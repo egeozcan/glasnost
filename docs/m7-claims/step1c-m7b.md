@@ -43,7 +43,7 @@ This is M7b step 1c. It covers the approved revisions that reached main after st
 - Q-1503 (disabled vehicles). S-0405 claims 13 and 20 (changed).
 - Q-1504 (hunting units and hovering jumpjets). Already as built (satisfied).
 
-**New requests:** Q-1505 (disabling a vehicle docked on a repair depot; interim: passed over when our depot exchange tethers it, so a pad depot yes and an ordinary depot no) and Q-1506 (the firing-check answer of a disabled vehicle: S-0301 places it under *impossible*, S-0405 claim 20 says illegal; interim: *illegal* at the head of rank 4, after the busy check). Q-1507 to Q-1519 are unused.
+**New requests:** Q-1505 (disabling a vehicle docked on a repair depot; interim: passed over when our depot exchange tethers it, so a pad depot yes and an ordinary depot no). Q-1506 (the firing-check answer of a disabled vehicle) was written and then withdrawn before merging, because S-0301 revision 26 in the same batch answers it (see the second batch below). Q-1506 to Q-1519 are unused.
 
 ## S-0615 revision 3
 
@@ -132,6 +132,6 @@ This is M7b step 1c. It covers the approved revisions that reached main after st
 |---|---|---|
 | 13, disabled on a completed cell arrival, not at placement or creation; off-map vehicles passed over; a tethered vehicle in its own cell passed over at the 1-to-0 transition (Q-1503) | changed | `power::arrival` from `cloak::machine::cell_movement_completed`; `power::set_disabled`; `power::tethered_in_own_cell`. The repair-depot dock is Q-1505 (interim). Test: `claim_13_tethered_vehicle_is_passed_over`. |
 | 20, at disabling and enabling: the guard reset, deselection, locomotor, sounds | changed | `power::disable`, `power::enable`; `Effect::Deactivated`, `Sound::Deactivate`, `Sound::Activate`; audio `TypeSounds::deactivate` and `activate` (`DeactivateSound`, `ActivateSound`; coverage rows). Tests: `claim_20_what_a_disabled_vehicle_cannot_do`, `claim_20_enabling_resets_an_enabled_vehicle_and_skips_off_map`. |
-| 20, what a disabled vehicle cannot do: move, fire, be box-selected, take behaviour, stop, scatter, deploy or guard orders | changed | `targeting::movable`, `box_eligible`; `combat::check` (illegal, interim Q-1506); `orders::refused_while_disabled` in `orders::issue`, which the own AI goes through too. Test: `claim_20_what_a_disabled_vehicle_cannot_do`. |
+| 20, what a disabled vehicle cannot do: move, fire, be box-selected, take behaviour, stop, scatter, deploy or guard orders | changed | `targeting::movable`, `box_eligible`; `combat::check` (illegal; placed by S-0301 revision 26, see below); `orders::refused_while_disabled` in `orders::issue`, which the own AI goes through too. Test: `claim_20_what_a_disabled_vehicle_cannot_do`. |
 | 20, half brightness of a disabled voxel vehicle | seam | the live view does not apply object brightness yet (`render::light::object_brightness` not wired). |
 | Backing, scenarios | (c) | |
