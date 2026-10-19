@@ -229,6 +229,42 @@
           ],
           "default": null
         },
+        "loop_count": {
+          "description": "`LoopCount`, *L* (S-0109 Import mapping); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "loop_end": {
+          "description": "`LoopEnd`, λₑ as written (S-0109 Import mapping and F2); absent:\nthe sprite end.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "loop_start": {
+          "description": "`LoopStart`, λₛ (S-0109 Import mapping); absent: 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "make_infantry": {
+          "description": "`MakeInfantry`, the make-infantry index *i* (S-0611 F4, S-0109\nImport mapping; art data); absent: −1, none.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
         "middle_frame": {
           "description": "μ: half the image-frame count of the sprite of the type's last\nsprite-found moment, 0 when none was found (S-0109 claims 14 and\n25); absent when the import had no art.",
           "type": [
@@ -236,6 +272,22 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "new_theater": {
+          "description": "A new-theater type: the new-theater flag without the theater flag\n(S-0109 Terms and F2); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "next": {
+          "description": "`Next`, the follow-up type, by type name (S-0109 claim 15); absent:\nnone.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "normalized": {
@@ -254,6 +306,28 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "ping_pong": {
+          "description": "`PingPong`, the ping-pong flag (S-0109 claim 9); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "random_loop_delay": {
+          "description": "`RandomLoopDelay`, the loop-delay pair in updates (S-0109 claim\n11); absent: 0, 0.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
         },
         "random_rate": {
           "description": "`RandomRate`: the random rate pair (ρ₁, ρ₂), a −1 already replaced by\nthe end held (S-0109 claim 3).",
@@ -276,6 +350,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "reverse": {
+          "description": "`Reverse`, the reverse flag (S-0109 claim 8); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
           "default": null
         },
         "running_frames": {
@@ -8312,7 +8394,7 @@
           "default": true
         },
         "anim_fast_rate_freezes": {
-          "description": "A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3); animation playback and the S-0517 claim 7 deploy delay are not implemented yet.",
+          "description": "A rate above 900 converts to a stage delay of ⌊900 / ρ⌋ = 0, so the animation never advances or ends through playback; off: a positive rate gives max(1, ⌊900 / ρ⌋). Rates of 0 or below give 0 in both settings. Built for the random-rate conversion of an animation's creation draw (S-0109 claim 3) and the playback of infantry-making animations in the simulation (S-0611 claim 8); the S-0517 claim 7 deploy delay is not implemented yet.",
           "type": "boolean",
           "default": true
         },
@@ -9202,7 +9284,7 @@
           "default": true
         },
         "infantry_animation_occupancy": {
-          "description": "An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark. Not implemented yet (wave 2).",
+          "description": "An infantry-making animation marks its position taken and sets the cell's infantry house in every update, and frees the position at its end whatever holds it; off: it holds the position only while no other unit does, leaves the infantry house alone while other infantry stands there and frees only its own mark.",
           "type": "boolean",
           "default": true
         },
@@ -9357,7 +9439,7 @@
           "default": true
         },
         "mutation_test_ground_record": {
-          "description": "The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record. Not implemented yet (wave 2).",
+          "description": "The conversion test's position choice reads the cell's ground record even for a victim on a high-bridge deck; off: a victim on a deck is tested against the deck record.",
           "type": "boolean",
           "default": true
         },
@@ -9817,7 +9899,7 @@
           "default": true
         },
         "refused_mutation_frees_position": {
-          "description": "A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark. Not implemented yet (wave 2).",
+          "description": "A refused mutation victim's standing position is free from its death tick while it plays die-2, and its removal frees that position again even if a walker took it; off: the position stays taken until removal, which frees only the victim's own mark.",
           "type": "boolean",
           "default": true
         },
@@ -10939,6 +11021,17 @@
             "format": "int32"
           }
         },
+        "anim_to_infantry": {
+          "description": "`[General] AnimToInfantry`, the animation-to-infantry list (S-0611\nF4); absent: empty.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "berserk_color": {
           "description": "`[AudioVisual] BerserkColor`, the berserk tint's colour-adjustment\ntable position (S-0610 claim 7); absent: 0.",
           "type": [
@@ -11078,6 +11171,30 @@
           "format": "int32",
           "default": null
         },
+        "genetic_mutator_activate_sound": {
+          "description": "`[AudioVisual] GeneticMutatorActivateSound`, the activation sound\n(S-0611 claim 2); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "infantry_mutate": {
+          "description": "`[General] InfantryMutate`, the conversion animation type (S-0611\nclaims 8 to 12); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "ion_blast": {
+          "description": "`[General] IonBlast`, the genetic mutation's launch animation\n(S-0611 claim 2); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "iron_curtain_color": {
           "description": "`[AudioVisual] IronCurtainColor`, a tint selector (S-0513 Import\nmapping); absent: 0.",
           "type": [
@@ -11188,6 +11305,30 @@
         },
         "lightning_warhead": {
           "description": "`[General] LightningWarhead`, a warhead key (S-0513 claim 18);\nabsent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mutate_explosion": {
+          "description": "`[General] MutateExplosion`: explosion mode when on, cell mode when\noff (S-0611 claims 3 and 4); absent: no (cell mode).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "mutate_explosion_warhead": {
+          "description": "`[SpecialWeapons] MutateExplosionWarhead`, the explosion warhead\n(S-0611 claim 3); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mutate_warhead": {
+          "description": "`[SpecialWeapons] MutateWarhead`, the cell warhead (S-0611 claim 4);\nabsent: none.",
           "type": [
             "string",
             "null"

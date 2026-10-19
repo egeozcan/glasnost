@@ -219,6 +219,21 @@ pub(crate) fn anim_created(
     let rules = w.rules_arc();
     let a = rules.animation(name)?;
     let delay = creation_draws(w, a);
+    start_event(w, a, at, played);
+    delay
+}
+
+/// The start event of an animation of type `a` at `at` (S-0109 claim 13):
+/// the immediate middle event when μ = 0, then the resource chain
+/// reaction. It comes at creation, and at a follow-up switch after the new
+/// type's delay choice (S-0109 claim 28). `played`: the caller models the
+/// later playback, so a later middle event is not noted as missing.
+pub(crate) fn start_event(
+    w: &mut World,
+    a: &crate::rules::AnimRules,
+    at: Option<(i32, i32, i32)>,
+    played: bool,
+) {
     let effects = a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater;
     match a.mu {
         // spec: S-0109 claim 13 (the start event produces the middle event at once when μ = 0)
@@ -239,7 +254,6 @@ pub(crate) fn anim_created(
             w.note("S-0401 claim 20: an animation's start-event chain reaction on a resource cell (the economy topic's seam) takes no draw and has no effect");
         }
     }
-    delay
 }
 
 /// The cell containing a ground position (S-0204 claim 2).
@@ -455,6 +469,7 @@ pub fn new_game(
         waves: Default::default(),
         discs: Vec::new(),
         walkers: Default::default(),
+        mutation: Default::default(),
         drain: Default::default(),
         temporal: Default::default(),
         mind: Default::default(),

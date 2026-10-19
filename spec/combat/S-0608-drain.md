@@ -2,8 +2,8 @@
 id: S-0608
 title: Drain (attaching to a building, draining its power and credits, and letting go)
 topic: combat
-revision: 4
-sources-class: [decomp]
+revision: 5
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-19
@@ -353,12 +353,17 @@ New terms:
     An aircraft's admitted initial firing pass can still make its run's round pending
     (S-0501 claim 15), even though the drain attempt makes no ordinary shot and spends
     no per-shot round. The attempt is not a reason to roll back a pass or its pending-round
-    mark. Attack-run transitions, later round spending and any remaining attempts in a
-    burst belong to S-0501 claims 12 to 17, not to the drain attempt.
-    - Backing: `measurable` (D12); aircraft bookkeeping through a cell-target attempt is
-      measurable there without the object-target continuation limitation in Open questions.
+    mark. When an attempt clears the object target of an aircraft that remains in play,
+    S-0501 claim 12's departure cancels the remaining burst attempts and that pass's scatter
+    request, and enters *done* with a 1-tick processing delay. It preserves any formed link
+    and pending round, which is spent at S-0501 claim 15's ordinary boundary. It neither
+    restores the target nor itself clears the destination or starts rearm. Cell-target
+    attempts keep their target and use the normal pass transitions. Other attack-run
+    transitions and later round spending remain S-0501 claims 12 to 17's rules.
+    - Backing: `measurable` (D12) for aircraft bookkeeping through a cell-target attempt.
       The original object-target continuation fault is `unmeasured`: no destructive crash
-      test is proposed, and the safe continuation belongs to S-0501.
+      test is proposed. Safe object-target continuation is S-0501 claim 12's design departure,
+      not an oracle outcome; S-0501 claim 12's engine-only scenario checks it.
     - Confidence: high (no recent-shot record, reveal, direct uncloak and suicide precedence),
       medium (aircraft composition with target clearing)
 
@@ -711,8 +716,9 @@ weapon range of them.
   and ammunition through run completion. Expected: no immediate per-shot spending, but ordinary
   pending run-round spending at S-0501 claim 15's boundary. Any new shot record, direct reveal
   or uncloak, attachment from the suicide weapon, or rollback of an admitted pass's pending
-  round falsifies the corresponding rule. The cell test does not settle object-target aircraft
-  continuation below. Use a healthy, non-critical-health cloaker to avoid random uncloak.
+  round falsifies the corresponding rule. The cell test does not test the object-target
+  continuation departure of S-0501 claim 12; that claim's engine-only scenario checks it.
+  Use a healthy, non-critical-health cloaker to avoid random uncloak.
 - **D13, temporary departure (claim 17).** Named test data gives a non-balloon airborne vehicle
   drainer eligibility to board an ordinary transport. Board between due position checks and
   void a run if the link ended before boarding. Record actual successful boarding, both partners,
@@ -740,12 +746,6 @@ weapon range of them.
    D6 part c and D7 record it.
 2. **A stock attempt from a neighbouring cell.** Whether stock movement and firing timing ever let
    a Disc attempt a drain before it is over the building (claim 2): D2 part c.
-3. **Aircraft object-target continuation (Q-1442, S-0501).** The admitted pass already makes
-   a round pending (claim 16), but the attempt can clear the aircraft's target before its
-   attack run completes that pass. The original can then fault when the pass still tries to
-   scatter at its now-missing target. Safe continuation of the remaining burst and the cell
-   scatter request needs the aircraft owner's rule, rather than inventing a no-round exception. D12's cell-target case isolates the
-   pending-round rule without claiming an object-target continuation outcome.
 
 ## Questions for the project lead
 

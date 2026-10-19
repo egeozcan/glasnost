@@ -741,7 +741,7 @@ fn placement_accepted(w: &World, id: ObjectId, m: &Member) -> bool {
             crate::cells::Marker::Infantry(x, _) => w
                 .obj(x)
                 .is_some_and(|xo| x != id && !crate::combat::damage::dead(xo)),
-            crate::cells::Marker::Terrain(_) => true,
+            crate::cells::Marker::Terrain(_) | crate::cells::Marker::Anim(..) => true,
         };
         if rec.marks[usize::from(p)].as_ref().is_some_and(live) {
             return false;

@@ -409,6 +409,38 @@ pub struct AnimationType {
     /// decimal); absent: 0.
     #[serde(default)]
     pub damage: Option<Decimal>,
+    /// `MakeInfantry`, the make-infantry index *i* (S-0611 F4, S-0109
+    /// Import mapping; art data); absent: −1, none.
+    #[serde(default)]
+    pub make_infantry: Option<i32>,
+    /// `LoopStart`, λₛ (S-0109 Import mapping); absent: 0.
+    #[serde(default)]
+    pub loop_start: Option<i32>,
+    /// `LoopEnd`, λₑ as written (S-0109 Import mapping and F2); absent:
+    /// the sprite end.
+    #[serde(default)]
+    pub loop_end: Option<i32>,
+    /// `LoopCount`, *L* (S-0109 Import mapping); absent: 0.
+    #[serde(default)]
+    pub loop_count: Option<i32>,
+    /// `Reverse`, the reverse flag (S-0109 claim 8); absent: no.
+    #[serde(default)]
+    pub reverse: Option<bool>,
+    /// `PingPong`, the ping-pong flag (S-0109 claim 9); absent: no.
+    #[serde(default)]
+    pub ping_pong: Option<bool>,
+    /// `RandomLoopDelay`, the loop-delay pair in updates (S-0109 claim
+    /// 11); absent: 0, 0.
+    #[serde(default)]
+    pub random_loop_delay: Option<[i32; 2]>, // spec: S-0109 claim 11 (a pair)
+    /// `Next`, the follow-up type, by type name (S-0109 claim 15); absent:
+    /// none.
+    #[serde(default)]
+    pub next: Option<String>,
+    /// A new-theater type: the new-theater flag without the theater flag
+    /// (S-0109 Terms and F2); absent: no.
+    #[serde(default)]
+    pub new_theater: Option<bool>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15

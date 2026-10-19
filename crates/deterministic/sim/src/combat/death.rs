@@ -480,8 +480,14 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     if extra {
         crate::gas::virus_death(w, o.pos, owner, true);
     }
-    // Seam: S-0611 is not built yet (M7b). Death kind 9 (mutation, S-0615 claim 1) plays die-2 here until it is.
-    // spec: S-0107 claim 17 rows 4 to 7 (not human: die-1; w = 1: die-1; w = 2 or 9: die-2)
+    // spec: S-0107 claim 17 row 7 and S-0611 claims 1 and 6 (w = 9 reached: the conversion takes place unless claim 6's test refuses it)
+    if !not_human
+        && kind == crate::mutation::MUTATING_DEATH_KIND
+        && crate::mutation::convert(w, id, hit)
+    {
+        return;
+    }
+    // spec: S-0107 claim 17 rows 4 to 7 (not human: die-1; w = 1: die-1; w = 2: die-2; w = 9 with the conversion refused: die-2, S-0611 claim 7)
     let request = if not_human {
         Some(Seq::Die1)
     } else {

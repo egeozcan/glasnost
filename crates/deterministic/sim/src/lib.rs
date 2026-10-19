@@ -14,6 +14,7 @@
 //! `xtask` tests enforce that rule.
 
 pub mod air;
+pub mod anim_clock;
 pub mod approach;
 pub mod base;
 pub mod behaviour;
@@ -43,6 +44,7 @@ pub mod linked;
 pub mod load;
 pub mod mind;
 pub mod mp_triggers;
+pub mod mutation;
 pub mod naval;
 pub mod objects;
 pub mod occupancy;

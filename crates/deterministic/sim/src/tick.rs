@@ -106,6 +106,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::walker::turn(w, id);
         return;
     }
+    if w.mutation.makers.contains_key(&id) {
+        // spec: S-0611 claim 8 and S-0109 claim 5 (an infantry-making animation updates in its own turn)
+        crate::mutation::turn(w, id);
+        return;
+    }
     if w.waves.contains_key(&id) {
         // spec: S-0607 claim 21 (a magnetic wave updates in its own turn of the update order)
         crate::lift::wave_turn(w, id);

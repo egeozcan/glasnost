@@ -23,6 +23,9 @@
 //! - [`bunker`]: tank bunkers built near the base, filled with suitable
 //!   vehicles and emptied by a deploy click to repair, retreat or attack
 //!   (S-0606).
+//! - [`mutator`]: the genetic mutator fired at a dense group of seen enemy
+//!   infantry with none of the house's own or allied infantry in its reach
+//!   (S-0611).
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod absorber;
@@ -44,6 +47,7 @@ pub mod lifter;
 pub mod linked;
 pub mod memory;
 pub mod mind;
+pub mod mutator;
 pub mod psychic;
 pub mod radiation;
 pub mod scripted;

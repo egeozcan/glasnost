@@ -2,13 +2,13 @@
 id: S-0611
 title: Mutation
 topic: combat
-revision: 1
+revision: 2
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-19
 measurements: []
-requests: []
+requests: [Q-1461]
 supersedes: []
 ---
 
@@ -44,11 +44,12 @@ Skirmish only; network games and campaigns are out of scope.
 - **Mutating death kind.** Infantry-death kind 9 (S-0107, Terms). A **mutating warhead** is a
   warhead whose infantry-death kind is 9. S-0302 claim 17 already uses this term.
 - **Conversion.** The replacement effect of S-0107 claim 17, row 7: instead of a death sequence the
-  victim leaves play at once and a conversion animation starts at its position. A **victim** is the
+  victim leaves play at once unless a crash begins (claim 7), and a conversion animation starts at its position in either case. A **victim** is the
   killed infantry unit; the conversion is **refused** when claim 6's test fails, and the death then
   takes row 7's die-2 request.
 - **Conversion animation.** The animation type that the rules' general mutation key names (Import
-  mapping). With stock data it is an infantry-making animation.
+  mapping). Whether it or a follow-up makes infantry depends on the imported animation
+  settings and animation-to-infantry list (claims 9 and 10).
 - **Infantry-making animation.** An animation whose type has a make-infantry index other than −1
   (the "none" value; S-0109 Import mapping). The index selects an entry of the rules'
   animation-to-infantry list, the **made type**.
@@ -175,18 +176,30 @@ Skirmish only; network games and campaigns are out of scope.
    - Confidence: high for the land, building and position rows; medium for the ground record on a
      deck and for the draw retained when a building refuses
 
-7. **What becomes of the victim.** A converted victim leaves play in the tick of its death, with no
-   death sequence and no corpse, after the shared death effects and credit of S-0312 claim 8 (so the
-   kill is credited to the attacker or attacking house exactly as for any death); its type's crash
-   flag keeps S-0107 claim 17's exception. A victim that held control of other units loses it as
+7. **What becomes of the victim.** Unless a crash begins as described below, a converted victim
+   leaves play in the tick of its death, with no death sequence and no corpse, after the shared
+   death effects and credit of S-0312 claim 8 (so the
+   kill is credited to the attacker or attacking house exactly as for any death).
+   The crash exception changes only the victim's removal, not its conversion: the conversion
+   animation still starts in the death tick, with claim 8's owner, and makes infantry under
+   claims 9 to 11, independently of the victim's subsequent crash. A crash begins only when
+   the type has the crash flag and the victim's height above its surface is greater than
+   0 leptons (S-0312 claim 16); the flag alone on open ground does not prevent removal.
+   For a victim that starts a crash, the standing position is marked taken again in the death
+   tick, not left free as for a refused conversion. The conversion animation also marks that
+   position immediately. Its later marks and freeing follow claim 8: the position is not
+   guaranteed to remain taken until the crash ends if the animation ends sooner.
+   Crash motion and eventual victim removal belong to the movement and death rules, not to
+   the conversion animation. A victim that held control of other units loses it as
    on any death (S-0601), and a controlled victim's control ends with it. A refused conversion
    takes S-0107 claim 17's die-2 request.
 
    The refused victim's standing position is shown free in the occupancy record from the tick of
    its death, while its die-2 sequence still plays, so another walker may choose it
    (`quirks.refused_mutation_frees_position`, Edge cases).
-   - Backing: `measurable` (scenarios MU1 and MU7 part c)
-   - Confidence: high for the removal and the die-2 request; medium for the freed position and
+   - Backing: `measurable` (scenarios MU1, MU7 part c and MU13)
+   - Confidence: high for the removal, animation surviving the crash exception, crash-start
+     height test and the die-2 request; medium for the occupancy consequences and
      the second freeing at removal (Edge cases)
 
 8. **The conversion animation.** A conversion creates one conversion animation at the victim's
@@ -199,13 +212,16 @@ Skirmish only; network games and campaigns are out of scope.
    When it has an owner, the animation is drawn in that owner's colour, including after
    claim 9's fallback changes ownership. Without an owner it uses its ordinary animation palette. The original leaves the old colour on an animation waiting to place a unit after
    that change, a display-only defect fixed without a quirk switch. It plays as any animation
-   (S-0109), including its start sound. While it plays, an infantry-making animation holds its own standing position: in
+   (S-0109), including its start sound. It marks its standing position immediately at
+   conversion. Ordinary immediate victim removal clears that mark again, but a victim retained
+   by a crash does not perform that removal in the death tick (claim 7).
+   While it plays, an infantry-making animation holds its own standing position: in
    each of its updates its position is marked taken in the occupancy record of its surface, and the
-   cell's infantry house becomes the animation's owner. Between the death and its first update the
-   position is free. At its end the position is shown free again, whatever else has marked it
+   cell's infantry house becomes the animation's owner. For a victim removed immediately,
+   between the death and its first update the position is free. At its end the position is shown free again, whatever else has marked it
    meanwhile (`quirks.infantry_animation_occupancy`, Edge cases). The animation has no health and
    is not a target.
-   - Backing: `measurable` (scenarios MU1, MU6, MU8, MU9 and MU10)
+   - Backing: `measurable` (scenarios MU1, MU6, MU8, MU9, MU10 and MU13)
    - Confidence: high for the owner rule; medium for the occupancy marks
 
 ### Infantry made by an animation
@@ -257,8 +273,9 @@ Skirmish only; network games and campaigns are out of scope.
     animation is removed otherwise. Each attempt takes its own position-choice draw when the
     point is at terrain height inside the usable area, its class is centre and no earlier
     position-choice refusal applies. The owner of claim 9 is resolved again at each attempt.
-    In the original each failed attempt also builds a unit that is never placed; our engine builds none (documented
-    departure, no switch; Open questions).
+    In the original each failed attempt also builds a unit that is never placed; our engine
+    builds none (documented departure, no switch; Open questions), but retains claim 14's
+    scenario-stream consumption and creation-number reservation.
     - Backing: `measurable` (scenarios MU9 and MU10) for the delay and retry; `unmeasured` for
       the never-placed object, which has no established observable
     - Confidence: medium
@@ -282,6 +299,41 @@ Skirmish only; network games and campaigns are out of scope.
     again under claims 1 to 12 (when S-0107 claim 17 reaches row 7 for its type), to the house of
     that later hit.
     - Backing: `measurable` (scenario MU5 part c)
+    - Confidence: high
+
+14. **Draws and numbering of creation attempts (Q-1460).** Every end attempt that has a
+    valid made type and a resolved owner (claim 9), successful or refused, takes one raw
+    creation draw from the scenario random stream (S-0202 claim 10). Its standing-position
+    choice uses the state left by that draw: when claim 10's position choice applies, it
+    takes one ranged draw over the inclusive integer range 0 to 3 only for a centre-class
+    point with no earlier vehicle/object refusal (S-0208 claim 3). Thus a vehicle blocking
+    the ground record gives one raw creation draw and no position-choice draw, even at a
+    centre-class point. A centre-class choice with all selectable infantry positions taken
+    still takes the ranged draw and then fails. A clear centre-class placement takes the
+    raw draw followed by that ranged draw. Side-class and non-terrain-height placements
+    take the creation draw but no position-choice draw. None of these draws is undone by
+    refusal. These are the creation and placement draws, not a count of unrelated animation
+    events or effects elsewhere in the same tick. They describe the infantry object's own
+    creation and placement, not additional objects created by special properties of a made
+    type. Such type-specific auxiliary creation is outside this claim's draw and number totals.
+    The object-present refusal inherits S-0208 claim 3's `unmeasured` backing: no practical
+    fixture isolates that flag from other refusals; MU12 tests the vehicle refusal instead.
+
+    In the original the attempted infantry unit itself also consumes one number from the
+    shared object creation counter, even when it is never placed. Refusal neither returns that
+    number nor restores the counter. It assigns no control group and advances no automatic
+    control-group numbering: new infantry starts ungrouped. Our engine keeps its own
+    deterministic creation counter rather than matching the original's global numbers
+    (the departure also used by S-0306 claim 13), but reserves one number per attempt,
+    including a refused attempt, without reuse. Avoiding an unplaced object under claim 11
+    must not undo that reservation or the creation draw. When claim 9 creates nothing
+    because the index is invalid or no owner can be resolved, no unit-creation draw or
+    unit number is consumed in our engine. The invalid-index case is F4's safe design
+    departure, not a guarantee about the original's undefined access.
+    - Backing: `measurable` (scenario MU12) for original draw composition, counter advance
+      and absence of a control group; `unmeasured` for no resolved owner, because no normal-input
+      skirmish without a civilian house is established (claim 9). Our counter reservation
+      without an unplaced object and invalid-index handling are design
     - Confidence: high
 
 ## Formulas
@@ -374,6 +426,7 @@ Skirmish only; network games and campaigns are out of scope.
 | Art, animation section | `MakeInfantry` | make-infantry index *i*, F4 (S-0109 maps the key) | integer | −1 (none) |
 | Rules, `[General]` | `IonBlast` | launch animation of claim 2 (shared with other users of the key) | animation reference (S-0004) | none: no launch animation |
 | Rules, `[AudioVisual]` | `GeneticMutatorActivateSound` | activation sound of claim 2 | sound name | none: no sound |
+| Rules, infantry type section | `Crashable` | permits the victim's crash instead of immediate removal, but never suppresses its conversion animation (claim 7) | boolean (S-0003) | false at type creation; omitted layered values retain the value in force |
 | Rules, warhead section | `InfDeath` | the mutating death kind is the value 9 (S-0107 maps the key) | integer | 0 |
 | Rules, superweapon section | `Type` | the genetic mutation superweapon is S-0512's genetic-conversion kind (S-0512 maps the key and its kind words) | name | as S-0512 |
 | Rules, superweapon section | `Range`, `LineMultiplier` | not read by the effect (claim 2) | — | — |
@@ -382,14 +435,15 @@ Skirmish only; network games and campaigns are out of scope.
   is not established (Open questions). Our engine delivers no hits for that mode and the importer
   warns once.
 - An index *i* with *i* ≥ *n*, or negative other than −1: nothing is made and the importer warns
-  (F4).
+  (F4). Claims 11 and 14's retry draws and number reservations use the made type selected by
+  the existing animation/list mapping; they have no additional imported setting.
 - The civilian house is found by the side named Civilian, an engine constant (S-0414 Import
   mapping), not stock data.
 - Announcement and radar-event bindings are S-0701's and S-0410's.
 
 ## Measurement scenarios
 
-All scenarios use stock data with mods off, normal game speed, a small purpose-made skirmish map,
+All scenarios use stock data with mods and director off, normal game speed, a small purpose-made skirmish map,
 and a recorder of health, owner, type, position and occupancy for listed units and of the scenario
 random stream. One bystander computer player is kept outside the observed area under the
 glossary's void rule. Run each deterministic sub-test once with the seed
@@ -467,7 +521,8 @@ index names.
   position: no draw. (b) A victim on a high-bridge deck with a vehicle standing beneath the bridge
   in the same cell: refused, die-2 (switch on). (c) A refused victim's position read from the
   occupancy record during its die-2 sequence: free. (d) The new unit of a computer player house:
-  in the original it starts hunting; record its behaviour. *Falsified if* a side-position
+  in the original it starts hunting; record its behaviour. A different initial behaviour
+  falsifies this original-only rule. *Falsified if* a side-position
   victim consumes a draw, a centre-class victim does not, (b) produces a new unit, or (c) shows
   the position taken. Also let an allied walker take the refused victim's freed position while
   die-2 still plays in a traversable gate cell. Its mark must be cleared again when the victim
@@ -525,6 +580,50 @@ index names.
   for a local launch, and sound/radar output with no victims present. A changed effect, missing
   launch feedback or a launch animation anywhere other than F1 falsifies claim 2.
 
+- **MU12 (attempt draws and numbering, claims 11 and 14).** Use MU9's setup with the
+  director off and the read-only random-state recorder. Record each terminal attempt's
+  incoming/outgoing scenario state, made-unit creation number and group, and whether a unit
+  enters play. Use MU10's trigger-created infantry-making animation at a centre-class point,
+  with a named test art file removing random-rate and start/middle-event effects. Run these variants once each, recording the
+  seed: vehicle blocking the cell; all selectable infantry positions occupied without a
+  vehicle/object refusal; clear centre-class point; clear side-class point; and a point
+  above terrain height. Observe at least three refused retries, then clear the blocker and
+  observe success. Expected per attempt: vehicle blocker, one raw value only; infantry
+  crowding, one raw value followed by one ranged choice over 0 to 3; clear centre, the same
+  draw composition with successful placement; side or raised point, one raw value only.
+  Use S-0202 claims 4 and 5 to predict the ranged result from the state after the raw value,
+  and the corresponding position under S-0208 claim 3. Repeat the clear-centre variant over
+  16 recorded seeds to distinguish reversed draw allocation. No creation draw, reversed
+  allocation, or an extra position draw under the vehicle blocker falsifies claim 14.
+  Record the original's creation counter immediately before and after each refused attempt:
+  it increases by one, with no rollback. Create a later factory unit and account separately
+  for intervening creations: its number includes the consumed attempt numbers. Any rollback
+  falsifies the numbering rule. Each attempted infantry object has no control group.
+  A recorded group assignment falsifies that rule.
+  Engine-only check: refused attempts create no retained object but still consume their draw
+  and one deterministic creation number; neither is returned for later reuse.
+- **MU13 (crash-flag conversion, claims 7 and 8; Q-1461).** Normal-speed skirmish with
+  director off, house A's mutating weapon and house B's ordinary human infantry type with
+  no personal death-animation list, no cyborg or jumpjet type flag, and a named map override
+  enabling its crash flag. On dry open ground, kill it at a side position. Record death tick,
+  animation creation, owner, occupancy marks, victim removal and made-unit appearance.
+  Expected: no crash at surface height, immediate victim removal and one A-owned conversion
+  animation, later making A's infantry under claims 9 to 11. Repeat with positive recorded
+  height above the surface, not merely above terrain on a bridge: a named map override gives
+  the same non-jumpjet type jumpjet movement, allowing scripted flight. Accept the fixture
+  only when the recorded death case reaches row 7 of S-0107 claim 17, rather than a parachute
+  or jumpjet-type case. Give the airborne victim 1 remaining health and use a non-ignoring
+  mutating hit whose minimum damage is lethal (S-0302 claims 5 and 17); do not use cell-mode
+  delivery, which does no damage there. Expected: the victim starts a crash, yet the
+  conversion animation starts at its death position in that same tick and follows ordinary
+  ownership and end-placement rules. Its standing position is marked taken on entry to
+  the crash, not left free by conversion. Record subsequent animation marks and freeing
+  separately from victim removal; do not assume that their end ticks coincide. Repeat with
+  A defeated before animation expiry under MU8's setup: the made unit goes to the civilian
+  house, even though the victim crashed. Run once per variant with the seed recorded.
+  Missing conversion animation, suppressed creation solely because the victim crashed,
+  wrong owner, or a position left unmarked at crash entry falsifies the respective rule.
+
 ## Open questions
 
 The following unresolved original outcomes are `unmeasured` (low confidence): no safe missing-type
@@ -536,3 +635,7 @@ effect fixture is known for the sweep interruption. They do not override the def
    anything observable, such as house unit counts or build limits. Our engine builds none.
 3. Whether a death effect of a cell-mode victim that removes the next listed infantry unit of the
    same cell can stop the sweep of that cell (no stock case known).
+4. Q-1460 question 3, beyond the attempted infantry's own number and control group: the
+   additional draw and number totals for made types whose special properties create auxiliary
+   objects at construction are not established here. Claim 14 answers the ordinary retry,
+   successful placement, draw order and non-rollback rules, not that type-specific extension.

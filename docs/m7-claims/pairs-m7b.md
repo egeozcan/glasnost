@@ -15,6 +15,10 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Drain × absorber: an empty absorber with no base output, drained, does not black its house out; with a passenger inside (extra output) a new link does; the absorber refuses the balloon-hovering disc | `drain_pairs::a_drained_absorber_blacks_out_only_with_passengers` | S-0608, S-0405, S-0605 |
 | Drain × grinder: a drained grinder of a resource-destination type pays its house's credits to the drainer's house in payouts of *A*, cannot be sold, and an own grinder refuses the balloon-hovering disc | `drain_pairs::a_drained_grinder_pays_and_cannot_be_sold` | S-0608, S-0603, S-0408 |
 | Drain × tank bunker: a drained bunker's firing answer is *illegal* and it cannot be sold, but without output it blacks nothing out; a bunker refuses the balloon-hovering disc (row P6) | `drain_pairs::a_drained_bunker_refuses_fire_and_sale_but_no_blackout` | S-0608, S-0606, S-0405, S-0408 |
+| Genetic Mutator × mind control: a cell-mode launch converts a controlled unit, which leaves its controller's list; the made unit is the launching house's and inherits no control; a converted controller releases its other victims to their owners | `mutator_pairs::a_mutated_controlled_unit_and_a_mutated_controller` | S-0611, S-0601 |
+| Genetic Mutator × tank bunker: a launch on a bunker hits neither the bunker nor its bunkered vehicle, which stays bunkered; infantry beside it in the block converts | `mutator_pairs::a_launch_on_a_tank_bunker_leaves_it_and_its_vehicle` | S-0611, S-0606 |
+| Genetic Mutator × absorber: a passenger inside is not listed and is not hit; a walker still on its way in converts and its entry ends | `mutator_pairs::a_launch_on_an_absorber_spares_its_passenger_and_takes_an_entrant` | S-0611, S-0605 |
+| Genetic Mutator × magnetic lift: a launch under a seized vehicle leaves it unhurt and gripped; infantry on the ground beneath converts | `mutator_pairs::a_launch_under_a_seized_vehicle_takes_only_the_infantry` | S-0611, S-0607 |
 
 The parachutist's order of the virus animation and the explosion was request Q-1421; S-0615 revision 3
 answers it (the virus effect first, then the kind 3 or 5 animation), and the test now checks the order
@@ -30,7 +34,6 @@ in).
 
 Each waits for its spec (named seams in the code).
 
-- Genetic Mutator (S-0611) with controlled, bunkered, absorbed and seized units; death kind 9 in `combat::death`.
 - Psychic Dominator (S-0612) with controlled units, bunkers (`bunker::holds_through_owner_change`) and the absorber.
 - Cloning Vats, and the Force Shield against the M7a weapons.
 

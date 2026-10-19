@@ -483,6 +483,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
         }
         Kind::Infantry => {
             w.cells.leave(cell, o.layer, id);
+            // spec: S-0611 claim 7 (a refused mutation victim's removal frees its standing position again)
+            crate::mutation::removing(w, id);
             if let Some(wt) = o.walk.as_ref().and_then(|s| s.target) {
                 w.cells.clear_infantry(wt.cell(), o.layer, id, q);
             }

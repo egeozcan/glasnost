@@ -2,7 +2,7 @@
 //! They are not game state: the simulation never reads them, and they are
 //! neither saved nor hashed.
 
-use crate::world::{ObjectId, Pos};
+use crate::world::{HouseId, ObjectId, Pos};
 
 /// One presentation event.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -308,6 +308,23 @@ pub enum Effect {
         /// It was made (otherwise it was removed).
         made: bool,
     },
+    /// An infantry-making animation (S-0611 claims 8 to 12) was made,
+    /// switched type, changed owner, had a placement refused, or ended.
+    /// The simulation plays it; the drawing shows `name` at `frame`.
+    Maker {
+        /// The animation.
+        id: ObjectId,
+        /// Its current type's name.
+        name: String,
+        /// Where.
+        pos: Pos,
+        /// Its owner (its colour).
+        owner: Option<HouseId>,
+        /// The image frame it shows.
+        frame: i32,
+        /// What happened.
+        event: crate::mutation::MakerEvent,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.
@@ -454,6 +471,25 @@ pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
 /// [`anim`], playing in reverse when `reverse` (S-0517 claim 6: the deploying
 /// presentation of an undeploy).
 pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, reverse: bool) {
+    let index = w
+        .rules()
+        .animations
+        .iter()
+        .position(|a| a.name.eq_ignore_ascii_case(name))
+        .and_then(|i| u32::try_from(i).ok());
+    if !reverse
+        && let Some(i) = index
+        && crate::mutation::makes_infantry(w, i)
+    {
+        let layer = if w.high_bridge(pos.cell()) && pos.z > w.surface_at(pos.x, pos.y) {
+            crate::world::Layer::Deck
+        } else {
+            crate::world::Layer::Ground
+        };
+        // spec: S-0611 claim 9 (the rules for every infantry-making animation: it is played by the simulation and creates its unit at its end; no owner)
+        crate::mutation::start(w, i, pos, layer, None, false);
+        return;
+    }
     let delay = crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
