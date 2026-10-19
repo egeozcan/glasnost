@@ -1434,6 +1434,37 @@ The M7b AI audit lane: maps 0, 2 and 8, Yuri against the Allied side and against
 | Weather storm | Allied | `Brain::fire_superweapons` | 1 launch: granted in 4 games (5 300 to 28 300 house-ticks, 18 % to 76 % of it suspended by low power) and ready once, the charge outlasting the rest of the game |
 | Nuclear missile | Soviet | `Brain::fire_superweapons` | 1 launch, ready in 1 game |
 
+### Full skirmishes (M7b exit 4d)
+
+Six whole games of the own AI against itself on the local lane (`glasnost-headless ai-sides 120000 <seed> <map>`, `GLASNOST_AI_QUICK` unset, so full games; raw outputs git-ignored under `local-lane/m7b/4d/`): the Yuri side (house 1) against the Allied side and against the Soviet side (house 0) on maps 0, 2 and 8. The binary was built at fa9a9f0 (the economy-defence fix and `M7A_SEED` 27; sha256 45b13425df8c506f…). Every game reached a winner on the first seed tried, seed 7, and each replays to the same state and survives its save and load. Earlier sets, also seed 7 and all with winners, are superseded: pre-berserk fix (sha256 be5656e1d9337b61…): Allied won map 2 at 26 389, Yuri won map 8 at 45 545 and map 0 at 47 766 against Allied, and maps 2, 8 and 0 at 46 170, 15 985 and 51 936 against Soviet; at 56e9852 (sha256 e8a9c2a9084dca98…): Allied won map 2 at 26 389, Yuri won the other five (map 8 at 45 545 and map 0 at 50 521 against Allied; maps 2, 8 and 0 at 45 987, 15 985 and 67 839 against Soviet), with up to 2 479 economy-defence orders for one house, which led to the fix (*AI round 2* above).
+
+Yuri's orders (`special::Uses`), then what the simulation counted:
+
+| Opponent, map | Winner, tick | Absorber entries | Bunker builds / entries / exits | Lifter builds / lift orders | Drainer builds / drain orders | Grinder entries | Mutator / dominator launches | Psychic reveals | Mind-control orders | Berserk orders | Gattling defences | Economy defence |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Allied, 2 | Allied, 22 314 | 5 | 3 / 3 / 2 | 1 / 2 | 1 / 0 | 0 | 0 / 0 | 4 | 3 | 2 | 1 | 33 |
+| Allied, 8 | Yuri, 43 812 | 37 | 2 / 5 / 5 | 6 / 2 | 1 / 5 | 3 | 4 / 0 | 10 | 6 | 1 | 2 | 5 |
+| Allied, 0 | Yuri, 47 641 | 126 | 2 / 12 / 3 | 2 / 2 | 1 / 7 | 1 | 5 / 0 | 11 | 2 | 2 | 2 | 58 |
+| Soviet, 2 | Yuri, 62 873 | 40 | 2 / 4 / 4 | 20 / 5 | 13 / 15 | 1 | 1 / 0 | 16 | 6 | 0 | 2 | 54 |
+| Soviet, 8 | Yuri, 34 437 | 16 | 2 / 7 / 5 | 4 / 3 | 1 / 5 | 3 | 0 / 0 | 7 | 4 | 0 | 1 | 14 |
+| Soviet, 0 | Yuri, 44 985 | 31 | 2 / 6 / 5 | 7 / 3 | 3 / 7 | 1 | 2 / 0 | 4 | 2 | 1 | 1 | 31 |
+
+| Opponent, map | Takeovers (S-0601) | Units gone berserk (S-0610) | Gas clouds / hits (S-0613) | Absorbed (S-0605) | Ground (S-0603) | Bunkered (S-0606) | Seized / dropped (S-0607) | Drain links / credits (S-0608) | Infantry mutated (S-0611) | Taken over by the dominator (S-0612) | Yuri gattling top-stage ticks (S-0609) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Allied, 2 | 8 | 7 | 4 / 63 | 2 | 0 | 2 | 1 / 1 | 0 / 0 | 0 | 0 | 0 |
+| Allied, 8 | 6 | 5 | 10 / 128 | 4 | 3 | 5 | 2 / 2 | 2 / 0 | 19 | 0 | 383 |
+| Allied, 0 | 15 | 4 | 12 / 253 | 17 | 1 | 3 | 8 / 4 | 1 / 0 | 24 | 0 | 0 |
+| Soviet, 2 | 28 | 1 | 6 / 52 | 3 | 1 | 4 | 11 / 6 | 6 / 631 | 1 | 0 | 2 658 |
+| Soviet, 8 | 14 | 1 | 5 / 45 | 11 | 1 | 5 | 4 / 2 | 2 / 30 | 0 | 0 | 846 |
+| Soviet, 0 | 19 | 0 | 4 / 12 | 10 | 1 | 5 | 13 / 12 | 3 / 60 | 5 | 0 | 4 989 |
+
+- **Psychic sensor orders** are 0 in every game: the side's psychic detection comes from its radar building (side audit below), so no sensor is needed.
+- **Dominator: no launch in any game.** It was granted in two games: the 900-tick probe (`GLASNOST_AI_SWPROBE`) found it never ready in the Allied map 0 game (2 samples) and ready in 6 of 29 samples in the Soviet map 2 game, never with at least 3 dominable enemies at the best cell (the aim's minimum). **Mutator:** 12 launches in 4 games; no probe sample found it ready, unsuspended and with a clear group of at least 3 (it fires when one appears, and waits while Yuri's own infantry is in the group).
+- **Never built by Yuri while buildable:** the unarmed deployer vehicle (it has no AI role) in 4 games, buildable from ticks 16 501 to 24 301; in the Allied map 2 game, which Yuri lost at 22 314, an armed vehicle and the armed jumpjet, buildable from tick 8 101. In the Soviet games on maps 0 and 2, several types became buildable only after tick 43 201 or 61 501 and were not built before the game ended.
+- **Side audit** (`side-audit 2 8 7` at fa9a9f0, the same result as the earlier run of this round): 79 types of the side, 76 within the house tech level; 29 offered, 29 built, 28 placed or released. The naval yard (#65) has no cell on map 8. Three buildings are above the tech level (#43, #51, #66). Never offered: types forbidden to the house's country or stolen-tech types, the other sides' buildings and what needs them, and two vehicles (#17, #23) whose prerequisite is a side building the house is never offered. No gunner vehicles.
+- **Seams (*Seams reachable by stock data*, below) in these games:** hovers stood in 4 games and repair depots in 3, so the hover chase cut and `any_docked` are reachable there (no counter in the simulation tells how often they ran). No pulse source appeared (`under_pulse` not reached). The other listed seams leave no trace in the lane output. No game stalled or failed its replay or save.
+- **Lane on the same binary** (v9: quick mode, seeds 7 to 10, 24 games): every game ends with a winner; Yuri wins 5 of 12 against Allied and 11 of 12 against Soviet (the same as v8 at 56e9852); the most economy-defence orders for one house are 85 (2 479 in v8).
+
 ### Seams reachable by stock data
 
 A grep of the 22 `Seam:` comments under `crates/deterministic` (no counter in the simulation: that would change it). Reachable by stock data: the hover chase cut (`hover.rs`, likely every game); morphable tilesets in placement (`econ/placement.rs`); the sidebar display-name tie (`econ/tech.rs`); the scenery-disguise terrain-fire pass (`targeting.rs`); tubes (`seams.rs`, `transport.rs`: map tube definitions are not imported); `any_docked` (`econ/sell.rs`, repair depots and pads); `neutral_sees_through` (`cloak/disguise.rs`); `under_pulse` (`econ/power.rs`, no pulse source). Not reachable or not wired: the capture, hijack and retaining-entry trigger notifications (`mp_triggers.rs`, no callers), the trigger cell attempts (`bridges/mod.rs`, trigger actions only), the all-base-units mode (`econ/setup.rs`, refused), the teleport type exclusion (`superweapons/warp.rs`, no type named), the transport `disabled` states (neither built), `house_left` (`cloak/disguise.rs`, no callers), the load map RNG (`load.rs`). Stale comments: `spawn.rs` (`owner_changed` has callers), `cloak/machine.rs` (`grant_own_flag` is called by `crates.rs`), `bridges/hut.rs` (`engineer_entered_hut` is called by `structures/entry.rs`).
