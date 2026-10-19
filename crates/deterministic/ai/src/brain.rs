@@ -286,6 +286,7 @@ impl Brain {
             }
             self.build_lifter(w, &mut out);
             self.build_drainer(w, &mut out);
+            self.build_anti_air(w, &mut out);
             if !paying {
                 self.expand(w, &mut out);
             }
@@ -531,6 +532,30 @@ impl Brain {
             out.push(Order::Build { what: t });
             self.special.count_drainer_build();
         }
+    }
+
+    /// Builds a unit or defence able to hit the enemy drainers it sees in
+    /// the air ([`crate::antiair::build_type`]), as a person answers a
+    /// drain he cannot shoot at: not while selling out. A defence replaces
+    /// a tech-climb building this think ordered, as a superweapon building
+    /// does.
+    fn build_anti_air(&mut self, w: &World, out: &mut Vec<Order>) {
+        if self.script.selling() {
+            return;
+        }
+        let Some(t) = crate::antiair::build_type(&self.script, w) else {
+            return;
+        };
+        if t.kind == Kind::Building {
+            if out.iter().any(|o| matches!(o, Order::Place { .. })) {
+                return;
+            }
+            let climb =
+                |x: &TypeRef| x.kind == Kind::Building && scripted::role_of(w, *x).is_none();
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+        }
+        out.push(Order::Build { what: t });
+        self.special.count_anti_air_build();
     }
 
     /// Builds a tank bunker (S-0606, [`crate::bunker::build_type`]) as a
