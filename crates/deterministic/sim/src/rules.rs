@@ -733,6 +733,10 @@ pub struct GeneralRules {
     pub guard_stray: Option<i32>,
     /// Scatter threshold of the house skill level.
     pub iq_scatter: i32,
+    /// The maximum house skill level (S-0209 claim 11, S-0412 claim 3): the
+    /// level of a computer player house of the original, which our engine
+    /// gives only to a test-only computer-controlled player house (glossary).
+    pub iq_max: i32,
     /// The auto-deploy delay A of S-0215 claim 31 for difficulty index 1,
     /// ticks: the list's second entry, the only one our engine reads (the
     /// neutral and special houses have index 1); `None` when the list has no
@@ -1139,6 +1143,8 @@ impl SimRules {
             }),
             // spec: S-0209 Import mapping ([IQ] Scatter absent: 3)
             iq_scatter: g.iq_scatter.unwrap_or(3),
+            // spec: S-0209 Import mapping ([IQ] MaxIQLevels absent: 5 skill levels)
+            iq_max: g.iq_max.unwrap_or(5),
             // spec: S-0215 claim 31 and Import mapping (AIAutoDeployFrameDelay: the entry for difficulty index 1; no second entry, or no list: none, and the row does not apply)
             auto_deploy_delay: g
                 .ai_auto_deploy_frame_delay

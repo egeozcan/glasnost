@@ -294,16 +294,20 @@ pub fn check(
     if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
         return Answer::Busy;
     }
-    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: the firing check answers illegal for every target and every weapon of a disabled vehicle, a force-fire target included; placed at the head of rank 4, interim Q-1506)
-    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
-        return Answer::Illegal;
-    }
     // spec: S-0301 claim 9 (grip refusals within rank 4) and S-0607 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, which gives the same answer, and the refusal of a firer bound to a slave master, which our engine does not have, precede it)
     if weapon.is_some()
         && let Some(Target::Object(x)) = target
         && crate::lift::grips(w, firer, x)
     {
         return Answer::Rearming;
+    }
+    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal (not in our engine), the own-gripped-target rearming (above) and the materialising firer's rearming, and outranks every other rank-4 answer
+    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
+        if crate::teleport::phasing_in(w, firer) {
+            // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
+            return Answer::Rearming;
+        }
+        return Answer::Illegal;
     }
     // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
     if kind == Kind::Infantry
@@ -355,11 +359,11 @@ pub fn check(
     {
         // spec: S-0513 claim 27 (a protected object is an illegal target for a weapon whose warhead is a parasite warhead)
         let parasite = r.combat.warhead_of(weapon).is_some_and(|h| h.parasite);
-        // spec: S-0513 claim 28 (departure: every player house takes the human rule; the neutral and special houses get illegal against a protected object)
+        // spec: S-0513 claim 28 (departure: every player house takes the human rule; the neutral and special houses, and a test-only computer-controlled player house (glossary), get illegal against a protected object)
         let player = o
             .owner
             .and_then(|h| w.houses.get(usize::from(h.0)))
-            .is_none_or(|h| h.role == crate::world::HouseRole::Player);
+            .is_none_or(|h| h.human);
         if parasite || !player {
             return Answer::Illegal;
         }

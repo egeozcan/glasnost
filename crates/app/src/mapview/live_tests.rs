@@ -204,6 +204,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         shadow: None,
         alternative: false,
         attitude: Attitude::None,
+        disabled: false,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -268,6 +269,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         shadow: None,
         alternative: false,
         attitude: Attitude::None,
+        disabled: false,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1442,6 +1444,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         shadow: None,
         alternative: false,
         attitude: Attitude::None,
+        disabled: false,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1475,6 +1478,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
             shadow: Some(anchor),
             alternative: false,
             attitude: Attitude::None,
+            disabled: false,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1631,6 +1635,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             shadow: None,
             alternative,
             attitude: Attitude::None,
+            disabled: false,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1718,6 +1723,7 @@ fn aircraft_attitude_is_drawn() {
         shadow: None,
         alternative: false,
         attitude,
+        disabled: false,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -1810,4 +1816,81 @@ fn aircraft_attitude_is_drawn() {
         crashing: true,
     };
     assert_eq!(images(craft(16384, 20480, crash)).0, base);
+}
+
+/// spec: S-0104 claim 13 (Deactivated voxel vehicles: a voxel vehicle disabled under S-0405
+/// claims 13 and 20 is drawn at trunc(b / 2) ‰, before claim 15's shade-row mapping)
+#[test]
+fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let draw = |disabled: bool| {
+        let (mut import, catalogue, mut assets) = context_with(RULES);
+        let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        art.voxels.insert("body".into(), b"main.vxl".to_vec());
+        assets.insert(
+            b"main.vxl",
+            VxlWriter {
+                model: &synthetic_model(),
+            }
+            .write(),
+        );
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+            body: 8192,
+            turret: 8192,
+            elevation: 0,
+            anim: 0,
+            infantry: None,
+            object: sim_code(ObjectId(9)),
+            harvesting: None,
+            shadow: None,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        entries[0]
+            .items
+            .iter()
+            .find_map(|i| match i.paint {
+                Paint::Lit(s) => Some(i32::from(s.rho)),
+                _ => None,
+            })
+            .expect("a lit body item")
+    };
+    let (on, off) = (draw(false), draw(true));
+    let rho = glasnost_render::light::brightness_rho;
+    let candidates: Vec<i32> = (0..4000).filter(|&b| rho(b) == on).collect();
+    assert!(!candidates.is_empty());
+    assert!(
+        candidates.iter().all(|&b| rho(b / 2) == off),
+        "the disabled body takes ρ of trunc(b / 2)"
+    );
+    assert!(off < on);
 }

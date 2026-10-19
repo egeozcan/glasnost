@@ -28,10 +28,13 @@
 //!   game speed fastest (index 0, glossary claim G2). The record's houses
 //!   are hard computer players: per S-0412 claim 4 a hard computer gets
 //!   difficulty index 0 and the easy row, which our engine applies through
-//!   the handicap (S-0412 claim 5). They are AI houses of our engine with
-//!   no brain attached (our own AI takes no part); like the original's
-//!   computer players they stop the unused-house cleanup (S-0009 claim
-//!   28). See *Differences* in docs/development.md for what we cannot
+//!   the handicap (S-0412 claim 5). With `computer` set (the default)
+//!   both are test-only computer-controlled player houses (glossary;
+//!   S-0215 and S-0309 Terms): the original's computer-owner rules, the
+//!   oracle house's skill level (the rules' maximum, S-0412 claim 3) and
+//!   difficulty index 0, no teams, and no brain (our own AI takes no part).
+//!   Like the original's computer players they stop the unused-house
+//!   cleanup (S-0009 claim 28). See *Differences* in docs/development.md for what we cannot
 //!   reproduce (the original's skirmish AI, the observer, the tech level).
 //! - **Groups**: per side one type, round(9000 / cost) units (an exact half
 //!   to the even number, as the CSVs show), at least 1, infantry at most 60. Unit *i* of side A on
@@ -677,10 +680,9 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     gs.bases = false;
     gs.game_speed = FASTEST;
     if ground.computer {
-        // measure: M-0001 (Setup, Players: two computer houses). The specs
-        // record the original's rules for computer-controlled owners (glossary
-        // *AI house*: "that rule describes the original"), so the arena plays
-        // the record's houses as not human-controlled to reproduce them.
+        // measure: M-0001 (Setup, Players: two computer houses). Both
+        // houses are test-only computer-controlled player houses (glossary;
+        // S-0215 Terms): they follow the original's computer-owner rules.
         for h in gs.houses.iter_mut().take(2) {
             h.human = false;
         }
@@ -688,6 +690,17 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     let mut w = glasnost_sim::load::new_game(rules.clone(), &ground.map, ground.tiles.clone(), &gs)
         .map_err(|e| format!("{e:?}"))?;
     let houses = [HouseId(0), HouseId(1)];
+    if ground.computer {
+        // spec: S-0215 Terms and S-0309 Terms (Test-only exception: a marked test house takes its oracle house's skill level and difficulty index, and has no teams)
+        // spec: S-0412 claim 3 (a computer player house: the rules' maximum house skill level)
+        let skill = rules.general.iq_max;
+        for h in houses {
+            let house = &mut w.houses[usize::from(h.0)];
+            house.skill = skill;
+            // spec: S-0412 claim 4 (a hard computer: difficulty index 0)
+            house.econ.setup.difficulty = 0;
+        }
+    }
     // Nothing of the two houses may exist before the groups are placed.
     if w.objects
         .values()

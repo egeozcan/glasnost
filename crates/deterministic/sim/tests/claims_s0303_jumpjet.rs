@@ -76,7 +76,11 @@ fn a_jumpjet_is_tracked_from_take_off_until_touchdown() {
         "it takes off"
     );
     assert_eq!(phase(&w, u), Phase::Ascending);
-    assert_eq!(height(&w, u), 0, "the take-off update leaves it at height 0");
+    assert_eq!(
+        height(&w, u),
+        0,
+        "the take-off update leaves it at height 0"
+    );
     assert!(flying::tracked(&w, u), "tracked from the take-off update");
     assert!(
         until(&mut w, 2000, |w| phase(w, u) == Phase::Grounded),
@@ -213,7 +217,11 @@ fn a_low_jumpjet_is_found_twice() {
     assert!(until(&mut w, 60, |w| phase(w, u) != Phase::Grounded));
     assert!(flying::tracked(&w, u));
     let c = pos(&w, u).cell();
-    assert!(w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&u));
+    assert!(
+        w.cells
+            .list(c, glasnost_sim::world::Layer::Ground)
+            .contains(&u)
+    );
     let twice = loss_from_raised_blast(&mut w, u);
     assert_eq!(twice, 2 * once, "two entries at the same distance");
 }
@@ -232,7 +240,11 @@ fn flying_listed_double_hit_both_positions() {
         assert!(until(&mut w, 60, |w| phase(w, u) != Phase::Grounded));
         assert!(flying::tracked(&w, u));
         let c = pos(&w, u).cell();
-        assert!(w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&u));
+        assert!(
+            w.cells
+                .list(c, glasnost_sim::world::Layer::Ground)
+                .contains(&u)
+        );
         let loss = loss_from_raised_blast(&mut w, u);
         assert_eq!(loss, if on { 2 * once } else { once }, "switch {on}");
     }
@@ -303,10 +315,18 @@ fn a_cruising_jumpjet_changes_sectors() {
 fn placement_in_the_air_needs_the_counts_as_aircraft_flag() {
     for flag in [false, true] {
         let mut r = ruleset();
-        r.sim.vehicles.get_mut("JV").unwrap().econ.considered_aircraft = Some(flag);
+        r.sim
+            .vehicles
+            .get_mut("JV")
+            .unwrap()
+            .econ
+            .considered_aircraft = Some(flag);
         let mut w = glasnost_sim::testkit::game_with(&r, SIZE, 7);
         let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
-        assert!(!flying::tracked(&w, u), "placed on the ground: not registered");
+        assert!(
+            !flying::tracked(&w, u),
+            "placed on the ground: not registered"
+        );
         let mut p = pos(&w, u);
         let facing = w.body_facing(u);
         glasnost_sim::objects::take_inside(&mut w, u);

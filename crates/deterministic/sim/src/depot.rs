@@ -699,11 +699,11 @@ fn send_away(w: &mut World, k: ObjectId, v: ObjectId) -> bool {
     let Some(o) = w.obj(v).cloned() else {
         return true;
     };
-    // spec: S-0314 claim 6 (the guard-spot return holds for the neutral and special houses only; no player house takes it)
+    // spec: S-0314 claim 6 (the guard-spot return holds for the neutral and special houses only; no player house takes it, except a test-only computer-controlled one, glossary)
     let human = o
         .owner
         .and_then(|h| w.houses.get(usize::from(h.0)))
-        .is_none_or(|h| h.role == crate::world::HouseRole::Player);
+        .is_none_or(|h| h.human);
     let rally = w.obj(k).and_then(|b| b.guard_spot);
     // spec: S-0314 claim 6 (exit selection occurs before the rally-point override; it takes no draw, so only its result matters)
     let exit = exit_cell(w, k, v).map(Target::Cell);

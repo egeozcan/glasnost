@@ -3156,6 +3156,7 @@ impl Builder<'_> {
             // spec: S-0105 claim 12 (no tick has run: the spawned aircraft are docked, the main body shows)
             alternative: false,
             attitude: Attitude::None,
+            disabled: false,
         };
         Some(self.mobile(&m))
     }
@@ -3254,7 +3255,18 @@ impl Builder<'_> {
             } else {
                 self.extra_light(b"ExtraUnitLight")
             };
-            let row = self.house_row(hsv, ground + extra);
+            let voxel = self
+                .import
+                .arts
+                .get(&(m.kind, m.idx))
+                .is_some_and(|a| a.voxels.contains_key("body"));
+            let b = if m.disabled && m.kind == Kind::Vehicles && voxel {
+                // spec: S-0104 claim 13 (Deactivated voxel vehicles: trunc(b / 2) ‰, before claim 15's shade-row mapping)
+                (ground + extra) / 2
+            } else {
+                ground + extra
+            };
+            let row = self.house_row(hsv, b);
             let body = self.vehicle_items(m, point, u, row);
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
@@ -4086,6 +4098,10 @@ pub struct Mobile {
     pub alternative: bool,
     /// For an aircraft: how its body is tilted (S-0105 claims 41, 42).
     pub attitude: Attitude,
+    /// A vehicle disabled under S-0405 claims 13 and 20 (S-0104 claim 13:
+    /// a voxel vehicle is then drawn at half its brightness). `false`
+    /// without a game state.
+    pub disabled: bool,
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105

@@ -27,13 +27,15 @@ pub fn tau_a() -> F64 {
 }
 
 /// Whether an object's owner is human-controlled for the unit rules: every
-/// player house in our engine (S-0309 Terms, *Houses in our engine*); the
-/// neutral and special houses are not.
+/// player house in our engine (S-0309 Terms, *Houses in our engine*) except
+/// an explicitly marked test-only computer-controlled player house (S-0309
+/// Terms, *Test-only exception*); the neutral and special houses are not.
 pub fn player_owned(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.owner)
         .and_then(|h| w.houses.get(usize::from(h.0)))
-        .is_some_and(|h| h.role == HouseRole::Player)
+        // spec: S-0309 Terms (Test-only exception: a marked player house takes the computer-owner rules of claim 25)
+        .is_some_and(|h| h.role == HouseRole::Player && h.human)
 }
 
 /// ρ₃ between the reference points of two objects (S-0309 Formulas).
@@ -819,7 +821,12 @@ pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
         return true;
     }
     // spec: S-0309 claim 7 (the object's cell is read in the layer the object occupies, for the searcher's movement zone)
-    let other = reach_read(w, to.pos.cell(), u.zone, to.layer == crate::world::Layer::Deck);
+    let other = reach_read(
+        w,
+        to.pos.cell(),
+        u.zone,
+        to.layer == crate::world::Layer::Deck,
+    );
     // spec: S-0309 claims 7 and 11 and S-0212 claim 4 (regions compared as S-0212 claim 4 does: two cells of no reach region count as the same region, and so do two off-map cells; a no-link deck read differs from every other region)
     match (own, other) {
         (Reach::Region(x), Reach::Region(y)) => x == y,

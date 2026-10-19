@@ -1036,7 +1036,7 @@ fn effects_of(w: &World, id: ObjectId) -> (bool, Vec<glasnost_sim::combat::effec
     (deselected, sounds)
 }
 
-// spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling a guard reset, deselection, the locomotor switched off and the deactivation sound; the firing check answers illegal for every target, so it acquires nothing and a force-fire is refused; orders that need a movable or able-to-fire actor are refused when given; it is still a target like any other vehicle)
+// spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling a guard reset, deselection, the locomotor switched off and the deactivation sound; the firing check answers illegal for every target (S-0301 claim 9), so it acquires nothing and a force-fire is refused; orders that need a movable or able-to-fire actor are refused when given; it is still a target like any other vehicle)
 #[test]
 fn claim_20_what_a_disabled_vehicle_cannot_do() {
     use glasnost_sim::combat::effects::Sound;
@@ -1049,9 +1049,8 @@ fn claim_20_what_a_disabled_vehicle_cannot_do() {
     for _ in 0..3 {
         step(&mut w);
     }
-    let shot = |w: &World| {
-        glasnost_sim::combat::check::check(w, d, Some(Target::Object(foe)), 0, false)
-    };
+    let shot =
+        |w: &World| glasnost_sim::combat::check::check(w, d, Some(Target::Object(foe)), 0, false);
     assert_ne!(shot(&w), Answer::Illegal, "enabled: a legal target");
     w.effects.clear();
     order(&mut w, A, Order::PowerOff { actor: k });
@@ -1112,6 +1111,34 @@ fn claim_20_what_a_disabled_vehicle_cannot_do() {
     assert_eq!(sounds, [Sound::Activate]);
 }
 
+// spec: S-0301 claim 9 (Deactivated firers within rank 4: the deactivated refusal outranks the absent-weapon impossible) and S-0405 claim 20
+#[test]
+fn claim_20_deactivated_illegal_outranks_absent_weapon() {
+    use glasnost_sim::world::Target;
+    let mut w = game(&armed_rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let d = drone(&mut w, 0, -4, 4);
+    let foe = drone(&mut w, 1, -2, 4);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    // Slot 1 holds no weapon.
+    let empty =
+        |w: &World| glasnost_sim::combat::check::check(w, d, Some(Target::Object(foe)), 1, false);
+    assert_eq!(
+        empty(&w),
+        Answer::Impossible,
+        "enabled: no weapon in the slot"
+    );
+    order(&mut w, A, Order::PowerOff { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(power::unit_disabled(&w, d));
+    assert_eq!(empty(&w), Answer::Illegal, "deactivated: illegal first");
+}
+
 // spec: S-0405 claim 20 (at enabling every vehicle claim 13 enables gets the guard reset, also one that was not disabled; it plays no activation sound) and claim 13 (a vehicle off the map at either transition is passed over and keeps its state)
 #[test]
 fn claim_20_enabling_resets_an_enabled_vehicle_and_skips_off_map() {
@@ -1133,7 +1160,10 @@ fn claim_20_enabling_resets_an_enabled_vehicle_and_skips_off_map() {
     for _ in 0..3 {
         step(&mut w);
     }
-    assert!(!power::unit_disabled(&w, on_map), "placement is not an arrival");
+    assert!(
+        !power::unit_disabled(&w, on_map),
+        "placement is not an arrival"
+    );
     w.obj_mut(off_map).unwrap().econ.building.unit_disabled = true;
     glasnost_sim::objects::take_inside(&mut w, off_map);
     let spot = glasnost_sim::world::Target::Cell(testkit::mid(SIZE, 0, 9));
@@ -1177,5 +1207,8 @@ fn claim_13_tethered_vehicle_is_passed_over() {
     for _ in 0..3 {
         step(&mut w);
     }
-    assert!(!power::unit_disabled(&w, d), "tethered in its factory's cell");
+    assert!(
+        !power::unit_disabled(&w, d),
+        "tethered in its factory's cell"
+    );
 }

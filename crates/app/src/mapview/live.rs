@@ -1502,6 +1502,8 @@ impl Live {
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
             attitude: attitude(w, o),
+            // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
+            disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
         })
     }
 

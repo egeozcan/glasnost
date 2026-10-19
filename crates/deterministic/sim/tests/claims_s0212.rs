@@ -1864,7 +1864,10 @@ fn the_search_region_reads_the_searchers_deck() {
     let a = glasnost_sim::world::ObjectId(9000);
     w.objects.insert(a, c);
     // The car stands on the near bank; the searcher on the ground under the deck at (3, 0), a cell of no reach region read for its ground.
-    assert_eq!(regions::reach_in(&w, cell(3, 0), MovementZone::Normal), Reach::None);
+    assert_eq!(
+        regions::reach_in(&w, cell(3, 0), MovementZone::Normal),
+        Reach::None
+    );
     assert!(
         glasnost_sim::combat::acquire::same_zone(&w, a, car),
         "the deck read through the link gives the bank's region"

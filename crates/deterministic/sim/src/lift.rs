@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use crate::combat::damage::{self, Hit};
 use crate::combat::data::SeizeLocomotor;
 use crate::rules::{Behaviour, Kind, Locomotor};
-use crate::world::{HouseId, HouseRole, Layer, ObjectId, Pos, Target, World};
+use crate::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 
 /// The magnetic wave of a magnetic-beam weapon's shot (S-0607 claim 21,
 /// F4): its firer, its target, the two fade accumulators and whether it has
@@ -384,11 +384,12 @@ fn harvester_case(w: &mut World, x: ObjectId) -> bool {
 }
 
 /// Whether the house follows the original's non-human rule of claims 6
-/// and 20: the neutral and special houses (our AI houses take the human
+/// and 20: the neutral and special houses and a test-only
+/// computer-controlled player house (glossary; our AI houses take the human
 /// rule).
 fn non_human_rule(w: &World, h: Option<HouseId>) -> bool {
     h.and_then(|h| w.houses.get(usize::from(h.0)))
-        .is_some_and(|x| !x.human && x.role != HouseRole::Player)
+        .is_some_and(|x| !x.human)
 }
 
 /// The seize itself (S-0607 claim 5; claims 22 and 23 for a stand-in).

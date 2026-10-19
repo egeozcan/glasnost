@@ -761,7 +761,11 @@ fn lost_deck_fall_and_splash() {
     let x = w.walkers[&wid].pos.z;
     testkit::run(&mut w, 1);
     if w.walkers[&wid].falling {
-        assert_eq!(w.walkers[&wid].pos.z, x + v1, "the first drop by the updated rate");
+        assert_eq!(
+            w.walkers[&wid].pos.z,
+            x + v1,
+            "the first drop by the updated rate"
+        );
     }
     let mut landed = false;
     for _ in 0..200 {
@@ -1414,7 +1418,10 @@ fn unlimited_range_both_positions() {
     let mut off = r.clone();
     off.globals.quirks.disc_laser_unlimited_range = false;
     let (hit, first) = disc_with_range(&off, "-2");
-    assert!(hit, "never cancelled on distance: the final detonation hits");
+    assert!(
+        hit,
+        "never cancelled on distance: the final detonation hits"
+    );
     assert!(!first.contains(&DiscEvent::Cancelled));
 }
 
@@ -1472,7 +1479,11 @@ fn cell_target_over_a_bridge_deck() {
         glasnost_num::geom::root_floor(n, w.rules().quirks.table_root_distance, w.rules().mode)
             as i32
     };
-    assert_eq!(disc::recheck_distance(&w, f, Target::Cell(cell)), flat, "no deck in the re-check");
+    assert_eq!(
+        disc::recheck_distance(&w, f, Target::Cell(cell)),
+        flat,
+        "no deck in the re-check"
+    );
     let raised = disc::final_point(&w, Target::Cell(cell));
     assert_eq!(raised, Pos::new(ground.x, ground.y, ground.z + 416));
     set_deck(&mut w, cell, false);

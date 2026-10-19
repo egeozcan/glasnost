@@ -164,9 +164,13 @@ pub fn line_distance(p: Pos, q: Pos, c: Pos, table: bool, mode: Rounding) -> F64
         m(d[1], a[0]).sub(m(a[1], d[0]), mode),
     ];
     // spec: S-0306 claim 27 (N = RZ₂₄((h_z u_z + hᵧuᵧ) + hₓuₓ))
-    let num = n(m(h[2], u[2]).add(m(h[1], u[1]), mode).add(m(h[0], u[0]), mode));
+    let num = n(m(h[2], u[2])
+        .add(m(h[1], u[1]), mode)
+        .add(m(h[0], u[0]), mode));
     // spec: S-0306 claim 27 (L = (hᵧhᵧ + h_zh_z) + hₓhₓ, double precision)
-    let len = m(h[1], h[1]).add(m(h[2], h[2]), mode).add(m(h[0], h[0]), mode);
+    let len = m(h[1], h[1])
+        .add(m(h[2], h[2]), mode)
+        .add(m(h[0], h[0]), mode);
     // spec: S-0306 claim 27 (D = |N / r(L)|, r the real-input table root of S-0204 claim 5, used only on L)
     let root = glasnost_num::geom::table_root_real(len, table, mode);
     num.div(root, mode).abs()
@@ -348,14 +352,20 @@ mod tests {
     fn last_sample_follows_the_mode() {
         let one = F64::from_i64(1, Rounding::Nearest);
         assert!(fraction(49, Rounding::Nearest).eq_num(one));
-        let below = one.sub(F64::from_parts(false, 1, -24, Rounding::Nearest), Rounding::Nearest);
+        let below = one.sub(
+            F64::from_parts(false, 1, -24, Rounding::Nearest),
+            Rounding::Nearest,
+        );
         assert!(fraction(49, Rounding::TowardZero).eq_num(below));
         // The spec's example: P = (2688, 2688, 60), Q = (3840, 2688, 0).
         let (p, q) = (Pos::new(2688, 2688, 60), Pos::new(3840, 2688, 0));
         for m in [Rounding::Nearest, Rounding::TowardZero] {
             assert_eq!(sample(p, q, 0, m), p);
         }
-        assert_eq!(sample(p, q, 49, Rounding::TowardZero), Pos::new(3839, 2688, 0));
+        assert_eq!(
+            sample(p, q, 49, Rounding::TowardZero),
+            Pos::new(3839, 2688, 0)
+        );
         assert_eq!(sample(p, q, 49, Rounding::Nearest), q);
     }
 

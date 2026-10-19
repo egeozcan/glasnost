@@ -757,9 +757,15 @@ fn a_seized_unit_is_tracked_and_in_the_air_by_height() {
         "the seized unit takes off"
     );
     assert!(glasnost_sim::combat::flying::tracked(&w, v));
-    assert!(!glasnost_sim::combat::weapon::in_air(&w, v), "low after take-off");
+    assert!(
+        !glasnost_sim::combat::weapon::in_air(&w, v),
+        "low after take-off"
+    );
     assert!(run_until(&mut w, 400, |w| height(w, v) >= 208));
-    assert!(glasnost_sim::combat::weapon::in_air(&w, v), "at 208 leptons or more it is in the air");
+    assert!(
+        glasnost_sim::combat::weapon::in_air(&w, v),
+        "at 208 leptons or more it is in the air"
+    );
 }
 
 // spec: S-0607 claim 7 (revision 10: when the seize's search finds no cell the unit has no movement commitment and stays grounded, with no take-off registration) and S-0502 claim 29 (revision 19, Seized units)
@@ -791,6 +797,9 @@ fn a_seized_unit_with_no_cell_stays_grounded_and_untracked() {
     for _ in 0..30 {
         glasnost_sim::testkit::run(&mut w, 1);
         assert_eq!(jump::phase(&w, v), Some(Phase::Grounded), "no take-off");
-        assert!(!glasnost_sim::combat::flying::tracked(&w, v), "not registered");
+        assert!(
+            !glasnost_sim::combat::flying::tracked(&w, v),
+            "not registered"
+        );
     }
 }

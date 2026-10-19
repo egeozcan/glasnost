@@ -553,7 +553,8 @@ fn touchdown_registration(w: &mut World, id: ObjectId, alive: bool) {
     let in_play = w.obj(id).is_some_and(|o| o.on_map);
     let falling = crate::fall::falling(w, id);
     // spec: S-0502 claim 29 and Edge cases (quirks.jumpjet_falling_touchdown_tracked on: a touchdown while falling, or no longer alive or in play, leaves it registered; off: every touchdown ends registration)
-    let keeps = w.rules().quirks.jumpjet_falling_touchdown_tracked && (falling || !alive || !in_play);
+    let keeps =
+        w.rules().quirks.jumpjet_falling_touchdown_tracked && (falling || !alive || !in_play);
     if !keeps {
         // spec: S-0502 claim 29 (revision 18, Q-1500 answered: registration ends in the touchdown tick, before it enters grounded)
         crate::combat::flying::unregister(w, id);

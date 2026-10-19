@@ -3498,7 +3498,10 @@ impl Quirks {
                 self.infantry_animation_occupancy,
             ),
             ("disc_laser_no_house", self.disc_laser_no_house),
-            ("disc_laser_unlimited_range", self.disc_laser_unlimited_range),
+            (
+                "disc_laser_unlimited_range",
+                self.disc_laser_unlimited_range,
+            ),
             ("railgun_collinear_hits", self.railgun_collinear_hits),
             ("flying_listed_double_hit", self.flying_listed_double_hit),
             (

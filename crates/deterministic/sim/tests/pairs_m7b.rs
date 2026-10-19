@@ -375,14 +375,29 @@ fn a_not_human_virus_death_makes_one_virus_effect() {
     r.sim.infantry.get_mut("FRAIL").unwrap().not_human = Some(true);
     for chute in [false, true] {
         let mut w = testkit::game_with(&r, 20, 7);
-        let id = testkit::spawn(&mut w, Kind::Infantry, "FRAIL", 1, testkit::mid(20, 0, 0), 0);
+        let id = testkit::spawn(
+            &mut w,
+            Kind::Infantry,
+            "FRAIL",
+            1,
+            testkit::mid(20, 0, 0),
+            0,
+        );
         if chute {
             w.obj_mut(id).unwrap().infantry.as_mut().unwrap().seq = Some(Seq::Parachute);
         }
         let (clouds, anims) = (cloud_count(&w), w.gas.anims.len());
         venom_kill(&mut w, id);
-        assert_eq!(cloud_count(&w) - clouds, 1, "one extra virus particle (chute {chute})");
-        assert_eq!(w.gas.anims.len(), anims, "no lasting virus animation (chute {chute})");
+        assert_eq!(
+            cloud_count(&w) - clouds,
+            1,
+            "one extra virus particle (chute {chute})"
+        );
+        assert_eq!(
+            w.gas.anims.len(),
+            anims,
+            "no lasting virus animation (chute {chute})"
+        );
     }
 }
 

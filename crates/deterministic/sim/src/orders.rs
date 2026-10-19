@@ -233,7 +233,8 @@ fn refused_while_disabled(w: &World, order: &Order) -> bool {
         _ => return false,
     };
     // spec: S-0405 claim 20 (revision 20, Q-1503 answered: orders that need a movable or able-to-fire actor are refused for a disabled vehicle at the time the order is given, not when it is carried out; an AI house's orders are bound by the same rules)
-    w.obj(actor).is_some_and(|o| o.kind == Kind::Vehicle) && crate::econ::power::unit_disabled(w, actor)
+    w.obj(actor).is_some_and(|o| o.kind == Kind::Vehicle)
+        && crate::econ::power::unit_disabled(w, actor)
 }
 
 /// Applies every house's pending orders (S-0213 claims 1 and 3): houses

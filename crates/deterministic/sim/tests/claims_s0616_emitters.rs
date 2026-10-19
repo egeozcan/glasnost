@@ -1201,7 +1201,11 @@ fn s0306_claim_27_collinear_hits_both_positions() {
         assert_eq!(near_line(&w, p, q, on_line, 0), collinear, "on the line");
         assert_eq!(near_line(&w, p, q, on_line, -5), collinear, "below 0");
         // A zero-length beam: 300 leptons from its start.
-        assert_eq!(near_line(&w, p, p, off_start, 128), collinear, "zero-length");
+        assert_eq!(
+            near_line(&w, p, p, off_start, 128),
+            collinear,
+            "zero-length"
+        );
         // Off the line by 200 leptons: finite in both positions.
         let off_line = Pos::new(3000, 1200, 0);
         assert!(!near_line(&w, p, q, off_line, 128));
@@ -1625,6 +1629,10 @@ fn claim_1_destruction_smoke_until_removal() {
 #[test]
 fn claim_1_destruction_smoke_of_a_sold_building() {
     let [now, next] = destroyed_tower_selling(false, true);
-    assert_eq!(now, (true, false), "being sold: awaiting removal, not marked");
+    assert_eq!(
+        now,
+        (true, false),
+        "being sold: awaiting removal, not marked"
+    );
     assert_eq!(next, (false, true), "removed in its next turn: marked");
 }
