@@ -146,6 +146,18 @@ fn fingerprint(w: &World, rs: &Ruleset, t: TypeRef) -> String {
             {
                 let _ = write!(s, "; {}", weapon_print(rs, wp));
             }
+            if let Some(b) = glasnost_sim::econ::deploy::deploys_into(w, t.kind, t.index) {
+                let into = TypeRef {
+                    kind: Kind::Building,
+                    index: b,
+                };
+                let _ = write!(
+                    s,
+                    "; deploys into a building of role {:?} (yard {})",
+                    role_of(w, into),
+                    glasnost_ai::scripted::deploys_into_yard(w, t.kind, t.index)
+                );
+            }
         }
     }
     s

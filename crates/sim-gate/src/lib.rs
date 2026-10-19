@@ -124,8 +124,15 @@ pub const M6C_TICKS: i32 = 12_000;
 /// raiders): seed 4 gives no takeover order, and no seed of 1 to 16 has
 /// every counter at least 3 (seeds 1, 11 and 13 come nearest, with the
 /// sensor orders' 2); of seeds 17 to 40, seed 27 is the only one that
-/// does.
-pub const M7A_SEED: u32 = 27;
+/// does. Moved from 27 to 7 in M7b AI round 3, with the margin setup's
+/// five PREY, Alpha's start TAKER and the HULKs' armour class: seed 7
+/// has every counter at least 3; seed 27 gives 1 takeover order. Moved
+/// from 7 to 92 later in that round, with each house's start WARD (a
+/// bunker vehicle the waves leave at home): no counter is 0 in seeds 1
+/// to 16, none of which has every counter at least 3 (the sensor orders'
+/// 2, or few takeover orders); of seeds 17 to 104, seed 92 is the only
+/// one that does.
+pub const M7A_SEED: u32 = 92;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

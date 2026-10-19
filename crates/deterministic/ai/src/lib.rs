@@ -29,6 +29,7 @@
 //! - [`fixture`]: the synthetic skirmish (invented rules and map).
 
 pub mod absorber;
+pub mod antiair;
 pub mod brain;
 pub mod bunker;
 pub mod chrono;

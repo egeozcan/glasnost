@@ -331,3 +331,151 @@ fn builds_the_army_beside_an_extra_slave_miner_with_money() {
         "{with_money:?} against {without:?}"
     );
 }
+
+/// House 0 of [`settled`] with no credits, LAB standing (SILO's
+/// prerequisite), and on its lines SILO (it gives the missile the brain
+/// fires) and an army soldier, both started and running; returns the
+/// world, SILO's type and the soldier's.
+fn saving_for_a_silo() -> (World, TypeRef, TypeRef) {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    let home = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(H) && o.kind == Kind::Building)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    let lab = glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, "LAB").unwrap(),
+    };
+    let at = (4..20)
+        .map(|d| glasnost_map::CellXY::new(home.x, home.y + d))
+        .find(|&c| {
+            glasnost_sim::econ::placement::cell_test(
+                &w,
+                lab.index,
+                c,
+                &glasnost_sim::econ::placement::Test::order(H),
+            )
+        })
+        .expect("room for LAB");
+    testkit::spawn(&mut w, Kind::Building, "LAB", 0, at, 0);
+    // The sidebar offers SILO once the house has been updated with LAB.
+    testkit::run(&mut w, 60);
+    let silo = TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, "SILO").unwrap(),
+    };
+    let soldier = first(&w, Role::Army, Kind::Infantry);
+    w.houses[0].credits = 1;
+    // The house's lines go: the silo starts a new Building line (S-0404
+    // claim 1).
+    w.econ.lines.lines.retain(|l| l.house != H);
+    assert!(
+        tech::buildable(&w, H, silo),
+        "{:?}",
+        tech::answer(&w, H, silo)
+    );
+    assert!(orders::issue(&mut w, H, Order::Build { what: silo }));
+    assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+    testkit::run(&mut w, 1);
+    let item = |w: &World, t: TypeRef| {
+        w.econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == H)
+            .filter_map(|l| l.item.as_ref())
+            .find(|i| i.t == t)
+            .map(|i| (i.hold, i.owed))
+    };
+    assert!(
+        item(&w, silo).is_some_and(|(h, o)| h == Hold::None && o > 0),
+        "{:?} {:?}",
+        item(&w, silo),
+        w.econ.lines.lines
+    );
+    assert!(item(&w, soldier).is_some_and(|(h, _)| h == Hold::None));
+    (w, silo, soldier)
+}
+
+// S-0404 claim 5 (the hold order) and PLAN §4.7 (M7b AI round 3): while a building that gives a superweapon the brain fires waits on its line for money and no enemy is near the base, the house holds its army's unit lines, as a person stops training to finish the superweapon; the building itself runs on.
+#[test]
+fn holds_the_army_while_a_superweapon_building_waits_for_money() {
+    let map = fixture::map();
+    let (mut w, silo, soldier) = saving_for_a_silo();
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let orders = brain.think(&w);
+    assert!(
+        orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+    assert!(!orders.contains(&Order::Hold { what: silo }));
+    assert_eq!(brain.special_uses().superweapon_holds, 1);
+    assert_eq!(brain.special_uses().economy_holds, 0);
+}
+
+// PLAN §4.7 (M7b AI round 3): with an enemy seen near the base the house keeps training while it saves for the superweapon building.
+#[test]
+fn keeps_training_with_an_enemy_near_the_base() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    let near = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(H) && o.kind == Kind::Building)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        glasnost_map::CellXY::new(near.x + 3, near.y - 3),
+        0,
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let orders = brain.think(&w);
+    assert!(
+        !orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+    assert_eq!(brain.special_uses().superweapon_holds, 0);
+}
+
+// PLAN §4.7 (M7b AI round 3): a house whose army is outnumbered by the enemy units it sees keeps training while it saves for the superweapon building, even with no enemy near the base.
+#[test]
+fn keeps_training_while_outnumbered() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    let field = fixture::at(4, 0);
+    for d in 0..3 {
+        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, fixture::at(4, d), 0);
+    }
+    glasnost_sim::econ::shroud::area_reveal(
+        &mut w,
+        H,
+        glasnost_sim::world::Pos::centre(field, 0),
+        5,
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let orders = brain.think(&w);
+    assert!(
+        !orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+    assert_eq!(brain.special_uses().superweapon_holds, 0);
+}

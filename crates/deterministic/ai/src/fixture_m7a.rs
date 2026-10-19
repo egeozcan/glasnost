@@ -48,11 +48,18 @@
 //!   [`base_ruleset`] and [`base_map`], which the M7b scenario uses
 //!   unchanged): the ore does not spread, so each house keeps the plan's
 //!   two harvesters; PREY, an unarmed sturdy vehicle that only the
-//!   lifter's and the controller's warheads affect, three of each house
-//!   near the other's start; start vehicles ([`START_VEHICLES`]): GATV and
-//!   MAGN for Alpha, a second MINR for Beta; Alpha's HULKs behind its
-//!   start; a frail EYE, which a raid can destroy and its house builds
-//!   again.
+//!   lifter's and the controller's warheads affect, five of each house
+//!   near the other's start, each worth 1 credit; start vehicles
+//!   ([`START_VEHICLES`]): GATV and MAGN for Alpha, a second MINR for
+//!   Beta; a start TAKER for Alpha ([`START_INFANTRY`]); Alpha's HULKs
+//!   behind its start, of PREY's armour class, so that only the lifters
+//!   and the controllers touch them before the grinder stands; a frail
+//!   EYE, which a raid can destroy and its house builds again; WARD, an
+//!   unbuildable turreted vehicle whose gun sits in a multi-weapon slot
+//!   (no primary weapon, so the AI's waves leave it at home), one behind
+//!   each start, which the house's bunkers take in. The PREY, the TAKER,
+//!   the HULKs' class and WARD came in M7b AI round 3, for seeds of 1 to
+//!   16 with no takeover order, no unit ground or no vehicle bunkered.
 //!
 //! To add a type, insert it in [`base_ruleset`] (with `register`) and, for
 //! a start unit, add its name to [`INFANTRY`] or [`VEHICLES`] (or, for the
@@ -135,10 +142,37 @@ fn margins(r: &mut Ruleset) {
     prey.primary = None;
     prey.secondary = None;
     prey.strength = Some(2000);
+    // Worth next to nothing, so that grinding a controlled one pays its
+    // taker's house next to nothing (S-0603 claim 8).
+    prey.cost = Some(1);
     prey.tech_level = Some(-1);
     prey.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
     register(r, "vehicles", "PREY");
     r.sim.vehicles.insert("PREY".into(), prey);
+    // Alpha's HULKs of the same class (M7b AI round 3): the raids' berserk
+    // hits sent them hunting and killed them before the grinder stood
+    // (the sweep's seeds with no unit ground); only the lifters and the
+    // controllers touch them now, and they wait for the grinder.
+    if let Some(h) = r.sim.vehicles.get_mut("HULK") {
+        h.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
+    }
+    // WARD: a turreted vehicle nobody can build, whose one gun sits in a
+    // weapon slot of a multi-weapon turret (no primary weapon). It is
+    // bunker-eligible (S-0606 claim 1: turreted, with a current weapon),
+    // and the AI, which counts a vehicle with a primary weapon (or a
+    // gattling's slots) as army, keeps it at home: each house starts with
+    // one, which its bunkers take in (the sweep's seeds with no vehicle
+    // bunkered had every tank fighting when the bunkers stood).
+    let mut ward = r.sim.vehicles["GUNR"].clone();
+    ward.primary = None;
+    ward.secondary = None;
+    ward.turret_count = Some(1);
+    ward.weapon_count = Some(1);
+    ward.combat.weapon_slots = Some(vec!["Gun".into()]);
+    ward.strength = Some(2000);
+    ward.tech_level = Some(-1);
+    register(r, "vehicles", "WARD");
+    r.sim.vehicles.insert("WARD".into(), ward);
     for (n, h) in r.sim.warheads.iter_mut() {
         if n == "MAGWH" || n == "MIND" {
             continue;
@@ -543,6 +577,24 @@ pub fn map() -> Map {
             key += 1;
         }
     }
+    for (name, dx, list) in START_INFANTRY {
+        for (i, ty) in list.iter().enumerate() {
+            let c = at(dx + 2 * i as i32 - 4, START_INFANTRY_ROW);
+            m.objects.infantry.push(Infantry {
+                placed: placed(name, ty, c, key),
+                sub_cell: 2,
+            });
+            key += 1;
+        }
+    }
+    // Each house's WARD behind its start, beside the base its bunkers
+    // stand in, out of the first raids' way.
+    for (name, dx) in [("Alpha", -START_DX), ("Beta", START_DX)] {
+        m.objects.units.push(Unit {
+            placed: placed(name, "WARD", at(dx + dx.signum() * HULK_BEHIND, 3), key),
+        });
+        key += 1;
+    }
     // The other house's prey on each start's side toward the middle.
     for (other, dx) in [("Beta", -START_DX), ("Alpha", START_DX)] {
         for (ox, oy) in PREY_AT {
@@ -564,7 +616,7 @@ const HULK_BEHIND: i32 = 7;
 
 /// Where the other house's PREY stand near each start: cells toward the
 /// middle and rows.
-const PREY_AT: [(i32, i32); 3] = [(6, -3), (6, 0), (10, -6)];
+const PREY_AT: [(i32, i32); 5] = [(6, -3), (6, 0), (10, -6), (14, -3), (14, 2)];
 
 /// The extra vehicles each house starts with in the gate's scenario (by
 /// house name and start offset).
@@ -574,6 +626,12 @@ pub const START_VEHICLES: [(&str, i32, &[&str]); 2] = [
 ];
 /// The row (dy from the middle) of the extra start vehicles.
 const START_VEHICLE_ROW: i32 = -3;
+
+/// The extra infantry each house starts with in the gate's scenario (by
+/// house name and start offset), in a row north of the extra vehicles.
+pub const START_INFANTRY: [(&str, i32, &[&str]); 1] = [("Alpha", -START_DX, &["TAKER"])];
+/// The row (dy from the middle) of the extra start infantry.
+const START_INFANTRY_ROW: i32 = -5;
 
 /// The fixture's flat ground and resource fields with the starts at
 /// ±[`START_DX`] and each house's start objects, without the gate's margin
