@@ -102,8 +102,13 @@ pub const M6C_TICKS: i32 = 12_000;
 /// sensor orders' 2. Moved from 2 to 1 at M7b step 1c (the S-0405 r20,
 /// S-0502 r18 and S-0309 r21 revisions): Alpha wins seed 2 at tick
 /// 11 331; seed 1, the lowest that plays all its ticks, has every counter
-/// at least 3 but the sensor orders' 2.
-pub const M7A_SEED: u32 = 1;
+/// at least 3 but the sensor orders' 2. Moved from 1 to 16 at M7b step 2a
+/// (the gate's margin setup of `glasnost_ai::fixture_m7a::map` and
+/// `ruleset`): seed 16 is the only seed of 1 to 16 that plays all its
+/// ticks with every counter at least 3, the sensor orders included (a
+/// house lost its frail sensor and built another); seed 1 has the sensor
+/// orders' 2.
+pub const M7A_SEED: u32 = 16;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

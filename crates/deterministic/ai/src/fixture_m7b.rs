@@ -114,7 +114,7 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 /// The scenario's ruleset: M7a's with the disc, the drainable buildings of
 /// Beta and the drain settings.
 pub fn ruleset() -> Ruleset {
-    let mut r = fixture_m7a::ruleset();
+    let mut r = fixture_m7a::base_ruleset();
     r.sim.projectiles.insert(
         "DROP".into(),
         ProjectileType {
@@ -288,7 +288,7 @@ pub fn rules() -> Arc<SimRules> {
 
 /// The scenario's map: M7a's with Alpha's start discs and Beta's crowds.
 pub fn map() -> Map {
-    let mut m = fixture_m7a::map();
+    let mut m = fixture_m7a::base_map();
     let first = m.objects.infantry.len() + m.objects.units.len();
     for i in 0..DISCS {
         let key = first + i;
