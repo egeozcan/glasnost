@@ -37,7 +37,7 @@ claim tests in that spec's `claims_s06xx*.rs` file and are listed in its ledger,
 The other half of PLAN §M7's list is not built yet; each pair below waits for its spec (named
 seams in the code).
 
-- Floating Disc (S-0608 drain) with the bunker, the absorber, the grinder and power: `approach::draining`.
+- Floating Disc (S-0608 drain) with the bunker, the absorber, the grinder and power: built at M7b step 3.3 ([pairs-m7b.md](pairs-m7b.md)).
 - Genetic Mutator (S-0611) with controlled, bunkered, absorbed and seized units.
 - Psychic Dominator (S-0612) with controlled units, bunkers (`bunker::holds_through_owner_change`) and the absorber.
 - Special-hit effects (S-0615) with the lift fall and gas deaths: built at M7b step 3.2, see `pairs-m7b.md`.
