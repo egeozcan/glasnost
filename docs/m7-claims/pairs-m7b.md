@@ -16,8 +16,9 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Drain × grinder: a drained grinder of a resource-destination type pays its house's credits to the drainer's house in payouts of *A*, cannot be sold, and an own grinder refuses the balloon-hovering disc | `drain_pairs::a_drained_grinder_pays_and_cannot_be_sold` | S-0608, S-0603, S-0408 |
 | Drain × tank bunker: a drained bunker's firing answer is *illegal* and it cannot be sold, but without output it blacks nothing out; a bunker refuses the balloon-hovering disc (row P6) | `drain_pairs::a_drained_bunker_refuses_fire_and_sale_but_no_blackout` | S-0608, S-0606, S-0405, S-0408 |
 
-The parachutist's order of the virus animation and the explosion is request Q-1421 (interim: the virus
-animation first); the test checks only what both orders share.
+The parachutist's order of the virus animation and the explosion was request Q-1421; S-0615 revision 3
+answers it (the virus effect first, then the kind 3 or 5 animation), and the test now checks the order
+(M7b step 1c).
 
 What a drained bunker, absorber or grinder does with its occupants and entrants (a bunkered
 vehicle's fire, entries, releases and recycling during a link) is request Q-1444. Interim: only
