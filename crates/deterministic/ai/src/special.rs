@@ -163,11 +163,6 @@ pub struct Uses {
     pub curtained_buildings: u32,
 }
 
-/// Ticks after which an army unit sent at a raider of the economy may be
-/// sent at the same raider again (a person who sent a unit lets it go and
-/// looks again later, M7b AI round 2).
-const DEFEND_AGAIN: i32 = 450; // nocite: tuning of our own opponent
-
 /// The special-ability part of one AI house's brain.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Special {
@@ -177,10 +172,6 @@ pub struct Special {
     /// What the tank bunkers remember between thinks (`bunker`).
     #[serde(default)]
     pub(crate) bunker: crate::bunker::Watch,
-    /// The army units sent at a raider of the economy: unit, raider and
-    /// tick (`Brain::defend`).
-    #[serde(default)]
-    pub(crate) defended: Vec<(ObjectId, ObjectId, i32)>,
 }
 
 /// The click a person would give `unit` on `target`, as orders, when the
@@ -259,21 +250,6 @@ impl Special {
     /// Counts one army unit sent at a drainer or a raider of the economy.
     pub(crate) fn count_economy_defence(&mut self) {
         self.uses.economy_defence += 1;
-    }
-
-    /// Whether `unit` was sent at raider `raider` within the last
-    /// [`DEFEND_AGAIN`] ticks.
-    pub(crate) fn defended_lately(&self, w: &World, unit: ObjectId, raider: ObjectId) -> bool {
-        self.defended
-            .iter()
-            .any(|&(u, r, t)| u == unit && r == raider && w.tick - t < DEFEND_AGAIN)
-    }
-
-    /// Notes `unit` sent at raider `raider` now, and forgets old notes.
-    pub(crate) fn note_defended(&mut self, w: &World, unit: ObjectId, raider: ObjectId) {
-        self.defended
-            .retain(|&(u, _, t)| u != unit && w.tick - t < DEFEND_AGAIN);
-        self.defended.push((unit, raider, w.tick));
     }
 
     /// Counts one iron curtain fired on a building.

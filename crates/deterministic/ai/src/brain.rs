@@ -1502,13 +1502,14 @@ impl Brain {
                 || (o.beh.current == Some(Behaviour::Enter)
                     && glasnost_sim::structures::bunker::entering_bunker(w, id))
                 || glasnost_sim::structures::bunker::bunkered(w, id);
-            if busy || bound {
+            // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: the brain gives it none, and counts none)
+            let berserk = glasnost_sim::psychic::berserk(w, id);
+            if busy || bound || berserk {
                 continue;
             }
-            // A unit already sent at the raider from where it stands or
-            // lately (`Special::defended_lately`), or one that did not take
-            // that order (`memory`), is not sent again: a person does not
-            // click the same every second.
+            // A unit already sent at the raider from where it stands, or
+            // one that did not take that order (`memory`), is not sent
+            // again: a person does not click the same every second.
             let memory = &self.special.memory;
             let raider = (near_home || idle(w, id))
                 .then(|| {
@@ -1519,7 +1520,6 @@ impl Brain {
                                 && can_attack(w, id, e)
                                 && memory.ok(w, id, Target::Object(e))
                                 && !memory.pending(w, id, Target::Object(e))
-                                && !self.special.defended_lately(w, id, e)
                         })
                         .min_by_key(|&&(e, c)| (dist2(c, at), e))
                 })
@@ -1546,7 +1546,6 @@ impl Brain {
                 if raider.is_some() {
                     self.special.count_economy_defence();
                     self.special.memory.note(w, std::slice::from_ref(&order));
-                    self.special.note_defended(w, id, e);
                 }
                 out.push(order);
             }

@@ -247,6 +247,7 @@ fn a_drained_plant_is_known_with_its_drainer() {
     assert_eq!(beta.special_uses().economy_defence, 0);
 }
 
+// spec: S-0610 claim 6 (a berserk unit takes no orders)
 // A unit of the house that an enemy shoots at its harvester goes for that
 // enemy, though it stands away from home (M7b AI round 2: undefended
 // slaves and harvesters).
@@ -299,8 +300,8 @@ fn defends_a_harvester_under_fire() {
     let _ = b.think(&w);
     let _ = b.think(&w);
     assert_eq!(b.special_uses().economy_defence, 1);
-    // Nor once it has moved and its target was taken from it (another
-    // order): a person looks again only later.
+    // Once it has moved and lost its target (another order) while the
+    // raider still shoots at the harvester, it is sent again at once.
     let mut moved = w.clone();
     for o in b.think(&moved) {
         orders::issue(&mut moved, HouseId(0), o);
@@ -330,10 +331,17 @@ fn defends_a_harvester_under_fire() {
         }
     }
     shroud::area_reveal(&mut moved, HouseId(0), Pos::centre(at(2, 2), 0), 12);
-    let _ = b.think(&moved);
-    assert_eq!(
-        b.special_uses().economy_defence,
-        1,
-        "not sent at the same raider again so soon"
-    );
+    let mut berserk = moved.clone();
+    let mut again = b.clone();
+    let out = again.think(&moved);
+    assert_eq!(attacked(&out, gun), Some(raider), "sent again at once");
+    assert_eq!(again.special_uses().economy_defence, 2);
+    // A berserk unit takes no orders (S-0610 claim 6): none is given or
+    // counted.
+    if let Some(o) = berserk.obj_mut(gun) {
+        o.combat.berserk = Some(300);
+    }
+    let out = b.think(&berserk);
+    assert_eq!(attacked(&out, gun), None, "no order to a berserk unit");
+    assert_eq!(b.special_uses().economy_defence, 1);
 }
