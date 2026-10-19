@@ -1552,10 +1552,17 @@ fn claim_1_deactivated_sparks_first_in_the_turn() {
 /// (the system, whether the building is still in play, whether the system
 /// is marked), right after the kill and after the next tick.
 fn destroyed_tower(explodes: bool) -> [(bool, bool); 2] {
+    destroyed_tower_selling(explodes, false)
+}
+
+fn destroyed_tower_selling(explodes: bool, selling: bool) -> [(bool, bool); 2] {
     let mut r = rules();
     r.sim.buildings.get_mut("TOWER").unwrap().combat.explodes = Some(explodes);
     let mut w = testkit::game_with(&r, N, 7);
     let b = tower(&mut w);
+    if selling {
+        w.obj_mut(b).unwrap().beh.current = Some(glasnost_sim::rules::Behaviour::Selling);
+    }
     let n = w.gas.systems.keys().last().copied();
     hit_tower(&mut w, b, 800, 100_000);
     let made: Vec<ObjectId> = w
@@ -1584,5 +1591,13 @@ fn claim_1_destruction_smoke_until_removal() {
     assert_eq!(now, (false, true), "gone at once: marked at once");
     let [now, next] = destroyed_tower(true);
     assert_eq!(now, (true, false), "awaiting removal: not marked");
+    assert_eq!(next, (false, true), "removed in its next turn: marked");
+}
+
+/// spec: S-0616 claim 1 (revision 9: a building awaiting removal under S-0312 claim 21 because it was being sold when destroyed, though its type does not explode, keeps its destruction smoke until its removal, which marks it) and scenario P21 part d
+#[test]
+fn claim_1_destruction_smoke_of_a_sold_building() {
+    let [now, next] = destroyed_tower_selling(false, true);
+    assert_eq!(now, (true, false), "being sold: awaiting removal, not marked");
     assert_eq!(next, (false, true), "removed in its next turn: marked");
 }

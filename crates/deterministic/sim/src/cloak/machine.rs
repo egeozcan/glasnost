@@ -156,6 +156,8 @@ fn start(w: &mut World, id: ObjectId) {
         ob.cloak.stage = 0;
     }
     ob.cloak.stepped = tick;
+    // spec: S-0615 claim 14 (an object that begins to cloak is lost to its disc lasers)
+    crate::disc::object_lost(w, id);
     sound(w, id);
     // spec: S-0516 claim 14 (the start of cloaking: attackers drop the target)
     drop_attackers(w, id);

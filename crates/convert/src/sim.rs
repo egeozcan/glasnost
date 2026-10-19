@@ -1983,6 +1983,19 @@ impl Builder<'_> {
                 show(&t.name)
             ));
         }
+        let frames = self
+            .i
+            .arts
+            .and_then(|a| a.get(&(Kind::Animations, index)))
+            .and_then(|a| a.sprite_frames);
+        if flaming && self.i.arts.is_some() && frames.is_none() {
+            // spec: S-0615 claim 11 and Import mapping (Unknown frame count: a burning-walker type with no sprite, or one whose frame count is unknown, uses N = 0 and is removed at its first removal test with no damage over time; a departure, the importer warns)
+            let line = t.reads.last().copied().unwrap_or(t.created_in);
+            self.warn(line, 0, format!(
+                "animations {}: a burning walker (IsFlamingGuy) with no sprite frame count; our engine uses N = 0, so it is removed at its first removal test after expiry starts, with no damage over time (the original faults; S-0615 claim 11)",
+                show(&t.name)
+            ));
+        }
         // spec: S-0109 Import mapping (Damage: a decimal, δ of claim 17; absent 0)
         if let Some(d) = sec.value(b"Damage").and_then(decimal_text) {
             rec.put("damage", jsonc::string(d));

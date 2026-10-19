@@ -3245,6 +3245,12 @@ impl Builder<'_> {
             rec.put("locomotor", jsonc::string(name));
         }
         let name = format!("warheads {}", show(&t.name));
+        // spec: S-0615 claim 3 and Import mapping (a negative InfDeath acts as kind 0 in the ordinary dispatch; bad data: the importer warns)
+        self.each_int(
+            key(t, "InfDeath"),
+            |v| v < 0,
+            |v| format!("{name} InfDeath {v} is negative: it acts as death kind 0 (no animation, removed at once), an own death animation list uses entry 0 and a \"not human\" type makes its die-1 request (S-0615 claim 3)"),
+        );
         // spec: S-0607 claim 22 (an unknown identifier, design: the importer warns, and a hit is treated as with a locomotor that cannot stand in temporarily)
         self.each(
             key(t, "Locomotor"),

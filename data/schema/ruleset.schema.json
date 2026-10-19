@@ -8791,6 +8791,11 @@
           "type": "boolean",
           "default": true
         },
+        "disc_laser_unlimited_range": {
+          "description": "A disc laser whose weapon has the unlimited range compares its re-check distance with that negative value as it is, so it is cancelled at its first step and never deals damage; off: unlimited range never cancels a disc laser on distance.",
+          "type": "boolean",
+          "default": true
+        },
         "dock_bound_aircraft_ignores_limit": {
           "description": "A dock-bound aircraft type is tested at queue time by the dock test only.",
           "type": "boolean",
@@ -9223,6 +9228,11 @@
         },
         "jumpjet_bridge_early_cruise_height": {
           "description": "An own-cell early cruise keeps the height above the surface r as its target even when the take-off threshold used the smaller bridge-adjusted h, so it can climb again above the deck; off: it keeps h at that transition.",
+          "type": "boolean",
+          "default": true
+        },
+        "jumpjet_falling_touchdown_tracked": {
+          "description": "A jumpjet touching down in the bridge or parachute falling state, or no longer alive or in play, stays a tracked flying object; off: every touchdown ends its registration.",
           "type": "boolean",
           "default": true
         },
@@ -9718,6 +9728,11 @@
         },
         "rail_missile_vanishes_with_spawner": {
           "description": "Missiles on the rail vanish with no detonation when the spawner dies or changes hands; off: they are released like preparing missiles.",
+          "type": "boolean",
+          "default": true
+        },
+        "railgun_collinear_hits": {
+          "description": "A railgun candidate whose calculated line distance is not a number (exact collinearity among others) qualifies whatever the hit distance; off: the finite Euclidean distance to the beam's line (to its start for a zero-length beam), strictly below the hit distance.",
           "type": "boolean",
           "default": true
         },

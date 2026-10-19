@@ -330,6 +330,50 @@ fn a_gas_cloud_kills_a_parachutist_with_one_cloud_and_an_explosion() {
     round_trip(&w);
 }
 
+/// Kills `id` at once with the kind-8 warhead VENOM, no attacker.
+fn venom_kill(w: &mut World, id: ObjectId) {
+    use glasnost_sim::combat::damage::{self, Hit};
+    let h = w
+        .rules()
+        .combat
+        .warheads
+        .iter()
+        .position(|x| x.name == "VENOM")
+        .unwrap() as u32;
+    damage::apply(
+        w,
+        id,
+        Hit {
+            amount: 10_000,
+            warhead: Some(h),
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+}
+
+// Pair: special-hit effects and gas deaths (S-0615 × S-0613), revision 3 (Q-1421 answered).
+// spec: S-0615 claim 1 (Order with the extra virus effect: a "not human" type killed on the ground with death kind 8 makes its forced die-1 request and then one extra virus effect; a "not human" parachutist gets exactly one virus effect, not a second one in row 4) and S-0107 claim 17 row 4
+#[test]
+fn a_not_human_virus_death_makes_one_virus_effect() {
+    let mut r = gas_rules();
+    r.sim.infantry.get_mut("FRAIL").unwrap().not_human = Some(true);
+    for chute in [false, true] {
+        let mut w = testkit::game_with(&r, 20, 7);
+        let id = testkit::spawn(&mut w, Kind::Infantry, "FRAIL", 1, testkit::mid(20, 0, 0), 0);
+        if chute {
+            w.obj_mut(id).unwrap().infantry.as_mut().unwrap().seq = Some(Seq::Parachute);
+        }
+        let (clouds, anims) = (cloud_count(&w), w.gas.anims.len());
+        venom_kill(&mut w, id);
+        assert_eq!(cloud_count(&w) - clouds, 1, "one extra virus particle (chute {chute})");
+        assert_eq!(w.gas.anims.len(), anims, "no lasting virus animation (chute {chute})");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The drain (S-0608) with the tank bunker, the absorber, the grinder and
 // power. What a drained bunker, absorber or grinder does with its occupants
