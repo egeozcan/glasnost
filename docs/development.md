@@ -1524,23 +1524,24 @@ Outputs (git-ignored, never committed): `local-lane/m7b/arena/ours-<ID>.csv` (ou
 
 | Record | Pairings | Fail win test | Fail row-left KS | Fail column-left KS | Pairings failing any test | Side-unanimous stock outcomes reproduced |
 |---|---|---|---|---|---|---|
-| M-0001 | 96 | 5 | 25 | 17 | 36 | 149 of 172 |
+| M-0001 | 96 | 6 | 27 | 17 | 37 | 146 of 172 |
 | M-0002 | 24 | 4 | 9 | 4 | 17 | 43 of 47 |
 | M-0003 | 35 | 3 | 5 | 4 | 6 | 55 of 64 |
 
-Before the fixes below (and with human-controlled houses) the counts were 37, 13 and 9 failing pairings, and 142, 41 and 51 unanimous outcomes reproduced. Our games vary much less with the seed than the stock ones (often identical for all six seeds), so many share KS tests fail although the winner and the mean share agree.
+Before the fixes below (and with human-controlled houses) the counts were 37, 13 and 9 failing pairings, and 142, 41 and 51 unanimous outcomes reproduced. Running the three records takes about 8 minutes on 8 threads. Our games vary much less with the seed than the stock ones (often identical for all six seeds), so many share KS tests fail although the winner and the mean share agree.
 
-**Fixed against approved specs** (with synthetic tests): a jumpjet between lift-off and landing is a tracked flying object (S-0303 Terms, S-0502 claims 4, 5 and 15; Q-1500), so detonations above the terrain hit it; a jumpjet is in the air for weapon choice by S-0307's height test (S-0502 Terms, S-0308 table P row 19; Q-1501); a range or area search for aircraft first scans the tracked flying objects (S-0309 claim 9, table C row "class"); tests in `claims_s0303_jumpjet.rs`. The computer houses fixed a group that could not approach (S-0215 claim 37's keep table keeps a hunt target for a computer house).
+**Fixed against approved specs** (with synthetic tests): a jumpjet between lift-off and landing is a tracked flying object (S-0303 Terms, S-0502 claims 4, 5 and 15; Q-1500), so detonations above the terrain hit it; a jumpjet is in the air for weapon choice by S-0307's height test (S-0502 Terms, S-0308 table P row 19; Q-1501); a range or area search for aircraft first scans the tracked flying objects (S-0309 claim 9, table C row "class"); the map-wide search's second pass takes only objects of the ground render layer, so it never finds a hovering jumpjet (S-0309 claim 7); a projectile's claim 20 c threshold is 128 for a target airborne in another render layer (S-0306 claim 20 c). Tests in `claims_s0303_jumpjet.rs` and `claims_s0306.rs`. Hunting units run only map-wide searches, so the claim 9 change alone moved no arena count; the claim 7 and claim 20 c changes turned DISK against HTK into a pass, and DISK against FV and TELE against MGTK into failures (below). The computer houses fixed a group that could not approach (S-0215 claim 37's keep table keeps a hunt target for a computer house).
 
 **Open discrepancies** (largest first; type IDs as in the committed records):
 
 - *Units on impassable cliff cells* (Q-1502): five placement cells of side A are rock cliffs of land type 3 on `Arena.mmx`; infantry there belong to no reach region and never move, so infantry pairings on side A end `none` or lose (YTNK/MIND/INIT/VIRUS against E1 or E2). The lead's note on M-0001 and M-0002 (main f81fc29, answering Q-1502 for the setup) confirms that the stock harness placed units on those cells like anywhere else, which our placement already does, and that in the stock games of those pairings every game still ended by the third sample with one side owning nothing. So the setup matches and the difference is in the simulation (what a unit on such a cell may do, or how it is reached); the behaviour part of Q-1502 waits on a spec.
 - *A powered vehicle is never disabled* (Q-1503; S-0405 claim 13 is a seam): ROBO fights in ours and not in the stock games (M-0003 ROBO pairings, LTNK against ROBO). Waits on the request.
+- *Hunting ground units against hovering jumpjets* (Q-1504): by S-0309 claims 1 and 7 a hunting unit never finds a hovering jumpjet, so our FV stop firing once the DISK hover, while the stock FV win 12 of 12. Waits on the request.
 - *Steering anti-air projectiles* (DISK against APOC, MGTK against APOC): the APOC's anti-air missiles detonate next to the launcher right after launch. Not yet explained (S-0306 steering rows); no request yet.
 - *Mind control* (MIND against MGTK and the MIND shares, ours lower): our MIND capture fewer units and die. Not yet explained (S-0601, S-0610).
-- *Magnetron* (TELE pairings): our TELE seize targets that then neither lift nor take damage while the beam keeps firing; V3 shares end slightly above 1 against TELE. Not yet explained (S-0607).
+- *Magnetron* (TELE pairings): our TELE seize targets that then neither lift nor take damage while the beam keeps firing (TELE against MGTK now ends `none` in all 12 games, since a lifted target is outside the ground layer); V3 shares end slightly above 1 against TELE. Not yet explained (S-0607).
 - *CAOS pairings* (ours too strong: it wins or survives more than in the stock games against SREF, BFRT, E1, TTNK and HTNK): not yet explained.
-- The drain seam of S-0608 (`draining()` in `combat/approach.rs`) waits on that spec (a separate step).
+- The drain of S-0608 (the `draining()` seam in `combat/approach.rs` on this branch) landed on main in step 3.3, not on this branch.
 - MIND against E2: the stock CSV shows `none` before the frame limit, which the procedure does not explain; noted for the lead.
 
 ### The synthetic arena
