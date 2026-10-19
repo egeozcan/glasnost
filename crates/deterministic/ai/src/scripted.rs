@@ -1328,32 +1328,51 @@ impl Script {
 
     /// The water the base grows toward: when a naval factory type that the
     /// house has none of is buildable but has no cell to stand on, the
-    /// explored water cell nearest the construction yard (the first in cell
-    /// order on equal distance).
+    /// nearest explored site within the wide spiral where its foundation
+    /// would stand but for the distance to the base (the cursor shows the
+    /// foundation fits, S-0406 claims 3 and 5, and only the adjacency of
+    /// claim 4 fails), the first in cell order on equal distance. With no
+    /// such site the base does not grow: a person does not lay buildings
+    /// toward water too small or too far for the yard (M7b AI audit: on a
+    /// map with a narrow strip of water the base walked nine power plants
+    /// toward it and starved the economy).
     pub(crate) fn water_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
-        let stuck = w.rules().buildings.iter().enumerate().any(|(i, b)| {
-            let t = TypeRef {
-                kind: Kind::Building,
-                index: i as u32,
-            };
-            b.naval
-                && b.factory.is_some()
-                && tech::present_count(w, self.house, t) == 0
-                && tech::buildable(w, self.house, t)
-                && !self.placeable(w, t)
-        });
-        if !stuck {
+        let stuck: Vec<u32> = w
+            .rules()
+            .buildings
+            .iter()
+            .enumerate()
+            .filter(|(i, b)| {
+                let t = TypeRef {
+                    kind: Kind::Building,
+                    index: *i as u32,
+                };
+                b.naval
+                    && b.factory.is_some()
+                    && tech::present_count(w, self.house, t) == 0
+                    && tech::buildable(w, self.house, t)
+                    && !self.placeable(w, t)
+            })
+            .map(|(i, _)| i as u32)
+            .collect();
+        if stuck.is_empty() {
             return None;
         }
-        w.cells
-            .grid
-            .iter()
-            .filter(|(c, cell)| {
-                cell.land == glasnost_map::terrain::land::WATER
-                    && shroud::explored(w, self.house, *c)
+        let test = placement::Test::order(self.house);
+        let r = WIDE_RINGS;
+        (-r..=r)
+            .flat_map(|dy| (-r..=r).map(move |dx| CellXY::new(home.x + dx, home.y + dy)))
+            .filter(|&c| {
+                w.cells
+                    .grid
+                    .get(c)
+                    .is_some_and(|cell| cell.land == glasnost_map::terrain::land::WATER)
+                    && stuck.iter().any(|&t| {
+                        placement::explored(w, self.house, t, c)
+                            && placement::cell_test(w, t, c, &test)
+                    })
             })
-            .map(|(c, _)| c)
             .min_by_key(|&c| (dist2(c, home), c.y, c.x))
     }
 
