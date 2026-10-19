@@ -800,7 +800,7 @@ pub struct GeneralRules {
     /// indexes 0, 1 and 2: the neutral and special houses read entry 1, a
     /// test-only computer-controlled player house its oracle house's index;
     /// `None` where the list has no entry.
-    pub auto_deploy_delays: [Option<i32>; 3],
+    pub auto_deploy_delays: [Option<i32>; 3], // spec: S-0215 Terms (difficulty index: 0, 1 or 2)
     /// The rules' lobby game-speed index (S-0201 claim 7).
     pub lobby_game_speed: u8,
     /// The engineer-capture health ratio c (S-0214 row I7), single

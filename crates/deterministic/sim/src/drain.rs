@@ -17,7 +17,7 @@
 //!   ending restores what claim 14 lists ([`end`]). Taking a party off the
 //!   map for a while without removing it does not touch its links (Open
 //!   question 3; request Q-1443, answered by S-0608 revision 5, not yet
-//! taken in).
+//!   taken in).
 //!
 //! State is world-level ([`DrainWorld`]): every drained building with its
 //! drainer, and each drainer's newest partner. The two differ only for a
