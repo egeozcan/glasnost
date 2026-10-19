@@ -263,6 +263,20 @@ fn shields_buildings_with_an_enemy_at_them() {
     );
 }
 
+// S-0513 claim 31 and F3 (M7b AI audit): the shield takes the buildings of the house within its radius of the target cell, so two buildings with a gap between them are shielded together.
+#[test]
+fn shields_buildings_with_a_gap_between_them() {
+    let (g, yard) = ready("SHLDB");
+    let mut w = g.world.clone();
+    let b = spot(yard, 12, 12);
+    testkit::spawn(&mut w, Kind::Building, "POWR", 0, b, 0);
+    testkit::spawn(&mut w, Kind::Building, "PILL", 0, spot(b, 5, 0), 0);
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, spot(b, 8, 0), 0);
+    glasnost_sim::tick::step(&mut w);
+    let cells = fires(&think(&w), "SHLD", &w);
+    assert_eq!(cells.len(), 1, "one shield order: {cells:?}");
+}
+
 // A ready spy plane goes at the enemy base.
 #[test]
 fn sends_the_spy_plane_at_the_enemy() {

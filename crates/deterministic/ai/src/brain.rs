@@ -732,33 +732,53 @@ impl Brain {
         self.vehicle_block(w, false, TELEPORT_MIN)
     }
 
-    /// A force shield's cell: the building of the house with the most of
-    /// its buildings in the block, at least [`SHIELD_MIN`], where a seen
-    /// enemy stands within [`DEFEND`] cells and no unit of anyone else is
-    /// in the block; the first in cell order on equal counts.
+    /// A force shield's cell: the reference cell of one of the house's
+    /// buildings with a seen enemy within [`DEFEND`] cells, whose shield
+    /// takes the most buildings of the house and its allies, at least
+    /// [`SHIELD_MIN`]; the first in cell order on equal counts. The shield
+    /// protects buildings of the launching house and its allies whose
+    /// reference point is within the shield's radius of the target cell's
+    /// centre, and nothing else (S-0513 claim 31, F3: the radial indicator
+    /// a person reads off the cursor; the height is left out). The M7b AI
+    /// audit found the shield ready in every Yuri game and never fired: the
+    /// old aim counted buildings by their cell in a 3 × 3 block, which two
+    /// buildings with a gap between them never share.
     fn shield_cell(&self, w: &World) -> Option<CellXY> {
         let house = self.house();
+        let me = &w.houses[usize::from(house.0)];
         let enemies = self.script.seen_enemies(w);
-        let buildings: Vec<CellXY> = w
+        let r = 256 * i64::from(w.rules().superweapons.shield_radius); // spec: S-0513 F3 (256 leptons per cell of the radius R)
+        let points: Vec<(bool, i64, i64)> = w
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Building)
-            .filter(|o| o.owner == Some(house))
-            .map(|o| o.pos.cell())
+            .filter(|o| {
+                o.owner
+                    .is_some_and(|h| h == house || me.allies.contains(&h))
+            })
+            .map(|o| {
+                let p = w.reference_point(o.id);
+                (o.owner == Some(house), i64::from(p.x), i64::from(p.y))
+            })
             .collect();
-        let others: Vec<CellXY> = w
-            .objects
-            .values()
-            .filter(|o| o.on_map && o.health > 0 && o.owner != Some(house))
-            .map(|o| o.pos.cell())
-            .collect();
-        let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
-        buildings
+        let mut cands: Vec<CellXY> = points
             .iter()
-            .copied()
+            .filter(|&&(own, _, _)| own)
+            .map(|&(_, x, y)| CellXY::new((x / 256) as i32, (y / 256) as i32))
             .filter(|&c| enemies.iter().any(|&(_, e)| dist2(e, c) <= DEFEND * DEFEND))
-            .filter(|&c| !others.iter().any(|&o| near(o, c)))
-            .map(|c| (buildings.iter().filter(|&&b| near(b, c)).count(), c))
+            .collect();
+        cands.sort_by_key(|c| (c.y, c.x));
+        cands.dedup();
+        cands
+            .into_iter()
+            .map(|c| {
+                let (cx, cy) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0513 F3 (the target cell centre)
+                let n = points
+                    .iter()
+                    .filter(|&&(_, x, y)| (x - cx).pow(2) + (y - cy).pow(2) < r * r)
+                    .count();
+                (n, c)
+            })
             .filter(|&(n, _)| n >= SHIELD_MIN)
             .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
             .map(|(_, c)| c)
