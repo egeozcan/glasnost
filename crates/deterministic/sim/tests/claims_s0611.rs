@@ -617,6 +617,65 @@ fn claim_7_crash_victim_still_converts() {
     assert!(unit.is_some(), "it makes its unit");
 }
 
+// spec: S-0107 claim 17 row 7 (revision 18: for a successful replacement a crash changes only the victim's removal; the conversion animation still starts in the death tick, the standing position is marked taken again at crash entry, and the animation's later freeing need not wait for the crash to end)
+// spec: S-0611 claims 7 and 8 (the crash keeps the victim; the animation runs its ordinary course)
+#[test]
+fn s0107_claim_17_row_7_crash_changes_only_the_removal() {
+    let r = rules(false);
+    let c = at(0, 0);
+    let kill = |w: &mut World, v: ObjectId| {
+        let h = warhead(w, "Mutate");
+        damage::apply(
+            w,
+            v,
+            Hit {
+                amount: 100,
+                warhead: Some(h),
+                distance: 0,
+                attacker: None,
+                house: Some(ALPHA),
+                ignore_defences: false,
+                no_escape: false,
+            },
+        );
+    };
+    // On the ground: the victim is removed; the animation's span from the
+    // death tick to its end.
+    let mut w = game(&r);
+    let v = put(&mut w, "JJC", BETA, c, position::RIGHT);
+    w.obj_mut(v).unwrap().health = 1;
+    let t0 = w.tick;
+    kill(&mut w, v);
+    assert!(w.obj(v).is_none());
+    let m = makers(&w)[0];
+    let (_, end) = finish(&mut w, m);
+    let span = end - t0;
+    // Above the surface: a crash, the mark taken at crash entry, and the
+    // animation ends after the same span while the victim still crashes.
+    let mut w = game(&r);
+    let v = put(&mut w, "JJC", BETA, c, position::RIGHT);
+    w.obj_mut(v).unwrap().pos.z += 2000;
+    w.obj_mut(v).unwrap().health = 1;
+    let t0 = w.tick;
+    w.effects.clear();
+    kill(&mut w, v);
+    assert!(glasnost_sim::jump::crashing(&w, v));
+    assert_eq!(maker_events(&w).len(), 1, "the animation starts at once");
+    assert!(
+        mark(&w, c, Layer::Ground, position::RIGHT).is_some(),
+        "marked taken at crash entry"
+    );
+    let m = makers(&w)[0];
+    let (unit, end) = finish(&mut w, m);
+    assert_eq!(end - t0, span, "the end does not wait for the crash");
+    assert!(
+        w.obj(v)
+            .is_some_and(|_| glasnost_sim::jump::crashing(&w, v)),
+        "the victim is still crashing"
+    );
+    assert!(unit.is_some());
+}
+
 // ---------------------------------------------------------------------------
 // Claim 8: the conversion animation, owner and occupancy.
 // ---------------------------------------------------------------------------

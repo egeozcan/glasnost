@@ -890,7 +890,7 @@ fn set_disabled(w: &mut World, h: HouseId, unit: u32, disabled: bool) {
         .collect();
     for id in ids {
         if disabled && tethered_in_own_cell(w, id) {
-            // spec: S-0405 claim 13 (at the 1-to-0 transition a vehicle tethered to the building standing in its own cell is passed over and stays enabled, for example a new vehicle still in its factory; interim Q-1505: a vehicle docked on a repair depot is passed over when our depot exchange tethers it)
+            // spec: S-0405 claim 13 (at the 1-to-0 transition a vehicle tethered to the building standing in its own cell is passed over and stays enabled, for example a new vehicle still in its factory; revision 21, Q-1505: on its own house's repair depot only when tethered to that depot and the depot stands in its cell, reading neither the pad flag nor the repair phase; S-0314 claim 17 owns when depot entry tethers)
             continue;
         }
         if disabled {

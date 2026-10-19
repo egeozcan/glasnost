@@ -34,19 +34,19 @@ claim tests in that spec's `claims_s06xx*.rs` file and are listed in its ledger,
 
 ## Pairs left for M7b
 
-The other half of PLAN §M7's list is not built yet; each pair below waits for its spec (named
-seams in the code).
+Every pair of the other half of PLAN §M7's list is now built; [pairs-m7b.md](pairs-m7b.md) lists
+them. None is left open.
 
-- Floating Disc (S-0608 drain) with the bunker, the absorber, the grinder and power: built at M7b step 3.3 ([pairs-m7b.md](pairs-m7b.md)).
-- Genetic Mutator (S-0611) with controlled, bunkered, absorbed and seized units.
-- Psychic Dominator (S-0612) with controlled units, bunkers and the absorber: built at M7b step 3.5 ([pairs-m7b.md](pairs-m7b.md)).
-- Special-hit effects (S-0615) with the lift fall and gas deaths: built at M7b step 3.2, see `pairs-m7b.md`.
-- Cloning Vats, and the Force Shield against the M7a weapons.
+- Floating Disc (S-0608 drain) with the bunker, the absorber, the grinder and power: built at M7b step 3.3.
+- Genetic Mutator (S-0611) with controlled, bunkered, absorbed and seized units: built at M7b step 3.4.
+- Psychic Dominator (S-0612) with controlled units, bunkers and the absorber: built at M7b step 3.5.
+- Special-hit effects (S-0615) with the lift fall and gas deaths: built at M7b step 3.2.
+- Cloning Vats, and the Force Shield against the M7a weapons: built at M7b step 4a. The drain on a
+  protected building waits for request Q-1507 and tests its interim.
 
 ## Local relation tests on the reference ruleset
 
-PLAN §M7 also asks for a local relation test on the reference ruleset for each pair. M7a has none
-yet. The local lane (`crates/app/tests/m7a_lane.rs`, scenes for berserk, the psychic sensor
-and reveal, mind control and overload, gattling spin, gas clouds, the absorber, the grinder, the
-bunker and the magnetic lift) exercises each ability on the installed data, one at a time,
-and the AI lane plays them together, but neither checks a pair. This is carried to M7b.
+PLAN §M7 also asks for a local relation test on the reference ruleset for each pair. M7b step 4b
+adds them for the 16 M7a pairs too, in `crates/tools/tests/relation_lane.rs` (the tests named
+`m7a_<synthetic test name>`). The run command and the results on the user's install are in
+[pairs-m7b.md](pairs-m7b.md#local-relation-tests-on-the-reference-ruleset): all 16 M7a tests pass.

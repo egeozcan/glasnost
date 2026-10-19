@@ -8,11 +8,12 @@ mod lift_common;
 
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{AnimationType, Decimal, ParticleSystemType, ParticleType, WarheadType};
+use glasnost_rules::sim_econ::SuperweaponType;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::infantry::Seq;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::{ObjectId, Pos, World};
-use glasnost_sim::{gas, lift, save, testkit};
+use glasnost_sim::{gas, lift, save, superweapons, testkit};
 
 fn register(r: &mut Ruleset, reg: &str, name: &str) {
     let l = r.registries.entry(reg.into()).or_default();
@@ -67,6 +68,43 @@ fn round_trip(w: &World) {
     let h = save::state_hash(w);
     let l = save::load(&save::save(w), w.rules_arc(), testkit::catalogue()).unwrap();
     assert_eq!(save::state_hash(&l), h);
+}
+
+/// Adds the force shield: SHIELD (kind and action ForceShield), radius 3
+/// cells, 80 ticks of protection, a blackout of 40 ticks, the fade sound 20
+/// ticks before the end, the invoke animation SHIELDA.
+fn add_shield(r: &mut Ruleset) {
+    register(r, "superweapons", "SHIELD");
+    r.sim.superweapons.insert(
+        "SHIELD".into(),
+        SuperweaponType {
+            kind: Some("ForceShield".into()),
+            action: Some("ForceShield".into()),
+            recharge_time: Some(Decimal("0.1".into())),
+            ..Default::default()
+        },
+    );
+    register(r, "animations", "SHIELDA");
+    r.sim
+        .animations
+        .insert("SHIELDA".into(), AnimationType::default());
+    let g = &mut r.sim.general.superweapons;
+    g.force_shield_radius = Some(3);
+    g.force_shield_duration = Some(80);
+    g.force_shield_blackout_duration = Some(40);
+    g.force_shield_play_fade_sound_time = Some(20);
+    g.force_shield_invoke_anim = Some("SHIELDA".into());
+}
+
+/// House `h`'s force-shield launch at `c` (the record and readiness are
+/// S-0512's and play no part here).
+fn shield(w: &mut World, h: u8, c: glasnost_map::CellXY) {
+    let i = w
+        .rules()
+        .superweapons
+        .first_of_kind(superweapons::SwKind::ForceShield)
+        .expect("the force shield type");
+    superweapons::protect::force_shield(w, glasnost_sim::world::HouseId(h), i, c);
 }
 
 // Pair: special-hit effects and the magnetic lift's fall (S-0615 × S-0607).
@@ -399,6 +437,68 @@ fn a_not_human_virus_death_makes_one_virus_effect() {
             "no lasting virus animation (chute {chute})"
         );
     }
+}
+
+// Pair: gas clouds and the force shield (S-0613 × S-0513).
+// spec: S-0613 claim 13 (a gas particle hits every object listed in the ground layer of its cell, buildings included, with ordinary damage that does not ignore defences)
+// spec: S-0513 claim 31 (the launching house's building within the radius is protected) and S-0302 claim 8 (a hit on a protected object that does not ignore defences changes no health)
+#[test]
+fn a_gas_cloud_does_nothing_to_a_shielded_building() {
+    let mut r = gas_rules();
+    add_shield(&mut r);
+    register(&mut r, "buildings", "TOWER");
+    r.sim.buildings.insert(
+        "TOWER".into(),
+        glasnost_rules::sim::BuildingType {
+            strength: Some(1000),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        },
+    );
+    let mut w = testkit::game_with(&r, 20, 7);
+    let shielded = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        0,
+        testkit::mid(20, 0, 0),
+        0,
+    );
+    let open = testkit::spawn(
+        &mut w,
+        Kind::Building,
+        "TOWER",
+        0,
+        testkit::mid(20, 0, 6),
+        0,
+    );
+    testkit::run(&mut w, 3);
+    shield(&mut w, 0, testkit::mid(20, 0, 0));
+    assert!(superweapons::protected(&w, shielded) && !superweapons::protected(&w, open));
+    let draw = w
+        .rules()
+        .gas
+        .particles
+        .iter()
+        .find(|p| p.name == "FOG")
+        .unwrap()
+        .draw;
+    for id in [shielded, open] {
+        let p = w.obj(id).unwrap().pos;
+        gas::middle_event_particle(&mut w, draw, Some((p.x, p.y, p.z)));
+    }
+    let h = |w: &World, id| w.obj(id).unwrap().health;
+    let (hs, ho) = (h(&w, shielded), h(&w, open));
+    for _ in 0..60 {
+        if h(&w, open) < ho {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    assert!(h(&w, open) < ho, "the cloud hurts the open building");
+    assert!(superweapons::protected(&w, shielded));
+    assert_eq!(h(&w, shielded), hs, "and not the shielded one");
+    round_trip(&w);
 }
 
 // ---------------------------------------------------------------------------
@@ -824,6 +924,42 @@ mod drain_pairs {
         assert_eq!(drain::partner(&w, d), Some(g), "the link stays");
         round_trip(&w);
     }
+
+    // Pair: the drain and the force shield (S-0608 × S-0513), interim of request Q-1507.
+    // spec: S-0513 claim 31 (the launching house's building within the radius is protected) and claim 27 (the list of what protection refuses besides damage has no drain row) with claim 28 (a player house may fire at a protected object)
+    // spec: S-0608 claim 3 (the firing check's drain refusals: the own building, already drained, not drainable; no protection row) and claim 5 (the attempt forms the link)
+    // Q-1507 (open): whether protection refuses or ends a drain link; interim: the literal reading, not refused, the link forms and holds while protected.
+    #[test]
+    fn a_shielded_plant_is_drained_under_the_q1507_interim() {
+        let mut r = rules();
+        super::add_shield(&mut r);
+        let mut w = testkit::game_with(&r, SIZE, 7);
+        testkit::run(&mut w, 2);
+        let p = put(&mut w, Kind::Building, "PLANT", BETA, 0, 0);
+        testkit::run(&mut w, 2);
+        super::shield(&mut w, BETA, at(0, 0));
+        assert!(glasnost_sim::superweapons::protected(&w, p));
+        // The disc over the plant, its drain weapon checked before the
+        // attempt: not illegal.
+        let d = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 9, 9);
+        objects::take_inside(&mut w, d);
+        let c = Pos::centre(w.obj(p).unwrap().pos.cell(), 0);
+        let ground = w.surface_at(c.x, c.y);
+        objects::place(&mut w, d, Pos::new(c.x, c.y, ground + 200), 0);
+        w.obj_mut(d).unwrap().target = Some(Target::Object(p));
+        assert_ne!(
+            glasnost_sim::combat::check::check(&w, d, Some(Target::Object(p)), 1, false),
+            Fire::Illegal,
+            "the firing check does not refuse"
+        );
+        fire::shot(&mut w, d, 1, Target::Object(p));
+        assert_eq!(drain::partner(&w, d), Some(p), "the link forms");
+        sleep(&mut w, d);
+        testkit::run(&mut w, 20);
+        assert!(glasnost_sim::superweapons::protected(&w, p));
+        assert_eq!(drain::partner(&w, d), Some(p), "and holds while protected");
+        round_trip(&w);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1200,7 +1336,7 @@ mod dominator_pairs {
     /// GATT, the absorber BIO and the bunker BUNK) with the domination
     /// values: lead-in LEAD (four frames) swept at stage 0, sweep SWEEP
     /// (four frames), capture range 1, no warhead (no damage).
-    fn rules() -> Ruleset {
+    pub(super) fn rules() -> Ruleset {
         let mut r = super::mutator_pairs::rules();
         for n in ["LEAD", "SWEEP"] {
             register(&mut r, "animations", n);
@@ -1258,7 +1394,7 @@ mod dominator_pairs {
     /// House `h`'s domination at `c` (the superweapon's record and
     /// readiness are S-0512's and play no part here), run to its sweep;
     /// returns the objects it took over.
-    fn dominate(w: &mut World, h: u8, c: CellXY) -> Vec<ObjectId> {
+    pub(super) fn dominate(w: &mut World, h: u8, c: CellXY) -> Vec<ObjectId> {
         domination::launch(w, HouseId(h), 0, c);
         for _ in 0..10 {
             w.effects.clear();
@@ -1379,6 +1515,498 @@ mod dominator_pairs {
         assert!(!mind::permanent(&w, inside));
         assert_eq!(absorb::absorbed_in(&w, inside), Some(bio), "still inside");
         assert_eq!(owner(&w, bio), Some(BETA));
+        round_trip(&w);
+    }
+}
+
+mod shield_pairs {
+    use super::{add_shield, register, shield};
+    use glasnost_map::CellXY;
+    use glasnost_rules::schema::Ruleset;
+    use glasnost_rules::sim::{BuildingType, Decimal, UnitType, WarheadType, WeaponType};
+    use glasnost_sim::combat::check::{self, Answer};
+    use glasnost_sim::econ::power;
+    use glasnost_sim::econ::release::{self, Outcome};
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::{Behaviour, Kind};
+    use glasnost_sim::superweapons::protected;
+    use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+    use glasnost_sim::{gattling, lift, mind, mutation, objects, save, testkit, tick};
+
+    pub(super) const SIZE: i32 = 24;
+    pub(super) const ALPHA: u8 = 0;
+    pub(super) const BETA: u8 = 1;
+
+    fn dec(s: &str) -> Decimal {
+        Decimal(s.into())
+    }
+
+    /// The dominator pairs' rules (the controller CLONE with Ray3, GRUNT,
+    /// TGT, the lifter MAGL, the absorber BIO, the mutation and domination
+    /// values) with the force shield of `add_shield`, and: GATL (a vehicle
+    /// gattling with six slots G0 to G5, each of damage 5, rate 1, range 10
+    /// and warhead GWH of versus 1 for every armour; three stages, spin-up 7, spin-down 1, thresholds 10,
+    /// 30 and 60); TOWER (an unarmed 1 × 1 building of strength 1000); VAT
+    /// (a 2 × 2 cloning building, not immune to psionics); BARR (a 2 × 2 infantry factory); and the
+    /// domination's area damage 20 with the warhead DOMWH (spread 4 cells,
+    /// full damage at the edge).
+    pub(super) fn rules() -> Ruleset {
+        let mut r = super::dominator_pairs::rules();
+        add_shield(&mut r);
+        register(&mut r, "warheads", "GWH");
+        r.sim.warheads.insert(
+            "GWH".into(),
+            WarheadType {
+                verses: Some(vec![dec("1"); 11]),
+                ..Default::default()
+            },
+        );
+        let slots: Vec<String> = (0..6).map(|i| format!("G{i}")).collect();
+        for n in &slots {
+            r.sim.weapons.insert(
+                n.clone(),
+                WeaponType {
+                    damage: Some(5),
+                    rof: Some(1),
+                    range: Some(dec("10")),
+                    speed: Some(100),
+                    projectile: Some("Bullet".into()),
+                    warhead: Some("GWH".into()),
+                    ..Default::default()
+                },
+            );
+        }
+        let mut gat: UnitType = r.sim.vehicles["TGT"].clone();
+        gat.turret_count = Some(1);
+        gat.weapon_count = Some(6);
+        gat.combat.weapon_slots = Some(slots);
+        gat.combat.is_gattling = Some(true);
+        gat.combat.weapon_stages = Some(3);
+        gat.combat.rate_up = Some(7);
+        gat.combat.rate_down = Some(1);
+        gat.combat.stage_thresholds = Some(vec![10, 30, 60]);
+        register(&mut r, "vehicles", "GATL");
+        r.sim.vehicles.insert("GATL".into(), gat);
+        let tower = BuildingType {
+            strength: Some(1000),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        };
+        let mut vat = BuildingType {
+            strength: Some(1000),
+            foundation: Some([2, 2]),
+            ..Default::default()
+        };
+        vat.econ.cloning = Some(true);
+        // Not immune to psionics, so that it can be taken (S-0601 claim 3).
+        vat.combat.immune_to_psionics = Some(false);
+        let barr = BuildingType {
+            strength: Some(1000),
+            foundation: Some([2, 2]),
+            factory: Some("infantry".into()),
+            ..Default::default()
+        };
+        for (n, b) in [("TOWER", tower), ("VAT", vat), ("BARR", barr)] {
+            register(&mut r, "buildings", n);
+            r.sim.buildings.insert(n.into(), b);
+        }
+        register(&mut r, "warheads", "DOMWH");
+        r.sim.warheads.insert(
+            "DOMWH".into(),
+            WarheadType {
+                verses: Some(vec![dec("1"); 11]),
+                cell_spread: Some(dec("4")),
+                percent_at_max: Some(dec("1")),
+                ..Default::default()
+            },
+        );
+        let g = &mut r.sim.general.superweapons;
+        g.dominator_damage = Some(20);
+        g.dominator_warhead = Some("DOMWH".into());
+        r
+    }
+
+    pub(super) fn at(dx: i32, dy: i32) -> CellXY {
+        testkit::mid(SIZE, dx, dy)
+    }
+
+    pub(super) fn put(
+        w: &mut World,
+        kind: Kind,
+        name: &str,
+        house: u8,
+        dx: i32,
+        dy: i32,
+    ) -> ObjectId {
+        testkit::spawn(w, kind, name, house, at(dx, dy), 0)
+    }
+
+    pub(super) fn owner(w: &World, id: ObjectId) -> Option<u8> {
+        w.obj(id).and_then(|o| o.owner).map(|h| h.0)
+    }
+
+    fn health(w: &World, id: ObjectId) -> i32 {
+        w.obj(id).unwrap().health
+    }
+
+    pub(super) fn run_until(w: &mut World, max: i32, done: impl Fn(&World) -> bool) -> bool {
+        for _ in 0..max {
+            if done(w) {
+                return true;
+            }
+            tick::step(w);
+        }
+        done(w)
+    }
+
+    pub(super) fn attack(w: &mut World, house: u8, actor: ObjectId, target: ObjectId) {
+        assert!(orders::issue(
+            w,
+            HouseId(house),
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(target)),
+                dest: None,
+            },
+        ));
+    }
+
+    /// House `h`'s infantry factory `k` releases a new GRUNT (S-0404
+    /// claim 13), once every earlier released unit has left its building's
+    /// contact place; returns the GRUNTs that appeared other than it (the
+    /// copies), in creation order. The new units are then ordered away, so
+    /// that their contact ends (S-0417 claim 10).
+    pub(super) fn release_grunt(w: &mut World, h: u8, k: ObjectId) -> Vec<ObjectId> {
+        assert!(
+            run_until(w, 600, |w| w.objects.values().all(|o| o.contact.is_none())),
+            "the earlier units leave"
+        );
+        let ti = w.rules().index_of(Kind::Infantry, "GRUNT").unwrap();
+        let before: Vec<ObjectId> = w.objects.keys().copied().collect();
+        let g = objects::create(w, Kind::Infantry, ti, Some(HouseId(h)));
+        assert_eq!(release::release(w, k, g), Outcome::Released);
+        let new: Vec<(ObjectId, Option<HouseId>)> = w
+            .objects
+            .values()
+            .filter(|o| o.kind == Kind::Infantry && o.type_index == ti && o.on_map)
+            .filter(|o| !before.contains(&o.id))
+            .map(|o| (o.id, o.owner))
+            .collect();
+        for (i, &(id, house)) in new.iter().enumerate() {
+            let dest = at(i as i32 * 2 - 6, 9);
+            assert!(orders::issue(
+                w,
+                house.unwrap(),
+                Order::Behaviour {
+                    actor: id,
+                    behaviour: Behaviour::Move,
+                    attack_move: false,
+                    target: None,
+                    dest: Some(Target::Cell(dest)),
+                },
+            ));
+        }
+        new.into_iter()
+            .map(|(id, _)| id)
+            .filter(|&id| id != g)
+            .collect()
+    }
+
+    pub(super) fn round_trip(w: &World) {
+        let h = save::state_hash(w);
+        let l = save::load(&save::save(w), w.rules_arc(), testkit::catalogue()).unwrap();
+        assert_eq!(save::state_hash(&l), h);
+    }
+
+    // Pair: the force shield and mind control (S-0513 × S-0601), with the cloning vat (S-0404).
+    // spec: S-0513 claims 27 and 31 (a building of the launching house within the radius is protected; a protected object cannot be mind-controlled)
+    // spec: S-0601 claim 3 (the takeover test: a building may be taken, a protected object may not), claim 4 (the firing check of a takeover warhead answers illegal when the test fails) and claim 5 (the landing tests again: a target protected by then is not taken)
+    // spec: S-0513 claim 30 (the launching house is blacked out) and S-0404 claim 14 (each cloning building the house owns copies the released infantry; no power gate) with S-0405 claim 9 (factories do not stop for low power)
+    #[test]
+    fn a_shielded_vat_refuses_mind_control_and_keeps_cloning() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let vat = put(&mut w, Kind::Building, "VAT", ALPHA, 0, 0);
+        let open = put(&mut w, Kind::Building, "VAT", ALPHA, -8, -8);
+        let barr = put(&mut w, Kind::Building, "BARR", ALPHA, 7, -8);
+        let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, 4, 4);
+        testkit::run(&mut w, 5);
+        shield(&mut w, ALPHA, at(0, 0));
+        assert!(protected(&w, vat));
+        assert!(
+            !protected(&w, open) && !protected(&w, barr),
+            "outside the radius"
+        );
+        assert!(power::blackout_running(&w, HouseId(ALPHA)));
+        assert!(!mind::can_take(&w, clone, vat));
+        assert_eq!(
+            check::check(&w, clone, Some(Target::Object(vat)), 0, false),
+            Answer::Illegal
+        );
+        // A shot already on its way lands on the shielded vat: nothing.
+        mind::detonation(&mut w, Some(clone), Some(Target::Object(vat)));
+        assert_eq!(owner(&w, vat), Some(ALPHA));
+        // The same landing on the unshielded vat takes it.
+        mind::detonation(&mut w, Some(clone), Some(Target::Object(open)));
+        assert_eq!(owner(&w, open), Some(BETA));
+        round_trip(&w);
+        // Alpha's release: one copy, at the shielded vat, Alpha's, though
+        // Alpha is blacked out; the taken vat copies nothing for Alpha.
+        let copies = release_grunt(&mut w, ALPHA, barr);
+        assert_eq!(copies.len(), 1);
+        assert_eq!(w.obj(copies[0]).unwrap().contact, Some(vat));
+        assert_eq!(owner(&w, copies[0]), Some(ALPHA));
+        assert!(power::blackout_running(&w, HouseId(ALPHA)));
+        round_trip(&w);
+    }
+
+    // Pair: the force shield and a gattling (S-0513 × S-0609).
+    // spec: S-0513 claim 28 (departure: a player house's units may fire at a protected object; their hits do nothing) and S-0302 claim 8 (a hit on a protected object changes no health)
+    // spec: S-0609 claim 5 (a vehicle gattling spins up in every tick in which it fires), so it spins up against a shielded building as against an open one
+    #[test]
+    fn a_gattling_fires_at_a_shielded_building_and_spins_up_for_nothing() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let shielded = put(&mut w, Kind::Building, "TOWER", ALPHA, 0, 0);
+        let open = put(&mut w, Kind::Building, "TOWER", ALPHA, 0, 9);
+        let g1 = put(&mut w, Kind::Vehicle, "GATL", BETA, 5, 0);
+        let g2 = put(&mut w, Kind::Vehicle, "GATL", BETA, 5, 9);
+        testkit::run(&mut w, 5);
+        shield(&mut w, ALPHA, at(0, 0));
+        assert!(protected(&w, shielded) && !protected(&w, open));
+        assert_ne!(
+            check::check(&w, g1, Some(Target::Object(shielded)), 0, false),
+            Answer::Illegal,
+            "a player house may fire"
+        );
+        let (h1, h2) = (health(&w, shielded), health(&w, open));
+        attack(&mut w, BETA, g1, shielded);
+        attack(&mut w, BETA, g2, open);
+        assert!(
+            run_until(&mut w, 60, |w| gattling::spin(w, g1).value >= 30
+                && gattling::spin(w, g2).value >= 30
+                && w.obj(open).unwrap().health < h2),
+            "both spin up and the control is hit"
+        );
+        assert!(protected(&w, shielded), "still within the shield's time");
+        assert_eq!(health(&w, shielded), h1, "the hits do nothing");
+        assert!(health(&w, open) < h2, "the control is hurt");
+        round_trip(&w);
+    }
+
+    // Pair: the force shield and the psychic dominator (S-0513 × S-0612).
+    // spec: S-0513 claim 31 (only buildings are shielded: infantry, vehicles and aircraft within the radius are not protected) and S-0302 claim 8 (the sweep's area damage does nothing to a shielded building)
+    // spec: S-0612 claims 9, 10 and 13 (the area damage before the takeovers; a building is never taken, a protected object is passed over, an unprotected unit is taken)
+    #[test]
+    fn a_domination_over_a_shielded_base_takes_its_units_and_spares_its_buildings() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let shielded = put(&mut w, Kind::Building, "TOWER", ALPHA, 0, 0);
+        let open = put(&mut w, Kind::Building, "TOWER", ALPHA, 3, 0);
+        let grunt = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 1, 1);
+        testkit::run(&mut w, 5);
+        shield(&mut w, ALPHA, at(0, 0));
+        assert!(protected(&w, shielded));
+        assert!(!protected(&w, open), "3 cells away: not below the radius");
+        assert!(!protected(&w, grunt), "infantry is never shielded");
+        let (hs, ho) = (health(&w, shielded), health(&w, open));
+        let taken = super::dominator_pairs::dominate(&mut w, BETA, at(0, 0));
+        assert!(taken.contains(&grunt), "the unit is taken");
+        assert_eq!(owner(&w, grunt), Some(BETA));
+        assert_eq!(owner(&w, shielded), Some(ALPHA));
+        assert_eq!(owner(&w, open), Some(ALPHA));
+        assert_eq!(health(&w, shielded), hs, "no damage under the shield");
+        assert!(health(&w, open) < ho, "the unshielded building is hurt");
+        round_trip(&w);
+    }
+
+    // Pair: the force shield and the genetic mutator (S-0513 × S-0611).
+    // spec: S-0513 claim 31 (infantry within the radius is not protected)
+    // spec: S-0611 claim 4 (cell mode hits the infantry listed in the swept cells and no building) and claims 9 and 10 (the made unit is the launching house's)
+    #[test]
+    fn a_mutation_inside_a_shield_converts_its_infantry() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let shielded = put(&mut w, Kind::Building, "TOWER", ALPHA, 0, 0);
+        let grunt = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 1, 0);
+        testkit::run(&mut w, 5);
+        shield(&mut w, ALPHA, at(0, 0));
+        assert!(protected(&w, shielded) && !protected(&w, grunt));
+        let h = health(&w, shielded);
+        w.effects.clear();
+        mutation::launch(&mut w, HouseId(BETA), 0, at(1, 0));
+        assert!(w.obj(grunt).is_none(), "converted");
+        assert_eq!(health(&w, shielded), h);
+        round_trip(&w);
+        assert!(
+            run_until(&mut w, 60, |w| w.mutation.makers.is_empty()),
+            "the animation ends"
+        );
+        let ti = w.rules().index_of(Kind::Infantry, "GRUNT").unwrap();
+        let made: Vec<u8> = w
+            .objects
+            .values()
+            .filter(|o| o.kind == Kind::Infantry && o.type_index == ti)
+            .filter_map(|o| o.owner.map(|h| h.0))
+            .collect();
+        assert_eq!(made, [BETA], "one made unit, the launching house's");
+    }
+
+    // Pair: the force shield and the magnetic lift (S-0513 × S-0607).
+    // spec: S-0513 claim 31 (a vehicle within the radius is not protected) and claim 27 (only a protected object's locomotor is refused to a seizing warhead)
+    // spec: S-0607 claims 3 and 5 (an unprotected vehicle is seized)
+    #[test]
+    fn a_lift_seizes_a_vehicle_inside_a_shield() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let shielded = put(&mut w, Kind::Building, "TOWER", ALPHA, 0, 0);
+        let v = put(&mut w, Kind::Vehicle, "TGT", ALPHA, 1, 1);
+        let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, -6, 1);
+        testkit::run(&mut w, 5);
+        shield(&mut w, ALPHA, at(0, 0));
+        assert!(protected(&w, shielded) && !protected(&w, v));
+        attack(&mut w, BETA, l, v);
+        assert!(run_until(&mut w, 60, |w| lift::seized(w, v)), "seized");
+        assert!(protected(&w, shielded));
+        round_trip(&w);
+    }
+}
+
+mod cloning_pairs {
+    use super::shield_pairs::{
+        ALPHA, BETA, SIZE, at, owner, put, release_grunt, round_trip, rules, run_until,
+    };
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::Kind;
+    use glasnost_sim::structures::absorb;
+    use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+    use glasnost_sim::world::{HouseId, World};
+    use glasnost_sim::{mind, mutation, testkit};
+
+    fn grunts(w: &World) -> usize {
+        let ti = w.rules().index_of(Kind::Infantry, "GRUNT").unwrap();
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Infantry && o.type_index == ti)
+            .count()
+    }
+
+    // Pair: cloning vats and mind control (S-0404 × S-0601).
+    // spec: S-0601 claims 3 and 6 (a building may be taken; the takeover changes its owner with every consumer of a change of owner) and claim 9 (the release gives it back to its owner)
+    // spec: S-0404 claim 14 (each cloning building the house owns, in acquisition order, copies the released infantry for its owner) and claim 7 Terms (an ownership change ranks a building after every building the new owner holds; reacquiring gives a later rank)
+    #[test]
+    fn a_controlled_vat_clones_for_its_controller_and_ranks_last_when_released() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let v1 = put(&mut w, Kind::Building, "VAT", ALPHA, -7, 4);
+        let v2 = put(&mut w, Kind::Building, "VAT", ALPHA, 6, 4);
+        let ka = put(&mut w, Kind::Building, "BARR", ALPHA, -7, -7);
+        let kb = put(&mut w, Kind::Building, "BARR", BETA, 6, -7);
+        let clone = put(&mut w, Kind::Infantry, "CLONE", BETA, -4, 0);
+        testkit::run(&mut w, 5);
+        let contacts = |w: &World, c: &[_]| -> Vec<_> {
+            c.iter().map(|&g| w.obj(g).unwrap().contact).collect()
+        };
+        let copies = release_grunt(&mut w, ALPHA, ka);
+        assert_eq!(
+            contacts(&w, &copies),
+            [Some(v1), Some(v2)],
+            "the first order"
+        );
+        assert!(mind::take(&mut w, clone, v1));
+        assert_eq!(owner(&w, v1), Some(BETA));
+        // Beta's release: the controlled vat copies for Beta.
+        let copies = release_grunt(&mut w, BETA, kb);
+        assert_eq!(contacts(&w, &copies), [Some(v1)]);
+        assert_eq!(owner(&w, copies[0]), Some(BETA));
+        // Alpha's release: only Alpha's own vat.
+        let copies = release_grunt(&mut w, ALPHA, ka);
+        assert_eq!(contacts(&w, &copies), [Some(v2)]);
+        round_trip(&w);
+        // Released back to Alpha, the vat ranks after the other.
+        mind::release(&mut w, clone, v1);
+        assert_eq!(owner(&w, v1), Some(ALPHA));
+        let copies = release_grunt(&mut w, ALPHA, ka);
+        assert_eq!(
+            contacts(&w, &copies),
+            [Some(v2), Some(v1)],
+            "the order flips"
+        );
+        assert!(copies.iter().all(|&c| owner(&w, c) == Some(ALPHA)));
+        round_trip(&w);
+    }
+
+    // Pair: cloning vats and the genetic mutator (S-0404 × S-0611).
+    // spec: S-0611 claims 9 and 10 (the made unit is a fresh object placed by the conversion animation, the launching house's)
+    // spec: S-0404 claim 14 (copies come only from an infantry factory's release; a unit that no factory releases is not copied)
+    #[test]
+    fn a_mutation_made_unit_is_not_cloned() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let vat = put(&mut w, Kind::Building, "VAT", ALPHA, -7, 4);
+        let k = put(&mut w, Kind::Building, "BARR", ALPHA, -7, -7);
+        put(&mut w, Kind::Infantry, "GRUNT", BETA, 6, 6);
+        testkit::run(&mut w, 5);
+        mutation::launch(&mut w, HouseId(ALPHA), 0, at(6, 6));
+        assert!(
+            run_until(&mut w, 60, |w| w.mutation.makers.is_empty()),
+            "the animation ends"
+        );
+        assert_eq!(grunts(&w), 1, "the made unit, no copy");
+        round_trip(&w);
+        // The contrast: a factory release is copied.
+        let copies = release_grunt(&mut w, ALPHA, k);
+        assert_eq!(copies.len(), 1);
+        assert_eq!(w.obj(copies[0]).unwrap().contact, Some(vat));
+    }
+
+    // Pair: cloning vats and the infantry absorber (S-0404 × S-0605).
+    // spec: S-0605 claims 11 and 12 (the owner's deploy order lets a passenger out by the exit search)
+    // spec: S-0404 claim 14 (copies come only from an infantry factory's release; a passenger let out is not copied)
+    #[test]
+    fn a_passenger_let_out_of_an_absorber_is_not_cloned() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        put(&mut w, Kind::Building, "VAT", ALPHA, -7, 4);
+        let bio = put(&mut w, Kind::Building, "BIO", ALPHA, 0, 0);
+        let g = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 4, 0);
+        testkit::run(&mut w, 5);
+        let r = targeting::click(
+            &w,
+            HouseId(ALPHA),
+            &[g],
+            ClickOn::Object(bio),
+            Modifiers::default(),
+        );
+        for o in r.orders {
+            orders::issue(&mut w, HouseId(ALPHA), o);
+        }
+        assert!(
+            run_until(&mut w, 900, |w| absorb::absorbed_in(w, g) == Some(bio)),
+            "goes in"
+        );
+        assert!(orders::issue(
+            &mut w,
+            HouseId(ALPHA),
+            Order::Deploy { actor: bio }
+        ));
+        assert!(
+            run_until(&mut w, 300, |w| absorb::count(w, bio) == 0
+                && w.obj(g).is_some_and(|o| o.on_map)),
+            "let out"
+        );
+        assert_eq!(grunts(&w), 1, "no copy");
+        round_trip(&w);
+    }
+
+    // Pair: cloning vats and the psychic dominator (S-0404 × S-0612).
+    // spec: S-0612 claim 13 (a building is never taken over) and S-0404 claim 14 (the vat still copies for its owner)
+    #[test]
+    fn a_domination_leaves_a_vat_with_its_owner() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let vat = put(&mut w, Kind::Building, "VAT", ALPHA, 0, 0);
+        let k = put(&mut w, Kind::Building, "BARR", ALPHA, -7, -7);
+        testkit::run(&mut w, 5);
+        super::dominator_pairs::dominate(&mut w, BETA, at(0, 0));
+        assert_eq!(owner(&w, vat), Some(ALPHA));
+        let copies = release_grunt(&mut w, ALPHA, k);
+        assert_eq!(copies.len(), 1);
+        assert_eq!(w.obj(copies[0]).unwrap().contact, Some(vat));
+        assert_eq!(owner(&w, copies[0]), Some(ALPHA));
         round_trip(&w);
     }
 }
