@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 38
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -34,8 +34,10 @@ separate infantry/vehicle firing follow it. An uncloak completing in that update
 ordinary firing later in the same turn, but cannot give an aircraft attack-run shot an extra
 chance after its behaviour processing. Building behaviour-fired shots likewise precede the
 building's fade update. S-0616 claim 1 owns where damage sparks and deactivated-vehicle
-sparks fall within an object's turn. These are local ordering constraints, not global firing,
-cloak or spark phases. Their backing, confidence and proposed measurements remain those of the owning claims.
+sparks fall within an object's turn. S-0608 claim 15 owns local drain ordering for the
+drainer's position and alliance checks and the drained building's payout, including their
+boundary with the owner's house power update. These are local ordering constraints, not global
+firing, cloak, spark or drain phases. Their backing, confidence and proposed measurements remain those of the owning claims.
 
 ## Terms
 
