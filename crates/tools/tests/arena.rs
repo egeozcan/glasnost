@@ -2,20 +2,26 @@
 //!
 //! - `synthetic_arena_is_deterministic`: a synthetic matchup over a few
 //!   seeds gives the identical report twice (in CI).
-//! - `arena_records_parse`: every arena measurement record under
-//!   `measurements/` parses (its scenario; the outcomes may be local-only),
-//!   and passes with none (in CI).
-//! - `arena_matches_the_oracle`: the local lane's statistical comparison
-//!   (never in CI): with `GLASNOST_GAME_DIR` set, every arena record's
-//!   matchup is played on the reference ruleset over the record's N seeds
-//!   (or `GLASNOST_ARENA_N`) and compared with the record: a two-proportion
-//!   z test on each group's win rate and a two-sample Kolmogorov–Smirnov
-//!   test on the times to kill, at `arena::ALPHA`.
+//! - `arena_records_parse`: every oracle arena record under
+//!   `measurements/` (front matter plus the sibling CSV) parses and has the
+//!   protocol's shape (in CI).
+//! - `arena_matches_the_oracle`: the local lane's comparison (never in
+//!   CI): with `GLASNOST_GAME_DIR` set, the records' games are played in
+//!   our engine with their setup (`glasnost_tools::oracle`) and compared
+//!   per pairing: a two-proportion test on the row's win proportion and
+//!   two-sample Kolmogorov–Smirnov tests on the row-left and column-left
+//!   shares, at `oracle::ALPHA`.
+//! - `oracle_records_are_compared`: the oracle comparison on the synthetic
+//!   ground with a temporary record (in CI).
+//! - The other tests cover the synthetic arena of `glasnost_tools::arena`
+//!   (our own flat map and invented groups), including its fenced-block
+//!   record form, kept as a documented alternative.
 
 use std::path::{Path, PathBuf};
 
-use glasnost_tools::arena::{self, ALPHA, ArenaRules, Cli, Scenario};
+use glasnost_tools::arena::{self, ArenaRules, Cli, Scenario};
 use glasnost_tools::local_lane::GAME_DIR_VAR;
+use glasnost_tools::oracle;
 
 fn measurements() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../measurements")
@@ -138,56 +144,129 @@ fn an_unknown_type_is_refused() {
     assert!(e.contains("NOSUCH"), "{e}");
 }
 
+/// Every oracle arena record under `measurements/` (the lead's form: front
+/// matter, a Setup `- Map:` line, and the sibling CSV) parses and has the
+/// protocol's shape: per pairing seeds 0 to 5 once on each side (measure:
+/// M-0001, M-0002, M-0003, Procedure). In CI; no game data is read.
 #[test]
 fn arena_records_parse() {
-    let records = arena::load_records(&measurements(), false).unwrap();
+    let records = oracle::load_records(&measurements()).unwrap();
     if records.is_empty() {
-        println!("skipped: no arena measurement record in measurements/");
+        println!("skipped: no oracle arena record in measurements/");
     }
     for r in &records {
-        println!("{} block {}: {:?}", r.id, r.block + 1, r.scenario);
+        oracle::check_shape(&r.games).unwrap_or_else(|e| panic!("{}: {e}", r.id));
+        assert!(
+            !r.map_file.is_empty() && r.map_sha256.len() == 64,
+            "{}",
+            r.id
+        );
+        println!(
+            "{}: {} games, {} pairings",
+            r.id,
+            r.games.len(),
+            oracle::pairings(&r.games).len()
+        );
     }
+    // The fenced-block form of `arena::load_records` is a documented
+    // alternative that no record uses; it still parses whatever is there.
+    arena::load_records(&measurements(), false).unwrap();
 }
 
+/// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,
+/// every oracle arena record (or only `GLASNOST_ARENA_RECORD`, an ID) is
+/// played in our engine with the record's setup and compared with its
+/// CSV per pairing (two-proportion test on the row's wins, KS tests on the
+/// row-left and column-left shares, at p < [`oracle::ALPHA`]; each
+/// record's *Tolerance for tests*). The tables go to
+/// `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored). Fails while any
+/// pairing is outside the tolerance; see docs/development.md, *Arena
+/// mode*, for the open discrepancies.
 #[test]
 fn arena_matches_the_oracle() {
-    let records = match arena::load_records(&measurements(), false) {
-        Ok(r) => r,
-        Err(e) => panic!("{e}"),
-    };
+    let records = oracle::load_records(&measurements()).unwrap();
     if records.is_empty() {
-        println!("skipped: no arena measurement record in measurements/");
+        println!("skipped: no oracle arena record in measurements/");
         return;
     }
     let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
         println!(
-            "skipped: {GAME_DIR_VAR} is not set (the comparison needs the reference ruleset; local-only lane)"
+            "skipped: {GAME_DIR_VAR} is not set (the oracle arena needs the install; local-only lane)"
         );
         return;
     };
-    let rules = match arena::reference_rules(Path::new(&dir)) {
-        Ok(Ok(r)) => ArenaRules::Reference(r),
-        Ok(Err(e)) => panic!("the reference rules did not resolve: {e}"),
-        Err(e) => panic!("could not read the install ({:?})", e.kind()),
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let cli = oracle::Cli {
+        record: std::env::var("GLASNOST_ARENA_RECORD").unwrap_or_else(|_| "all".into()),
+        pairings: Vec::new(),
+        threads: std::thread::available_parallelism().map_or(4, |n| n.get()),
+        out: root.join("local-lane/m7b/arena"),
+        measurements: measurements(),
+        compare_only: false,
+        watch: None,
+        groups: false,
+        ai_houses: false,
     };
-    let seeds = std::env::var("GLASNOST_ARENA_N")
-        .ok()
-        .and_then(|v| v.parse().ok());
-    let cli = Cli {
-        scenario: None,
-        seeds,
-        first_seed: 1,
-        records: true,
-        synthetic: false,
-        types: false,
-        watch: false,
-    };
-    let report = arena::run_cli(&cli, &rules, &measurements()).unwrap();
+    let report = oracle::run_cli(&cli, Some(Path::new(&dir))).unwrap();
     println!("{report}");
     assert!(
-        report.contains(" 0 failed"),
-        "an arena matchup is outside the oracle's tolerance (α = {ALPHA})"
+        report
+            .lines()
+            .filter(|l| l.contains("pairings failing any test:"))
+            .all(|l| l.contains("pairings failing any test: 0 of")),
+        "an oracle arena pairing is outside the record's tolerance (p < {})",
+        oracle::ALPHA
     );
+}
+
+/// The oracle comparison end to end on the synthetic ground: a record made
+/// in a temporary folder from our own games passes; the same record with
+/// the winners and shares swapped fails. Invented test data, not
+/// measurements.
+#[test]
+fn oracle_records_are_compared() {
+    let ground = oracle::synthetic_ground(40);
+    let dir = std::env::temp_dir().join(format!("glasnost-oracle-{}", std::process::id()));
+    let topic = dir.join("combat");
+    std::fs::create_dir_all(&topic).unwrap();
+    let md = "---\nid: M-test\n---\n\n## Setup\n\n- Map: `Synthetic.map` (sha256 `0000000000000000000000000000000000000000000000000000000000000000`).\n";
+    let mut jobs = Vec::new();
+    for side in [oracle::Side::A, oracle::Side::B] {
+        for seed in oracle::SEEDS {
+            jobs.push(("CART".to_string(), "WALKER".to_string(), side, seed));
+        }
+    }
+    let ours: Vec<oracle::Game> = oracle::run_jobs(&ground, &jobs, 4)
+        .into_iter()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    std::fs::write(topic.join("M-test-same.md"), md).unwrap();
+    std::fs::write(topic.join("M-test-same.csv"), oracle::write_csv(&ours)).unwrap();
+    let records = oracle::load_records(&dir).unwrap();
+    assert_eq!(records.len(), 1);
+    oracle::check_shape(&records[0].games).unwrap();
+    let c = oracle::compare_record(&records[0], &ours);
+    assert!(
+        c.failing().is_empty() && c.not_same().is_empty(),
+        "{}",
+        oracle::report(&c)
+    );
+    let reversed: Vec<oracle::Game> = ours
+        .iter()
+        .map(|g| oracle::Game {
+            winner: match g.winner {
+                oracle::Winner::Row => oracle::Winner::Col,
+                oracle::Winner::Col => oracle::Winner::Row,
+                w => w,
+            },
+            row_left: g.col_left + 20_000,
+            col_left: g.row_left + 20_000,
+            ..g.clone()
+        })
+        .collect();
+    let c = oracle::compare_record(&records[0], &reversed);
+    assert_eq!(c.failing().len(), 1, "{}", oracle::report(&c));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The whole `--records` path on the synthetic ruleset, over records in a

@@ -48,11 +48,15 @@
 //! The scenario's choices (row width, the re-order period, the default map
 //! size, distance and tick cap) are rules of this tool, not of the game.
 //!
-//! # Arena measurement records
+//! # Arena measurement records (alternative format)
 //!
-//! The project lead writes the stock game's outcomes as measurement records
-//! (`measurements/<topic>/M-xxxx-*.md`, see `measurements/TEMPLATE.md`).
-//! A record holds one or more fenced blocks whose info string is `arena`;
+//! The lead's arena records (M-0001 to M-0003) use another form, front
+//! matter plus a sibling CSV, and another setup; they are read and played
+//! by [`crate::oracle`]. The fenced-block form below is kept as a
+//! documented alternative for small matchups on this module's own flat
+//! map; no record uses it today.
+//!
+//! A record in this form (`measurements/<topic>/M-xxxx-*.md`) holds one or more fenced blocks whose info string is `arena`;
 //! each block is one matchup, one `key: value` per line (`#` starts a
 //! comment):
 //!

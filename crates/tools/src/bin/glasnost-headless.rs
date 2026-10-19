@@ -34,8 +34,14 @@
 //!   map over N seeds; prints win rates, times to kill and survivors. On
 //!   the synthetic ruleset, or on the install's reference ruleset when
 //!   `GLASNOST_GAME_DIR` is set (then also written to the git-ignored
-//!   `local-lane/arena.txt`). `arena --records` runs every arena
-//!   measurement record's matchup and compares it with the record.
+//!   `local-lane/arena.txt`). `arena --records` runs the fenced-block
+//!   arena records of that module's alternative format, if any.
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless arena --record <ID|all>
+//!   [options]`: the oracle arena (`glasnost_tools::oracle`): the lead's
+//!   arena records (M-0001 to M-0003: front matter plus the sibling CSV)
+//!   played in our engine with their setup and compared per pairing;
+//!   writes the git-ignored `local-lane/m7b/arena/ours-<ID>.csv` and
+//!   `oracle-<ID>.txt`.
 
 use std::process::ExitCode;
 

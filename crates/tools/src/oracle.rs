@@ -1167,7 +1167,26 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
             for t in types {
                 match group(&ground.rules, &t) {
                     Ok((kind, n, cost)) => {
-                        let _ = writeln!(out, "  {t} {kind:?} {n} {cost}");
+                        let powered = ground.rules.index_of(kind, &t).is_some_and(|i| {
+                            kind == Kind::Vehicle
+                                && ground
+                                    .rules
+                                    .econ
+                                    .power
+                                    .powered_unit
+                                    .get(i as usize)
+                                    .copied()
+                                    .unwrap_or(false)
+                        });
+                        let _ = writeln!(
+                            out,
+                            "  {t} {kind:?} {n} {cost}{}",
+                            if powered {
+                                " (powered unit: disabled on entering a cell without a control centre, S-0405 claim 13)"
+                            } else {
+                                ""
+                            }
+                        );
                     }
                     Err(e) => {
                         let _ = writeln!(out, "  {t}: {e}");
