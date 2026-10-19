@@ -2,10 +2,13 @@
 //! and landing is a tracked flying object that the above-terrain detonations
 //! of S-0303 claim 6 hit (S-0303 Terms; S-0502 claims 5 and 15; Q-1500), and
 //! its in-the-air answer is S-0307's height test (S-0502 Terms, *Airborne*;
-//! S-0308 table P row 19; Q-1501). Synthetic data only.
+//! S-0308 table P row 19; Q-1501), and a range search for aircraft finds it
+//! among the airborne objects (S-0309 claim 9). Synthetic data only.
 
 mod jump_common;
 
+use glasnost_rules::sim::{ProjectileType, WeaponType};
+use glasnost_sim::combat::acquire::{self, SearchContext, SearchKind};
 use glasnost_sim::combat::area::{self, Detonation};
 use glasnost_sim::combat::{flying, weapon};
 use glasnost_sim::jump::{self, Phase};
@@ -93,4 +96,63 @@ fn a_jumpjet_is_in_the_air_by_the_height_test() {
     assert!(!weapon::in_air(&w, u), "at 207 leptons it is not");
     w.obj_mut(u).unwrap().pos.z = surface + 208;
     assert!(weapon::in_air(&w, u), "at 208 leptons it is");
+}
+
+/// A game whose CART type fires only weapon `Flak` (anti-air, not
+/// anti-ground) with a guard range of 6 cells (invented values).
+fn flak_game() -> World {
+    let mut r = ruleset();
+    r.sim.projectiles.insert(
+        "AAOnly".into(),
+        ProjectileType {
+            aa: Some(true),
+            ag: Some(false),
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    let gun = r.sim.weapons["Gun"].clone();
+    r.sim.weapons.insert(
+        "Flak".into(),
+        WeaponType {
+            projectile: Some("AAOnly".into()),
+            ..gun
+        },
+    );
+    let cart = r.sim.vehicles.get_mut("CART").unwrap();
+    cart.primary = Some("Flak".into());
+    cart.secondary = None;
+    cart.guard_range = Some(d("6"));
+    glasnost_sim::testkit::game_with(&r, SIZE, 7)
+}
+
+// spec: S-0309 claim 9 (a range search that looks for aircraft scans the tracked flying objects first) and table C row "class" (that scan also accepts vehicles); S-0502 claim 4 (a jumpjet above 208 leptons is in no cell, so only that scan finds it)
+#[test]
+fn a_range_search_for_aircraft_finds_a_jumpjet_in_flight() {
+    let mut w = flak_game();
+    let a = put(&mut w, "CART", Kind::Vehicle, 0, 0, 0);
+    let u = put(&mut w, "JV", Kind::Vehicle, 1, 3, 0);
+    // On the ground the jumpjet is in the ground layer: not an airborne object, and a vehicle the anti-air-only search rejects.
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
+        None
+    );
+    jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
+        Some(u)
+    );
+}
+
+// spec: S-0309 claim 9 (allied airborne objects are looked at only with a friendly-row exception)
+#[test]
+fn a_range_search_passes_over_an_allied_jumpjet_in_flight() {
+    let mut w = flak_game();
+    let a = put(&mut w, "CART", Kind::Vehicle, 0, 0, 0);
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 3, 0);
+    jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
+        None
+    );
 }

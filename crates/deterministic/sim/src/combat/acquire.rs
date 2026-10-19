@@ -1072,7 +1072,30 @@ pub fn search(
                 .unwrap_or(ao.pos.cell()),
             _ => ao.pos.cell(),
         };
-        // Flying objects (claim 9) need tracked flying objects: none fly in our engine.
+        // spec: S-0309 claim 9 (a range or area search that looks for aircraft first scans the tracked flying objects that S-0303's flying-object search finds around the centre cell, radius max(n, 1) cells; they precede cell candidates on equal scores, and count in K for the early stops)
+        if c.aircraft && matches!(kind, SearchKind::Range | SearchKind::Area) {
+            // spec: S-0309 table C row "class" (the scan of airborne objects also accepts infantry and vehicles)
+            let ca = Classes {
+                infantry: true,
+                vehicles: true,
+                ..c
+            };
+            for x in crate::combat::flying::candidates(w, centre, nrings) {
+                let Some(o) = w.obj(x) else { continue };
+                // spec: S-0309 claim 9 (only objects on the map and not in the ground render layer, each once; allied ones only with the friendly-row exceptions)
+                if x == a || !o.on_map || crate::temporal::ground_layer(w, x) {
+                    continue;
+                }
+                if w.allied(ao.owner, o.owner) && !friendly_exception(w, a) {
+                    continue;
+                }
+                if candidate(w, a, x, ca, big_r, kind, false)
+                    && let Some(s) = score(w, a, x, false)
+                {
+                    cands.push((x, s));
+                }
+            }
+        }
         let only_aircraft =
             kind == SearchKind::Range && c.aircraft && !c.infantry && !c.vehicles && !c.buildings;
         if !only_aircraft && nrings >= 1 {
