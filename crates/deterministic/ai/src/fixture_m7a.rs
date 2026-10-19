@@ -54,9 +54,12 @@
 //!   Beta; a start TAKER for Alpha ([`START_INFANTRY`]); Alpha's HULKs
 //!   behind its start, of PREY's armour class, so that only the lifters
 //!   and the controllers touch them before the grinder stands; a frail
-//!   EYE, which a raid can destroy and its house builds again. The PREY,
-//!   the TAKER and the HULKs' class came in M7b AI round 3, for seeds of
-//!   1 to 16 with no takeover order or no unit ground.
+//!   EYE, which a raid can destroy and its house builds again; WARD, an
+//!   unbuildable turreted vehicle whose gun sits in a multi-weapon slot
+//!   (no primary weapon, so the AI's waves leave it at home), one behind
+//!   each start, which the house's bunkers take in. The PREY, the TAKER,
+//!   the HULKs' class and WARD came in M7b AI round 3, for seeds of 1 to
+//!   16 with no takeover order, no unit ground or no vehicle bunkered.
 //!
 //! To add a type, insert it in [`base_ruleset`] (with `register`) and, for
 //! a start unit, add its name to [`INFANTRY`] or [`VEHICLES`] (or, for the
@@ -153,6 +156,23 @@ fn margins(r: &mut Ruleset) {
     if let Some(h) = r.sim.vehicles.get_mut("HULK") {
         h.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special2);
     }
+    // WARD: a turreted vehicle nobody can build, whose one gun sits in a
+    // weapon slot of a multi-weapon turret (no primary weapon). It is
+    // bunker-eligible (S-0606 claim 1: turreted, with a current weapon),
+    // and the AI, which counts a vehicle with a primary weapon (or a
+    // gattling's slots) as army, keeps it at home: each house starts with
+    // one, which its bunkers take in (the sweep's seeds with no vehicle
+    // bunkered had every tank fighting when the bunkers stood).
+    let mut ward = r.sim.vehicles["GUNR"].clone();
+    ward.primary = None;
+    ward.secondary = None;
+    ward.turret_count = Some(1);
+    ward.weapon_count = Some(1);
+    ward.combat.weapon_slots = Some(vec!["Gun".into()]);
+    ward.strength = Some(2000);
+    ward.tech_level = Some(-1);
+    register(r, "vehicles", "WARD");
+    r.sim.vehicles.insert("WARD".into(), ward);
     for (n, h) in r.sim.warheads.iter_mut() {
         if n == "MAGWH" || n == "MIND" {
             continue;
@@ -566,6 +586,14 @@ pub fn map() -> Map {
             });
             key += 1;
         }
+    }
+    // Each house's WARD behind its start, beside the base its bunkers
+    // stand in, out of the first raids' way.
+    for (name, dx) in [("Alpha", -START_DX), ("Beta", START_DX)] {
+        m.objects.units.push(Unit {
+            placed: placed(name, "WARD", at(dx + dx.signum() * HULK_BEHIND, 3), key),
+        });
+        key += 1;
     }
     // The other house's prey on each start's side toward the middle.
     for (other, dx) in [("Beta", -START_DX), ("Alpha", START_DX)] {
