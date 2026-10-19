@@ -1,8 +1,7 @@
 //! The tick pipeline (S-0203): the parts of a tick in their fixed places.
 //!
-//! The parts that are not built yet (the
-//! weather storm, chrono flashes, diving aircraft, teams,
-//! pulses, blast rings and crates) are empty seams in their places
+//! The parts that are not built yet (chrono flashes, diving aircraft,
+//! teams and pulses) are empty seams in their places
 //! of S-0203 claim 1, so that their draws land where the original takes them
 //! once they are written. Resource growth (row 9), the production lines (row
 //! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
@@ -35,6 +34,10 @@ pub fn step(w: &mut World) {
     // Rows 10 and 11 have no topic yet: empty seams.
     // spec: S-0203 claim 1 row 12 and S-0615 claim 13 (disc lasers, the most recently fired first, after rows 10 and 11 and before row 3 and the turn pass)
     crate::disc::update(w);
+    // spec: S-0104 claims 4 and 5 (the ambient fade and the nuke flash's phase change; the fade work may run anywhere in the tick and takes no draws: here, just before the domination update that reads it)
+    crate::lighting::update(w);
+    // spec: S-0612 Terms (the domination update runs in S-0203 row 3, before the storm's own update of that tick) and claims 4 to 7
+    crate::domination::update(w);
     // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
     crate::superweapons::storm::update(w);
     // spec: S-0203 claim 1 row 13 and S-0525 claims 5, 6 and 11 (radiation maintenance: after the storm, before the turn pass; the most recently created field first; no draws)
@@ -47,7 +50,8 @@ pub fn step(w: &mut World) {
     crate::econ::shroud::sweep(w);
     turn_pass(w);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
-    // Row 15 (blast rings): an empty seam.
+    // spec: S-0203 claim 1 row 15 and S-0612 claim 8 (blast rings, after the turn pass; no draws)
+    crate::domination::rings(w);
     // spec: S-0203 claim 1 row 16 and S-0520 claim 4 (crate expiry and replacement, after the turn pass and before the production lines)
     crate::crates::update(w);
     // spec: S-0203 claim 8 and row 6 (the production lines see the whole turn pass)
@@ -109,6 +113,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.mutation.makers.contains_key(&id) {
         // spec: S-0611 claim 8 and S-0109 claim 5 (an infantry-making animation updates in its own turn)
         crate::mutation::turn(w, id);
+        return;
+    }
+    if w.domination.anims.contains_key(&id) {
+        // spec: S-0612 claims 1 and 8 and S-0109 claim 5 (a domination animation updates in its own turn)
+        crate::domination::anim_turn(w, id);
         return;
     }
     if w.waves.contains_key(&id) {

@@ -1253,6 +1253,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 return;
             }
             if rules.combat.warhead_of(pr.weapon).is_some_and(|h| h.nuke) {
+                // spec: S-0104 claim 5 (a nuclear missile detonating starts the nuke flash's brightening phase with a lighting re-evaluation)
+                crate::lighting::nuke_detonated(w);
                 // spec: S-0306 claim 25 (the nuclear warhead waits for its fireball animation)
                 if rules.animation("NUKEBALL").is_some() {
                     effects::anim(w, "NUKEBALL", pt);

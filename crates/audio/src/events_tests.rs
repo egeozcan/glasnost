@@ -2108,3 +2108,35 @@ fn genetic_mutation_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Hum", "Grow"]);
 }
+
+// spec: S-0612 claim 1 (the psychic domination's activation sound at the centre of the target cell, positional) and claim 8 (the blast ring and the domination's own events are silent)
+#[test]
+fn dominator_sounds() {
+    use glasnost_sim::domination::DomEvent;
+    let mut r = ruleset();
+    r.sim.general.superweapons.psychic_dominator_activate_sound = Some("Psi".into());
+    let w = testkit::game_with(&r, SIZE, 5);
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut a = audio(&w, &["Psi"]);
+    let dom = |event| Effect::Domination {
+        event,
+        house: Some(HouseId(1)),
+        pos: at,
+    };
+    let fx = [
+        Effect::Superweapon {
+            event: SwEvent::DominatorSound,
+            house: Some(HouseId(1)),
+            sw: None,
+            pos: Some(at),
+        },
+        dom(DomEvent::Started),
+        dom(DomEvent::Sweep),
+        dom(DomEvent::Taken(ObjectId(9))),
+        dom(DomEvent::Final),
+        dom(DomEvent::Over),
+        dom(DomEvent::RingEnded),
+    ];
+    a.tick(&w, &fx, &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Psi"]);
+}

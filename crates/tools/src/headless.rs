@@ -190,6 +190,7 @@ async fn smoke_async(
                         | Effect::Beam { .. }
                         | Effect::Drain { .. }
                         | Effect::Maker { .. }
+                        | Effect::Domination { .. }
                         | Effect::Walker { .. } => {}
                     }
                 }

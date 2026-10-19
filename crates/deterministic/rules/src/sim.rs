@@ -1093,6 +1093,14 @@ pub struct General {
     /// mapping, claim 14).
     #[serde(default)]
     pub rad_light_delay: Option<i32>,
+    /// `[AudioVisual] AmbientChangeRate`, the normal ambient fade interval
+    /// in game minutes (S-0104 claim 4, Import mapping); absent: 0.2.
+    #[serde(default)]
+    pub ambient_change_rate: Option<Decimal>,
+    /// `[AudioVisual] AmbientChangeStep`, the ambient fade step as an
+    /// ambient factor (S-0104 claim 4, Import mapping); absent: 0.1.
+    #[serde(default)]
+    pub ambient_change_step: Option<Decimal>,
     /// `[Radiation] RadLevelFactor`, a double (S-0525 Import mapping, F6).
     #[serde(default)]
     pub rad_level_factor: Option<Decimal>,

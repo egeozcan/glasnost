@@ -677,7 +677,7 @@ mod mutator_pairs {
     /// lifter whose beam MagRay seizes vehicles); and the mutation values:
     /// cell mode, the cell warhead MUT (infantry-death kind 9), the
     /// conversion animation MUTA (index 0, four frames) making GRUNT.
-    fn rules() -> Ruleset {
+    pub(super) fn rules() -> Ruleset {
         let mut r = testkit::combat_ruleset();
         let ones = || Some(vec![dec("1"); 11]);
         for (n, wh) in [
@@ -988,5 +988,209 @@ mod mutator_pairs {
         let units = made(&mut w);
         assert_eq!(units.len(), 1);
         assert_eq!(owner(&w, units[0]), Some(BETA));
+    }
+}
+
+mod dominator_pairs {
+    use super::register;
+    use glasnost_map::CellXY;
+    use glasnost_rules::schema::Ruleset;
+    use glasnost_rules::sim::AnimationType;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::domination::{self, DomEvent};
+    use glasnost_sim::rules::Kind;
+    use glasnost_sim::structures::{absorb, bunker};
+    use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+    use glasnost_sim::world::{HouseId, ObjectId, World};
+    use glasnost_sim::{mind, orders, save, testkit, tick};
+
+    const SIZE: i32 = 24;
+    const ALPHA: u8 = 0;
+    const BETA: u8 = 1;
+
+    /// The mutator pairs' ruleset (the controller CLONE, GRUNT, TGT,
+    /// GATT, the absorber BIO and the bunker BUNK) with the domination
+    /// values: lead-in LEAD (four frames) swept at stage 0, sweep SWEEP
+    /// (four frames), capture range 1, no warhead (no damage).
+    fn rules() -> Ruleset {
+        let mut r = super::mutator_pairs::rules();
+        for n in ["LEAD", "SWEEP"] {
+            register(&mut r, "animations", n);
+            r.sim.animations.insert(
+                n.into(),
+                AnimationType {
+                    frame_count: Some(4),
+                    ..Default::default()
+                },
+            );
+        }
+        let g = &mut r.sim.general.superweapons;
+        g.dominator_first_anim = Some("LEAD".into());
+        g.dominator_second_anim = Some("SWEEP".into());
+        g.dominator_fire_at_percentage = Some(0);
+        g.dominator_capture_range = Some(1);
+        r
+    }
+
+    fn at(dx: i32, dy: i32) -> CellXY {
+        testkit::mid(SIZE, dx, dy)
+    }
+
+    fn put(w: &mut World, kind: Kind, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
+        testkit::spawn(w, kind, name, house, at(dx, dy), 0)
+    }
+
+    fn owner(w: &World, id: ObjectId) -> Option<u8> {
+        w.obj(id).and_then(|o| o.owner).map(|h| h.0)
+    }
+
+    fn run_until(w: &mut World, max: i32, done: impl Fn(&World) -> bool) -> bool {
+        for _ in 0..max {
+            if done(w) {
+                return true;
+            }
+            tick::step(w);
+        }
+        done(w)
+    }
+
+    fn click(w: &mut World, house: u8, sel: &[ObjectId], on: ObjectId) {
+        let r = targeting::click(
+            w,
+            HouseId(house),
+            sel,
+            ClickOn::Object(on),
+            Modifiers::default(),
+        );
+        for o in r.orders {
+            orders::issue(w, HouseId(house), o);
+        }
+    }
+
+    /// House `h`'s domination at `c` (the superweapon's record and
+    /// readiness are S-0512's and play no part here), run to its sweep;
+    /// returns the objects it took over.
+    fn dominate(w: &mut World, h: u8, c: CellXY) -> Vec<ObjectId> {
+        domination::launch(w, HouseId(h), 0, c);
+        for _ in 0..10 {
+            w.effects.clear();
+            tick::step(w);
+            let ev: Vec<DomEvent> = w
+                .effects
+                .iter()
+                .filter_map(|e| match e {
+                    Effect::Domination { event, .. } => Some(*event),
+                    _ => None,
+                })
+                .collect();
+            if ev.contains(&DomEvent::Sweep) {
+                return ev
+                    .into_iter()
+                    .filter_map(|e| match e {
+                        DomEvent::Taken(id) => Some(id),
+                        _ => None,
+                    })
+                    .collect();
+            }
+        }
+        panic!("no sweep");
+    }
+
+    fn round_trip(w: &World) {
+        let h = save::state_hash(w);
+        let l = save::load(&save::save(w), w.rules_arc(), testkit::catalogue()).unwrap();
+        assert_eq!(save::state_hash(&l), h);
+    }
+
+    // Pair: the psychic dominator and mind control (S-0612 × S-0601).
+    // spec: S-0612 claim 14 (a controlled object is first released by its temporary controller, then changes owner, then becomes permanently controlled)
+    // spec: S-0612 claim 15 (a temporary controller that is taken over keeps its victims, S-0601 claim 11)
+    // spec: S-0601 claims 9 and 11 (the release ends the link; an owner change of the controller keeps its victims under quirks.mind_control_owner_change_keeps_victims)
+    #[test]
+    fn a_domination_takes_a_controller_and_a_controlled_unit() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        // Beta's controller inside the swept area holds Alpha's unit far
+        // outside it; Alpha's controller far outside holds Beta's unit
+        // inside it.
+        let c_in = put(&mut w, Kind::Infantry, "CLONE", BETA, 0, 0);
+        let v_out = put(&mut w, Kind::Vehicle, "TGT", ALPHA, 10, 8);
+        let c_out = put(&mut w, Kind::Infantry, "CLONE", ALPHA, -10, -8);
+        let v_in = put(&mut w, Kind::Vehicle, "TGT", BETA, 1, 0);
+        assert!(mind::take(&mut w, c_in, v_out));
+        assert!(mind::take(&mut w, c_out, v_in));
+        let taken = dominate(&mut w, ALPHA, at(0, 0));
+        assert!(taken.contains(&c_in) && taken.contains(&v_in), "{taken:?}");
+        // The victim inside: released by Alpha's controller, then taken
+        // over permanently.
+        assert!(mind::controlled_by(&w, v_in).is_none(), "released");
+        assert!(mind::controller(&w, c_out).is_none_or(|r| !r.victims.contains(&v_in)));
+        assert!(mind::permanent(&w, v_in));
+        assert_eq!(owner(&w, v_in), Some(ALPHA));
+        // The controller inside: now Alpha's, permanently, and it keeps its
+        // victim outside the area.
+        assert_eq!(owner(&w, c_in), Some(ALPHA));
+        assert!(mind::permanent(&w, c_in));
+        assert_eq!(
+            mind::controlled_by(&w, v_out),
+            Some(c_in),
+            "keeps its victim"
+        );
+        assert!(!mind::permanent(&w, v_out), "not swept");
+        round_trip(&w);
+    }
+
+    // Pair: the psychic dominator and a tank bunker (S-0612 × S-0606).
+    // spec: S-0612 claim 13 (a vehicle in a two by two bunker stands at the bunker's foundation centre, listed before it: the start object of its cell, taken over; the bunker never is; the bunker link stays)
+    // spec: S-0606 claim 15 (either side changes owner: the link holds)
+    #[test]
+    fn a_domination_takes_a_bunkered_vehicle_and_leaves_the_link() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let b = put(&mut w, Kind::Building, "BUNK", BETA, 0, 0);
+        let g = put(&mut w, Kind::Vehicle, "GATT", BETA, 6, 1);
+        testkit::run(&mut w, 5);
+        click(&mut w, BETA, &[g], b);
+        assert!(
+            run_until(&mut w, 1500, |w| bunker::bunkered_in(w, g) == Some(b)),
+            "bunkered"
+        );
+        let taken = dominate(&mut w, ALPHA, at(0, 0));
+        assert_eq!(taken, vec![g]);
+        assert_eq!(owner(&w, g), Some(ALPHA));
+        assert!(mind::permanent(&w, g));
+        assert_eq!(owner(&w, b), Some(BETA), "a building is never taken");
+        assert_eq!(bunker::bunkered_in(&w, g), Some(b), "the link stays");
+        round_trip(&w);
+        testkit::run(&mut w, 5);
+        assert_eq!(bunker::bunkered_in(&w, g), Some(b), "and holds");
+    }
+
+    // Pair: the psychic dominator and an absorbing building (S-0612 × S-0605).
+    // spec: S-0612 claim 15 (only examined objects are direct recipients: an absorbed passenger is not listed in any cell and keeps its owner; the building is never taken, claim 13)
+    // spec: S-0612 claims 12 and 13 (infantry on the map near the building is examined and taken over)
+    // spec: S-0605 claim 1 (absorbed infantry leaves the map)
+    #[test]
+    fn a_domination_spares_an_absorbed_passenger() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let bio = put(&mut w, Kind::Building, "BIO", BETA, 0, 0);
+        let inside = put(&mut w, Kind::Infantry, "GRUNT", BETA, 4, 0);
+        testkit::run(&mut w, 5);
+        click(&mut w, BETA, &[inside], bio);
+        assert!(
+            run_until(&mut w, 900, |w| absorb::absorbed_in(w, inside) == Some(bio)),
+            "goes in"
+        );
+        let beside = put(&mut w, Kind::Infantry, "GRUNT", BETA, -1, 0);
+        let taken = dominate(&mut w, ALPHA, at(0, 0));
+        assert_eq!(taken, vec![beside]);
+        assert_eq!(owner(&w, beside), Some(ALPHA));
+        assert_eq!(
+            owner(&w, inside),
+            Some(BETA),
+            "the passenger keeps its owner"
+        );
+        assert!(!mind::permanent(&w, inside));
+        assert_eq!(absorb::absorbed_in(&w, inside), Some(bio), "still inside");
+        assert_eq!(owner(&w, bio), Some(BETA));
+        round_trip(&w);
     }
 }

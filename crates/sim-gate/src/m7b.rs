@@ -4,11 +4,14 @@
 //! starts with hovering discs whose draining weapon links them with the
 //! other side's power plants and refineries, and builds more; and with a
 //! genetic mutator (S-0611, M7b step 3.4) that the Yuri-style side builds
-//! and fires at the other side's infantry.
+//! and fires at the other side's infantry; and with a psychic dominator
+//! (S-0612, M7b step 3.5) that the Yuri-style side builds and fires at the
+//! other side's units.
 //!
 //! The run counts the drain orders the AI gave, the drain events the
 //! simulation then showed, the mutator launches and the infantry they
-//! mutated ([`Exercise`]), besides everything the M7a duel counts. The
+//! mutated, the dominator launches and the objects they took over
+//! ([`Exercise`]), besides everything the M7a duel counts. The
 //! counters are not part of the golden hashes; the full run asserts that
 //! none of the drain and mutation counters is below [`MARGIN`] (the M7a
 //! counters are reported, not asserted: `duel-m7a` asserts them).
@@ -20,6 +23,7 @@
 use glasnost_ai::fixture_m7b as kit;
 use glasnost_ai::game::Game;
 use glasnost_sim::combat::effects::Effect;
+use glasnost_sim::domination::DomEvent;
 use glasnost_sim::drain::DrainEvent;
 use glasnost_sim::mutation::MakerEvent;
 use glasnost_sim::superweapons::SwEvent;
@@ -55,11 +59,18 @@ pub struct Exercise {
     pub infantry_mutated: u32,
     /// The first tick at whose end an infantry-making animation existed.
     pub first_maker: Option<i32>,
+    /// Psychic dominator launches (S-0612 claim 1: the activation sound
+    /// of each launch).
+    pub dominator_launches: u32,
+    /// Objects a sweep took over (S-0612 claim 14).
+    pub objects_taken: u32,
+    /// The first tick at whose end a domination was in force.
+    pub first_domination: Option<i32>,
 }
 
 impl Exercise {
     /// Every drain counter the full run asserts on, by name.
-    pub fn counters(&self) -> [(&'static str, u32); 6] {
+    pub fn counters(&self) -> [(&'static str, u32); 8] {
         [
             ("drain orders (S-0608)", self.m7a.uses.drain_orders),
             ("drain links formed (S-0608 claims 2 and 5)", self.links),
@@ -76,6 +87,11 @@ impl Exercise {
                 "infantry mutated (S-0611 claims 9 to 12)",
                 self.infantry_mutated,
             ),
+            (
+                "dominator launches (S-0612 claim 1)",
+                self.dominator_launches,
+            ),
+            ("objects taken over (S-0612 claim 14)", self.objects_taken),
         ]
     }
 
@@ -99,6 +115,14 @@ impl Exercise {
                     event: SwEvent::GeneticSound,
                     ..
                 } => self.mutator_launches += 1,
+                Effect::Superweapon {
+                    event: SwEvent::DominatorSound,
+                    ..
+                } => self.dominator_launches += 1,
+                Effect::Domination {
+                    event: DomEvent::Taken(_),
+                    ..
+                } => self.objects_taken += 1,
                 Effect::Maker {
                     event:
                         MakerEvent::Ended {
@@ -134,13 +158,18 @@ impl Exercise {
             self.first_maker = Some(w.tick);
         }
         first |= watch.first(making, "mutation animation");
+        let dominating = glasnost_sim::domination::in_force(w);
+        if dominating && self.first_domination.is_none() {
+            self.first_domination = Some(w.tick);
+        }
+        first |= watch.first(dominating, "domination");
         first
     }
 }
 
 /// Plays the M7b duel for `ticks` ticks (it ends earlier when the game is
 /// over). The game is saved and loaded halfway, at the first tick a drain
-/// link exists, at the first tick a mutation animation exists and at the first tick each kind of M7a state appears; the
+/// link exists, at the first tick a mutation animation exists, at the first tick a domination is in force and at the first tick each kind of M7a state appears; the
 /// loaded game must hash alike and goes on from there. Returns the state
 /// hash after every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {

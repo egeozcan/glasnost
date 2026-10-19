@@ -19,6 +19,9 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Genetic Mutator × tank bunker: a launch on a bunker hits neither the bunker nor its bunkered vehicle, which stays bunkered; infantry beside it in the block converts | `mutator_pairs::a_launch_on_a_tank_bunker_leaves_it_and_its_vehicle` | S-0611, S-0606 |
 | Genetic Mutator × absorber: a passenger inside is not listed and is not hit; a walker still on its way in converts and its entry ends | `mutator_pairs::a_launch_on_an_absorber_spares_its_passenger_and_takes_an_entrant` | S-0611, S-0605 |
 | Genetic Mutator × magnetic lift: a launch under a seized vehicle leaves it unhurt and gripped; infantry on the ground beneath converts | `mutator_pairs::a_launch_under_a_seized_vehicle_takes_only_the_infantry` | S-0611, S-0607 |
+| Psychic Dominator × mind control: a controlled unit in the swept area is released by its controller outside it, then taken over permanently; a controller in the area is taken over and keeps its victim outside it | `dominator_pairs::a_domination_takes_a_controller_and_a_controlled_unit` | S-0612, S-0601 |
+| Psychic Dominator × tank bunker: the vehicle in a two by two bunker is its cell's start object and is taken over; the bunker is not; the bunker link stays | `dominator_pairs::a_domination_takes_a_bunkered_vehicle_and_leaves_the_link` | S-0612, S-0606 |
+| Psychic Dominator × absorber: the absorbed passenger is not listed and keeps its owner; infantry on the map beside the building is taken over; the building is not | `dominator_pairs::a_domination_spares_an_absorbed_passenger` | S-0612, S-0605 |
 
 The parachutist's order of the virus animation and the explosion is request Q-1421 (interim: the virus
 animation first); the test checks only what both orders share.
@@ -33,7 +36,6 @@ in).
 
 Each waits for its spec (named seams in the code).
 
-- Psychic Dominator (S-0612) with controlled units, bunkers (`bunker::holds_through_owner_change`) and the absorber.
 - Cloning Vats, and the Force Shield against the M7a weapons.
 
 ## Local relation tests on the reference ruleset

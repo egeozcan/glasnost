@@ -1438,7 +1438,7 @@ impl SimRules {
         };
         let particle_names = registry("particles");
         let anim_names = registry("animations");
-        let animations = anim_names
+        let animations: Vec<AnimRules> = anim_names
             .iter()
             .map(|n| {
                 let a = s.animations.get(n).cloned().unwrap_or_default();
@@ -1515,7 +1515,7 @@ impl SimRules {
         let crates = crate::crates::CrateRules::new(r, &names, &overlays, &combat, mode);
         let econ = crate::econ::EconRules::new(r, mode);
         let missiles = crate::spawn::MissileRules::new(s, &names, &combat.warheads, mode);
-        let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, mode);
+        let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, &animations, mode);
         let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         Self {

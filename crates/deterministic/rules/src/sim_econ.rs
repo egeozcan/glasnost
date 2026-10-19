@@ -891,6 +891,33 @@ pub struct SwGeneral {
     /// (S-0611 claim 2); absent: none.
     #[serde(default)]
     pub genetic_mutator_activate_sound: Option<String>,
+    /// `[General] DominatorFirstAnim`, the domination's lead-in animation
+    /// type (S-0612 claims 1 and 4); absent: none.
+    #[serde(default)]
+    pub dominator_first_anim: Option<String>,
+    /// `[General] DominatorSecondAnim`, the domination's sweep animation
+    /// type (S-0612 claims 5 and 8); absent: none.
+    #[serde(default)]
+    pub dominator_second_anim: Option<String>,
+    /// `[General] DominatorFireAtPercentage`, *p* of S-0612 F1; absent: 50.
+    #[serde(default)]
+    pub dominator_fire_at_percentage: Option<i32>,
+    /// `[General] DominatorCaptureRange`, *r* of S-0612 claim 11 (ring
+    /// metric); absent: 2.
+    #[serde(default)]
+    pub dominator_capture_range: Option<i32>,
+    /// `[General] DominatorDamage`, the sweep's area damage amount (S-0612
+    /// claim 9); absent: 50.
+    #[serde(default)]
+    pub dominator_damage: Option<i32>,
+    /// `[General] DominatorWarhead`, the sweep's area damage warhead
+    /// (S-0612 claim 9); absent: none.
+    #[serde(default)]
+    pub dominator_warhead: Option<String>,
+    /// `[AudioVisual] PsychicDominatorActivateSound`, the activation sound
+    /// (S-0612 claim 1); absent: none.
+    #[serde(default)]
+    pub psychic_dominator_activate_sound: Option<String>,
 }
 
 /// One entry of the power-up table (S-0520 Terms): weight, animation, water

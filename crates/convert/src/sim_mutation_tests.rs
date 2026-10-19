@@ -1,4 +1,5 @@
-//! Import tests of S-0611 (mutation) on invented data: every name and
+//! Import tests of S-0611 (mutation) and S-0612 (psychic domination) on
+//! invented data: every name and
 //! number here is made up.
 
 use glasnost_rules::sim::SimData;
@@ -64,4 +65,45 @@ fn absent_mutation_keys() {
     assert!(g.anim_to_infantry.is_none());
     assert!(g.genetic_mutator_activate_sound.is_none());
     assert_eq!(s.animations["Bloom"].make_infantry, None);
+}
+
+const DOMINATOR: &str = "[General]\nDominatorFirstAnim=Rise\nDominatorSecondAnim=Wave2\n\
+    DominatorFireAtPercentage=75\nDominatorCaptureRange=4\nDominatorDamage=120\nDominatorWarhead=Mind\n\
+    [AudioVisual]\nPsychicDominatorActivateSound=Thrum\n\
+    AmbientChangeRate=2.5\nAmbientChangeStep=0.05\n\
+    [Animations]\n1=Rise\n2=Wave2\n[Warheads]\n1=Mind\n";
+
+/// spec: S-0612 Import mapping (DominatorFirstAnim and DominatorSecondAnim animation references; DominatorFireAtPercentage, DominatorCaptureRange and DominatorDamage integers; DominatorWarhead a warhead reference; PsychicDominatorActivateSound a sound name)
+/// spec: S-0104 Import mapping (AmbientChangeRate and AmbientChangeStep decimals of rules [AudioVisual])
+#[test]
+fn dominator_keys() {
+    let s = sim(DOMINATOR, "");
+    let g = &s.general.superweapons;
+    assert_eq!(g.dominator_first_anim.as_deref(), Some("Rise"));
+    assert_eq!(g.dominator_second_anim.as_deref(), Some("Wave2"));
+    assert_eq!(g.dominator_fire_at_percentage, Some(75));
+    assert_eq!(g.dominator_capture_range, Some(4));
+    assert_eq!(g.dominator_damage, Some(120));
+    assert_eq!(g.dominator_warhead.as_deref(), Some("Mind"));
+    assert_eq!(g.psychic_dominator_activate_sound.as_deref(), Some("Thrum"));
+    assert_eq!(
+        s.general.ambient_change_rate.as_ref().map(|d| d.0.as_str()),
+        Some("25e-1")
+    );
+    assert_eq!(
+        s.general.ambient_change_step.as_ref().map(|d| d.0.as_str()),
+        Some("5e-2")
+    );
+}
+
+/// spec: S-0612 Import mapping (absent keys stay absent; the simulation's defaults are 50, 2 and 50 and no types, warhead or sound)
+#[test]
+fn absent_dominator_keys() {
+    let s = sim("[Animations]\n1=Rise\n", "");
+    let g = &s.general.superweapons;
+    assert!(g.dominator_first_anim.is_none() && g.dominator_second_anim.is_none());
+    assert!(g.dominator_fire_at_percentage.is_none());
+    assert!(g.dominator_capture_range.is_none() && g.dominator_damage.is_none());
+    assert!(g.dominator_warhead.is_none() && g.psychic_dominator_activate_sound.is_none());
+    assert!(s.general.ambient_change_rate.is_none() && s.general.ambient_change_step.is_none());
 }

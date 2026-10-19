@@ -132,7 +132,7 @@ pairs with S-0701 claim 30.
 `superweapon_list_cut_by_removal` (S-0513, S-0611), `mutation_test_ground_record`,
 `refused_mutation_frees_position`, `infantry_animation_occupancy` (S-0611),
 `disc_laser_no_house` (S-0615). The `dominator_*` names of S-0612 sit in `spec/superweapons/`,
-which the quirk inventory test does not scan; they are not added (S-0612 is M7).
+which the quirk inventory test does not scan; they are not added (S-0612 is M7). Built at M7b step 3.5: the inventory test now scans S-0612 and every `dominator_*` name has a switch (`docs/m7-claims/S-0612.md`).
 
 ## Requests
 

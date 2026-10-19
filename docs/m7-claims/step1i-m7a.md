@@ -19,7 +19,7 @@ No claim was renumbered, so no citation needed re-mapping.
 | S-0214 order targeting | 41 (from 40) | none |
 | S-0616 particle systems | 5 (from 4) | none |
 | S-0606 vehicle bunker | 3 (from 2) | handled by M7a step 3.7 |
-| S-0607, S-0608, S-0612, S-0615 | one revision on each (S-0607 1 to 2, S-0608 2 to 3, S-0612 1 to 2, S-0615 1 to 2) | n/a yet |
+| S-0607, S-0608, S-0612, S-0615 | one revision on each (S-0607 1 to 2, S-0608 2 to 3, S-0612 1 to 2, S-0615 1 to 2) | n/a yet; S-0612 revision 2 built at M7b step 3.5 ([S-0612.md](S-0612.md)) |
 | `spec/glossary.md` | 54 (from 51) | (c) |
 | every other spec (list below) | one revision on (S-0215, S-0404, S-0106, S-0522 two) | (c) |
 | `spec/README.md`, `spec/requests/` Q-1152, Q-1154, Q-1155, Q-1156, Q-1280 | | index rows and request status: (c) |
@@ -97,7 +97,7 @@ Handled by M7a step 3.7 (vehicle bunker). No bunker code is touched here.
 
 ## Not built yet
 
-S-0607 (magnetic lift) revision 2, S-0608 (drain) revision 3, S-0612 (psychic dominator) revision 2, S-0615 (special hit effects) revision 2: n/a yet.
+S-0607 (magnetic lift) revision 2, S-0608 (drain) revision 3, S-0612 (psychic dominator) revision 2, S-0615 (special hit effects) revision 2: n/a yet. S-0612 revision 2 is built at M7b step 3.5 ([S-0612.md](S-0612.md)).
 
 ## Editorial (the setup-wording sweep)
 
