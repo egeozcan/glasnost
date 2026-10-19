@@ -13,9 +13,9 @@
 //! Seams to specs that are not built (each named where it is used):
 //! - S-0514 (chrono weapons): built in `crate::temporal`; [`being_erased`]
 //!   reads its locks. Units that cannot be teleported: [`warp::chrono_seam`];
-//! - S-0611 and S-0612 (genetic mutation, psychic domination):
-//!   [`launch::yuri_seam`]. The psychic reveal (S-0610 claims 13 to 15) is
-//!   [`crate::psychic::reveal`];
+//! - S-0612 (psychic domination): [`launch::yuri_seam`]. The genetic
+//!   mutation (S-0611) is [`crate::mutation::launch`] and the psychic
+//!   reveal (S-0610 claims 13 to 15) [`crate::psychic::reveal`];
 //! - S-0510 (spy infiltration resetting the first superweapon):
 //!   [`charge::spy_reset`];
 //! - S-0601 (mind control refused by protection): [`protected`] is the

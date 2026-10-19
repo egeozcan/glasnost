@@ -1,5 +1,6 @@
-//! The synthetic M7b skirmish for the determinism gate (M7b step 3.3): the
-//! M7a scenario ([`crate::fixture_m7a`]) plus a drain (S-0608). Every name
+//! The synthetic M7b skirmish for the determinism gate (M7b steps 3.3 and
+//! 3.4): the M7a scenario ([`crate::fixture_m7a`]) plus a drain (S-0608)
+//! and a genetic mutator (S-0611). Every name
 //! and number here is test data of our own, not game behaviour; the drain's
 //! behaviour comes from the specs the sim crate cites, and this file only
 //! supplies the types and the places.
@@ -17,18 +18,33 @@
 //!   blacks out Beta's power.
 //! - The game-wide drain settings: a payout every [`PERIOD`] ticks of
 //!   [`AMOUNT`] credits, and the drain animation SUCKANIM.
+//! - **Alpha** only (S-0611, M7b step 3.4): GENEB, a building that gives
+//!   the genetic mutator GENE (charge [`GENE_CHARGE`] minutes, an invented
+//!   short time so that the AI fires it several times in the run; cell
+//!   mode), cheap and with no prerequisite, built by the AI's superweapon
+//!   step once its base allows. The cell warhead MUTATE has the mutating
+//!   death kind; the conversion animation MUTANIM makes a MADMAN (the
+//!   animation-to-infantry list's only entry); the launch animation
+//!   IONANIM.
+//! - **Beta** starts with crowds of CROWD, an unarmed walker nobody can
+//!   build, three on neighbouring cells at each of [`CROWDS`] around its
+//!   start: dense infantry that stays where it is, apart enough that one
+//!   launch takes one crowd. Beta builds no barracks within the gate's run,
+//!   so without them its six start riflemen would be the only infantry the
+//!   mutator could take.
 //!
 //! The gate's module is `crates/sim-gate/src/m7b.rs`.
 
 use std::sync::Arc;
 
-use glasnost_map::objects::{Placed, Unit};
+use glasnost_map::objects::{Infantry, Placed, Unit};
 use glasnost_map::{CellXY, Map};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     AnimationType, Decimal, LocomotionClass, Locomotor, MovementZone, ProjectileType, UnitType,
-    WeaponType,
+    WarheadType, WeaponType,
 };
+use glasnost_rules::sim_econ::SuperweaponType;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::world::GameSetup;
@@ -40,6 +56,14 @@ pub const MAP_NAME: &str = "synthetic-m7b";
 
 /// The discs Alpha starts with, in a row north of its start.
 pub const DISCS: usize = 3;
+
+/// Beta's extra start infantry for the mutator (S-0611): crowds of three
+/// unarmed CROWD walkers on neighbouring cells, at these offsets from its
+/// start, apart enough that one launch reaches one crowd only.
+pub const CROWDS: [(i32, i32); 4] = [(-6, -8), (4, -8), (-6, 8), (4, 8)];
+
+/// The genetic mutator's charge time in minutes (a decimal of the rules).
+pub const GENE_CHARGE: &str = "0.2";
 
 /// The ticks between two payouts of a link.
 pub const PERIOD: i32 = 30;
@@ -132,6 +156,56 @@ pub fn ruleset() -> Ruleset {
             ..Default::default()
         },
     );
+    // CROWD: an unarmed walker nobody can build (tech level -1); Beta
+    // starts with crowds of them ([`CROWDS`]).
+    let mut crowd = r.sim.infantry["WALKER"].clone();
+    crowd.primary = None;
+    crowd.secondary = None;
+    crowd.tech_level = Some(-1);
+    register(&mut r, "infantry", "CROWD");
+    r.sim.infantry.insert("CROWD".into(), crowd);
+    // The genetic mutator (S-0611), Alpha's only.
+    r.sim.superweapons.insert(
+        "GENE".into(),
+        SuperweaponType {
+            kind: Some("GeneticConverter".into()),
+            action: Some("GeneticConverter".into()),
+            recharge_time: Some(d(GENE_CHARGE)),
+            is_powered: Some(false),
+            ..Default::default()
+        },
+    );
+    register(&mut r, "superweapons", "GENE");
+    let mut gene = fixture::building(2, 2, 300, 0);
+    gene.econ.super_weapon = Some("GENE".into());
+    gene.econ.required_houses = Some(vec!["Alphaland".into()]);
+    register(&mut r, "buildings", "GENEB");
+    r.sim.buildings.insert("GENEB".into(), gene);
+    r.sim.warheads.insert(
+        "MUTATE".into(),
+        WarheadType {
+            inf_death: Some(9),
+            verses: Some(vec![d("1"); 11]),
+            ..Default::default()
+        },
+    );
+    for (name, frames, make) in [("MUTANIM", 8, Some(0)), ("IONANIM", 6, None)] {
+        register(&mut r, "animations", name);
+        r.sim.animations.insert(
+            name.into(),
+            AnimationType {
+                frame_count: Some(frames),
+                make_infantry: make,
+                ..Default::default()
+            },
+        );
+    }
+    let s = &mut r.sim.general.superweapons;
+    s.mutate_explosion = Some(false);
+    s.mutate_warhead = Some("MUTATE".into());
+    s.infantry_mutate = Some("MUTANIM".into());
+    s.anim_to_infantry = Some(vec!["MADMAN".into()]);
+    s.ion_blast = Some("IONANIM".into());
     let g = &mut r.sim.general;
     g.drain_money_frame_delay = Some(PERIOD);
     g.drain_money_amount = Some(AMOUNT);
@@ -144,7 +218,7 @@ pub fn rules() -> Arc<SimRules> {
     Arc::new(SimRules::new(&ruleset(), MAP_NAME))
 }
 
-/// The scenario's map: M7a's with Alpha's start discs.
+/// The scenario's map: M7a's with Alpha's start discs and Beta's crowds.
 pub fn map() -> Map {
     let mut m = fixture_m7a::map();
     let first = m.objects.infantry.len() + m.objects.units.len();
@@ -162,6 +236,25 @@ pub fn map() -> Map {
                 raw: Vec::new(),
             },
         });
+    }
+    let mut key = m.objects.infantry.len() + m.objects.units.len();
+    for (dx, dy) in CROWDS {
+        for (x, y) in [(0, 0), (1, 0), (0, 1)] {
+            let c: CellXY = fixture::at(fixture_m7a::START_DX + dx + x, dy + y);
+            m.objects.infantry.push(Infantry {
+                placed: Placed {
+                    key: key.to_string().into_bytes(),
+                    owner: b"Beta".to_vec(),
+                    type_name: b"CROWD".to_vec(),
+                    health: 256,
+                    cell: c,
+                    facing: 0,
+                    raw: Vec::new(),
+                },
+                sub_cell: 2,
+            });
+            key += 1;
+        }
     }
     m
 }

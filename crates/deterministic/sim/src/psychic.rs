@@ -20,8 +20,9 @@
 //! - S-0613 (gas clouds): a gas particle's hit with a berserk-causing
 //!   warhead goes through damage resolution like any other hit
 //!   (`gas::damage_step`, S-0613 claim 13) and so reaches [`enter`].
-//! - S-0611 and S-0612 (mutation, psychic domination) are M7b; psychic
-//!   domination's immunity reads the same psionics immunity (claim 1).
+//! - S-0612 (psychic domination) is M7b; its immunity reads the same
+//!   psionics immunity (claim 1). S-0611 (mutation) is built
+//!   (`crate::mutation`) and reads no psionics rule.
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;

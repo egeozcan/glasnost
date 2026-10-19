@@ -92,7 +92,7 @@ Save format: unchanged (no new state). Hashes: the late start changes the course
 
 | Entry | Class | Notes |
 |---|---|---|
-| Batch note: S-0608, S-0611, S-0612 and S-0615 are approved | (c) | |
+| Batch note: S-0608, S-0611, S-0612 and S-0615 are approved | (c) | S-0611 built at M7b step 3.4 ([S-0611.md](S-0611.md)). |
 | *pass counter*, *clock stage*, *crate places* (wording, units) | (c) | |
 | *tech building*: the stock examples are removed | (c) | as S-0515. |
 | *leaving stage*: S-0513 owns it; it starts at the first update after launch, not at departure, and ends at departure; other specs use this sense, the wait-expiry update included | satisfied | as S-0215's Terms row. |

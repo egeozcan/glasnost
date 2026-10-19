@@ -2069,3 +2069,42 @@ fn walker_and_beam_sounds() {
     a.tick(&w, &fx, &mut Rng::new(1));
     assert_eq!(heard(&mut a, 0), ["Roar"]);
 }
+
+// spec: S-0611 claim 2 (the genetic mutation's activation sound, positional at the mutation point) and claim 8 with S-0109 claim 13 (an infantry-making animation plays its type's start sound at its creation and at a follow-up type's start; its other events are silent)
+#[test]
+fn genetic_mutation_sounds() {
+    use glasnost_sim::mutation::MakerEvent;
+    let mut r = ruleset();
+    r.sim.general.superweapons.genetic_mutator_activate_sound = Some("Hum".into());
+    let w = testkit::game_with(&r, SIZE, 5);
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let mut a = audio(&w, &["Hum", "Grow"]);
+    let mut n = SoundNames::default();
+    n.set_anim_report("Bloom", "Grow");
+    a.set_names(n);
+    let maker = |event| Effect::Maker {
+        id: ObjectId(9),
+        name: "BLOOM".into(),
+        pos: at,
+        owner: Some(HouseId(1)),
+        frame: 0,
+        event,
+    };
+    let fx = [
+        Effect::Superweapon {
+            event: SwEvent::GeneticSound,
+            house: Some(HouseId(1)),
+            sw: None,
+            pos: Some(at),
+        },
+        maker(MakerEvent::Made),
+        maker(MakerEvent::Owner),
+        maker(MakerEvent::Refused),
+        maker(MakerEvent::Ended {
+            unit: None,
+            conversion: true,
+        }),
+    ];
+    a.tick(&w, &fx, &mut Rng::new(1));
+    assert_eq!(heard(&mut a, 0), ["Hum", "Grow"]);
+}

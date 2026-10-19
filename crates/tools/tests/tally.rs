@@ -754,3 +754,60 @@ fn counts_drain_links_and_credits_drained() {
     assert_eq!(paid, 3, "three payouts within the run");
     assert!(tally.credits_drained > 0, "the payouts moved credits");
 }
+
+// spec: S-0611 claims 2, 8 and 9 to 12 (the lane counts each launch by its activation sound, each infantry-making animation made, and each unit a conversion animation's end made)
+#[test]
+fn counts_mutator_launches_and_infantry_mutated() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::mutation::MakerEvent;
+    use glasnost_sim::superweapons::SwEvent;
+    use glasnost_sim::world::{ObjectId, Pos};
+    let mut tally = Tally::default();
+    let maker = |event| Effect::Maker {
+        id: ObjectId(7),
+        name: "MUTANIM".into(),
+        pos: Pos::default(),
+        owner: Some(HouseId(0)),
+        frame: 0,
+        event,
+    };
+    for e in [
+        Effect::Superweapon {
+            event: SwEvent::GeneticSound,
+            house: Some(HouseId(0)),
+            sw: Some(0),
+            pos: None,
+        },
+        Effect::Superweapon {
+            event: SwEvent::Launch,
+            house: Some(HouseId(0)),
+            sw: Some(0),
+            pos: None,
+        },
+        maker(MakerEvent::Made),
+        maker(MakerEvent::Made),
+        maker(MakerEvent::Refused),
+        maker(MakerEvent::Ended {
+            unit: Some(ObjectId(9)),
+            conversion: true,
+        }),
+        maker(MakerEvent::Ended {
+            unit: None,
+            conversion: true,
+        }),
+        maker(MakerEvent::Ended {
+            unit: Some(ObjectId(10)),
+            conversion: false,
+        }),
+    ] {
+        tally.effect(&e);
+    }
+    assert_eq!(
+        (
+            tally.mutator_launches,
+            tally.conversions,
+            tally.infantry_mutated
+        ),
+        (1, 2, 1)
+    );
+}

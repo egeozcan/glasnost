@@ -432,7 +432,7 @@ pub struct AnimationType {
     /// `RandomLoopDelay`, the loop-delay pair in updates (S-0109 claim
     /// 11); absent: 0, 0.
     #[serde(default)]
-    pub random_loop_delay: Option<[i32; 2]>,
+    pub random_loop_delay: Option<[i32; 2]>, // spec: S-0109 claim 11 (a pair)
     /// `Next`, the follow-up type, by type name (S-0109 claim 15); absent:
     /// none.
     #[serde(default)]

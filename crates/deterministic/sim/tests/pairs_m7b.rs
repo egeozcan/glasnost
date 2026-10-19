@@ -637,3 +637,356 @@ mod drain_pairs {
         round_trip(&w);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Pairs with the genetic mutator (S-0611, M7b step 3.4): its cell-mode
+// launch (`mutation::launch`) against a controlled unit and a controller
+// (S-0601), a bunkered vehicle (S-0606), an absorbed passenger (S-0605) and
+// a seized vehicle (S-0607).
+// ---------------------------------------------------------------------------
+
+mod mutator_pairs {
+    use super::register;
+    use glasnost_map::CellXY;
+    use glasnost_rules::schema::Ruleset;
+    use glasnost_rules::sim::{
+        AnimationType, BuildingType, Decimal, UnitType, WarheadType, WeaponType,
+    };
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::mutation::{self, MakerEvent};
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::{Behaviour, Kind};
+    use glasnost_sim::structures::{absorb, bunker};
+    use glasnost_sim::targeting::{self, ClickOn, Modifiers};
+    use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+    use glasnost_sim::{lift, mind, save, testkit, tick};
+
+    const SIZE: i32 = 24;
+    const ALPHA: u8 = 0;
+    const BETA: u8 = 1;
+
+    fn dec(s: &str) -> Decimal {
+        Decimal(s.into())
+    }
+
+    /// The combat ruleset with: the takeover warhead MIND and its weapon
+    /// Ray3 (room for three victims) on infantry CLONE; GRUNT (unarmed
+    /// infantry, also the made type); TGT (an unarmed vehicle of strength
+    /// 30 000) and GATT (a turreted armed vehicle, bunker-eligible); BIO (an
+    /// infantry absorber for three) and BUNK (a tank bunker); MAGL (a
+    /// lifter whose beam MagRay seizes vehicles); and the mutation values:
+    /// cell mode, the cell warhead MUT (infantry-death kind 9), the
+    /// conversion animation MUTA (index 0, four frames) making GRUNT.
+    fn rules() -> Ruleset {
+        let mut r = testkit::combat_ruleset();
+        let ones = || Some(vec![dec("1"); 11]);
+        for (n, wh) in [
+            (
+                "MIND",
+                WarheadType {
+                    verses: ones(),
+                    mind_control: Some(true),
+                    ..Default::default()
+                },
+            ),
+            (
+                "MUT",
+                WarheadType {
+                    verses: ones(),
+                    inf_death: Some(9),
+                    ..Default::default()
+                },
+            ),
+            (
+                "LIFTWH",
+                WarheadType {
+                    verses: ones(),
+                    is_locomotor: Some(true),
+                    locomotor: Some("jumpjet".into()),
+                    ..Default::default()
+                },
+            ),
+        ] {
+            r.sim.warheads.insert(n.into(), wh);
+        }
+        for (n, wh, dmg, mag) in [("Ray3", "MIND", 3, false), ("MagRay", "LIFTWH", 50, true)] {
+            r.sim.weapons.insert(
+                n.into(),
+                WeaponType {
+                    damage: Some(dmg),
+                    rof: Some(20),
+                    range: Some(dec("8")),
+                    speed: Some(100),
+                    projectile: Some("Bullet".into()),
+                    warhead: Some(wh.into()),
+                    is_mag_beam: mag.then_some(true),
+                    ..Default::default()
+                },
+            );
+        }
+        for (name, primary) in [("CLONE", Some("Ray3")), ("GRUNT", None)] {
+            let mut t = r.sim.infantry["WALKER"].clone();
+            t.strength = Some(100);
+            t.primary = primary.map(Into::into);
+            register(&mut r, "infantry", name);
+            r.sim.infantry.insert(name.into(), t);
+        }
+        let mut tgt: UnitType = r.sim.vehicles["BUGGY"].clone();
+        tgt.strength = Some(30000);
+        tgt.primary = None;
+        let mut gatt: UnitType = r.sim.vehicles["CRUSHER"].clone();
+        gatt.turret = Some(true);
+        gatt.strength = Some(30000);
+        let mut magl: UnitType = r.sim.vehicles["BUGGY"].clone();
+        magl.strength = Some(1000);
+        magl.primary = Some("MagRay".into());
+        for (n, t) in [("TGT", tgt), ("GATT", gatt), ("MAGL", magl)] {
+            register(&mut r, "vehicles", n);
+            r.sim.vehicles.insert(n.into(), t);
+        }
+        let bio = BuildingType {
+            strength: Some(1000),
+            foundation: Some([2, 2]),
+            infantry_absorb: Some(true),
+            passengers: Some(3),
+            size_limit: Some(dec("1")),
+            ..Default::default()
+        };
+        let bunk = BuildingType {
+            strength: Some(1000),
+            foundation: Some([2, 2]),
+            bunker: Some(true),
+            number_impassable_rows: Some(0),
+            ..Default::default()
+        };
+        for (n, b) in [("BIO", bio), ("BUNK", bunk)] {
+            register(&mut r, "buildings", n);
+            r.sim.buildings.insert(n.into(), b);
+        }
+        register(&mut r, "animations", "MUTA");
+        r.sim.animations.insert(
+            "MUTA".into(),
+            AnimationType {
+                make_infantry: Some(0),
+                frame_count: Some(4),
+                ..Default::default()
+            },
+        );
+        let g = &mut r.sim.general.superweapons;
+        g.mutate_explosion = Some(false);
+        g.mutate_warhead = Some("MUT".into());
+        g.infantry_mutate = Some("MUTA".into());
+        g.anim_to_infantry = Some(vec!["GRUNT".into()]);
+        r
+    }
+
+    fn at(dx: i32, dy: i32) -> CellXY {
+        testkit::mid(SIZE, dx, dy)
+    }
+
+    fn put(w: &mut World, kind: Kind, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
+        testkit::spawn(w, kind, name, house, at(dx, dy), 0)
+    }
+
+    fn owner(w: &World, id: ObjectId) -> Option<u8> {
+        w.obj(id).and_then(|o| o.owner).map(|h| h.0)
+    }
+
+    fn run_until(w: &mut World, max: i32, done: impl Fn(&World) -> bool) -> bool {
+        for _ in 0..max {
+            if done(w) {
+                return true;
+            }
+            tick::step(w);
+        }
+        done(w)
+    }
+
+    fn click(w: &mut World, house: u8, sel: &[ObjectId], on: ObjectId) {
+        let r = targeting::click(
+            w,
+            HouseId(house),
+            sel,
+            ClickOn::Object(on),
+            Modifiers::default(),
+        );
+        for o in r.orders {
+            orders::issue(w, HouseId(house), o);
+        }
+    }
+
+    /// House `h`'s cell-mode launch at `c` (the superweapon's record and
+    /// readiness are S-0512's and play no part here).
+    fn launch(w: &mut World, h: u8, c: CellXY) {
+        w.effects.clear();
+        mutation::launch(w, HouseId(h), 0, c);
+    }
+
+    /// Runs until every conversion animation has ended; returns the units
+    /// they made.
+    fn made(w: &mut World) -> Vec<ObjectId> {
+        let mut out = Vec::new();
+        for _ in 0..60 {
+            if w.mutation.makers.is_empty() {
+                break;
+            }
+            w.effects.clear();
+            tick::step(w);
+            for e in &w.effects {
+                if let Effect::Maker {
+                    event:
+                        MakerEvent::Ended {
+                            unit: Some(u),
+                            conversion: true,
+                        },
+                    ..
+                } = e
+                {
+                    out.push(*u);
+                }
+            }
+        }
+        assert!(w.mutation.makers.is_empty(), "every animation ended");
+        out
+    }
+
+    fn round_trip(w: &World) {
+        let h = save::state_hash(w);
+        let l = save::load(&save::save(w), w.rules_arc(), testkit::catalogue()).unwrap();
+        assert_eq!(save::state_hash(&l), h);
+    }
+
+    // Pair: the genetic mutator and mind control (S-0611 × S-0601).
+    // spec: S-0611 claim 7 (a controlled victim's control ends with it; a victim that held control of other units loses it as on any death)
+    // spec: S-0611 claims 4, 9 and 10 (any house's listed infantry is hit; the made unit goes to the launching house and inherits nothing)
+    // spec: S-0601 claims 10 and 12 (a controller's death releases its victims to their owners; a victim leaving play leaves its controller's list)
+    #[test]
+    fn a_mutated_controlled_unit_and_a_mutated_controller() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let clone = put(&mut w, Kind::Infantry, "CLONE", ALPHA, -6, 0);
+        let grunt = put(&mut w, Kind::Infantry, "GRUNT", BETA, 0, 0);
+        let tgt = put(&mut w, Kind::Vehicle, "TGT", BETA, -6, 4);
+        // Both are taken at once, before the controller's own fire can.
+        assert!(mind::take(&mut w, clone, grunt));
+        assert!(mind::take(&mut w, clone, tgt));
+        testkit::run(&mut w, 5);
+        assert_eq!(owner(&w, tgt), Some(ALPHA));
+        assert_eq!(owner(&w, grunt), Some(ALPHA));
+        // Beta mutates its own unit, now Alpha's by control.
+        launch(&mut w, BETA, at(0, 0));
+        assert!(w.obj(grunt).is_none(), "converted");
+        assert!(
+            mind::controller(&w, clone).is_some_and(|r| !r.victims.contains(&grunt)),
+            "the victim left its controller's list"
+        );
+        round_trip(&w);
+        let units = made(&mut w);
+        assert_eq!(units.len(), 1);
+        assert_eq!(owner(&w, units[0]), Some(BETA), "the launching house");
+        assert!(!mind::mind_controlled(&w, units[0]), "no control inherited");
+        // Beta mutates the controller: its other victim goes back to Beta.
+        launch(&mut w, BETA, at(-6, 0));
+        assert!(w.obj(clone).is_none());
+        tick::step(&mut w);
+        assert_eq!(
+            owner(&w, tgt),
+            Some(BETA),
+            "released by the controller's death"
+        );
+        assert!(!mind::mind_controlled(&w, tgt));
+        let units = made(&mut w);
+        assert_eq!(units.len(), 1);
+        assert_eq!(owner(&w, units[0]), Some(BETA));
+        assert!(mind::controller(&w, units[0]).is_none_or(|r| r.victims.is_empty()));
+    }
+
+    // Pair: the genetic mutator and a tank bunker (S-0611 × S-0606).
+    // spec: S-0611 claim 4 (no object other than listed infantry receives a direct cell-mode hit: the bunker and its bunkered vehicle are untouched, infantry beside them converts)
+    // spec: S-0606 claims 7 and 14 (the bunker link holds while its vehicle is neither destroyed nor removed)
+    #[test]
+    fn a_launch_on_a_tank_bunker_leaves_it_and_its_vehicle() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let b = put(&mut w, Kind::Building, "BUNK", ALPHA, 0, 0);
+        let g = put(&mut w, Kind::Vehicle, "GATT", ALPHA, 6, 1);
+        testkit::run(&mut w, 5);
+        click(&mut w, ALPHA, &[g], b);
+        assert!(
+            run_until(&mut w, 1500, |w| bunker::bunkered_in(w, g) == Some(b)),
+            "bunkered"
+        );
+        let beside = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, -1, 0);
+        let (hb, hg) = (w.obj(b).unwrap().health, w.obj(g).unwrap().health);
+        launch(&mut w, BETA, at(0, 0));
+        assert_eq!(w.obj(b).unwrap().health, hb);
+        assert_eq!(w.obj(g).unwrap().health, hg);
+        assert_eq!(bunker::bunkered_in(&w, g), Some(b), "still bunkered");
+        assert!(w.obj(beside).is_none(), "the infantry beside converts");
+        round_trip(&w);
+        let units = made(&mut w);
+        assert_eq!(units.len(), 1);
+        assert_eq!(owner(&w, units[0]), Some(BETA));
+    }
+
+    // Pair: the genetic mutator and an absorbing building (S-0611 × S-0605).
+    // spec: S-0611 claim 5 (infantry held by an absorbing building is not listed in any cell and is never a victim; a unit still on the map on its way in is eligible, and its conversion ends its entry)
+    #[test]
+    fn a_launch_on_an_absorber_spares_its_passenger_and_takes_an_entrant() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let bio = put(&mut w, Kind::Building, "BIO", ALPHA, 0, 0);
+        let inside = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 4, 0);
+        testkit::run(&mut w, 5);
+        click(&mut w, ALPHA, &[inside], bio);
+        assert!(
+            run_until(&mut w, 900, |w| absorb::absorbed_in(w, inside) == Some(bio)),
+            "goes in"
+        );
+        // A second walker on its way in, one cell from the building.
+        let entrant = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, -1, 1);
+        click(&mut w, ALPHA, &[entrant], bio);
+        tick::step(&mut w);
+        let h = w.obj(inside).unwrap().health;
+        launch(&mut w, BETA, at(0, 0));
+        assert_eq!(absorb::absorbed_in(&w, inside), Some(bio), "still inside");
+        assert_eq!(w.obj(inside).unwrap().health, h, "not hit");
+        assert!(w.obj(entrant).is_none(), "the entrant converts");
+        round_trip(&w);
+        let units = made(&mut w);
+        assert_eq!(units.len(), 1);
+        assert_eq!(owner(&w, units[0]), Some(BETA));
+        assert_eq!(absorb::count(&w, bio), 1, "the entry ended with it");
+    }
+
+    // Pair: the genetic mutator and the magnetic lift (S-0611 × S-0607).
+    // spec: S-0611 claim 4 (a seized vehicle is no infantry: it takes no direct cell-mode hit; infantry beneath it converts)
+    // spec: S-0607 claims 5 and 12 (the seized vehicle stays gripped through hits that do not reach it)
+    #[test]
+    fn a_launch_under_a_seized_vehicle_takes_only_the_infantry() {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        let v = put(&mut w, Kind::Vehicle, "TGT", ALPHA, 6, 0);
+        let l = put(&mut w, Kind::Vehicle, "MAGL", BETA, -2, 0);
+        testkit::run(&mut w, 5);
+        orders::issue(
+            &mut w,
+            HouseId(BETA),
+            Order::Behaviour {
+                actor: l,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(v)),
+                dest: None,
+            },
+        );
+        assert!(run_until(&mut w, 600, |w| lift::seized(w, v)), "seized");
+        let c = w.obj(v).unwrap().pos.cell();
+        let under = testkit::spawn(&mut w, Kind::Infantry, "GRUNT", ALPHA, c, 0);
+        let hv = w.obj(v).unwrap().health;
+        launch(&mut w, BETA, c);
+        assert_eq!(w.obj(v).unwrap().health, hv, "no hit on the vehicle");
+        assert!(lift::seized(&w, v), "still seized");
+        assert!(w.obj(under).is_none(), "the infantry beneath converts");
+        round_trip(&w);
+        let units = made(&mut w);
+        assert_eq!(units.len(), 1);
+        assert_eq!(owner(&w, units[0]), Some(BETA));
+    }
+}

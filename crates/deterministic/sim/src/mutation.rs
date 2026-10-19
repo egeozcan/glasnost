@@ -202,6 +202,8 @@ pub enum MakerEvent {
     Ended {
         /// The infantry unit created.
         unit: Option<ObjectId>,
+        /// It was a conversion animation (claim 8).
+        conversion: bool,
     },
 }
 
@@ -613,10 +615,16 @@ fn place(w: &mut World, unit: ObjectId, p: Pos) -> bool {
 }
 
 /// Takes a made unit that could not be placed out of the game again: our
-/// engine keeps no never-placed object (claim 11's departure).
+/// engine keeps no never-placed object (claim 11's departure). The object,
+/// whatever its creation made with it, and its numbers are given back, so a
+/// refused attempt leaves only its draws (Q-1460).
 fn discard(w: &mut World, unit: ObjectId) {
-    crate::mind::removing(w, unit);
-    w.objects.remove(&unit);
+    let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
+    for id in made {
+        w.mind.controllers.remove(&id);
+        w.objects.remove(&id);
+    }
+    w.next_id = unit.0;
 }
 
 /// One creation attempt at the end of an infantry-making animation
@@ -746,7 +754,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
         pos: m.pos,
         owner: m.owner,
         frame: m.player.frame(),
-        event: MakerEvent::Ended { unit },
+        event: MakerEvent::Ended {
+            unit,
+            conversion: m.conversion,
+        },
     });
     let skip = w.rules().quirks.update_order_removal_skip;
     // spec: S-0611 claim 9 and S-0109 claim 16 (then it is removed); S-0203 claim 10 (a removal from the update order)

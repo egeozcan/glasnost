@@ -252,7 +252,7 @@ fn death_kind_table() {
         (6, &["POP"], false, false),
         (7, &["GLOW"], false, false),
         (8, &[], false, false),
-        (9, &[], false, true),
+        (9, &[], false, false),
         (10, &["SMASH"], false, false),
         (11, &[], false, false),
     ];
@@ -266,8 +266,8 @@ fn death_kind_table() {
         assert_eq!(wk.len(), usize::from(walks), "kind {k}");
         // Kinds 1 and 2 request the unit's own death sequence: our WALKER has none, so with
         // quirks.refused_death_keeps_unit the unit stays (S-0107 claim 17); the others are removed.
-        // Kind 9 converts unless S-0611 claim 6 refuses: this ruleset lists no land multipliers,
-        // so the foot multiplier is 0, the conversion is refused and die-2 is requested (claim 7).
+        // Kind 9 converts on this open ground (S-0611 claims 6 and 7): the unit leaves play at
+        // once and no death animation of this table is made.
         assert_eq!(w.obj(id).is_some(), stays, "kind {k}");
     }
 }

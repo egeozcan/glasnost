@@ -130,6 +130,9 @@ pub struct Uses {
     /// Drainers sent at an enemy building to drain it (S-0608, `drain`).
     #[serde(default)]
     pub drain_orders: u32,
+    /// Genetic mutator launches ordered (S-0611, `mutator`).
+    #[serde(default)]
+    pub mutator_launches: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -278,6 +281,11 @@ impl Special {
     /// Counts one drainer sent at an enemy building (S-0608, `drain`).
     pub(crate) fn count_drain_order(&mut self) {
         self.uses.drain_orders += 1;
+    }
+
+    /// Counts one genetic mutator launch ordered (S-0611, `mutator`).
+    pub(crate) fn count_mutator_launch(&mut self) {
+        self.uses.mutator_launches += 1;
     }
 
     /// Counts one gattling defence building ordered (S-0609, `gattling`).

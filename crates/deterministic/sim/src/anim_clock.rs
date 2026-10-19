@@ -53,9 +53,12 @@ impl Default for AnimQuirks {
     }
 }
 
+/// The number of animation quirk switches.
+pub const ANIM_SWITCHES: usize = 6; // spec: S-0109 Edge cases and quirks (six switches)
+
 impl AnimQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 6] {
+    pub fn named(&self) -> [(&'static str, bool); ANIM_SWITCHES] {
         [
             ("anim_loop_count_wrap", self.anim_loop_count_wrap),
             ("anim_reverse_raw_loop_end", self.anim_reverse_raw_loop_end),

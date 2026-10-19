@@ -2711,3 +2711,7 @@ mod gas_tests;
 #[cfg(test)]
 #[path = "sim_special_tests.rs"]
 mod special_tests;
+
+#[cfg(test)]
+#[path = "sim_mutation_tests.rs"]
+mod mutation_tests;
