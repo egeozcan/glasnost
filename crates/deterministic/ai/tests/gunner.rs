@@ -155,11 +155,7 @@ fn no_load_without_a_healing_mode() {
 #[test]
 fn keeps_an_engineer_healer_from_capturing() {
     let mut r = ruleset(1);
-    r.sim
-        .infantry
-        .get_mut("MEDI")
-        .expect("MEDI")
-        .engineer = Some(true);
+    r.sim.infantry.get_mut("MEDI").expect("MEDI").engineer = Some(true);
     r.registries
         .get_mut("buildings")
         .expect("buildings registry")
@@ -189,4 +185,27 @@ fn keeps_an_engineer_healer_from_capturing() {
     assert!(guns.contains(&v));
     assert_eq!(b.special_uses().gunner_loads, 1);
     assert_eq!(b.special_uses().engineers, 0);
+}
+
+// PLAN §4.7: with an empty gunner vehicle waiting, PER_HEALER armed vehicles and no infantry that would heal in it, the house queues one such infantry unit even with no credits to spare (the line pays as money comes in; the M7b lane found the army spending every credit).
+#[test]
+fn queues_a_healer_without_credits_to_spare() {
+    let (mut w, medi, _) = scene(&ruleset(1), PER_HEALER);
+    glasnost_sim::objects::remove(&mut w, medi);
+    // PILL is the fixture's infantry factory; POWR keeps it powered.
+    let x = -fixture::START_DX;
+    testkit::spawn(&mut w, Kind::Building, "POWR", 0, fixture::at(x + 6, -6), 0);
+    testkit::spawn(&mut w, Kind::Building, "PILL", 0, fixture::at(x + 6, 6), 0);
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    w.houses[0].credits = 0;
+    let (orders, _) = think(&w);
+    let medi_t = w.rules().index_of(Kind::Infantry, "MEDI").expect("MEDI");
+    let builds = orders
+        .iter()
+        .filter(|o| matches!(o, Order::Build { what } if what.kind == Kind::Infantry && what.index == medi_t))
+        .count();
+    assert_eq!(builds, 1, "{orders:?}");
 }

@@ -11,17 +11,21 @@
 //!
 //! - **loads a healer.** Each idle, empty gunner vehicle of the house at
 //!   home ([`HOME_REACH`] cells), with no unit on its way in, gets the
-//!   nearest free infantry unit of the house at home whose mode gives that
-//!   vehicle a healing weapon, by the *enter* click (S-0214);
+//!   nearest infantry unit of the house, at home or idle, whose mode gives
+//!   that vehicle a healing weapon, by the *enter* click (S-0214); the
+//!   click replaces the army's order of the same think for it (the side's
+//!   healer is its engineer, an army type the army script rallies), and
+//!   the capture step leaves it be;
 //! - **builds the passenger.** With such a vehicle waiting and no such
-//!   infantry of the house, it orders the cheapest infantry type it can
-//!   build whose mode gives the vehicle a healing weapon;
+//!   infantry of the house, it queues the cheapest infantry type it can
+//!   build whose mode gives the vehicle a healing weapon, without the
+//!   credit reserve of the other abilities (the line pays as money comes
+//!   in);
 //! - **keeps one healer for every [`PER_HEALER`] armed vehicles** of the
 //!   house: a person mends a group with one, and every gunner turned into a
 //!   healer is one gun less in the fight, so a person stops there.
 //!
-//! It never sends a mind controller, a berserk unit or an infantry unit
-//! another ability gave an order in the same think. It reads only the
+//! It never sends a mind controller or a berserk unit. It reads only the
 //! house's own objects and the rules a person may read, and draws no
 //! random value. The numbers are tuning of our own opponent, not game
 //! behaviour.
@@ -103,8 +107,8 @@ fn ordered(out: &[Order], id: ObjectId) -> bool {
         .any(|o| matches!(o, Order::Behaviour { actor, .. } if *actor == id))
 }
 
-/// Whether infantry unit `id` is free to be sent: idle, selectable, not
-/// berserk, no mind controller, not in contact with a building.
+/// Whether infantry unit `id` may be sent: selectable, not berserk, no
+/// mind controller, not in contact with a building.
 fn free_infantry(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     o.kind == Kind::Infantry
@@ -112,7 +116,6 @@ fn free_infantry(w: &World, id: ObjectId) -> bool {
         && o.contact.is_none()
         && !psychic::berserk(w, id)
         && mind::controller(w, id).is_none()
-        && scripted::idle(w, id)
         && targeting::selectable(w, id)
 }
 
@@ -191,8 +194,7 @@ impl Special {
                 .filter(|&id| {
                     !plan.loads.iter().any(|&(p, _)| p == id)
                         && free_infantry(w, id)
-                        && at_home(id)
-                        && !ordered(out, id)
+                        && (at_home(id) || scripted::idle(w, id))
                         && !mind::mind_controlled(w, id)
                         && unit(id).is_some_and(|p| heals_in(w, vr, p))
                         && self.memory.ok(w, id, Target::Object(v))
@@ -249,12 +251,15 @@ impl Special {
         let plan = self.gunner_plan(script, own, w, out);
         for (id, v) in plan.loads {
             if let Some(orders) = click_if(w, script.house, id, v, &[Action::Enter]) {
+                // The healer's click replaces any order of this think for
+                // it (the army's rally: an engineer is an army type).
+                out.retain(|o| o.actor() != Some(id));
                 out.extend(orders);
                 self.count_gunner_load();
             }
         }
         if let Some(t) = plan.build {
-            self.order_unit(script, w, t, out);
+            self.queue_unit(script, w, t, out);
         }
     }
 }
@@ -303,7 +308,7 @@ pub fn probe(w: &World, house: HouseId) -> [usize; 6] {
         .collect();
     let free = healers
         .iter()
-        .filter(|o| free_infantry(w, o.id) && at_home(o))
+        .filter(|o| free_infantry(w, o.id) && (at_home(o) || scripted::idle(w, o.id)))
         .count();
     [
         armed,

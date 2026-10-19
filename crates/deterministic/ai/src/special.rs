@@ -531,6 +531,18 @@ impl Special {
             .any(|o| o.owner == Some(house) && o.kind == Kind::Infantry && f(o.id))
     }
 
+    /// Orders one unit of type `t` without the credit reserve of
+    /// [`Self::order_unit`]: the line pays for it as money comes in, as a
+    /// person queues a unit the army is waiting for (the gunner's
+    /// passenger: the M7b lane found the reserve never met, every credit
+    /// spent on the army).
+    pub(crate) fn queue_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
+        if script.selling() || Self::queued(w, script.house, t) {
+            return;
+        }
+        out.push(Order::Build { what: t });
+    }
+
     /// Whether the line of `t` already holds one in its queue (a queued copy
     /// has no object yet).
     fn queued(w: &World, house: HouseId, t: TypeRef) -> bool {
