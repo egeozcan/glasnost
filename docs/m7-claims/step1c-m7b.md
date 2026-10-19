@@ -204,6 +204,10 @@ A player house with `human` clear is a *test-only computer-controlled player hou
 | S-0212 claim 4's backing (two no-region cells compare as one, through S-0309 scenario A11) | (c) | the rule was built at the first batch (Q-1502). |
 | S-0608 claim 16 (an aircraft whose object target a drain attempt clears: S-0501 claim 12's continuation) | not taken in | S-0501 claim 12's *Drain continuation (departure)* (revision 18, before eb1cc74) is not built either: `air` has no drain case. Handed off with S-0208. |
 
+## Merge with S-0612 (main 1f10ae3)
+
+Main merged S-0612 (the Psychic Dominator, `domination` and `lighting`) at save format 64 while this branch was also at 64 with other state, so the merge takes **save format 65** and regenerates all nine goldens on the merged tree (the M7a and M7b gate tests pass; `M7A_SEED` stays 1). AI game format 26 (S-0612's). The only conflicts were the goldens. The four quirk switches that `every_spec_quirk_has_a_switch` found missing on main (`disc_laser_unlimited_range`, `railgun_collinear_hits`, `flying_listed_double_hit`, `jumpjet_falling_touchdown_tracked`) are this step's and come in with it, each tested in both positions. S-0104 revision 26 (fbe0d9b) changes only claim 13's deactivated voxel vehicles: the halving stays in `mapview::build` on the vehicle's brightness *U* + extra light, which already carries the lighting that S-0612's `lighting` module feeds into the cells; flash and effect-tint adjustments are still not modelled.
+
 ## Not taken in
 
 - **S-0208 revision 34** (claim 24, a scatter destination is not an escape path; claim 12 and 13 wording; scenarios). Our scatter only sets the destination and clears the path (`scatter::request`), and the walk then goes through the ordinary path search with S-0212's gate, so claim 24 probably holds as built, but it is not tested and the revision is long. Handed off.
