@@ -11,7 +11,8 @@
 //!
 //! - **loads a healer.** Each idle, empty gunner vehicle of the house at
 //!   home ([`HOME_REACH`] cells), with no unit on its way in, gets the
-//!   nearest infantry unit of the house, at home or idle, whose mode gives
+//!   nearest infantry unit of the house, idle or at home on the army's
+//!   rally (no capture or entry of its own), whose mode gives
 //!   that vehicle a healing weapon, by the *enter* click (S-0214); the
 //!   click replaces the army's order of the same think for it (the side's
 //!   healer is its engineer, an army type the army script rallies), and
@@ -119,6 +120,21 @@ fn free_infantry(w: &World, id: ObjectId) -> bool {
         && targeting::selectable(w, id)
 }
 
+/// Whether unit `id` only moves or stands with the army (the army's
+/// rally): no capture, entry or other task of its own that the click
+/// would cut short.
+fn rallied(w: &World, id: ObjectId) -> bool {
+    use Behaviour as B;
+    let rally = |b: Option<Behaviour>| {
+        matches!(
+            b,
+            None | Some(B::Move | B::QueuedMove | B::Guard | B::AreaGuard | B::AttackMove)
+        )
+    };
+    w.obj(id)
+        .is_some_and(|o| rally(o.beh.current) && rally(o.beh.queued))
+}
+
 /// What the gunner step would do now: the (infantry, vehicle) pairs to
 /// send in, and the infantry type to build when a vehicle waits and the
 /// house has no such infantry.
@@ -194,7 +210,7 @@ impl Special {
                 .filter(|&id| {
                     !plan.loads.iter().any(|&(p, _)| p == id)
                         && free_infantry(w, id)
-                        && (at_home(id) || scripted::idle(w, id))
+                        && (scripted::idle(w, id) || (at_home(id) && rallied(w, id)))
                         && !mind::mind_controlled(w, id)
                         && unit(id).is_some_and(|p| heals_in(w, vr, p))
                         && self.memory.ok(w, id, Target::Object(v))
@@ -229,8 +245,9 @@ impl Special {
         script: &Script,
         own: &[ObjectId],
         w: &World,
+        out: &[Order],
     ) -> Vec<ObjectId> {
-        self.gunner_plan(script, own, w, &[])
+        self.gunner_plan(script, own, w, out)
             .loads
             .into_iter()
             .map(|(p, _)| p)
@@ -325,7 +342,9 @@ pub fn probe(w: &World, house: HouseId) -> GunnerProbe {
         .collect();
     let free = healers
         .iter()
-        .filter(|o| free_infantry(w, o.id) && (at_home(o) || scripted::idle(w, o.id)))
+        .filter(|o| {
+            free_infantry(w, o.id) && (scripted::idle(w, o.id) || (at_home(o) && rallied(w, o.id)))
+        })
         .count();
     GunnerProbe {
         armed,

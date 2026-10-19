@@ -593,7 +593,7 @@ impl Special {
         let mut taken: Vec<ObjectId> = Vec::new();
         let mut any = false;
         // An engineer the gunner step loads into a gunner vehicle stays.
-        let kept = self.gunner_reserved(script, own, w);
+        let kept = self.gunner_reserved(script, own, w, out);
         for &id in own {
             if !engineer::is_engineer(w, id) {
                 continue;
