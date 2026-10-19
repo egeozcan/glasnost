@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 68
+revision: 69
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166]
 supersedes: []
@@ -160,9 +160,9 @@ because the skill level is part of the unit rules. Throughout this spec:
   house, human or AI,
 - a rule, a table row or a condition given for a "computer-controlled owner" describes the
   original only. It is marked **Original only (note for AI designers)**, and our engine applies it
-  to no player house: in our engine no player house meets the condition "computer-controlled", so
-  for its units such a row never matches and such a condition never holds (the neutral and special
-  houses: below). What the original's computer player gets from
+  to no player house in a normal game: no such player house meets the condition
+  "computer-controlled", so for its units such a row never matches and such a condition never
+  holds (the neutral and special houses, and test setups: below). What the original's computer player gets from
   the rule is recorded so that our AI may choose to reproduce it through ordinary orders,
 - a condition on team membership never holds in our engine, because an AI house has no teams
   (Terms, *team member*),
@@ -180,6 +180,19 @@ human-controlled owners holds in our engine for every house, for every owner or 
 included, it means every player house. Claim 18 states this for retaliation. Rules that hold for
 another reason are not affected. Campaign-specific rules are not specified here.
 
+**Test-only computer-controlled player house.** By the project lead's decision of 2026-10-19,
+our engine may mark a player house as computer-controlled in a test or arena setup for comparison
+with the stock oracle. Such a house follows the original's rules for computer-controlled owners,
+including this spec's original-only rows and conditions, exactly as neutral and special houses
+do, but with the house skill level the corresponding oracle house had and with no teams. The
+headless arena mode uses this setting for both houses, because both stock arena houses are
+computer-controlled. It is unavailable in a normal game and is not given to our own AI. Throughout
+this spec, statements that every player house follows human-controlled rules, or that an
+original-only rule applies to no player house, exclude these explicitly marked test houses.
+This includes retaliation outside *guard*, *area guard* and *patrol* (claim 18) and the
+computer-controlled-owner condition of scatter case 2 (claim 19). It does not remove the
+retaliate-property requirement: a hunter whose behaviour lacks that property cannot retaliate.
+
 Each claim states its backing and confidence for the original's behaviour, including the parts
 marked as the original's only. Which houses our engine applies a rule to is a design rule of our
 engine, not a claim about the original, and needs no backing.
@@ -187,14 +200,18 @@ engine, not a claim about the original, and needs no backing.
 Terms used by this spec:
 
 - **Computer-controlled, AI house, house skill level:** as the glossary defines them. This spec
-  uses *computer-controlled* for the original only, and an AI house follows the rules given for
-  human-controlled owners (houses in our engine, above). For the house skill level, this spec owns
+  uses *computer-controlled* for the original and for the test-only setting below; an AI house
+  follows the rules given for human-controlled owners (houses in our engine, above). For the house skill level, this spec owns
   the rules that the level gates (claims 14, 15 and 36), and S-0412 (claim 3) owns the level each
   house gets at game start: in a skirmish of the original the maximum skill level of the AI
   settings (below) for the house of every computer player, and 0 for every human-controlled house
   and for the neutral and special houses. In our engine an AI house in a skirmish keeps the level
   0 of a human-controlled house, and the neutral and special houses keep 0 as well.
   Campaign house-level assignments are outside this spec's scope.
+- **Test-only computer-controlled player house:** a player house explicitly marked in a test or
+  arena setup to use the original's computer-controlled-owner rules, with the oracle house's
+  house skill level and no teams (houses in our engine, above). Headless arena mode marks both
+  houses this way. This is not an AI house of our engine and is unavailable in a normal game.
 - **Sequence frame count as a delay:** claims 22, 30 and 31 use the frame count of a unit's
   sequence entry (S-0107) unchanged as a number of ticks.
 - **Actor:** an infantry, vehicle, aircraft or building object. Only actors have behaviours.
@@ -467,10 +484,12 @@ Terms used by this spec:
   *area-guard threshold*, an integer house skill level. A house whose skill level is below the threshold
   rests its units in *guard* rather than *area guard* in the cases of claims 14 and 15 (Import
   mapping).
-- **Deactivated, reactivated:** an actor is *deactivated* when a rule of another topic switches
-  it off (for example a vehicle disabled by an electromagnetic pulse, or one that needs a
-  control building its owner has lost), and
-  *reactivated* when that rule switches it on again.
+- **Deactivated, reactivated:** an actor is *deactivated* when another topic's rule switches
+  it off, for example a vehicle disabled by loss of its control centre, and *reactivated* when
+  that rule switches it on again. An electromagnetic pulse is a separate state and does not
+  by itself deactivate a vehicle (S-0405 claim 13). At the enabling transition, every on-map
+  vehicle of the affected powered-unit type receives the guard reset, whether or not it was
+  deactivated (S-0405 claims 13 and 20).
 - **Open-topped transport:** a transport (an actor that carries passengers) whose passengers can
   fire from inside it. The transport specs own both.
 - **Unload or deploy cycle:** the cycle named by the readiness and restart conditions in
@@ -795,7 +814,8 @@ Terms used by this spec:
    order given to a slave master gives its harvesting slaves a guard reset.
    - Backing: `measurable` (scenario B3, cases f and i, for the force and the mind-control guard
      reset; case g for the stop order's guard reset of a slave master's slaves; also
-     B45 f for disabling and enabling a control-centre-dependent vehicle; S-0607 L2 for
+     B45 f for disabling and enabling a control-centre-dependent vehicle; S-0405 claim 20,
+     scenario W8 part l for enabling resetting an already enabled vehicle; S-0607 L2 for
      magnetic seizure's guard reset when its locomotor is replaced). Entering an open-topped
      transport and additional slave-rule reset sites remain `unmeasured` here: this spec
      supplies no isolated fixture for those sites, and the generic force test alone does
@@ -1597,12 +1617,16 @@ Terms used by this spec:
     the original's rule for owners that are not human-controlled, stated next, and their other
     retaliation conditions are those of S-0309 (claim 25, part h). **Original only for player
     houses (note for AI designers):** in the original, none of the three conditions holds back a
-    mobile actor of a computer-controlled house: its behaviour list, a target it already has and
-    its distance to the attacker do not stop it from retaliating, and it overrides at once. The
-    other retaliation conditions, owned by the target-acquisition specs, still apply to it.
+    mobile actor of a computer-controlled house: the human owner's behaviour list, existing-target
+    prohibition and distance limit do not apply, and it overrides at once when retaliation is
+    allowed. An existing actor target does impose a different condition: the attacker's threat
+    sum must be at least the current target's, using S-0309 claim 25 part h's comparison, not
+    the converted integer threat score. The other retaliation conditions still apply, including
+    the retaliate property above and S-0309 claim 25 part h's prohibition while draining.
     - Backing: `measurable` (scenario B7: cases a to d for the behaviour list, the player
       return-fire setting and the distance rule, case g for an actor that already has a target,
-      and its computer-controlled runs for the original-only part)
+      and its computer-controlled runs for the original-only part, including the threat-sum
+      comparison; S-0309 claim 25 part h for that comparison's backing and confidence)
     - Confidence: high (the property and the behaviour list); medium (the distance rule and the
       rule about an existing target)
 
@@ -3995,11 +4019,16 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     weapon range; the recorder shows the target). A second enemy B, beyond the vehicle's weapon range
     and inside its sight, then fires at it. Expected: no override, the target stays A and the
     suspended slot stays empty. Repeat with a vehicle of the computer-controlled house (the
-    original-only part of claim 18): expected an override to *attack* with B as target at once.
+    original-only part of claim 18), choosing A and B so B's threat sum is at least A's
+    (S-0309 claim 25 part h): expected an override to *attack* with B as target at once.
     A third run with the computer-controlled vehicle, with B beyond (*S* + 0.5) × 256 leptons and
-    beyond its weapon range: expected an override at once as well (the distance rule does not hold
-    back a computer-controlled actor). Falsified in the first run by an override to *attack* or by
-    B becoming the target, and in the second and third by no override.
+    beyond its weapon range, but still with B's threat sum at least A's: expected an override
+    at once as well (the human distance limit does not apply). Repeat the second run with B's
+    threat sum below A's: expected no retaliation, A retained. Include equality in the
+    at-least case. The recorder reads both threat sums at the hit; reject a run in which their
+    intended relation or another retaliation condition fails. Falsified in the first run by an
+    override to *attack* or by B becoming the target, in the second and third by no override,
+    or in the lower-threat repeat by B becoming the target.
     (h) Order during an override: repeat (b) and, while the override is in effect, give the
     vehicle a move order (which clears its target, S-0213). Expected: *guard* never becomes
     current by a revert; *move* becomes current through the queue (claim 12), and the suspended

@@ -2,11 +2,11 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 41
+revision: 42
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742]
 supersedes: []
@@ -140,7 +140,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Spawned aircraft type, slave unit.** An aircraft type that a carrier-like unit launches and
   controls (Import mapping), and a unit that a slave master of S-0215 controls.
 - **Movable.** An own object that the player can move. For a mobile object all of these must
-  hold: it is not disabled; it is not being erased or phasing in; it is not held
+  hold: it is not disabled; it is not deactivated (S-0405 claims 13 and 20); it is not being
+  erased or phasing in; it is not held
   (S-0614 claims 7 and 8); it is not held inside a tank bunker; its type is not a spawned
   aircraft type; it is not a slave unit; it is not falling (for example under a parachute); and,
   if it launches spawned aircraft, its launching count is not strictly between 0 and its spawn
@@ -150,7 +151,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
   game is not a campaign game, the game option that lets construction yards be packed up again is
   on, and the yard is not mind-controlled. (The original also asks that the yard's house be
   human-controlled; every acting house meets that, Terms, *acting house*.)
-- **Able to fire.** An own object that is armed, not disabled and not falling.
+- **Able to fire.** An own object that is armed, not disabled, not deactivated (S-0405
+  claims 13 and 20) and not falling.
 - **Melee-linked.** One of two objects joined by a *link*: the link that a hit of a weapon whose
   warhead carries the link flag (Import mapping) makes between the shooter and the object it hit,
   with both ends linked to each other (low for what creates it). It ends when the shooter is given a
@@ -352,7 +354,8 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
      in Terms are backed by S-0207 claim 20 and Scenario D22 runs 5 and 6. The superweapon
      arrival hold is backed by S-0513 claim 40 and Scenario SW13 part c. The launching-count
      and hold exclusions in *movable* are backed by S-0506 claim 10 (R6) and S-0614 claims 7
-     and 8 (P1 and P9), respectively.
+     and 8 (P1 and P9), respectively. The deactivated exclusions in *movable* and *able to
+     fire* are backed by S-0405 claims 13 and 20, scenario W8 part a.
    - Confidence: medium
 
 5. **The attack-move gesture.** If the attack-move gesture is held (or attack-move mode is on)

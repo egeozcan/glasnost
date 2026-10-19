@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 50
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280]
 supersedes: []
@@ -72,7 +72,7 @@ claims so that no aggregate check is mistaken for independent evidence:
 | Family | Detail still unmeasured | Why it is retained |
 |---|---|---|
 | Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
-| Unreachable or oversized cases | shared comparisons of unusable cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
+| Unreachable or oversized cases | comparisons involving off-map cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
 | Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations must not be used to confirm them. |
 
 Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
@@ -375,12 +375,13 @@ Terms specific to this spec:
    - Backing: `measurable` for reach regions and their differences between cells inside the usable
      area (scenarios P3, P4), for a destination that is off-map or in no reach region while the
      unit stands in a reach region (P11 run 3), and for a deck read through an enabled link (P4 map
-     K run 2). `unmeasured` for the two shared comparisons. Two
-     off-map cells are compared only when the unit's own cell is outside the usable area, and then
-     the second exception of claim 6 skips the comparison. Two cells of no reach region are compared
-     only when the unit stands on a cell that its own movement zone cannot use, which no order or
-     map placement of the measurement setup is known to bring about. For the same reasons an off-map
-     cell is never compared with a cell of no reach region. `unmeasured` for a deck read through a
+     K run 2). `measurable` for two cells of no reach region counting as the same region in target
+     acquisition (S-0309 claims 7 and 11, scenario A11 part j, runs 3 and 5): map-placed infantry
+     on cliff cells allow this comparison without a move order placing them there.
+     `unmeasured` for comparisons involving off-map cells. Two off-map cells are compared only
+     when the unit's own cell is outside the usable area, and then the second exception of claim 6
+     skips the comparison. This also prevents the gate from comparing an off-map starting cell
+     with a destination of no reach region. `unmeasured` for a deck read through a
      link that is not enabled or with no link found: the first needs a bridge cell within 1 cell of
      a link that is not enabled, such as a low span laid beside a high bridge, or a high bridge whose
      link a destruction has disabled while some of its deck stands, which belongs to the bridge
@@ -2592,6 +2593,12 @@ row resets (S-0006 claim 5). No stock value is assumed: expected numbers are com
 values at measurement time. A computer-controlled team member gets its order through its team's
 script, the team being made by a trigger action that creates a team. Use one run per variant unless stated. Claim 25's nearby-cell search takes no random draws.
 P16 run (u) checks this separately from other activity in the tick.
+
+**Shared no-reach-region comparison (claim 4).** S-0309 claims 7 and 11, scenario A11 part j,
+runs 3 and 5, supply the setup, target recorder, expected picks and falsification for this rule:
+a map-placed infantry searcher on a cliff cell of no reach region picks the enemy on another
+such cell, not the enemy on open ground. This tests the shared comparison through target
+acquisition, not a path computation's gate or subsequent route search.
 
 - **P1 (claims 13 and 17; secondary check: claims 7 to 18): path shape on open ground.**
   - Setup: a flat map of clear land at one height level, no overlays or objects, 40 × 40 cells. One

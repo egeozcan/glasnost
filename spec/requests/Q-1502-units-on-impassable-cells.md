@@ -3,7 +3,7 @@ id: Q-1502
 title: Units that stand on cells their movement zone cannot enter
 status: answered
 related: [S-0212, S-0309, S-0215, S-0211]
-answered-by: [S-0309]
+answered-by: [S-0309, S-0208]
 ---
 
 ## Need

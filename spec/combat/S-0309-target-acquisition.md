@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 21
+revision: 23
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -56,6 +56,18 @@ this spec:
   human-controlled, applies in our engine to the neutral and special houses only. Claim 25 gathers
   these rules. For AI houses they are the original's only: Edge cases and quirks records them as a
   note for AI designers, for an AI that may reproduce them through ordinary orders.
+
+**Test-only exception.** An explicitly marked test-only computer-controlled player house
+(glossary; S-0215 claims 18 and 19) uses the original's computer-owner rules, not the
+human-owner rules. This setting is for oracle comparisons only, including both houses in
+headless arena mode; it is unavailable in normal games and is not given to our AI. Throughout
+this spec, statements restricting computer-owner rules to the neutral and special houses,
+or applying human-owner rules to every player house, exclude these marked test houses.
+References to the neutral and special houses in the owner-dependent rules include them,
+but those houses' setup values do not: a marked test house uses its corresponding oracle
+house's skill level and difficulty index, and has no teams. In particular, claim 25 applies,
+with its difficulty-indexed entries selected by that test house's index rather than necessarily
+index 1. This is a design rule, not an additional claim about the original.
 
 - **Automatic search.** A search in which an object (the *searcher*) picks a target by itself. It
   has a *kind*, a *centre* and, for two kinds, a *radius*:
@@ -478,7 +490,12 @@ this spec:
 
    *Hovering jumpjets.* The aircraft pass holds aircraft-kind objects only, not infantry units or
    vehicles with jumpjet movement, so a hunting actor's own map-wide search never picks a jumpjet
-   while it is outside the ground layer. A hunting actor can still attack one in these ways:
+   while it is outside the ground layer. Disc-laser firing does not itself force descent or
+   ground-layer entry (S-0502 claim 32, answering Q-1504 question 2). Ordinary low ascent,
+   descent, retained low target height or wobble can still put an attacking jumpjet in the
+   ground layer independently of its weapon; that layer, not firing, decides eligibility here.
+   These height rules inherit S-0502 claim 32's backing and confidence.
+   A hunting actor can still attack one in these ways:
    - it picked the jumpjet while that was in the ground layer (before lift-off, after landing,
      or while its height keeps it in the ground layer, S-0102 claim 3) and still holds it: a
      target set by a map-wide search is not an opportunity target (claim 24), so later searches
@@ -539,7 +556,7 @@ this spec:
    only those that are on the map and not in the ground render layer are looked at, each once, with
    no one-object-per-cell rule (claim 10), and objects allied with the searcher only when its type
    attacks friendlies, it is berserk or it is a passenger of a mind-controlled open-topped
-   transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; an object stays registered while it is airborne, from lift-off (S-0303). With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
+   transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; registration during jumpjet movement follows S-0502 claim 29, including its placement and touchdown exceptions. In particular, a jumpjet becomes registered in its take-off update, normally at height 0 leptons, without waiting for a rise. Ordinary registration ends at touchdown, crash end or going off the map, not at a height threshold. With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
    Except in a range search that looks for aircraft and nothing else, cell candidates are drawn from legal cells in rings around the centre cell, from ring 0 through at most ring *n* − 1. Equal-score cell candidates are resolved by ring order and then by the F2 order of legal cells within a ring. For *n* = 0 no ring is looked at, whatever the
    airborne objects hold. For *n* ≥ 1, let *r*₁ = trunc(*n* / 4) and *r*₂ = trunc(*n* / 2), and let
    *K*(*r*) be the candidates among the airborne objects together with those in rings 0 … *r*. The
@@ -551,12 +568,14 @@ this spec:
    search whose radius is above 0 but below 256 leptons has *n* = 0 and looks at no cell at all
    (only at airborne objects, whose search radius is then 1 cell).
    - Backing: `measurable` (scenario A4; the sector effects by scenario A4, part d, and S-0303's
-     scenario A16), except the rule that a radius of 1 to 255 leptons looks at no cell, which is
+     scenario A16; jumpjet registration boundaries inherit S-0502 claim 29's backing and
+     confidence, including scenario J28 and its stated unmeasured exceptions), except the rule
+     that a radius of 1 to 255 leptons looks at no cell, which is
      `unmeasured`: it follows from F1 and the ring rule, and seeing it would need an enemy object
      within 255 leptons of the searcher in another cell, which no placement makes reliable. Also
      `unmeasured`: the rule that leaves out found objects in the ground render layer, because
-     which tracked flying objects can be in the ground layer belongs to S-0303's registration rules
-     and no setup known puts one there
+     S-0502 claim 29 establishes registered jumpjets in that layer during low flight, but A4
+     does not isolate their rejection by the airborne scan from their later cell consideration
    - Confidence: high for the ring order and the early stops; medium for the airborne scan (the
      set of tracked objects and F7 are S-0303's, claim 6)
 
@@ -947,10 +966,13 @@ this spec:
 
 ### Owners that are not human-controlled
 
-25. **The neutral and special houses.** In our engine the rules below apply when the owner, or
-    the house itself, is the neutral or the special house (Terms, *Houses in our engine*). They are
-    the original's rules for every owner that is not human-controlled; for a player house the other
-    claims apply unchanged. Each part names the rule it changes.
+25. **Computer-owner acquisition rules.** In our engine the rules below apply to the neutral
+    and special houses and to explicitly marked test-only computer-controlled player houses
+    (Terms, *Test-only exception*). They are the original's rules for every owner that is not
+    human-controlled; for every other player house the other claims apply unchanged. In this
+    claim, “these houses” includes those marked test houses. Difficulty index 1 and the second
+    list entry describe the neutral and special houses only; test houses use their oracle
+    difficulty index. Each part names the rule it changes.
     - *(a) Passive acquisition (claim 2).* An engineer of these houses is not excluded.
     - *(b) Search classes (claim 5).* A vehicle whose type deploys to fire and an object whose type
       has the no-auto-fire flag search like any other object. An infantry unit whose type has the
@@ -2260,8 +2282,12 @@ an excluded run. Named test data gives targets enough health to survive through 
   jumpjet, run 2 drops it when it rises, the property-on run of 3 does not retaliate, or run 4
   does not pick it. For run 4 place the jumpjet in a tracked sector reached by claim 9's
   search, so a sector omission does not decide the result. Any run in which the recorded
-  render layer of the jumpjet becomes the ground layer while it attacks is set aside and reported for S-0502: a jumpjet in the ground layer is
-  found by the map-wide search.
+  render layer of the jumpjet becomes the ground layer while it attacks is recorded separately:
+  ordinary low-height cases can qualify for the map-wide search, but firing does not force
+  that transition (S-0502 claim 32). Such a run does not test the outside-ground-layer exclusion.
+  For run 3 use a settled hover over flat terrain that remains at least 208 leptons above the
+  surface throughout charge-up and damage, as in S-0502 claim 32's measurement scenario.
+  Ground-layer entry at that height is contrary to that claim, not an expected attack descent.
 - *Falsified if:* part b picks the unreachable target, part a does not move, part c differs as it
   says, part d picks the island enemy, part e does not, or parts f to k differ as they say.
 

@@ -2,13 +2,13 @@
 id: S-0208
 title: Infantry movement (standing positions, walking step and speed, crawling, scatter destinations)
 topic: infantry
-revision: 33
+revision: 34
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295]
+requests: [Q-0017, Q-0072, Q-0201, Q-0181, Q-0235, Q-0311, Q-0268, Q-0295, Q-1502]
 supersedes: []
 ---
 
@@ -47,7 +47,7 @@ answers Q-0072 question 3 for ordinary walking infantry: when the walker stops a
 to its destination (claims 16 and 17, scenario W10). The approach step keeping a destination
 does not exempt it from these arrival rules. Infantry of a
 jumpjet type move by the jumpjet locomotor, which belongs to other movement specs; claims 16 and
-17 do not cover them. Q-0201's arrival test was already given by approved revision 15,
+17 do not cover them. Q-0201's arrival test was already given by
 claim 16; claim 18 below supplies the previously missing cell-destination point and height,
 and the consequence of arriving underneath its deck. S-0212 claim 7 already specifies that
 a successful path to a high-bridge cell ends on its deck; claim 23 already owns later search
@@ -58,7 +58,7 @@ Citations refer to the approved specs and their current correction-round drafts,
 S-0417 (factory unloading). The other cited specs are: S-0003 (INI value forms), S-0006 (rules
 layering), S-0009 (map file semantics), S-0011 (map triggers), S-0105 (voxel rendering, for its table trigonometry and
 table square root), S-0106 (slope shapes and terrain surface height), S-0107 (infantry sprite
-sequences, revision 4, which drops its damage-scatter passages and points here), S-0201 (game
+sequences, which points here for damage scatter), S-0201 (game
 speed and tick rate), S-0202 (the random streams), S-0204 (coordinates, distance and facing),
 S-0205 (number domains), S-0207 (ground vehicle movement), S-0209 (cell occupancy and crowding),
 S-0210 (crushing), S-0211 (land types and passability), S-0212 (pathfinding), S-0215 (behaviours)
@@ -366,8 +366,8 @@ used by this spec:
      parts e and f; the vehicle-present row through S-0209 scenario C2, the building-present flag through S-0209
      scenario C10, the terrain marks through S-0209 scenario C16). `unmeasured` for the
      object-present flag and its open-gate exception, for the reason S-0209 claim 1 gives: every
-     stock object known to set the flag gets an entry outcome of its own, so its effect here, and
-     so the exception to it, has no known stock trigger
+     known object that sets the flag gets an entry outcome of its own, so its effect here,
+     and thus the exception to it, has no known isolated measurement trigger
    - Confidence: high for the class rule, table O, the draw, the strict surface-selection test and
      the reservation; medium for the
      object-present flag and the open-gate exception
@@ -445,7 +445,9 @@ used by this spec:
    holds from *s* = 4 on. Due map south and due map west drift sideways and can take longer
    (claim 14). Speeds outside 2 to 38 behave differently (claim 14 for *s* = 1, Edge cases for fast
    walkers).
-   - Backing: `measurable` (scenarios W4 and W8)
+   - Backing: `measurable` (scenarios W4 and W8). `unmeasured` for the provisional
+     between-position height rule: W2(e) collects heights but supplies no confirmed prediction
+     for the original; keeping the departure height is our engine's interim design choice
    - Confidence: high for the 17-lepton arrival rule and the truncation, and that a walker does not
      move on the tick on which it chooses a walking target; medium for the choice falling on the tick
      after the arrival tick, which assumes that a walker's movement is processed once per tick
@@ -512,7 +514,7 @@ used by this spec:
     | *deployed*, *deployed-fire* or *deployed-idle*, and the type's *undeploy* entry has image frames | *undeploy* starts (row 6; these three kinds are interruptible) | does not refuse, since the unit now plays *undeploy* |
     | *deployed*, *deployed-fire* or *deployed-idle*, and the type's *undeploy* entry has no image frames | turned down (row 1): the unit keeps playing its sequence | does not refuse, since that sequence is interruptible |
 
-    No stock behaviour starts *deployed-idle* (S-0107 claim 20), so its rows matter only where a
+    No built-in behaviour starts *deployed-idle* (S-0107 claim 20), so its rows matter only where a
     mechanic of another spec starts it.
 
     No other unit gets a request for *undeploy* or any exemption: for a unit whose current sequence is
@@ -555,7 +557,7 @@ used by this spec:
       the *deploy*, *deployed* and *deployed-fire* rows of the *undeploy* table, part o4 for a type
       whose *undeploy* entry has no image frames. Scenario W9, parts b and d, for the draw taken by
       an accepted request, part d when it finds no destination). `unmeasured` for three parts:
-      - the *deployed-idle* rows: no stock behaviour starts *deployed-idle* (S-0107 claim 20), so
+      - the *deployed-idle* rows: no built-in behaviour starts *deployed-idle* (S-0107 claim 20), so
         no setup reaches it without a mechanic that another spec owns.
       - the team-member condition of scatter permission: a unit becomes a team member only through
         the original's computer-player team system (Terms), which no spec states and which then
@@ -584,8 +586,8 @@ used by this spec:
     by the height-aware test of S-0009 claim 4 (Terms) and is enterable for the unit. The unit's destination is the first qualifying candidate that also
     passes the screen-cover check at its own height level and is not a high-bridge cell. The high-bridge raise within that check is our engine's provisional choice; the corresponding condition in the original remains unidentified (Terms, *screen-cover check*). When no qualifying candidate is both,
     its destination is the first qualifying candidate, whatever the check gives and whether or not it
-    is a high-bridge cell. The unit then moves there as under a move order. When no candidate
-    qualifies, it does not move.
+    is a high-bridge cell. The unit then attempts to move there as under a move order, subject
+    to normal pathfinding (claim 24). When no candidate qualifies, it does not move.
     - Backing: `measurable` (scenario W7, parts b and d; part f for the screen-cover check on uneven
       ground; part l for the exclusion of high-bridge cells from the first choice; part p for the
       height-aware form of the usable area; scenario W9, part d, for the draw of a request that
@@ -615,7 +617,8 @@ used by this spec:
     facing when it stands exactly on the centre), rounded by F6. Its destination is the cell that
     the nearby-cell search of S-0212 (claim 25) gives around its scatter centre cell, in the scatter
     use that S-0212 claim 25 describes (no reference cell and no reach region). When the search
-    gives a cell, the unit moves there as under a move order. Which cells qualify (among
+    gives a cell, the unit attempts to move there as under a move order, subject to normal
+    pathfinding (claim 24). Which cells qualify (among
     them the rule that a cell's whole occupancy record must be empty), the double count of the
     centre, the movement zone and the choice among the preferred cells by the tick number of the
     request are S-0212's. This spec adds only how a scatter uses the result. The direction plays no
@@ -823,8 +826,14 @@ used by this spec:
     own cell while assigning the target's cell as destination. Claim 21 below owns its
     second position choice and walking outcome; the immediate walking target need not be
     the shortcut's first chosen point on a bridge deck.
-    - Backing: `measurable` (scenario W10, parts a, b, b2 and b3 for the rule; part c checks
-      only the exception's end state)
+    - Backing: `measurable` (scenario W10, parts a, b, b2 and b3 for the attack-versus-move
+      distinction and the cell-centre range point; part c checks only the exception's end state).
+      `unmeasured` for the exception's exact clearing tick and its restriction to an already
+      standing walker: W10(c) does not isolate it from an arrival stop, and no fixture here
+      reaches it independently. Also `unmeasured` for the open-topped range variant, the
+      area-guard and hunt cases and the queued-behaviour fallback: W10 does not arrange those
+      states at a qualifying arrival. The rescue case belongs to the out-of-scope team system
+      and has no skirmish measurement here
     - Confidence: medium for the rule and its four behaviours; medium for the measured point being
       the target cell's centre; low for the exception, which was found by reading and not traced
       through a whole approach (Open questions)
@@ -1102,6 +1111,44 @@ used by this spec:
       foundation/destination test; medium for the combined release, continuing-walk
       and no-jump consequences
 
+### Scatter and unreachable starting cells
+
+24. **A scatter destination is not an escape path.** Claims 12 and 13 choose a destination,
+    not a walking target or a route. Neither the neighbouring-cell choice nor the nearby-cell
+    search requires that destination to share the unit's reach region. Once chosen, however,
+    an ordinary walking infantry unit reaches it only through normal pathfinding, including
+    S-0212 claim 6's reachability gate, and the entry outcomes of S-0209. The forced and
+    move-anywhere options do not exempt that walk from the gate. A failed gate gives no
+    path, not a direct step to the chosen cell. Destination retention, stopping and retry
+    after failure remain separate from destination selection (S-0212 claims 21 and 23).
+
+    In particular, take a stationary ordinary walker with no path or walking target, on a
+    legal cell inside the usable area that belongs to no reach region of its movement zone,
+    with none of S-0212 claim 6's exceptions applying. An accepted scatter request can give
+    it a destination on otherwise usable ground in a reach region, but it cannot leave its
+    starting cell for that destination: the regions differ and it gets no path. This holds
+    even for an immediately adjacent destination, and for a request without a threat point
+    whose destination search has no reach-region restriction. There is no scatter-only
+    one-cell escape or relocation. A chosen cell that itself belongs to no reach region
+    passes the region comparison under S-0212 claim 4, but still needs a path and legal entry
+    outcomes; passing that comparison alone does not make a cliff enterable.
+
+    Being placed on such a cell does not itself send a scatter request. Claims 11 and 15
+    still decide acceptance and damage requests. These rules do not establish which attack
+    or acquisition event destroys a stranded unit; S-0309 claims 7, 11 and 18 distinguish
+    the searches and retaliation that can reach it. This answers the ordinary walking
+    infantry scatter part of Q-1502 question 1, not other locomotors or every cause of death
+    in its arena games.
+    - Backing: `measurable` (scenario W16 for stationary scatter and direct-move controls,
+      both damage-request forms, and placement without a request). The comparison when the
+      chosen destination also has no reach region carries S-0212 claim 4's backing.
+      `unmeasured` for a forced move-anywhere request on the stranded fixture: W16's human
+      scatter and damage requests are not move-anywhere, and no reliable setup here makes
+      crowding send that request to the cliff occupant. Its options do not supply a path,
+      but that particular combination is not independently tested
+    - Confidence: high for destination selection not bypassing pathfinding; medium for the
+      combined cliff-cell outcome, pending a discriminating observation
+
 ## Formulas
 
 **F1. Distance from the centre.** *r* = trunc(√̃((*u* − 128)² + (*v* − 128)²)), where √̃ is the
@@ -1236,7 +1283,7 @@ positions are never taken, as claim 3 says).
 | Standing, about to step into the next cell (asking tick, at the earliest the tick after arrival) | the cell is clear for it and a position is free | that position becomes its walking target (claim 3); no movement this tick, the first step on the next |
 | Standing, about to step | no position is free | no walking target; S-0209 decides |
 | Any | scatter request refused (claim 11) | no draw and no new destination; a unit whose current sequence is a deploy kind, sent a forced, move-anywhere request, has still been sent a request for *undeploy* (claim 11) |
-| Any | scatter request accepted, destination found | moves to that cell as under a move order |
+| Any | scatter request accepted, destination found | attempts to move to that cell under normal pathfinding and entry rules (claim 24) |
 | Any | scatter request accepted, no destination found | does not move; the draw has been taken |
 | Walking, arrival tick | target is a mobile actor in range at its cell centre, behaviour attack, area guard, hunt or rescue (claim 17) | loses its destination, keeps its target; the walk ends on this tick (claim 16) |
 | Walking, arrival tick | no locomotor destination, or arrived in the locomotor destination's cell within two height levels (claim 16) | walk ends: no destination, speed fraction 0, stands at the position reached |
@@ -1297,9 +1344,10 @@ W10).
     cell's infantry house is allied with the vehicle's house). These outcomes are S-0209's claims,
     with the backing given there.
 
-  Arriving walkers never take the top or centre positions (claim 3). Only pre-placed units (claim
-  5) and units entering the cell of their mission target or master (claim 4, which then uses the
-  centre) stand there. With the switch off, a unit standing at the top position is recorded as
+  Ordinary occupant-respecting walkers never take the top or centre positions (claim 3).
+  Pre-placed units can stand there (claim 5); occupant-ignoring walking can choose the centre
+  (claim 4), as can occupant-ignoring teleport placement (claim 19). With the switch off,
+  a unit standing at the top position is recorded as
   taking the top position, so each of the two units has its own entry, and the record is not empty
   while either of them stands in the cell. Nothing else changes: the position class of every point
   is still given by claim 2 (no point has the class *top*), so claims 3 and 4 choose positions and
@@ -1429,28 +1477,39 @@ refused-replacement outcome are engine rules, with no separate imported setting.
 
 ## Measurement scenarios
 
-All run under the *measurement setup*, on purpose-made flat maps of one theater with clear terrain
+All run under the glossary's *measurement setup*, with the director off and game speed index 2
+unless stated otherwise. Use the installed release's unmodified data except the named test files
+and purpose-made maps explicitly allowed by that setup; remove those test files afterwards.
+Choose types by the imported properties each scenario requires, and record the effective fields
+used to compute its expected results. No particular shipped type, speed, weapon value or release
+geometry is assumed. Runs use purpose-made flat maps of one theater with clear terrain
 unless stated, with one human player and one computer player whose start position is far away,
 besides the neutral and special houses that every skirmish has (glossary *house*). The expected values for
 computer-owned units are the original's, and in our engine they hold for units of the neutral and
 special houses too (Terms, the project lead's decision of 2026-10-10). Our engine's departure for AI houses (claims 11 and 15) is not
 measurable against the original, which has no such houses.
 Observations are taken with a *recorder* that reads unit world positions per tick (or from
-screenshots when stated). Where a scenario counts ticks "from the first step to arrival", the count
+screenshots when stated). In scatter scenarios, "moves on the tick of the request/hit" means
+that a new scatter destination is assigned on that tick, not that a physical walking step must
+occur then. Record destination assignment separately from the first physical step; claim 24
+still governs whether any route exists. Where a scenario counts ticks "from the first step to arrival", the count
 is *t*ₐ − *t*₁ + 1, where *t*₁ is the first tick on which the unit's position changes and *t*ₐ the
 tick on which it is placed on its final standing position: both ticks are included. Paths are
 straight runs of clear cells, so S-0212 sends every walker along the run.
+For each scenario, a qualified observation contradicting any stated expected result is a
+falsifier, not just the examples in its falsifier list. A failed setup qualification or an
+explicitly exploratory subpart is inconclusive. Statistical parts use their stated bands.
 
 **Scenario W1: standing positions and capacity of the side positions (claims 1, 3, 4).**
-- *Setup:* (a, b) an empty target cell *T* = (*x*, *y*). Four infantry of one stock type, owned by the
+- *Setup:* (a, b) an empty target cell *T* = (*x*, *y*). Four infantry of one type, owned by the
   human player, each pre-placed at sub-cell 2 (the right position): one in each of the cells
   (*x* − 1, *y*), (*x* − 2, *y*), (*x* − 3, *y*) and (*x* − 4, *y*), on the same row as *T*. (c) A
-  separate game: a stock transport vehicle that infantry can enter, standing still in *T*, and one
-  stock infantry type that can enter it, pre-placed at sub-cell 2 in (*x* − 1, *y*). (d) As (c),
+  separate game: a transport vehicle whose imported passenger rules allow infantry, standing still
+  in *T*, and one infantry type eligible to enter it, pre-placed at sub-cell 2 in (*x* − 1, *y*). (d) As (c),
   with the infantry unit pre-placed at sub-cell 0 (the centre) instead. (e) A separate game: *T*
   is a foundation cell, in the foundation's west column, of a capturable building of the computer
-  player, and a stock infantry type that can capture buildings, owned by the human player, is
-  pre-placed at sub-cell 0 in (*x* − 1, *y*). (f) As (d), with a landed stock transport aircraft
+  player, and an infantry type with the imported building-capture property, owned by the human player, is
+  pre-placed at sub-cell 0 in (*x* − 1, *y*). (f) As (d), with a landed transport aircraft
   that infantry can enter standing in *T* instead of the vehicle. In (d), (e) and (f) the W9
   recorder reads the draws taken on every tick.
 - *Procedure:* (a) order the unit in (*x* − 1, *y*) into *T*, wait until it stops, record its
@@ -1503,7 +1562,7 @@ cases).**
     to the neighbour that claim 13 gives when all eight neighbours qualify.
   - (c) A separate game per run. One infantry unit pre-placed at sub-cell 1 in a cell, with an empty
     cell east of it. Order it one cell east and record the position it takes.
-  - (d) A separate game. Five infantry units of the human player, of one stock type that is neither
+  - (d) A separate game. Five infantry units of the human player, of one type that is neither
     a fraidycat nor the cow, each alone in its own cell, the five cells at least 2 cells apart. The
     map gives them the sub-cell values 0, 1, 2, 3 and 4. No orders are given. Read each unit's
     position within the cell 30 ticks after the start (the idle actions of S-0107 claim 14 only
@@ -1564,24 +1623,25 @@ cases).**
 - *Falsified if:* any run takes top or centre, or a count falls outside its band.
 
 **Scenario W4: walking step and speed (claims 6, 7).**
-- *Setup:* every stock type and setting below is chosen so that F5 gives *s* from 2 to 38 in every
+- *Setup:* every type and setting below is chosen so that F5 gives *s* from 2 to 38 in every
   part (claim 6). A straight east-west run of 12 clear cells per unit, side by side, each unit owned by the
   human player and pre-placed alone at sub-cell 2 in the west end cell of its run. No crates on the
   runs. The house's country is noted, and its country speed factor for infantry is read from the
   rules data.
-  - (a) Three stock infantry types with different speed fields, at the lowest veterancy rank.
-  - (b) One stock infantry type whose veteran ability list names the faster ability, placed by the
+  - (a) Three infantry types with different imported speed fields, at the lowest veterancy rank.
+  - (b) One infantry type whose imported veteran ability list names the faster ability, placed by the
     test map at veteran rank, beside a unit of the same type at the lowest rank. The type is chosen so
-    that trunc(*s*₁ × *k*ᵥ) differs from *s*₁ for the stock veteran speed factor; if no stock type
+    that trunc(*s*₁ × *k*ᵥ) differs from *s*₁ for the imported veteran speed factor; if no available type
     gives such a pair, the run still checks that *s* = trunc(*s*₁ × *k*ᵥ).
-  - (c) One stock infantry type, and a crate placed on the unit's own run one cell east of its start
+  - (c) One infantry type, and a crate placed on the unit's own run one cell east of its start
     cell. A named test file (an override section of the test map, or a loose copy of the rules file)
     makes the speed crate the only crate outcome. The crate's speed multiplier is read from the rules
     data.
-- *Procedure:* order each unit to the cell 10 cells east of its start.
+- *Procedure:* order each unit to the cell 10 cells east of its start. Repeat (a) at game speed
+  indices 1 and 6, using the same effective imported fields, to test speed invariance per tick.
 - *Observable:* the world *x* and *y* of the unit on every tick of the walk, and the number of ticks
   from the first step to arrival.
-- *Runs:* 1 per unit.
+- *Runs:* 1 per unit and game speed tested.
 - *Expected:* on every tick of steady walking *x* grows by exactly the *s* of F5, and *y* does not
   change: (a) from the speed field and the country factor, with *m* = 1.0 and no veteran factor; (b)
   the veteran unit's *s* = trunc(*s*₁ × *k*ᵥ), where *s*₁ is the step of the lowest-rank unit beside
@@ -1592,13 +1652,14 @@ cases).**
   change the walk of 10 cells takes 10 × (⌈240 / *s*⌉ + 2) − 1 ticks from the first step to arrival
   (for *s* from 2 to 38, claim 6). A count of 10 × (⌈240 / *s*⌉ + 1), 9 ticks fewer, would mean that
   the walking target is chosen on the arrival tick; the per-tick record then shows no tick without
-  movement between two cells.
+  movement between two cells. Changing game speed leaves the per-tick steps and tick counts
+  unchanged; only elapsed real time changes.
 - *Falsified if:* any steady step differs from the expected *s*, the final position is not exact,
   *y* changes, or the number of ticks differs.
 
 **Scenario W5: crawling, panic and the prone non-crawler (claims 8, 10).**
 - *Setup and procedure:*
-  - (a) A unit of the human player, of a stock infantry type that can crawl, on open ground, ordered
+  - (a) A unit of the human player, of an infantry type whose art enables crawling, on open ground, ordered
     to a cell ten cells away. While it walks (its behaviour is then *move*, in which a
     human-controlled unit does not retaliate, S-0215 claim 18), a computer-owned unit with a weak
     weapon hurts it once, enough to raise its fear to lie down (S-0107 claim 16) without killing it.
@@ -1607,7 +1668,7 @@ cases).**
   - (c) A computer-owned fraidycat civilian type hurt by a known attacker, which panics and flees.
     Record its per-tick step while it shows *panic*.
   - (d) A named test file (a loose copy of the rules file, and of the art file if needed) marks a
-    stock infantry type of the human player as a cyborg whose art cannot crawl. Order the unit to a
+    chosen infantry type of the human player as a cyborg whose art cannot crawl. Order the unit to a
     cell ten cells away and, while it walks, hit it with an attack from a known attacker that
     deals more than its remaining health, so that it survives as a crippled cyborg. If it stops after
     the hit, order it on at once. Record its per-tick step during the first 40 ticks after the hit,
@@ -1624,7 +1685,7 @@ cases).**
 
 **Scenario W6: terrain does not slow walkers (claim 9).**
 - *Setup:* two straight runs of 10 cells side by side, one of clear land, one of a land type whose
-  walker percentage is between 0 % and 100 % in stock data. One infantry of the same type at the
+  imported walker percentage is strictly between 0 % and 100 %. One infantry of the same type at the
   start of each, at sub-cell 2.
 - *Procedure:* order both to the far end on the same tick.
 - *Observable:* ticks from the first step to arrival.
@@ -1635,9 +1696,9 @@ cases).**
 
 **Scenario W7: scatter acceptance, destinations and damage requests (claims 11 to 13, 15).**
 - *Setup:* Unless a part says otherwise, units are at the lowest veterancy rank, and the
-  player-scatter rule is off: if stock data turns it on, a named test file (a loose copy of the rules
-  file) turns it off. Where a part needs a behaviour with the scatter property and stock data does not
-  give it, a named test file gives it. In parts c, g, h1, h4 to h7, i and j the unit that scatters stands on
+  player-scatter rule is off: if the effective imported rule is on, a named test file (a loose copy
+  of the rules file) turns it off. Where a part needs a behaviour with the scatter property and the
+  effective imported behaviour lacks it, a named test file gives it. In parts c, g, h1, h4 to h7, i and j the unit that scatters stands on
   open flat ground with no other unit within 2 cells, so its search collects exactly its eight
   neighbours (claim 13). The recorder reads the tick number (Terms) of every tick. For a unit that
   walks when a request reaches it, *Z* is its scatter centre cell on the tick of the request: the
@@ -1659,7 +1720,7 @@ cases).**
     (claim 15).
   - (c) An idle computer-owned fraidycat civilian of an unarmed type, standing in *guard* on open
     flat ground. A named
-    test file removes the scatter property from *guard* (if stock data gives it the property) and
+    test file removes the scatter property from *guard* if its imported behaviour properties include it and
     leaves the player-scatter rule off. A unit of the human player at least 4 cells away hits it
     once. By claim 15 neither case of request A is sent (the first needs the player-scatter rule or
     the scatter ability, the second the scatter property), and claim 11 refuses request B (it is not
@@ -1671,7 +1732,7 @@ cases).**
   - (d) The runs of (b), read for where the new destination lies.
   - (e) A gap cell *G* in an otherwise impassable straight line (for example a cliff line), with open
     ground on both sides. *G* holds three computer-owned infantry standing still on its three side
-    positions; one of them is of a stock type that can deploy, whose *undeploy* entry has image
+    positions; one of them is of a type with the imported infantry-deploy property, whose *undeploy* entry has image
     frames, and is deployed, playing *deployed* (the recorder shows its sequence). A map trigger orders a
     fourth infantry unit of the same house, standing 2 cells before *G*, to a cell 10 cells beyond
     *G* through the gap. *G* gives it the outcome *stationary friendly* (S-0209 claim 4), and since its
@@ -1694,11 +1755,11 @@ cases).**
     map east and once due map west of the soldier.
   - (h) Three units, each hit once, each run once with the attacker due map east and once due map
     west: (h1) an idle computer-owned infantry unit that is not a fraidycat and may not retaliate
-    (Terms; for example an unarmed type that is not an engineer, or a stock civilian type
+    (Terms; for example an unarmed type that is not an engineer, or a civilian type
     that a named test file makes not a fraidycat), in a behaviour with the scatter property, hit by
     a unit of the human player; (h2) the same type owned by the human player, hit by a computer-owned
     unit; (h3) an idle armed computer-owned soldier, not a fraidycat, in a behaviour with the
-    retaliate property, of a stock type whose weapon can hit the attacker, so that it may retaliate
+    retaliate property, of a type whose imported weapon properties allow it to hit the attacker, so that it may retaliate
     (Terms), hit by a unit of the human player. Four more variants of (h2) and (h1): (h4) as (h2),
     with a named test file that turns the player-scatter rule on; (h5) as (h2), with the rule off,
     the unit placed by the test map at veteran rank and a named test file whose veteran ability
@@ -1735,7 +1796,7 @@ cases).**
     2) of the centre cell of the block. Each of the other 24 cells of the block holds an occupant: a vehicle of
     the human player in one corner cell, armed and ordered to hit the civilian once, and in each of
     the other 23 cells one idle, unarmed infantry unit of the civilian's house, of a type that is not
-    a fraidycat (a named test file may make a stock civilian type not a fraidycat, as in (h1)),
+    a fraidycat (a named test file may remove the fraidycat property from a civilian type, as in (h1)),
     pre-placed at a side position. Every cell of the block then has a non-empty occupancy record,
     and every cell outside it either cannot be entered or differs from the centre cell by more than
     1 height level (the search's height condition), so the nearby-cell search finds nothing
@@ -1758,14 +1819,14 @@ cases).**
     choice *d* is one of the directions 2 to 6.
   - (m) The first case for a unit that is not deploying (claim 11). As (e), with these changes: no
     occupant of *G* can deploy; the three occupants and the fourth unit belong to the human player,
-    the occupants of a stock type whose *cheer* entry has image frames; and the user moves the fourth unit
+    the occupants of a type whose imported *cheer* entry has image frames; and the user moves the fourth unit
     by a move order. When the fourth unit is one cell short of the cell before *G*, the user gives
     the three occupants the celebration order, so that they play *cheer* (S-0107 claim 21) when the
     fourth unit stops in front of *G* and starts sending its forced, move-anywhere requests (S-0209
     claim 8). If the recorder shows a cheer ending before the fourth unit stops, the run is repeated
     with the order given later.
   - (n) The second case of claim 11 (deploying, human-controlled owner, request not both forced and
-    move-anywhere). A stock infantry type that can deploy, owned by the human player, on open flat
+    move-anywhere). An infantry type with the imported infantry-deploy property, owned by the human player, on open flat
     ground with no other unit within 2 cells, not a fraidycat, in a behaviour in which it may
     retaliate (S-0215 claim 18). A named test file turns the player-scatter rule on, so that the
     unit has scatter permission. A computer-owned unit with a long-range weapon, outside the
@@ -1785,18 +1846,18 @@ cases).**
     retaliate (Terms), and a unit of the human player hits it once, which sends it request A by
     its second case (claim 15), forced and not move-anywhere. The variant counts only when the
     recorder shows it playing *deployed* on the tick of the hit. *Deployed-idle* is left out,
-    since no stock behaviour starts it (S-0107 claim 20).
+    since no built-in behaviour starts it (S-0107 claim 20).
   - (o) The *undeploy* table of claim 11 (its *deploy*, *deployed* and *deployed-fire* rows). As
     (e), with these changes: the three occupants of *G* and the fourth
-    unit belong to the human player; the occupants are of a stock type that can deploy, and the user
+    unit belong to the human player; the occupants are of a type with the imported infantry-deploy property, and the user
     gives them the deploy order. The fourth unit, ordered through the gap, stops in front of *G* and
     starts sending its forced, move-anywhere requests (S-0209 claim 8). Variants, by the sequence
     that all three occupants play on the tick of the first request, reached by giving the deploy
     order earlier or later (as in (m), the recorder shows the sequences): (o1) *deploy*,
     (o2) *deployed* and (o3) *deployed-fire* (by an enemy unit in the occupants' weapon range), with
-    a stock type whose *undeploy* entry has image frames; and (o4) *deployed*, with a named test
+    a type whose imported *undeploy* entry has image frames; and (o4) *deployed*, with a named test
     file (a loose copy of the art file) that gives the occupants' type an *undeploy* entry with no
-    image frames. *Deployed-idle* is left out, since no stock behaviour starts it (S-0107 claim 20).
+    image frames. *Deployed-idle* is left out, since no built-in behaviour starts it (S-0107 claim 20).
     If the recorder shows another sequence on that tick, the run is repeated with the order given
     earlier or later.
   - (p) The height-aware usable area (claim 12). A purpose-made map whose cells are all flat at
@@ -1818,7 +1879,7 @@ cases).**
     civilian of an unarmed type, owned by the human player, at the lowest veterancy rank unless a
     variant says otherwise, walks north along a straight run of open flat ground under a move
     order to a cell *D* 8 cells away, in a move behaviour with the scatter property (a named test
-    file gives it if stock data does not). When it is 4 cells from *D* it is hit once by a
+    file gives it if the imported behaviour lacks it). When it is 4 cells from *D* it is hit once by a
     long-range weapon fired from due map east by a computer-owned unit on its row. Its locomotor is
     moving and it has a destination, so the hit sends it request B only (claim 15), which is not
     forced, and claim 11's third case decides by its scatter permission. Variants: (q1) the
@@ -1952,7 +2013,7 @@ cases).**
   or a count outside 8 to 32. (c) the hit itself moves the unit, two first moves with the same
   residue mod 8 end in different cells, or it stays although free cells are next to it. (d) it
   moves to a cell that is not a neighbour of *Z* (a neighbour of *D* far from *Z* would mean the
-  centre is the farther destination, as revision 13 of this spec said). (e) it
+  centre is the farther destination). (e) it
   stays deployed, or undeploys but never leaves *G* although cells next to the gap are free. (f) any counted destination differs from every predicted one; a candidate that fails
   the check is chosen while a later qualifying candidate passes; or a count falls outside its band
   (in particular, if the west candidate is chosen at the rate flat ground would give). (g) in (g1) or
@@ -1996,7 +2057,7 @@ cases).**
   keeps that position in every cell of a straight run (claim 3), so each leg is 256 leptons long and
   parallel to its run, and no random draw is involved. The house's country speed factor for
   infantry is read from the rules data.
-  - (a) A stock type at the lowest veterancy rank, chosen so that F5 gives *s* from 2 to 38 for the
+  - (a) A type at the lowest veterancy rank, chosen so that F5 gives *s* from 2 to 38 for the
     house's country (claim 6).
   - (b) A named test file (a loose copy of the rules file) sets the type's speed field and the
     veteran speed factor so that F5 gives *s* = 1 for a unit at veteran rank whose type has the
@@ -2152,7 +2213,7 @@ cases).**
     separate the exception from the main rule, which can clear the destination first on an arrival
     tick in range (Open questions); it checks only the state once firing has begun.
   - (d) No target: a move order to an empty cell eight cells away.
-  - (e) Separate stock-data runs, no weapon overrides, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), game speed
+  - (e) Separate runs under the common measurement setup, with no weapon overrides, game speed
     index 2. A tiny map has a straight high bridge over flat enterable clear ground, with
     approaches at deck level and a ground route beneath it. For e2, shape the access route
     so that the only route from the ground start to a bridge approach passes through *C*
@@ -2211,14 +2272,14 @@ cases).**
   satisfy that test, or the specified later failed search keeps the destination.
 
 **Scenario W11: teleporting infantry landing (claims 19 and 20; Q-0181, Q-0235).**
-- *Setup:* a tiny flat clear skirmish map, a human player's stock teleporting infantry, one
+- *Setup:* a tiny flat clear skirmish map, a human player's infantry with the imported teleporting locomotor, one
   bystander computer player kept outside the observed area, game speed index 2, no engine add-on and
   no mods (the named test files of a scenario and the purpose-made test maps excepted). Use scripted orders and a read-only recorder for positions, destinations, occupancy
   and scenario stream state. Repeat each part with three recorded seeds. Void runs in which
   an unnamed bystander acts on a test object or enters the observed area.
 - *Procedure:* (a) Order empty cell centres, then cells with one, two and three allied infantry
   side positions taken. (b) Order a vehicle-occupied cell and an impassable cell, leaving empty
-  neighbours. (c) Use named test-map copies of stock infantry able to enter a transport,
+  neighbours. (c) Use named test-map copies of infantry types whose imported properties allow them to enter a transport,
   capture, sabotage or be absorbed by a building, changing only their locomotor to the
   teleporting one. Give their corresponding object destinations and check the occupant-ignoring
   choice. Also use a blocked object destination in a behaviour outside those four and compare
@@ -2233,7 +2294,7 @@ cases).**
   After each successful jump record deck status, listing and both occupancy records.
   Once phasing in ends, issue a player scatter and record the centre and occupancy
   conditions of the resulting destination choice. (e) Order across a cliff and to an isolated island.
-  (f) Place the stock teleporting infantry by a production release or map-trigger placement
+  (f) Place the infantry with the teleporting locomotor by a production release or map-trigger placement
   with ground infantry occupants nearby. Identify any destination supplied during placement,
   then compare that event with a later ordinary move, for human and non-player owners where
   placement can be arranged. Do not manufacture a destination by writing game state.
@@ -2293,14 +2354,14 @@ cases).**
   for or against claim 20.
 
 **Scenario W12: candidate factory tether damage test (claim 15).**
-- *Setup:* a tiny clear skirmish map, human-owned infantry factory and stock infantry, a
+- *Setup:* a tiny clear skirmish map, human-owned infantry factory and an infantry type it can produce, a
   bystander computer player far away, game speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Produce
   infantry with no rally point and then with a rally point, three recorded seeds each.
 - *Procedure:* use scripted production and a read-only recorder as in S-0417 U10. Record
   contact, tether, current and queued behaviour, target, destination and movement in progress
   from release through the first cell arrival. Seek an interval in which the tether is the
   only failed condition of claim 15 request A's second case. Only if such an interval exists,
-  use stock no-attacker damage, with the player-scatter rule enabled by a named test-map
+  use damage without a known attacker, with the player-scatter rule enabled by a named test-map
   override, and compare the same surviving unit after tether loss. Remove the override.
 - *Observable:* which conditions coincide with the tether, and whether the hit sends an
   accepted scatter and a draw. Record health to exclude lethal hits.
@@ -2316,11 +2377,12 @@ cases).**
 **Scenario W13: close-range movement within the current cell (claim 21).**
 
 - *Setup:* a tiny flat clear skirmish map, one human-controlled house and one bystander
-  computer player, game speed index 2, stock data, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use ordinary walking
+  computer player, game speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use ordinary walking
   infantry with the close-range property described by S-0307. Pre-place the attacker at the
   top position and a legal enemy target in a neighbouring cell. Keep the observed area free
   of other actors. Use S-0307 RG23(b)'s successful-shortcut geometry and repeat with each side
-  position occupied in turn. Repeat on a high bridge with different ground and deck occupants.
+  position occupied in turn. Repeat on a high bridge with different ground and deck occupants,
+  including all three deck side positions taken while a ground side position remains free.
 - *Procedure:* give an attack order with scripted input. In three runs per arrangement,
   record ticks, positions, walking target, destination, target and occupancy reservations
   through the first arrival and the next approach processing. A read-only recorder is
@@ -2339,7 +2401,7 @@ cases).**
   choice, or completion on that arrival despite neither claim 16 nor claim 17 holding.
 
 **Scenario W14: infantry entered-by timing (claim 22; Q-0268 part 1).**
-- *Setup:* a tiny clear skirmish map with human-owned stock walking infantry and one
+- *Setup:* a tiny clear skirmish map with human-owned infantry with the ordinary walking locomotor and one
   bystander computer player kept away, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Attach
   independent one-time any-house entered-by tags to successive intermediate and
   final cells. Each tag's action sets a distinct map variable. Include a level high
@@ -2368,12 +2430,12 @@ cases).**
   change is not a falsifier: record the entered-by action itself.
 
 **Scenario W15: walking factory clear-report timing (claim 23; Q-0295).**
-- *Setup:* a tiny flat clear skirmish map with a human-owned stock infantry factory,
+- *Setup:* a tiny flat clear skirmish map with a human-owned infantry factory,
   enough credits and prerequisites to produce ordinary walking infantry, one
   bystander computer player kept away, game speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Set a rally point beyond the exit cell. Observe the factory, its foundation and
   the full route to the rally point. Use S-0417 U10(a)'s ordinary release setup.
-  If stock release geometry gives only one walking-target arrival before the exit,
+  If the imported release geometry gives only one walking-target arrival before the exit,
   repeat with a named test-map release-displacement override placing the unit
   at a legal appear position at least three cells from the factory's unchanged
   exit cell. Qualify this setup by recording successful placement, contact and
@@ -2400,6 +2462,50 @@ cases).**
 - *Measurement method:* scripted input and a read-only recorder; S-0417 U10(a) can incorporate
   these recordings without changing the oracle.
 
+**Scenario W16: scatter from a cell with no reach region (claim 24; Q-1502 question 1).**
+
+- Setup: a tiny skirmish map with an infantry unit with the ordinary walking locomotor map-placed on a
+  cliff cell whose imported passability properties exclude it from the unit's movement zone, inside the usable area and outside every reach region of
+  its movement zone. Provide empty, enterable ground neighbours in a reach region. Use no
+  bridge, transport, tether or existing movement. Place the same type on nearby open ground
+  as a control. Keep both houses alive independently. Use the common measurement setup, game speed
+  index 2, director off and mods off. Qualify the fixture by recording the starting cell's
+  lack of a reach region, the neighbours' reach-region membership and the absence of all
+  reachability-gate exceptions in S-0212 claim 6. Repeat with the enterable neighbours on
+  different sides of the cliff cell; the fixture is defined by these conditions, not by a
+  particular existing map.
+- Procedure: for the placement-only control, use a non-fraidycat type other than the cow
+  and record the first 30 ticks without orders or damage to test whether placement alone
+  assigns a scatter destination or consumes a scatter draw. Then, from fresh stationary
+  placements, send the human scatter order to each unit
+  separately (S-0213 claim 9). Repeat at eight successive request ticks in fresh runs. Also
+  test the damage path in claim 15 with an infantry type whose imported weapon list is empty and a
+  survivable hit. For a human-owned non-fraidycat, enable the player-scatter rule in a named
+  test-map override and use a current behaviour with the scatter property to obtain request A.
+  For request B, use a computer-owned fraidycat with that property and a known attacker.
+  Distinguish its two requests using W9. Run each damage variant three times per cliff
+  arrangement. Remove the test-map override afterwards. Retain
+  only runs in which the recorder confirms an accepted request and a chosen
+  destination on the surrounding usable ground. Record separately whether the request has
+  a threat point. Do not infer request acceptance from lack of motion. Give a direct move
+  order to the same neighbouring destination in a separate fresh run.
+- Observable: a read-only recorder records the request options, chosen destination, its
+  assignment and clearing ticks, and the unit's cell and world position each tick for
+  300 ticks after the request. Video records whether the unit ever leaves the cliff.
+  Exclude runs in which death, mind control, transport or another order interrupts the test.
+  A recording harness can host this test; support for distinguishing request acceptance
+  from route failure is a proposed harness addition, not a modification here.
+- Expected: placement alone gives no scatter destination or scatter draw. After an accepted
+  request, destination selection can succeed for the cliff unit, but normal pathfinding
+  rejects a destination in a reach region and takes no walking step. Record whether the
+  destination is retained or cleared separately from that result. The direct move control also fails; the open-ground scatter control walks normally. A cliff unit
+  taking a step to such a destination after a confirmed scatter, without another movement
+  cause or a reachability exception, falsifies the claim. An unaccepted request or a search
+  that finds no destination is inconclusive, not confirmation. Arena victory timings alone
+  do not identify an escape path. A scatter destination or attributable scatter draw during
+  the undisturbed initial interval falsifies the placement-only statement; an unrelated idle
+  action or externally supplied order makes that interval inconclusive instead.
+
 ## Open questions
 
 - The screen-cover check (Terms) is exact as arithmetic, but three parts of it are not confirmed:
@@ -2412,7 +2518,7 @@ cases).**
 - Infantry factory release gives a tether situation (S-0417 claim 10), but it has not been
   established that a released infantry unit can be hurt while tethered, stationary and without
   target or destination in a behaviour with the scatter property. W12 checks that conjunction.
-  until it does, the damage-scatter tether condition of claim 15 remains unmeasured.
+  Until it does, the damage-scatter tether condition of claim 15 remains unmeasured.
 - While a unit travels through a tunnel (S-0212 Terms), its scatter centre cell appears to be the
   tunnel's exit cell (Terms *scatter reference point*). Tunnels belong to S-0212 and the movement specs, and this was not checked
   further.

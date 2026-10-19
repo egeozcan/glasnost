@@ -2,11 +2,11 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344]
 supersedes: []
@@ -44,7 +44,9 @@ Rules owned elsewhere and not restated here:
   - claim 16: turning a destination into a movement point (claim 7 here),
   - claims 13 to 15: hovering, water and beach, the landing check,
   - claim 18: the crash fall, no spin, zero speeds and the growing crash rate,
-  - claim 19: sinking.
+  - claim 19: sinking,
+  - claim 29: registration as a tracked flying object,
+  - claim 30: the height test for being in the air for combat.
 - **Other rules that test the seized state:**
   - the approach step: S-0215 claim 37 c and d,
   - deployed vehicles: S-0517 claims 9 and 11,
@@ -67,6 +69,10 @@ crashed), *hover slot*, *height above the surface*, *render layer*, *contact*, *
 - **Game-wide death weapon:** S-0312 claim 6.
 - **Magnetic-beam weapon, magnetic wave:** S-0301 (Terms).
 - **Passive house:** S-0009.
+- **Tracked flying object:** S-0303 (Terms), with jumpjet registration owned by S-0502 claim 29.
+- **In the air for combat:** S-0502 claim 30. This is distinct from the positive height that
+  makes a release a drop (claim 13), and from the render-layer test for seize eligibility
+  (claim 3).
 
 New terms:
 
@@ -235,10 +241,26 @@ New terms:
    - It keeps the body facing it had when seized (S-0502 claim 10).
    - The hovering, water/beach and landing exceptions of S-0502 claims 13 to 15 apply to it
      because it is seized.
+   - **Flying-object registration.** When the seize gives it a movement commitment, its first
+     eligible jumpjet update takes off and makes it a tracked flying object, even before its
+     first rise. S-0502 claim 29 owns the registration's boundaries and exceptions. Ending
+     the grip does not end registration: a clear-cell drop stays registered through its
+     descent until touchdown; a blocked crash ends registration before its impact effects.
+     Leaving the map also ends registration. If the seize's search finds no cell, it has no
+     movement commitment and stays grounded (S-0502 claim 16); there is no take-off registration.
+   - **In the air for combat.** While on the map it counts as in the air exactly when its
+     signed integer height above the surface is at least 208 leptons (S-0502 claim 30), an
+     exact comparison with no rounding. This does not depend on its flight state, its own
+     type, whether it is gripped, dropped or set down, or its flying-object registration.
+     S-0502 claim 30 supplies the bridge-height interpretation. A registered unit below
+     that height is not in the air for combat, although the flying-object search can find it.
    - Backing: `measurable` (scenario L2 for the path, facing and the movement point beside the
-     lifter; scenario L12 for a lifter that moves during the pull)
+     lifter; scenario L12 for a lifter that moves during the pull; scenario L15 for registration
+     and the combat height test). The no-cell take-off exception is `unmeasured`: no ordinary
+     setup establishing that initial search failure is supplied here.
    - Confidence: high (the fixed point, the search, no refresh, which building types give a
-     docking point and its precedence); medium (the observed cell for a building lifter)
+     docking point and its precedence, registration and the combat height test),
+     medium (the observed cell for a building lifter)
 
 8. **Arrival drops the unit beside its lifter.** When a gripped unit arrives (S-0502 claim 12: its
    horizontal distance from its movement point is strictly less than 20 leptons), these happen in
@@ -248,8 +270,8 @@ New terms:
    - it enters *descending*,
    - its lifter's grip ends as claim 13 says.
 
-   Normally it is still in the air at that moment, so it is dropped over the cell of its movement
-   point, which is normally a free cell next to the lifter's: claims 15 to 17 then normally find
+   Normally its height above the surface is still positive at that moment, so it is dropped
+   over the cell of its movement point, normally a free cell next to the lifter's: claims 15 to 17 normally find
    that cell clear, and the unit descends and is set down unhurt. The unit falls onto the lifter
    only when the lifter is in that cell at the impact, for example because it has driven there.
    - Backing: `measurable` (scenarios L2 and L12)
@@ -346,7 +368,8 @@ New terms:
     | The gripped unit is given no destination (claim 9) | no |
     | The gripped unit's drop-pod stand-in ends (claim 23) | yes |
 
-    Ending a grip never clears the *seized* state. Only claim 20 does.
+    Ending a grip never clears the *seized* state. Restoration clears it under claim 20
+    (claim 24 for other stand-ins).
     - A lifter whose grip ended without clearing its target may fire at the same unit again. That
       unit is still seized, so the hit seizes nothing (claim 3) and does no damage (claim 1).
     - Backing: `measurable` (L2 arrival, L3 accepted destinations and rest, L7 leaving play,
@@ -788,7 +811,10 @@ New terms:
       jump and the lifter's target, the original's drop-pod descent and touchdown, and the
       teleporting aircraft. The occupancy rule is `measurable` (scenario L13 part f). Not
       reproducing the touchdown's target drop for other objects is `unmeasured` as a design
-      choice; the original's drop by house is `measurable` (L13 part c). The guard-row ending is `measurable` only conditionally (L13 part b, depot
+      choice. The original's same-house target retention is `measurable` (L13 part c).
+      Its other-house visibility condition and the retargeting draw are `unmeasured`: that
+      condition is not pinned down, and L13 part c does not isolate the draw or its trigger.
+      The guard-row ending is `measurable` only conditionally (L13 part b, depot
       variant): no layout is established in which a driving unit stops exactly on a docking
       point. The no-cell case of the teleporting stand-in is `unmeasured`: no setup is
       established in which the search around a lifter finds no cell. The walking rule, the
@@ -1016,8 +1042,8 @@ tick. Record random-stream positions for L3's draw comparison. Do not change gam
 establish a qualifying condition; a run lacking the required observations is inconclusive.
 
 - **L1 Eligibility (claims 3, 4).**
-  - Fire at each of: an infantry unit, a light and a heavy vehicle, a landed aircraft, an
-    aircraft in flight, a vehicle under the iron curtain, a vehicle just leaving a war factory,
+  - Fire at each of: an infantry unit, a building, a light and a heavy vehicle, a landed aircraft,
+    an aircraft in flight, a vehicle under the iron curtain, a vehicle just leaving a war factory,
     and an already-seized vehicle.
   - Named test data: give one vehicle type a size just below and one equal to the weapon's damage.
   - Part f: a teleporting harvester while it drives back to its refinery.
@@ -1360,10 +1386,13 @@ establish a qualifying condition; a run lacking the required observations is inc
       its next update. Give the victim two attackers, one of its own house and one of another
       house, both targeting it during the descent, and record whether each still has it as its
       target after touchdown. Expected in the original: the other-house attacker drops it, the
-      same-house attacker keeps it (our engine keeps both by design).
+      same-house attacker keeps it (our engine keeps both by design). Record visibility as
+      well; the other-house result is diagnostic until the visibility condition in claim 23
+      is established, not a confirmation from house ownership alone.
     - Falsified by: an accepted order or a shot after the grip ends, a restoration that
       clears the seized state, a grip or lifter target that ends before touchdown, or a lifter
-      target kept after touchdown.
+      target kept after touchdown. A same-house attacker losing its target solely at
+      touchdown falsifies the same-house retention rule.
   - Part d (claim 4 with other locomotors). With the hovering, the driving and an
     unknown-identifier warhead of part a, fire at a teleporting harvester while it drives back to
     its refinery (L1 part f's state, confirmed by the observations). The unknown-identifier warhead
@@ -1411,6 +1440,29 @@ establish a qualifying condition; a run lacking the required observations is inc
     restoration at rest. Compare height 1: it must hover instead.
   - A restoration while hovering, a route-dependent retry, or hovering at height 0 fails the
     design check. A run that never reaches the required state is inconclusive.
+- **L15 Registration and combat height (claim 7).**
+  - Use the common measurement setup above, with a magnetic lifter seizing a ground vehicle
+    over clear land. Record its first jumpjet update, flight state, signed integer height
+    above the surface, grip, registration and touchdown each tick with a read-only recorder.
+    Propose recorder support to the user if absent; do not write game state.
+  - Repeat with a mid-pull release over a parked vehicle to obtain a blocked crash. Observe
+    registration immediately before the impact effects, not only after removal. In both runs,
+    record the combat in-the-air answer during ascent and descent or crashing, including
+    observations below and at or above 208 leptons. If the trajectory skips the exact
+    boundary, report that limitation rather than claiming an exact-boundary measurement.
+    Named L15 map overrides may vary the victim's jumpjet climb field to obtain observations
+    at 207 and 208 leptons; only a trace reaching both heights tests the exact boundary.
+  - In a separate run, destroy the seized unit during ascent by force-fire. Record its
+    departure from the map and registration ending; registration must not survive that event.
+    A retained registration after departure falsifies the map-exit boundary.
+  - Expected: registration starts in the take-off update, before the first rise. Release
+    leaves it registered. The clear-cell run stays registered until touchdown; the blocked
+    run unregisters before its impact effects. In every observed state the combat answer is
+    true exactly at heights of at least 208 leptons, not merely whenever registered.
+  - Falsified by: registration starting only at a positive height, release unregistering it,
+    loss of registration during clear-cell descent before touchdown, registration surviving
+    into blocked-impact effects, or a combat answer inconsistent with the height comparison.
+    Run each variant three times. A missing read-only observation is inconclusive.
 - **S-0502 carry items.** L2, L3 and L4 together give the held body facing (S-0502 claim 10), the
   hovering, landing and arrival exclusions (claims 12 to 15), the growing crash rate (claim 18),
   the cell-centre detour (claim 15 here), and the sinking-only-after-a-drop case (S-0502 claim 19,
