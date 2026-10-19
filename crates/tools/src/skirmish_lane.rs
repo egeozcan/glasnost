@@ -130,6 +130,8 @@ struct Game {
     /// House-ticks a superweapon record stood granted, and granted but
     /// suspended, by kind name.
     granted_ticks: BTreeMap<String, (usize, usize)>,
+    /// The suspended house-ticks by cause (see [`Tally::suspended_causes`]).
+    suspended_causes: BTreeMap<String, [usize; 3]>,
     /// Units that went berserk (S-0610 claim 4), and house-ticks in which a
     /// player house's psychic sensors showed a hostile-intent line
     /// (claim 10).
@@ -144,6 +146,18 @@ struct Game {
     taken: usize,
     controlled_max: [usize; PLAYERS],
     controllers: [usize; PLAYERS],
+    /// Overload pulses of unlimited controllers that played the overload
+    /// sound (S-0601 claim 16), and per player house the most victims one
+    /// unlimited controller held at once.
+    overloads: usize,
+    unlimited_max: [usize; PLAYERS],
+    /// Per player house: infantry copies released at a cloning building
+    /// (S-0404 claim 14).
+    clones: [usize; PLAYERS],
+    /// Per player house: the most slave miners (S-0402) and the most slaves
+    /// on the map at once.
+    masters_max: [usize; PLAYERS],
+    slaves_max: [usize; PLAYERS],
     /// Per player house: house-ticks with a gattling at its top stage, and
     /// the distinct gattling types it had (S-0609).
     top_ticks: [usize; PLAYERS],
@@ -744,6 +758,11 @@ fn play_ai(
     g.taken = tally.taken;
     g.controlled_max = tally.controlled_max;
     g.controllers = tally.controllers.map(|s| s.len());
+    g.overloads = tally.overloads;
+    g.unlimited_max = tally.unlimited_max;
+    g.clones = tally.clones;
+    g.masters_max = tally.masters_max;
+    g.slaves_max = tally.slaves_max;
     g.top_ticks = tally.top_ticks;
     g.gattling_types = tally.gattling_types.map(|s| s.len());
     g.clouds = tally.clouds;
@@ -779,6 +798,7 @@ fn play_ai(
     g.dominator_killed = tally.dominator_killed;
     g.ready_ticks = tally.ready_ticks;
     g.granted_ticks = tally.granted_ticks;
+    g.suspended_causes = tally.suspended_causes;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
     for (h, u) in game.special_uses() {
@@ -882,6 +902,10 @@ pub struct Tally {
     /// suspended, by kind name: a kind granted long and never ready names
     /// a charge the house never finishes.
     pub granted_ticks: BTreeMap<String, (usize, usize)>,
+    /// The suspended house-ticks of [`Tally::granted_ticks`] by cause: a
+    /// timed blackout running (S-0405 claim 6, a force-shield launch or a
+    /// spy), a drain blackout (claim 5), or a true shortage of power.
+    pub suspended_causes: BTreeMap<String, [usize; 3]>,
     /// Units that went berserk (S-0610 claim 4: a unit that was not berserk
     /// after the last tick and is now).
     pub berserked: usize,
@@ -900,6 +924,21 @@ pub struct Tally {
     /// Per player house: its controllers (objects with a control record)
     /// seen so far.
     pub controllers: [BTreeSet<u32>; PLAYERS],
+    /// Overload pulses that played the overload sound (S-0601 claim 16).
+    pub overloads: usize,
+    /// Per player house: the most victims one unlimited controller held.
+    pub unlimited_max: [usize; PLAYERS],
+    /// Per player house: infantry copies released at a cloning building
+    /// (S-0404 claim 14: a new infantry unit in contact with a cloning
+    /// building when first seen).
+    pub clones: [usize; PLAYERS],
+    /// Per player house: the most slave miners and the most slaves on the
+    /// map at one tick (S-0402).
+    pub masters_max: [usize; PLAYERS],
+    /// Per player house: the most slaves on the map at one tick.
+    pub slaves_max: [usize; PLAYERS],
+    /// The infantry seen so far.
+    pub infantry_seen: BTreeSet<u32>,
     /// Per player house: the ticks in which at least one of its objects
     /// stood at its type's top gattling stage (S-0609 claim 2).
     pub top_ticks: [usize; PLAYERS],
@@ -1016,6 +1055,10 @@ impl Tally {
         use glasnost_sim::drain::DrainEvent;
         use glasnost_sim::mutation::MakerEvent;
         match e {
+            Effect::Mind {
+                sound: glasnost_sim::mind::MindSound::Overload,
+                ..
+            } => self.overloads += 1,
             Effect::Superweapon {
                 event: glasnost_sim::superweapons::SwEvent::GeneticSound,
                 ..
@@ -1066,6 +1109,40 @@ impl Tally {
     /// Counts what changed in the world's last tick.
     pub fn observe(&mut self, w: &World) {
         self.drained_ticks += w.drain.links.len();
+        let mut masters = [0usize; PLAYERS];
+        let mut slaves = [0usize; PLAYERS];
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            masters[h] += usize::from(glasnost_sim::econ::slaves::is_master(w, o.id));
+            slaves[h] += usize::from(o.econ.slave.is_some());
+        }
+        for h in 0..PLAYERS {
+            self.masters_max[h] = self.masters_max[h].max(masters[h]);
+            self.slaves_max[h] = self.slaves_max[h].max(slaves[h]);
+        }
+        for o in w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.kind == Kind::Infantry)
+        {
+            if !self.infantry_seen.insert(o.id.0) {
+                continue;
+            }
+            let cloner = o.contact.and_then(|k| w.obj(k)).is_some_and(|b| {
+                b.kind == Kind::Building
+                    && w.rules()
+                        .buildings
+                        .get(b.type_index as usize)
+                        .is_some_and(|t| t.raw.econ.cloning == Some(true))
+            });
+            if let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS)
+                && cloner
+            {
+                self.clones[h] += 1;
+            }
+        }
         let walkers: BTreeSet<u32> = w.walkers.keys().map(|id| id.0).collect();
         self.walkers += walkers.difference(&self.walkers_before).count();
         self.walkers_before = walkers;
@@ -1143,6 +1220,19 @@ impl Tally {
                         .or_default();
                     e.0 += 1;
                     e.1 += usize::from(r.suspended);
+                    if r.suspended {
+                        let house = HouseId(h as u8);
+                        let cause = if glasnost_sim::econ::power::blackout_running(w, house) {
+                            0
+                        } else if w.houses[h].econ.power.drain_blackout {
+                            1
+                        } else {
+                            2
+                        };
+                        self.suspended_causes
+                            .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
+                            .or_default()[cause] += 1;
+                    }
                 }
             }
         }
@@ -1183,6 +1273,10 @@ impl Tally {
             {
                 held[usize::from(h.0)] += r.victims.len();
                 self.controllers[usize::from(h.0)].insert(c.0);
+                if r.unlimited {
+                    let m = &mut self.unlimited_max[usize::from(h.0)];
+                    *m = (*m).max(r.victims.len());
+                }
             }
         }
         for (m, n) in self.controlled_max.iter_mut().zip(held) {
@@ -1755,6 +1849,12 @@ struct EconTrace {
     lost: [BTreeMap<&'static str, usize>; PLAYERS],
     /// The player houses' objects on the map at the last tick.
     alive: BTreeMap<glasnost_sim::world::ObjectId, (usize, &'static str)>,
+    /// Per object, the kinds (and locomotors) of the objects that had it
+    /// as their target at the last tick.
+    hunted: BTreeMap<glasnost_sim::world::ObjectId, Vec<String>>,
+    /// Objects lost since the last report, by category and the kind of an
+    /// object that targeted it at the tick before ("none" for no one).
+    lost_to: [BTreeMap<String, usize>; PLAYERS],
 }
 
 impl EconTrace {
@@ -1804,9 +1904,25 @@ impl EconTrace {
             // a passenger); count only the dead.
             if !alive.contains_key(id) && w.obj(*id).is_none_or(|o| o.health <= 0) {
                 *self.lost[h].entry(c).or_default() += 1;
+                let by = self
+                    .hunted
+                    .get(id)
+                    .and_then(|v| v.first().cloned())
+                    .unwrap_or_else(|| "none".into());
+                *self.lost_to[h].entry(format!("{c}<-{by}")).or_default() += 1;
             }
         }
         self.alive = alive;
+        self.hunted.clear();
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            if let Some(glasnost_sim::world::Target::Object(t)) = o.target {
+                let loco = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
+                self.hunted
+                    .entry(t)
+                    .or_default()
+                    .push(format!("{:?}/{:?}", o.kind, loco));
+            }
+        }
         // Paid this tick per house, so that a delivery in a tick that also
         // pays for production still counts as earned.
         let mut paid_now = [0i64; PLAYERS];
@@ -1894,6 +2010,14 @@ impl EconTrace {
                 })
                 .collect();
             let spent: i64 = self.spent[h].values().sum();
+            // The army on the map by kind.
+            let mut army: BTreeMap<String, usize> = BTreeMap::new();
+            for o in own
+                .iter()
+                .filter(|o| role_of(w, tech::type_of(o)) == Some(Role::Army))
+            {
+                *army.entry(format!("{:?}", o.kind)).or_default() += 1;
+            }
             // Explored resource cells and their worth, and the share within
             // 12 cells of a harvester or slave master of the house.
             let workers: Vec<glasnost_map::CellXY> = own
@@ -1917,9 +2041,26 @@ impl EconTrace {
                     }
                 }
             }
+            // Who drains the house's buildings, and who shoots at each
+            // drainer (kind/locomotor), for the drain blackouts.
+            let drainers: Vec<String> = w
+                .drain
+                .links
+                .iter()
+                .filter(|&(&b, _)| w.obj(b).is_some_and(|o| o.owner == Some(house)))
+                .filter_map(|(_, &d)| {
+                    let o = w.obj(d)?;
+                    let loco = w.rules().unit(o.kind, o.type_index).map(|u| u.locomotor);
+                    let shooters = self.hunted.get(&d).cloned().unwrap_or_default();
+                    Some(format!(
+                        "{:?}/{:?} {} hp {} targeted by {shooters:?}",
+                        o.kind, loco, d.0, o.health
+                    ))
+                })
+                .collect();
             let _ = writeln!(
                 s,
-                "econ tick {} house {h}: credits {} earned {} spent {} {:?}; harvesters {harvesters}; slave masters {:?} slaves {members} ({inside} inside) {:?}; explored resource cells {cells} worth {worth} near workers {near}; power {}/{} plants {}; lost {:?}; lines [{}]",
+                "econ tick {} house {h}: credits {} earned {} spent {} {:?}; harvesters {harvesters}; slave masters {:?} slaves {members} ({inside} inside) {:?}; explored resource cells {cells} worth {worth} near workers {near}; power {}/{} plants {} blackout {} drained {} {drainers:?}; army {:?}; buildings {}; lost {:?}; lost to {:?}; lines [{}]",
                 w.tick,
                 w.houses[h].credits,
                 self.earned[h],
@@ -1932,9 +2073,15 @@ impl EconTrace {
                 own.iter()
                     .filter(|o| role_of(w, tech::type_of(o)) == Some(Role::Power))
                     .count(),
+                glasnost_sim::econ::power::blackout_running(w, house),
+                w.houses[h].econ.power.drain_blackout,
+                army,
+                own.iter().filter(|o| o.kind == Kind::Building).count(),
                 self.lost[h],
+                self.lost_to[h],
                 items.join(", ")
             );
+            self.lost_to[h].clear();
             self.earned[h] = 0;
             self.spent[h].clear();
             self.lost[h].clear();
@@ -2403,8 +2550,8 @@ fn report(
                     String::new()
                 } else {
                     format!(
-                        " (by kind: {:?}; house-ticks ready by kind: {:?}; house-ticks granted (suspended) by kind: {:?})",
-                        g.launches_by_kind, g.ready_ticks, g.granted_ticks
+                        " (by kind: {:?}; house-ticks ready by kind: {:?}; house-ticks granted (suspended) by kind: {:?}; suspended by cause [timed blackout, drain blackout, shortage]: {:?})",
+                        g.launches_by_kind, g.ready_ticks, g.granted_ticks, g.suspended_causes
                     )
                 }
             );
@@ -2414,8 +2561,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {} plants first {} economy defence {} curtained buildings {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads, u.plants_first, u.economy_defence, u.curtained_buildings
                     )
                 })
                 .collect();
@@ -2458,8 +2605,15 @@ fn report(
             );
             let _ = writeln!(
                 s,
-                "  mind control: takeovers {}; most objects controlled at once per house {:?}; controllers per house {:?}",
-                g.taken, g.controlled_max, g.controllers
+                "  mind control: takeovers {}; most objects controlled at once per house {:?}; controllers per house {:?}; overload pulses {}; most victims of one unlimited controller per house {:?}; cloned infantry per house {:?}; most slave miners and slaves at once per house {:?} {:?}",
+                g.taken,
+                g.controlled_max,
+                g.controllers,
+                g.overloads,
+                g.unlimited_max,
+                g.clones,
+                g.masters_max,
+                g.slaves_max
             );
             let _ = writeln!(
                 s,
