@@ -1496,6 +1496,8 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                     Some(K::Paradrop | K::AmerParadrop) => "ready: paradrop",
                     Some(K::SpyPlane) => "ready: spy plane",
                     Some(K::ForceShield) => "ready: force shield",
+                    Some(K::Genetic) => "ready: genetic mutator",
+                    Some(K::Dominator) => "ready: psychic dominator",
                     Some(_) => "ready: other kind",
                     None => "ready: no kind",
                 };
@@ -1583,6 +1585,8 @@ fn features(w: &World, out: &mut BTreeMap<&'static str, BTreeSet<u32>>) {
                         Some(K::AmerParadrop) => "building gives: american paradrop",
                         Some(K::SpyPlane) => "building gives: spy plane",
                         Some(K::ForceShield) => "building gives: force shield",
+                        Some(K::Genetic) => "building gives: genetic mutator",
+                        Some(K::Dominator) => "building gives: psychic dominator",
                         Some(_) => "building gives: other kind",
                         None => "building gives: no kind",
                     };
