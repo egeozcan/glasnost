@@ -604,6 +604,12 @@ fn play_ai(
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
     let mut econ = EconTrace::default();
+    // `GLASNOST_AI_SWPROBE=n`: every n ticks, per house and charged
+    // mutator or dominator record, what the AI's aim sees.
+    let sw_probe: i32 = std::env::var("GLASNOST_AI_SWPROBE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -635,6 +641,9 @@ fn play_ai(
             if w.tick % econ_every == 0 {
                 print!("{}", econ.report(w));
             }
+        }
+        if sw_probe > 0 && w.tick % sw_probe == 0 {
+            print!("{}", sw_probe_line(w));
         }
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
@@ -1056,8 +1065,9 @@ impl Tally {
             .count();
         self.riding = now;
         // A launch spends a ready record that is still granted afterwards:
-        // count each such fall of the ready mark (a lost giving building
-        // also clears the grant).
+        // count each such fall of the ready mark to not ready (a lost giving
+        // building also clears the grant; low power suspends a record that
+        // stays ready, which is no launch).
         let ready_now: BTreeSet<(usize, usize)> = (0..PLAYERS)
             .flat_map(|h| (0..w.rules().superweapons.types.len()).map(move |i| (h, i)))
             .filter(|&(h, i)| {
@@ -1067,7 +1077,7 @@ impl Tally {
             .collect();
         for &(h, i) in self.ready_before.difference(&ready_now) {
             if glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
-                .is_some_and(|r| r.granted)
+                .is_some_and(|r| r.granted && !r.ready)
             {
                 self.launches += 1;
                 let kind = w.rules().superweapons.types[i].kind;
@@ -2522,6 +2532,43 @@ fn report(
                 "  replay reproduces the final state: {}; save in mid-game, loaded and continued, matches: {}",
                 g.replay_matches, g.save_matches
             );
+        }
+    }
+    s
+}
+
+/// The lines of `GLASNOST_AI_SWPROBE`: per house and mutator or dominator
+/// record (granted, ready or not, suspended), what the AI's aim sees.
+fn sw_probe_line(w: &World) -> String {
+    use glasnost_sim::superweapons::{SwKind, charge};
+    let mut s = String::new();
+    for h in 0..PLAYERS {
+        let house = HouseId(h as u8);
+        for (i, t) in w.rules().superweapons.types.iter().enumerate() {
+            let Some(r) = charge::get(w, house, i as u32) else {
+                continue;
+            };
+            if !r.granted {
+                continue;
+            }
+            let p = &w.houses[h].econ.power;
+            match t.kind {
+                Some(SwKind::Genetic) => {
+                    let (seen, any, clear) = glasnost_ai::mutator::probe(w, house);
+                    s += &format!(
+                        "swprobe tick {} house {h} Genetic ready {} suspended {} power {}/{}: seen infantry {seen} best {any} clear {clear}\n",
+                        w.tick, r.ready, r.suspended, p.output, p.drain
+                    );
+                }
+                Some(SwKind::Dominator) => {
+                    let (all, units, seen, best, refused) = glasnost_ai::dominator::probe(w, house);
+                    s += &format!(
+                        "swprobe tick {} house {h} Dominator ready {} suspended {} power {}/{}: seen dominable {seen} best {best} seen objects {all} units {units} refused {refused:?}\n",
+                        w.tick, r.ready, r.suspended, p.output, p.drain
+                    );
+                }
+                _ => {}
+            }
         }
     }
     s

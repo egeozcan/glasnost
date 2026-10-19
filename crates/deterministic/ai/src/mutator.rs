@@ -149,3 +149,39 @@ pub(crate) fn reached(w: &World, c: CellXY) -> Vec<glasnost_sim::world::ObjectId
         .map(|o| o.id)
         .collect()
 }
+
+/// A lane diagnostic of the mutator's aim for `house`: the seen enemy
+/// infantry, the most of them one launch reaches with no regard to the
+/// house's own, and the most with none of its own or its allies' inside
+/// (what [`mutate_cell`] needs at least [`MIN_GROUP`] of).
+pub fn probe(w: &World, house: glasnost_sim::world::HouseId) -> (usize, usize, usize) {
+    let script = Script::new(house, crate::brain::default_plan());
+    let me = &w.houses[usize::from(house.0)];
+    let explosion = w.rules().superweapons.mutation.explosion;
+    let enemies: Vec<&Object> = script
+        .seen_enemies(w)
+        .into_iter()
+        .filter_map(|(id, _)| w.obj(id))
+        .filter(|o| o.kind == Kind::Infantry)
+        .collect();
+    let friends: Vec<&Object> = w
+        .objects
+        .values()
+        .filter(|o| o.on_map && o.health > 0)
+        .filter(|o| {
+            o.owner
+                .is_some_and(|h| h == house || me.allies.contains(&h))
+        })
+        .filter(|o| explosion || o.kind == Kind::Infantry)
+        .collect();
+    let (mut any, mut clear) = (0, 0);
+    for e in &enemies {
+        let reach = Reach::of(w, e.pos.cell());
+        let n = enemies.iter().filter(|x| reach.holds(x)).count();
+        any = any.max(n);
+        if !friends.iter().any(|f| reach.holds(f)) {
+            clear = clear.max(n);
+        }
+    }
+    (enemies.len(), any, clear)
+}
