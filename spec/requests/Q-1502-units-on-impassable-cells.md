@@ -29,6 +29,12 @@ infantry on side A, in 6 of 6 seeds:
 - M-0002: VIRUS against E1 and VIRUS against E2;
 - M-0001: YTNK against E2, partly.
 
+The lead's note on M-0001 and M-0002 (main f81fc29, *Notes*, "Cliff cells in large groups")
+confirms the setup side: the stock harness placed units on these cells like anywhere else, and in
+the stock games of the pairings above every game still ended by the third sample with one side
+owning nothing, none at the frame limit. Our placement already matches, so the difference is in
+the simulation, which this request asks about.
+
 Code: `crates/deterministic/sim/src/regions.rs` (`same_region`) and
 `crates/deterministic/sim/src/combat/acquire.rs` (`candidate`, zone row).
 
@@ -45,5 +51,7 @@ open ground nearby; record whether the tank group attacks it, and whether the in
 Then swap the roles, with the infantry unit hunting.
 
 ## Current workaround
-None. The literal reading of S-0212 claim 4 holds: a cell without a region matches no region
-cell. The affected arena pairings are reported as failing for this reason.
+Current behaviour kept, by the literal reading of S-0212 claim 4: a cell without a region matches
+no region cell, so a unit on such a cell does not move by itself, its own map-wide search finds
+nothing, and an enemy map-wide search does not find it. The affected arena pairings are reported
+as failing for this reason.
