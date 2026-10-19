@@ -68,6 +68,14 @@ pub const SEED: u32 = 20_261_010;
 /// replays keep [`SEED`].
 pub const DUEL_SEED: u32 = 20_261_018;
 
+/// Seed of the diagonal duel: [`DUEL_SEED`] until M7b AI round 2, when
+/// house 0 won that game at tick 19 270 with its first ferry loaded and not
+/// yet unloaded. Seed 8 plays to tick 26 867 with 18 loads and 18 unloads
+/// (seeds 1 to 12 all ended between ticks 13 778 and 26 867; seed 12 never
+/// loaded a ferry). After the economy-defence change later in that round
+/// it plays to tick 28 947, again with 18 loads and 18 unloads.
+pub const DUEL_DIAGONAL_SEED: u32 = 8;
+
 /// Seed of the M6c duel. Kept at M7a step 2b, after the scenario was given
 /// margins: over the sweep of seeds 1 to 32 (`m6c_seed_sweep`) this seed's
 /// smallest counter is 4, the most any seed reached (see
@@ -107,8 +115,17 @@ pub const M6C_TICKS: i32 = 12_000;
 /// `ruleset`): seed 16 is the only seed of 1 to 16 that plays all its
 /// ticks with every counter at least 3, the sensor orders included (a
 /// house lost its frail sensor and built another); seed 1 has the sensor
-/// orders' 2.
-pub const M7A_SEED: u32 = 16;
+/// orders' 2. Moved from 16 to 4 at M7b AI round 2 (power before a
+/// building, the army beside an extra harvester, the defence of the
+/// economy): seed 16 gives 2 sensor orders and 2 bunker entry orders;
+/// seed 4 is the only seed of 1 to 16 that plays all its ticks with every
+/// counter at least 3. Moved from 4 to 27 later in that round (the
+/// economy defence keeps a unit's fight instead of switching it between
+/// raiders): seed 4 gives no takeover order, and no seed of 1 to 16 has
+/// every counter at least 3 (seeds 1, 11 and 13 come nearest, with the
+/// sensor orders' 2); of seeds 17 to 40, seed 27 is the only one that
+/// does.
+pub const M7A_SEED: u32 = 27;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
@@ -116,7 +133,8 @@ pub const M7A_TICKS: i32 = 12_000;
 /// Seed of the M7b duel. Chosen at M7b step 3.3 (S-0608) from the sweep of
 /// seeds 1 to 16 (`m7b_seed_sweep`): every seed plays all [`M7B_TICKS`]
 /// ticks with every drain counter at least [`m7b::MARGIN`]; seed 11 has the
-/// largest smallest drain counter (8 links formed). See
+/// largest smallest drain counter (8 links formed; since M7b AI round 2,
+/// with Beta's construction yard drainable too, 4). See
 /// `docs/development.md`, *Determinism gate*.
 pub const M7B_SEED: u32 = 11;
 
@@ -286,6 +304,7 @@ fn duel(
     map: &glasnost_map::Map,
     name: &str,
     ticks: i32,
+    seed: u32,
     flies: bool,
     launches: bool,
 ) -> Vec<String> {
@@ -294,7 +313,7 @@ fn duel(
         map,
         name,
         fixture::catalogue(),
-        fixture::setup(DUEL_SEED),
+        fixture::setup(seed),
     )
     .expect("the synthetic duel loads");
     let mut out = Vec::new();
@@ -373,7 +392,16 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         // reaches a launcher shot either, like the naval duel; rocket flights are covered by
         // S-0506's claim tests and the local lane's "rocket flights" count, so it is no
         // longer required to fly one. It still must load and unload a transport and launch.
-        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, false, true),
+        Scenario::Duel => {
+            return duel(
+                &fixture::map(),
+                "synthetic-duel",
+                ticks,
+                DUEL_SEED,
+                false,
+                true,
+            );
+        }
         // The diagonal game ends before a launcher is sent; the straight
         // duel flies both a rocket and an aircraft. Since S-0507 revision 4
         // (eb0224c: the ferried infantry's course differs from about tick
@@ -388,6 +416,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 &fixture::map_diagonal(),
                 "synthetic-duel-diagonal",
                 ticks,
+                DUEL_DIAGONAL_SEED,
                 false,
                 // Since the M6b2 round-4 revisions (S-0501 revision 15: aircraft are listed
                 // by height) the diagonal game charges its superweapon but no longer fires
@@ -433,6 +462,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 &fixture::map_naval(),
                 "synthetic-duel-naval",
                 ticks,
+                DUEL_SEED,
                 false,
                 false,
             );
@@ -497,7 +527,8 @@ pub fn golden_text(scenario: Scenario, ticks: i32) -> String {
         format!("every {stride}th tick")
     };
     let seed = match scenario {
-        Scenario::Duel | Scenario::DuelDiagonal | Scenario::DuelNaval => DUEL_SEED,
+        Scenario::Duel | Scenario::DuelNaval => DUEL_SEED,
+        Scenario::DuelDiagonal => DUEL_DIAGONAL_SEED,
         Scenario::DuelM6c => M6C_SEED,
         Scenario::DuelM7a => M7A_SEED,
         Scenario::DuelM7b => M7B_SEED,

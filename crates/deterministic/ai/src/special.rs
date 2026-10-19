@@ -147,6 +147,20 @@ pub struct Uses {
     /// weapon (S-0308 claims 5 and 6, `gunner`).
     #[serde(default)]
     pub gunner_loads: u32,
+    /// Building orders turned into a power plant order because the
+    /// building's drain would have left the house short of power
+    /// (`power::plant_first`).
+    #[serde(default)]
+    pub plants_first: u32,
+    /// Army units sent at an enemy draining one of the house's power
+    /// plants (S-0608, S-0405 claim 5) or attacking one of its harvesters,
+    /// slave miners or slaves (`Brain::defend`).
+    #[serde(default)]
+    pub economy_defence: u32,
+    /// Iron curtains fired on one of the house's buildings under attack
+    /// rather than on a group of vehicles (`Brain::curtain_cell`).
+    #[serde(default)]
+    pub curtained_buildings: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -226,6 +240,21 @@ impl Special {
     /// and 5, `Brain::economy_first`).
     pub(crate) fn count_resume(&mut self) {
         self.uses.resumes += 1;
+    }
+
+    /// Counts building orders turned into power plant orders.
+    pub(crate) fn count_plants_first(&mut self, n: usize) {
+        self.uses.plants_first += n as u32;
+    }
+
+    /// Counts one army unit sent at a drainer or a raider of the economy.
+    pub(crate) fn count_economy_defence(&mut self) {
+        self.uses.economy_defence += 1;
+    }
+
+    /// Counts one iron curtain fired on a building.
+    pub(crate) fn count_curtained_building(&mut self) {
+        self.uses.curtained_buildings += 1;
     }
 
     /// Counts one infantry unit sent into a gunner vehicle (`gunner`).

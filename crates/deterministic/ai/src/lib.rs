@@ -50,6 +50,7 @@ pub mod linked;
 pub mod memory;
 pub mod mind;
 pub mod mutator;
+pub mod power;
 pub mod psychic;
 pub mod radiation;
 pub mod scripted;

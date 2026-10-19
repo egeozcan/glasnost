@@ -191,8 +191,10 @@ fn think(w: &World) -> Vec<Order> {
 
 // An iron curtain goes on a group of the house's armed vehicles with a
 // seen enemy near; not on a quiet group, a group with its own infantry in
-// the block (the curtain kills infantry, S-0513 claim 23) or one with an
-// enemy in the block (the curtain would protect it).
+// the block (the curtain kills every reached infantry unit, S-0513 claim
+// 23) or one with an enemy vehicle in the block (it would be protected
+// too, claim 25). Enemy infantry in the block does not hold it back: it
+// dies (claim 23; M7b AI round 2).
 #[test]
 fn curtains_a_fighting_group_of_vehicles() {
     let (g, yard) = ready("IRONB");
@@ -229,13 +231,88 @@ fn curtains_a_fighting_group_of_vehicles() {
         "its own infantry would die"
     );
 
-    let mut with_enemy = g.world.clone();
-    group(&mut with_enemy, c);
-    walker(&mut with_enemy, 1, spot(c, 1, 1));
-    glasnost_sim::tick::step(&mut with_enemy);
+    let mut with_enemy_infantry = g.world.clone();
+    group(&mut with_enemy_infantry, c);
+    walker(&mut with_enemy_infantry, 1, spot(c, 1, 1));
+    glasnost_sim::tick::step(&mut with_enemy_infantry);
+    assert_eq!(
+        fires(&think(&with_enemy_infantry), "IRON", &with_enemy_infantry),
+        vec![c],
+        "an enemy infantry unit in the block dies, so the curtain goes on"
+    );
+
+    let mut with_enemy_vehicle = g.world.clone();
+    group(&mut with_enemy_vehicle, c);
+    testkit::spawn(
+        &mut with_enemy_vehicle,
+        Kind::Vehicle,
+        "GUNR",
+        1,
+        spot(c, 1, 1),
+        0,
+    );
+    glasnost_sim::tick::step(&mut with_enemy_vehicle);
     assert!(
-        fires(&think(&with_enemy), "IRON", &with_enemy).is_empty(),
-        "an enemy in the block would be protected too"
+        fires(&think(&with_enemy_vehicle), "IRON", &with_enemy_vehicle).is_empty(),
+        "an enemy vehicle in the block would be protected too"
+    );
+}
+
+// Two armed vehicles about to fight are enough for the curtain (M7b AI
+// round 2: three in one block was rare, and the curtain stood ready).
+#[test]
+fn curtains_a_fighting_pair_of_vehicles() {
+    let (g, yard) = ready("IRONB");
+    let c = spot(yard, 10, 8);
+    let mut w = g.world.clone();
+    for at in [c, spot(c, 1, 0)] {
+        testkit::spawn(&mut w, Kind::Vehicle, "GUNR", 0, at, 0);
+    }
+    testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, spot(c, 6, 0), 0);
+    glasnost_sim::tick::step(&mut w);
+    assert_eq!(
+        fires(&think(&w), "IRON", &w),
+        vec![c],
+        "the pair is curtained"
+    );
+
+    let mut one = g.world.clone();
+    testkit::spawn(&mut one, Kind::Vehicle, "GUNR", 0, c, 0);
+    testkit::spawn(&mut one, Kind::Infantry, "WALKER", 1, spot(c, 6, 0), 0);
+    glasnost_sim::tick::step(&mut one);
+    assert!(
+        fires(&think(&one), "IRON", &one).is_empty(),
+        "one vehicle is not worth the curtain"
+    );
+}
+
+// A building of the house that a seen enemy is attacking is curtained on
+// its reference cell (S-0513 claim 25: buildings are protected; M7b AI
+// round 2), and not while no enemy attacks it.
+#[test]
+fn curtains_a_building_under_attack() {
+    let (g, yard) = ready("IRONB");
+    let b = spot(yard, 12, 12);
+    let mut w = g.world.clone();
+    let plant = testkit::spawn(&mut w, Kind::Building, "POWR", 0, b, 0);
+    let e = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, spot(b, 6, 0), 0);
+    glasnost_sim::tick::step(&mut w);
+    let mut quiet = w.clone();
+    if let Some(o) = quiet.obj_mut(e) {
+        o.target = None;
+    }
+    assert!(
+        fires(&think(&quiet), "IRON", &quiet).is_empty(),
+        "no attack on the building, no curtain"
+    );
+    if let Some(o) = w.obj_mut(e) {
+        o.target = Some(glasnost_sim::world::Target::Object(plant));
+    }
+    let r = w.reference_point(plant).cell();
+    assert_eq!(
+        fires(&think(&w), "IRON", &w),
+        vec![r],
+        "the attacked building is curtained"
     );
 }
 
