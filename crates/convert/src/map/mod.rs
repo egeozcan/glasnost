@@ -905,6 +905,13 @@ impl Decoder<'_> {
                 p,
                 d.dominator_rate,
             ),
+            // spec: S-0104 Edge cases (Dominator fade rate scale: with quirks.dominator_rate_thousandths off, ⌊v⌋ ticks, truncated as the nuke rate is)
+            dominator_rate_whole: self.decimal_scaled(
+                b"DominatorAmbientChangeRate",
+                1,
+                None,
+                d.dominator_rate_whole,
+            ),
             // spec: S-0104 Import mapping (NukeAmbientChangeRate: truncated to whole ticks)
             nuke_rate: self.decimal_scaled(b"NukeAmbientChangeRate", 1, None, d.nuke_rate),
         }

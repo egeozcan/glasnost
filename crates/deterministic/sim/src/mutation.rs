@@ -268,10 +268,10 @@ pub fn makes_infantry(w: &World, anim: u32) -> bool {
 /// The stage clock's surroundings in the simulation: follow-up types from
 /// the rules, draws from the scenario stream (S-0109 claim 28), the middle
 /// and start events of the current type.
-struct SimEnv<'a> {
-    w: &'a mut World,
-    pos: Pos,
-    anim: Option<u32>,
+pub(crate) struct SimEnv<'a> {
+    pub(crate) w: &'a mut World,
+    pub(crate) pos: Pos,
+    pub(crate) anim: Option<u32>,
 }
 
 impl Env for SimEnv<'_> {

@@ -471,6 +471,9 @@ pub fn new_game(
         walkers: Default::default(),
         mutation: Default::default(),
         drain: Default::default(),
+        domination: Default::default(),
+        // spec: S-0104 claim 14 and Import mapping (the lighting sets are read once with the map)
+        lighting: crate::lighting::start(&map.lighting),
         temporal: Default::default(),
         mind: Default::default(),
         acquisitions: 0,

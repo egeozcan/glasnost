@@ -26,6 +26,14 @@
 //!   death kind; the conversion animation MUTANIM makes a MADMAN (the
 //!   animation-to-infantry list's only entry); the launch animation
 //!   IONANIM.
+//! - **Alpha** only (S-0612, M7b step 3.5): DOMB, a building that gives
+//!   the psychic dominator DOM (charge [`DOM_CHARGE`] minutes, an invented
+//!   short time so that the AI fires it several times in the run), cheap
+//!   (cheaper than GENEB, so built first) and with no prerequisite, built
+//!   by the AI's superweapon step. The lead-in DOMLEAD (8 frames) and the sweep DOMSWEEP (12
+//!   frames), the area damage warhead PSIWH with an invented amount
+//!   [`DOM_DAMAGE`]; the capture range and the fire-at percentage are the
+//!   absent-key defaults.
 //! - **Beta** starts with crowds of CROWD, an unarmed walker nobody can
 //!   build, three on neighbouring cells at each of [`CROWDS`] around its
 //!   start: dense infantry that stays where it is, apart enough that one
@@ -59,11 +67,32 @@ pub const DISCS: usize = 3;
 
 /// Beta's extra start infantry for the mutator (S-0611): crowds of three
 /// unarmed CROWD walkers on neighbouring cells, at these offsets from its
-/// start, apart enough that one launch reaches one crowd only.
-pub const CROWDS: [(i32, i32); 4] = [(-6, -8), (4, -8), (-6, 8), (4, 8)];
+/// start, apart enough that one launch reaches one crowd only. The
+/// mutator and the dominator (M7b step 3.5) take from the same crowds, so
+/// there are enough for at least three launches of each.
+pub const CROWDS: [(i32, i32); 11] = [
+    (-6, -8),
+    (4, -8),
+    (-6, 8),
+    (4, 8),
+    (-12, 0),
+    (-12, -12),
+    (-12, 12),
+    (-6, -15),
+    (4, -15),
+    (-6, 15),
+    (4, 15),
+];
 
 /// The genetic mutator's charge time in minutes (a decimal of the rules).
 pub const GENE_CHARGE: &str = "0.2";
+
+/// The psychic dominator's charge time in minutes (a decimal of the
+/// rules).
+pub const DOM_CHARGE: &str = "0.3";
+
+/// The psychic dominator's area damage amount.
+pub const DOM_DAMAGE: i32 = 30;
 
 /// The ticks between two payouts of a link.
 pub const PERIOD: i32 = 30;
@@ -200,7 +229,46 @@ pub fn ruleset() -> Ruleset {
             },
         );
     }
+    // The psychic dominator (S-0612), Alpha's only.
+    r.sim.superweapons.insert(
+        "DOM".into(),
+        SuperweaponType {
+            kind: Some("PsychicDominator".into()),
+            action: Some("PsychicDominator".into()),
+            recharge_time: Some(d(DOM_CHARGE)),
+            is_powered: Some(false),
+            ..Default::default()
+        },
+    );
+    register(&mut r, "superweapons", "DOM");
+    let mut dom = fixture::building(2, 2, 100, 0);
+    dom.econ.super_weapon = Some("DOM".into());
+    dom.econ.required_houses = Some(vec!["Alphaland".into()]);
+    register(&mut r, "buildings", "DOMB");
+    r.sim.buildings.insert("DOMB".into(), dom);
+    r.sim.warheads.insert(
+        "PSIWH".into(),
+        WarheadType {
+            cell_spread: Some(d("2")),
+            verses: Some(vec![d("1"); 11]),
+            ..Default::default()
+        },
+    );
+    for (name, frames) in [("DOMLEAD", 8), ("DOMSWEEP", 12)] {
+        register(&mut r, "animations", name);
+        r.sim.animations.insert(
+            name.into(),
+            AnimationType {
+                frame_count: Some(frames),
+                ..Default::default()
+            },
+        );
+    }
     let s = &mut r.sim.general.superweapons;
+    s.dominator_first_anim = Some("DOMLEAD".into());
+    s.dominator_second_anim = Some("DOMSWEEP".into());
+    s.dominator_warhead = Some("PSIWH".into());
+    s.dominator_damage = Some(DOM_DAMAGE);
     s.mutate_explosion = Some(false);
     s.mutate_warhead = Some("MUTATE".into());
     s.infantry_mutate = Some("MUTANIM".into());

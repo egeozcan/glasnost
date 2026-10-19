@@ -790,6 +790,8 @@ impl Audio {
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
             Effect::Maker { .. } => {}
+            // The domination's animations play their start sounds as Effect::Anim; its other events are silent (S-0612 claims 1 and 8).
+            Effect::Domination { .. } => {}
             // spec: S-0608 claim 5 and S-0109 claim 13 (the drain animation's creation: its type's start sound, at the drainer)
             Effect::Drain {
                 drainer,
@@ -1000,6 +1002,8 @@ impl Audio {
             SwEvent::RevealSound => s.reveal_sound.clone(),
             // spec: S-0611 claim 2 (the genetic mutation's activation sound, positional at the mutation point)
             SwEvent::GeneticSound => s.mutation.sound.clone(),
+            // spec: S-0612 claim 1 (the psychic domination's activation sound at the centre of the target cell, heard by players near it)
+            SwEvent::DominatorSound => s.domination.sound.clone(),
             // Announcements, messages, markers and radar events are the
             // interface's (S-0701 claim 28; S-0410).
             _ => None,

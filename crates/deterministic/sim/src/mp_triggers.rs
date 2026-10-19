@@ -61,7 +61,8 @@ const POSITION_H: i32 = 4482; // spec: S-0011 claim 23 (4475 … 4482: the playe
 
 /// The base and target ambient that code 73 set (S-0524 claim 7; S-0104
 /// claim 14), in hundredths; `None` keeps the map's own value. The fade of
-/// S-0104 claim 4 and the lighting re-evaluations are the renderer's.
+/// S-0104 claim 4 and the lighting re-evaluations are `crate::lighting`,
+/// which `set_ambient` updates too.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ambient {
     /// The base ambient.
@@ -327,6 +328,8 @@ pub fn set_ambient(w: &mut World, value: i32) {
         // spec: S-0524 claim 7 (it also sets target ambient unless a weather storm is active)
         a.target = Some(value);
     }
+    // spec: S-0104 claim 14 (the same values in the lighting state the fade reads)
+    crate::lighting::set_base(w, value);
 }
 
 /// Resize local area (code 40, S-0524 claim 8): items four to seven become

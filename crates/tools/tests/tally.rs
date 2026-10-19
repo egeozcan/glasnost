@@ -811,3 +811,54 @@ fn counts_mutator_launches_and_infantry_mutated() {
         (1, 2, 1)
     );
 }
+
+// spec: S-0612 claims 1, 9 and 14 (the lane counts each launch by its activation sound, each object a sweep takes over, and the objects the sweep's area damage hurt and destroyed)
+#[test]
+fn counts_dominator_launches_takeovers_and_damage() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::domination::DomEvent;
+    use glasnost_sim::superweapons::SwEvent;
+    use glasnost_sim::world::{ObjectId, Pos};
+    let mut tally = Tally::default();
+    let dom = |event| Effect::Domination {
+        event,
+        house: Some(HouseId(0)),
+        pos: Pos::default(),
+    };
+    for e in [
+        Effect::Superweapon {
+            event: SwEvent::DominatorSound,
+            house: Some(HouseId(0)),
+            sw: Some(0),
+            pos: None,
+        },
+        Effect::Superweapon {
+            event: SwEvent::Launch,
+            house: Some(HouseId(0)),
+            sw: Some(0),
+            pos: None,
+        },
+        dom(DomEvent::Started),
+        dom(DomEvent::Sweep),
+        dom(DomEvent::Damage {
+            damaged: 4,
+            killed: 2,
+        }),
+        dom(DomEvent::Taken(ObjectId(5))),
+        dom(DomEvent::Taken(ObjectId(6))),
+        dom(DomEvent::Taken(ObjectId(7))),
+        dom(DomEvent::Final),
+        dom(DomEvent::Over),
+    ] {
+        tally.effect(&e);
+    }
+    assert_eq!(
+        (
+            tally.dominator_launches,
+            tally.dominated,
+            tally.dominator_damaged,
+            tally.dominator_killed
+        ),
+        (1, 3, 4, 2)
+    );
+}

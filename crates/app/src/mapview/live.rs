@@ -241,6 +241,9 @@ pub struct Live {
     /// The cell pass as built, before any building left it.
     cell_pass: Vec<Item>,
     cell_pass_len: usize,
+    /// The game's global lighting the cell pass was last lit with: the
+    /// current ambient and the chosen set (S-0104 claims 4 and 5).
+    lit: (i32, glasnost_sim::lighting::Choice),
     /// Static objects ([`Built::objects`] indices) left out of the cell
     /// pass, as last drawn: buildings whose simulation object is gone, the
     /// map's gates (drawn live) and the overlays of cells that changed.
@@ -347,6 +350,10 @@ struct LiveAnim {
     /// any: the simulation plays it, so its type, image frame and owner
     /// colour are the simulation's.
     maker: Option<ObjectId>,
+    /// The domination animation it shows (S-0612 claims 1 and 8), if any:
+    /// the simulation plays it, so its type and image frame are the
+    /// simulation's.
+    dominating: Option<ObjectId>,
     /// The image frame a burning walker shows (S-0615 F1, or its expiring
     /// stage), in place of the playback's.
     frame: Option<i32>,
@@ -728,6 +735,11 @@ impl Live {
             static_layered,
             cell_pass: built.scene.items[..built.scene.cell_pass_len].to_vec(),
             cell_pass_len: built.scene.cell_pass_len,
+            // spec: S-0104 claim 1 (the scene was lit with the map's normal set)
+            lit: (
+                inputs.map.lighting.normal.ambient,
+                glasnost_sim::lighting::Choice::Normal,
+            ),
             gone: BTreeSet::new(),
             live_gates,
             overlay_codes,
@@ -1010,6 +1022,7 @@ impl Live {
             walker: None,
             drainer: None,
             maker: None,
+            dominating: None,
             frame: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
@@ -1176,6 +1189,45 @@ impl Live {
         }
     }
 
+    /// The domination animations (S-0612 claims 1 and 8: the lead-in and
+    /// the sweep animation): each simulated one is drawn with its type and
+    /// image frame; one the simulation has removed disappears.
+    fn follow_dominations(&mut self, now: i32) {
+        let shown: std::collections::BTreeSet<ObjectId> =
+            self.anims.iter().filter_map(|a| a.dominating).collect();
+        let new: Vec<(ObjectId, Vec<u8>, glasnost_sim::world::Pos)> = self
+            .world
+            .domination
+            .anims
+            .iter()
+            .filter(|(id, _)| !shown.contains(id))
+            .map(|(&id, d)| (id, d.player.name.clone(), d.pos))
+            .collect();
+        for (id, name, pos) in new {
+            self.counts.anims += 1;
+            let serial = self.anim_serial;
+            self.create_anim(&name, pos, now, None, false);
+            if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                a.dominating = Some(id);
+            }
+        }
+        let world = &self.world;
+        let table = &self.anim_table;
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.dominating else { return true };
+            let Some(d) = world.domination.anims.get(&id) else {
+                return false;
+            };
+            if a.player.name != d.player.name {
+                a.player = d.player.clone();
+                a.entry = table.get(&d.player.name.to_ascii_uppercase()).cloned();
+            }
+            a.frame = Some(d.player.frame());
+            a.pos = d.pos;
+            true
+        });
+    }
+
     fn follow_walkers(&mut self) {
         let world = &self.world;
         let rules = &self.rules;
@@ -1207,7 +1259,11 @@ impl Live {
         let q = AnimQuirks::default();
         self.anims.retain_mut(|a| {
             // spec: S-0615 claim 4 (a burning walker replaces S-0109's playback)
-            if now < a.first_update || a.walker.is_some() || a.maker.is_some() {
+            if now < a.first_update
+                || a.walker.is_some()
+                || a.maker.is_some()
+                || a.dominating.is_some()
+            {
                 return true;
             }
             let before = a.player.name.clone();
@@ -1324,6 +1380,7 @@ impl Live {
         self.follow_owners();
         self.follow_walkers();
         self.follow_makers();
+        self.follow_dominations(now);
         self.follow_drainers();
         self.update_anims(now);
         for e in effects {
@@ -1400,6 +1457,7 @@ impl Live {
                 | Effect::Beam { .. }
                 | Effect::Drain { .. }
                 | Effect::Maker { .. }
+                | Effect::Domination { .. }
                 | Effect::Walker { .. } => continue,
             };
             self.transients.push(Transient {
@@ -1629,7 +1687,20 @@ impl Live {
                 gone.extend(codes.iter().copied());
             }
         }
-        if gone != self.gone {
+        // The game's lighting changed (a fade step or a re-evaluation,
+        // S-0104 claims 4 and 5; the psychic domination's and the storm's
+        // lighting among them): the cells and the terrain are lit again.
+        let l = &self.world.lighting;
+        let key = (l.current, l.choice);
+        let relit = key != self.lit;
+        if relit {
+            let set =
+                glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
+            self.painter
+                .relight(inputs, scene, &mut self.cell_pass, key.0, set);
+            self.lit = key;
+        }
+        if gone != self.gone || relit {
             scene.items.clear();
             scene.items.extend(
                 self.cell_pass

@@ -441,6 +441,12 @@ pub struct World {
     /// partner.
     #[serde(default)]
     pub drain: crate::drain::DrainWorld,
+    /// The psychic domination (S-0612).
+    #[serde(default)]
+    pub domination: crate::domination::DominationWorld,
+    /// The game-wide lighting state (S-0104).
+    #[serde(default)]
+    pub lighting: crate::lighting::LightWorld,
     /// Map triggers (S-0011).
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.

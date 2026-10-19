@@ -4680,6 +4680,28 @@
           ],
           "default": null
         },
+        "ambient_change_rate": {
+          "description": "`[AudioVisual] AmbientChangeRate`, the normal ambient fade interval\nin game minutes (S-0104 claim 4, Import mapping); absent: 0.2.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ambient_change_step": {
+          "description": "`[AudioVisual] AmbientChangeStep`, the ambient fade step as an\nambient factor (S-0104 claim 4, Import mapping); absent: 0.1.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "ammo_crate_damage": {
           "description": "`AmmoCrateDamage` (S-0303 claim 19).",
           "type": [
@@ -8884,12 +8906,32 @@
           "default": true
         },
         "dominator_damage_storm_house": {
-          "description": "A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house. Not implemented yet (M7).",
+          "description": "A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house.",
+          "type": "boolean",
+          "default": true
+        },
+        "dominator_ground_layer_only": {
+          "description": "A dominator sweep visits only the ground layer of each swept cell, so an object on a bridge deck is never reached; off: the deck layer of a swept cell is visited after its ground layer, in the same way.",
           "type": "boolean",
           "default": true
         },
         "dominator_marks_own_objects": {
-          "description": "A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone. Not implemented yet (M7).",
+          "description": "A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone.",
+          "type": "boolean",
+          "default": true
+        },
+        "dominator_rate_thousandths": {
+          "description": "The map's dominator fade rate is stored in thousandths and used as ticks (a map value of 1 means 1000 ticks); off: the map value is a number of ticks, truncated as the nuke rate is.",
+          "type": "boolean",
+          "default": true
+        },
+        "dominator_sweep_from_nearest": {
+          "description": "A dominator sweep examines, in each swept cell, only the start object (the nearest to the cell's top corner, S-0207 F8) and the objects listed after it, up to the first listing that is no infantry, vehicle, aircraft or building; off: every listed infantry, vehicle and aircraft of the layer is examined, in listing order.",
+          "type": "boolean",
+          "default": true
+        },
+        "dominator_takes_dying": {
+          "description": "A dominator sweep takes over an examined object that is still in play while dying; off: a dying object is not examined.",
           "type": "boolean",
           "default": true
         },
@@ -10608,6 +10650,11 @@
           "type": "boolean",
           "default": true
         },
+        "zero_rate_freezes_ambient": {
+          "description": "With a zero ambient change rate the current ambient never moves, even for nuke and dominator fades; off: it jumps straight to the target.",
+          "type": "boolean",
+          "default": true
+        },
         "zero_score_rejected": {
           "description": "A final threat score of exactly 0 rejects the candidate.",
           "type": "boolean",
@@ -11118,6 +11165,57 @@
           ],
           "default": null
         },
+        "dominator_capture_range": {
+          "description": "`[General] DominatorCaptureRange`, *r* of S-0612 claim 11 (ring\nmetric); absent: 2.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dominator_damage": {
+          "description": "`[General] DominatorDamage`, the sweep's area damage amount (S-0612\nclaim 9); absent: 50.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dominator_fire_at_percentage": {
+          "description": "`[General] DominatorFireAtPercentage`, *p* of S-0612 F1; absent: 50.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "dominator_first_anim": {
+          "description": "`[General] DominatorFirstAnim`, the domination's lead-in animation\ntype (S-0612 claims 1 and 4); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "dominator_second_anim": {
+          "description": "`[General] DominatorSecondAnim`, the domination's sweep animation\ntype (S-0612 claims 5 and 8); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "dominator_warhead": {
+          "description": "`[General] DominatorWarhead`, the sweep's area damage warhead\n(S-0612 claim 9); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "force_shield_blackout_duration": {
           "description": "`[General] ForceShieldBlackoutDuration`, ticks (S-0513 claim 30);\nabsent: 800.",
           "type": [
@@ -11358,6 +11456,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "psychic_dominator_activate_sound": {
+          "description": "`[AudioVisual] PsychicDominatorActivateSound`, the activation sound\n(S-0612 claim 1); absent: none.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "psychic_reveal_activate_sound": {

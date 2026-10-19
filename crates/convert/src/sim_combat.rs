@@ -1508,6 +1508,21 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
     ("rad_level_max", RADIATION, "RadLevelMax", Int, "S-0525"),
     ("rad_level_delay", RADIATION, "RadLevelDelay", Int, "S-0525"),
     ("rad_light_delay", RADIATION, "RadLightDelay", Int, "S-0525"),
+    // spec: S-0104 Import mapping (AmbientChangeRate decimal game minutes, absent 0.2; AmbientChangeStep decimal ambient factor, absent 0.1)
+    (
+        "ambient_change_rate",
+        AUDIO_VISUAL,
+        "AmbientChangeRate",
+        Dec,
+        "S-0104",
+    ),
+    (
+        "ambient_change_step",
+        AUDIO_VISUAL,
+        "AmbientChangeStep",
+        Dec,
+        "S-0104",
+    ),
     (
         "rad_level_factor",
         RADIATION,

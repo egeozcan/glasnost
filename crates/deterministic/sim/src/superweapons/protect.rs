@@ -8,9 +8,9 @@
 //! occupancy row (`occupancy`, S-0210 claim 2, S-0209 row WP3), and the
 //! warp (claims 34, 37 and 38). The refusals of other specs read the same
 //! test there: mind control (S-0601, `crate::mind::can_take` and
-//! `crate::mind::dominate`), locomotor seizing (S-0607,
-//! `crate::lift::seize_hit`), and those not built yet (psychic domination
-//! S-0612, erasure S-0514, flinging, charge planting S-0519).
+//! `crate::mind::dominate`, which the psychic domination's sweep uses,
+//! S-0612), locomotor seizing (S-0607, `crate::lift::seize_hit`), and
+//! those not built yet (erasure S-0514, flinging, charge planting S-0519).
 
 use glasnost_map::CellXY;
 use glasnost_num::geom::root_floor;

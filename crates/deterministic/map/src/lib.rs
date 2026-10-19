@@ -290,6 +290,10 @@ pub struct Lighting {
     pub dominator: LightingSet,
     /// Dominator fade interval, stored in thousandths and used as ticks.
     pub dominator_rate: i32,
+    /// The same map value truncated to whole ticks (⌊v⌋), the rate used
+    /// with `quirks.dominator_rate_thousandths` off.
+    #[serde(default = "one_tick")]
+    pub dominator_rate_whole: i32,
     /// Nuke fade interval in ticks.
     pub nuke_rate: i32,
 }
@@ -317,9 +321,16 @@ impl Default for Lighting {
                 level: 0,
             },
             dominator_rate: 1,
+            // spec: S-0104 Edge cases (Dominator fade rate scale: switch off, the absent-key default stays 1 tick)
+            dominator_rate_whole: 1,
             nuke_rate: 1,
         }
     }
+}
+
+/// The absent-key fade interval, one tick (S-0104 Constants).
+fn one_tick() -> i32 {
+    1 // spec: S-0104 Constants (default dominator fade interval 1 tick)
 }
 
 /// The map-list and map-wide settings of S-0009 Import mapping that the

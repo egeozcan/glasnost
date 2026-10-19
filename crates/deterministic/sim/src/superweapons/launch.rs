@@ -63,6 +63,11 @@ pub fn fire(w: &mut World, h: HouseId, sw: u32, cell: CellXY) {
         super::event(w, SwEvent::Refused, Some(h), Some(i), None);
         return;
     }
+    if ty.kind == Some(SwKind::Dominator) && crate::domination::in_force(w) {
+        // spec: S-0512 claim 8 and S-0612 claims 3 and 7 (refused while a domination is in force, for any house: the charge and the ready state are kept; a refusal message for its own player)
+        super::event(w, SwEvent::Refused, Some(h), Some(i), None);
+        return;
+    }
     let mut silo = None;
     if ty.kind == Some(SwKind::Missile) && !rec.one_time {
         let choice = super::nuke::silo_choice(w, h, i);
@@ -317,19 +322,9 @@ fn effect(
         Some(SwKind::PsychicReveal) => crate::psychic::reveal(w, h, i, cell),
         // spec: S-0611 claims 2 to 4 (the genetic mutation launch: animation, announcement, sound, radar event, then the effect)
         Some(SwKind::Genetic) => crate::mutation::launch(w, h, i, cell),
-        Some(k @ SwKind::Dominator) => {
-            yuri_seam(w, h, k, cell);
-        }
+        // spec: S-0612 claims 1 and 2 (the psychic domination launch: radar event, the domination, announcement and sound)
+        Some(SwKind::Dominator) => crate::domination::launch(w, h, i, cell),
         // A type with no kind launches nothing.
         None => {}
     }
-}
-
-/// Seam: S-0612 (psychic domination) is not built (M7b). The launch still
-/// counts (the charge is consumed) and nothing happens.
-pub fn yuri_seam(w: &mut World, h: HouseId, k: SwKind, cell: CellXY) {
-    let _ = (h, cell);
-    w.note(format!(
-        "superweapon kind {k:?} is not built (S-0612): the launch does nothing"
-    ));
 }

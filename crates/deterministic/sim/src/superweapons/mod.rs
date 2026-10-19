@@ -13,9 +13,10 @@
 //! Seams to specs that are not built (each named where it is used):
 //! - S-0514 (chrono weapons): built in `crate::temporal`; [`being_erased`]
 //!   reads its locks. Units that cannot be teleported: [`warp::chrono_seam`];
-//! - S-0612 (psychic domination): [`launch::yuri_seam`]. The genetic
-//!   mutation (S-0611) is [`crate::mutation::launch`] and the psychic
-//!   reveal (S-0610 claims 13 to 15) [`crate::psychic::reveal`];
+//! - The Yuri kinds are built elsewhere: the psychic domination (S-0612)
+//!   is [`crate::domination::launch`], the genetic mutation (S-0611)
+//!   [`crate::mutation::launch`] and the psychic reveal (S-0610 claims 13
+//!   to 15) [`crate::psychic::reveal`];
 //! - S-0510 (spy infiltration resetting the first superweapon):
 //!   [`charge::spy_reset`];
 //! - S-0601 (mind control refused by protection): [`protected`] is the
@@ -60,7 +61,7 @@ pub enum SwKind {
     Paradrop,
     /// American paradrop.
     AmerParadrop,
-    /// Psychic domination (S-0612; not built).
+    /// Psychic domination (S-0612).
     Dominator,
     /// Spy plane.
     SpyPlane,
@@ -261,6 +262,10 @@ pub struct SwRules {
     pub berserk_color: i32,
     /// The game-wide mutation values (S-0611 Import mapping).
     pub mutation: crate::mutation::MutationRules,
+    /// The game-wide domination values (S-0612 Import mapping).
+    pub domination: crate::domination::DominationRules,
+    /// The rules' ambient fade values (S-0104 claim 4).
+    pub light: crate::lighting::LightRules,
 }
 
 /// The fixed paradrop plane type name (S-0522 Import mapping).
@@ -329,6 +334,7 @@ impl SwRules {
         r: &Ruleset,
         names: &BTreeMap<(Kind, String), u32>,
         combat: &CombatRules,
+        animations: &[crate::rules::AnimRules],
         mode: Rounding,
     ) -> Self {
         let s = &r.sim;
@@ -550,6 +556,16 @@ impl SwRules {
             .any(|t: &SwType| t.kind == Some(SwKind::Genetic));
         let mutation =
             crate::mutation::MutationRules::new(r, names, combat, genetic, &mut warnings);
+        let dominator = types
+            .iter()
+            .any(|t: &SwType| t.kind == Some(SwKind::Dominator));
+        let domination = crate::domination::DominationRules::new(
+            r,
+            combat,
+            animations,
+            dominator,
+            &mut warnings,
+        );
         let para_inf = g.ally_para_drop_inf.as_ref().map_or(0, Vec::len);
         let para_num = g.ally_para_drop_num.as_ref().map_or(0, Vec::len);
         Self {
@@ -598,6 +614,8 @@ impl SwRules {
             // spec: S-0610 Import mapping and Constants (BerserkColor absent: table position 0)
             berserk_color: g.berserk_color.unwrap_or(0),
             mutation,
+            domination,
+            light: crate::lighting::LightRules::new(r, mode),
         }
     }
 
@@ -1062,6 +1080,11 @@ pub enum SwEvent {
     /// player's aiming mode ends and its pending ready announcement for the
     /// record is cancelled with it (S-0513 claim 5, interface).
     GeneticSound,
+    /// The psychic domination's activation sound at the target cell's
+    /// centre, positional, for every player (S-0612 claim 1). The launching
+    /// player's aiming mode ends and its ready announcement is silenced
+    /// with it (S-0513 claim 5, interface).
+    DominatorSound,
     /// The teleport source marker over a picked source, for the launching
     /// player only (S-0513 claim 33).
     SourceMarker,

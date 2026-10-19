@@ -547,13 +547,7 @@ const NAMED: &[(&str, &[&str])] = &[
     ),
     (
         "S-0104",
-        &[
-            "AmbientChangeRate",
-            "AmbientChangeStep",
-            "LightVisibility",
-            "NukeAmbientChangeRate",
-            "SpawnsTiberium",
-        ],
+        &["LightVisibility", "NukeAmbientChangeRate", "SpawnsTiberium"],
     ),
     (
         "S-0105",

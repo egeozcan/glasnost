@@ -134,3 +134,18 @@ pub(crate) fn mutate_cell(script: &Script, w: &World) -> Option<CellXY> {
         .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
         .map(|(_, c)| c)
 }
+
+/// The objects in play that a launch at `c` reaches, as a person reads the
+/// reach off the cursor: infantry in cell mode, every object of the blast's
+/// layer in explosion mode.
+pub(crate) fn reached(w: &World, c: CellXY) -> Vec<glasnost_sim::world::ObjectId> {
+    let explosion = w.rules().superweapons.mutation.explosion;
+    let reach = Reach::of(w, c);
+    w.objects
+        .values()
+        .filter(|o| o.on_map && o.health > 0)
+        .filter(|o| explosion || o.kind == Kind::Infantry)
+        .filter(|o| reach.holds(o))
+        .map(|o| o.id)
+        .collect()
+}

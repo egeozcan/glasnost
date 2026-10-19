@@ -82,6 +82,7 @@ const SCENES: &[Scene] = &[
     ("drain-refinery", |l| drain(l, Drained::Refinery)),
     ("drain-blackout", |l| drain(l, Drained::Blackout)),
     ("mutator", mutator),
+    ("dominator", dominator),
 ];
 
 #[test]
@@ -1134,6 +1135,165 @@ fn mutator(lane: &mut Lane) {
         mine(lane) as i64 - before as i64
     );
     lane.save("mutator-new-infantry");
+}
+
+/// The psychic dominator superweapon type and a building type that gives
+/// it, by the rules' kind and the buildings' superweapon fields.
+fn dominator_types(w: &World) -> Option<(u32, String)> {
+    use glasnost_sim::superweapons::SwKind;
+    let r = w.rules();
+    let sw = r
+        .superweapons
+        .types
+        .iter()
+        .position(|t| t.kind == Some(SwKind::Dominator))? as u32;
+    let b = r
+        .superweapons
+        .building_sw
+        .iter()
+        .position(|f| f.iter().flatten().any(|&i| i == sw))?;
+    Some((sw, r.buildings.get(b)?.name.clone()))
+}
+
+/// S-0612 claims 1 to 14 and S-0104 (the dominator lighting): the local
+/// house's dominator, charged, fired at a group of enemy vehicles and
+/// infantry; the screens show the launch, the dominator lighting and the
+/// taken-over units.
+fn dominator(lane: &mut Lane) {
+    let w = lane.world();
+    let types = dominator_types(w);
+    let inf = human_infantry(w);
+    let veh = plain_vehicle(w);
+    println!(
+        "dominator type and giving building found: {}, infantry found: {}, vehicle found: {}",
+        types.is_some(),
+        inf.is_some(),
+        veh.is_some()
+    );
+    let (Some((sw, building)), Some(inf), Some(veh), Some(enemy)) = (types, inf, veh, lane.enemy())
+    else {
+        return;
+    };
+    let local = lane.local();
+    // The lane's own copy: a short charge, and a building that needs and
+    // draws no power (the lane's house has no power plant).
+    let bi = w.rules().index_of(Kind::Building, &building);
+    patch_rules(lane, |r| {
+        let t = &mut r.superweapons.types[sw as usize];
+        t.charge = 30;
+        t.powered = false;
+        if let Some(b) = bi.and_then(|i| r.econ.power.buildings.get_mut(i as usize)) {
+            b.needs_power = false;
+            b.drain = 0;
+        }
+    });
+    let home = lane.home();
+    let Some(top) = lane.area(CellXY::new(home.x - 8, home.y + 4), (4, 4), 1, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no free area for the building");
+        return;
+    };
+    lane.spawn(Kind::Building, &building, local, top);
+    let ready = until(lane, 600, move |w| {
+        glasnost_sim::superweapons::charge::get(w, local, sw).is_some_and(|r| r.ready)
+    });
+    println!("the record is ready after {ready:?} ticks");
+    let Some(_) = ready else { return };
+    // The group, well away from the local base.
+    let at = lane.open_land(CellXY::new(home.x + 12, home.y + 12));
+    let mut group = Vec::new();
+    for (dx, dy) in [(0, 0), (1, 0), (-1, 0)] {
+        let c = CellXY::new(at.x + dx, at.y + dy);
+        group.push(lane.spawn(Kind::Infantry, &inf, enemy, c));
+    }
+    for (dx, dy) in [(0, 1), (-1, -1)] {
+        let c = CellXY::new(at.x + dx, at.y + dy);
+        group.push(lane.spawn(Kind::Vehicle, &veh, enemy, c));
+    }
+    lane.look_at(at);
+    lane.ticks(3);
+    let light = |l: &Lane| {
+        let g = &l.world().lighting;
+        format!(
+            "ambient {} target {} choice {:?}",
+            g.current, g.target, g.choice
+        )
+    };
+    println!("before the launch: {}", light(lane));
+    {
+        let w = lane.world();
+        let reach = glasnost_sim::domination::swept(w, at);
+        println!(
+            "capture range {}, cells swept {}",
+            w.rules().superweapons.domination.range,
+            reach.len()
+        );
+        for &id in &group {
+            let Some(o) = w.obj(id) else { continue };
+            let c = o.pos.cell();
+            println!(
+                "  {:?} {} at {:?}: in the sweep {}, dominable {}",
+                o.kind,
+                o.type_index,
+                (c.x - at.x, c.y - at.y),
+                reach.iter().any(|&(rc, _)| rc == c),
+                glasnost_sim::mind::dominable(w, id)
+            );
+        }
+    }
+    let ok = glasnost_sim::orders::issue(
+        lane.world_mut(),
+        local,
+        glasnost_sim::orders::Order::FireSuperweapon { sw, cell: at },
+    );
+    println!("fire order taken: {ok}");
+    lane.ticks(2);
+    println!(
+        "launch: domination in force {}, {}",
+        glasnost_sim::domination::in_force(lane.world()),
+        light(lane)
+    );
+    lane.save("dominator-launch");
+    let swept = until(lane, 600, |w| {
+        w.domination
+            .current
+            .as_ref()
+            .is_none_or(|d| !matches!(d.phase, glasnost_sim::domination::Phase::LeadIn { .. }))
+    });
+    lane.ticks(2);
+    println!("the sweep after {swept:?} more ticks; {}", light(lane));
+    lane.save("dominator-lighting");
+    for &id in &group {
+        let w = lane.world();
+        if let Some(o) = w.obj(id) {
+            let c = o.pos.cell();
+            println!(
+                "  after the sweep: {:?} at {:?}, owner {:?}, layer {:?}, health {}",
+                o.kind,
+                (c.x - at.x, c.y - at.y),
+                o.owner,
+                o.layer,
+                o.health
+            );
+        }
+    }
+    let over = until(lane, 2000, |w| w.domination.current.is_none());
+    lane.ticks(2);
+    let taken = group
+        .iter()
+        .filter(|&&id| lane.world().obj(id).is_some_and(|o| o.owner == Some(local)))
+        .count();
+    let alive = group
+        .iter()
+        .filter(|&&id| lane.world().obj(id).is_some())
+        .count();
+    println!(
+        "over after {over:?} more ticks; {taken} of {} taken over, {alive} alive; {}",
+        group.len(),
+        light(lane)
+    );
+    lane.save("dominator-taken");
 }
 
 /// The screenshot key of a drain scene.
