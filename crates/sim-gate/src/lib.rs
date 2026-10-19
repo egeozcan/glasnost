@@ -72,7 +72,8 @@ pub const DUEL_SEED: u32 = 20_261_018;
 /// house 0 won that game at tick 19 270 with its first ferry loaded and not
 /// yet unloaded. Seed 8 plays to tick 26 867 with 18 loads and 18 unloads
 /// (seeds 1 to 12 all ended between ticks 13 778 and 26 867; seed 12 never
-/// loaded a ferry).
+/// loaded a ferry). After the economy-defence change later in that round
+/// it plays to tick 28 947, again with 18 loads and 18 unloads.
 pub const DUEL_DIAGONAL_SEED: u32 = 8;
 
 /// Seed of the M6c duel. Kept at M7a step 2b, after the scenario was given
@@ -118,8 +119,13 @@ pub const M6C_TICKS: i32 = 12_000;
 /// building, the army beside an extra harvester, the defence of the
 /// economy): seed 16 gives 2 sensor orders and 2 bunker entry orders;
 /// seed 4 is the only seed of 1 to 16 that plays all its ticks with every
-/// counter at least 3.
-pub const M7A_SEED: u32 = 4;
+/// counter at least 3. Moved from 4 to 27 later in that round (the
+/// economy defence keeps a unit's fight instead of switching it between
+/// raiders): seed 4 gives no takeover order, and no seed of 1 to 16 has
+/// every counter at least 3 (seeds 1, 11 and 13 come nearest, with the
+/// sensor orders' 2); of seeds 17 to 40, seed 27 is the only one that
+/// does.
+pub const M7A_SEED: u32 = 27;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
