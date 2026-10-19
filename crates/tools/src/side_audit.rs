@@ -478,6 +478,42 @@ async fn run_async(dir: &Path, side: i32, index: usize, seed: u32) -> std::io::R
             fingerprint(&w, &rs, t)
         );
     }
+    // The side's psychic sensors (S-0610 claim 9): the building types with
+    // a psychic-detection radius above 0, named by their number in the list
+    // above (a flag only, no value).
+    let sensors: Vec<String> = side_types
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| {
+            t.kind == Kind::Building
+                && rules
+                    .buildings
+                    .get(t.index as usize)
+                    .and_then(|b| b.raw.econ.psychic_detection_radius)
+                    .is_some_and(|r| r > 0)
+        })
+        .map(|(n, &t)| {
+            let role = role_of(&w, t).map_or("none".into(), |r| format!("{r:?}"));
+            let radar = rules
+                .buildings
+                .get(t.index as usize)
+                .and_then(|b| b.raw.econ.radar)
+                .unwrap_or(false);
+            format!(
+                "#{n} (role {role}, radar {radar}, placed/released {:?})",
+                seen[&t].placed
+            )
+        })
+        .collect();
+    let _ = writeln!(
+        out,
+        "  psychic detection (S-0610 claim 9) given by: {}",
+        if sensors.is_empty() {
+            "no type of the side".to_string()
+        } else {
+            sensors.join(", ")
+        }
+    );
     let _ = writeln!(
         out,
         "  offered {offered}, built {built}, placed or released {placed} of {} ({} within the tech level)",
