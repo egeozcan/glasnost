@@ -9021,6 +9021,11 @@
           "type": "boolean",
           "default": true
         },
+        "flying_listed_double_hit": {
+          "description": "An object found by both the flying-object search and a scanned cell of a detonation keeps both entries and can take two hits, the flying entry first; off: it keeps only its flying entry.",
+          "type": "boolean",
+          "default": true
+        },
         "flying_search_sectors": {
           "description": "The flying-object search reads only the sectors of F7 and can miss a flying object in range.",
           "type": "boolean",

@@ -218,6 +218,26 @@ fn a_low_jumpjet_is_found_twice() {
     assert_eq!(twice, 2 * once, "two entries at the same distance");
 }
 
+// spec: S-0303 claim 6 and Edge cases (revision 19: quirks.flying_listed_double_hit on, an object found by the flying-object search and a scanned cell takes two hits, flying first; off, only its flying entry, one hit)
+#[test]
+fn flying_listed_double_hit_both_positions() {
+    for on in [true, false] {
+        let mut r = ruleset();
+        r.globals.quirks.flying_listed_double_hit = on;
+        let mut w = glasnost_sim::testkit::game_with(&r, SIZE, 7);
+        glasnost_sim::testkit::run(&mut w, 4);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+        let once = loss_from_raised_blast(&mut w, u);
+        go(&mut w, u, at(4, 0));
+        assert!(until(&mut w, 60, |w| phase(w, u) != Phase::Grounded));
+        assert!(flying::tracked(&w, u));
+        let c = pos(&w, u).cell();
+        assert!(w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&u));
+        let loss = loss_from_raised_blast(&mut w, u);
+        assert_eq!(loss, if on { 2 * once } else { once }, "switch {on}");
+    }
+}
+
 // spec: S-0502 claim 29 (crash end: registration ends when the unit enters crashed, before the impact; the start of a crash does not end it)
 #[test]
 fn a_crashing_jumpjet_stays_tracked_until_the_crash_ends() {

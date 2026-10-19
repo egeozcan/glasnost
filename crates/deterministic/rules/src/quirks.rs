@@ -1788,6 +1788,10 @@ pub struct Quirks {
     // spec: S-0306 claim 27 and Edge cases
     #[serde(default = "on")]
     pub railgun_collinear_hits: bool,
+    /// An object found by both the flying-object search and a scanned cell of a detonation keeps both entries and can take two hits, the flying entry first; off: it keeps only its flying entry.
+    // spec: S-0303 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub flying_listed_double_hit: bool,
     /// A jumpjet touching down in the bridge or parachute falling state, or no longer alive or in play, stays a tracked flying object; off: every touchdown ends its registration.
     // spec: S-0502 claim 29 and Edge cases
     #[serde(default = "on")]
@@ -2337,6 +2341,7 @@ impl Default for Quirks {
             disc_laser_no_house: true,
             disc_laser_unlimited_range: true,
             railgun_collinear_hits: true,
+            flying_listed_double_hit: true,
             jumpjet_falling_touchdown_tracked: true,
             anim_damage_starts_at_one: true,
             dominator_damage_storm_house: true,
@@ -3495,6 +3500,7 @@ impl Quirks {
             ("disc_laser_no_house", self.disc_laser_no_house),
             ("disc_laser_unlimited_range", self.disc_laser_unlimited_range),
             ("railgun_collinear_hits", self.railgun_collinear_hits),
+            ("flying_listed_double_hit", self.flying_listed_double_hit),
             (
                 "jumpjet_falling_touchdown_tracked",
                 self.jumpjet_falling_touchdown_tracked,
