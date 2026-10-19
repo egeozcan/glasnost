@@ -24,6 +24,17 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Psychic Dominator × mind control: a controlled unit in the swept area is released by its controller outside it, then taken over permanently; a controller in the area is taken over and keeps its victim outside it | `dominator_pairs::a_domination_takes_a_controller_and_a_controlled_unit` | S-0612, S-0601 |
 | Psychic Dominator × tank bunker: the vehicle in a two by two bunker is its cell's start object and is taken over; the bunker is not; the bunker link stays | `dominator_pairs::a_domination_takes_a_bunkered_vehicle_and_leaves_the_link` | S-0612, S-0606 |
 | Psychic Dominator × absorber: the absorbed passenger is not listed and keeps its owner; infantry on the map beside the building is taken over; the building is not | `dominator_pairs::a_domination_spares_an_absorbed_passenger` | S-0612, S-0605 |
+| Force Shield × mind control (and Cloning Vats): a shielded vat cannot be taken; the controller's firing check is *illegal* and a landing shot takes nothing, while the same landing takes an unshielded vat; the launching house is blacked out and its shielded vat still copies its released infantry | `shield_pairs::a_shielded_vat_refuses_mind_control_and_keeps_cloning` | S-0513, S-0601, S-0404, S-0405 |
+| Force Shield × gattling: a player house's gattling fires at a shielded building and spins up as against an open one; its hits do nothing, while the open building is hurt | `shield_pairs::a_gattling_fires_at_a_shielded_building_and_spins_up_for_nothing` | S-0513, S-0609, S-0302 |
+| Force Shield × gas clouds: a cloud's hits do nothing to a shielded building and hurt an unshielded one | `a_gas_cloud_does_nothing_to_a_shielded_building` | S-0513, S-0613, S-0302 |
+| Force Shield × Psychic Dominator: the sweep's area damage spares the shielded building and hurts one just outside the radius; infantry within the radius is not shielded and is taken; no building is taken | `shield_pairs::a_domination_over_a_shielded_base_takes_its_units_and_spares_its_buildings` | S-0513, S-0612, S-0302 |
+| Force Shield × Genetic Mutator: infantry within the radius is not shielded and converts; the made unit is the launching house's | `shield_pairs::a_mutation_inside_a_shield_converts_its_infantry` | S-0513, S-0611 |
+| Force Shield × magnetic lift: a vehicle within the radius is not shielded and is seized | `shield_pairs::a_lift_seizes_a_vehicle_inside_a_shield` | S-0513, S-0607 |
+| Force Shield × drain (interim of request Q-1507): the drainer links to a shielded power plant and the link holds while it is protected | `drain_pairs::a_shielded_plant_is_drained_under_the_q1507_interim` | S-0513, S-0608 |
+| Cloning Vats × mind control: a controlled vat copies for its controller's house and not for its owner; released back, it ranks after the owner's other vat, so the order of copies flips | `cloning_pairs::a_controlled_vat_clones_for_its_controller_and_ranks_last_when_released` | S-0404, S-0601 |
+| Cloning Vats × Genetic Mutator: the unit a conversion makes is not copied; a factory release is | `cloning_pairs::a_mutation_made_unit_is_not_cloned` | S-0404, S-0611 |
+| Cloning Vats × absorber: a passenger that the deploy order lets out is not copied | `cloning_pairs::a_passenger_let_out_of_an_absorber_is_not_cloned` | S-0404, S-0605 |
+| Cloning Vats × Psychic Dominator: a vat in the swept area stays its owner's and keeps copying for it | `cloning_pairs::a_domination_leaves_a_vat_with_its_owner` | S-0404, S-0612 |
 
 The parachutist's order of the virus animation and the explosion was request Q-1421; S-0615 revision 3
 answers it (the virus effect first, then the kind 3 or 5 animation), and the test now checks the order
@@ -34,11 +45,32 @@ S-0608 revision 5 claim 18 answers it (no occupant gate), taken in at M7b step 1
 now lets the walker in while drained, and two pairs check a bunkered vehicle's fire and the grinder's
 recycling during a link.
 
+The Force Shield and Cloning Vats rows are M7b step 4a. The shield is launched with
+`superweapons::protect::force_shield`, never by writing protection on an object. It protects only
+the buildings of houses allied with the launching house (S-0513 claim 31), so the shield rows
+check its buildings, and the infantry and vehicles inside the radius as unprotected. A drain on a
+protected building is request Q-1507: S-0513 claim 27's list of what protection refuses has no
+drain row, and S-0608 claim 3 has no protection row. The test checks the interim, the literal
+reading (the link forms and holds). The scenario wording of S-0601 (a unit under a house's force
+shield) reads as if a shield protected units; claim 31 says it does not, and the tests follow
+claim 31.
+
+## Pairs without a test
+
+No approved spec states a relation for these pairs; each side runs by its own spec.
+
+| Pair | Why no relation |
+|---|---|
+| Force Shield × berserk | S-0302 claim 10 gives a berserk hit no effect on a building, and S-0610 claim 3 refuses immune building types, so a shield changes nothing. |
+| Force Shield × absorber, grinder and tank-bunker entry | No approved spec states the relation. Protection refuses damage and claim 27's list; entry into a shielded building is not in it. |
+| Force Shield × psychic sensor and reveal | No approved spec states the relation. |
+| Cloning Vats × drain and low power | No approved spec states a relation beyond power: S-0404 claim 14 has no power gate and S-0405 claim 9 does not stop factories for low power. The first shield row shows a blacked-out house's vat still copying. |
+| Cloning Vats × gattling, berserk, gas, lift | No approved spec states the relation: copies are ordinary infantry once released, victims like any other. |
+
 ## Pairs left
 
-Each waits for its spec (named seams in the code).
-
-- Cloning Vats, and the Force Shield against the M7a weapons.
+None. Every pair of PLAN §M7's list has a scenario test above, a row in this table, or (the drain on
+a protected building) a test of a request's interim.
 
 ## Local relation tests on the reference ruleset
 
