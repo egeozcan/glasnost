@@ -2,7 +2,7 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 25
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -136,8 +136,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    countdown is set to that shot's delay *D* (claims 2 to 8 and 10). The firing check then answers
    *rearming* for every weapon of the firer, in every tick with tick number below *t* + *D*, and
    no longer from tick *t* + *D* on. This holds unless a reason of ranks 1 to 4 gives its own answer (claim 9), and
-   except in the sync tick of claim 13 and between shots of an aircraft's same-tick full burst
-   (claim 4), in which the countdown does not hold the shot back. Apart from those exceptions,
+   except in the sync tick of claim 13, between shots of an aircraft's same-tick full burst
+   (claim 4), and for claim 9's unchecked building secondary attempts, in which the countdown
+   does not hold the shot back. Apart from those exceptions,
    *D* ticks pass from one shot to the next at the least. With *D* ≤ 0 the countdown is over at once. How often a firer attempts to fire (for a vehicle, once in
    each of its turns) belongs to S-0215 and to claim 9 here. A firer that has never fired, including
    one created during play, has no running countdown: it can fire as soon as it has a target. The
@@ -171,8 +172,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    arrival instead uses claim 19's conditions and the unchanged burst counter.
 
    Creating the emitter or trail is taken to always succeed. A creation that fails because the host
-   machine runs out of memory, which can happen in the original, is not modelled and has no
-   scenario.
+   machine runs out of memory, which can happen in the original, is not modelled. That
+   original failure is `unmeasured`: no scenario safely isolates host exhaustion from other
+   failures; confidence medium. Successful creation is the engine design assumption.
 
    The full delay is *D* of Formula F1. Its base is the weapon's rate-of-fire
    field *R* times the firing house's rate-of-fire factor *h* (claim 3) plus one ranged draw
@@ -184,8 +186,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    different whole number of ticks. Formula F1 gives the number domain of each result.
    - Backing: `measurable` (scenarios F1 and F2 for the full delay; F3, F4 and F9 for the order)
    - Confidence: high (the full delay, and 1-tick before every other kind); medium (effect weapon
-     before in-burst, since stock data has no effect weapon with a burst count above 1: test data
-     must supply the case)
+     before in-burst; scenario F4's burst part supplies named test data to isolate this order)
 
 3. **The house rate-of-fire factor.** In a skirmish, *h* of a player house is the rate-of-fire factor
    of the house's difficulty row times the rate-of-fire factor of the house's country, a product of two
@@ -358,8 +359,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | moving | the firer may not fire while it moves (S-0310) |
    | cloaked | the weapon needs the firer uncloaked and it is not |
    | out of range | the target is beyond the weapon's range (S-0307) |
-   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), or the drain refusals of S-0608 claim 3 (rank 4 below). S-0214, claim 6(e), defers to these for what the check refuses |
-   | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power or the firer is disabled, a hidden target fails the test below (S-0516 claim 24), and similar |
+   | illegal | the target is not a legal target for this firer and weapon. The combat specs give the cases: a versus value of exactly zero (S-0304, claim 1), an airborne or non-ground target the projectile cannot hit, or a non-unit target of a projectile that is not anti-ground (S-0306, claim 23), the healing tests (their feature specs), the takeover test (S-0601 claim 3), the berserk refusals (S-0610 claims 3 and 6), the bomb-planting and disarm tests (S-0519 claim 3), the parasite tests (S-0614 claim 5), a held organic firer (S-0614 claim 8), a sinking firer or target (S-0504 claim 5), a falling firer (S-0511 claim 10), a deactivated firer (S-0405 claims 13 and 20), or the drain refusals of S-0608 claim 3 (rank 4 below). S-0214, claim 6(e), defers to these for what the check refuses |
+   | impossible | the firer cannot fire this weapon now for a reason of its own: no weapon in the slot, the effect of its other weapon still alive (claim 5), the weapon needs power, a hidden target fails the test below (S-0516 claim 24), and similar |
    | busy | the firer is launching spawned aircraft (Terms) |
    | must deploy | a vehicle whose type must deploy before it fires, when its own cell fails the deploy-to-fire cell test of S-0517 claim 14 (a slope, a building in the cell, or a land type that does not allow it) and no reason of ranks 1 to 10 below holds. It then outranks *not facing* (S-0310, claim 9), and in the rank table also *moving* and *still turning*, an order that no game state shows (see below). On a cell that passes the test none of this applies: the vehicle gets the aiming answers as usual and S-0310 deploys it on *can fire* or *not facing* |
 
@@ -381,7 +382,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). The specified precedence within this rank is given below |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -389,7 +390,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 9 | out of range, illegal | the late target tests: a seeker type (Terms) answers *out of range*, whatever the distance; a warhead that cannot affect the target's armour class (the zero-versus test of S-0304 claim 1), a failed takeover test (S-0601 claim 3), a bomb-planting warhead against a target that already carries a planted bomb or a disarm warhead against one that carries none (S-0519 claim 3), the parasite tests (S-0614 claim 5), the target is sinking (S-0504 claim 5), or the firer is held and organic (S-0614 claim 8; a spawner weapon is already refused at rank 4), give *illegal* |
    | 10 | out of range | the attempt asked for the range test and the target is beyond the weapon's range |
    | 11 | must deploy, out of ammunition | a vehicle whose own cell fails S-0517 claim 14's deploy-to-fire cell test gets *must deploy* (S-0310 claim 9); an aircraft marked as a passenger carrier that now carries no passengers gets *out of ammunition*, regardless of its ammunition count (S-0310 claim 5; S-0501 claim 19). The two causes apply to different kinds of firer |
-   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; stock data has no vehicle that gives both |
+   | 12 | illegal, impossible | the remaining vehicle tests: a vehicle that is tethered (glossary) with a building as its contact gets *impossible*, and a vehicle whose default weapon is a healing weapon gets *illegal* (S-0310, claim 11; S-0314). Which of the two wins when both hold is not stated; no scenario here distinguishes that overlap |
    | 13 | moving | |
    | 14 | still turning | |
    | 15 | not facing | |
@@ -403,6 +404,20 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    By contrast, the magnetic-beam refusal against another non-building target while a grip
    and live wave coexist follows the target-layer and projectile tests. A failed one of
    those tests therefore gives its refusal rather than this conditional *rearming*.
+
+   **Deactivated firers within rank 4.** A deactivated firer (S-0405 claims 13
+   and 20) gets *illegal* for every target and weapon. This refusal
+   yields to the slave-bound firer's *illegal*, the materialising firer's *rearming* and
+   the own-gripped-target *rearming*. It outranks the remaining rank-4 answers, including
+   the held-temporal-target *rearming* and absent-weapon or power-sensitive-weapon
+   *impossible*. For vehicles, the earlier tube-transit *impossible*, launching-spawn
+   *busy* and melee-link *illegal* answers still take precedence.
+
+   **Firers being erased (S-0514 claim 17).** Ordinary firing stops during erasure.
+   That inactivity does not establish a firing-check answer: ordinary processing may skip
+   the attempt entirely. This spec assigns neither an answer label nor a rank to erasure,
+   and claims no precedence between erasure and the ranked refusals above. This does not
+   permit ordinary firing during erasure.
 
    **Drain refusals within rank 4 (S-0608 claim 3).** The refusal against the firer's own
    current drained building and the refusals specific to a draining weapon have different
@@ -460,9 +475,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    out of ammunition. The rank of *rearming* for a building's pending delayed shot (claim 14), and
    of *busy* for a firer that is not a vehicle, is not stated.
 
-   Where reasons of two of ranks 1 to 4 hold at once, which stock data does not give, the answer
-   may be that of either if the behaviours that respond to the answer (S-0215, S-0310) respond to
-   the two answers alike; otherwise the rank table's order holds.
+   Where reasons of two of ranks 1 to 4 hold at once, the answer may be that of either if
+   the behaviours that respond to the answer (S-0215, S-0310) respond to the two answers
+   alike; otherwise the rank table's order holds.
 
    Among ranks 11 to 15, S-0310 (claim 9) gives *must deploy*, *moving* and *still turning* no
    reply, so a vehicle with any of them stays as it is, while *not facing* makes it re-aim. So the
@@ -487,7 +502,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    other upgrades, occupants and the host. S-0215 claim 32 owns the gate and paired attempts.
    Claim 14 here specifies their priority over animation-delayed firing. An aircraft's full burst likewise has no firing check between
    its shots (S-0501 claim 12).
-   - Backing: `measurable` (scenarios F7, F8 and F15; S-0506 scenarios R2 and R6 for spawner
+   - Backing: `measurable` (scenarios F7, F8 and F15; S-0405 scenario W8 part j for
+     deactivated firing refusal; scenario F15a and S-0514 scenario E11 part a for inactivity during erasure; S-0506 scenarios R2 and R6 for spawner
      handoff and lockouts; S-0607 scenario L9 parts c, d and f for the gripping lifter's conditional
      rearming and any-weapon refusal against its gripped unit; scenario F7 part f for
      their precedence against target-layer and projectile refusals; S-0614 scenarios P2 and P9 for parasite restrictions; S-0504 scenario
@@ -505,16 +521,25 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      despite the primary's rearm countdown; scenario F17 for an empty resolved secondary
      slot and animation-delayed upgrade buildings).
      The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
-     reason: stock berserk weapons do not isolate the single-target firing check.
+     reason: no proposed setup isolates the single-target firing check from the area effect.
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
-     S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once (only
-     contrived data gives such a firer, for instance a spawner vehicle that is also playing death
-     frames or is melee-linked, and the behaviours that respond to the check's answer (S-0215,
-     S-0310) are not known to respond differently to *busy*, *illegal*, *impossible* and the early
-     *rearming* cases, so no scenario could tell the orders apart).
+     S-0504 claim 5. `unmeasured` for the order among ranks 1 to 4 when two of them hold at once:
+     no scenario here establishes both a reachable overlap and a differing observable reply
+     to its competing answers. This includes a spawner vehicle also playing death frames or
+     melee-linked. The order remains a prediction, not an observed distinction.
+     Deactivation's specified precedence against other rank-4 reasons is `unmeasured`:
+     W8 part j observes inactivity, not overlapping refusal labels, and no normal-input
+     setup isolating those overlaps is established here. The deactivation answer label itself
+     is also `unmeasured` here: W8 part j does not record it. The slave-bound exception to
+     own-grip precedence is `unmeasured`: F7 part f isolates the projectile comparison,
+     not a slave-bound lifter. Its confidence is medium. Erasure's firing-check label and
+     rank remain open, not rules asserted by this claim; E11 part a establishes only
+     ordinary firing inactivity.
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: high (the two grip-refusal precedence rules within rank 4,
+   - Confidence: medium (the deactivated refusal, its unmeasured within-rank precedence,
+     and ordinary firing inactivity during erasure), high
+     (the two grip-refusal comparisons against projectile and target-layer refusals within rank 4,
      the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
      falling refusal and the same-turn surviving-landing boundary,
      the three drain refusals, their specified precedence and no ordinary shot from a drain attempt),
@@ -536,7 +561,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     used without clamping to the maximum, even above it (`quirks.initial_ammo_above_capacity`,
     default original). An explicit 0 starts empty, including when the maximum is −1.
     The same rule applies to objects placed by the map and objects created for production.
-    there is no separate map ammunition value. This is the starting count, before any turns
+    There is no separate map ammunition value. This is the starting count, before any turns
     that can reload a vehicle (claim 11) or service an aircraft. Each shot
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
@@ -628,9 +653,11 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
     *k* is below *B* except after a change of weapon has carried a count over (claim 4), so for
     a one-shot weapon the value is 0 and for a burst of 2 it is the burst position already made. Where a sync frame applies, an attempt
-    with the primary weapon while the counter runs gets *rearming* until the counter equals *s*. In
-    the tick in which it equals *s* the rearm countdown is ignored and the shot can be made; that
-    shot is a *sync shot*. With no sync frame given, firing frames change only the picture.
+    with the primary weapon while the counter runs and has not yet reached *s* gets *rearming*.
+    In the tick in which it equals *s* the rearm countdown is ignored and the shot can be made.
+    That shot is a *sync shot*. Once the counter has passed *s*, whether this gate still
+    refuses a shot is open (Open questions). With no sync frame given, firing frames change
+    only the picture.
 
     **Warp exclusion (engine design).** S-0513 claim 51 suppresses firing-frame advancement
     from the first pending warp update through arrival effects inclusive. The counter retains
@@ -642,7 +669,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     - Backing: `measurable` (scenario F11, test data only; its tunnel part for the tunnel rows
       and its warp part for our engine's contract). Original per-stage warp continuation is
       `unmeasured` under S-0513 claim 52's incomplete continuation evidence
-      (scenario SW23 part g there).
+      (scenario SW23 part g there). Whether the first decrement occurs in the shot's turn
+      or the next remains open, rather than a measured rule of this table.
     - Confidence: high (warp design contract); medium (other firing-frame rules)
 
 14. **Animation-delayed building shots.** In the ordinary non-SAM attack path, outside
@@ -762,7 +790,7 @@ default) and round to nearest with it off; trunc is the conversion of S-0205 cla
 > *D*₅ = trunc(RZ₅₃(*D*₄ / *b*)) for a bunkered vehicle when *b* ≠ 0, else *D*₄
 > *D* = trunc(*D*₅ / 2) (toward zero) for a berserk firer, unless the shot is a disc laser shot (claim 8), else *D*₅
 
-Every value is a whole number of ticks. Examples (with *h* = 1, *v* = 0.5 as a double, *u* = 1):
+Every value is a whole number of ticks. Invented examples (with *h* = 1, *v* = 0.5 as a double, *u* = 1):
 *R* = 30 gives *D*₁ = 31 and a veteran's *D*₂ = 15; a garrison of *n* = 4 occupants with *m* = 2 then
 gives *D*₃ = 3 and *D*₄ = 1.
 
@@ -835,8 +863,9 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
   (S-0203).
 - A shot made in tick *t* with delay *D* ≥ 1 allows the next shot in tick *t* + *D* at the
   earliest (claim 1), unless that next shot is a sync shot (claim 13) or another shot of the
-  aircraft's same-tick full burst (claim 4). So measured shot intervals are *D* ticks when the firer attempts every tick
-  and makes no sync shot.
+  aircraft's same-tick full burst (claim 4), or an unchecked building secondary attempt
+  (claim 9). So measured shot intervals are *D* ticks when the firer attempts every tick
+  and uses none of those exceptions.
 - A building with a pending delayed shot reports *rearming*; under S-0215 claim 32 its attack
   behaviour is therefore processed every other tick (it keeps turning towards its target) until the
   shot. The delayed shot itself is timed by the building's own turns, one per tick, so its tick is
@@ -865,14 +894,16 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
   below *B*, so every
   shot gets the full delay and never an in-burst delay. Our engine treats any burst count below 1
   as 1, and the importer warns, naming the weapon. Policy: bad data gives a safe deterministic
-  result plus an importer warning. Backing: `unmeasured` for the original's negative-count
-  behaviour (confidence medium): our engine departs from it, and no real data has a negative
-  count, so a measurement would only document a behaviour we do not reproduce.
+  result plus an importer warning. Backing: `unmeasured` for the original's zero- and
+  negative-count behaviour (confidence medium): no scenario here attempts the failing input
+  or isolates the negative-count remainder. Our engine's safe replacement and warning are
+  checked by the invalid-burst part of scenario F16 (`measurable`, confidence high).
 - **Negative or zero delays.** A rate-of-fire field of 0 or less, a negative house, veteran or
   bunker factor, or a burst-delay field below −1, can give a delay of 0 or below; the countdown is
   then over at once (claim 1). The importer warns for a negative rate-of-fire field, a negative
   factor, or a burst-delay field below −1. A bunker factor or an occupy factor above 0 and below 1
-  lengthens the delay; no warning. Backing: `measurable` (scenario F16); confidence high.
+  lengthens the delay; no warning. Backing: `measurable` (scenario F16, including its
+  negative-factor, burst-delay and fractional-occupy parts); confidence high.
 - **Occupy factor not above 0, bunker factor 0.** Then that division is skipped (claim 7). An
   occupy or bunker value written as text that is not a number is read as absent (S-0003 claim 8,
   a departure of that spec), so the factor keeps its default of 1.0 and divides by 1 (backing `measurable`, scenario F5, skips
@@ -965,11 +996,15 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   these runs the rows' factors differ, and the expected *h* is the factor of the row that claim 3
   gives the entry times the country factor); a veteran vehicle of a type with the veteran
   rate-of-fire ability, and an elite one of a type with only the veteran ability; the test rules
-  file also sets *v* = 0.5.
+  file also sets *v* = 0.5. Include a rookie control, a veteran with only the elite
+  rate-of-fire ability, an elite with only that elite ability, and an elite with both abilities,
+  each in a separate run with otherwise identical fields.
 - Observable: shot intervals and draws.
   A further run sets *v* by test data, once written as 0.6 and once as 60%, for a weapon whose
   *D*₁ is 10.
-- Expected: Formulas F1 and F2 exactly; elite gets the factor once. The 0.6 run gives *D*₂ = 6 (the single
+- Expected: Formulas F1 and F2 exactly; elite gets the factor once with either or both
+  abilities, while the rookie and the veteran with only the elite ability get no factor.
+  The 0.6 run gives *D*₂ = 6 (the single
   just above 0.6), the 60% run *D*₂ = 5 (a double just below 0.6 under the round-toward-zero mode).
 - A further run (the non-player houses): the test rules file gives the three rows the factors 2.0,
   1.5 and 0.5 (easy, normal, difficult) and the neutral country the factor 1.5 (all exact in binary).
@@ -980,7 +1015,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   or a row applied).
 - Falsified if: the country factor does not act in the skirmish run, the
   skirmish intervals do not follow that *h*, the elite interval shows the factor twice, the 0.6 run
-  gives a *D*₂ other than 6, or the 60% run gives one other than 5.
+  gives a *D*₂ other than 6, the 60% run gives one other than 5, or an ability control
+  applies or omits the factor contrary to the expected rank test.
 
 **F3. Bursts.**
 - Setup: a vehicle whose weapon has burst count 3 (test rules file), then the same with burst delays
@@ -1007,7 +1043,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   change of target resets it, or the carried count does not decide the second weapon's delay.
 
 **F4. Effect weapons.**
-- Setup: a stock vehicle with a sonic weapon; a stock railgun weapon if available, else a test rules file.
+- Setup: a vehicle with a sonic weapon and a vehicle with a railgun weapon; named test rules
+  supply either weapon assignment when needed.
 - Observable: shot ticks; draws.
 - Expected (sonic weapon): no delay draw is taken; intervals are max(*R*, wave lifetime).
 - Falsified if: a draw is taken for the delay, or an interval differs from
@@ -1125,8 +1162,9 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   cloaking or uncloaking; (d) the vehicle does not re-aim, as the vehicle gets *must deploy* and not *not
   facing*.
 - Falsified if: (a) the building drops its target while its countdown runs; (b) the consequence of
-  *out of ammunition* starts while the countdown still runs; (c) the unit fires while in any cloaking state other than
-  fully visible; (d) the vehicle re-aims.
+  *out of ammunition* starts while the countdown still runs; (c) the non-aircraft unit fires
+  before becoming fully visible, or the aircraft's cloak refusal persists while cloaking or
+  uncloaking with all other gates satisfied; (d) the vehicle re-aims.
 
 - (e) Empty passenger carrier: use the named facing-test override of S-0501 scenario
   AC11 on a small skirmish map, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with a
@@ -1245,9 +1283,19 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   burst-counter value 0, a weapon with burst count 1 and a long rate-of-fire field.
 - Observable: shot ticks.
 - Expected: the first shot starts the counter at 7; the next shot comes in the vehicle's turn in
-  which the counter equals 3 (4 turns later), not at the rearm delay; the shot after that follows
-  the rearm delay again.
-- Falsified if: the shot ticks follow the rearm delay only.
+  which the counter equals 3 (4 turns later), not at the rearm delay. The long rearm delay for that
+  sync shot outlasts the counter, so the next shot follows that delay under either open
+  interpretation of the post-sync gate.
+- Falsified if: the second shot follows the rearm delay rather than the sync opportunity,
+  or its tick differs from the stated counter-equality tick.
+- Sync-selection controls: named test art and rules give a burst-2 vehicle different sync
+  values for counter values 0 and 1; record the counter, chosen value and shot ticks with
+  a read-only recorder. Repeat with both sync fields absent, then with burst count 3.
+  Expect only counter residues 0 and 1 to select their corresponding sync values; residue
+  2 and absent fields add no firing gate. The first shot starts at 2*F* − 1, and a sync
+  shot does not restart that counter. A different selection, restart on a sync shot or
+  gate from an absent field falsifies the corresponding rule. Record the first-decrement
+  boundary separately to resolve the open question, not as a presumed pass condition.
 - Beyond-the-start part: test art file, the same vehicle with firing sync frame 8 (2*F*) for
   burst-counter value 0, and a rate-of-fire field of 2. Expected, under the literal gate of
   claim 13: after a shot the counter runs from 7 to idle, the primary weapon answers *rearming*
@@ -1296,7 +1344,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Observable: the recorded raw values taken in the firing tick.
 - Expected: the projectile's draws, then one R(0, 2) (or R(3, 5) inside a burst), then the
   muzzle-flash animation's draws (S-0202, claim 10).
-- Falsified if: a second delay draw appears, or the delay draw comes before the projectile's.
+- Falsified if: a second delay draw appears, the delay draw comes before the projectile's,
+  or muzzle-flash draws precede the delay draw.
 - Spray and particle part: a spray-attack type's first shot of a burst (test data), and a
   fire-particle weapon's first shot. Expected: the spray pick comes before the projectile's draws
   and its delay draw follows them. For the fire-particle weapon, creating the emitter takes no draw
@@ -1365,6 +1414,21 @@ is absent (the control).
   Repeat with a building cloaking inside its own field: the refusal starts at fade level 11,
   not only at level 15 (S-0516 claim 18).
 
+**F15a. Erasure inactivity boundary (claim 9; S-0514 claim 17).**
+- Setup: use S-0514 scenario E11 part a's test map with moving/firing infantry,
+  vehicles, landed aircraft and armed buildings, at speed index 2, director off and no
+  engine add-on or mods except that scenario's named test data. Keep a bystander computer
+  player outside the observed area under the glossary's void rule. Give each victim a
+  durable enemy target in range and establish ordinary firing before the lock.
+- Procedure: attach an erasing beam through normal attack orders and maintain it for
+  at least two of the victim's ordinary full firing delays. Repeat three times per kind.
+- Observable: tick-labelled beam attachment and ordinary projectile or weapon-effect
+  creation by the victim; exclude effects launched before attachment.
+- Expected: ordinary firing stops during the attached lock. Any new ordinary shot by
+  the victim during that interval falsifies the inactivity rule. A lock that releases
+  early or a victim that was not firing in the control is inconclusive. This observation
+  establishes no answer label or precedence for a check that might not be attempted.
+
 **F16. Delays at the edges.**
 - Setup: test rules file; a single-shot vehicle weapon, a target of high strength in range.
 - Observable: shot ticks and the recorder's draw results for R(0, 2).
@@ -1374,7 +1438,28 @@ is absent (the control).
   more appears with −5, or the 0 run's intervals do not follow the draws.
 - (b) A bunkered vehicle (S-0206) with a bunker factor of 0.5 and of 0: Formula F1's *D*₅ is double
   *D*₄ for 0.5 (the delay lengthens) and equals *D*₄ for 0 (the division is skipped). Falsified
-  if the 0.5 run shortens the delay.
+  if either run differs from Formula F1.
+- (c) Isolate negative factors in separate runs: house factor −1, veteran factor −1
+  with the veteran ability active, and bunker factor −1 on a bunkered vehicle. Set all
+  other applicable factors to 1 and the rate-of-fire field to 20. Record the delay and
+  shot ticks over 20 shots. Expected: Formula F1 produces a negative delay, with no
+  countdown-imposed gap; the vehicle can shoot in each eligible turn. A positive
+  countdown or a missing otherwise eligible next-turn shot falsifies the rule.
+- (d) Set burst count 2 and the vehicle's first burst-delay field to −2, leaving other
+  gates satisfied. Expected: no delay draw after each first shot, and the second shot
+  in the next eligible turn; a running positive countdown or a delay draw there
+  falsifies the rule. Record importer warnings separately on our engine: each negative
+  input in parts a, c and d produces the warning named in Edge cases.
+- (e) Give a garrisoned building two living occupants, an ordinary weapon, unlimited
+  ammunition and occupy factor 0.5 in named test rules. Record 20 shot delays and draws.
+  Expected: Formula F1 doubles the post-occupant-division delay at its occupy division,
+  without an importer warning on our engine. A different computed delay falsifies the
+  arithmetic; the original is not expected to produce our importer warnings.
+- (f) Invalid burst (engine only): named test rules set burst count first to 0, then −2.
+  For each run record the importer warning and 20 otherwise eligible shot ticks and delay
+  draws. Expect one warning naming the weapon and single-shot behaviour with the full
+  delay after every shot, as for burst count 1. A missing warning, failure to run or any
+  in-burst delay falsifies the safe replacement. Do not run the failing original input.
 
 **F17. Upgrade pair with an empty secondary and animation delay (Q-0798).**
 - Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
@@ -1429,9 +1514,12 @@ is absent (the control).
 
 ## Open questions
 
+- Claim 9 leaves the firing-check answer label and rank during erasure open. Ordinary
+  firing inactivity is established independently by S-0514 claim 17; it cannot distinguish
+  a refused check from an attempt skipped entirely.
 - Claim 9 lists only the members of *illegal* and *impossible* that matter here; the combat specs
-  named there and the feature specs own the rest. Apart from its stated grip-refusal rules,
-  the precedence within rank 4 is not stated.
+  named there and the feature specs own the rest. Apart from the within-rank rules stated
+  in claim 9, precedence within rank 4 is not stated.
 - The amount of ammunition lost to damage (claim 17) is S-0302's.
 - Aircraft ammunition spending and servicing at landing pads are specified by S-0501 claims
   15 and 26 to 28; starting ammunition is answered by claim 10 (Q-0060 question 1).
