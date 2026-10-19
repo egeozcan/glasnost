@@ -177,8 +177,12 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::fire::reload_elapsed(w, id);
         return;
     }
-    // spec: S-0608 claims 11 and 12 (in every turn of the drainer: the alliance test, and the position check on its due ticks; a pulse-disabled drainer still checks). Q-1440 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: after the warp-only return, before the rest of the turn)
-    crate::drain::drainer_turn(w, id);
+    // spec: S-0608 claims 12 and 15 (Q-1440: a vehicle drainer's position check samples its position before that turn's behaviour start, behaviour processing, movement and firing, and before its erasure exit; the warp-only stages, which returned above, exclude it, S-0513 claim 51; a pulse-disabled drainer still checks)
+    crate::drain::position_check(w, id);
+    if !crate::temporal::erased(w, id) {
+        // spec: S-0608 claims 11 and 15 (the alliance test precedes behaviour processing, its shots, movement, separate firing and the controller's overload update; the erasure exit skips it)
+        crate::drain::alliance_test(w, id);
+    }
     // spec: S-0203 claim 4 (expected-health bookkeeping and protection-brightness phase processing are ordinary work: suppressed through arrival effects, eligible in the hold after its hold-end test, with no catch-up)
     // spec: S-0309 claim 15 (the expected remaining health changes in the object's own turn)
     crate::combat::acquire::expected_health_turn(w, id);
@@ -219,11 +223,20 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
-    if early {
-        // The first per-tick start and the countdown ran before the overload update.
+    let behaves = early || !crate::temporal::building_erased(w, id);
+    if behaves && !early {
+        // The behaviour start (the first per-tick start and the countdown); an unlimited controller ran it before its overload update.
+        process::head(w, id);
+    }
+    if kind == Kind::Building && w.obj(id).is_some() {
+        // spec: S-0515 claim 5 (the income cycle, in the building's own turn) and S-0608 claim 15 (Q-1440: the payout follows the due periodic income, so income available in that turn can be taken by it)
+        crate::structures::tech::turn(w, id);
+        // spec: S-0608 claims 7 and 15 (Q-1440: a drained resource-destination building's payout, in its own turn after its behaviour start and periodic income and before its behaviour processing, behaviour-issued firing, sale progression and the later health-change power recheck; claim 10: not while being erased or materialising)
+        crate::drain::building_turn(w, id);
+    }
+    if behaves {
+        // The behaviour processing.
         process::tail(w, id);
-    } else if !crate::temporal::building_erased(w, id) {
-        process::turn(w, id);
     }
     if w.obj(id).is_none() {
         return;
@@ -267,8 +280,6 @@ fn object_turn(w: &mut World, id: ObjectId) {
         }
         // spec: S-0518 claims 12 and 13 (a building's charger list and overpowered state, in its own turn)
         crate::linked::building_turn(w, id);
-        // spec: S-0608 claim 7 (a drained resource-destination building makes its payout in its own turn; claim 10: not while being erased, which returned above, or materialising). Q-1440 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: before the building's own power and economy turn)
-        crate::drain::building_turn(w, id);
         // spec: S-0405 claims 7 and 9, S-0409 claim 8 (the building's own turn)
         crate::econ::events::turn(w, id, false);
         // spec: S-0501 claim 26 (a pad's service step, in the pad's own turn)

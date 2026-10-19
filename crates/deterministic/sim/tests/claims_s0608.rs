@@ -96,7 +96,11 @@ fn hover_disc() -> UnitType {
 ///   drainable), REF (3 × 2, resource destination, drainable), BOTH
 ///   (output 50, resource destination, drainable), SHACK (resource
 ///   destination, not drainable), PSI (a controller of capacity 3,
-///   drainable), and the testkit's TOWER made drainable;
+///   drainable), CASHREF (resource destination, drainable, a periodic
+///   income of 100 every 10 ticks), and the testkit's TOWER made drainable;
+/// - SPAWNY and BOOMER: DISCs whose secondary is SUCKER made a spawner
+///   weapon (SUCKSPAWN) or a suicide weapon (SUCKBOOM); VAN: a transport
+///   with one place;
 /// - the payout period 10, the amount 25 and the drain animation SUCK
 ///   (8 frames).
 fn rules() -> Ruleset {
@@ -191,6 +195,35 @@ fn rules() -> Ruleset {
             ..Default::default()
         },
     );
+    // Claims 3 and 16: a draining weapon that is also a spawner weapon, and
+    // one that is also a suicide weapon, on DISC-like vehicles.
+    let mut spawny = r.sim.weapons["SUCKER"].clone();
+    spawny.spawner = Some(true);
+    r.sim.weapons.insert("SUCKSPAWN".into(), spawny);
+    let mut boom = r.sim.weapons["SUCKER"].clone();
+    boom.suicide = Some(true);
+    r.sim.weapons.insert("SUCKBOOM".into(), boom);
+    vehicle(&mut r, "SPAWNY", |t| {
+        t.primary = Some("Gun".into());
+        t.secondary = Some("SUCKSPAWN".into());
+    });
+    vehicle(&mut r, "BOOMER", |t| {
+        t.primary = Some("Gun".into());
+        t.secondary = Some("SUCKBOOM".into());
+    });
+    // Claim 17: a transport with one place.
+    vehicle(&mut r, "VAN", |t| {
+        t.primary = None;
+        t.passengers = Some(1);
+        t.size_limit = Some(dec("2"));
+    });
+    // Claim 15: a drained resource destination with a periodic income of 100.
+    building(&mut r, "CASHREF", |t| {
+        t.econ.resource_destination = Some(true);
+        t.combat.drainable = Some(true);
+        t.produce_cash_amount = Some(100);
+        t.produce_cash_delay = Some(P);
+    });
     let g = &mut r.sim.general;
     g.drain_money_frame_delay = Some(P);
     g.drain_money_amount = Some(A);
@@ -219,8 +252,14 @@ fn obj(x: ObjectId) -> Option<Target> {
 }
 
 /// Moves `id` to the centre of `cell` at height `z` above the ground.
+/// A move on the map, not a storage: the links are kept across the
+/// helper's take-out and put-back, which stand for the drainer's walk
+/// (S-0608 claim 17 ends them only at temporary off-map storage).
 fn shift(w: &mut World, id: ObjectId, cell: CellXY, z: i32) {
+    let (links, effects) = (w.drain.clone(), w.effects.len());
     objects::take_inside(w, id);
+    w.drain = links;
+    w.effects.truncate(effects);
     let p = Pos::centre(cell, 0);
     let ground = w.surface_at(p.x, p.y);
     objects::place(w, id, Pos::new(p.x, p.y, ground + z), 0);
@@ -482,8 +521,10 @@ fn quirk_relink_strands_previous_both_positions() {
         let ended = events(&w).contains(&DrainEvent::Ended);
         assert_eq!(ended, !strands);
         if strands {
-            // Claim 3 a reads the newest link only (Q-1441: the earlier rule, kept until S-0608 revision 5 is taken in).
+            // spec: S-0608 claim 3 (Q-1441: part a refuses only the current building; the stranded earlier one is refused to the draining weapon by part b, and the other weapon is not refused)
             assert_ne!(check::check(&w, d, obj(first), 0, false), Answer::Illegal);
+            assert_eq!(check::check(&w, d, obj(first), 1, false), Answer::Illegal);
+            assert_eq!(check::check(&w, d, obj(second), 0, false), Answer::Illegal);
             // The stranded first building keeps paying the drainer's house.
             set_credits(&mut w, BETA, 1000);
             let start = credits(&w, ALPHA);
@@ -1011,4 +1052,250 @@ fn save_round_trip_keeps_links() {
     let h = save::state_hash(&w);
     w.drain.links.clear();
     assert_ne!(save::state_hash(&w), h, "the links are hashed");
+}
+
+// ---------------------------------------------------------------------------
+// Revision 5: claim 3's precedence and claims 15 to 17.
+
+/// Makes building `b` hidden from every house without a sensor: a cloaked
+/// building at fade level 11 (S-0516 Terms and claim 18).
+fn hide(w: &mut World, b: ObjectId) {
+    let o = w.obj_mut(b).unwrap();
+    o.cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+    o.cloak.stage = 11;
+}
+
+// spec: S-0608 claim 3 (Precedence relevant to drain: the own-current-building refusal precedes the hidden-target impossible and the absence-of-weapon impossible, and the materialising firer's rearming precedes it; the draining-weapon refusals follow the hidden-target answer and precede the empty-spawner rearming)
+#[test]
+fn claim_3_precedence() {
+    let (mut w, d, b) = linked("PLANT");
+    let other = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 1, 1);
+    // An empty slot: illegal at its own building, impossible elsewhere.
+    assert_eq!(check::check(&w, d, obj(b), 2, false), Answer::Illegal);
+    assert_eq!(
+        check::check(&w, other, obj(b), 2, false),
+        Answer::Impossible
+    );
+    // A hidden building: its own drainer still gets illegal; another
+    // drainer's draining weapon gets the hidden target's impossible first.
+    hide(&mut w, b);
+    assert!(glasnost_sim::cloak::hidden_from(
+        &w,
+        b,
+        Some(HouseId(ALPHA))
+    ));
+    assert_eq!(check::check(&w, d, obj(b), 0, false), Answer::Illegal);
+    assert_eq!(check::check(&w, d, obj(b), 1, false), Answer::Illegal);
+    assert_eq!(
+        check::check(&w, other, obj(b), 1, false),
+        Answer::Impossible
+    );
+    // A materialising firer at its own building: rearming.
+    let t = w.tick;
+    w.obj_mut(d).unwrap().teleport = Some(glasnost_sim::teleport::TeleportState {
+        phasing: Some((t, 50)),
+        ..Default::default()
+    });
+    assert_eq!(check::check(&w, d, obj(b), 0, false), Answer::Rearming);
+    // A draining spawner weapon with no live spawn: refused as draining
+    // (part c, a type that is not drainable) before the empty-spawner rearming.
+    let s = put(&mut w, Kind::Vehicle, "SPAWNY", ALPHA, 6, 6);
+    let shack = put(&mut w, Kind::Building, "SHACK", BETA, 8, 8);
+    assert_eq!(check::check(&w, s, obj(shack), 1, false), Answer::Illegal);
+    let free = put(&mut w, Kind::Building, "PLANT", BETA, -6, 6);
+    assert_eq!(
+        check::check(&w, s, obj(free), 1, false),
+        Answer::Rearming,
+        "the empty spawner's own answer when no drain refusal applies"
+    );
+}
+
+// spec: S-0608 claim 15 (Q-1440: the erasure exit skips the alliance test, so an erased drainer keeps its link through an alliance change; its position check still runs before that exit)
+#[test]
+fn claim_15_an_erased_drainer() {
+    let lock = |w: &mut World, d: ObjectId, leader: ObjectId| {
+        w.temporal.locks.insert(
+            d,
+            glasnost_sim::temporal::Lock {
+                leader,
+                joiners: Vec::new(),
+                // The remaining amount (S-0514 F3): far from completion.
+                amount: 1_000_000,
+                was_off: false,
+            },
+        );
+    };
+    // The alliance test: skipped while erased, run otherwise.
+    for erased in [true, false] {
+        let (mut w, d, b) = linked("REF");
+        let leader = put(&mut w, Kind::Vehicle, "BOX", BETA, 8, 8);
+        while w.tick.rem_euclid(drain::CHECK_PERIOD) == drain::CHECK_PHASE {
+            tick::step(&mut w);
+        }
+        if erased {
+            lock(&mut w, d, leader);
+        }
+        w.houses[usize::from(BETA)].allies.push(HouseId(ALPHA));
+        w.houses[usize::from(BETA)].allies.sort();
+        tick::step(&mut w);
+        assert_eq!(glasnost_sim::temporal::erased(&w, d), erased);
+        assert_eq!(
+            drain::partner(&w, d),
+            erased.then_some(b),
+            "erased {erased}"
+        );
+    }
+    // The position check: run though erased.
+    let (mut w, d, _) = linked("REF");
+    let leader = put(&mut w, Kind::Vehicle, "BOX", BETA, 8, 8);
+    shift(&mut w, d, at(6, 6), 0);
+    while w.tick.rem_euclid(drain::CHECK_PERIOD) != drain::CHECK_PHASE {
+        tick::step(&mut w);
+    }
+    lock(&mut w, d, leader);
+    tick::step(&mut w);
+    assert!(!drain::draining(&w, d), "ended by the position check");
+}
+
+// spec: S-0608 claim 15 (Q-1440: a building's payout follows its due periodic income in the same turn, so income of that turn can be taken by it) and S-0515 claim 5
+#[test]
+fn claim_15_the_payout_takes_same_turn_income() {
+    let (mut w, _, b) = linked("CASHREF");
+    let pay = (w.tick / P + 2) * P;
+    // The income cycle due in the payout tick (S-0515 F1).
+    let short = i32::from(w.rules().quirks.cash_cycle_one_short);
+    w.obj_mut(b).unwrap().econ.building.income_restart = Some(pay - P + short);
+    while w.tick < pay {
+        tick::step(&mut w);
+    }
+    set_credits(&mut w, BETA, 0);
+    set_credits(&mut w, ALPHA, 0);
+    let p = payouts(&mut w, 1);
+    assert_eq!(p.len(), 1);
+    assert_eq!(p[0].1, A, "the income of that turn is taken");
+    assert_eq!(credits(&w, BETA), 100 - A);
+    assert_eq!(credits(&w, ALPHA), A);
+}
+
+// spec: S-0608 claim 15 (Q-1440: house power recalculation follows the turn pass, so a link ended by a position check is already gone for that tick's power update of the drained building's owner) and S-0405 claim 7
+#[test]
+fn claim_15_power_sees_the_position_check() {
+    let (mut w, d, _) = linked("BOTH");
+    testkit::run(&mut w, 2);
+    assert_eq!(w.houses[usize::from(BETA)].econ.power.output, 0);
+    shift(&mut w, d, at(6, 6), 0);
+    while w.tick.rem_euclid(drain::CHECK_PERIOD) != drain::CHECK_PHASE {
+        tick::step(&mut w);
+        assert!(drain::draining(&w, d));
+    }
+    tick::step(&mut w);
+    assert!(!drain::draining(&w, d));
+    assert_eq!(w.houses[usize::from(BETA)].econ.power.output, 50);
+}
+
+// spec: S-0608 claim 16 (Q-1442: the attempt records no new most recent shot, makes no firing reveal to the target's house and does not uncloak the firer, whether or not a link forms) and S-0409 Import mapping (RevealOnFire absent: yes, so an ordinary shot would reveal)
+#[test]
+fn claim_16_no_shot_record_reveal_or_uncloak() {
+    for over in [true, false] {
+        let mut w = game();
+        let b = put(&mut w, Kind::Building, "REF", BETA, 0, 0);
+        let d = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 0, 0);
+        if !over {
+            shift(&mut w, d, at(-2, 0), 0);
+        }
+        testkit::run(&mut w, 2);
+        w.obj_mut(d).unwrap().cloak.state = glasnost_sim::cloak::CloakState::Cloaked;
+        let (fired, shroud) = (w.obj(d).unwrap().last_fired, w.econ.shroud.clone());
+        attempt(&mut w, d, b);
+        assert_eq!(drain::partner(&w, d), over.then_some(b), "over {over}");
+        let o = w.obj(d).unwrap();
+        assert_eq!(o.last_fired, fired, "no shot recorded (over {over})");
+        assert_eq!(
+            o.cloak.state,
+            glasnost_sim::cloak::CloakState::Cloaked,
+            "still cloaked (over {over})"
+        );
+        assert!(w.econ.shroud == shroud, "no reveal (over {over})");
+    }
+}
+
+// spec: S-0608 claim 16 (Q-1442: a suicide weapon that is also draining makes the suicide hit on its firer instead of the attempt: no link, no drain target clearing)
+#[test]
+fn claim_16_suicide_replaces_the_attempt() {
+    let mut w = game();
+    let b = put(&mut w, Kind::Building, "REF", BETA, 0, 0);
+    let d = put(&mut w, Kind::Vehicle, "BOOMER", ALPHA, 0, 0);
+    attempt(&mut w, d, b);
+    assert!(!drain::being_drained(&w, b));
+    assert!(
+        w.obj(d).is_none_or(glasnost_sim::combat::damage::dead),
+        "the suicide hit"
+    );
+}
+
+/// A LEECH of Alpha draining a PLANT of Beta at (0, 0), then moved to
+/// (6, 6) with an Alpha VAN there (an infantry drainer keeps its link off
+/// the building, S-0608 claim 12's switch, on by default).
+fn leech_by_van(strands: bool) -> (World, ObjectId, ObjectId, ObjectId, Option<ObjectId>) {
+    let mut r = rules();
+    r.globals.quirks.drain_relink_strands_previous = true;
+    let mut w = game_of(&r);
+    let b = put(&mut w, Kind::Building, "PLANT", BETA, 0, 0);
+    let l = put(&mut w, Kind::Infantry, "LEECH", ALPHA, 0, 0);
+    attempt_slot(&mut w, l, 0, Target::Object(b));
+    let first = if strands {
+        let b2 = put(&mut w, Kind::Building, "PLANT", BETA, 4, 0);
+        shift(&mut w, l, at(4, 0), 0);
+        attempt_slot(&mut w, l, 0, Target::Object(b2));
+        assert!(drain::being_drained(&w, b) && drain::being_drained(&w, b2));
+        Some(b)
+    } else {
+        None
+    };
+    let b = drain::partner(&w, l).expect("linked");
+    let van = put(&mut w, Kind::Vehicle, "VAN", ALPHA, 6, 6);
+    shift(&mut w, l, at(6, 6), 0);
+    w.obj_mut(l).unwrap().dest = Some(Target::Object(van));
+    (w, l, b, van, first)
+}
+
+// spec: S-0608 claim 17 (Q-1443: boarding a transport ends the drainer's links at once, a stranded earlier link included, with claim 14's effects; returning does not restore them) and S-0507 claim 6
+#[test]
+fn claim_17_boarding_ends_the_links() {
+    for strands in [false, true] {
+        let (mut w, l, b, van, first) = leech_by_van(strands);
+        w.effects.clear();
+        assert!(glasnost_sim::transport::arrival(&mut w, l), "boards");
+        assert!(!drain::draining(&w, l), "strands {strands}");
+        assert!(!drain::being_drained(&w, b));
+        if let Some(f) = first {
+            assert!(!drain::being_drained(&w, f), "the stranded link too");
+        }
+        assert!(w.drain.links.is_empty() && w.drain.partner.is_empty());
+        assert!(events(&w).contains(&DrainEvent::Ended));
+        // Out again: no link comes back.
+        w.obj_mut(van)
+            .unwrap()
+            .transport
+            .passengers
+            .retain(|&x| x != l);
+        w.obj_mut(l).unwrap().transport.riding = None;
+        let p = Pos::centre(at(6, 6), 0);
+        let ground = w.surface_at(p.x, p.y);
+        objects::place(&mut w, l, Pos::new(p.x, p.y, ground), 0);
+        testkit::run(&mut w, 3);
+        assert!(!drain::draining(&w, l));
+        assert!(!drain::being_drained(&w, b));
+        round_trip(&w);
+    }
+}
+
+// spec: S-0608 claim 17 (Q-1443: a failed boarding is not storage: the link stays) and S-0507 claim 6 (a full transport turns it away)
+#[test]
+fn claim_17_failed_boarding_keeps_the_link() {
+    let (mut w, l, b, van, _) = leech_by_van(false);
+    let rider = put(&mut w, Kind::Infantry, "WALKER", ALPHA, 6, 6);
+    glasnost_sim::transport::board(&mut w, rider, van);
+    assert!(!glasnost_sim::transport::arrival(&mut w, l), "turned away");
+    assert_eq!(drain::partner(&w, l), Some(b));
 }

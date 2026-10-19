@@ -2840,7 +2840,8 @@ pub struct WeaponType {
     /// `FireOnce` (S-0309 claim 21).
     #[serde(default)]
     pub fire_once: Option<bool>,
-    /// `RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.
+    /// `RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: yes
+    /// (S-0409 Import mapping, revision 16).
     #[serde(default)]
     pub reveal_on_fire: Option<bool>,
     /// `LimboLaunch`, the launch-inside flag (S-0614 Terms); absent: no.

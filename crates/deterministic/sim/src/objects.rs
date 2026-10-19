@@ -359,6 +359,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     }
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
+    // spec: S-0608 claim 17 and S-0507 claim 6 (Q-1443: successful temporary off-map storage of either party ends its drain links at once, a stranded earlier link included)
+    crate::drain::stored(w, id);
     // spec: S-0614 claim 15 (a host taken off the map releases its parasite at once)
     crate::parasite::leaving(w, id);
     // spec: S-0502 claims 4, 13 and 14 (a jumpjet going inside releases its marks, its landing reservation and its hover slot)

@@ -116,14 +116,15 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     let Some(o) = w.obj(firer).cloned() else {
         return false;
     };
+    // spec: S-0608 claim 16 (Q-1442: a weapon that is both suicide and draining makes the suicide hit instead of the drain attempt: no attachment, no drain-specific target clearing, no ordinary shot)
     if rules.combat.weapon(weapon).suicide {
         // spec: S-0519 claim 11 (a suicide shot creates no projectile, plays no report, starts no rearm countdown and uses no ammunition: the firer takes one hit of its type's strength instead)
         crate::bomb::suicide(w, firer);
         return true;
     }
     if rules.combat.weapon(weapon).drain {
-        // spec: S-0608 claim 1 (a shot with a draining weapon is a drain attempt: no projectile, no shot damage, no warhead effect, no ordinary-shot draws; no rearm countdown, no burst advance, no ammunition; the attempt is not counted as a shot made, so an aircraft spends no round on it)
-        // Q-1442 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: the drain test comes after the suicide test; the attempt neither sets the last-shot tick nor reveals the firer)
+        // spec: S-0608 claim 1 (a shot with a draining weapon is a drain attempt: no projectile, no shot damage, no warhead effect, no ordinary-shot draws; no rearm countdown, no burst advance, no ordinary per-shot ammunition)
+        // spec: S-0608 claim 16 (Q-1442: the attempt records no new most recent shot, makes no ordinary firing reveal to the target's house and does not itself uncloak the firer, whether or not a link forms; an aircraft's pass bookkeeping is `air`'s, S-0501 claims 12, 15 and 16)
         crate::drain::attempt(w, firer, target);
         return false;
     }

@@ -1569,3 +1569,54 @@ fn the_target_surface_threshold_is_strict() {
         assert_eq!(w.obj(id).unwrap().layer, Layer::Deck, "listing unchanged");
     }
 }
+
+// spec: S-0208 claim 24 (a scatter destination is not an escape path: a stationary walker on a legal cell that belongs to no reach region of its zone accepts a forced request and gets a destination, but normal pathfinding's reachability gate gives it no path, so it never leaves its cell, even for an adjacent destination; being placed there sends no request) and S-0212 claim 6
+#[test]
+fn claim_24_scatter_is_no_escape() {
+    let stranded = || {
+        let mut s = scatter_scene(true);
+        // Code 9 is water (S-0211 claim 6): a legal cell inside the usable area in no reach region of the walker's zone (S-0212 claim 4).
+        s.set_cell(cell(0, 0), code_tile(9), 0);
+        place(&mut s, "TESTMAN", cell(0, 0), 0);
+        s
+    };
+    // Placed there: no request of its own, no destination.
+    let s = stranded();
+    let mut w = s.build();
+    let id = men(&w)[0];
+    assert_eq!(
+        pos(&w, id).cell(),
+        cell(0, 0),
+        "placed on the stranded cell"
+    );
+    // The walker's zone: MovementZone absent reads normal (S-0211 Import mapping); its cell is in no reach region, the next one is.
+    let z = glasnost_rules::sim::MovementZone::Normal;
+    assert_eq!(
+        glasnost_sim::regions::reach_in(&w, cell(0, 0), z),
+        glasnost_sim::regions::Reach::None
+    );
+    assert!(matches!(
+        glasnost_sim::regions::reach_in(&w, cell(1, 0), z),
+        glasnost_sim::regions::Reach::Region(_)
+    ));
+    common::run(&mut w, 30);
+    assert_eq!(w.obj(id).unwrap().dest, None);
+    // A forced request, with and without move-anywhere: accepted, a destination, no escape.
+    for req in [FORCED, FORCED_ANYWHERE] {
+        let s = stranded();
+        let mut w = s.build();
+        let id = men(&w)[0];
+        open_orders(&mut w);
+        set_guard(&mut w, id);
+        assert!(scatter::request(&mut w, id, req), "accepted");
+        assert!(w.obj(id).unwrap().dest.is_some(), "a destination");
+        for _ in 0..300 {
+            tick::step(&mut w);
+            assert_eq!(pos(&w, id).cell(), cell(0, 0), "it never leaves its cell");
+        }
+        // A direct move order to the adjacent cell fails the same way.
+        order_move(&mut w, id, cell(1, 0));
+        common::run(&mut w, 100);
+        assert_eq!(pos(&w, id).cell(), cell(0, 0));
+    }
+}

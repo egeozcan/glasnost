@@ -258,18 +258,19 @@ fn full_health(w: &World, x: ObjectId) -> bool {
     o.health >= strength
 }
 
-/// The drain refusals of S-0608 claim 3 against object `x`: (a) the
-/// building the firer drains (its newest link; a stranded first link is
-/// Q-1441's, answered by S-0608 revision 5 and not yet taken in: not this
-/// part), whatever the weapon; (b) a draining
-/// weapon against an object already being drained, by any drainer; (c) a
-/// draining weapon against an object whose type is not drainable. No
-/// alliance or ownership test.
-fn drain_refused(w: &World, firer: ObjectId, drain: bool, x: ObjectId) -> bool {
-    // spec: S-0608 claim 3 (a) (the target is the building that the firer itself drains, whatever the weapon)
-    if crate::drain::partner(w, firer) == Some(x) {
-        return true;
-    }
+/// The drain refusal of S-0608 claim 3 (a): the target is the building
+/// the firer itself drains (its current, newest link; a stranded earlier
+/// building is not refused by this part), whatever the weapon.
+fn own_drained_building(w: &World, firer: ObjectId, x: ObjectId) -> bool {
+    // spec: S-0608 claim 3 (a) (the target is the building that the firer itself drains, whatever the weapon; only its current building, not a stranded earlier one)
+    crate::drain::partner(w, firer) == Some(x)
+}
+
+/// The drain refusals of S-0608 claim 3 (b) and (c) against object `x`: a
+/// draining weapon against an object already being drained, by any drainer
+/// (a stranded earlier building of the firer's own included), or whose type
+/// is not drainable. No alliance or ownership test.
+fn drain_weapon_refused(w: &World, drain: bool, x: ObjectId) -> bool {
     // spec: S-0608 claim 3 (b) and (c) (a draining weapon against an object already being drained, or whose type is not drainable)
     drain && (crate::drain::being_drained(w, x) || !crate::drain::drainable(w, x))
 }
@@ -310,6 +311,16 @@ pub fn check(
         }
         return Answer::Illegal;
     }
+    // spec: S-0608 claim 3 (Precedence relevant to drain: the own-current-building refusal follows the own-gripped-unit and materialisation rearming answers and precedes the held-temporal-target rearming, hidden-target impossible, absence-of-weapon and power-sensitive-weapon impossible, the other weapon's live-effect impossible and the conditional magnetic-wave rearming)
+    if let Some(Target::Object(x)) = target
+        && own_drained_building(w, firer, x)
+    {
+        if crate::teleport::phasing_in(w, firer) {
+            // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0608 claim 3 (materialisation precedes the own-current-building refusal)
+            return Answer::Rearming;
+        }
+        return Answer::Illegal;
+    }
     // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
     if kind == Kind::Infantry
         && let Some(wp) = weapon
@@ -336,12 +347,6 @@ pub fn check(
         && projectile_illegal(w, weapon, t)
     {
         // spec: S-0301 claim 9 rank 4 (most target tests give illegal)
-        return Answer::Illegal;
-    }
-    if let Some(Target::Object(x)) = target
-        && drain_refused(w, firer, wr.drain, x)
-    {
-        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: after the projectile tests, before the other rank-4 tests)
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0610 claims 3 and 6 (a berserk-causing warhead against a psionics-immune type or a bunkered vehicle; a berserk firer against a berserk-friendly type: illegal)
@@ -387,6 +392,12 @@ pub fn check(
         && crate::temporal::holds(w, firer, x)
     {
         return Answer::Rearming;
+    }
+    if let Some(Target::Object(x)) = target
+        && drain_weapon_refused(w, wr.drain, x)
+    {
+        // spec: S-0608 claim 3 (Precedence relevant to drain: the draining-weapon refusals (b) and (c) follow the held-temporal-target, hidden-target, absence-of-weapon and power-sensitive-weapon answers and precede the berserk-warhead target refusals, projectile eligibility, the conditional magnetic-wave refusal, the other weapon's live-effect refusal and the empty-spawner rearming; their order among reasons that all answer illegal is not observable)
+        return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0614 claim 8 (a spawner weapon of a held mobile firer: impossible, whatever its organic type)
     if crate::parasite::held_spawner(w, firer, weapon) {

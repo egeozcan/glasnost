@@ -403,8 +403,8 @@ fn a_not_human_virus_death_makes_one_virus_effect() {
 
 // ---------------------------------------------------------------------------
 // The drain (S-0608) with the tank bunker, the absorber, the grinder and
-// power. What a drained bunker, absorber or grinder does with its occupants
-// is request Q-1444; these tests check only what the specs say.
+// power. Being drained adds no occupant-specific gate to them (S-0608
+// claim 18, Q-1444 answered).
 
 mod drain_pairs {
     use glasnost_map::CellXY;
@@ -524,10 +524,57 @@ mod drain_pairs {
             t.number_impassable_rows = Some(0);
             t.combat.drainable = Some(true);
         });
+        let mut tank = r.sim.vehicles["CRUSHER"].clone();
+        tank.crusher = None;
+        tank.primary = Some("Gun".into());
+        super::register(&mut r, "vehicles", "TANK");
+        r.sim.vehicles.insert("TANK".into(), tank);
+        let mut meat = r.sim.infantry["WALKER"].clone();
+        meat.cost = Some(200);
+        super::register(&mut r, "infantry", "MEAT");
+        r.sim.infantry.insert("MEAT".into(), meat);
         let g = &mut r.sim.general;
         g.drain_money_frame_delay = Some(10);
         g.drain_money_amount = Some(25);
         r
+    }
+
+    /// Orders `u` of house `h` into `b` with behaviour `how` (enter, or
+    /// the recycle order's eaten, S-0214 table M) and steps until `done`
+    /// holds (at most 1500 ticks).
+    fn enter_until(
+        w: &mut World,
+        h: u8,
+        (u, how): (ObjectId, Behaviour),
+        b: ObjectId,
+        done: impl Fn(&World) -> bool,
+    ) {
+        while orders::blocked(w) {
+            tick::step(w);
+        }
+        assert!(orders::issue(
+            w,
+            glasnost_sim::world::HouseId(h),
+            Order::Behaviour {
+                actor: u,
+                behaviour: how,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Object(b)),
+            },
+        ));
+        for _ in 0..1500 {
+            if done(w) {
+                return;
+            }
+            tick::step(w);
+        }
+        assert!(done(w), "entered");
+    }
+
+    fn sleep(w: &mut World, id: ObjectId) {
+        let t = w.tick;
+        w.obj_mut(id).unwrap().beh.force(Behaviour::Sleep, t, true);
     }
 
     fn game() -> World {
@@ -626,9 +673,10 @@ mod drain_pairs {
             Answer::Refuses,
             "no disc inside"
         );
-        // The link ends; a passenger walks in (whether one may enter a
-        // drained absorber is Q-1444), and a new link forms.
-        drain::end(&mut w, abs);
+        // spec: S-0608 claim 18 (Q-1444: absorber entry keeps S-0605's rules while the absorber is drained; the link neither ejects the passenger nor stops its approach)
+        // The disc holds still, so that its other weapon leaves the walker alone.
+        let t = w.tick;
+        w.obj_mut(d).unwrap().beh.force(Behaviour::Sleep, t, true);
         let u = put(&mut w, Kind::Infantry, "WALKER", BETA, 3, 0);
         while orders::blocked(&w) {
             tick::step(&mut w);
@@ -652,15 +700,17 @@ mod drain_pairs {
                 break;
             }
         }
-        assert!(inside, "the walker went in");
+        assert!(inside, "the walker went in while drained");
+        assert_eq!(drain::partner(&w, d), Some(abs), "the link stays");
         testkit::run(&mut w, 2);
-        // The plant's 100 and the passenger's 40, scaled by health (the
-        // first disc, no longer draining, may shoot at the buildings).
-        assert!(output(&w, BETA) > 100, "the passenger's extra output");
-        drain_with_disc(&mut w, abs);
-        testkit::run(&mut w, 2);
+        // With a passenger the drained absorber has output, so the house blacks out.
         assert_eq!(output(&w, BETA), 0, "blackout");
         assert!(!econ::power::in_operation(&w, def));
+        assert_eq!(absorb::absorbed_in(&w, u), Some(abs), "not ejected");
+        // The link ends: the plant's 100 and the passenger's 40, scaled by health.
+        drain::end(&mut w, abs);
+        testkit::run(&mut w, 2);
+        assert!(output(&w, BETA) > 100, "the passenger's extra output");
         round_trip(&w);
         let _ = plant;
     }
@@ -705,6 +755,73 @@ mod drain_pairs {
         assert_eq!(econ::power::firing_answer(&w, k), Some(Fire::Illegal));
         assert!(!econ::sell::sellable(&w, k));
         assert_eq!(output(&w, BETA), 100, "a bunker has no output");
+        round_trip(&w);
+    }
+
+    // Pair: the drain and a bunkered vehicle (S-0608 × S-0606).
+    // spec: S-0608 claim 18 (Q-1444: a bunkered vehicle keeps its own firing check, the drained bunker's illegal answer is not forwarded to it; the link neither ejects it nor ends its bunker link) and S-0606 claim 9 (its range bonus stays in force)
+    #[test]
+    fn a_drained_bunker_keeps_its_vehicle_firing() {
+        let mut w = game();
+        let k = put(&mut w, Kind::Building, "BUNK", BETA, 0, 0);
+        let u = put(&mut w, Kind::Vehicle, "TANK", BETA, 6, 1);
+        testkit::run(&mut w, 2);
+        enter_until(&mut w, BETA, (u, Behaviour::Enter), k, |w| {
+            bunker::bunkered_in(w, u) == Some(k)
+        });
+        let range = |w: &World| {
+            let wpn = glasnost_sim::combat::weapon::slot_weapon(w, u, 0);
+            let p = w.obj(u).unwrap().pos;
+            let far = CellXY::new((p.x + 6 * 256 + 128) / 256, p.y / 256);
+            glasnost_sim::combat::range::in_range(w, u, wpn, Some(Target::Cell(far)), None)
+        };
+        let bonus = range(&w);
+        let d = drain_with_disc(&mut w, k);
+        sleep(&mut w, d);
+        let foe = put(&mut w, Kind::Vehicle, "TANK", ALPHA, 5, -3);
+        testkit::run(&mut w, 2);
+        assert_eq!(econ::power::firing_answer(&w, k), Some(Fire::Illegal));
+        assert_ne!(
+            glasnost_sim::combat::check::check(&w, u, Some(Target::Object(foe)), 0, false),
+            Fire::Illegal,
+            "its own check"
+        );
+        assert_eq!(range(&w), bonus, "the bunker's range change stays");
+        testkit::run(&mut w, 30);
+        assert_eq!(bunker::bunkered_in(&w, u), Some(k), "not ejected");
+        assert_eq!(drain::partner(&w, d), Some(k));
+        round_trip(&w);
+    }
+
+    // Pair: the drain and grinder recycling (S-0608 × S-0603).
+    // spec: S-0608 claim 18 (Q-1444: grinder entry, consumption and recycling credit keep S-0603's rules while drained; the credit goes to the grinder's owner, and only a later ordinary payout can take it, claim 7)
+    #[test]
+    fn a_drained_grinder_still_recycles_for_its_owner() {
+        let mut w = game();
+        let g = put(&mut w, Kind::Building, "GRND", BETA, 0, 0);
+        let u = put(&mut w, Kind::Infantry, "MEAT", BETA, 5, 0);
+        testkit::run(&mut w, 2);
+        let d = drain_with_disc(&mut w, g);
+        sleep(&mut w, d);
+        assert_eq!(
+            grinder::answer(&w, g, u),
+            Answer::Accepts,
+            "drained, it accepts"
+        );
+        w.houses[usize::from(BETA)].credits = 1000;
+        let alpha = w.houses[usize::from(ALPHA)].credits;
+        enter_until(&mut w, BETA, (u, Behaviour::Eaten), g, |w| {
+            w.obj(u).is_none_or(|o| !o.on_map)
+        });
+        testkit::run(&mut w, 2);
+        let paid = w.houses[usize::from(ALPHA)].credits - alpha;
+        assert_eq!(paid % 25, 0, "only payouts reach the drainer: {paid}");
+        let refund = w.houses[usize::from(BETA)].credits - (1000 - paid);
+        assert!(
+            refund > 0,
+            "the recycling credit went to the grinder's owner"
+        );
+        assert_eq!(drain::partner(&w, d), Some(g), "the link stays");
         round_trip(&w);
     }
 }

@@ -1109,13 +1109,13 @@ fn reveal_for(w: &mut World, made_for: HouseId, cells: &[u32]) {
 /// The reveal on fire (claim 16): `firer` fired a shot from a weapon named
 /// `weapon` at `target`.
 pub fn fired(w: &mut World, firer: ObjectId, weapon: &str, target: crate::world::Target) {
-    // spec: S-0409 Import mapping (RevealOnFire absent: no)
+    // spec: S-0409 Import mapping (revision 16: RevealOnFire absent: yes)
     let flag = w
         .rules()
         .weapons
         .get(weapon)
         .and_then(|x| x.reveal_on_fire)
-        .unwrap_or(false);
+        .unwrap_or(true);
     if !flag {
         return;
     }
