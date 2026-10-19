@@ -2,11 +2,11 @@
 id: S-0606
 title: Vehicle bunker
 topic: structures
-revision: 7
+revision: 8
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-1163, Q-1164, Q-1300, Q-1301, Q-1302, Q-1303, Q-1304, Q-1305, Q-1306, Q-1307, Q-1308]
 supersedes: []
@@ -271,8 +271,13 @@ combination with the repair-depot role; other combinations have not been fully t
      taken over without ending the bunker link (claim 15).
    - **Magnetic lift:** S-0607 claims 1 to 3. Locomotor-warhead attacks on a bunkered vehicle are redirected to
      the bunker (S-0309 claim 24).
-   - **Drain of the bunker building:** planned S-0608; no drain rule is claimed here.
-   - Backing: `measurable` (scenario K6)
+   - **Drain of the bunker building:** S-0608 claim 18. Being drained does not forward the
+     bunker's own *illegal* firing answer to its vehicle: the vehicle keeps its own firing
+     check and bunker rate-of-fire, damage and range changes. Starting a drain neither ejects
+     the occupant nor ends its bunker link or an approaching entrant's contact. Drain adds no
+     entry or release gate to claims 2, 3, 5, 6 and 12. Independent blackout, power and
+     disability rules still apply (S-0405 claims 5, 8 and 9).
+   - Backing: `measurable` (scenario K6; S-0608 claim 18, scenario D14 for drain)
    - Confidence: high
 
 10. **No second bonus.** This spec adds no rate-of-fire, damage, range or armour rule of its own.
