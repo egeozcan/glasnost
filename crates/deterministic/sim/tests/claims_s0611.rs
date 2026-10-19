@@ -10,7 +10,8 @@
 //! - warheads Mutate (infantry-death kind 9, the cell warhead), MutateX
 //!   (kind 9, cell spread 1, the explosion warhead), Plain (kind 0);
 //! - infantry BRUTE (strength 300, the made type), BIG (strength 30 000),
-//!   HUSK (not human);
+//!   HUSK (not human), JJC (crashable, jumpjet movement without the
+//!   jumpjet type flag);
 //! - animations MUTA (make-infantry index 0, 4 image frames, no rate field:
 //!   one update per frame), MUTB (index 1, out of the one-entry list),
 //!   IONB (the launch animation), PRE (makes nothing, follow-up MUTA);
@@ -20,7 +21,9 @@ mod sw_common;
 
 use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{AnimationType, BuildingType, Decimal, LandRow, LandType, WarheadType};
+use glasnost_rules::sim::{
+    AnimationType, BuildingType, Decimal, LandRow, LandType, Locomotor, WarheadType,
+};
 use glasnost_rules::sim_econ::SuperweaponType;
 use glasnost_sim::cells::{Mark, Marker, position};
 use glasnost_sim::combat::damage::{self, Hit};
@@ -95,6 +98,18 @@ fn rules(explosion: bool) -> Ruleset {
             },
         );
     }
+    // JJC: a crashable human type with jumpjet movement and no jumpjet type flag (S-0611 claim 7, MU13's fixture).
+    let mut jjc = walker_like(&r, 100);
+    jjc.locomotor = Some(Locomotor::Jumpjet);
+    jjc.jumpjet = Some(false);
+    jjc.jumpjet_speed = Some(14);
+    jjc.jumpjet_climb = Some(d("5.0"));
+    jjc.jumpjet_crash = Some(d("6.0"));
+    jjc.jumpjet_height = Some(500);
+    jjc.jumpjet_accel = Some(d("2.0"));
+    jjc.crashable = Some(true);
+    r.sim.infantry.insert("JJC".into(), jjc);
+    reg(&mut r, "infantry", "JJC");
     for (n, hp) in [("BRUTE", BRUTE_HP), ("BIG", 30_000), ("HUSK", 100)] {
         let mut t = walker_like(&r, hp);
         if n == "HUSK" {
@@ -552,6 +567,56 @@ fn claim_7_victim_leaves_play() {
     );
 }
 
+// spec: S-0611 claim 7 (Q-1461: a crash begins only for a crash-flag type above its surface; then the victim is kept for its crash, yet the conversion animation starts in the death tick with claim 8's owner, the standing position is marked taken, and the animation later makes its unit; on open ground the flag alone does not prevent removal)
+#[test]
+fn claim_7_crash_victim_still_converts() {
+    let r = rules(false);
+    let c = at(0, 0);
+    // On the ground: removed at once.
+    let mut w = game(&r);
+    let v = put(&mut w, "JJC", BETA, c, position::RIGHT);
+    assert!(glasnost_sim::jump::is_jumpjet(&w, v));
+    mutate(&mut w, v, None, Some(ALPHA));
+    assert!(w.obj(v).is_none(), "the flag alone does not keep it");
+    assert_eq!(makers(&w).len(), 1);
+    // Above the surface: a crash, and the conversion anyway.
+    let mut w = game(&r);
+    let v = put(&mut w, "JJC", BETA, c, position::RIGHT);
+    // MU13: 1 remaining health, so that the airborne mutating hit's raised damage of 1 kills (S-0302 claims 5 and 17).
+    w.obj_mut(v).unwrap().pos.z += 300;
+    w.obj_mut(v).unwrap().health = 1;
+    assert!(glasnost_sim::jump::height_above(&w, v) > 0);
+    let at_v = w.obj(v).unwrap().pos;
+    w.effects.clear();
+    let h = warhead(&w, "Mutate");
+    damage::apply(
+        &mut w,
+        v,
+        Hit {
+            amount: 100,
+            warhead: Some(h),
+            distance: 0,
+            attacker: None,
+            house: Some(ALPHA),
+            ignore_defences: false,
+            no_escape: false,
+        },
+    );
+    assert!(glasnost_sim::jump::crashing(&w, v), "it crashes");
+    let ev = maker_events(&w);
+    assert_eq!(ev.len(), 1, "one conversion animation");
+    assert_eq!(ev[0].1, MakerEvent::Made);
+    assert_eq!(ev[0].2, Some(ALPHA));
+    assert_eq!(ev[0].3, at_v, "at its position, height included");
+    assert!(
+        mark(&w, c, Layer::Ground, position::RIGHT).is_some(),
+        "the standing position is taken in the death tick"
+    );
+    let m = makers(&w)[0];
+    let (unit, _) = finish(&mut w, m);
+    assert!(unit.is_some(), "it makes its unit");
+}
+
 // ---------------------------------------------------------------------------
 // Claim 8: the conversion animation, owner and occupancy.
 // ---------------------------------------------------------------------------
@@ -854,7 +919,7 @@ fn claim_10_player_unit_no_hunt() {
     );
 }
 
-// spec: S-0611 claim 11 (a refused placement: no unit, the animation steps back one frame and retries when that frame is next due; our engine builds no never-placed unit)
+// spec: S-0611 claims 11 and 14 (a refused placement: no unit, the animation steps back one frame and retries when that frame is next due; our engine builds no never-placed unit, but the attempt's creation number is consumed)
 #[test]
 fn claim_11_placement_refused() {
     let r = rules(false);
@@ -868,17 +933,28 @@ fn claim_11_placement_refused() {
     let next_before = w.next_id;
     let mut refused = 0;
     for _ in 0..12 {
+        let draws = w.rng.taken();
         step(&mut w);
-        refused += maker_events(&w)
+        let n = maker_events(&w)
             .iter()
             .filter(|e| e.0 == m && e.1 == MakerEvent::Refused)
             .count();
+        if n > 0 {
+            // spec: S-0611 claim 14 (a refused attempt under a vehicle takes the one raw creation draw and no position-choice draw)
+            assert_eq!(w.rng.taken() - draws, n as u64, "one raw draw per attempt");
+        }
+        refused += n;
     }
     assert!(refused >= 2, "it keeps retrying: {refused}");
     assert!(infantry_of(&w, "BRUTE").is_empty());
     assert!(w.mutation.makers.contains_key(&m), "the animation stays");
     assert_eq!(w.objects.len(), objects_before, "no never-placed unit");
-    assert_eq!(w.next_id, next_before, "its numbers are given back");
+    // spec: S-0611 claim 14 (Q-1460: each refused attempt consumes one creation number, never given back)
+    assert_eq!(
+        w.next_id,
+        next_before + refused as u32,
+        "one number per refused attempt, none given back"
+    );
     sw_common::remove(&mut w, car);
     let (unit, _) = finish(&mut w, m);
     assert!(unit.is_some());

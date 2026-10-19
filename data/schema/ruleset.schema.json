@@ -13724,7 +13724,7 @@
           ]
         },
         "reveal_on_fire": {
-          "description": "`RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: no.",
+          "description": "`RevealOnFire`, the reveal-on-fire flag (S-0409 claim 16); absent: yes\n(S-0409 Import mapping, revision 16).",
           "type": [
             "boolean",
             "null"

@@ -2968,6 +2968,33 @@ fn fired(w: &mut World, id: ObjectId, tg: Target) {
     scatter(w, id, tg);
 }
 
+/// Whether the aircraft's primary weapon is a draining weapon (S-0608
+/// Terms): its attempts have S-0608 claims 1, 2 and 16's effects instead of
+/// an ordinary shot's.
+fn drains(w: &World, id: ObjectId) -> bool {
+    primary(w, id).is_some_and(|wp| w.rules().combat.weapon(wp).drain)
+}
+
+/// Claim 12's drain continuation: a drain attempt of this pass cleared the
+/// object target `tg` of an aircraft that remains in play.
+fn drain_cleared(w: &World, id: ObjectId, tg: Target) -> bool {
+    // spec: S-0501 claim 12 (Drain continuation: an attempt that clears the object target of an aircraft that remains in play; a cell-target attempt keeps its target and uses the normal pass transitions)
+    drains(w, id)
+        && matches!(tg, Target::Object(_))
+        && w.obj(id).is_some_and(|o| o.on_map && o.target.is_none())
+}
+
+/// Claim 12's drain continuation (departure): no remaining burst attempts
+/// (the burst stopped at the attempt), no scatter request for the pass,
+/// *done* with a 1-tick processing delay. Any formed link and the pending
+/// round are kept; the target is not restored, the destination not
+/// cleared and no rearm countdown started.
+fn drain_departure(w: &mut World, id: ObjectId) -> Option<i32> {
+    // spec: S-0501 claim 12 and Edge cases (Drain clears an aircraft's object target: cancel the remaining burst attempts and that pass's scatter request, keep the pending round; done is due after 1 tick)
+    set_stage(w, id, Stage::Done);
+    Some(1)
+}
+
 fn bare_rof(w: &World, id: ObjectId) -> i32 {
     primary(w, id).map_or(1, |wp| w.rules().combat.weapon(wp).rof)
 }
@@ -3129,6 +3156,13 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             match ans {
                 Answer::CanFire => {
                     full_burst(w, id, tgv);
+                    if drain_cleared(w, id, tgv) {
+                        if let Some(a) = st_mut(w, id) {
+                            // spec: S-0501 claim 15 and S-0608 claim 16 (an admitted initial pass with a draining weapon makes its run's round pending, though its attempts make no ordinary shot; target clearing does not roll it back)
+                            a.pending = true;
+                        }
+                        return drain_departure(w, id);
+                    }
                     fired(w, id, tgv);
                     if is_strafer {
                         // spec: S-0501 T1 (strafer: strafe pass 2, run lock on, one rate of fire)
@@ -3193,8 +3227,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             let ans = crate::combat::check::check(w, id, Some(tgv), 0, true);
             match ans {
                 Answer::CanFire => {
-                    // spec: S-0501 T1 (refiring, ready: one shot, scatter)
-                    if crate::combat::fire::shot(w, id, 0, tgv) {
+                    // spec: S-0501 T1 (refiring, ready: one shot, scatter); a drain attempt at a cell is a pass like any other (claim 12)
+                    if crate::combat::fire::shot(w, id, 0, tgv) || drains(w, id) {
+                        if drain_cleared(w, id, tgv) {
+                            return drain_departure(w, id);
+                        }
                         fired(w, id, tgv);
                     }
                     let next = if !ammo_left(w, id) {
@@ -3241,8 +3278,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
                 ans,
                 Answer::CanFire | Answer::NotFacing | Answer::Cloaked | Answer::OutOfRange
             ) {
-                // spec: S-0501 claim 13 and T1 (later passes fire even when not facing, cloaked or out of range; one shot, scatter, the target becomes the destination)
-                if crate::combat::fire::shot(w, id, 0, tgv) {
+                // spec: S-0501 claim 13 and T1 (later passes fire even when not facing, cloaked or out of range; one shot, scatter, the target becomes the destination); a drain attempt at a cell is a pass like any other (claim 12)
+                if crate::combat::fire::shot(w, id, 0, tgv) || drains(w, id) {
+                    if drain_cleared(w, id, tgv) {
+                        return drain_departure(w, id);
+                    }
                     fired(w, id, tgv);
                 }
                 set_dest(w, id, Some(tgv));

@@ -12,12 +12,11 @@
 //! - Payouts (claims 7 to 10) come in the drained building's own turn
 //!   ([`building_turn`]).
 //! - The link ends by the alliance test and the position check in the
-//!   drainer's turn (claims 11 and 12, [`drainer_turn`]), by a killing hit
-//!   ([`killed`]) or removal ([`removing`]) of either party (claim 13), and
-//!   ending restores what claim 14 lists ([`end`]). Taking a party off the
-//!   map for a while without removing it does not touch its links (Open
-//!   question 3; request Q-1443, answered by S-0608 revision 5, not yet
-//!   taken in).
+//!   drainer's turn (claims 11 and 12, [`alliance_test`] and
+//!   [`position_check`]), by a killing hit ([`killed`]) or removal
+//!   ([`removing`]) of either party (claim 13), and by successful temporary
+//!   off-map storage of either party ([`stored`], claim 17, Q-1443); ending
+//!   restores what claim 14 lists ([`end`]).
 //!
 //! State is world-level ([`DrainWorld`]): every drained building with its
 //! drainer, and each drainer's newest partner. The two differ only for a
@@ -36,11 +35,11 @@
 //! drainer (Edge cases: a display defect our engine fixes in both positions
 //! of the switch).
 //!
-//! The position of the drainer's tests and of the payout within the turn is
-//! request Q-1440 (answered by S-0608 revision 5, not yet taken in; the
-//! earlier rule kept: the drainer's tests after the warp-only return,
-//! before the overload update; the payout after the building's erasure
-//! return, before its own power and economy turn).
+//! The places of the drainer's tests and of the payout within the turn are
+//! claim 15's (Q-1440): the position check before the erasure exit, the
+//! alliance test after it and before the overload update and behaviour
+//! processing; the payout after the building's behaviour start and periodic
+//! income, before its behaviour processing (`tick::object_turn`).
 
 use std::collections::BTreeMap;
 
@@ -237,19 +236,15 @@ pub fn end(w: &mut World, b: ObjectId) {
     });
 }
 
-/// The drainer's tests in its own turn (claims 11 and 12).
-pub fn drainer_turn(w: &mut World, id: ObjectId) {
+/// The drainer's position check in its own turn (claim 12, F3), with
+/// claim 15's local boundary: it samples the position before that turn's
+/// behaviour start, behaviour processing, movement and firing, and before
+/// the erasure exit (`tick::object_turn`).
+pub fn position_check(w: &mut World, id: ObjectId) {
     let Some(b) = partner(w, id) else { return };
-    let Some(bo) = w.obj(b) else {
+    if w.obj(b).is_none() {
         // A building that left play without its removal reaching this
         // module: the link cannot outlive it (claim 13).
-        end(w, b);
-        return;
-    };
-    let building_house = bo.owner;
-    let drainer_house = w.obj(id).and_then(|o| o.owner);
-    // spec: S-0608 claim 11 (in every turn of the drainer the link ends if the building's house allies the drainer's house, the same house included; read in that direction only)
-    if w.allied(building_house, drainer_house) {
         end(w, b);
         return;
     }
@@ -260,6 +255,23 @@ pub fn drainer_turn(w: &mut World, id: ObjectId) {
     let due = w.tick.rem_euclid(CHECK_PERIOD) == CHECK_PHASE;
     // spec: S-0608 claim 12 (the link ends if the building whose foundation covers the drainer's cell is not the one it drains, or there is none)
     if checks && due && !over(w, id, b) {
+        end(w, b);
+    }
+}
+
+/// The drainer's alliance test in its own turn (claim 11), in the turns
+/// that reach it (claim 15: not in a turn that the erasure exit ends).
+pub fn alliance_test(w: &mut World, id: ObjectId) {
+    let Some(b) = partner(w, id) else { return };
+    let Some(bo) = w.obj(b) else {
+        // spec: S-0608 claim 13 (a building that left play: the link cannot outlive it)
+        end(w, b);
+        return;
+    };
+    let building_house = bo.owner;
+    let drainer_house = w.obj(id).and_then(|o| o.owner);
+    // spec: S-0608 claim 11 (in every ordinary turn of the drainer that reaches the alliance test, the link ends if the building's house allies the drainer's house, the same house included; read in that direction only)
+    if w.allied(building_house, drainer_house) {
         end(w, b);
     }
 }
@@ -338,6 +350,28 @@ pub fn killed(w: &mut World, id: ObjectId) {
         end(w, b);
     }
     building_gone(w, id);
+}
+
+/// Object `id` is taken off the map by ordinary temporary storage (claim
+/// 17, `objects::take_inside`): boarding a transport (open-topped
+/// included), entering a building, docking inside a spawner, travelling
+/// inside a projectile. Every link of a drainer ends at once, a stranded
+/// earlier one included, and so does a stored building's own link, with
+/// claim 14's effects; returning restores nothing.
+pub fn stored(w: &mut World, id: ObjectId) {
+    // spec: S-0608 claim 17 (successfully taking either party off the map through ordinary temporary storage ends the link immediately, with claim 14's effects; this also clears a stranded earlier building's drain when its drainer leaves the map)
+    let mine: Vec<ObjectId> = w
+        .drain
+        .links
+        .iter()
+        .filter(|&(_, &d)| d == id)
+        .map(|(&b, _)| b)
+        .collect();
+    for b in mine {
+        end(w, b);
+    }
+    // spec: S-0608 claim 17 (the same departure rule for a drained building taken off the map without being destroyed)
+    end(w, id);
 }
 
 /// Object `id` is removed from the game (claim 13).

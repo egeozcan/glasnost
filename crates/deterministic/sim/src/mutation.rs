@@ -511,19 +511,20 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
         return false;
     }
     let u = rules.unit(o.kind, o.type_index);
+    let mut crashed = false;
     if u.is_some_and(|u| u.vehicle.crashable) {
-        // The crash exception keeps the victim's marks; whether its conversion animation still starts was Q-1461's question; S-0611 revision 2 answers it (the animation still starts, and a crash needs height above the surface), not yet taken in, so the earlier rule is kept: none.
+        // spec: S-0611 claim 7 (Q-1461: for a victim that starts a crash, the standing position is marked taken again in the death tick)
         for (cc, l, r) in records.clone() {
             if let Some(x) = w.cells.occ_mut(cc, l) {
                 *x = r;
             }
         }
-        // spec: S-0611 claim 7 (its type's crash flag keeps S-0107 claim 17's exception)
-        if crate::jump::start_crash(w, id, Some(hit)) {
-            return true;
-        }
-        for &(cc, l, _) in &records {
-            w.cells.clear_infantry(cc, l, id, oq);
+        // spec: S-0611 claim 7 and S-0312 claim 16 (a crash begins only when the type has the crash flag and the victim's height above its surface is greater than 0 leptons; the flag alone on open ground does not prevent removal)
+        crashed = crate::jump::start_crash(w, id, Some(hit));
+        if !crashed {
+            for &(cc, l, _) in &records {
+                w.cells.clear_infantry(cc, l, id, oq);
+            }
         }
     }
     // spec: S-0611 claim 8 (the owner: the attacker's current owner, else the attacking house, else none)
@@ -531,17 +532,48 @@ pub fn convert(w: &mut World, id: ObjectId, hit: &Hit) -> bool {
         .attacker
         .and_then(|a| w.obj(a))
         .map_or(hit.house, |a| a.owner);
-    // spec: S-0611 claim 7 (a converted victim leaves play in the tick of its death, with no death sequence and no corpse)
-    crate::combat::death::leave_play(w, id);
+    if !crashed {
+        // spec: S-0611 claim 7 (a converted victim leaves play in the tick of its death, with no death sequence and no corpse)
+        crate::combat::death::leave_play(w, id);
+    }
     match rules.superweapons.mutation.anim {
-        // spec: S-0611 claim 8 (one conversion animation at the victim's position, height included, in the tick of the death)
+        // spec: S-0611 claim 8 (one conversion animation at the victim's position, height included, in the tick of the death) and claim 7 (Q-1461: it starts also for a victim that starts a crash, independently of the crash)
         Some(a) => {
-            start(w, a, o.pos, o.layer, owner, true);
+            let made = start(w, a, o.pos, o.layer, owner, true);
+            if crashed && let Some(m) = made {
+                mark_now(w, m);
+            }
         }
         // spec: S-0611 Edge cases (absent conversion animation: the victim is removed with no replacement)
         None => w.note("S-0611 Edge cases: no conversion animation type; the converted victim leaves no replacement"),
     }
     true
+}
+
+/// The conversion animation `id` of a victim that started a crash marks its
+/// standing position at once (claims 7 and 8): no ordinary removal of the
+/// victim clears that mark again in the death tick.
+fn mark_now(w: &mut World, id: ObjectId) {
+    let Some(m) = w.mutation.makers.get(&id).cloned() else {
+        return;
+    };
+    let rules = w.rules_arc();
+    let making = m
+        .anim
+        .and_then(|a| rules.animations.get(a as usize))
+        .is_some_and(|a| a.make_infantry != -1);
+    if making {
+        let (c, p) = m.spot;
+        // spec: S-0611 claim 8 (it marks its standing position immediately at conversion; a victim retained by a crash does not perform the removal that would clear that mark in the death tick)
+        w.cells.mark_anim(
+            c,
+            m.layer,
+            p,
+            id,
+            m.owner,
+            rules.quirks.infantry_animation_occupancy,
+        );
+    }
 }
 
 /// A refused victim leaves play (claim 7): its removal frees its standing
@@ -616,15 +648,16 @@ fn place(w: &mut World, unit: ObjectId, p: Pos) -> bool {
 
 /// Takes a made unit that could not be placed out of the game again: our
 /// engine keeps no never-placed object (claim 11's departure). The object,
-/// whatever its creation made with it, and its numbers are given back, so a
-/// refused attempt leaves only its draws (Q-1460).
+/// and whatever its creation made with it, is removed; its creation draw
+/// and its creation number stay consumed and are never reused (claim 14,
+/// Q-1460).
 fn discard(w: &mut World, unit: ObjectId) {
     let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
     for id in made {
         w.mind.controllers.remove(&id);
         w.objects.remove(&id);
     }
-    w.next_id = unit.0;
+    // spec: S-0611 claim 14 (one creation number reserved per attempt, a refused attempt included, without reuse: the counter is not rolled back)
 }
 
 /// One creation attempt at the end of an infantry-making animation
@@ -673,7 +706,7 @@ fn attempt(w: &mut World, id: ObjectId, m: &mut Maker) -> Attempt {
     // spec: S-0611 claim 10 (a fresh object of the made type: full health, starting experience under S-0311 claim 11, no passengers, no inherited order)
     let unit = crate::objects::create(w, Kind::Infantry, ty, Some(house));
     if !place(w, unit, m.pos) {
-        // spec: S-0611 claim 11 (no unit appears; our engine builds none, a documented departure; the creation draw order is Q-1460's question)
+        // spec: S-0611 claims 11 and 14 (no unit appears; our engine builds none, a documented departure; the creation draw, then the position-choice draw where claim 10's choice applies, are not undone)
         discard(w, unit);
         return Attempt::Refused;
     }

@@ -541,6 +541,27 @@ fn claim_16_reveal_on_fire() {
     assert!(!shroud::explored(&w, A, c(2, 2)));
 }
 
+// spec: S-0409 Import mapping (revision 16: RevealOnFire absent means yes) and claim 16 (a weapon without the key reveals on fire; one with it set to no does not)
+#[test]
+fn claim_16_reveal_on_fire_absent_is_yes() {
+    for (flag, reveals) in [(None, true), (Some(false), false)] {
+        let mut r = testkit::combat_ruleset();
+        let w0 = r.sim.weapons.keys().next().cloned().unwrap();
+        r.sim.weapons.get_mut(&w0).unwrap().reveal_on_fire = flag;
+        let mut r2 = rules();
+        r2.sim.weapons = r.sim.weapons.clone();
+        r2.sim.warheads = r.sim.warheads.clone();
+        r2.sim.projectiles = r.sim.projectiles.clone();
+        let mut w = game(&r2);
+        let firer = spawn(&mut w, Kind::Vehicle, "EYE1", 1, 0, 0);
+        let target = spawn(&mut w, Kind::Vehicle, "EYE1", 0, 15, 0);
+        step(&mut w);
+        assert!(!shroud::explored(&w, A, c(0, 0)));
+        shroud::fired(&mut w, firer, &w0, Target::Object(target));
+        assert_eq!(shroud::explored(&w, A, c(0, 0)), reveals, "{flag:?}");
+    }
+}
+
 // spec: S-0409 Edge cases (quirks.fire_reveal_expires off: the reveal on fire is an area reveal and stays)
 #[test]
 fn claim_16_reveal_permanent_with_switch_off() {

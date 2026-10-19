@@ -196,8 +196,7 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
             // spec: S-0508 claims 7 to 9 (a civilian garrison building's own turn: forced evacuation, the owner following the first occupant, the return of an abandoned building)
             crate::structures::garrison::turn(w, id);
             crate::econ::power::building_turn(w, id);
-            // spec: S-0515 claims 5 and 6 (the income cycle of a cash-producing building, in its own turn)
-            crate::structures::tech::turn(w, id);
+            // The income cycle of a cash-producing building (S-0515 claims 5 and 6) comes earlier in the building's turn, before its behaviour processing (S-0608 claim 15; `tick::object_turn`).
             // spec: S-0402 claim 21 and S-0203 claim 12 (a building master's group update sees that turn's operation-state effects and animation advancement, and comes before its paid repair)
             crate::econ::slaves::group_turn(w, id);
             // spec: S-0314 claim 8 and S-0408 claim 13 (a building whose repair is on steps in its turn); S-0203 claim 12 (after the group update, so a delivery in it can pay this turn's step)

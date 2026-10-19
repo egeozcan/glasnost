@@ -2482,3 +2482,97 @@ fn ac27_a_resting_deck_aircraft_refuses_only_the_deck_vehicle_through_its_listin
         Outcome::Clear
     );
 }
+
+// ---------------------------------------------------------------------------
+// Drain attempts in attack runs (claims 12, 15 and 16; S-0608 claim 16)
+
+/// [`rules`] with the draining weapons Suck (burst 2, the Rocket
+/// projectile) and SuckS (burst 2, the strafing projectile Straight), the
+/// aircraft DJET, DSTRAFE and DFIGHT (a fighter) with 3 rounds each, and the
+/// drainable 2 × 2 building DRB.
+fn drain_rules() -> Ruleset {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    for (n, proj) in [("Suck", "Rocket"), ("SuckS", "Straight")] {
+        r.sim.weapons.insert(
+            n.into(),
+            WeaponType {
+                damage: Some(1),
+                rof: Some(30),
+                range: dec("6"),
+                speed: Some(60),
+                burst: Some(2),
+                projectile: Some(proj.into()),
+                warhead: Some("HE".into()),
+                drain_weapon: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    for (n, u) in [
+        ("DJET", flyer(Some("Suck"), 3)),
+        ("DSTRAFE", flyer(Some("SuckS"), 3)),
+        ("DFIGHT", {
+            let mut u = flyer(Some("Suck"), 3);
+            u.econ.fighter = Some(true);
+            u
+        }),
+    ] {
+        push(&mut r, "aircraft", n);
+        r.sim.aircraft.insert(n.into(), u);
+    }
+    let mut b = econ_common::plain(500);
+    b.foundation = Some([2, 2]);
+    b.combat.drainable = Some(true);
+    push(&mut r, "buildings", "DRB");
+    r.sim.buildings.insert("DRB".into(), b);
+    r
+}
+
+// spec: S-0501 claim 12 (Drain continuation: an attempt that clears the object target of an aircraft in play cancels the remaining burst attempts and the pass's scatter and enters done with a 1-tick delay; it neither restores the target nor undoes a formed link) and claim 15 (the admitted initial pass makes its round pending, spent once at the done boundary); S-0608 claim 16
+#[test]
+fn claim_12_drain_departure() {
+    let r = drain_rules();
+    for name in ["DJET", "DSTRAFE", "DFIGHT"] {
+        let mut w = game(&r);
+        ready(&mut w);
+        let b = building(&mut w, "DRB", 1, 8, 0);
+        let a = put(&mut w, Kind::Aircraft, name, 0, -4, 0);
+        assert_eq!(air::strafer(&w, a), name == "DSTRAFE");
+        click(&mut w, a, ClickOn::Object(b));
+        assert!(
+            run_until(&mut w, 200, |w| w.obj(a).unwrap().target.is_some()),
+            "{name}: the order applies"
+        );
+        let cleared = run_until(&mut w, 3000, |w| w.obj(a).unwrap().target.is_none());
+        assert!(cleared, "{name}: the attempt clears the target");
+        let s = st(&w, a);
+        assert_eq!(s.stage, air::Stage::Done, "{name}: {}", describe(&w, a));
+        assert!(s.pending, "{name}: the round is pending");
+        assert_eq!(
+            w.obj(a).unwrap().combat.ammo,
+            3,
+            "{name}: nothing spent yet"
+        );
+        assert!(w.projectiles.is_empty(), "{name}: no ordinary shot");
+        let link = glasnost_sim::drain::partner(&w, a);
+        assert!(link.is_none() || link == Some(b));
+        step(&mut w);
+        assert_eq!(
+            w.obj(a).unwrap().combat.ammo,
+            2,
+            "{name}: one round, at done"
+        );
+        assert!(!st(&w, a).pending);
+        for _ in 0..5 {
+            step(&mut w);
+            assert_eq!(w.obj(a).unwrap().target, None, "{name}: not restored");
+        }
+        assert_eq!(
+            glasnost_sim::drain::partner(&w, a),
+            link,
+            "{name}: the link stays"
+        );
+        assert_eq!(w.obj(a).unwrap().combat.ammo, 2, "{name}: no second round");
+    }
+}
