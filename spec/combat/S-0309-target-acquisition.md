@@ -2,7 +2,7 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 21
+revision: 22
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -539,7 +539,7 @@ this spec:
    only those that are on the map and not in the ground render layer are looked at, each once, with
    no one-object-per-cell rule (claim 10), and objects allied with the searcher only when its type
    attacks friendlies, it is berserk or it is a passenger of a mind-controlled open-topped
-   transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; an object stays registered while it is airborne, from lift-off (S-0303). With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
+   transport. Equal-score airborne candidates are resolved by S-0303's F7 order: the centre sector, the east, north, south and west runs, then the four diagonal groups, and within a sector by the order in which the objects were registered there; registration during jumpjet movement follows S-0502 claim 29, including its placement and touchdown exceptions. In particular, a jumpjet becomes registered in its take-off update, normally at height 0 leptons, without waiting for a rise. Ordinary registration ends at touchdown, crash end or going off the map, not at a height threshold. With `quirks.flying_search_sectors` off, equal-score candidates are resolved by registration order among all tracked flying objects, each considered once.
    Except in a range search that looks for aircraft and nothing else, cell candidates are drawn from legal cells in rings around the centre cell, from ring 0 through at most ring *n* − 1. Equal-score cell candidates are resolved by ring order and then by the F2 order of legal cells within a ring. For *n* = 0 no ring is looked at, whatever the
    airborne objects hold. For *n* ≥ 1, let *r*₁ = trunc(*n* / 4) and *r*₂ = trunc(*n* / 2), and let
    *K*(*r*) be the candidates among the airborne objects together with those in rings 0 … *r*. The
@@ -551,12 +551,14 @@ this spec:
    search whose radius is above 0 but below 256 leptons has *n* = 0 and looks at no cell at all
    (only at airborne objects, whose search radius is then 1 cell).
    - Backing: `measurable` (scenario A4; the sector effects by scenario A4, part d, and S-0303's
-     scenario A16), except the rule that a radius of 1 to 255 leptons looks at no cell, which is
+     scenario A16; jumpjet registration boundaries inherit S-0502 claim 29's backing and
+     confidence, including scenario J28 and its stated unmeasured exceptions), except the rule
+     that a radius of 1 to 255 leptons looks at no cell, which is
      `unmeasured`: it follows from F1 and the ring rule, and seeing it would need an enemy object
      within 255 leptons of the searcher in another cell, which no placement makes reliable. Also
      `unmeasured`: the rule that leaves out found objects in the ground render layer, because
-     which tracked flying objects can be in the ground layer belongs to S-0303's registration rules
-     and no setup known puts one there
+     S-0502 claim 29 establishes registered jumpjets in that layer during low flight, but A4
+     does not isolate their rejection by the airborne scan from their later cell consideration
    - Confidence: high for the ring order and the early stops; medium for the airborne scan (the
      set of tracked objects and F7 are S-0303's, claim 6)
 
