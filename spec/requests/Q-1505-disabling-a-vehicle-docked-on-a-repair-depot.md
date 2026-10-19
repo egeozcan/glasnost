@@ -1,9 +1,9 @@
 ---
 id: Q-1505
 title: Is a vehicle docked on a repair depot passed over when the last control centre stops
-status: open
+status: answered
 related: [S-0405, S-0314]
-answered-by: []
+answered-by: [S-0405]
 ---
 
 ## Need

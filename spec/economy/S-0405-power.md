@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-19
 measurements: []
-requests: [Q-0180, Q-0224, Q-0276, Q-1503]
+requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505]
 supersedes: []
 ---
 
@@ -423,10 +423,27 @@ house's own update in a tick, which comes after the turn pass and before orders 
     At the 1-to-0 transition a vehicle that is tethered (glossary) to the building standing in its
     own cell is passed over too and stays enabled, for example a new vehicle still in its factory
     (S-0417 claims 2 and 7).
+
+    **Repair depots (Q-1505).** The same exception applies to a vehicle being repaired on its
+    own house's depot: it stays enabled at the 1-to-0 transition only if it is tethered to that
+    depot and the depot stands in the vehicle's current cell. Being serviced or merely having
+    contact with the depot is not enough. S-0314 claim 17 owns when depot entry establishes
+    tether. At an ordinary depot without the pad flag and without either unloading flag, the
+    ordinary approach and repair exchanges establish no tether, so its untethered customer is
+    disabled at the transition. With the pad flag, entry can establish tether under that
+    claim's conditions, but the flag does not guarantee it: even a pad depot can repair an
+    untethered vehicle, which is disabled at the transition too. The disabling test itself
+    reads neither the pad flag nor the repair phase. No new disabling event occurs merely
+    because repair finishes or contact or tether later ends.
+
     A vehicle whose type has the powered-unit flag is disabled too when it completes its arrival
-    in a cell while its house has no active control centre, unless the cell holds a building (a
-    vehicle in a factory or on a repair depot stays enabled). An arrival is the end of a step of
-    its own movement into the cell, which covers driving out of a factory, being unloaded, landing
+    in a cell while its house has no active control centre, unless the cell holds a building.
+    This arrival exception needs no tether: an enabled vehicle arriving in a factory or on a
+    repair depot stays enabled, but does not become enabled if already disabled. A vehicle
+    passed over at the transition and then leaving a depot is disabled on its first completed
+    arrival in a cell without a building, provided no control centre has become active meanwhile.
+    An arrival is the end of a step of its own movement into the cell, which covers driving out of
+    a factory, being unloaded, landing
     after a fall, arriving by a chrono jump and coming out of a tunnel or a burrow. Being placed on
     a cell by the map, or created on one, is not an arrival (Q-1503 part 2): such a vehicle stays
     enabled, and can act normally, until its first completed arrival in a cell without a building.
@@ -447,6 +464,8 @@ house's own update in a tick, which comes after the turn pass and before orders 
     may coexist with it. S-0616 claim 1 owns the sparks and their timing.
     - Backing: `measurable` (scenario W8, parts a to i, part h for off-map vehicles at disabling,
       part j for placement and the first arrival, part k for the tethered exception at a factory,
+      part m for depot service with and without tether and disabling after departure,
+      with S-0314 claim 17 supplying the depot tether conditions and its backing,
       S-0616 scenarios P1 and P23 for the deactivated-vehicle sparks).
       Hover effects inherit the backing and confidence of S-0503 claims 8 and 10–11, with
       scenario H7 there testing ordinary disabling, settling, spin, residual travel and water loss.
@@ -455,7 +474,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
       vehicle cannot be ordered into a transport).
     - Confidence: medium (the count and its two transitions, the off-map and tethered exceptions,
       the deactivated-state distinction, the cell-entry rule's arrival timing and placement
-      exception); low (the building exception of the cell-entry rule)
+      exception, depot transition outcomes composed with S-0314 claim 17); high (neither pad
+      flag nor repair phase enters the disabling test); low (the building exception of the
+      cell-entry rule)
 
 14. **Spy satellite.** The map reveal of a spy satellite (S-0409 owns it) does not depend on
     power: neither low power, nor a blackout, nor switching the building off stops it, whether or
@@ -750,6 +771,7 @@ remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-04
 | Rules, building section, `TogglePower` | whether input offers power mode on the building (S-0214, claim 13) | boolean | yes |
 | Rules, building section, `PowersUnit` | the control centre's powered unit (claim 13) | vehicle type name | none |
 | Rules, vehicle section, `PoweredUnit` | powered-unit flag (claim 13) | boolean | no |
+| Rules, building section, `UnitRepair`, `Helipad` | repair-depot and pad flags, respectively (S-0314 claims 6 and 17 own them); the pad flag affects tether establishment, not claim 13's disabling test directly | boolean | no for each; layering owned by S-0314 |
 | Rules, vehicle section, `DeactivateSound`, `ActivateSound` | the sounds played at disabling and enabling (claim 20; playback S-0701) | sound name (S-0003); a name that names no sound keeps the value in force | none (no sound) |
 | Rules, building section, `Drainable` | drainable type (S-0608 claims 1–3 own eligibility and attachment) | boolean | no |
 | Rules, building section, `SuperGapRadiusInCells` | super-gap radius (claim 16; this spec owns the key) | integer, cells | 0 |
@@ -1008,13 +1030,28 @@ switched off the house has full power (W3's second pair).
     disabled, and X' stays enabled with no centre active). Give the X' vehicle an attack order
     on an enemy test building far out of its range, and switch the variant on again while the
     vehicle is driving towards it.
-- *Runs:* three per part.
+  - (m) (Q-1505) use a driving X vehicle, damaged enough that repair cannot finish during the
+    observation, ample credits and K as the only centre. The named test file supplies two
+    otherwise identical ordinary repair depots, one with the pad flag and one without it,
+    neither with either unloading flag. Keep the depot operational independently of K.
+    In separate runs enter each depot while K runs, wait for paid repair, then switch K off.
+    For the pad variant use both an untethered straight level approach and a tether-producing
+    approach under S-0314 claim 17 (its scenario H19 supplies approach controls). Classify
+    each run by the recorded tether at centre loss, not by the flag alone. The vehicle must
+    occupy a cell containing its depot. In the tethered run, while K remains off, order it
+    away to a cell without a building. Do not manufacture tether or position by state writes.
+    If an approach fails to produce the required state, vary approach position and order
+    timing and repeat; do not count that failure as evidence for its disabling outcome.
+- *Runs:* three per part; in m three per depot-and-tether condition, at game speed 2.
 - *Observable:* whether the vehicles move and obey orders. In part a also record a screenshot
   of a disabled X vehicle beside an enabled X' vehicle on the same ground, and the sounds played
   at disabling and enabling. In part j record the ticks of every shot fired by the placed
   vehicles, the ticks of their cell arrivals, and their health and their enemies' health. In
   part k record whether the new vehicle leaves the factory and where it is disabled. In part l
   record whether the X' vehicle keeps its target and keeps driving after the variant comes on.
+  Part m additionally records contact, tether, current cell, enabled state, health and credits
+  every tick through centre loss and departure; confirm that paid repair was occurring before
+  centre loss and distinguish the loss tick from subsequent movement arrivals.
 - *Expected:* (a) both X vehicles are disabled and refuse orders; a hovering vehicle can still
   settle, spin and travel residually as S-0503 claims 8 and 10–11 specify (scenario H7 there tests
   those effects and water destruction). (b) Both work again; (c) the X vehicles
@@ -1033,13 +1070,21 @@ switched off the house has full power (W3's second pair).
   is passed over while tethered to its factory, drives out, and is disabled on its first
   arrival in a cell without a building (its type has the flag). (l) The X' vehicle
   drops its target and stops on the tick the variant comes on (claim 20's reset at enabling).
+  (m) The untethered vehicle at either depot is disabled at the centre's 1-to-0 transition.
+  The tethered vehicle at the pad depot is passed over and stays enabled, without claim 20's
+  disabling reset. It can leave and is disabled at its first completed arrival in a cell
+  without a building. Tether conditions, not repair progress or the pad flag alone, separate
+  these outcomes.
 - *Falsified if:* in (j) a placed vehicle does not fire before its first arrival, or fires or
   moves under orders after it, or in (k) the new vehicle stays in the factory or is not
   disabled outside it, or in (l) the X' vehicle keeps its target when the variant comes on,
   or (a) or (b) differ, or in (c) the X vehicles stop, or in (d) the Z vehicle keeps
   working, or in (e) it is disabled on the depot's cell or stays enabled afterwards, or in (f) the
   X' vehicle is unaffected, or in (g) the Z vehicle works again, or in (h) the X' vehicle is
-  disabled after it is unloaded, or in (i) either vehicle type differs from the expected state.
+  disabled after it is unloaded, or in (i) either vehicle type differs from the expected state,
+  or in (m) an untethered serviced vehicle is passed over, a vehicle tethered to the depot in
+  its current cell is disabled at centre loss, or that passed-over vehicle stays enabled after
+  its first completed arrival outside all buildings while K remains off.
 
 **W9: spy satellite (claim 14).**
 - *Setup:* a named test file gives a test type with the spy satellite flag (S-0409) the needs-power
@@ -1180,9 +1225,6 @@ switched off the house has full power (W3's second pair).
 ## Open questions
 
 - Whether a sprite-drawn vehicle is darkened while disabled, as a voxel vehicle is (claim 20).
-- Whether a vehicle docked on a repair depot is tethered to it when the last control centre
-  stops, and so passed over (claim 13). Only the factory case is established.
-
 - Whether a disabled vehicle whose locomotor keeps working when switched off can still be moved
   by a behaviour that gives it a destination, for example one whose *wait* behaviour refused the
   guard reset (claim 20). No such path is known in a skirmish.
