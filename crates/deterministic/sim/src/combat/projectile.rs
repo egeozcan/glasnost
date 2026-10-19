@@ -1381,6 +1381,7 @@ fn detonation_point(
         }
         _ => 42,
     };
+    // spec: S-0306 claim 20 (c) (below the threshold and no electromagnetic flag: the target point; else D_R below 32: the reference point)
     if !em && ds < threshold {
         aim_target_point(w, t)
     } else if dr < 32 {
