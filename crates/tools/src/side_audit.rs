@@ -514,6 +514,45 @@ async fn run_async(dir: &Path, side: i32, index: usize, seed: u32) -> std::io::R
             sensors.join(", ")
         }
     );
+    // The side's gunner vehicles (S-0308 claims 5 and 6): whether each
+    // switches its weapon with its passenger, and which infantry types of
+    // the side give it a healing weapon (what the own AI loads; flags and
+    // type numbers only).
+    let gunners: Vec<String> = side_types
+        .iter()
+        .enumerate()
+        .filter_map(|(n, &t)| {
+            let v = w.rules().unit(t.kind, t.index)?;
+            if t.kind != Kind::Vehicle || !v.combat.gunner {
+                return None;
+            }
+            let c = &v.combat;
+            let healers: Vec<String> = side_types
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.kind == Kind::Infantry)
+                .filter(|(_, p)| {
+                    w.rules()
+                        .unit(p.kind, p.index)
+                        .is_some_and(|p| glasnost_ai::gunner::heals_in(&w, v, p))
+                })
+                .map(|(m, _)| format!("#{m}"))
+                .collect();
+            Some(format!(
+                "#{n} (multi-weapon {}, gattling {}, charge turret {}, healers {:?})",
+                c.multi_weapon, c.gattling, c.charge_turret, healers
+            ))
+        })
+        .collect();
+    let _ = writeln!(
+        out,
+        "  gunner vehicles (S-0308 claims 5 and 6): {}",
+        if gunners.is_empty() {
+            "no type of the side".to_string()
+        } else {
+            gunners.join(", ")
+        }
+    );
     let _ = writeln!(
         out,
         "  offered {offered}, built {built}, placed or released {placed} of {} ({} within the tech level)",

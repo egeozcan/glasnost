@@ -127,6 +127,9 @@ struct Game {
     launches_by_kind: BTreeMap<String, usize>,
     /// House-ticks a superweapon record stood ready, by kind name.
     ready_ticks: BTreeMap<String, usize>,
+    /// House-ticks a superweapon record stood granted, and granted but
+    /// suspended, by kind name.
+    granted_ticks: BTreeMap<String, (usize, usize)>,
     /// Units that went berserk (S-0610 claim 4), and house-ticks in which a
     /// player house's psychic sensors showed a hostile-intent line
     /// (claim 10).
@@ -610,6 +613,12 @@ fn play_ai(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // `GLASNOST_AI_GUNPROBE=n`: every n ticks, per house, what the AI's
+    // gunner loading sees (`glasnost_ai::gunner::probe`).
+    let gun_probe: i32 = std::env::var("GLASNOST_AI_GUNPROBE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -644,6 +653,18 @@ fn play_ai(
         }
         if sw_probe > 0 && w.tick % sw_probe == 0 {
             print!("{}", sw_probe_line(w));
+        }
+        if gun_probe > 0 && w.tick % gun_probe == 0 {
+            for h in 0..PLAYERS {
+                let [armed, gunners, carrying, empty_home, healers, free] =
+                    glasnost_ai::gunner::probe(w, HouseId(h as u8));
+                if gunners > 0 {
+                    println!(
+                        "gunprobe tick {} house {h} armed {armed} gunners {gunners} carrying {carrying} empty-idle-home {empty_home} healers {healers} free-home {free}",
+                        w.tick
+                    );
+                }
+            }
         }
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
@@ -751,6 +772,7 @@ fn play_ai(
     g.dominator_damaged = tally.dominator_damaged;
     g.dominator_killed = tally.dominator_killed;
     g.ready_ticks = tally.ready_ticks;
+    g.granted_ticks = tally.granted_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
     for (h, u) in game.special_uses() {
@@ -850,6 +872,10 @@ pub struct Tally {
     pub launches_by_kind: BTreeMap<String, usize>,
     /// House-ticks a superweapon record stood ready, by kind name.
     pub ready_ticks: BTreeMap<String, usize>,
+    /// House-ticks a superweapon record stood granted, and granted but
+    /// suspended, by kind name: a kind granted long and never ready names
+    /// a charge the house never finishes.
+    pub granted_ticks: BTreeMap<String, (usize, usize)>,
     /// Units that went berserk (S-0610 claim 4: a unit that was not berserk
     /// after the last tick and is now).
     pub berserked: usize,
@@ -1095,6 +1121,24 @@ impl Tally {
                 .ready_ticks
                 .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
                 .or_default() += 1;
+        }
+        for h in 0..PLAYERS {
+            for i in 0..w.rules().superweapons.types.len() {
+                let Some(r) =
+                    glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+                else {
+                    continue;
+                };
+                if r.granted {
+                    let kind = w.rules().superweapons.types[i].kind;
+                    let e = self
+                        .granted_ticks
+                        .entry(kind.map_or("no kind".to_string(), |k| format!("{k:?}")))
+                        .or_default();
+                    e.0 += 1;
+                    e.1 += usize::from(r.suspended);
+                }
+            }
         }
         self.ready_before = ready_now;
         let berserk: BTreeSet<u32> = w
@@ -2353,8 +2397,8 @@ fn report(
                     String::new()
                 } else {
                     format!(
-                        " (by kind: {:?}; house-ticks ready by kind: {:?})",
-                        g.launches_by_kind, g.ready_ticks
+                        " (by kind: {:?}; house-ticks ready by kind: {:?}; house-ticks granted (suspended) by kind: {:?})",
+                        g.launches_by_kind, g.ready_ticks, g.granted_ticks
                     )
                 }
             );
