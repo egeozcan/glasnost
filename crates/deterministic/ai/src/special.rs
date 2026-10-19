@@ -136,6 +136,13 @@ pub struct Uses {
     /// Psychic dominator launches ordered (S-0612, `dominator`).
     #[serde(default)]
     pub dominator_launches: u32,
+    /// Hold orders given to production lines while the house pays for a
+    /// harvester or refinery it lacks (S-0404 claim 5, `Brain::economy_first`).
+    #[serde(default)]
+    pub economy_holds: u32,
+    /// Build orders that resumed a held line (S-0404 claims 3 and 5).
+    #[serde(default)]
+    pub resumes: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -206,6 +213,14 @@ impl Special {
 
     /// Counts one deploy order given to a deployable unit (S-0517,
     /// `deployers`).
+    pub(crate) fn count_economy_hold(&mut self) {
+        self.uses.economy_holds += 1;
+    }
+
+    pub(crate) fn count_resume(&mut self) {
+        self.uses.resumes += 1;
+    }
+
     pub(crate) fn count_deploy(&mut self) {
         self.uses.deploys += 1;
     }

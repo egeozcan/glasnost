@@ -114,6 +114,14 @@ const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 
+/// Resource cells around a refinery, slave miner or home that keep one
+/// harvester at work ([`Script::harvesters_wanted`]).
+const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
+
+/// Cells around a refinery, slave miner or home within which resource
+/// counts for [`Script::harvesters_wanted`].
+const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
+
 /// Spacing of the search grid that waves sweep once every enemy start
 /// position has been visited.
 const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
@@ -783,6 +791,46 @@ impl Script {
         }
     }
 
+    /// The harvesters the house keeps: the plan's count, and more while
+    /// the explored resource around its refineries, slave miners and home
+    /// would keep them at work, one for every [`CELLS_PER_HARVESTER`]
+    /// resource cells within [`FIELD_REACH`] cells, as a person adds
+    /// harvesters to a large field. A person stops at twice the plan's
+    /// count: more harvesters than that crowd the same fields and docks
+    /// (M7b AI audit: two slave miners earned about a third of what two
+    /// harvesters of the other sides earned on the same stock maps, and the
+    /// house starved).
+    pub(crate) fn harvesters_wanted(&self, w: &World) -> usize {
+        let mut centres: Vec<CellXY> = self
+            .own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id))
+            .filter(|o| {
+                slaves::is_master(w, o.id)
+                    || (o.kind == Kind::Building
+                        && self.allowed(w, tech::type_of(o), Role::Refinery))
+            })
+            .map(|o| o.pos.cell())
+            .collect();
+        centres.extend(self.home(w));
+        let mut cells = std::collections::BTreeSet::new();
+        for c in centres {
+            for dy in -FIELD_REACH..=FIELD_REACH {
+                for dx in -FIELD_REACH..=FIELD_REACH {
+                    let x = CellXY::new(c.x + dx, c.y + dy);
+                    if dx * dx + dy * dy <= FIELD_REACH * FIELD_REACH
+                        && resource::resource_at(w, x).is_some()
+                        && shroud::explored(w, self.house, x)
+                    {
+                        cells.insert((x.y, x.x));
+                    }
+                }
+            }
+        }
+        let n = self.plan.harvesters;
+        (cells.len() / CELLS_PER_HARVESTER).clamp(n, 2 * n)
+    }
+
     /// Whether the house keeps the plan's harvester count (deployed slave
     /// miners count).
     pub(crate) fn harvesters_kept(&self, w: &World) -> bool {
@@ -970,7 +1018,7 @@ impl Script {
                 .candidates(w, Role::Harvester)
                 .first()
                 .is_some_and(|&t| is_slave_miner(w, t));
-        if can_harvest && economy < self.plan.harvesters && !selling {
+        if can_harvest && economy < self.harvesters_wanted(w) && !selling {
             self.build(w, Role::Harvester, &mut out);
         }
 
