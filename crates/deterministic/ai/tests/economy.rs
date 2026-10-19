@@ -8,6 +8,11 @@
 //!   its line waits for money, every other running item is held with the
 //!   hold order (S-0404 claim 5), and resumed with a build order once the
 //!   economy is whole (S-0404 claims 3 and 5).
+//! - M7b AI round 2: a slave-miner house works every field it knows, with
+//!   no cap at twice its count (S-0402 claim 14: the slaves fill one
+//!   miner); a house that knew a field and knows none any more wants no
+//!   harvester; with money beyond a harvester and the cheapest army unit,
+//!   a house builds its army beside an extra harvester past the plan's.
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
@@ -221,4 +226,108 @@ fn resumes_a_held_item_once_the_economy_is_whole() {
     );
     assert_eq!((holds, resumes), (0, 1));
     assert!(!orders.iter().any(|o| matches!(o, Order::Hold { .. })));
+}
+
+fn army_builds(w: &World, orders: &[Order]) -> usize {
+    orders
+        .iter()
+        .filter(|o| matches!(o, Order::Build { what } if role_of(w, *what) == Some(Role::Army)))
+        .count()
+}
+
+// PLAN §4.7 (M7b AI round 2): a house that has had its harvesters and knows no resource left on the map wants none; it neither orders one nor holds the army for one (a house ended a game at the tick limit with 53 605 credits, waiting for a lost slave miner on a mined-out map).
+#[test]
+fn wants_no_harvester_on_a_mined_out_map() {
+    let map = fixture::map();
+    let mut w = settled(&map, 100);
+    // The house's brain has seen the fields.
+    let mut brain = Brain::with_plan(&w, &map, H, plan(3));
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let _ = brain.think(&w);
+    let ore: Vec<_> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| glasnost_sim::econ::resource::resource_at(&w, c).is_some())
+        .collect();
+    assert!(!ore.is_empty());
+    for c in ore {
+        glasnost_sim::crush::remove_overlay(&mut w, c);
+    }
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    let orders = brain.think(&w);
+    assert_eq!(harvester_builds(&w, &orders), 0, "{orders:?}");
+    assert!(army_builds(&w, &orders) >= 1, "{orders:?}");
+}
+
+/// Alpha of the synthetic M7b skirmish (slave miners) with a war factory,
+/// four slave miners beside home and 11 × 11 more explored ore cells there
+/// (with the start field more than 140 cells, seven slave miners' worth),
+/// and `credits`.
+fn slave_miner_house(credits: i32) -> World {
+    use glasnost_ai::fixture_m7b as kit;
+    use glasnost_sim::world::Pos;
+    let mut g = Game::new(
+        kit::rules(),
+        &kit::map(),
+        kit::MAP_NAME,
+        fixture::catalogue(),
+        kit::setup(5),
+    )
+    .expect("the M7b skirmish loads");
+    while g.world.tick <= g.world.orders_blocked_through || g.world.tick % 15 != 0 {
+        g.step();
+    }
+    let mut w = g.world.clone();
+    let home = fixture::at(-glasnost_ai::fixture_m7a::START_DX, 0);
+    let near = |dx: i32, dy: i32| glasnost_map::CellXY::new(home.x + dx, home.y + dy);
+    testkit::spawn(&mut w, Kind::Building, "FACT", 0, near(6, -6), 0);
+    for dy in [-3, -5, -7, -9] {
+        testkit::spawn(&mut w, Kind::Vehicle, "SMV", 0, near(-4, dy), 0);
+    }
+    for ox in 0..11 {
+        for oy in 0..11 {
+            if let Some(cell) = w.cells.grid.get_mut(near(-12 + ox, -5 + oy)) {
+                cell.overlay = ((ox + oy) % 12) as u8;
+                cell.overlay_data = 6;
+            }
+        }
+    }
+    glasnost_sim::econ::shroud::area_reveal(&mut w, H, Pos::centre(near(-6, 0), 0), 10);
+    glasnost_sim::econ::shroud::area_reveal(&mut w, H, Pos::centre(near(0, 6), 0), 10);
+    w.houses[0].credits = credits;
+    w
+}
+
+// PLAN §4.7 (M7b AI round 2): a slave miner is its slaves' own refinery (S-0402 claim 14), so a slave-miner house buys one for every twenty explored resource cells near home with no cap at twice the plan's count, as a harvester house has (four slave miners, a plan of two).
+#[test]
+fn a_slave_miner_house_works_every_field() {
+    let mut w = slave_miner_house(100_000);
+    let orders = think(&mut w, &glasnost_ai::fixture_m7b::map(), plan(2));
+    assert_eq!(harvester_builds(&w, &orders), 1, "{orders:?}");
+}
+
+// PLAN §4.7 (M7b AI round 2): beyond the plan's count, a slave-miner house that wants more miners builds its army beside the miner when it can pay for both, and holds the army for the miner when it cannot.
+#[test]
+fn builds_the_army_beside_an_extra_slave_miner_with_money() {
+    let map = glasnost_ai::fixture_m7b::map();
+    let mut rich = slave_miner_house(100_000);
+    let with_money = think(&mut rich, &map, plan(2));
+    assert_eq!(harvester_builds(&rich, &with_money), 1, "{with_money:?}");
+
+    let mut poor = slave_miner_house(100);
+    let without = think(&mut poor, &map, plan(2));
+    assert_eq!(harvester_builds(&poor, &without), 1, "{without:?}");
+    // The brain's own drainer rule is not the army round's.
+    assert!(
+        army_builds(&rich, &with_money) > army_builds(&poor, &without),
+        "{with_money:?} against {without:?}"
+    );
 }

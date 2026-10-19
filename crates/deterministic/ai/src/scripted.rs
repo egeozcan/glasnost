@@ -436,6 +436,10 @@ struct Watch {
     stall_since: Option<i32>,
     last_sale: Option<i32>,
     selling: bool,
+    /// Whether the house has known a resource cell on the map (explored),
+    /// as a person remembers having seen a field (M7b AI round 2).
+    #[serde(default)]
+    knew_field: bool,
 }
 
 impl Script {
@@ -488,6 +492,14 @@ impl Script {
             .collect();
         v.sort_by_key(|&t| (production::cost_field(w, t), t.kind as u8, t.index));
         v
+    }
+
+    /// The cost of the cheapest army type the house can build now (0 with
+    /// none).
+    fn cheapest_army(&self, w: &World) -> i32 {
+        self.candidates(w, Role::Army)
+            .first()
+            .map_or(0, |&t| production::cost_field(w, t))
     }
 
     pub(crate) fn own(&self, w: &World) -> Vec<ObjectId> {
@@ -828,16 +840,89 @@ impl Script {
             }
         }
         let n = self.plan.harvesters;
+        if cells.is_empty() && self.field_spent(w) {
+            return 0;
+        }
+        let want = (cells.len() / CELLS_PER_HARVESTER).max(n);
+        // A slave miner is its slaves' own refinery (S-0402 claim 14), so
+        // nothing queues: a person buys one for every field its slaves can
+        // work (M7b AI round 2: a Yuri house with two slave miners earned a
+        // quarter of what its enemy's two harvesters did, beside fields
+        // nobody worked).
+        if self.slave_miners(w) {
+            return want;
+        }
         // A person stops at twice the plan's harvesters: more queue at the
         // refineries.
-        (cells.len() / CELLS_PER_HARVESTER).clamp(n, 2 * n) // nocite: tuning of our own opponent
+        want.min(2 * n) // nocite: tuning of our own opponent
+    }
+
+    /// Whether an explored cell of the map holds a resource for the house.
+    fn knows_field(&self, w: &World) -> bool {
+        w.cells.grid.iter().any(|(c, _)| {
+            resource::resource_at(w, c).is_some() && shroud::explored(w, self.house, c)
+        })
+    }
+
+    /// Whether the fields the house has known are all mined out: it has
+    /// known a resource cell (as of its last think) and no explored cell
+    /// holds one now. A person does not buy harvesters for a map whose
+    /// fields are all mined out, and then spends on the army (M7b AI round
+    /// 2: a house kept wanting a lost slave miner on a map with no resource
+    /// left, held its army for it and ended the game with 53 605 credits
+    /// unspent at the tick limit). A house that has never seen a field is
+    /// not told by this that there is none.
+    pub(crate) fn field_spent(&self, w: &World) -> bool {
+        self.watch.knew_field && !self.knows_field(w)
+    }
+
+    /// Whether the house's harvesters are slave miners (its first harvester
+    /// candidate is one).
+    pub(crate) fn slave_miners(&self, w: &World) -> bool {
+        self.candidates(w, Role::Harvester)
+            .first()
+            .is_some_and(|&t| is_slave_miner(w, t))
+    }
+
+    /// The harvester count the house pays for before its army and before
+    /// the other items on its lines: the plan's, or with slave miners
+    /// every one it wants ([`Self::harvesters_wanted`]). M7b AI round 2: a
+    /// Yuri house kept two slave miners, earned a quarter of its Allied
+    /// enemy's income and bought the army while its third miner waited on
+    /// its line for money.
+    pub(crate) fn economy_target(&self, w: &World) -> usize {
+        if self.slave_miners(w) {
+            self.harvesters_wanted(w)
+        } else {
+            self.plan.harvesters
+        }
     }
 
     /// Whether the house keeps the plan's harvester count (deployed slave
-    /// miners count).
+    /// miners count), or wants none (a mined-out map, [`Self::field_spent`]):
+    /// the condition for the extras of the base (superweapon buildings,
+    /// sensors, defences of the brain's own).
     pub(crate) fn harvesters_kept(&self, w: &World) -> bool {
         self.of_role(w, Role::Harvester).len() + self.slave_buildings(w).len()
             >= self.plan.harvesters
+            || self.field_spent(w)
+    }
+
+    /// Whether the house keeps its [`Self::economy_target`], or wants no
+    /// harvester (a mined-out map): while it does not, a harvester waiting
+    /// on its line for money is paid first (`Brain::economy_first`).
+    pub(crate) fn economy_kept(&self, w: &World) -> bool {
+        self.of_role(w, Role::Harvester).len() + self.slave_buildings(w).len()
+            >= self.economy_target(w)
+            || self.field_spent(w)
+    }
+
+    /// The power plant the plan builds next: the cheapest power plant type
+    /// the house can build and place now.
+    pub(crate) fn plant_type(&self, w: &World) -> Option<TypeRef> {
+        self.candidates(w, Role::Power)
+            .into_iter()
+            .find(|&t| self.placeable(w, t))
     }
 
     /// Rally-point clicks for the house's infantry factories that have
@@ -895,6 +980,9 @@ impl Script {
         let mut out = Vec::new();
         let house = self.house;
         let own = self.own(w);
+        if !self.watch.knew_field {
+            self.watch.knew_field = self.knows_field(w);
+        }
         self.sell_when_broke(w, &mut out);
         let selling = self.watch.selling;
 
@@ -942,11 +1030,13 @@ impl Script {
                 });
             }
         } else if !selling {
-            let p = &w.houses[usize::from(house.0)].econ.power;
             // The first missing role the house can build a type for now
             // (a role it cannot build yet, such as a refinery that needs a
-            // factory first, does not hold up the others).
-            let low_power = p.output <= p.drain || self.of_role(w, Role::Power).is_empty();
+            // factory first, does not hold up the others). Power is read
+            // off the plants without a blackout (`power::short`): a
+            // blackout is not answered with power plants.
+            let low_power =
+                crate::power::short(w, house) || self.of_role(w, Role::Power).is_empty();
             let wanted = low_power
                 .then_some(Role::Power)
                 .into_iter()
@@ -1020,18 +1110,41 @@ impl Script {
                 .candidates(w, Role::Harvester)
                 .first()
                 .is_some_and(|&t| is_slave_miner(w, t));
-        if can_harvest && economy < self.harvesters_wanted(w) && !selling {
+        let wanted = self.harvesters_wanted(w);
+        if can_harvest && economy < wanted && !selling {
             self.build(w, Role::Harvester, &mut out);
         }
 
         // The army: one type round-robin per kind of factory, once the
-        // harvesters are kept (while a harvester can still be had: a
-        // harvester type to build now, or a vehicle factory to build while
-        // the house has none).
+        // plan's harvesters are kept (while a harvester can still be had:
+        // a harvester type to build now, or a vehicle factory to build
+        // while the house has none). Beyond the plan's count, up to every
+        // slave miner the house wants (`economy_target`), the army waits
+        // for the miner only while the house cannot pay for both beyond
+        // what its running items still owe: a person with money builds the
+        // army beside the extra miner.
         let vehicle_factory = Role::Factory(FactoryKind::Vehicle);
+        let credits = w.houses[usize::from(house.0)].credits;
+        let owed: i32 = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == house)
+            .filter_map(|l| l.item.as_ref())
+            .filter(|i| !i.done() && i.hold == production::Hold::None)
+            .map(|i| i.owed)
+            .fold(0i32, i32::saturating_add);
+        let harvester = self.candidates(w, Role::Harvester).first().copied();
+        let rich = harvester.is_some_and(|t| {
+            credits.saturating_sub(owed)
+                >= production::cost_field(w, t).saturating_add(self.cheapest_army(w))
+        });
+        let short = economy < self.plan.harvesters.min(wanted)
+            || (economy < self.economy_target(w).min(wanted) && !rich);
         let economy_first = !selling
-            && economy < self.plan.harvesters
-            && (!self.candidates(w, Role::Harvester).is_empty()
+            && short
+            && (harvester.is_some()
                 || (self.of_role(w, vehicle_factory).is_empty()
                     && !self.candidates(w, vehicle_factory).is_empty()));
         // Lifters are built by their own rule (`lifter::build_type`), not

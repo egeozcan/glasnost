@@ -104,9 +104,9 @@ const UNLOAD_STUCK: i32 = 450; // nocite: tuning of our own opponent
 /// The radius, in cells, around a superweapon's target cell within which
 /// seen enemies count for its worth and the house's own objects forbid it.
 const STRIKE_RADIUS: i64 = 3; // nocite: tuning of our own opponent
-/// The fewest of its own armed vehicles in an effect block for an iron
-/// curtain.
-const GROUP_MIN: usize = 3; // nocite: tuning of our own opponent
+/// The armed vehicles in one effect block that make an iron curtain worth
+/// firing at a fight (a pair of tanks about to engage).
+const CURTAIN_VEHICLES: usize = 2; // nocite: tuning of our own opponent
 /// The fewest of its own armed vehicles in an effect block for a teleport
 /// source (a block of three, with none of its infantry in it, was too rare:
 /// the teleport stood ready for thousands of ticks in the local lane).
@@ -281,6 +281,11 @@ impl Brain {
         }
         if w.tick % THINK_PERIOD == 0 {
             self.special.think(&self.script, w, &mut out);
+            if !self.script.selling() {
+                let plant = self.script.plant_type(w);
+                let n = crate::power::plant_first(w, self.house(), plant, &mut out);
+                self.special.count_plants_first(n);
+            }
         }
         self.fire_superweapons(w, &mut out);
         self.rebuild_yard(w, &mut out);
@@ -331,8 +336,9 @@ impl Brain {
 
     /// Economy first on the production lines, as a person who has lost a
     /// harvester or refinery pauses the rest of the sidebar to pay for its
-    /// replacement: while the house keeps fewer harvesters than the plan's
-    /// or has no refinery, and an item of the harvester or refinery role
+    /// replacement: while the house keeps fewer harvesters than its
+    /// economy target (`Script::economy_target`: the plan's, or every slave
+    /// miner it wants) or has no refinery, and an item of the harvester or refinery role
     /// runs on a line with less money in hand than its balance owed, every
     /// other running item of the house (power excepted while the house is
     /// short of power) is put on hold with the hold order (S-0404 claim 5).
@@ -355,7 +361,7 @@ impl Brain {
             )
         };
         let short = !self.script.selling()
-            && (!self.script.harvesters_kept(w) || !self.script.has_refinery(w));
+            && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
         let credits = w.houses[usize::from(h.0)].credits;
         let paying = short
             && w.econ.lines.lines.iter().any(|l| {
@@ -364,8 +370,7 @@ impl Brain {
                         economy(i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
                     })
             });
-        let p = &w.houses[usize::from(h.0)].econ.power;
-        let low_power = p.output <= p.drain;
+        let low_power = crate::power::short(w, h);
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
             if i.done() || economy(i.t) {
@@ -631,7 +636,12 @@ impl Brain {
                 Some(SwKind::Missile) => self.strike_cell(w),
                 Some(SwKind::Storm) if w.sw.storm.state == StormState::Idle => self.strike_cell(w),
                 Some(SwKind::Paradrop | SwKind::AmerParadrop) => self.drop_cell(w),
-                Some(SwKind::IronCurtain) => self.curtain_cell(w),
+                Some(SwKind::IronCurtain) => self.curtain_cell(w).map(|(c, building)| {
+                    if building {
+                        self.special.count_curtained_building();
+                    }
+                    c
+                }),
                 Some(SwKind::ForceShield) => self.shield_cell(w),
                 Some(SwKind::SpyPlane) => self.script.attack_goal(w),
                 Some(SwKind::Chrono) if !Self::has_source(w, h) => self.group_cell(w),
@@ -682,9 +692,8 @@ impl Brain {
 
     /// The cell of an effect block (S-0513 claim 4: the cell and its eight
     /// neighbours) holding the most of the house's armed vehicles, at least
-    /// [`GROUP_MIN`], with none of its infantry or organic units (the
-    /// curtain kills infantry, claim 23, and the teleport kills organic
-    /// units, claim 35) and no unit of anyone else (both would protect or
+    /// `min`, with none of its infantry or organic units (the teleport
+    /// kills organic units, claim 35) and no unit of anyone else (it would
     /// send them too); the first in cell order on equal counts. With
     /// `fight`, a seen enemy must be within [`FIGHT`] cells.
     fn vehicle_block(&self, w: &World, fight: bool, min: usize) -> Option<CellXY> {
@@ -721,10 +730,119 @@ impl Brain {
             .map(|(_, c)| c)
     }
 
-    /// An iron curtain's cell: a block of the house's armed vehicles that
-    /// is fighting.
-    fn curtain_cell(&self, w: &World) -> Option<CellXY> {
-        self.vehicle_block(w, true, GROUP_MIN)
+    /// An iron curtain's cell (M7b AI round 2), as a person aims it: the
+    /// centre of an effect block (S-0513 claim 4, F1: the cell and its eight
+    /// neighbours) on the house's own objects the curtain protects (claim
+    /// 25: vehicles and buildings), where the protection matters now:
+    ///
+    /// - a block holding at least [`CURTAIN_VEHICLES`] of the house's armed
+    ///   vehicles with a seen enemy within [`FIGHT`] cells (the vehicles
+    ///   about to fight), centred on one of them, or
+    /// - a block on one of the house's buildings that a seen enemy is
+    ///   attacking (its target is the building), centred on the building's
+    ///   reference cell.
+    ///
+    /// No block holds one of the house's or its allies' infantry (the
+    /// curtain kills every reached infantry unit, claim 23) or another
+    /// house's vehicle or building (it would be protected too, claim 25);
+    /// enemy infantry in the block is welcome (it dies, claim 23). Of these
+    /// blocks the one whose protected own objects cost the most is fired
+    /// at, the first in cell order on equal worth. Returns the cell and
+    /// whether the block was chosen for a building under attack.
+    ///
+    /// The old aim wanted three vehicles in one block with no other house's
+    /// unit at all; in the lane the curtain was ready for 7 900 to 51 000
+    /// house-ticks and fired once in 7 games.
+    fn curtain_cell(&self, w: &World) -> Option<(CellXY, bool)> {
+        let house = self.house();
+        let me = &w.houses[usize::from(house.0)];
+        let friend = |h: Option<HouseId>| h.is_some_and(|h| h == house || me.allies.contains(&h));
+        let enemies = self.script.seen_enemies(w);
+        // The objects a block reaches, as a person sees them standing in
+        // its cells (claim 4: listed in a swept layer of a block cell, so
+        // not in flight and not inside); a building once.
+        let reached_by = |c: CellXY| {
+            use glasnost_sim::superweapons as sw;
+            let mut ids: Vec<ObjectId> = sw::block(w, c)
+                .into_iter()
+                .flat_map(|(_, x)| {
+                    sw::swept_layers(w, x)
+                        .into_iter()
+                        .flat_map(move |l| sw::listed(w, x, l))
+                })
+                .collect();
+            ids.sort();
+            ids.dedup();
+            ids.into_iter()
+                .filter_map(|id| w.obj(id))
+                .filter(|o| o.health > 0)
+                .collect::<Vec<_>>()
+        };
+        let attacked: Vec<ObjectId> = enemies
+            .iter()
+            .filter_map(|&(e, _)| match w.obj(e)?.target {
+                Some(Target::Object(t))
+                    if w.obj(t)
+                        .is_some_and(|b| b.kind == Kind::Building && b.owner == Some(house)) =>
+                {
+                    Some(t)
+                }
+                _ => None,
+            })
+            .collect();
+        let mut cands: Vec<(CellXY, bool)> = w
+            .objects
+            .values()
+            .filter(|o| {
+                o.on_map && o.health > 0 && o.owner == Some(house) && self.army_vehicle(w, o)
+            })
+            .map(|o| (o.pos.cell(), false))
+            .chain(
+                attacked
+                    .iter()
+                    .filter_map(|&b| w.obj(b))
+                    .map(|b| (w.reference_point(b.id).cell(), true)),
+            )
+            .collect();
+        cands.sort_by_key(|&(c, b)| (c.y, c.x, b));
+        cands.dedup();
+        cands
+            .into_iter()
+            .filter_map(|(c, building)| {
+                let reached = reached_by(c);
+                // spec: S-0513 claim 23 (every reached infantry unit dies, of any house)
+                let own_infantry = reached
+                    .iter()
+                    .any(|o| o.kind == Kind::Infantry && friend(o.owner));
+                // spec: S-0513 claim 25 (every other reached vehicle, aircraft and building is protected)
+                let protects_others = reached
+                    .iter()
+                    .any(|o| o.kind != Kind::Infantry && !friend(o.owner) && o.owner.is_some());
+                if own_infantry || protects_others {
+                    return None;
+                }
+                let vehicles = reached
+                    .iter()
+                    .filter(|o| o.owner == Some(house) && self.army_vehicle(w, o))
+                    .count();
+                let fighting = enemies.iter().any(|&(_, e)| dist2(e, c) <= FIGHT * FIGHT);
+                let worth_it = if building {
+                    reached.iter().any(|o| attacked.contains(&o.id))
+                } else {
+                    vehicles >= CURTAIN_VEHICLES && fighting
+                };
+                if !worth_it {
+                    return None;
+                }
+                let worth: i64 = reached
+                    .iter()
+                    .filter(|o| o.owner == Some(house) && o.kind != Kind::Infantry)
+                    .map(|o| i64::from(production::cost_field(w, tech::type_of(o))))
+                    .sum();
+                Some((worth, c, building))
+            })
+            .max_by_key(|&(worth, c, _)| (worth, std::cmp::Reverse((c.y, c.x))))
+            .map(|(_, c, building)| (c, building))
     }
 
     /// A teleport source's cell: a block of the house's armed vehicles.
@@ -1324,11 +1442,47 @@ impl Brain {
             .collect()
     }
 
+    /// The seen enemies a person answers first (M7b AI round 2), each with
+    /// its cell: a drainer draining one of the house's power plants, which
+    /// blacks out the whole house (S-0405 claim 5) and whose building
+    /// cannot be sold (S-0408 claim 3), and an enemy attacking one of the
+    /// house's harvesters, slave miners or slaves (its target is the
+    /// worker: a person sees the shots). In the lane the Allied side's
+    /// waves killed up to 165 slaves of a Yuri house in one game, mostly
+    /// with infantry, while the Yuri army stood near by.
+    fn raiders(&self, w: &World) -> Vec<(ObjectId, CellXY)> {
+        let house = self.house();
+        let seen = self.script.seen_enemies(w);
+        let drainers: Vec<ObjectId> = crate::power::drained_plants(w, house)
+            .into_iter()
+            .map(|(_, d)| d)
+            .collect();
+        let worker = |id: ObjectId| {
+            w.obj(id).is_some_and(|o| {
+                o.owner == Some(house)
+                    && (o.econ.harvest.is_some()
+                        || scripted::role_of(w, tech::type_of(o)) == Some(Role::Harvester)
+                        || o.econ.slave.is_some()
+                        || glasnost_sim::econ::slaves::is_master(w, id))
+            })
+        };
+        seen.into_iter()
+            .filter(|&(e, _)| {
+                drainers.contains(&e)
+                    || w.obj(e)
+                        .is_some_and(|o| matches!(o.target, Some(Target::Object(t)) if worker(t)))
+            })
+            .collect()
+    }
+
     /// Defends the base: every army unit near home that is not already
-    /// fighting an intruder attacks the intruder nearest to it.
-    fn defend(&self, w: &World, out: &mut Vec<Order>) {
+    /// fighting an intruder attacks the intruder nearest to it. A raider
+    /// ([`Brain::raiders`]) comes first, for every army unit that can
+    /// attack it and is near home or idle, within [`RECALL`] cells of it.
+    fn defend(&mut self, w: &World, out: &mut Vec<Order>) {
         let intruders = self.intruders(w);
-        if intruders.is_empty() {
+        let raiders = self.raiders(w);
+        if intruders.is_empty() && raiders.is_empty() {
             return;
         }
         let Some(home) = self.script.home(w) else {
@@ -1337,11 +1491,9 @@ impl Brain {
         for id in self.script.of_role(w, Role::Army) {
             let Some(o) = w.obj(id) else { continue };
             let at = o.pos.cell();
-            if dist2(at, home) > RECALL * RECALL {
-                continue;
-            }
+            let near_home = dist2(at, home) <= RECALL * RECALL;
             let busy = matches!(o.target, Some(Target::Object(t))
-                if intruders.iter().any(|&(e, _)| e == t));
+                if intruders.iter().chain(&raiders).any(|&(e, _)| e == t));
             // A unit on its way into a recycling building (S-0603) is left to go;
             // so is a vehicle on its way into a tank bunker, and a bunkered one
             // is left to the bunker part (`bunker`), which lets it out (S-0606).
@@ -1353,18 +1505,47 @@ impl Brain {
             if busy || bound {
                 continue;
             }
-            if let Some(&(e, _)) = intruders
-                .iter()
-                .filter(|&&(e, _)| can_attack(w, id, e))
-                .min_by_key(|&&(e, c)| (dist2(c, at), e))
-            {
-                out.push(Order::Behaviour {
+            // A unit already sent at the raider from where it stands, or
+            // one that did not take that order (`memory`), is not sent
+            // again: a person does not click the same every second.
+            let memory = &self.special.memory;
+            let raider = (near_home || idle(w, id))
+                .then(|| {
+                    raiders
+                        .iter()
+                        .filter(|&&(e, c)| {
+                            dist2(c, at) <= RECALL * RECALL
+                                && can_attack(w, id, e)
+                                && memory.ok(w, id, Target::Object(e))
+                                && !memory.pending(w, id, Target::Object(e))
+                        })
+                        .min_by_key(|&&(e, c)| (dist2(c, at), e))
+                })
+                .flatten();
+            let pick = raider.copied().or_else(|| {
+                near_home
+                    .then(|| {
+                        intruders
+                            .iter()
+                            .filter(|&&(e, _)| can_attack(w, id, e))
+                            .min_by_key(|&&(e, c)| (dist2(c, at), e))
+                            .copied()
+                    })
+                    .flatten()
+            });
+            if let Some((e, _)) = pick {
+                let order = Order::Behaviour {
                     actor: id,
                     behaviour: Behaviour::Attack,
                     attack_move: false,
                     target: Some(Target::Object(e)),
                     dest: None,
-                });
+                };
+                if raider.is_some() {
+                    self.special.count_economy_defence();
+                    self.special.memory.note(w, std::slice::from_ref(&order));
+                }
+                out.push(order);
             }
         }
     }

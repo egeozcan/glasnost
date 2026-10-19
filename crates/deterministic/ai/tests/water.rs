@@ -115,10 +115,13 @@ fn power_orders(rows: i32) -> usize {
     let mut brain = Brain::with_plan(&w, &map, HouseId(0), fixture::plan());
     let orders = brain.think(&w);
     let powr = w.rules().index_of(Kind::Building, "POWR");
-    orders
+    let plants = orders
         .iter()
         .filter(|o| matches!(o, Order::Build { what } if what.kind == Kind::Building && Some(what.index) == powr))
-        .count()
+        .count();
+    // A plant ordered before a building the plants cannot carry (M7b AI
+    // round 2, `power::plant_first`) is not a walk.
+    plants.saturating_sub(brain.special_uses().plants_first as usize)
 }
 
 // PLAN §4.7, S-0406 claims 3 to 5: a band of water two rows deep cannot take the 3 × 3 naval yard anywhere, so the base does not walk toward it.
