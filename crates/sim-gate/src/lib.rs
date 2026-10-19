@@ -107,8 +107,12 @@ pub const M6C_TICKS: i32 = 12_000;
 /// `ruleset`): seed 16 is the only seed of 1 to 16 that plays all its
 /// ticks with every counter at least 3, the sensor orders included (a
 /// house lost its frail sensor and built another); seed 1 has the sensor
-/// orders' 2.
-pub const M7A_SEED: u32 = 16;
+/// orders' 2. Moved from 16 to 4 at M7b AI round 2 (power before a
+/// building, the army beside an extra harvester, the defence of the
+/// economy): seed 16 gives 2 sensor orders and 2 bunker entry orders;
+/// seed 4 is the only seed of 1 to 16 that plays all its ticks with every
+/// counter at least 3.
+pub const M7A_SEED: u32 = 4;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;
@@ -116,7 +120,8 @@ pub const M7A_TICKS: i32 = 12_000;
 /// Seed of the M7b duel. Chosen at M7b step 3.3 (S-0608) from the sweep of
 /// seeds 1 to 16 (`m7b_seed_sweep`): every seed plays all [`M7B_TICKS`]
 /// ticks with every drain counter at least [`m7b::MARGIN`]; seed 11 has the
-/// largest smallest drain counter (8 links formed). See
+/// largest smallest drain counter (8 links formed; since M7b AI round 2,
+/// with Beta's construction yard drainable too, 4). See
 /// `docs/development.md`, *Determinism gate*.
 pub const M7B_SEED: u32 = 11;
 
@@ -279,14 +284,15 @@ fn launched(w: &glasnost_sim::world::World) -> bool {
 /// rocket in flight, with an aircraft in the air, with a passenger aboard a
 /// transport and with a superweapon charging (panics when the loaded game
 /// hashes differently). With `flies`, a full run must have flown both.
-/// Every full run must have loaded a passenger into a transport and let
-/// one out (M6b, S-0507); with `launches`, it must have launched a
-/// superweapon (M6b, S-0512 and S-0513).
+/// With `ferries`, a full run must have loaded a passenger into a
+/// transport and let one out (M6b, S-0507); with `launches`, it must have
+/// launched a superweapon (M6b, S-0512 and S-0513).
 fn duel(
     map: &glasnost_map::Map,
     name: &str,
     ticks: i32,
     flies: bool,
+    ferries: bool,
     launches: bool,
 ) -> Vec<String> {
     let mut g = Game::new(
@@ -343,7 +349,7 @@ fn duel(
             break;
         }
     }
-    if ticks >= SKIRMISH_TICKS {
+    if ferries && ticks >= SKIRMISH_TICKS {
         assert!(
             loads > 0 && unloads > 0 && aboard_saved,
             "{name}: the full duel loads a transport ({loads}) and unloads one ({unloads})"
@@ -373,7 +379,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         // reaches a launcher shot either, like the naval duel; rocket flights are covered by
         // S-0506's claim tests and the local lane's "rocket flights" count, so it is no
         // longer required to fly one. It still must load and unload a transport and launch.
-        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, false, true),
+        Scenario::Duel => return duel(&fixture::map(), "synthetic-duel", ticks, false, true, true),
         // The diagonal game ends before a launcher is sent; the straight
         // duel flies both a rocket and an aircraft. Since S-0507 revision 4
         // (eb0224c: the ferried infantry's course differs from about tick
@@ -388,6 +394,11 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 &fixture::map_diagonal(),
                 "synthetic-duel-diagonal",
                 ticks,
+                false,
+                // Since M7b AI round 2 (power before a building, the army
+                // beside an extra harvester) house 0 wins the diagonal game
+                // at tick 19 270 with its first ferry loaded and on its way;
+                // the straight and the naval duels must still load and unload.
                 false,
                 // Since the M6b2 round-4 revisions (S-0501 revision 15: aircraft are listed
                 // by height) the diagonal game charges its superweapon but no longer fires
@@ -434,6 +445,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
                 "synthetic-duel-naval",
                 ticks,
                 false,
+                true,
                 false,
             );
         }

@@ -13,9 +13,9 @@
 //!   is over the building (S-0608 claim 2: an attempt from a neighbouring
 //!   cell forms no link). Alpha starts with [`DISCS`] of them, north of
 //!   its start.
-//! - **Beta**'s power plant POWR and refinery PROC are drainable; PROC is
-//!   a resource destination, so a link to it takes credits, and one to POWR
-//!   blacks out Beta's power.
+//! - **Beta**'s power plant POWR, refinery PROC and construction yard
+//!   YARD are drainable; PROC is a resource destination, so a link to it
+//!   takes credits, and one to POWR blacks out Beta's power.
 //! - The game-wide drain settings: a payout every [`PERIOD`] ticks of
 //!   [`AMOUNT`] credits, and the drain animation SUCKANIM.
 //! - **Alpha** only (S-0611, M7b step 3.4): GENEB, a building that gives
@@ -175,6 +175,12 @@ pub fn ruleset() -> Ruleset {
     if let Some(b) = r.sim.buildings.get_mut("PROC") {
         b.combat.drainable = Some(true);
         b.econ.resource_destination = Some(true);
+    }
+    // Beta's construction yard too (M7b AI round 2): Beta no longer builds
+    // a power plant for each drain blackout, so a third target keeps
+    // Alpha's third start disc at work.
+    if let Some(b) = r.sim.buildings.get_mut("YARD") {
+        b.combat.drainable = Some(true);
     }
     register(&mut r, "animations", "SUCKANIM");
     r.sim.animations.insert(
