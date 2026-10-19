@@ -140,6 +140,17 @@ fn defends_the_base() {
     for &id in &army {
         w.obj_mut(id).unwrap().target = None;
     }
+    // The intruder is the only enemy unit: other units of house 1 that
+    // roam near the base by then are taken out of play.
+    let others: Vec<_> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(HouseId(1)) && o.kind != Kind::Building && o.id != intruder)
+        .map(|o| o.id)
+        .collect();
+    for id in others {
+        objects::remove(&mut w, id);
+    }
     let map = fixture::map();
     let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
     for &id in &army {

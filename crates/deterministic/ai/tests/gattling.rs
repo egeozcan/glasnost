@@ -220,11 +220,15 @@ fn builds_gattling_defences() {
             .iter()
             .any(|(_, u)| u.gattling_defences >= 1)
     );
-    for _ in 0..3000 {
+    // The vehicle line builds the harvesters a large field keeps first
+    // (M7b AI audit), so the gattling vehicle may come later.
+    let gatg = |w: &World| (0..2).map(|h| vehicles(w, h, "GATG")).sum::<usize>();
+    let until = g.world.tick + 9000;
+    while g.world.tick < until && g.outcome().is_none() && gatg(&g.world) == 0 {
         g.step();
+        assert!(count(&g.world, 0, "GDEF") <= wanted);
     }
-    assert!(count(&g.world, 0, "GDEF") <= wanted);
-    let built = (0..2).map(|h| vehicles(&g.world, h, "GATG")).sum::<usize>();
+    let built = gatg(&g.world);
     assert!(built > 0, "no GATG built by tick {}", g.world.tick);
 }
 

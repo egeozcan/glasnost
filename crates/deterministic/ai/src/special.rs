@@ -136,6 +136,17 @@ pub struct Uses {
     /// Psychic dominator launches ordered (S-0612, `dominator`).
     #[serde(default)]
     pub dominator_launches: u32,
+    /// Hold orders given to production lines while the house pays for a
+    /// harvester or refinery it lacks (S-0404 claim 5, `Brain::economy_first`).
+    #[serde(default)]
+    pub economy_holds: u32,
+    /// Build orders that resumed a held line (S-0404 claims 3 and 5).
+    #[serde(default)]
+    pub resumes: u32,
+    /// Infantry sent into an empty gunner vehicle to give it a healing
+    /// weapon (S-0308 claims 5 and 6, `gunner`).
+    #[serde(default)]
+    pub gunner_loads: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -195,6 +206,7 @@ impl Special {
         self.bunkers(script, &own, w, out);
         self.lifters(script, &own, w, out);
         self.drainers(script, &own, w, out);
+        self.gunners(script, &own, w, out);
         self.memory.note(w, &out[start..]);
     }
 
@@ -202,6 +214,23 @@ impl Special {
     /// the unit did not take, see `memory`).
     pub fn given_up(&self) -> usize {
         self.memory.blocked()
+    }
+
+    /// Counts one hold order given while the house pays for its economy
+    /// (S-0404 claim 5, `Brain::economy_first`).
+    pub(crate) fn count_economy_hold(&mut self) {
+        self.uses.economy_holds += 1;
+    }
+
+    /// Counts one build order that resumed a held line (S-0404 claims 3
+    /// and 5, `Brain::economy_first`).
+    pub(crate) fn count_resume(&mut self) {
+        self.uses.resumes += 1;
+    }
+
+    /// Counts one infantry unit sent into a gunner vehicle (`gunner`).
+    pub(crate) fn count_gunner_load(&mut self) {
+        self.uses.gunner_loads += 1;
     }
 
     /// Counts one deploy order given to a deployable unit (S-0517,
@@ -481,7 +510,7 @@ impl Special {
 
     /// The cheapest type of infantry the house can build now that
     /// satisfies `f`.
-    fn buildable_infantry(
+    pub(crate) fn buildable_infantry(
         w: &World,
         house: HouseId,
         f: impl Fn(&glasnost_sim::rules::UnitRules) -> bool,
@@ -502,6 +531,18 @@ impl Special {
             .any(|o| o.owner == Some(house) && o.kind == Kind::Infantry && f(o.id))
     }
 
+    /// Orders one unit of type `t` without the credit reserve of
+    /// [`Self::order_unit`]: the line pays for it as money comes in, as a
+    /// person queues a unit the army is waiting for (the gunner's
+    /// passenger: the M7b lane found the reserve never met, every credit
+    /// spent on the army).
+    pub(crate) fn queue_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
+        if script.selling() || Self::queued(w, script.house, t) {
+            return;
+        }
+        out.push(Order::Build { what: t });
+    }
+
     /// Whether the line of `t` already holds one in its queue (a queued copy
     /// has no object yet).
     fn queued(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -511,7 +552,7 @@ impl Special {
 
     /// Orders one unit of `t` from the sidebar when the house keeps enough
     /// credits in hand and the type is not already in its line.
-    fn order_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
+    pub(crate) fn order_unit(&self, script: &Script, w: &World, t: TypeRef, out: &mut Vec<Order>) {
         let price = production::cost_field(w, t);
         if script.selling()
             || Self::queued(w, script.house, t)
@@ -551,11 +592,16 @@ impl Special {
         let house = script.house;
         let mut taken: Vec<ObjectId> = Vec::new();
         let mut any = false;
+        // An engineer the gunner step loads into a gunner vehicle stays.
+        let kept = self.gunner_reserved(script, own, w);
         for &id in own {
             if !engineer::is_engineer(w, id) {
                 continue;
             }
             any = true;
+            if kept.contains(&id) {
+                continue;
+            }
             if !scripted::idle(w, id) || !targeting::selectable(w, id) {
                 continue;
             }

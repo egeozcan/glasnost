@@ -263,6 +263,7 @@ impl Brain {
             v
         };
         if w.tick % THINK_PERIOD == 0 {
+            let paying = self.economy_first(w, &mut out);
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
             self.build_superweapon(w, &mut out);
@@ -271,7 +272,7 @@ impl Brain {
             if self.special_uses().sensors == sensors && !self.build_grinder(w, &mut out) {
                 let defences = self.special_uses().gattling_defences;
                 self.build_gattling_defence(w, &mut out);
-                if self.special_uses().gattling_defences == defences {
+                if self.special_uses().gattling_defences == defences && !paying {
                     self.build_bunker(w, &mut out);
                 }
             }
@@ -326,6 +327,62 @@ impl Brain {
             _ => true,
         });
         out
+    }
+
+    /// Economy first on the production lines, as a person who has lost a
+    /// harvester or refinery pauses the rest of the sidebar to pay for its
+    /// replacement: while the house keeps fewer harvesters than the plan's
+    /// or has no refinery, and an item of the harvester or refinery role
+    /// runs on a line with less money in hand than its balance owed, every
+    /// other running item of the house (power excepted while the house is
+    /// short of power) is put on hold with the hold order (S-0404 claim 5).
+    /// Once no such item runs, or the economy is whole again, every held
+    /// item is resumed with a build order for its type (S-0404 claims 3
+    /// and 5), the forced-start hold of claim 10 included, which a person
+    /// resumes alike. Found by the M7b AI audit: a slave-miner house that
+    /// lost a miner to a raid paid for its replacement in step with a
+    /// superweapon building and two army lines, and the miner stood on its
+    /// line for 6 000 ticks.
+    /// Returns whether the house is paying for its economy (no new
+    /// building of its own choosing is started then).
+    fn economy_first(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
+        use glasnost_sim::econ::production::Hold;
+        let h = self.house();
+        let economy = |t: TypeRef| {
+            matches!(
+                scripted::role_of(w, t),
+                Some(Role::Harvester | Role::Refinery)
+            )
+        };
+        let short = !self.script.selling()
+            && (!self.script.harvesters_kept(w) || !self.script.has_refinery(w));
+        let credits = w.houses[usize::from(h.0)].credits;
+        let paying = short
+            && w.econ.lines.lines.iter().any(|l| {
+                l.house == h
+                    && l.item.as_ref().is_some_and(|i| {
+                        economy(i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
+                    })
+            });
+        let p = &w.houses[usize::from(h.0)].econ.power;
+        let low_power = p.output <= p.drain;
+        for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
+            let Some(i) = &l.item else { continue };
+            if i.done() || economy(i.t) {
+                continue;
+            }
+            if paying {
+                let power = scripted::role_of(w, i.t) == Some(Role::Power);
+                if i.hold == Hold::None && !(power && low_power) {
+                    out.push(Order::Hold { what: i.t });
+                    self.special.count_economy_hold();
+                }
+            } else if i.hold == Hold::Player && tech::buildable(w, h, i.t) {
+                out.push(Order::Build { what: i.t });
+                self.special.count_resume();
+            }
+        }
+        paying
     }
 
     /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
@@ -675,33 +732,58 @@ impl Brain {
         self.vehicle_block(w, false, TELEPORT_MIN)
     }
 
-    /// A force shield's cell: the building of the house with the most of
-    /// its buildings in the block, at least [`SHIELD_MIN`], where a seen
-    /// enemy stands within [`DEFEND`] cells and no unit of anyone else is
-    /// in the block; the first in cell order on equal counts.
+    /// A force shield's cell: the reference cell of one of the house's
+    /// buildings with a seen enemy within [`DEFEND`] cells, whose shield
+    /// takes the most buildings of the house and its allies, at least
+    /// [`SHIELD_MIN`]; the first in cell order on equal counts. The shield
+    /// protects buildings of the launching house and its allies whose
+    /// reference point is within the shield's radius of the target cell's
+    /// centre, and nothing else (S-0513 claim 31, F3: the radial indicator
+    /// a person reads off the cursor; the height is left out). The M7b AI
+    /// audit found the shield ready in every Yuri game and never fired: the
+    /// old aim counted buildings by their cell in a 3 × 3 block, which two
+    /// buildings with a gap between them never share.
     fn shield_cell(&self, w: &World) -> Option<CellXY> {
         let house = self.house();
+        let me = &w.houses[usize::from(house.0)];
         let enemies = self.script.seen_enemies(w);
-        let buildings: Vec<CellXY> = w
+        let r = 256 * i64::from(w.rules().superweapons.shield_radius); // spec: S-0513 F3 (256 leptons per cell of the radius R)
+        let points: Vec<(bool, CellXY, i64, i64)> = w
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Building)
-            .filter(|o| o.owner == Some(house))
-            .map(|o| o.pos.cell())
+            .filter(|o| {
+                o.owner
+                    .is_some_and(|h| h == house || me.allies.contains(&h))
+            })
+            .map(|o| {
+                let p = w.reference_point(o.id);
+                (
+                    o.owner == Some(house),
+                    p.cell(),
+                    i64::from(p.x),
+                    i64::from(p.y),
+                )
+            })
             .collect();
-        let others: Vec<CellXY> = w
-            .objects
-            .values()
-            .filter(|o| o.on_map && o.health > 0 && o.owner != Some(house))
-            .map(|o| o.pos.cell())
-            .collect();
-        let near = |a: CellXY, b: CellXY| (a.x - b.x).abs() <= 1 && (a.y - b.y).abs() <= 1;
-        buildings
+        let mut cands: Vec<CellXY> = points
             .iter()
-            .copied()
+            .filter(|&&(own, _, _, _)| own)
+            .map(|&(_, c, _, _)| c)
             .filter(|&c| enemies.iter().any(|&(_, e)| dist2(e, c) <= DEFEND * DEFEND))
-            .filter(|&c| !others.iter().any(|&o| near(o, c)))
-            .map(|c| (buildings.iter().filter(|&&b| near(b, c)).count(), c))
+            .collect();
+        cands.sort_by_key(|c| (c.y, c.x));
+        cands.dedup();
+        cands
+            .into_iter()
+            .map(|c| {
+                let (cx, cy) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0513 F3 (the target cell centre)
+                let n = points
+                    .iter()
+                    .filter(|&&(_, _, x, y)| (x - cx) * (x - cx) + (y - cy) * (y - cy) < r * r)
+                    .count();
+                (n, c)
+            })
             .filter(|&(n, _)| n >= SHIELD_MIN)
             .max_by_key(|&(n, c)| (n, std::cmp::Reverse((c.y, c.x))))
             .map(|(_, c)| c)

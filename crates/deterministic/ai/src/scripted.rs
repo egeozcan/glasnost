@@ -114,6 +114,14 @@ const RALLY_AHEAD: i32 = 3; // nocite: tuning of our own opponent
 /// plan's wave size.
 const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 
+/// Resource cells around a refinery, slave miner or home that keep one
+/// harvester at work ([`Script::harvesters_wanted`]).
+const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
+
+/// Cells around a refinery, slave miner or home within which resource
+/// counts for [`Script::harvesters_wanted`].
+const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
+
 /// Spacing of the search grid that waves sweep once every enemy start
 /// position has been visited.
 const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
@@ -783,6 +791,48 @@ impl Script {
         }
     }
 
+    /// The harvesters the house keeps: the plan's count, and more while
+    /// the explored resource around its refineries, slave miners and home
+    /// would keep them at work, one for every [`CELLS_PER_HARVESTER`]
+    /// resource cells within [`FIELD_REACH`] cells, as a person adds
+    /// harvesters to a large field. A person stops at twice the plan's
+    /// count: more harvesters than that crowd the same fields and docks
+    /// (M7b AI audit: two slave miners earned about a third of what two
+    /// harvesters of the other sides earned on the same stock maps, and the
+    /// house starved).
+    pub(crate) fn harvesters_wanted(&self, w: &World) -> usize {
+        let mut centres: Vec<CellXY> = self
+            .own(w)
+            .into_iter()
+            .filter_map(|id| w.obj(id))
+            .filter(|o| {
+                slaves::is_master(w, o.id)
+                    || (o.kind == Kind::Building
+                        && self.allowed(w, tech::type_of(o), Role::Refinery))
+            })
+            .map(|o| o.pos.cell())
+            .collect();
+        centres.extend(self.home(w));
+        let mut cells = std::collections::BTreeSet::new();
+        for c in centres {
+            for dy in -FIELD_REACH..=FIELD_REACH {
+                for dx in -FIELD_REACH..=FIELD_REACH {
+                    let x = CellXY::new(c.x + dx, c.y + dy);
+                    if dx * dx + dy * dy <= FIELD_REACH * FIELD_REACH
+                        && resource::resource_at(w, x).is_some()
+                        && shroud::explored(w, self.house, x)
+                    {
+                        cells.insert((x.y, x.x));
+                    }
+                }
+            }
+        }
+        let n = self.plan.harvesters;
+        // A person stops at twice the plan's harvesters: more queue at the
+        // refineries.
+        (cells.len() / CELLS_PER_HARVESTER).clamp(n, 2 * n) // nocite: tuning of our own opponent
+    }
+
     /// Whether the house keeps the plan's harvester count (deployed slave
     /// miners count).
     pub(crate) fn harvesters_kept(&self, w: &World) -> bool {
@@ -970,7 +1020,7 @@ impl Script {
                 .candidates(w, Role::Harvester)
                 .first()
                 .is_some_and(|&t| is_slave_miner(w, t));
-        if can_harvest && economy < self.plan.harvesters && !selling {
+        if can_harvest && economy < self.harvesters_wanted(w) && !selling {
             self.build(w, Role::Harvester, &mut out);
         }
 
@@ -1328,32 +1378,51 @@ impl Script {
 
     /// The water the base grows toward: when a naval factory type that the
     /// house has none of is buildable but has no cell to stand on, the
-    /// explored water cell nearest the construction yard (the first in cell
-    /// order on equal distance).
+    /// nearest explored site within the wide spiral where its foundation
+    /// would stand but for the distance to the base (the cursor shows the
+    /// foundation fits, S-0406 claims 3 and 5, and only the adjacency of
+    /// claim 4 fails), the first in cell order on equal distance. With no
+    /// such site the base does not grow: a person does not lay buildings
+    /// toward water too small or too far for the yard (M7b AI audit: on a
+    /// map with a narrow strip of water the base walked nine power plants
+    /// toward it and starved the economy).
     pub(crate) fn water_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
-        let stuck = w.rules().buildings.iter().enumerate().any(|(i, b)| {
-            let t = TypeRef {
-                kind: Kind::Building,
-                index: i as u32,
-            };
-            b.naval
-                && b.factory.is_some()
-                && tech::present_count(w, self.house, t) == 0
-                && tech::buildable(w, self.house, t)
-                && !self.placeable(w, t)
-        });
-        if !stuck {
+        let stuck: Vec<u32> = w
+            .rules()
+            .buildings
+            .iter()
+            .enumerate()
+            .filter(|(i, b)| {
+                let t = TypeRef {
+                    kind: Kind::Building,
+                    index: *i as u32,
+                };
+                b.naval
+                    && b.factory.is_some()
+                    && tech::present_count(w, self.house, t) == 0
+                    && tech::buildable(w, self.house, t)
+                    && !self.placeable(w, t)
+            })
+            .map(|(i, _)| i as u32)
+            .collect();
+        if stuck.is_empty() {
             return None;
         }
-        w.cells
-            .grid
-            .iter()
-            .filter(|(c, cell)| {
-                cell.land == glasnost_map::terrain::land::WATER
-                    && shroud::explored(w, self.house, *c)
+        let test = placement::Test::order(self.house);
+        let r = WIDE_RINGS;
+        (-r..=r)
+            .flat_map(|dy| (-r..=r).map(move |dx| CellXY::new(home.x + dx, home.y + dy)))
+            .filter(|&c| {
+                w.cells
+                    .grid
+                    .get(c)
+                    .is_some_and(|cell| cell.land == glasnost_map::terrain::land::WATER)
+                    && stuck.iter().any(|&t| {
+                        placement::explored(w, self.house, t, c)
+                            && placement::cell_test(w, t, c, &test)
+                    })
             })
-            .map(|(c, _)| c)
             .min_by_key(|&c| (dist2(c, home), c.y, c.x))
     }
 

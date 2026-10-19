@@ -118,3 +118,47 @@ pub(crate) fn dominate_cell(
         .max_by_key(|&(v, c)| (v, std::cmp::Reverse((c.y, c.x))))
         .map(|(_, c)| c)
 }
+
+/// A lane diagnostic of the dominator's aim for `house`: the seen enemy
+/// objects, the seen enemy units, those it may take, and the most of
+/// them one sweep reaches.
+pub fn probe(
+    w: &World,
+    house: glasnost_sim::world::HouseId,
+) -> (usize, usize, usize, usize, Vec<String>) {
+    let script = Script::new(house, crate::brain::default_plan());
+    let seen: Vec<&Object> = script
+        .seen_enemies(w)
+        .into_iter()
+        .filter_map(|(id, _)| w.obj(id))
+        .collect();
+    let units = seen.iter().filter(|o| o.kind != Kind::Building).count();
+    let refused: Vec<String> = seen
+        .iter()
+        .filter(|o| o.kind != Kind::Building && !glasnost_sim::mind::dominable(w, o.id))
+        .map(|o| {
+            let air = glasnost_sim::combat::weapon::in_air(w, o.id);
+            let shielded = glasnost_sim::superweapons::protected(w, o.id);
+            format!("{:?}/air {air}/protected {shielded}", o.kind)
+        })
+        .collect();
+    let enemies: Vec<&Object> = seen
+        .iter()
+        .copied()
+        .filter(|o| o.kind != Kind::Building)
+        .filter(|o| glasnost_sim::mind::dominable(w, o.id))
+        .collect();
+    let mut best = 0;
+    for e in &enemies {
+        let reach: BTreeSet<(i32, i32, Layer)> = glasnost_sim::domination::swept(w, e.pos.cell())
+            .into_iter()
+            .map(|(x, l)| (x.x, x.y, l))
+            .collect();
+        let n = enemies
+            .iter()
+            .filter(|o| reach.contains(&(o.pos.cell().x, o.pos.cell().y, o.layer)))
+            .count();
+        best = best.max(n);
+    }
+    (seen.len(), units, enemies.len(), best, refused)
+}
