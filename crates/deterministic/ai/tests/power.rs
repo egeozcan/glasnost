@@ -299,4 +299,41 @@ fn defends_a_harvester_under_fire() {
     let _ = b.think(&w);
     let _ = b.think(&w);
     assert_eq!(b.special_uses().economy_defence, 1);
+    // Nor once it has moved and its target was taken from it (another
+    // order): a person looks again only later.
+    let mut moved = w.clone();
+    for o in b.think(&moved) {
+        orders::issue(&mut moved, HouseId(0), o);
+    }
+    orders::issue(
+        &mut moved,
+        HouseId(0),
+        Order::Behaviour {
+            actor: gun,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(at(8, 0))),
+        },
+    );
+    let from = moved.obj(gun).unwrap().pos.cell();
+    for _ in 0..300 {
+        tick::step(&mut moved);
+        if moved.obj(gun).unwrap().pos.cell() != from && glasnost_ai::scripted::idle(&moved, gun) {
+            break;
+        }
+    }
+    assert_ne!(moved.obj(gun).unwrap().pos.cell(), from, "the gun moved");
+    for (id, t) in [(gun, None), (raider, Some(Target::Object(minr)))] {
+        if let Some(o) = moved.obj_mut(id) {
+            o.target = t;
+        }
+    }
+    shroud::area_reveal(&mut moved, HouseId(0), Pos::centre(at(2, 2), 0), 12);
+    let _ = b.think(&moved);
+    assert_eq!(
+        b.special_uses().economy_defence,
+        1,
+        "not sent at the same raider again so soon"
+    );
 }
