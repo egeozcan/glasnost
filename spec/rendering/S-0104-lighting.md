@@ -2,11 +2,11 @@
 id: S-0104
 title: Lighting
 topic: rendering
-revision: 25
+revision: 26
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0013, Q-0050]
 supersedes: []
@@ -226,7 +226,10 @@ Radiation-field light creation, fading, removal and snow-theater colour are owne
     - **Protection brightness:** S-0513 claim 29 and F9 specify the brightness envelope for curtain and force-shield protection, applied to the ordinary non-negative brightness above before claim 15's shade-row mapping. S-0102 claim 34 owns which drawing variants receive that envelope, building-slot brightness inheritance, the normal-light override, and the separate pixel-colour adjustment after shading. Mere attachment does not convey the host's envelope. These contracts isolate protection without simultaneous damage flashes or air-strike marking; those combinations and special drawing variants outside S-0102 claim 34 remain unresolved.
       - Backing: `measurable` (S-0513 scenario SW10 part g; S-0102 scenario D44 for drawing variants and slot inheritance)
       - Confidence: high for the envelope; medium for drawing variants and slot-brightness refresh, as qualified by S-0102 claim 34
-    - **Not covered here:** changes to an object's brightness while it flashes or, for a building, while it is marked by an air strike (S-0519 claims 17 and 19). These modify the values above (Open questions).
+    - **Deactivated voxel vehicles.** A voxel vehicle disabled under S-0405 claims 13 and 20 is drawn at trunc(*b* / 2) ‰, where *b* is the integer brightness it would otherwise use, including any flash or effect-tint brightness adjustment. Division is integer division truncated toward zero, before claim 15's shade-row mapping. Thus deactivation halves the adjusted brightness, not the final pixel colour. Whether sprite-drawn vehicles are darkened too remains open in S-0405.
+      - Backing: `measurable` (S-0405 scenario W8 part a for visible darkening). The exact truncation and its ordering after flash or effect-tint adjustments are `unmeasured`: that scenario records ordinary darkening, not odd brightness values or overlapping effects.
+      - Confidence: high for the integer rule and ordering; medium for the visible result
+    - **Not covered here:** the brightness adjustments themselves while an object flashes or, for a building, while it is marked by an air strike (S-0519 claims 17 and 19). These modify the values above (Open questions); the deactivation rule above specifies only where halving applies relative to those adjustments.
     - The extra-light values are stored as ⌊*v* × 1000⌋ ‰ with no rounding allowance, where *v* is the single-precision decimal of S-0003, so a value such as 0.57 becomes 569.
     - All additions are integer additions. *b* is not clamped here; the row mapping of claim 15 treats any *b* ≤ 0 as 0.
     - Backing: `measurable` (Scenarios L9 for the animations and the terrain tile, L10, L14, L15 for vehicles and infantry in shadowed cells, L23 for buildings, terrain objects, wall and other overlays, deck overlays and the animations of row 3, L3 Setup A for the tint of plain terrain objects, and S-0112 OV1, OV2 and OV11 for untinted ore-spawning terrain objects and smudges; S-0103 PE for undeploy animations and its repeat of L23 Part B for a terrain-palette building's own animation). `unmeasured` for the infantry equality boundary at exactly 208 leptons and the vehicle boundary at that height: L10 and L15 observe stock flight or falls, but do not guarantee a sample exactly at that height. `unmeasured` for the exceptional second tile pass: its selecting condition is not established, so no scenario isolates it. The terrain-palette building's even-centre rule and own-animation source are `unmeasured` unless the corresponding L23 or S-0103 setup identifies a suitable stock subject. Its voxel-part source is `unmeasured`: L23 Part E tests voxel parts of ordinary buildings only. The parachute's exact creation-tick sampling is `unmeasured`: L23 Part D tests the retained brightness during the fall but does not distinguish creation from first visible opening. The normal-light override for row-3 animations is `unmeasured`: L9 supplies a row-5 subject, not a drawing-with-object subject with that flag. The timing of an object's added λ term after a dominator ends is `unmeasured`: L16 observes ground and ordinary infantry, not the deck or airborne subjects that would distinguish the alternatives.
