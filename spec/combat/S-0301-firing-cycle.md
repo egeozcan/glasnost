@@ -2,11 +2,11 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 24
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0060, Q-0798]
 supersedes: []
@@ -37,7 +37,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 - **Shot.** One firing of one weapon by a firer: one projectile, beam or effect launched, or, for a spawner weapon, one target handed to the spawn controller as a pending target. A shot is *made* when the weapon's firing action succeeds; an attempt that the firing check refuses, or whose projectile launch fails (claim 15), makes no shot.
 - **Draining weapon, drain attempt, drainable type, draining, being drained.** As S-0608
   claims 1 to 3 and Terms. A drain attempt replaces an ordinary shot and does not count as a
-  shot for this spec's countdown, burst, ammunition or ordinary-shot draw rules (claim 9).
+  shot for this spec's countdown, burst, per-shot ammunition or ordinary-shot draw rules
+  (claim 9). Aircraft pending run rounds remain separate (S-0608 claim 16; S-0501 claim 15).
 - **Drop attempt.** A carrying aircraft's attempt to release its first passenger instead of an
   ordinary shot (S-0522 claim 11). Neither success nor refusal counts as an ordinary shot here.
 - **Void shot.** An attempt that passed the firing check but whose projectile could not be put on
@@ -402,7 +403,27 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    By contrast, the magnetic-beam refusal against another non-building target while a grip
    and live wave coexist follows the target-layer and projectile tests. A failed one of
    those tests therefore gives its refusal rather than this conditional *rearming*.
-   No other precedence within rank 4 is specified here.
+
+   **Drain refusals within rank 4 (S-0608 claim 3).** The refusal against the firer's own
+   current drained building and the refusals specific to a draining weapon have different
+   precedence, even though each answers *illegal*:
+   - Against its own current drained building, the firer gets *illegal* rather than the
+     held-temporal-target *rearming*, hidden-target *impossible*, absent-weapon or
+     power-sensitive-weapon *impossible*, other-weapon live-effect *impossible*, or
+     conditional magnetic-wave *rearming* answer. Materialisation and the own-gripped-unit
+     *rearming* answers still outrank this refusal.
+   - A draining weapon against an already drained object or a non-drainable type instead
+     yields to the held-temporal-target, hidden-target, absent-weapon and power-sensitive-weapon
+     answers. Its *illegal* outranks the other-weapon live-effect *impossible*, conditional
+     magnetic-wave *rearming* and empty-spawner *rearming* answers. Rearm, ammunition,
+     cloak and the rank-9 takeover test cannot displace either drain refusal.
+
+   The own-current-building refusal does not cover an earlier building stranded by relinking
+   (S-0608 claim 3). A draining weapon is still refused there because it is already drained.
+   Another weapon may fire if all remaining checks pass. Relative ordering of reasons that
+   all give *illegal*, including the berserk and projectile refusals, is not required by
+   these rules: their answer and consequences are identical. No other precedence within
+   rank 4 is specified here.
 
    **Falling and the landing turn (S-0511 claim 10).** A falling firer gets *illegal*
    at rank 4. For ordinary infantry and vehicles, the fall and any landing hit precede
@@ -414,8 +435,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
 
    **Drain attempts (S-0608 claim 1).** Passing the firing check with a draining weapon
    leads to a drain attempt rather than an ordinary shot: no projectile, shot damage or
-   warhead effect, no rearm-countdown start, no burst advance, no ammunition use and no
-   ordinary-shot draws. S-0608 claims 1, 2 and 5 own the link attempt, target clearing and
+   warhead effect, no rearm-countdown start, no burst advance, no ordinary per-shot
+   ammunition use and no ordinary-shot draws. An admitted initial aircraft firing pass
+   still makes its run's round pending, even when its attempt is a drain attempt
+   (S-0608 claim 16; S-0501 claim 15). S-0608 claims 1, 2 and 5 own the link attempt, target clearing and
    link-formation effects. Clearing the target still resets the burst counter under claim 4.
    Link effects, including animation creation and release of controlled units, retain their
    own possible random draws; their randomness is not an ordinary-shot draw.
@@ -475,7 +498,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      S-0601 scenarios MC2, MC3 and MC11 for takeover legality; S-0610 scenario P4 for the
      berserk-friendly refusal; scenario F7 part e and S-0501 scenario AC11 for the
      empty passenger-carrier refusal and its precedence; S-0608 scenarios D1 and D2 for
-     drain attempts instead of shots and D3 for the rank-4 drain refusals; also
+     drain attempts instead of shots, D3 for the rank-4 drain refusals, D9 part a for
+     stranded buildings, D11 for drain refusal precedence and D12 for aircraft pending
+     rounds despite a drain attempt; also
      S-0215 scenario B36 and its extensions for the upgrade gate and ordered paired attempts
      despite the primary's rearm countdown; scenario F17 for an empty resolved secondary
      slot and animation-delayed upgrade buildings).
@@ -492,8 +517,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    - Confidence: high (the two grip-refusal precedence rules within rank 4,
      the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
      falling refusal and the same-turn surviving-landing boundary,
-     the three drain refusals and no ordinary shot from a drain attempt),
-     medium (its missing countdown start and ammunition use, as S-0608 claim 1), high (rearming before ammunition and range, facing and moving after them, and
+     the three drain refusals, their specified precedence and no ordinary shot from a drain attempt),
+     medium (its missing countdown start and per-shot ammunition use, as S-0608 claim 1,
+     and aircraft pending-round composition, as S-0608 claim 16), high (rearming before ammunition and range, facing and moving after them, and
      *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),
      medium (the full membership of *illegal* and *impossible*,
      and the early *rearming* cases, which other specs own; only the ones relevant to this spec are
@@ -515,9 +541,10 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     that a vehicle, infantry or building makes uses one round when *a* > 0; *a* = −1 is never
     changed. With *a* = 0 the firing check answers *out of ammunition*. A disc laser shot uses no
     round (S-0615 claim 12; and it neither advances a garrison's muzzle index, S-0313,
-    nor restarts a vehicle's reload, claim 11). A drain attempt likewise uses no round
-    (claim 9; S-0608 claim 1). Aircraft spend one round per attack run in which they fired, not per shot
-    (S-0501 claim 15). A successful drop attempt additionally spends one round immediately,
+    nor restarts a vehicle's reload, claim 11). A drain attempt likewise uses no ordinary
+    per-shot round (claim 9; S-0608 claim 1). Aircraft instead make one round pending per
+    attack run whose initial firing pass is admitted, not per shot, including a pass that
+    makes a drain attempt rather than a shot (S-0501 claim 15; S-0608 claim 16). A successful drop attempt additionally spends one round immediately,
     whereas a refused drop has no net immediate ammunition change (S-0522 claims 9 and 11).
     Run-level pending spending still applies even when every drop attempt in the firing pass
     is refused; it is additional to successful drops' immediate spending.
@@ -530,7 +557,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     and *t* + 2, then answers
     *rearming* until its countdown ends, and only then *out of ammunition*.
     - Backing: `measurable` (scenario F9; the building part of scenario F3 for a burst weapon,
-      the building part of scenario F4; S-0522 scenario P7 for drop ammunition)
+      the building part of scenario F4; S-0522 scenario P7 for drop ammunition, and
+      S-0608 scenario D12 for aircraft drain-attempt pending rounds)
     - Confidence: high (starting count, no clamp, the same rule for map and production,
       rounds used, out of ammunition); medium (the building rule: it needs a building with
       ammunition above 1, so test data must supply it)
@@ -789,7 +817,7 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | State | Event | Result |
 |---|---|---|
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
-| ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ammunition use or ordinary-shot draws; target clearing still resets the burst counter |
+| ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ordinary per-shot ammunition use or ordinary-shot draws; target clearing still resets the burst counter; an admitted initial aircraft pass still makes its run round pending (S-0608 claim 16; S-0501 claim 15) |
 | infantry walker, any rearm state | charge arrival under S-0519 claim 13 | countdown replaced by claim 19's non-shot delay; burst counter and ammunition unchanged by the query |
 | carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or muzzle animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
