@@ -2,11 +2,11 @@
 id: S-0507
 title: Transports (eligibility, capacity, boarding, passenger order, unloading, open-topped passengers)
 topic: combat
-revision: 8
+revision: 9
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-16
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0700, Q-0701, Q-0702, Q-0703, Q-0704, Q-0705, Q-0706, Q-0672, Q-0673]
 supersedes: []
@@ -205,6 +205,12 @@ This spec does not repeat what other specs own:
    If the transport is a gunner type, this is the boarding event of S-0308 claim 6. If the
    boarding unit is itself an open-topped transport, its own passengers lose their targets.
 
+   Successful boarding ends the passenger's current and any stranded earlier drain links
+   immediately, including when the receiving transport is open-topped (S-0608 claim 17).
+   Turns while riding do not preserve those links, and unloading does not restore them.
+   The ended links' effects and the later house power update follow S-0608 claim 14.
+   Failed boarding does not itself end a drain link.
+
    Boarding and ordinary unloading within the usable area preserve the passenger's cloak
    state and stage (S-0516 claim 16). Elapsed game ticks consume its cloak delay during the
    ride; boarding neither resets nor pauses it. A stored passenger's fading does not catch
@@ -219,6 +225,10 @@ This spec does not repeat what other specs own:
    - Backing: `measurable` (T2, T3, T4, T6 and T12). T3 tests boarding resets and
      notifications; notification rules also use S-0524 claim 14's scenario C16.
      S-0516 claim 16's scenarios test cloak persistence and timing.
+     S-0608 claim 17's D13 tests immediate drain cleanup, open-topped boarding and no
+     restoration on unloading; an unreachable linked-boarding fixture is inconclusive.
+     Drain-link preservation on failed boarding is `unmeasured`: no scenario here isolates
+     a refused arrival while the link is still live from its independent position check.
    - Confidence: high for acceptance; medium for the refused infantry's reaction
 
 ### Unloading a vehicle transport
@@ -414,7 +424,7 @@ This spec does not repeat what other specs own:
     selection, not a promise that it survives that update. Initial map
     loading skips the search and its draws, retaining the centre (S-0501 claim 40).
     The original can instead use a passenger's team waypoint; that team choice is outside
-    scope. Passing F7, rather than failing it, causes this replacement
+    scope. Passing S-0501 claim 40's landing test, rather than failing it, causes this replacement
     (`quirks.air_unload_reselects_clear_destination`).
 
     **Release placement.** Position 1 is removed from the passenger order for this attempt.
@@ -622,7 +632,7 @@ remainder; the result has units of step directions.
 - **Load counted in whole sizes (`quirks.transport_load_truncated`, default on).** A passenger
   adds its size rounded down to the load (claim 1, F1), so passengers smaller than 1 add nothing
   and a vehicle transport takes any number of them; a passenger of size 1.9 counts as 1. The
-  candidate's own size is not rounded. Stock data may give no fractional sizes, but a mod can.
+  candidate's own size is not rounded. This difference requires fractional passenger sizes.
   *Fixed behaviour:* retain the double-precision sum, rounded at each addition by S-0205
   claims 4 and 5, without converting each partial sum to an integer.
 
@@ -864,8 +874,9 @@ reselect always wait 1 tick. Record ordinary flight descent separately: approach
 descent command or a landing guarantee. Any verdict, replacement or delay mismatch falsifies
 its corresponding part.
 
-**T12. Open-topped passengers (claims 14 and 15).** A stock open-topped transport with two armed
-infantry passengers.
+**T12. Open-topped passengers (claims 14 and 15).** A named test map defines an open-topped
+vehicle transport with capacity and size limit sufficient for two armed infantry passengers.
+Board both before each part.
 - *(a)* Drive it past an enemy: the passengers fire while inside. Record passenger and
   transport positions each tick: all agree after each transport position change. Repeat with a
   named open-topped aircraft carrying infantry to test that the flag is not vehicle-only.
