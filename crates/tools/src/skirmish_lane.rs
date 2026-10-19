@@ -597,6 +597,13 @@ fn play_ai(
         .and_then(|v| v.trim().parse().ok());
     let mut line_items: BTreeMap<String, Option<(glasnost_sim::econ::TypeRef, i32)>> =
         BTreeMap::new();
+    // `GLASNOST_AI_ECON=n`: an economy line per house every n ticks (income,
+    // spending by category, harvesters, slave miners and slaves).
+    let econ_every: i32 = std::env::var("GLASNOST_AI_ECON")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut econ = EconTrace::default();
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -623,6 +630,12 @@ fn play_ai(
         tally.observe(w);
         occasions(w, &mut g.occasions);
         features(w, &mut g.features);
+        if econ_every > 0 {
+            econ.observe(w);
+            if w.tick % econ_every == 0 {
+                print!("{}", econ.report(w));
+            }
+        }
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
         }
@@ -1669,6 +1682,207 @@ pub(crate) fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
 /// The lines of `GLASNOST_AI_LINES`: what changed on house `h`'s production
 /// lines since the last call (`items`: per line index its last item type
 /// and progress). Classes and counts only.
+/// The economy trace of `GLASNOST_AI_ECON`: credits earned and spent by
+/// category since the last report, per house.
+#[derive(Default)]
+struct EconTrace {
+    last_credits: [i32; PLAYERS],
+    earned: [i64; PLAYERS],
+    spent: [BTreeMap<&'static str, i64>; PLAYERS],
+    /// Per line: its item's object and the balance owed at the last tick.
+    owed: BTreeMap<usize, (glasnost_sim::world::ObjectId, i32)>,
+    /// Objects lost since the last report, by category.
+    lost: [BTreeMap<&'static str, usize>; PLAYERS],
+    /// The player houses' objects on the map at the last tick.
+    alive: BTreeMap<glasnost_sim::world::ObjectId, (usize, &'static str)>,
+}
+
+impl EconTrace {
+    fn category(w: &World, t: glasnost_sim::econ::TypeRef) -> &'static str {
+        if t.kind == Kind::Building {
+            let gives = w
+                .rules()
+                .superweapons
+                .building_sw
+                .get(t.index as usize)
+                .is_some_and(|f| f.iter().any(Option::is_some));
+            return match role_of(w, t) {
+                Some(Role::Power) => "power",
+                Some(Role::Refinery) => "refinery",
+                Some(Role::Yard) | Some(Role::Factory(_)) => "factory",
+                _ if gives => "superweapon",
+                _ => match glasnost_sim::econ::production::line_kind(w, t) {
+                    Some(glasnost_sim::econ::production::LineKind::Defence) => "defence",
+                    _ => "other building",
+                },
+            };
+        }
+        match (role_of(w, t), t.kind) {
+            (Some(Role::Harvester), _) => "harvester",
+            (Some(Role::Army), Kind::Infantry) => "army infantry",
+            (Some(Role::Army), Kind::Aircraft) => "army aircraft",
+            (Some(Role::Army), _) => "army vehicle",
+            _ => "other unit",
+        }
+    }
+
+    fn observe(&mut self, w: &World) {
+        let mut alive = BTreeMap::new();
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            let c = if o.econ.slave.is_some() {
+                "slave"
+            } else {
+                Self::category(w, tech::type_of(o))
+            };
+            alive.insert(o.id, (h, c));
+        }
+        for (id, &(h, c)) in &self.alive {
+            // Gone from the map: dead, or inside something (a slave home,
+            // a passenger); count only the dead.
+            if !alive.contains_key(id) && w.obj(*id).is_none_or(|o| o.health <= 0) {
+                *self.lost[h].entry(c).or_default() += 1;
+            }
+        }
+        self.alive = alive;
+        // Paid this tick per house, so that a delivery in a tick that also
+        // pays for production still counts as earned.
+        let mut paid_now = [0i64; PLAYERS];
+        let mut now = BTreeMap::new();
+        for (i, l) in w.econ.lines.lines.iter().enumerate() {
+            let h = usize::from(l.house.0);
+            let Some(item) = &l.item else { continue };
+            if h >= PLAYERS {
+                continue;
+            }
+            let paid = match self.owed.get(&i) {
+                Some(&(o, owed)) if o == item.object => owed - item.owed,
+                _ => item.start_price - item.owed,
+            };
+            if paid > 0 {
+                *self.spent[h].entry(Self::category(w, item.t)).or_default() += i64::from(paid);
+                paid_now[h] += i64::from(paid);
+            }
+            now.insert(i, (item.object, item.owed));
+        }
+        self.owed = now;
+        for h in 0..PLAYERS {
+            let c = w.houses[h].credits;
+            let gained = i64::from(c - self.last_credits[h]) + paid_now[h];
+            if gained > 0 {
+                self.earned[h] += gained;
+            }
+            self.last_credits[h] = c;
+        }
+    }
+
+    fn report(&mut self, w: &World) -> String {
+        use glasnost_sim::econ::slaves;
+        let mut s = String::new();
+        for h in 0..PLAYERS {
+            let house = HouseId(h as u8);
+            let own: Vec<&glasnost_sim::world::Object> = w
+                .objects
+                .values()
+                .filter(|o| o.on_map && o.health > 0 && o.owner == Some(house))
+                .collect();
+            let harvesters = own
+                .iter()
+                .filter(|o| o.econ.harvest.is_some() && !slaves::is_master(w, o.id))
+                .count();
+            let mut masters: BTreeMap<String, usize> = BTreeMap::new();
+            let mut members = 0usize;
+            let mut inside = 0usize;
+            for o in own.iter().filter(|o| slaves::is_master(w, o.id)) {
+                if let Some(g) = slaves::group_of(w, o.id) {
+                    *masters
+                        .entry(format!("{:?} {:?}", o.kind, g.state))
+                        .or_default() += 1;
+                    members += g.members.iter().filter(|m| m.id.is_some()).count();
+                    inside += g
+                        .members
+                        .iter()
+                        .filter(|m| m.id.is_some() && m.inside)
+                        .count();
+                }
+            }
+            let mut phases: BTreeMap<String, usize> = BTreeMap::new();
+            for o in &own {
+                if let Some(ss) = &o.econ.slave {
+                    *phases
+                        .entry(format!("{:?}/{:?}", o.beh.current, ss.phase))
+                        .or_default() += 1;
+                }
+            }
+            let items: Vec<String> = w
+                .econ
+                .lines
+                .lines
+                .iter()
+                .filter(|l| l.house == house)
+                .filter_map(|l| {
+                    let i = l.item.as_ref()?;
+                    Some(format!(
+                        "{:?}:{} {}/54{}",
+                        l.kind,
+                        Self::category(w, i.t),
+                        i.progress,
+                        if i.waiting { " waiting" } else { "" }
+                    ))
+                })
+                .collect();
+            let spent: i64 = self.spent[h].values().sum();
+            // Explored resource cells and their worth, and the share within
+            // 12 cells of a harvester or slave master of the house.
+            let workers: Vec<glasnost_map::CellXY> = own
+                .iter()
+                .filter(|o| o.econ.harvest.is_some() || slaves::is_master(w, o.id))
+                .map(|o| o.pos.cell())
+                .collect();
+            let (mut cells, mut worth, mut near) = (0usize, 0i64, 0i64);
+            for (c, _) in w.cells.grid.iter() {
+                if glasnost_sim::econ::resource::resource_at(w, c).is_some()
+                    && glasnost_sim::econ::shroud::explored(w, house, c)
+                {
+                    cells += 1;
+                    let v = glasnost_sim::econ::resource::worth(w, c);
+                    worth += v;
+                    if workers.iter().any(|&p| {
+                        let (dx, dy) = (i64::from(p.x - c.x), i64::from(p.y - c.y));
+                        dx * dx + dy * dy <= 144
+                    }) {
+                        near += v;
+                    }
+                }
+            }
+            let _ = writeln!(
+                s,
+                "econ tick {} house {h}: credits {} earned {} spent {} {:?}; harvesters {harvesters}; slave masters {:?} slaves {members} ({inside} inside) {:?}; explored resource cells {cells} worth {worth} near workers {near}; power {}/{} plants {}; lost {:?}; lines [{}]",
+                w.tick,
+                w.houses[h].credits,
+                self.earned[h],
+                spent,
+                self.spent[h],
+                masters,
+                phases,
+                w.houses[h].econ.power.output,
+                w.houses[h].econ.power.drain,
+                own.iter()
+                    .filter(|o| role_of(w, tech::type_of(o)) == Some(Role::Power))
+                    .count(),
+                self.lost[h],
+                items.join(", ")
+            );
+            self.earned[h] = 0;
+            self.spent[h].clear();
+            self.lost[h].clear();
+        }
+        s
+    }
+}
+
 fn line_changes(
     w: &World,
     h: HouseId,
@@ -2140,8 +2354,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes
                     )
                 })
                 .collect();
