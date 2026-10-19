@@ -532,7 +532,7 @@ fn dominate(w: &mut World, h: u8, c: CellXY) -> Option<Vec<ObjectId>> {
 
 /// The reference rules with the domination's sweep damage set to 0, for
 /// the pairs whose building the reference sweep destroys before the
-/// takeover can be seen (S-0612 claim 12's damage comes first).
+/// takeover can be seen (S-0612 claim 10: the damage comes first).
 fn without_sweep_damage(r: &Arc<SimRules>) -> Arc<SimRules> {
     let mut x = (**r).clone();
     x.superweapons.domination.damage = 0;
@@ -1901,6 +1901,13 @@ fn m7b_dominator_a_domination_spares_an_absorbed_passenger() {
         }
         let mut parts: Vec<&str> = note.into_iter().collect();
         if !beside_taken {
+            // spec: S-0612 claim 11 (the swept cells: ring metric at most min(r, 10), S-0303's metric)
+            let c = w.obj(beside).unwrap().pos.cell();
+            let t = at(0, 0);
+            let (dx, dy) = ((c.x - t.x).abs(), (c.y - t.y).abs());
+            let ring = dx.max(dy) + dx.min(dy) / 2;
+            let reach = rr.superweapons.domination.range.min(10);
+            assert!(ring > reach, "the unit beside in a swept cell is taken");
             parts.push("the unit beside lies outside the swept cells");
         }
         if parts.is_empty() {
