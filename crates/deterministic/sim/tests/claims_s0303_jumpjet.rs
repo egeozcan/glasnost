@@ -1,9 +1,9 @@
 //! Claim tests for jumpjets in flight in combat: a jumpjet between take-off
-//! and landing is a tracked flying object that the above-terrain detonations
-//! of S-0303 claim 6 hit (S-0303 Terms; S-0502 claims 5 and 15; Q-1500), and
-//! its in-the-air answer is S-0307's height test (S-0502 Terms, *Airborne*;
-//! S-0308 table P row 19; Q-1501), and a range search for aircraft finds it
-//! among the airborne objects (S-0309 claim 9). Synthetic data only.
+//! and touchdown or crash end is a tracked flying object that the
+//! above-terrain detonations of S-0303 claim 6 hit (S-0502 claim 29), a low
+//! one can be found twice (claim 31), its in-the-air answer is a height test
+//! (S-0502 claim 30; S-0308 table P row 19), and a range search for aircraft
+//! finds it among the airborne objects (S-0309 claim 9). Synthetic data only.
 
 mod jump_common;
 
@@ -65,17 +65,19 @@ fn a_jumpjet_in_flight_is_hit_through_the_flying_object_search() {
     );
 }
 
-// spec: S-0502 claims 5 and 15 (take-off and touchdown are the boundaries of the tracking; Q-1500)
+// spec: S-0502 claim 29 (revision 18, Q-1500 answered: registered in the update it takes off, at height 0, with no wait for a first rise; registration ends at touchdown)
 #[test]
 fn a_jumpjet_is_tracked_from_take_off_until_touchdown() {
     let mut w = game();
     let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
     go(&mut w, u, at(4, 0));
     assert!(
-        until(&mut w, 60, |w| flying::tracked(w, u)),
-        "it is tracked once it takes off"
+        until(&mut w, 60, |w| phase(w, u) != Phase::Grounded),
+        "it takes off"
     );
-    assert_ne!(phase(&w, u), Phase::Grounded);
+    assert_eq!(phase(&w, u), Phase::Ascending);
+    assert_eq!(height(&w, u), 0, "the take-off update leaves it at height 0");
+    assert!(flying::tracked(&w, u), "tracked from the take-off update");
     assert!(
         until(&mut w, 2000, |w| phase(w, u) == Phase::Grounded),
         "it lands"
@@ -83,7 +85,7 @@ fn a_jumpjet_is_tracked_from_take_off_until_touchdown() {
     assert!(!flying::tracked(&w, u), "it is not tracked after touchdown");
 }
 
-// spec: S-0502 Terms (Airborne: a jumpjet counts as in the air by S-0307's height test, at least 208 leptons above the surface; Q-1501)
+// spec: S-0502 claim 30 (revision 18, Q-1501 answered: in the air exactly when on the map and r ≥ 208 leptons, an exact comparison)
 #[test]
 fn a_jumpjet_is_in_the_air_by_the_height_test() {
     let mut w = game();
@@ -178,4 +180,118 @@ fn a_map_wide_search_never_finds_a_hovering_jumpjet() {
         acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
         Some(u)
     );
+}
+
+/// The health a blast slightly above the unit takes from it.
+fn loss_from_raised_blast(w: &mut World, u: ObjectId) -> i32 {
+    let before = w.obj(u).unwrap().health;
+    let mut point = pos(w, u);
+    point.z += 8;
+    let warhead = Some(he(w));
+    area::detonate(
+        w,
+        Detonation {
+            point,
+            damage: 50,
+            warhead,
+            source: None,
+            house: Some(HouseId(1)),
+            resources: false,
+        },
+    );
+    before - w.obj(u).unwrap().health
+}
+
+// spec: S-0502 claim 31 (a low jumpjet in its take-off update is registered and listed in its cell: a detonation above the terrain finds it once through the flying-object search and once in its cell, and the two entries are not merged)
+#[test]
+fn a_low_jumpjet_is_found_twice() {
+    let mut w = game();
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+    let once = loss_from_raised_blast(&mut w, u);
+    assert!(once > 0, "the grounded unit is hit once, in its cell");
+    go(&mut w, u, at(4, 0));
+    assert!(until(&mut w, 60, |w| phase(w, u) != Phase::Grounded));
+    assert!(flying::tracked(&w, u));
+    let c = pos(&w, u).cell();
+    assert!(w.cells.list(c, glasnost_sim::world::Layer::Ground).contains(&u));
+    let twice = loss_from_raised_blast(&mut w, u);
+    assert_eq!(twice, 2 * once, "two entries at the same distance");
+}
+
+// spec: S-0502 claim 29 (crash end: registration ends when the unit enters crashed, before the impact; the start of a crash does not end it)
+#[test]
+fn a_crashing_jumpjet_stays_tracked_until_the_crash_ends() {
+    let mut w = game();
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+    jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+    assert!(jump::start_crash(&mut w, u, None));
+    step(&mut w);
+    assert_eq!(phase(&w, u), Phase::Crashing);
+    assert!(flying::tracked(&w, u), "a crashing unit stays registered");
+    let mut ended = false;
+    for _ in 0..400 {
+        step(&mut w);
+        if w.obj(u).is_none_or(|_| phase(&w, u) == Phase::Crashed) {
+            ended = true;
+            break;
+        }
+        assert!(flying::tracked(&w, u));
+    }
+    assert!(ended, "the crash ends");
+    assert!(!flying::tracked(&w, u), "not registered from the crash end");
+}
+
+/// A JV jumpjet descending to land under `quirk`, with its health set to 0
+/// (no longer alive) just before touchdown: whether it is still tracked
+/// once grounded.
+fn dead_touchdown_tracked(quirk: bool) -> bool {
+    let mut r = ruleset();
+    r.globals.quirks.jumpjet_falling_touchdown_tracked = quirk;
+    let mut w = glasnost_sim::testkit::game_with(&r, SIZE, 7);
+    glasnost_sim::testkit::run(&mut w, 4);
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+    go(&mut w, u, at(2, 0));
+    assert!(until(&mut w, 2000, |w| phase(w, u) == Phase::Descending));
+    assert!(flying::tracked(&w, u));
+    w.obj_mut(u).unwrap().health = 0;
+    assert!(until(&mut w, 2000, |w| phase(w, u) == Phase::Grounded));
+    flying::tracked(&w, u)
+}
+
+// spec: S-0502 claim 29 and Edge cases (quirks.jumpjet_falling_touchdown_tracked: on, a touchdown of a unit no longer alive leaves it registered; off, every touchdown ends registration)
+#[test]
+fn falling_touchdown_quirk_both_positions() {
+    assert!(dead_touchdown_tracked(true));
+    assert!(!dead_touchdown_tracked(false));
+}
+
+// spec: S-0502 claim 29 (registration moves to the sector of a new cell in ascending and cruising updates, with S-0303 claim 11's arrival order)
+#[test]
+fn a_cruising_jumpjet_changes_sectors() {
+    let mut w = game();
+    let u = put(&mut w, "JV", Kind::Vehicle, 0, -12, 0);
+    let start = flying::sector(&w, pos(&w, u).cell());
+    go(&mut w, u, at(12, 0));
+    let goal = flying::sector(&w, at(12, 0));
+    assert_ne!(start, goal, "the flight crosses a sector boundary");
+    assert!(until(&mut w, 3000, |w| phase(w, u) == Phase::Descending));
+    assert_eq!(w.flying.sector_of.get(&u), Some(&goal));
+}
+
+// spec: S-0502 claim 29 (placed on the map in the air: registered only when airborne and its type has the counts-as-aircraft flag; without the flag not until it next takes off)
+#[test]
+fn placement_in_the_air_needs_the_counts_as_aircraft_flag() {
+    for flag in [false, true] {
+        let mut r = ruleset();
+        r.sim.vehicles.get_mut("JV").unwrap().econ.considered_aircraft = Some(flag);
+        let mut w = glasnost_sim::testkit::game_with(&r, SIZE, 7);
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+        assert!(!flying::tracked(&w, u), "placed on the ground: not registered");
+        let mut p = pos(&w, u);
+        let facing = w.body_facing(u);
+        glasnost_sim::objects::take_inside(&mut w, u);
+        p.z += 300;
+        glasnost_sim::objects::place(&mut w, u, p, facing);
+        assert_eq!(flying::tracked(&w, u), flag);
+    }
 }

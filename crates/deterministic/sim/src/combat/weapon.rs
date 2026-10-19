@@ -40,17 +40,17 @@ pub fn in_air(w: &World, id: ObjectId) -> bool {
 }
 
 /// The in-the-air answer of an object that is not of a rocket type: for a
-/// flying aircraft S-0307's *airborne* (S-0501 Terms); for a jumpjet (a
-/// unit of a jumpjet type moving with its jumpjet locomotor) S-0307's
-/// height test (S-0502 Terms, *Airborne*; Q-1501). No other object is in
-/// the air.
+/// flying aircraft S-0307's *airborne* (S-0501 Terms); for a unit moving
+/// with the jumpjet locomotor, seized units included, on the map with a
+/// height above the surface of at least 208 leptons (S-0502 claim 30). No
+/// other object is in the air.
 pub fn aircraft_in_air(w: &World, id: ObjectId) -> bool {
     // spec: S-0501 Terms (an aircraft's in-the-air answer is S-0307's airborne)
     if crate::air::is_aircraft(w, id) {
         return airborne_by_height(w, id);
     }
-    // spec: S-0502 Terms (Airborne: whether a jumpjet counts as in the air for combat is given by S-0307's height test, not by its flight state; Q-1501)
-    crate::jump::is_jumpjet(w, id) && crate::jump::jumpjet_type(w, id) && airborne_by_height(w, id)
+    // spec: S-0502 claim 30 (revision 18, Q-1501 answered: a unit moving with the jumpjet locomotor, whatever its own kind and seized units included, is in the air exactly when it is on the map and r ≥ 208 leptons, r above the deck only with the on-deck state; not by its flight state)
+    crate::jump::is_jumpjet(w, id) && airborne_by_height(w, id)
 }
 
 /// Whether an object is airborne in the sense of S-0307 (Terms): on the

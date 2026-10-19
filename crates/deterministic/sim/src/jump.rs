@@ -507,6 +507,30 @@ pub fn placed(w: &mut World, id: ObjectId) {
     });
 }
 
+/// A unit put on the map (S-0502 claim 29): it is registered as a tracked
+/// flying object at its placement only when it is then airborne (claim 30
+/// for a unit moving with the jumpjet locomotor, S-0307 otherwise) and its
+/// type has the counts-as-aircraft flag (Import mapping,
+/// `ConsideredAircraft`). Otherwise a jumpjet placed in the air is not
+/// registered until it next takes off from *grounded*. Aircraft are left
+/// to their own movement lane, which does not track them yet.
+pub fn placed_registration(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {
+        return;
+    }
+    let flag = w
+        .rules()
+        .econ
+        .tech
+        .of(crate::econ::tech::type_of(o))
+        .is_some_and(|t| t.considered_aircraft);
+    // spec: S-0502 claim 29 (placed in the air: registered only when airborne, claim 30, and the type has the counts-as-aircraft flag; the same rule for every kind of unit)
+    if flag && crate::combat::weapon::airborne_by_height(w, id) {
+        crate::combat::flying::register(w, id);
+    }
+}
+
 /// Puts a grounded jumpjet in the air in `phase` at `height` leptons above
 /// the surface, as if it had flown there: its mark and listing go, its
 /// target height is the height, a hovering one holds its cell's slot, and
@@ -538,6 +562,11 @@ pub fn start_in_flight(w: &mut World, id: ObjectId, phase: Phase, height: i32) {
 /// The jumpjet leaves the map or goes inside: every mark, the reservation
 /// and the hover slot are released (claims 4, 7, 13, 14 and 18).
 pub fn leaving(w: &mut World, id: ObjectId) {
+    let own_tracking = crate::air::is_aircraft(w, id) || crate::spawn::rocket_type(w, id).is_some();
+    if !own_tracking {
+        // spec: S-0502 claim 29 (revision 18, Q-1500 answered: going off the map for any reason ends registration, also for a seized unit whose own locomotor was restored, S-0607 claim 20)
+        crate::combat::flying::unregister(w, id);
+    }
     if !is_jumpjet(w, id) {
         return;
     }
@@ -545,8 +574,6 @@ pub fn leaving(w: &mut World, id: ObjectId) {
     unlist(w, id);
     release_reservation(w, id);
     release_slot(w, id);
-    // spec: S-0303 Terms (a jumpjet that leaves play is no longer a tracked flying object; Q-1500)
-    crate::combat::flying::unregister(w, id);
 }
 
 /// Takes the jumpjet out of the cell list it is in (claim 4): the cell of
@@ -595,8 +622,6 @@ fn leave_ground(w: &mut World, id: ObjectId) {
 fn settle(w: &mut World, id: ObjectId, layer: Layer) {
     let Some(o) = w.obj(id) else { return };
     let cell = o.pos.cell();
-    // spec: S-0303 Terms and S-0502 claim 15 (a jumpjet that lands is no longer a tracked flying object; Q-1500)
-    crate::combat::flying::unregister(w, id);
     unlist(w, id);
     w.cells.leave_both(cell, id);
     list_at(w, id, layer);
@@ -1327,8 +1352,6 @@ fn move_to(w: &mut World, id: ObjectId, x: i32, y: i32) {
         ob.pos.x = x;
         ob.pos.y = y;
     }
-    // spec: S-0303 Terms (a tracked flying object's sector follows the cell it is over as it flies)
-    crate::combat::flying::moved(w, id);
 }
 
 /// Whether the unit's own type is a jumpjet type (glossary *jumpjet type*:
@@ -1342,19 +1365,15 @@ pub fn jumpjet_type(w: &World, id: ObjectId) -> bool {
     })
 }
 
-/// A jumpjet takes off: from now until it lands it is a tracked flying
-/// object (S-0303 Terms: "a jumpjet between lift-off and landing"; S-0502
-/// Open questions: "from take-off until it lands or crashes"), which the
-/// above-terrain detonations of S-0303 claim 6 read. The exact boundaries
-/// and the double entry of a low jumpjet that is also cell-listed (claim 4)
-/// are open (S-0303 Open questions, Q-1500): this is the literal
-/// composition of the two rules, take-off at claim 5, landing at the
-/// touchdown of claim 15 or any other settling, leaving play at [`leaving`].
+/// A unit moving with the jumpjet locomotor takes off (S-0502 claim 29):
+/// it becomes a tracked flying object in the sector of the cell it is over,
+/// read by the above-terrain detonations of S-0303 claim 6. A unit seized
+/// by magnetic lift is registered by the same rule. Registration ends at
+/// touchdown, at crash end or when it goes off the map ([`leaving`]); a
+/// low unit can be registered and cell-listed at once (claim 31).
 fn took_off(w: &mut World, id: ObjectId) {
-    if jumpjet_type(w, id) {
-        // spec: S-0303 Terms and S-0502 claim 5 (a jumpjet is tracked from take-off; Q-1500)
-        crate::combat::flying::register(w, id);
-    }
+    // spec: S-0502 claim 29 (revision 18, Q-1500 answered: registered in the update it takes off, leaving grounded for ascending, normally at height 0, seized units included; a unit already registered is not registered again)
+    crate::combat::flying::register(w, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1493,6 +1512,8 @@ pub fn lift_fall(w: &mut World, id: ObjectId) {
 /// A dropped unit's fall ends in *crashed* (S-0607 claim 17): it releases
 /// its hover slot.
 pub fn lift_crashed(w: &mut World, id: ObjectId) {
+    // spec: S-0502 claim 29 (crash end: registration ends when it enters crashed)
+    crate::combat::flying::unregister(w, id);
     release_slot(w, id);
     // spec: S-0607 claim 17 and S-0502 claim 18 (it releases its hover slot; maximum speed and target height 0; crashed)
     upd(w, id, |j| {
@@ -1568,6 +1589,8 @@ pub fn lift_settle(w: &mut World, id: ObjectId) {
         j.order = None;
         j.moving = false;
     });
+    // spec: S-0502 claim 29 (a set-down unit stops being registered at its touchdown)
+    crate::combat::flying::unregister(w, id);
     settle(w, id, layer);
 }
 

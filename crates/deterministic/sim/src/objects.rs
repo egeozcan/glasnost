@@ -314,6 +314,8 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     }
     // spec: S-0502 claim 1 (a jumpjet is placed grounded with its mark)
     crate::jump::placed(w, id);
+    // spec: S-0502 claim 29 (a unit placed on the map in the air is registered only when it is then airborne and its type has the counts-as-aircraft flag)
+    crate::jump::placed_registration(w, id);
     // spec: S-0501 claim 1 (an aircraft's placement height, speed fraction and marks)
     crate::air::placed(w, id);
     // spec: S-0203 claim 2 (a terrain object takes turns exactly when its type has the spawns-resources flag)

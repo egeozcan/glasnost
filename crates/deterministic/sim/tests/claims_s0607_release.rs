@@ -747,3 +747,17 @@ fn claim_4_comes_first_whatever_the_warhead_names() {
         );
     }
 }
+
+// spec: S-0502 claim 29 (revision 18, Q-1500 answered: a unit of any type seized by magnetic lift is registered as a tracked flying object from its first jumpjet update, a take-off) and claim 30 (Q-1501 answered: a seized unit is in the air by the same height test, r ≥ 208 leptons)
+#[test]
+fn a_seized_unit_is_tracked_and_in_the_air_by_height() {
+    let (mut w, _l, v) = seized(|_| {});
+    assert!(
+        run_until(&mut w, 60, |w| jump::phase(w, v) != Some(Phase::Grounded)),
+        "the seized unit takes off"
+    );
+    assert!(glasnost_sim::combat::flying::tracked(&w, v));
+    assert!(!glasnost_sim::combat::weapon::in_air(&w, v), "low after take-off");
+    assert!(run_until(&mut w, 400, |w| height(w, v) >= 208));
+    assert!(glasnost_sim::combat::weapon::in_air(&w, v), "at 208 leptons or more it is in the air");
+}

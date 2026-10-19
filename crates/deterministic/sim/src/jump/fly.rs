@@ -531,6 +531,7 @@ fn touchdown(w: &mut World, id: ObjectId, d: Pos) {
         j.landing_request = false;
     });
     release_slot(w, id);
+    touchdown_registration(w, id, alive);
     settle(w, id, layer);
     if alive {
         // spec: S-0502 claim 15 (still in play and alive: its sight is refreshed at its new position, it releases its hover slot and enters grounded, it attempts crate pickup, a deploy-to-land vehicle's landing request ends)
@@ -541,6 +542,22 @@ fn touchdown(w: &mut World, id: ObjectId, d: Pos) {
     crate::lift::touched_down(w, id);
     // spec: S-0502 claim 15 and S-0516 claims 13 and 22 (a completed touchdown is a cell-arrival update: the sensor disc transfers to the landing cell and the adjacency-reveal test applies)
     crate::cloak::machine::cell_movement_completed(w, id);
+}
+
+/// Whether a touchdown ends the unit's registration as a tracked flying
+/// object (S-0502 claim 29): it does, before the unit enters *grounded*,
+/// except with `quirks.jumpjet_falling_touchdown_tracked` on for a unit in
+/// the bridge or parachute falling state of claim 4, or no longer alive or
+/// in play, which stays registered.
+fn touchdown_registration(w: &mut World, id: ObjectId, alive: bool) {
+    let in_play = w.obj(id).is_some_and(|o| o.on_map);
+    let falling = crate::fall::falling(w, id);
+    // spec: S-0502 claim 29 and Edge cases (quirks.jumpjet_falling_touchdown_tracked on: a touchdown while falling, or no longer alive or in play, leaves it registered; off: every touchdown ends registration)
+    let keeps = w.rules().quirks.jumpjet_falling_touchdown_tracked && (falling || !alive || !in_play);
+    if !keeps {
+        // spec: S-0502 claim 29 (revision 18, Q-1500 answered: registration ends in the touchdown tick, before it enters grounded)
+        crate::combat::flying::unregister(w, id);
+    }
 }
 
 fn crashing_outcome(w: &mut World, id: ObjectId) {
@@ -573,6 +590,8 @@ fn crashing_outcome(w: &mut World, id: ObjectId) {
             j.ht = 0;
             j.phase = Phase::Crashed;
         });
+        // spec: S-0502 claim 29 (revision 18, Q-1500 answered: registration ends when it enters crashed, before S-0312 claim 16's impact, so its own impact never finds it through the flying-object search)
+        crate::combat::flying::unregister(w, id);
         impact(w, id);
     }
 }
@@ -681,6 +700,7 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         return false;
     }
     let before = pos(w, id);
+    let start = j.phase;
     physics(w, id);
     if w.obj(id).is_none() {
         return false;
@@ -696,6 +716,10 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     // The crash start and the fall's end are judged after the state's outcome (claim 18).
     if w.obj(id).is_some() {
         crashing_outcome(w, id);
+    }
+    if matches!(start, Phase::Ascending | Phase::Cruising) {
+        // spec: S-0502 claim 29 (revision 18, Q-1500 answered: in each update of ascending or cruising over a different cell, the registration moves to the new cell's sector with S-0303 claim 11's arrival order; hovering, descending and crashing updates do not move it)
+        crate::combat::flying::moved(w, id);
     }
     let after = pos(w, id);
     (after.x, after.y) != (before.x, before.y)
