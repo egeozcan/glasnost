@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 57
+revision: 58
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: []
 supersedes: []
@@ -306,7 +306,9 @@ database*). See S-0006.
 **quirk switch.** A named setting of our engine, written `quirks.<name>`, that controls one unusual or
 defective behaviour of the original. Its default is always the original behaviour. The spec that
 names a switch describes both the original behaviour and the alternative ("fixed") behaviour that the
-switch selects when turned off. Where the original crashes, stops with a program error, gives an
+switch selects when turned off. An obvious original bug with no gameplay impact, such as a
+pure display glitch, gets no switch: the spec states the fixed behaviour and records the original's
+bug in one sentence. Where the original crashes, stops with a program error, gives an
 undefined result, hangs or leaves the game frozen for good on bad data, depends on the host
 machine or on real time, or itself faults (crashes or hangs) on legal data, there is no switch: that
 is a *departure*. A switch shared by
@@ -517,7 +519,10 @@ human-controlled house. This is a rule of our engine, not a claim about the orig
 - *The original's computer behaviours.* What the original's computer player gets from such rules is
   recorded in the specs as behaviour of the original. Our AI may choose to reproduce it by giving
   ordinary orders.
-- *Player houses only.* The ruling covers the houses of the players. The two non-player houses that
+- *Test setups.* A *test-only computer-controlled player house* is not an AI house. It is an
+  explicit exception for oracle comparisons, unavailable in normal games (S-0215, claims 18
+  and 19).
+- *Player houses only.* The ruling covers the houses of the players in normal games. The two non-player houses that
   every skirmish creates, the *neutral house* and the *special house* (see *house*), are not AI
   houses: they keep the original's rules for owners that are not human-controlled (decision of the
   project lead, 2026-10-10; for example S-0208, claims 11 and 15, and S-0107, claims 14 and 15).
@@ -526,8 +531,9 @@ The decision was taken on claims of S-0213 and S-0215, and their approved revisi
 a general rule of our engine, so it holds in every spec. Where a spec gives a rule for
 computer-controlled owners, that rule describes the original, and an AI house follows the rule the
 spec gives for human-controlled owners. Specs that give such a rule mark it as the original's
-only, except for units of the neutral and special houses, which keep it in our engine
-(see *Player houses only* above). In particular an AI house has the house skill level of a human-controlled house:
+only, except for units of the neutral and special houses and explicitly marked test-only
+computer-controlled player houses, which keep it in our engine (see *Player houses only* and
+*Test setups* above). In particular an AI house has the house skill level of a human-controlled house:
 0 in a skirmish or network game (see *house skill level*). By default it also uses the *normal
 row* of the difficulty skill block, as a human-controlled house in a skirmish does (see *difficulty
 row* and *difficulty skill block*).
@@ -557,8 +563,9 @@ row I13; a count below 0 meets neither that row nor the transport verdicts x and
 capacity.
 
 **computer-controlled.** A house of the original that its computer player plays rather than a
-person. The specs use the word for the original: a rule given for a "computer-controlled owner"
-states what the original does for units of such a house. In our engine the computer plays *AI
+person. A rule given for a "computer-controlled owner" states what the original does for units
+of such a house. The term also covers an explicitly marked *test-only computer-controlled
+player house* in our engine (S-0215, claims 18 and 19). In our engine the computer plays *AI
 houses*, which follow the unit rules and order legality of human-controlled houses (see *AI
 house*). Units of the neutral and special houses keep such a rule in our engine too (*AI house*,
 *Player houses only*). Keeping these rules does not give the neutral and special houses the maximum
@@ -715,6 +722,8 @@ network game has the level 0 of a human-controlled house, not the rules' maximum
 follow the unit rules of human houses (see *AI house*). So every rule gated by the skill level
 treats its units as it treats a human player's: for example the area-guard row of S-0215 (claim
 15), the cell-wide scatter rule of S-0209 (claim 11) and automatic crushing in S-0210 (claim 11).
+A *test-only computer-controlled player house* instead uses the house skill level of the
+corresponding oracle house, not the AI house's level 0 (S-0215, claims 18 and 19).
 
 **human participant.** A person who takes part in a game through the lobby, observers included.
 S-0412 owns the term (Terms); S-0414 uses it.
@@ -795,8 +804,11 @@ and every release takes from the front (S-0605 claims 7, 8 and 11 to 14).
 
 **per-mille (‰).** An integer ratio where 1000 means a factor of 1.0.
 
-**player house.** A house of a player, human or AI (see *AI house*). The *neutral house* and the
-*special house* are not player houses. S-0409 defines it (Terms); most specs of the batch use it.
+**player house.** A house of a player: human or computer in the original, human or AI in a
+normal game of our engine (see *AI house*). An explicitly marked *test-only computer-controlled
+player house* is also a player house, but not an AI house. The *neutral house* and the *special
+house* are not player houses. S-0409 defines the ordinary term (Terms); S-0215 claims 18 and 19
+apply the test-only exception.
 
 **rear direction.** The step direction nearest to a transport's body facing plus 32767
 facing units, one facing unit short of a half turn. S-0507 claim 10 owns its use for exits
@@ -859,7 +871,19 @@ S-0215 (Terms); orders set them (S-0213), and the movement specs keep further po
 **team member.** An actor that belongs to a team of the original's computer-player script system.
 That system is out of scope for glasnost, so specs note only where membership changes a rule of the
 game. An *AI house* of our engine has no such teams, so a rule's exception for team members never
-applies to its units. See S-0215 (Terms).
+applies to its units. Test-only computer-controlled player houses likewise have no teams.
+See S-0215 (Terms).
+
+**test-only computer-controlled player house.** A player house explicitly marked in a test
+setup to follow the original's computer-controlled-owner rules, including rules described
+as original-only. It uses the corresponding oracle house's *house skill level* and has no teams.
+In a two-house combat comparison run without a displayed view, both houses are marked this way.
+It is not an *AI house* and is unavailable in a normal game or to our own AI. Statements that all player houses follow human-controlled unit
+rules exclude these explicitly marked test houses. S-0215 owns the exception; claims 18 and 19
+apply it to retaliation and scatter. It does not waive a behaviour's retaliate-property
+requirement (S-0215, claim 18). This is a design rule for our engine, not an additional claim
+about the original. Its dependency on a same-batch S-0215 change is listed under **Changes for
+other specs** below.
 
 **tick.** One simulation step: the unit of game time. Timings of game state such as delays,
 cooldowns, animation stages and build times are ordinarily counted in ticks, against the *tick
@@ -2766,6 +2790,19 @@ scenario T6, part G.
 - *Expected:* the same integer *D*ᵇ and the same integer *D*ᵐ in every valid run at all speeds.
 - *Falsified if:* either duration is repeatably different at any two speeds under these controls.
   Equality supports only these two examples; it cannot confirm the exhaustive part of G3.
+
+## Changes for other specs
+
+- **S-0215:** its approved text excludes every player house from computer-controlled-owner
+  rules. Qualify that exclusion as applying to normal games and add the explicitly marked
+  test-only player-house exception: original computer-owner rules, the corresponding oracle
+  house's skill level, no teams, and both houses marked in a two-house combat comparison run
+  without a displayed view. Describe this setup generically, without naming a tool or mode.
+  Claims 18 and 19 must
+  apply it to retaliation and scatter without waiving the retaliate-property requirement.
+  The current same-batch S-0215 draft already carries this change. Hand off that change with
+  this glossary; the approved text alone does not support these entries. Later blanket
+  exclusions in S-0215 must be read under that explicit test-only exception, not as overriding it.
 
 ## Open questions
 
