@@ -132,6 +132,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0303](combat/S-0303-area-damage.md) | Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects) | combat | 19 | approved | — |
 | [S-0215](simulation/S-0215-behaviours.md) | Behaviours (standing orders) and their processing | simulation | 69 | approved | — |
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 22 | approved | — |
-| [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 19 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 10 | approved | — |
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 26 | approved | — |
+| [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 20 | approved | — |

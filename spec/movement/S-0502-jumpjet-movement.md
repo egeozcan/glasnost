@@ -2,7 +2,7 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1026,10 +1026,12 @@ New terms:
       wait for a first rise, a height or a flight state, and from that update on detonations
       above the terrain can find it. It is registered in the sector of the cell it is over at
       that moment. A unit that is already registered is not registered a second time.
-    - **Seized units.** A unit of any type seized by magnetic lift (S-0607) gets a fresh
-      jumpjet locomotor in *grounded*, and the seize's point assignment (claim 16) gives it a
-      movement commitment. Its first jumpjet update is therefore a take-off, and it is
-      registered from that update, by the same rule as a unit of a jumpjet type.
+    - **Seized units.** A unit of any type seized by magnetic lift (S-0607 claim 5) gets a
+      fresh jumpjet locomotor in *grounded*. When the seize's point assignment (claim 16)
+      finds a cell and gives it a movement commitment, its first eligible jumpjet update
+      takes off and registers it by the same rule as a unit of a jumpjet type. If the initial
+      search finds no cell, it has no movement commitment and stays *grounded*, without
+      take-off registration (claims 3, 5 and 16; S-0607 claim 7).
     - **Sector updates.** In each update of *ascending* or *cruising* in which the unit is over
       a different cell from the one recorded at its last registration or sector update, its
       registration moves to the sector of the new cell, with S-0303 claim 11's arrival order.
@@ -1064,7 +1066,9 @@ New terms:
     - Ion storms, which would prevent the take-off and so the registration, do not occur in
       skirmish (Edge cases and quirks).
     - Backing: `measurable` (scenario J28 a to d for the start, touchdown, crash and hovering
-      boundaries; J28 e for a seized unit). Sector updates are `unmeasured` here: S-0303
+      boundaries; J28 e for a seized unit). The initial-seize no-cell exception is
+      `unmeasured`: no ordinary setup establishing that search failure is supplied here
+      (claim 16; S-0607 claim 7). Sector updates are `unmeasured` here: S-0303
       scenario A20 measures sector crossings of cruising jumpjets only.
       The placement rule and the falling touchdown are `unmeasured`: J28 does not establish
       a jumpjet placed in the air, nor a touchdown in the falling state.
