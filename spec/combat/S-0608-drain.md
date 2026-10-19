@@ -2,13 +2,13 @@
 id: S-0608
 title: Drain (attaching to a building, draining its power and credits, and letting go)
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-19
 measurements: []
-requests: [Q-1440, Q-1441, Q-1442, Q-1443, Q-1444]
+requests: [Q-1440, Q-1441, Q-1442, Q-1443, Q-1444, Q-1507]
 supersedes: []
 ---
 
@@ -125,6 +125,7 @@ New terms:
      by any drainer,
    - (c) the weapon is a draining weapon and the target is an object whose type is not drainable.
 
+   Protection of the target adds no refusal here for player houses (claim 19).
    Parts b and c do not apply to a target that is not an object. Neither the firing check nor the
    drain attempt tests alliance or ownership: the only alliance test of the whole mechanism before
    a link forms is the weapon choice of S-0308 table P row 8, which picks the draining weapon only
@@ -405,6 +406,38 @@ New terms:
     - Confidence: high for absence of a direct drain gate in the named interactions,
       medium for combined blackout effects, whose eligibility remains with their owners
 
+19. **Protection does not stop a drain (Q-1507).** Neither protection kind of S-0513 (the
+    invulnerability effect or a force shield) plays any part in draining, for the drained building
+    or for the drainer. A curtain that reaches an infantry drainer or an organic-vehicle drainer
+    hits it instead of protecting it (S-0513 claims 23 and 24); a killing hit from it ends the link
+    under claim 13.
+    - **Forming.** A drain attempt against a protected building forms the link exactly as against
+      an unprotected one (claims 1, 2 and 5): the building is being drained, its house gets the
+      drain blackout when the building has output (S-0405 claim 5), controlled victims are released
+      and payouts follow claim 7. The weapon choice of S-0308 table P row 8 and the drain refusals of
+      claim 3 do not test protection, and the attempt never fails because of it. There is no case
+      in which the drainer fires and then loses the link to protection.
+    - **Protection starting.** Protection that starts on a drained building, or on a drainer, while
+      the link exists leaves the link, the blackout, the payouts, the sale refusal and the drained
+      building's *illegal* firing answer unchanged.
+    - **Protection ending.** The end of protection is not an event for the link either: the link
+      continues until one of claims 11 to 13 or 17 ends it.
+    - **Who may fire.** For a firer of a player house the firing check gives no answer for a
+      protected target beyond those it would give an unprotected one (S-0513 claim 28, the human
+      rule our engine gives every player house), so the drain proceeds. The one exception is
+      S-0513 claim 27's parasite-warhead refusal, which applies to a draining weapon given such a
+      warhead as to any weapon. A firer of one of the two
+      non-player houses gets the *illegal* answer of S-0513 claim 28 against a protected target
+      with its draining weapon, as with any weapon: it never makes the attempt, and what it does
+      next follows the ordinary *illegal* consequences (S-0301 claim 9; S-0215 claim 23). In the
+      original the same refusal applies to every house that is not human-controlled.
+
+    Whether an event that ends a link (a killing hit, a capture) can reach a protected party is
+    that event's owner's rule (S-0302 claim 8, S-0509). When it does, claim 11 or 13 applies.
+    - Backing: `measurable` (scenario D15)
+    - Confidence: high (no protection test in the attempt, the link, the payouts or any ending),
+      medium (the non-player-house case, which rests on S-0513 claim 28's general rule)
+
 ## Formulas
 
 **F1, payout ticks.** A payout happens in the drained building's turn of tick number *n* when
@@ -459,6 +492,7 @@ with no rounding or floating point.
 | linked, vehicle drainer | turn in a tick with *n* mod 16 = 2, its cell is not in the building's foundation | not draining (claim 14) |
 | linked | killing hit, removal, or successful temporary off-map storage of either party | not draining (claims 14 and 17) |
 | linked | ownership change to a house that does not ally the other party | linked; payer, recipient and blackout follow the new owners |
+| linked | protection of either party starts or ends | linked; nothing changes (claim 19) |
 
 Observable ordering consequences:
 
@@ -528,7 +562,8 @@ Observable ordering consequences:
 
 Claim 15's local turn boundaries and claim 17's successful-departure cleanup have no data
 key. Claim 18 adds no occupant import: bunker fields remain S-0606's, absorber fields S-0605's,
-and recycling fields S-0603's. None overrides the drainable flag above.
+and recycling fields S-0603's. None overrides the drainable flag above. Claim 19 adds no key:
+protection kinds and durations remain S-0513's imports.
 
 ## Measurement scenarios
 
@@ -739,6 +774,30 @@ weapon range of them.
   needs a separately due resource-destination payout. A drain-specific refusal, lost bunker
   bonus, ejection or changed recycling amount falsifies claim 18. Repeat output-enabled
   variants separately to distinguish S-0405's ordinary blackout consequences.
+
+- **D15, protection (claim 19).** Two player houses: the human house owns a Disc, the computer
+  house a power plant and a refinery, with enough credits for payouts, under scripted input for
+  its superweapon launches. Keep infantry out of the protected 3 × 3 area. Record the link
+  partners, both balances, the plant house's power totals and blackout, and each object's
+  protection state; if the hovering Disc is itself protected, record that rather than voiding.
+  - Part a: protect the plant with the invulnerability effect, then order the drain attack.
+    Expected: the link forms at the attempt and the house's output reads 0 at its next power
+    update. Repeat against the refinery: due payouts happen.
+  - Part b: as part a with a force shield over the refinery. The launch's own timed blackout of
+    the launching house (S-0513 claim 30) hides the power effect, so observe the link partner and
+    the payouts. Expected: link and due payouts as unprotected. If named test data lengthens the
+    protection past that blackout, the drained plant's blackout is also seen afterwards.
+  - Part c: link first, then protect the drained building, in separate runs with each kind.
+    Expected: no detach, payouts continue on due ticks, the drained building still cannot fire or
+    be sold.
+  - Part d: let the protection of part c expire while the link holds. Expected: no change at
+    expiry.
+  - Part e: a computer-house Disc under scripted input ordered against a protected human
+    building, with a check-answer recorder. Expected in the original: *illegal* and no attempt
+    (S-0513 claim 28's original rule). If such an order cannot be given, mark it blocked.
+
+  A detach, a refused or failed attempt in parts a to d, or a change at the start or end of
+  protection falsifies claim 19.
 
 ## Open questions
 

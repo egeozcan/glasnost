@@ -1,9 +1,9 @@
 ---
 id: Q-1507
 title: Does force-shield or iron-curtain protection stop a drain link
-status: open
+status: answered
 related: [S-0608, S-0513]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need
