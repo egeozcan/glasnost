@@ -2,11 +2,11 @@
 id: S-0605
 title: Infantry absorber (who may enter an absorbing building, entry, holding, release)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-1260, Q-1261, Q-1262, Q-1263, Q-1264, Q-1265, Q-1266, Q-1267, Q-1152, Q-1159]
 supersedes: []
@@ -43,7 +43,9 @@ Neighbouring specs own the rest, and this spec does not repeat them:
 - the retry of a queued entry in the actor's own turn: S-0314 (claim 23),
 - the release of a controlled unit: S-0601 (claims 8 and 9),
 - the spin reset of a gattling-type entrant: S-0609 (claim 11),
-- the tag raise on entry: S-0524 (claim 12).
+- the tag raise on entry: S-0524 (claim 12),
+- the unchanged entry, holding and voluntary-release rules while the building is being drained:
+  S-0608 (claim 18).
 
 Cross-spec changes required at hand-off (the earlier ones on S-0601, S-0405 claim 7, S-0108,
 S-0312 and S-0408 are made in the current drafts of those specs):
