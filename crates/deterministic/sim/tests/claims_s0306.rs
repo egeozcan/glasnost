@@ -3491,3 +3491,34 @@ fn claim15_lifted_position_is_kept() {
     let (mut s, id, p) = cruise(400, |_| {});
     assert_eq!(step(&mut s, id), Out::Flying(Pos::new(p.x + 64, p.y, 418)));
 }
+
+// spec: S-0306 claim 20 c (threshold 128 for a target airborne in another render layer: an aircraft in flight; 42 otherwise)
+#[test]
+fn claim20c_airborne_target_in_another_layer_uses_128() {
+    let mut r = base();
+    ball(&mut r).aa = Some(true);
+    // A flying aircraft: the flying locomotor (S-0501 Terms).
+    r.sim.aircraft.get_mut("PLANE").unwrap().locomotor = Some(glasnost_rules::sim::Locomotor::Fly);
+    let mut s = setup(&r, 6, 0);
+    // Of the firer's own house, so that the proximity row does not apply.
+    let plane = testkit::spawn(&mut s.w, Kind::Aircraft, "PLANE", 0, cell_of(6, 3), 0);
+    let tp = pos(&s, plane);
+    let air = Pos::new(tp.x, tp.y, tp.z + 400);
+    put(&mut s.w, plane, air);
+    let rp = s.w.reference_point(plane);
+    // P′ 100 from the reference point (the anti-air row of T1 detonates; D_S = 100 ≥ 42 but below 128).
+    let id = place(
+        &mut s,
+        Target::Object(plane),
+        Pos::new(rp.x - 150, rp.y, rp.z),
+        [50, 0, 0],
+    );
+    let Out::Detonated(p) = step(&mut s, id) else {
+        panic!("the anti-air row detonates")
+    };
+    assert_eq!(
+        (p.x, p.y),
+        (rp.x, rp.y),
+        "the point moves onto the target ({p:?}, {rp:?})"
+    );
+}

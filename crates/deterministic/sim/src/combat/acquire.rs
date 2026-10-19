@@ -1042,8 +1042,11 @@ pub fn search(
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
-                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them, considered again after the first pass with their own tests and score)
+                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer, so landed aircraft are among them, considered again after the first pass; an object neither an aircraft nor in the ground layer, such as a hovering jumpjet, is never found)
                 if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
+                    continue;
+                }
+                if pass == 1 && !crate::temporal::ground_layer(w, x) {
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);

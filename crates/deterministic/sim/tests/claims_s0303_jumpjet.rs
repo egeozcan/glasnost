@@ -101,6 +101,11 @@ fn a_jumpjet_is_in_the_air_by_the_height_test() {
 /// A game whose CART type fires only weapon `Flak` (anti-air, not
 /// anti-ground) with a guard range of 6 cells (invented values).
 fn flak_game() -> World {
+    flak_game_with(None)
+}
+
+/// As [`flak_game`], with CART's secondary weapon set.
+fn flak_game_with(secondary: Option<&str>) -> World {
     let mut r = ruleset();
     r.sim.projectiles.insert(
         "AAOnly".into(),
@@ -121,7 +126,7 @@ fn flak_game() -> World {
     );
     let cart = r.sim.vehicles.get_mut("CART").unwrap();
     cart.primary = Some("Flak".into());
-    cart.secondary = None;
+    cart.secondary = secondary.map(String::from);
     cart.guard_range = Some(d("6"));
     glasnost_sim::testkit::game_with(&r, SIZE, 7)
 }
@@ -154,5 +159,23 @@ fn a_range_search_passes_over_an_allied_jumpjet_in_flight() {
     assert_eq!(
         acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
         None
+    );
+}
+
+// spec: S-0309 claim 7 (the map-wide search's second pass takes only objects of the ground render layer, so a hovering jumpjet, not an aircraft, is never found by it)
+#[test]
+fn a_map_wide_search_never_finds_a_hovering_jumpjet() {
+    let mut w = flak_game_with(Some("Gun"));
+    let a = put(&mut w, "CART", Kind::Vehicle, 0, 0, 0);
+    let u = put(&mut w, "JV", Kind::Vehicle, 1, 3, 0);
+    jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::PerTick),
+        None
+    );
+    // The range search finds it among the airborne objects (claim 9).
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::Range, SearchContext::PerTick),
+        Some(u)
     );
 }
