@@ -2,11 +2,11 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871]
 supersedes: []
@@ -627,7 +627,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     - is an illegal target for a weapon whose warhead is a parasite warhead (S-0614).
 
     An electromagnetic pulse and an existing erasure are not stopped by protection.
-    - Backing: `measurable` for the listed refusals (SW10 part c). Pulse independence and an
+    Protection does not refuse a draining weapon's attempt, does not stop a drain link from
+    forming on a protected building and does not end an existing drain link, when protection
+    starts or ends (S-0608 claim 19). For the two non-player houses, claim 28's *illegal* answer
+    applies to a draining weapon as to any other weapon, and the parasite-warhead refusal above
+    applies to a draining weapon given such a warhead.
+    - Backing: `measurable` for the listed refusals (SW10 part c); the drain interaction
+      inherits S-0608 claim 19's backing (S-0608 scenario D15). Pulse independence and an
       already-running erasure are `unmeasured`: no independent stock pulse delivery or
       reproducible protection-during-erasure setup is established here
     - Confidence: high for the listed refusals; low for the pulse and existing erasure, whose
