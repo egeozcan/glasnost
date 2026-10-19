@@ -1,9 +1,9 @@
 ---
 id: Q-1461
 title: Does a converted victim whose type has the crash flag still leave a conversion animation
-status: open
+status: answered
 related: [S-0611, S-0107]
-answered-by: []
+answered-by: [S-0611]
 ---
 
 ## Need
