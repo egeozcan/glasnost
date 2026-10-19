@@ -1,9 +1,9 @@
 ---
 id: Q-1501
 title: The in-the-air answer of a jumpjet for weapon choice and targeting
-status: open
+status: answered
 related: [S-0308, S-0502, S-0307, S-0309]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need

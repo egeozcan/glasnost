@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501]
 supersedes: []
 ---
 
@@ -26,7 +26,8 @@ How a unit that moves with the jumpjet locomotor flies:
   hover slot is taken
 - what happens when a landing fails
 - the crash fall
-- which flight states count as "moving now" for the firing checks.
+- which flight states count as "moving now" for the firing checks
+- when a jumpjet is registered for the flying-object search, and when it counts as in the air.
 
 Skirmish only. Network games and campaigns are out of scope.
 
@@ -62,8 +63,9 @@ Pointers, not repeated here:
   Superweapon teleport eligibility, landing and arrival belong to S-0513 claims 34 to 40.
 - **Cloaking.** A jumpjet can start to cloak only on the ground: S-0516 claim 4.
 - **Airborne.** A jumpjet state is not either of the glossary's *airborne* tests. Whether a
-  jumpjet counts as in the air for combat is given by S-0307's height test and S-0308's
-  in-the-air state, not by being *hovering* or *cruising*.
+  jumpjet counts as in the air for combat is a height test, not its being *hovering* or
+  *cruising*: claim 30. Whether detonations above the terrain find it through the
+  flying-object search is its registration: claim 29.
 
 ## Terms
 
@@ -79,6 +81,9 @@ From the glossary and other specs:
 - *demolition warhead*; *damage that ignores defences* and the *no-escape* marker (S-0312 Terms)
 - *behaviour*, current and queued (S-0215); *sight*; *sinking*; *sinking descent*
 - *legal cell*.
+- *tracked flying object*, *sector* and the flying-object search (S-0303 Terms, claim 6 and
+  F7). Here *registered* means being a tracked flying object.
+- *airborne* for an ordinary object (S-0307 Terms); *on the map*, *off the map* (glossary).
 - *seized*, *grip*, *dropped*, *set down* (S-0607 Terms). Here “held by magnetic lift”
   means *seized*, including after the grip ends and during a drop, until restoration of the
   unit's own locomotor (S-0607 claim 20). It does not mean only actively gripped.
@@ -1010,6 +1015,100 @@ New terms:
     - Confidence: high for predicates and retained values; medium for the stock
       deployable balloon-hover fixture.
 
+### Flying-object registration and the in-the-air test
+
+29. **Registration as a tracked flying object (Q-1500).** This claim fixes when a unit moving
+    with the jumpjet locomotor is a tracked flying object. Two searches read the registration:
+    the flying-object search of area damage (S-0303 claim 6) and the airborne candidates of
+    target acquisition (S-0309 claim 9).
+    - **Start.** It becomes registered in the update in which it takes off (claim 5), when it
+      leaves *grounded* for *ascending*. Its height then is normally 0. Registration does not
+      wait for a first rise, a height or a flight state, and from that update on detonations
+      above the terrain can find it. It is registered in the sector of the cell it is over at
+      that moment. A unit that is already registered is not registered a second time.
+    - **Seized units.** A unit of any type seized by magnetic lift (S-0607) gets a fresh
+      jumpjet locomotor in *grounded*, and the seize's point assignment (claim 16) gives it a
+      movement commitment. Its first jumpjet update is therefore a take-off, and it is
+      registered from that update, by the same rule as a unit of a jumpjet type.
+    - **Sector updates.** In each update of *ascending* or *cruising* in which the unit is over
+      a different cell from the one recorded at its last registration or sector update, its
+      registration moves to the sector of the new cell, with S-0303 claim 11's arrival order.
+      *Hovering*, *descending* and *crashing* updates do not move it between sectors, so a
+      unit that moves horizontally in one of them keeps the sector of its last update. For
+      an ordinary crash fall (claim 18) this is moot: the unit has no health (S-0312 claim 16),
+      so S-0303 claim 6 never takes it as a candidate.
+    - **End.** It stops being registered at the first of these events:
+      - **touchdown** (claim 15): in the touchdown tick, together with the other effects for a
+        unit still in play and alive, before it enters *grounded*
+      - **crash end** (claim 18): when it enters *crashed*, before S-0312 claim 16's impact.
+        Its own impact effects can therefore never find it through the flying-object search
+      - **going off the map** for any reason: for example entering a transport or a
+        building, or its removal.
+    - **Not an end.** None of these ends registration:
+      - the start of a crash; a crashing unit stays registered until the crash ends
+      - hovering or cruising at any height
+      - the end of a magnetic grip. A dropped unit whose fall ends over a clear cell goes on to
+        *descending* (S-0607 claims 16 and 17) and stops being registered at its touchdown.
+        A set-down unit stops at its touchdown too. Restoring a seized unit's own locomotor
+        (S-0607 claim 20) does not change its registration.
+    - **Placed on the map in the air.** A unit placed on the map is registered at its placement
+      only when it is then airborne (claim 30) and its type has the counts-as-aircraft flag
+      (Import mapping). This rule is the same for every kind of unit. A jumpjet placed in the
+      air without that flag is not registered until it next takes off from *grounded*.
+    - **Touchdown while falling** (`quirks.jumpjet_falling_touchdown_tracked`, default on, YR
+      behaviour). The touchdown event does not end registration when the unit is then in
+      the bridge or parachute falling state of claim 4, or is no longer alive or in play. Such
+      a unit stays registered while *grounded*, and its next take-off does not register it
+      again. It stops being registered at a later touchdown or crash end that does end it,
+      or when it goes off the map. Off (fixed behaviour): every touchdown ends registration.
+    - Ion storms, which would prevent the take-off and so the registration, do not occur in
+      skirmish (Edge cases and quirks).
+    - Backing: `measurable` (scenario J28 a to d for the start, touchdown, crash and hovering
+      boundaries; J28 e for a seized unit). Sector updates are `unmeasured` here: S-0303
+      scenario A20 measures sector crossings of cruising jumpjets only.
+      The placement rule and the falling touchdown are `unmeasured`: J28 does not establish
+      a jumpjet placed in the air, nor a touchdown in the falling state.
+    - Confidence: high for the start, touchdown, crash end and the seized unit's
+      registration. Medium for going off the map, the placement rule and sector updates.
+      Low for the falling touchdown.
+
+30. **In the air for combat (Q-1501).** A unit moving with the jumpjet locomotor is in the air
+    (S-0307 Terms, *airborne*) exactly when it is on the map and its height above the surface
+    *r* is at least 208 leptons. *r* is claim 4's signed integer height: above the terrain,
+    or above the deck when the on-deck state is set. The comparison is exact, with no rounding.
+    This is the only test for these units in weapon choice (S-0308 table P rows 18 and 19),
+    range (S-0307) and target acquisition (S-0309). S-0303 claim 10's halving is for aircraft
+    only and never applies to these units.
+    - It does not depend on the jumpjet state, on moving or moving now, on the type's cruise
+      height, or on registration (claim 29). A *hovering* or *cruising* jumpjet whose wobble
+      takes it below 208 leptons is not in the air there. An *ascending*, *descending* or
+      *crashing* one at 208 leptons or more is in the air.
+    - A jumpjet vehicle and a jumpjet infantry unit use the same test.
+    - A unit seized by magnetic lift uses the same test, whatever its own kind and whether it
+      is gripped, dropped or set down.
+    - **Over a high bridge without the on-deck state,** the test uses *r*, not claim 4's
+      deck-adjusted *r*′. A jumpjet at deck height there (*r* = 416 leptons) is in the air,
+      although claim 4 lists it in the ground layer. At *r* = 207 leptons it is not.
+    - A unit off the map is not in the air.
+    - Aircraft use S-0501 claim 18's in-the-air answer instead.
+    - Backing: `measurable` (scenario J29)
+    - Confidence: high
+
+31. **A low jumpjet can be both registered and listed.** A unit is registered (claim 29) and, when claim 4's evaluated-draw-layer condition permits a new listing, is listed in its cell layer during:
+    - its take-off update and the rest of its ascent, while *r* < 208 leptons or *r*′ = 0
+    - its descent, from the moment *r* < 208 leptons or *r*′ = 0 until touchdown
+    - a crash fall below 208 leptons, where it has no health and is no candidate
+    - a listing retained from a low flight-state transition while it hovers or cruises
+      (claims 4 and 22)
+    - the falling touchdown of claim 29, while it stays registered on the ground.
+
+    While both hold, a detonation above the terrain finds it once through the flying-object
+    search and once in its cell's layer (S-0303 claim 6). Its two entries are not merged.
+    What the second entry does is S-0303's. At 208 leptons or more, in any state, only the
+    registration can find it; a grounded unit that is not registered is found only in its cell.
+    - Backing: `measurable` (scenario J28 b and c)
+    - Confidence: high for take-off, ascent and descent; medium for retained listings
+
 ## Formulas
 
 All heights and positions are signed integers in leptons. Current and maximum speed and wobble
@@ -1150,7 +1249,7 @@ round-toward-zero arithmetic.
 
 | State | Event (checked each tick after the physics step) | Next state | Effect |
 |---|---|---|---|
-| grounded | eligible update with a movement commitment, even with empty order-level destination | ascending | speeds 0, fraction 1 (0 for zero speed, design), *h*<sub>t</sub> = *H* (claims 5, 24 and 25) |
+| grounded | eligible update with a movement commitment, even with empty order-level destination | ascending | speeds 0, fraction 1 (0 for zero speed, design), *h*<sub>t</sub> = *H*; registered (claims 5, 24, 25 and 29) |
 | ascending | *h* > ¼ *h*<sub>t</sub> (½ balloon-hover vehicle) | ascending | *v*<sub>m</sub> = *S*, heading towards destination |
 | ascending | over the destination cell, past that fraction, not balloon-hover | cruising | *h*<sub>t</sub> = *r* (claim 7) |
 | ascending | *h* ≥ *h*<sub>t</sub>, slot free | hovering | slot claimed |
@@ -1163,9 +1262,9 @@ round-toward-zero arithmetic.
 | descending | water or beach destination, neither entering nor held by magnetic lift | hovering or cruising | as claim 14 |
 | descending | landing check fails | (stopped) | claim 17 |
 | descending | move order | ascending | *h*<sub>t</sub> = *H* |
-| descending | bridge-adjusted height *h* = 0 | grounded | touchdown effects (claim 15) |
+| descending | bridge-adjusted height *h* = 0 | grounded | touchdown effects (claim 15); registration ends (claim 29) |
 | any but crashing, crashed | crash started, above the surface, not held by magnetic lift | crashing | pending aerial crash guarantees the next update (design); *h*<sub>t</sub> = −5 leptons; extra drop this tick, new ordinary height target next tick |
-| crashing, ordinary unit | height < 1 lepton or extra drop crosses a deck | crashed | slot released; S-0312 claim 16 impact |
+| crashing, ordinary unit | height < 1 lepton or extra drop crosses a deck | crashed | slot released; registration ends (claim 29); S-0312 claim 16 impact |
 | crashing, dropped seized unit | height < 1 lepton or extra drop crosses a deck | descending, sinking or crashed | S-0607 claims 16 and 17 |
 
 Ordinary state outcomes for a tick use that tick's physics results. A transition to a new state,
@@ -1223,6 +1322,12 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
   search at each fall-back to rest. Claim 17's magnetic-release safety departure overrides
   both switch settings for lifter-ended release, but not S-0607 claim 9's no-destination exception.
   Backing and confidence are claim 17's; the off alternative is a design rule.
+- **Falling touchdown keeps registration** (`quirks.jumpjet_falling_touchdown_tracked`,
+  default on, YR behaviour). On: a touchdown while the unit is in the bridge or parachute
+  falling state, or no longer alive or in play, leaves it registered as a tracked flying object
+  (claim 29), so on the ground it can still be found by the flying-object search as well as in
+  its cell (claim 31). Off (fixed behaviour): every touchdown ends registration. Backing and
+  confidence are claim 29's.
 - **Ion storms.** An ion storm makes every flying jumpjet of the affected house crash, and stops a
   grounded one taking off. Ion storms do not occur in skirmish, so this is out of scope.
 
@@ -1243,6 +1348,7 @@ until the following tick. Ordinary jumpjet physics itself takes no random draw (
 | type key `JumpjetWobbles` | *W* | decimal, single precision | engine default 0.15 |
 | type key `JumpjetDeviation` | *d* | integer, leptons | engine default 40 |
 | type key `JumpjetNoWobbles` | no-wobble flag | boolean | no |
+| type key `ConsideredAircraft` | counts-as-aircraft flag: registration of a unit placed on the map in the air (claim 29); other uses belong to the specs that read it | boolean | no (S-0105 Import mapping) |
 | infantry type key `JumpJetTurn` | jumpjet-turn flag (claim 10; S-0310 claim 8) | boolean | no |
 | vehicle type key `IsSimpleDeployer` | deploy-to-land vehicle, with the next row (S-0517) | boolean | no |
 | vehicle type key `DeployToLand` | deploy-to-land vehicle; full-height cruise (claims 11 to 13) | boolean | no |
@@ -1795,11 +1901,56 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   with and without a saved rally. Original skipped-window aftermath remains diagnostic
   under U14; no safe original fallback or stock fixture is asserted.
 
+- **J28 Flying-object registration and two entries (claims 29 and 31, Q-1500).** Common
+  setup. Target: a stock jumpjet vehicle (named variant of *jumpjet-flight-test* if stock data has
+  none), owned by a second test house that is the firer's enemy, at full health. Firer: one stock
+  unit whose weapon can hit ground and air targets and whose projectile detonates at the aimed
+  object's position. Decoy: an enemy jumpjet hovering in the target's cell or next to it, when a
+  variant says so. Use a named test variant of the firer's warhead whose spread radius *R*
+  exceeds the decoy's height above the target, so that a detonation at the decoy is above the
+  terrain and within *R* of the target. No veterancy and no other damage sources. Use the
+  read-only recorder for the target's health and separate damage events, flight state, height
+  above the surface *r*, and each detonation's tick and position. *Observable:* per detonation,
+  the number of damage events the target takes and their sizes. Two hits need not total twice a
+  single hit, since each entry is sized at its own distance (S-0303 claim 7).
+  - (a) The target hovers at its cruise height (at least 208 leptons), aimed at directly.
+    Expected: one hit per detonation; it is found only through registration. No damage
+    falsifies registration while hovering.
+  - (b) The target descends to land, aimed at directly, with detonations while *r* < 208
+    leptons. Expected: two hits per detonation, unless the first kills it. A single hit
+    falsifies claim 31 or S-0303's handling of the two entries.
+  - (c) The target is ordered to move, and a detonation at the decoy arrives in its take-off
+    update, at *r* = 0. Expected: two hits. A single hit (cell entry only) falsifies the start
+    of claim 29, for example registration at the first rise.
+  - (d) The target is grounded and idle after a completed touchdown, with a detonation at the
+    decoy. Expected: one hit (cell only; touchdown ended registration). Two hits falsify the
+    touchdown end.
+  - (e) A stock magnetic lifter seizes an enemy ground vehicle and lifts it above 208 leptons.
+    A second firer of the vehicle's enemy fires at it while it is gripped. Expected: each
+    above-terrain detonation damages it. No damage falsifies the seized unit's registration.
+  Attempt each variant 10 times and record each seed and input tick.
+- **J29 In the air for weapon choice (claim 30, Q-1501).** Common setup. Firer: one stock unit
+  whose primary weapon cannot hit air targets and whose secondary weapon has an anti-air
+  projectile (S-0308 table P row 19). Targets, each in a separate run: a stock jumpjet vehicle
+  (or named variant), a stock jumpjet infantry unit, and an enemy ground vehicle seized by a
+  stock magnetic lifter. Use the read-only recorder for each target's height above the surface
+  *r*, on-deck state and flight state, and for the firer's chosen weapon slot at each shot.
+  *Procedure:* order the firer to attack the target while the target is grounded, ascends,
+  hovers and descends. For the jumpjets also order a landing on the high bridge's deck and
+  record the shots of its final descent, where the on-deck state is not yet set and *r* is
+  between 416 and 624 leptons (*r*′ below 208). *Observable:* the chosen slot against *r* at each shot.
+  *Expected:* the secondary exactly at shots with *r* ≥ 208 leptons, the primary (or no shot,
+  when the primary is refused) at shots with *r* < 208, in every flight state; during the deck descent
+  the secondary, because *r*, not *r*′, is tested. A switch at another height, or one that follows the flight
+  state (for example the primary while ascending above 208 leptons), falsifies claim 30. Repeat each
+  target and flight-state/height subcase in 10 runs, recording the seed and input tick.
+
 ## Open questions
 
-- **Flying-object registration.** From take-off until it lands or crashes, a jumpjet is entered
-  in a registry of flying objects. Which searches read that registry (for example, targeting by
-  air defences) is not established here.
+- **Registration of a sinking dropped unit.** Claim 29 fixes the registration boundaries and
+  its two readers. Whether a seized unit dropped onto blocked water, which starts sinking
+  (claim 19), stops being registered before it goes off the map is not established
+  (confidence low). It is registered at the latest until then.
 - **The crash-end event.** The event raised at the end of a crash (claim 18) remains
   untraced here. The separate ascent factory-contact interaction is resolved by claim 7
   and S-0417 claim 15. Its original skipped-window aftermath and unsolicited no-rally

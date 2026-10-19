@@ -1,9 +1,9 @@
 ---
 id: Q-1500
 title: When a jumpjet is a tracked flying object, and the double entry of a low one
-status: open
+status: answered
 related: [S-0303, S-0502]
-answered-by: []
+answered-by: [S-0502]
 ---
 
 ## Need
