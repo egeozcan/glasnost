@@ -2,11 +2,11 @@
 id: S-0603
 title: Grinder (recycling units into credits)
 topic: structures
-revision: 8
+revision: 9
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-1157]
 supersedes: []
@@ -43,7 +43,10 @@ Neighbouring specs own the rest, and this spec does not repeat them:
 - the original's enter-nearest instruction, which looks for an *absorbing* building and is a
   different action from claim 14's search: S-0215 (claim 24),
 - a slave master that is consumed: its untransferred slave group ends by S-0312 claim 31,
-- an entrant converted by mutation before it arrives: S-0611 claim 5.
+- an entrant converted by mutation before it arrives: S-0611 claim 5,
+- being drained adds no direct entry or consumption restriction and leaves the recycle payout
+  going to the building's owner: S-0608 claim 18. Any separate transfer to the drainer is
+  S-0608 claim 7's payout, not a change to this spec's recycle payout.
 
 ## Terms
 
