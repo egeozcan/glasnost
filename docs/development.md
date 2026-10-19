@@ -1387,42 +1387,43 @@ Yuri side (M7a step 4; seed 7; outputs under the git-ignored `local-lane/m7a/yur
 - **AI audit: water walk (S-0406).** `Script::water_goal` grows the base toward water only where an explored site would take the naval yard but for the distance to the base (what the placement cursor shows, S-0406 claims 3 to 5). On a stock map the Yuri house used to walk a dozen power plants toward a strip of water too narrow for the yard, and starved. Tests: `tests/water.rs`.
 - **AI audit: economy first (S-0404; AI game format 27).** `Brain::economy_first`: while the house is short of the plan's harvesters and a harvester on its line waits for money, every other running item is put on the hold order (S-0404 claim 5) and resumed with a build order once the economy is whole (claims 3 and 5); `Uses::economy_holds`, `Uses::resumes`. `Script::harvesters_wanted` adds harvesters to an explored field: one for every 20 explored resource cells within 14 cells of the house's refineries, slave masters and home, between the plan's count and twice it (tuning of our own opponent). Tests: `tests/economy.rs`. The extra harvesters cost the duel-m7a sweep margin (seeds 1 to 16, minimum/median/maximum, before → after): gattling stage rises 2/13/32 → 0/2/6, gas clouds 1/160/250 → 0/2/91, bunker entry orders 2/7/12 → 0/4/7, lift orders 6/11/26 → 0/5/10: the fixture fields grow to about 228 resource cells, each house keeps up to 4 harvesters and its army comes later. The gate seed still passes; the fixture setup is left as a question for the main session.
 - **AI audit: force shield aim (S-0513).** `Brain::shield_cell` counts the buildings of the house and its allies whose reference point lies within the shield radius of the target cell's centre (claim 31, F3: the radial indicator a person reads), at one of the house's buildings with a seen enemy within 12 cells, at least 2 buildings. The old aim counted building cells in a 3 × 3 block, which two buildings with a gap never share: the shield was ready in every Yuri lane game and never fired (now 80 launches in 24 games). Test: `tests/ai_sw.rs` `shields_buildings_with_a_gap_between_them`.
-- **AI audit: gunner vehicles (S-0308).** `glasnost_ai::gunner` (a new file; `Special::gunners` is called last in `Special::think`): an idle, empty gunner vehicle at home whose type switches its weapon with its passenger (claims 5 and 6) gets the nearest infantry unit of the house, at home or idle, whose mode gives it a healing weapon (negative damage), by the *enter* click; one healer for every 5 armed vehicles. The click replaces the army's order of the same think for that unit, and the capture step leaves it be (`Special::gunner_reserved`): in the stock data the side's healer is its engineer, an army type the army script rallies and the capture step sends away. With no such infantry the cheapest type is queued without the credit reserve of the other abilities (`Special::queue_unit`). `Uses::gunner_loads`. Tests: `tests/gunner.rs`.
+- **AI audit: gunner vehicles (S-0308).** `glasnost_ai::gunner` (a new file; `Special::gunners` is called last in `Special::think`): an idle, empty gunner vehicle at home whose type switches its weapon with its passenger (claims 5 and 6) gets the nearest infantry unit of the house, idle or at home on the army's rally (moving or guarding, no capture or entry of its own), whose mode gives it a healing weapon (negative damage), by the *enter* click; one healer for every 5 armed vehicles. The click replaces the army's order of the same think for that unit, and the capture step leaves it be (`Special::gunner_reserved`): in the stock data the side's healer is its engineer, an army type the army script rallies and the capture step sends away. With no such infantry the cheapest type is queued without the credit reserve of the other abilities (`Special::queue_unit`). `Uses::gunner_loads`. Tests: `tests/gunner.rs`.
 - **AI audit: lane and audit tools.** The lane's launch count now counts only a fall of the ready mark to not ready while the record stays granted (low-power suspensions used to count as launches). New lane lines: house-ticks granted (and suspended) by superweapon kind; `GLASNOST_AI_ECON=n` (economy line per house: income, spending by category, harvesters, slaves, explored resource cells near the workers, lines); `GLASNOST_AI_SWPROBE=n` (what the mutator and dominator aim sees, `mutator::probe`, `dominator::probe`); `GLASNOST_AI_GUNPROBE=n` (`gunner::probe`). The side audit prints the side's psychic-detection buildings (S-0610 claim 9) and its gunner vehicle types with the infantry types that would heal in them.
 
 ### Ability audit
 
-The M7b AI audit lane: maps 0, 2 and 8, Yuri against the Allied side and against the Soviet side, seeds 7 to 10 (24 games, at most 120 000 ticks; 12 games per Allied and Soviet side, 24 for Yuri). Counts are the orders of `special::Uses` (games with any in brackets) or true launches; "0 because" gives the reason found. Ability names are generic (no stock type names).
+The M7b AI audit lane: maps 0, 2 and 8, Yuri against the Allied side and against the Soviet side, seeds 7 to 10 (24 games, at most 120 000 ticks; 12 games per Allied and Soviet side, 24 for Yuri), with the final AI. Counts are the orders of `special::Uses` (games with any in brackets) or true launches; "0 because" gives the reason found. Ability names are generic (no stock type names).
 
 | Ability | Side | AI module | Lane count |
 |---|---|---|---|
-| Garrison a building | all | `special` (garrison) | Allied 36 (4), Soviet 21 (5), Yuri 100 (9) |
-| Engineer capture, tech buildings | all | `special` (engineers), `tech_buildings` | Allied 50 (12), Soviet 89 (12), Yuri 248 (24) |
-| Spy infiltration | Allied, Yuri | `special` (spies) | Allied 24 (12), Yuri 4 (3); Soviet 0, not traced |
+| Garrison a building | all | `special` (garrison) | Allied 28 (4), Soviet 21 (5), Yuri 97 (9) |
+| Engineer capture, tech buildings | all | `special` (engineers), `tech_buildings` | Allied 59 (12), Soviet 89 (12), Yuri 217 (24) |
+| Spy infiltration | Allied, Yuri | `special` (spies) | Allied 24 (12), Yuri 4 (3); Soviet 0 because the side has no infiltrator type (side audit) |
 | Jumpjet against unreachable enemies | all | `jumpjets` | Allied 48 (11), Soviet 19 (3), Yuri 35 (12) |
-| Deploy in place, deploy-fire | all | `deployers` | Allied 742, Soviet 5, Yuri 1005 |
-| Leave radiation | all | `radiation` | Soviet 6 (4), Yuri 11 (5); Allied 0, not traced |
+| Deploy in place, deploy-fire | all | `deployers` | Allied 738, Soviet 5, Yuri 863 |
+| Leave radiation | all | `radiation` | Soviet 6 (4), Yuri 11 (5, all against the Soviet side); Allied 0 because the only radiation weapon in these pairings is the Soviet side's (side audits), and the Allied side meets only Yuri |
 | Chrono erasure | Allied | `chrono` | 27 (12) |
 | Linked (prism) weapons | Allied | `linked` | 4 (3) |
 | Charge an overpowerable defence | Soviet | `linked` | 2 (1) charges, 2 (2) buildings |
 | Bombs, suicides, strikes | Soviet, Yuri | `terror` | Soviet bombs 342, suicides 126, strikes 86; Yuri bombs 22, suicides 144 |
 | Disarm a bomb | all | `terror` | Yuri 2 (1); Allied 0 because no Allied object was bombed in its 12 games; Soviet 0: bombs on its objects in 2 games, a seen bomb with an idle disarmer able to reach it once (the lane's occasion counts) |
 | Sabotage | Allied, Yuri | `terror` | Allied 51 (12), Yuri 3 (2) |
-| Crates | all | `crates` | Allied 271, Soviet 89, Yuri 1056 |
-| Berserk weapons | Yuri | `psychic` | 33 (12) |
+| Crates | all | `crates` | Allied 315, Soviet 89, Yuri 1121 |
+| Berserk weapons | Yuri | `psychic` | 36 (11) |
 | Psychic sensor | Yuri | `Brain::build_sensor` | 0 because the side's radar building gives psychic detection (side audit line), so the house always owns one; most sensors at once is 1 in every game |
 | Psychic reveal | Yuri | `Brain::fire_superweapons` | 181 orders; 181 launches |
 | Mind control | Yuri | `mind` | 113 (18) |
 | Gattling defence, kept spin | Yuri | `gattling` | 32 (24) defences, 1171 spins kept |
 | Absorbing building | Yuri | `absorber` | 447 (24) |
 | Grinder | Yuri | `grinder` | 23 (9): rare because controlled infantry goes to absorbers first, wounded units go only with no repair depot, and surplus infantry only when credits are low |
-| Tank bunker | Yuri | `bunker` | 51 builds, 168 entries, 139 exits |
-| Magnetic lifter | Yuri | `lifter` | 78 builds, 36 lifts, 39 drops |
-| Drain | Yuri | `drain` | 48 builds, 259 orders (17) |
+| Tank bunker | Yuri | `bunker` | 52 builds, 160 entries, 133 exits |
+| Magnetic lifter | Yuri | `lifter` | 79 builds, 38 lifts, 41 drops |
+| Drain | Yuri | `drain` | 48 builds, 258 orders (17) |
 | Genetic mutator | Yuri | `mutator` | 17 (5) launches; holds fire while no 3 seen enemy infantry share a reach (the aim probe shows the seen enemy infantry mostly 0) |
 | Psychic dominator | Yuri | `dominator` | 3 launches: granted in 7 of 24 games (the build climb takes about 5 500 ticks for one superweapon building), ready in 3, where it stood ready for 2 000 to 39 000 house-ticks and held fire: the aim probe shows the seen enemy vehicles mostly not dominable by data, and too few seen enemy units in one sweep |
 | Force shield | Yuri | `Brain::shield_cell` | 80 launches (was 0) |
-| Gunner vehicle healer | Allied | `gunner` | 2 (2) (was 0) |
+| Gunner vehicle healer | Allied | `gunner` | 0 in the final lane: the side's only healer is its engineer, and every engineer it built was idle away from home or on its way to a capture when a gunner vehicle waited (a version that also cut short a capture or entry loaded 2 in 2 games but lost 12 captures, 11 of them tech buildings, and was not kept); `tests/gunner.rs` covers the load |
+| Chronosphere (teleport) | Allied | `Brain::group_cell`, `landing_cell` | 3 launches: granted in all 12 games, 20 % to 99 % of it suspended by low power; ready in 6 games (390 to 11 400 house-ticks) |
 | Paradrops, spy plane | Allied, Soviet | `Brain::fire_superweapons` | 138 paradrop launches (both paradrop kinds), 111 spy planes |
 | Iron curtain | Soviet | `Brain::vehicle_block` | 1 launch: granted 14 600 to 76 800 house-ticks in 7 games, suspended by low power for 27 % to 95 % of it; ready in 3 games (7 900 to 51 000 house-ticks), where the aim (3 armed vehicles in a 3 × 3 block in a fight, no own infantry) found a block once. Not changed in this audit |
 | Weather storm | Allied | `Brain::fire_superweapons` | 1 launch: granted in 4 games (5 300 to 28 300 house-ticks, 18 % to 76 % of it suspended by low power) and ready once, the charge outlasting the rest of the game |
