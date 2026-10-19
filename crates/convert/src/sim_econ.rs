@@ -327,6 +327,7 @@ const SUPERWEAPON_FIELDS: &[Row] = &[
 const GENERAL: &[u8] = b"General"; // spec: S-0004 Import mapping (the general settings section)
 const AI: &[u8] = b"AI"; // spec: S-0407 Import mapping (`[AI]`)
 const AUDIO_VISUAL: &[u8] = b"AudioVisual"; // spec: S-0409 Import mapping (`[AudioVisual]`)
+const SPECIAL_WEAPONS: &[u8] = b"SpecialWeapons"; // spec: S-0004 Import mapping (`[SpecialWeapons]`)
 const CRATE_RULES: &[u8] = b"CrateRules"; // spec: S-0412 Import mapping (`[CrateRules]`)
 const POWERUPS: &[u8] = b"Powerups"; // spec: S-0520 Import mapping (`[Powerups]`)
 
@@ -1073,6 +1074,56 @@ const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
         Bool,
         "S-0610",
     ),
+    // spec: S-0611 Import mapping (MutateExplosion a boolean, absent no: cell mode; the two warheads of [SpecialWeapons] and the conversion and launch animations are references, absent none; AnimToInfantry an infantry type list, absent empty; GeneticMutatorActivateSound a sound name, absent none)
+    (
+        "mutate_explosion",
+        GENERAL,
+        "MutateExplosion",
+        Bool,
+        "S-0611",
+    ),
+    (
+        "mutate_explosion_warhead",
+        SPECIAL_WEAPONS,
+        "MutateExplosionWarhead",
+        Ref(Kind::Warheads),
+        "S-0611",
+    ),
+    (
+        "mutate_warhead",
+        SPECIAL_WEAPONS,
+        "MutateWarhead",
+        Ref(Kind::Warheads),
+        "S-0611",
+    ),
+    (
+        "infantry_mutate",
+        GENERAL,
+        "InfantryMutate",
+        Ref(Kind::Animations),
+        "S-0611",
+    ),
+    (
+        "anim_to_infantry",
+        GENERAL,
+        "AnimToInfantry",
+        Refs(Kind::Infantry),
+        "S-0611",
+    ),
+    (
+        "ion_blast",
+        GENERAL,
+        "IonBlast",
+        Ref(Kind::Animations),
+        "S-0611",
+    ),
+    (
+        "genetic_mutator_activate_sound",
+        AUDIO_VISUAL,
+        "GeneticMutatorActivateSound",
+        Text,
+        "S-0611",
+    ),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,
@@ -1114,6 +1165,7 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
             s if s == COMBAT_DAMAGE => "global:CombatDamage",
             s if s == CRATE_RULES => "global:CrateRules",
             s if s == DIALOG => "global:MultiplayerDialogSettings",
+            s if s == SPECIAL_WEAPONS => "global:SpecialWeapons",
             _ => "global:General",
         };
         out.push((cat, (*k).to_owned(), *spec));

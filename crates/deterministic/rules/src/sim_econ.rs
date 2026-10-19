@@ -863,6 +863,34 @@ pub struct SwGeneral {
     /// absent: no.
     #[serde(default)]
     pub berzerk_allowed: Option<bool>,
+    /// `[General] MutateExplosion`: explosion mode when on, cell mode when
+    /// off (S-0611 claims 3 and 4); absent: no (cell mode).
+    #[serde(default)]
+    pub mutate_explosion: Option<bool>,
+    /// `[SpecialWeapons] MutateExplosionWarhead`, the explosion warhead
+    /// (S-0611 claim 3); absent: none.
+    #[serde(default)]
+    pub mutate_explosion_warhead: Option<String>,
+    /// `[SpecialWeapons] MutateWarhead`, the cell warhead (S-0611 claim 4);
+    /// absent: none.
+    #[serde(default)]
+    pub mutate_warhead: Option<String>,
+    /// `[General] InfantryMutate`, the conversion animation type (S-0611
+    /// claims 8 to 12); absent: none.
+    #[serde(default)]
+    pub infantry_mutate: Option<String>,
+    /// `[General] AnimToInfantry`, the animation-to-infantry list (S-0611
+    /// F4); absent: empty.
+    #[serde(default)]
+    pub anim_to_infantry: Option<Vec<String>>,
+    /// `[General] IonBlast`, the genetic mutation's launch animation
+    /// (S-0611 claim 2); absent: none.
+    #[serde(default)]
+    pub ion_blast: Option<String>,
+    /// `[AudioVisual] GeneticMutatorActivateSound`, the activation sound
+    /// (S-0611 claim 2); absent: none.
+    #[serde(default)]
+    pub genetic_mutator_activate_sound: Option<String>,
 }
 
 /// One entry of the power-up table (S-0520 Terms): weight, animation, water

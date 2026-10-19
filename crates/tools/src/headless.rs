@@ -189,6 +189,7 @@ async fn smoke_async(
                         | Effect::Disc { .. }
                         | Effect::Beam { .. }
                         | Effect::Drain { .. }
+                        | Effect::Maker { .. }
                         | Effect::Walker { .. } => {}
                     }
                 }

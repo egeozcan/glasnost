@@ -264,8 +264,10 @@ fn death_kind_table() {
         let (a, wk) = made(&w);
         assert_eq!(a, anims, "kind {k}");
         assert_eq!(wk.len(), usize::from(walks), "kind {k}");
-        // Kinds 1, 2 and 9 request the unit's own death sequence: our WALKER has none, so with
+        // Kinds 1 and 2 request the unit's own death sequence: our WALKER has none, so with
         // quirks.refused_death_keeps_unit the unit stays (S-0107 claim 17); the others are removed.
+        // Kind 9 converts unless S-0611 claim 6 refuses: this ruleset lists no land multipliers,
+        // so the foot multiplier is 0, the conversion is refused and die-2 is requested (claim 7).
         assert_eq!(w.obj(id).is_some(), stays, "kind {k}");
     }
 }
