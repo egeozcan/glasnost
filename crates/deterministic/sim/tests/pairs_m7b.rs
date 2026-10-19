@@ -939,7 +939,20 @@ mod drain_pairs {
         testkit::run(&mut w, 2);
         super::shield(&mut w, BETA, at(0, 0));
         assert!(glasnost_sim::superweapons::protected(&w, p));
-        let d = drain_with_disc(&mut w, p);
+        // The disc over the plant, its drain weapon checked before the
+        // attempt: not illegal.
+        let d = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 9, 9);
+        objects::take_inside(&mut w, d);
+        let c = Pos::centre(w.obj(p).unwrap().pos.cell(), 0);
+        let ground = w.surface_at(c.x, c.y);
+        objects::place(&mut w, d, Pos::new(c.x, c.y, ground + 200), 0);
+        w.obj_mut(d).unwrap().target = Some(Target::Object(p));
+        assert_ne!(
+            glasnost_sim::combat::check::check(&w, d, Some(Target::Object(p)), 1, false),
+            Fire::Illegal,
+            "the firing check does not refuse"
+        );
+        fire::shot(&mut w, d, 1, Target::Object(p));
         assert_eq!(drain::partner(&w, d), Some(p), "the link forms");
         sleep(&mut w, d);
         testkit::run(&mut w, 20);
