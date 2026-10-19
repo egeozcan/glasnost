@@ -16,7 +16,11 @@ Our engine answered "never in the air" for every non-aircraft. The oracle arena 
 effect: in M-0001, DISK against HTK and DISK against APOC (stock: the column wins 12 of 12)
 gave our engine a row win in 12 of 12 games. The HTK and APOC kept choosing their primary slot,
 which the firing check rejects against the high DISK, and never fired. Code:
-`crates/deterministic/sim/src/combat/weapon.rs`, `aircraft_in_air`.
+`crates/deterministic/sim/src/combat/weapon.rs`, `aircraft_in_air`. With the workaround below
+the HTK fire and DISK against HTK gives the column 12 of 12 again. DISK against APOC still gives
+the row 12 of 12: the APOC now fire their anti-air weapon, but its steering projectiles detonate
+next to the launcher right after launch. That is a separate, not yet explained discrepancy
+(S-0306), not part of this request.
 
 ## Questions
 1. Is a jumpjet (a unit of a jumpjet type moving with its jumpjet locomotor) in the air for
