@@ -1966,7 +1966,7 @@ mod cloning_pairs {
         let g = put(&mut w, Kind::Infantry, "GRUNT", ALPHA, 4, 0);
         testkit::run(&mut w, 5);
         let r = targeting::click(
-            &mut w,
+            &w,
             HouseId(ALPHA),
             &[g],
             ClickOn::Object(bio),
