@@ -796,11 +796,11 @@ pub struct GeneralRules {
     /// level of a computer player house of the original, which our engine
     /// gives only to a test-only computer-controlled player house (glossary).
     pub iq_max: i32,
-    /// The auto-deploy delay A of S-0215 claim 31 for difficulty index 1,
-    /// ticks: the list's second entry, the only one our engine reads (the
-    /// neutral and special houses have index 1); `None` when the list has no
-    /// second entry.
-    pub auto_deploy_delay: Option<i32>,
+    /// The auto-deploy delay list of S-0215 claim 31, ticks, for difficulty
+    /// indexes 0, 1 and 2: the neutral and special houses read entry 1, a
+    /// test-only computer-controlled player house its oracle house's index;
+    /// `None` where the list has no entry.
+    pub auto_deploy_delays: [Option<i32>; 3],
     /// The rules' lobby game-speed index (S-0201 claim 7).
     pub lobby_game_speed: u8,
     /// The engineer-capture health ratio c (S-0214 row I7), single
@@ -1204,11 +1204,11 @@ impl SimRules {
             iq_scatter: g.iq_scatter.unwrap_or(3),
             // spec: S-0209 Import mapping ([IQ] MaxIQLevels absent: 5 skill levels)
             iq_max: g.iq_max.unwrap_or(5),
-            // spec: S-0215 claim 31 and Import mapping (AIAutoDeployFrameDelay: the entry for difficulty index 1; no second entry, or no list: none, and the row does not apply)
-            auto_deploy_delay: g
-                .ai_auto_deploy_frame_delay
-                .as_ref()
-                .and_then(|l| l.get(1).copied()),
+            // spec: S-0215 claim 31 and Import mapping (AIAutoDeployFrameDelay: the list by difficulty index; no list: empty, and the row does not apply)
+            auto_deploy_delays: {
+                let l = g.ai_auto_deploy_frame_delay.as_deref().unwrap_or_default();
+                [0, 1, 2].map(|i| l.get(i).copied())
+            },
             // spec: S-0201 Constants (rules lobby game speed absent: index 6; claim 7 covers 0 to 6)
             lobby_game_speed: g.lobby_game_speed.map_or(6, |v| v.clamp(0, 6) as u8),
             // spec: S-0214 Import mapping (EngineerCaptureLevel: stored in single precision; absent 1.0)

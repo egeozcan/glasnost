@@ -16,7 +16,8 @@
 //!   ([`killed`]) or removal ([`removing`]) of either party (claim 13), and
 //!   ending restores what claim 14 lists ([`end`]). Taking a party off the
 //!   map for a while without removing it does not touch its links (Open
-//!   question 3; request Q-1443).
+//!   question 3; request Q-1443, answered by S-0608 revision 5, not yet
+//! taken in).
 //!
 //! State is world-level ([`DrainWorld`]): every drained building with its
 //! drainer, and each drainer's newest partner. The two differ only for a
@@ -36,7 +37,8 @@
 //! of the switch).
 //!
 //! The position of the drainer's tests and of the payout within the turn is
-//! request Q-1440 (interim: the drainer's tests after the warp-only return,
+//! request Q-1440 (answered by S-0608 revision 5, not yet taken in; the
+//! earlier rule kept: the drainer's tests after the warp-only return,
 //! before the overload update; the payout after the building's erasure
 //! return, before its own power and economy turn).
 

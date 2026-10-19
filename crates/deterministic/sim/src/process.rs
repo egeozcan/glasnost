@@ -1043,13 +1043,16 @@ fn auto_deploy(w: &mut World, id: ObjectId) -> Option<i32> {
     let o = w.obj(id)?.clone();
     let r = w.rules_arc();
     let u = r.unit(o.kind, o.type_index)?;
-    // spec: S-0215 claim 31 (the last row: an owner that is not human-controlled; Terms, houses in our engine: the neutral and special houses only)
-    let human = o.owner.is_none_or(|h| w.houses[usize::from(h.0)].human);
-    if human {
+    // spec: S-0215 claim 31 (the last row: an owner that is not human-controlled; Terms, houses in our engine: the neutral and special houses, and a test-only computer-controlled player house)
+    let owner = o.owner.map(|h| &w.houses[usize::from(h.0)]);
+    if owner.is_none_or(|h| h.human) {
         return None;
     }
-    // spec: S-0215 claim 31 (A: the entry for difficulty index 1 of the neutral and special houses; no such entry: the row does not apply)
-    let a = r.general.auto_deploy_delay?;
+    // spec: S-0215 claim 31 (A: the entry for the owner's difficulty index, 1 for the neutral and special houses; S-0309 Terms, Test-only exception: a marked house's oracle index; no such entry: the row does not apply)
+    let idx = owner.map_or(1, |h| h.econ.setup.difficulty);
+    let a = usize::try_from(idx)
+        .ok()
+        .and_then(|i| r.general.auto_deploy_delays.get(i).copied().flatten())?;
     let fires = u.raw.deploy_fire.unwrap_or(false);
     let immune = u.raw.immune_to_radiation.unwrap_or(false);
     let on_spot = match o.guard_spot {

@@ -260,7 +260,8 @@ fn full_health(w: &World, x: ObjectId) -> bool {
 
 /// The drain refusals of S-0608 claim 3 against object `x`: (a) the
 /// building the firer drains (its newest link; a stranded first link is
-/// Q-1441's, interim: not this part), whatever the weapon; (b) a draining
+/// Q-1441's, answered by S-0608 revision 5 and not yet taken in: not this
+/// part), whatever the weapon; (b) a draining
 /// weapon against an object already being drained, by any drainer; (c) a
 /// draining weapon against an object whose type is not drainable. No
 /// alliance or ownership test.
@@ -340,7 +341,7 @@ pub fn check(
     if let Some(Target::Object(x)) = target
         && drain_refused(w, firer, wr.drain, x)
     {
-        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (interim: after the projectile tests, before the other rank-4 tests)
+        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: after the projectile tests, before the other rank-4 tests)
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0610 claims 3 and 6 (a berserk-causing warhead against a psionics-immune type or a bunkered vehicle; a berserk firer against a berserk-friendly type: illegal)

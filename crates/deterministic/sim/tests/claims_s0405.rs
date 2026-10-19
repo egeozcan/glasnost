@@ -1139,6 +1139,36 @@ fn claim_20_deactivated_illegal_outranks_absent_weapon() {
     assert_eq!(empty(&w), Answer::Illegal, "deactivated: illegal first");
 }
 
+// spec: S-0301 claim 9 rank 4 (a deactivated firer that is materialising answers rearming, not illegal) and S-0207 claim 20 (f) (phasing in)
+#[test]
+fn claim_20_deactivated_firer_phasing_in_answers_rearming() {
+    use glasnost_sim::teleport::TeleportState;
+    use glasnost_sim::world::Target;
+    let mut w = game(&armed_rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let d = drone(&mut w, 0, -4, 4);
+    let foe = drone(&mut w, 1, -2, 4);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    order(&mut w, A, Order::PowerOff { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(power::unit_disabled(&w, d));
+    let ask =
+        |w: &World| glasnost_sim::combat::check::check(w, d, Some(Target::Object(foe)), 0, false);
+    assert_eq!(ask(&w), Answer::Illegal, "deactivated, not phasing in");
+    let t = w.tick;
+    w.obj_mut(d).unwrap().teleport = Some(TeleportState {
+        phasing: Some((t, 10)),
+        ..Default::default()
+    });
+    assert!(glasnost_sim::teleport::phasing_in(&w, d));
+    assert_eq!(ask(&w), Answer::Rearming, "deactivated and phasing in");
+}
+
 // spec: S-0405 claim 20 (at enabling every vehicle claim 13 enables gets the guard reset, also one that was not disabled; it plays no activation sound) and claim 13 (a vehicle off the map at either transition is passed over and keeps its state)
 #[test]
 fn claim_20_enabling_resets_an_enabled_vehicle_and_skips_off_map() {

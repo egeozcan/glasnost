@@ -193,6 +193,15 @@ fn claim_1_refund() {
     );
 }
 
+// spec: S-0408 claim 1 (a computer-controlled house receives P in full) and glossary (a test-only computer-controlled player house is computer-controlled)
+#[test]
+fn claim_1_test_house_receives_p() {
+    let mut w = game(&rules());
+    assert_eq!(sell::refund(&w, A, tr(&w, "HUT")), 500);
+    w.houses[usize::from(A.0)].human = false;
+    assert_eq!(sell::refund(&w, A, tr(&w, "HUT")), 1000);
+}
+
 // spec: S-0408 claim 1 and F1 (the seam S-0312 F5 reads: the owner's refund; none without an owner)
 #[test]
 fn claim_1_building_refund_seam() {

@@ -84,10 +84,11 @@ fn refund_at(w: &World, house: HouseId, t: TypeRef, whole: bool) -> i32 {
         .mul(b, mode)
         .mul(a, mode)
         .to_i32_common();
+    // spec: S-0408 claim 1 (a computer-controlled house receives P in full: the neutral and special houses, and a test-only computer-controlled player house, glossary; every other player house, AI houses included, the refund)
     let player = w
         .houses
         .get(usize::from(house.0))
-        .is_some_and(|h| h.role == HouseRole::Player);
+        .is_some_and(|h| h.role == HouseRole::Player && h.human);
     if !player || whole {
         // spec: S-0408 F1 and claim 1 (the neutral and special houses receive P) and S-0402 claim 18 (the percentage taken as 1)
         return p;
