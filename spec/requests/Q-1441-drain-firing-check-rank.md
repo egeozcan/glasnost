@@ -1,9 +1,9 @@
 ---
 id: Q-1441
 title: The drain refusals among the firing check's other illegal answers, and the stranded building
-status: open
+status: answered
 related: [S-0608, S-0301, S-0601, S-0610]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need

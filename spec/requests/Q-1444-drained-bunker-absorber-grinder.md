@@ -1,9 +1,9 @@
 ---
 id: Q-1444
 title: A drained tank bunker, infantry absorber or grinder and its occupants
-status: open
+status: answered
 related: [S-0608, S-0606, S-0605, S-0603, S-0405]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need

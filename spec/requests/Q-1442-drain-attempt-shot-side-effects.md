@@ -1,9 +1,9 @@
 ---
 id: Q-1442
 title: What else a drain attempt does or skips compared with a shot
-status: open
+status: answered
 related: [S-0608, S-0301, S-0312, S-0516, S-0501]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need

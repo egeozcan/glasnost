@@ -2,13 +2,13 @@
 id: S-0608
 title: Drain (attaching to a building, draining its power and credits, and letting go)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
-requests: []
+requests: [Q-1440, Q-1441, Q-1442, Q-1443, Q-1444]
 supersedes: []
 ---
 
@@ -85,7 +85,9 @@ New terms:
 1. **A drain attempt replaces the shot.** When a firer makes a shot with a draining weapon (the
    firing cycle and its check are S-0301's), no ordinary shot happens: no projectile, no shot damage,
    no warhead effect and no ordinary-shot random draws. The attempt neither starts the rearm
-   countdown, nor counts towards the burst, nor uses ammunition. Link-formation effects (claim 5),
+   countdown, nor advances the burst, nor uses ordinary per-shot ammunition. Clearing its target
+   still resets the burst counter to 0 (S-0301 claim 4). Aircraft run bookkeeping is separate
+   (claim 16). Link-formation effects (claim 5),
    including animation creation and release of controlled units, retain their own rules and may
    draw randomness. Instead:
    - against a target that is not an object (a cell), nothing at all happens and the firer keeps
@@ -130,9 +132,32 @@ New terms:
    not ally the target's house. That row does not test whether the target is already being
    drained, so a second drainer chooses its draining weapon against a building that another
    drainer holds, and then gets *illegal* here.
-   - Backing: `measurable` (scenario D3)
-   - Confidence: high (a to c), medium (their rank among the rank-4 reasons, which S-0301 leaves
-     unordered)
+
+   Only the drainer's current building is refused by part a. A stranded earlier building
+   (Edge cases) is not refused by part a with either weapon. A draining weapon is nevertheless
+   refused against that earlier building by part b. Its other weapon may fire there if the
+   remaining checks pass.
+
+   **Precedence relevant to drain.** Both drain refusals give the same *illegal* answer, but
+   they occupy different places among S-0301 claim 9's rank-4 answers:
+   - The own-current-building refusal precedes the held-temporal-target *rearming* answer,
+     hidden-target *impossible*, absence-of-weapon and power-sensitive-weapon *impossible*,
+     the other weapon's live-effect *impossible*, and the conditional magnetic-wave
+     *rearming* answer. Materialisation and the own-gripped-unit *rearming* answers precede it.
+   - The draining-weapon refusals follow the held-temporal-target, hidden-target,
+     absence-of-weapon and power-sensitive-weapon answers. They precede the berserk-warhead
+     target refusals, projectile eligibility, conditional magnetic-wave refusal, other-weapon
+     live-effect refusal, and empty-spawner *rearming* answer.
+   - The berserk firer's berserk-friendly target refusal precedes the draining-weapon refusals,
+     but not the own-current-building refusal. The takeover test is later still, at rank 9,
+     after rearm, ammunition and cloak. No rank numbered below 4 is interleaved between
+     the drain refusals. Higher-priority kind-specific answers retain S-0301 claim 9's ranks.
+
+   This fixes the answer when a drain refusal competes with a differently named answer.
+   it does not require an internal order between reasons that all give *illegal*.
+   - Backing: `measurable` (D3, D9 part a, D11). Relative ordering of reasons that all answer
+     *illegal* is `unmeasured`: the answer and its consequences cannot distinguish them.
+   - Confidence: high
 
 4. **One to one.** By claim 3 and S-0308 table P row 8, a building is drained by at most one
    drainer and, with stock data, a drainer drains at most one building. A drainer that is draining
@@ -165,8 +190,9 @@ New terms:
    approach normally stays over the building. This is not a restraint imposed by the link:
    the attempt does not itself clear a pre-existing destination (claim 1). While draining it
    may fire its other weapon at objects in range (claim 4), it takes no ordinary approach step (S-0215 claim 37 d), and an
-   attack order on the building it drains is refused by the firing check (claim 3 a). Any movement
-   that takes it off the building ends the link (claim 12).
+   attack order on the building it drains is refused by the firing check (claim 3 a). Movement
+   that takes a vehicle drainer off the foundation is noticed at claim 12's next position check,
+   not necessarily at the movement itself.
    - Backing: `measurable` (scenario D1, part b; D5)
    - Confidence: medium
 
@@ -214,10 +240,10 @@ New terms:
 
 ### How the link ends
 
-11. **The building's house allies the drainer's house.** In every turn of the drainer, the link
-    ends if the building's house allies the drainer's house, including when both are the same house.
+11. **The building's house allies the drainer's house.** In every ordinary turn of the drainer
+    that reaches the alliance test (claim 15), the link ends if the building's house allies the drainer's house, including when both are the same house.
     The alliance is read in that direction only (glossary, *alliance* is one-way). Ownership
-    changes that lead to it, all read at the drainer's next turn:
+    changes that lead to it, all read at the drainer's next eligible alliance test:
     - the building is captured by the drainer's house, or by any other house that allies the
       drainer's house (S-0509),
     - the drainer is taken over by the building's house or by a house the building's house allies
@@ -228,7 +254,7 @@ New terms:
     and the building's new house gets the drain blackout (S-0405 claims 5 and 7). The weapon-choice
     test of S-0308 runs in the opposite direction (the firer's house allying the target's), so a
     link can form against a building whose house allies the drainer's house without the drainer's
-    house allying it back; it then ends at the drainer's next turn, possibly in the same tick, and
+    house allying it back. It then ends at the drainer's next eligible alliance test, and
     the release of claim 5 has already happened.
     - Backing: `measurable` (scenario D7, parts a to c); `unmeasured` for the one-way case and its
       release (a skirmish lobby makes only mutual team alliances, so no setup reaches it)
@@ -263,9 +289,8 @@ New terms:
       a temporal weapon, S-0514).
     - Backing: `measurable` (scenario D8; D9 part a for the stranded first link)
     - Confidence: high (killing hit and removal, and the stranded state of Edge cases). Medium for
-      the stranded first building's destruction interactions, as Edge cases gives them. Temporary
-      departures from play without destruction are `unmeasured` and unresolved here: their removal
-      notifications have not been traced and no isolating skirmish setup has been established.
+      the stranded first building's destruction interactions, as Edge cases gives them.
+      Temporary departures without destruction are covered by claim 17.
 
 14. **What ending the link restores.** When a link ends, for any cause:
     - the building is no longer being drained, and its house is due to work out its power.
@@ -280,6 +305,100 @@ New terms:
     drainer does not get the building back as a target.
     - Backing: `measurable` (scenarios D5, D7 and D8)
     - Confidence: high
+
+15. **Turn boundaries (Q-1440).** These are local observable constraints, not shared drain phases:
+    - A vehicle's position check samples its position before that turn's behaviour start,
+      due behaviour processing, ordinary movement and separate firing. Movement later in that
+      turn cannot make the earlier sample fail. A link formed by that turn's firing therefore
+      is not position-checked again in the same turn.
+    - The alliance test precedes due behaviour processing, its shots, ordinary movement,
+      separate firing and the controller's overload update. It does not re-test a link newly
+      formed by a later shot in that turn. An alliance-ending link is already gone when those
+      later opportunities ask whether the unit is draining.
+    - In the original, a vehicle still performs its position check before its erasure or
+      warp-only early exit. That exit skips the alliance test. An erased building skips
+      its payout; it does not pay and then end its turn. No general rule that an erased
+      drainer runs the alliance test is implied. Our engine's superweapon warp-only stages
+      instead follow S-0513 claim 51's exclusion of ordinary work, including these checks.
+      This does not settle the original's unresolved continuation in other warp stages
+      (S-0513 claim 52).
+    - A building's payout follows its early operation-state refresh and its due periodic
+      income, but precedes due behaviour processing, including behaviour-issued firing or
+      sale progression, and the later health-change power recheck. A pending behaviour may
+      already have started before the payout. Thus periodic income available in that turn
+      can be taken by the payout, and credits paid before later sale removal stay paid.
+      Capture or erasure by an earlier object's action is already seen by the payout, not
+      deferred until after it. A building erased at its payout opportunity pays nothing.
+    - House power recalculation is not part of the building's turn: S-0405 claim 7 and
+      S-0203 claim 8 put it after the turn pass. A link ended by a position check in that
+      pass has already ended for that same tick's house power update. It is the drained
+      building owner's update that matters, not necessarily the drainer owner's update.
+    - Backing: `measurable` (D10); the original's other warp-stage continuation remains
+      `unmeasured` for S-0513 claim 52's reason. The warp-only exclusion is the cited
+      engine contract, not a new claim about those original stages.
+    - Confidence: high for the traced local boundaries and house-update consequence
+
+16. **Attempt side effects and precedence (Q-1442).** A drain attempt does not record a new most
+    recent shot, perform the ordinary firing reveal to the target's house, or itself uncloak
+    the firer. This holds whether or not it forms a link. Ordinary firing-check behaviour
+    still applies: a weapon requiring a visible firer can receive *cloaked* and cause the
+    behaviour to start uncloaking before any attempt is admitted (S-0301 claim 12 and
+    S-0516 claim 11). A draining weapon allowed to fire cloaked does not itself break that cloak.
+
+    If the same weapon is also a suicide weapon, the suicide effect replaces the drain attempt:
+    it applies the suicide hit to its firer, without attempting attachment, drain-specific
+    target clearing or an ordinary shot. The resulting death effects belong to S-0312 claims
+    1 and 4 to 7. Protection from the suicide hit does not make it proceed to draining. Death and hit effects keep their own rules.
+
+    An aircraft's admitted initial firing pass can still make its run's round pending
+    (S-0501 claim 15), even though the drain attempt makes no ordinary shot and spends
+    no per-shot round. The attempt is not a reason to roll back a pass or its pending-round
+    mark. Attack-run transitions, later round spending and any remaining attempts in a
+    burst belong to S-0501 claims 12 to 17, not to the drain attempt.
+    - Backing: `measurable` (D12); aircraft bookkeeping through a cell-target attempt is
+      measurable there without the object-target continuation limitation in Open questions.
+      The original object-target continuation fault is `unmeasured`: no destructive crash
+      test is proposed, and the safe continuation belongs to S-0501.
+    - Confidence: high (no recent-shot record, reveal, direct uncloak and suicide precedence),
+      medium (aircraft composition with target clearing)
+
+17. **Temporary storage ends the link (Q-1443).** Successfully taking either party off the map
+    through ordinary temporary storage ends the link immediately, with claim 14's effects,
+    not at its next turn or on return. This includes boarding a transport: no continuing
+    blackout cause, payout, sale refusal or firing refusal from that link survives while the
+    drainer is stored. Already-kept house power totals still wait for claim 14's power update. Returning does not restore it; a new drain attempt is needed. This also clears
+    a stranded earlier building's drain when its drainer leaves the map. Failed boarding
+    or an unsuccessful removal does not count. Being lifted while still on the map is not
+    storage and retains claim 12's position-check rule.
+
+    The same departure rule applies to a drained building if a rule successfully takes it
+    off the map without destroying it; no reachable skirmish storage route for such a
+    building is established here. Conversion that destroys or removes the original object
+    already falls under claim 13, not a preserved link to its replacement.
+    - Backing: `measurable` (D13, transport fixture). Temporary building storage is
+      `unmeasured`: no legal skirmish building carrier or storage route is established.
+    - Confidence: high for ordinary successful off-map departure; medium for composing it
+      with each feature's boarding eligibility
+
+18. **Occupants and entrants (Q-1444).** Being drained adds no occupant-specific gate to a tank
+    bunker, infantry absorber or grinder:
+    - A bunkered vehicle keeps its own firing check; the drained bunker's *illegal* answer
+      is not forwarded to it. Its bunker rate-of-fire, damage and range changes stay in
+      force (S-0606 claim 9). This is not immunity to independent loss of power or disability.
+    - Bunker entry and release retain S-0606 claims 2, 3, 5, 6 and 12's ordinary conditions.
+    - Absorber entry, holding and voluntary release retain S-0605 claims 1, 7, 9 and 11 to 13's rules.
+    - Grinder entry, consumption and recycling credit retain S-0603 claims 5 and 8's rules.
+      Recycling credit goes to the grinder's owner, not directly to the drainer. A later
+      ordinary payout can take those credits only under claim 7.
+
+    Starting a link neither ejects nor consumes these occupants, ends their bunker link,
+    nor clears an approaching entrant's contact solely because of draining. Other effects
+    still apply independently: in particular claim 5 releases controlled victims, and
+    S-0405 claims 5, 8 and 9 own any house blackout and operation changes. There is no
+    further direct drain modifier to occupant capacity, owner, bonuses or recycling value.
+    - Backing: `measurable` (D14)
+    - Confidence: high for absence of a direct drain gate in the named interactions,
+      medium for combined blackout effects, whose eligibility remains with their owners
 
 ## Formulas
 
@@ -333,7 +452,7 @@ with no rounding or floating point.
 | linked | tick number a multiple of \|*P*\|, building of a resource-destination type takes its turn, neither being erased nor materialising | payout F2 |
 | linked | drainer's turn, the building's house allies the drainer's house | not draining (claim 14) |
 | linked, vehicle drainer | turn in a tick with *n* mod 16 = 2, its cell is not in the building's foundation | not draining (claim 14) |
-| linked | killing hit or removal of either party | not draining (claim 14) |
+| linked | killing hit, removal, or successful temporary off-map storage of either party | not draining (claims 14 and 17) |
 | linked | ownership change to a house that does not ally the other party | linked; payer, recipient and blackout follow the new owners |
 
 Observable ordering consequences:
@@ -354,8 +473,9 @@ Observable ordering consequences:
     firing and its sale refusal, and a first building of a resource-destination type goes on paying
     the drainer's house (claim 7). Neither the alliance test (claim 11) nor the position check
     (claim 12) looks at the first building any more, so it stays drained until the drainer is
-    removed from the game: a killing hit on the drainer ends only the newer link at once, and the
-    first ends when the dead drainer is removed. Destroying or removing the stranded first
+    taken off the map or removed from the game: a killing hit on the drainer ends only the newer
+    link at once, and the first ends when the dead drainer is removed. Temporary storage also
+    ends both links under claim 17. Destroying or removing the stranded first
     building also tears down the drainer's newer link.
   - Backing: `measurable` (D9 part a). Confidence: high for the stranded state, medium for its
     destruction interactions.
@@ -391,12 +511,19 @@ Observable ordering consequences:
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| rules, weapon | `DrainWeapon` | draining weapon (claims 1, 3; S-0308 owns the term) | boolean | no |
-| rules, type | `Drainable` | drainable type (claims 1 to 3) | boolean | no |
+| rules, weapon | `DrainWeapon` | draining weapon (claims 1, 3 and 16; S-0308 owns the term) | boolean | no |
+| rules, weapon | `Suicide` | suicide precedence over draining (claim 16) | boolean | no |
+| rules, weapon | `DecloakToFire` | fire-only-visible gate before an attempt (claim 16; S-0301 claim 12) | boolean | yes |
+| rules, weapon | `RevealOnFire` | ordinary firing reveal, skipped by a drain attempt (claim 16) | boolean | yes |
+| rules, type | `Drainable` | drainable type (claims 1 to 3), including bunker, absorber and grinder types in claim 18 | boolean | no |
 | rules, type | `ResourceDestination` | resource-destination type (claim 7) | boolean | no |
 | rules, `[CombatDamage]` | `DrainMoneyFrameDelay` | payout period *P* (F1) | integer, ticks | 100 |
 | rules, `[CombatDamage]` | `DrainMoneyAmount` | payout amount *A* (F2) | integer, credits | 0 |
 | rules, `[CombatDamage]` | `DrainAnimationType` | drain animation (claim 5) | animation name; a name not yet known registers a new animation type (S-0004 registration) | none: no animation |
+
+Claim 15's local turn boundaries and claim 17's successful-departure cleanup have no data
+key. Claim 18 adds no occupant import: bunker fields remain S-0606's, absorber fields S-0605's,
+and recycling fields S-0603's. None overrides the drainable flag above.
 
 ## Measurement scenarios
 
@@ -424,8 +551,8 @@ weapon range of them.
   - Part a: order a Disc to attack an enemy refinery from a distance. Record the tick of the
     attempt. Repeat with named test-map overrides disabling the drain animation and using a
     building with no controlled victims to isolate the attempt's random draws. Expected: no
-    projectile or shot damage, no ordinary-shot random draw, unchanged ammunition and burst
-    position, no started rearm countdown, cleared target, and a formed link. Compare the
+    projectile or shot damage, no ordinary-shot random draw, unchanged ammunition, burst
+    position 0 after target clearing, no started rearm countdown, cleared target, and a formed link. Compare the
     random-stream changes with and without animation separately under S-0109 claim 3.
     Falsified by a draw in the isolated attempt, a spent round, advanced burst, started countdown
     or kept target. Use a named finite-ammunition Disc variant initially holding 5 rounds for
@@ -537,7 +664,9 @@ weapon range of them.
     without a return visit. In separate runs kill the drainer (only the newer link ends at
     the hit; the stranded link ends on removal), and destroy the first building (the newer
     link also ends). Automatic first-link cleanup on relinking falsifies the quirk.
-    Observe sale refusal and firing refusal of the stranded building too.
+    Observe sale refusal and firing refusal of the stranded building too. Order the drainer to
+    fire its non-draining weapon at that first building: claim 3 a does not refuse it. Select
+    a draining weapon against it in a separate fixture: claim 3 b does refuse it.
   - Part b: named test-map aircraft variant with a draining weapon and hovering attack capability,
     and a drainable resource-destination building. Form a link while over the foundation,
     then move away for at least 64 ticks. Expected: the aircraft remains linked and due payouts
@@ -545,14 +674,78 @@ weapon range of them.
     position-check phase falsifies the non-vehicle rule. If no legal aircraft attack can form
     a link with these data, report this scenario as blocked, not as confirmation.
 
+- **D10, local turn boundaries (claim 15).** Extend D5 with a move that crosses the foundation
+  edge during the drainer's own turn on a due check tick. Record position before and after its
+  turn. Expected: release waits for the next due sample. Repeat with displacement by an earlier
+  object: a due sample already outside releases it that tick. Record the drained owner's house
+  power update: it already sees the ended link, subject to other blackout causes.
+  In D6 erase the refinery on a payout tick, varying the temporal attacker's place before or
+  after it: only an opportunity before lock-on can pay. Named test data adds periodic income
+  due on a payout tick with initially empty credits: expected income is available to the payout.
+  Start a sale before draining: a payout opportunity before later sale removal still pays.
+  Void any run where behaviour start already removed the building. Any opposite ordering
+  falsifies the relevant boundary. For vehicle erasure, lock a linked test drainer temporally
+  and displace it by an independent lift where legal: the due position sample still runs.
+  If no legal displacement exists, that subtest is blocked, not confirmation. Warp-only engine
+  exclusion is tested under S-0513 claim 51, not as an original all-stage assertion.
+- **D11, competing firing answers (claim 3).** Named draining-primary test variants and a
+  read-only check-answer recorder. Against a drained building hidden without sensor coverage,
+  expected *impossible*. Make it the firer's current drain partner instead: expected *illegal*.
+  Keep the vehicle drainer over the foundation so position checks cannot release its link.
+  Further variants combine draining with power-sensitive, spawner or magnetic-beam properties,
+  supplying respectively missing power, no living spawns, or another gripped target plus a live
+  wave. Expected: power-sensitive *impossible* beats the draining-weapon refusal, but that
+  refusal beats empty-spawner and conditional magnetic-wave *rearming*. Record answers,
+  admission and target retention. Different answers falsify the corresponding precedence.
+  If ordinary input and data cannot reach an exact combined state, mark that subtest blocked.
+  Two identical *illegal* answers cannot establish an internal order.
+- **D12, non-shot effects (claim 16).** Named variant gives a drainer a cloak ability and a
+  draining weapon permitted to fire cloaked, with ordinary firing reveal enabled. Remove other
+  reveal causes. Record cloak, visibility to the target's owner, recent-shot tick and link.
+  Expected: attachment without a new shot tick, firing reveal or direct uncloak. Repeat D2
+  part b: failed attachment likewise has no shot effects. Control: require a visible firer,
+  expecting the earlier *cloaked* answer to initiate uncloaking before an admitted attempt.
+  Add the suicide property in a separate run: expected suicide hit and no attachment, even
+  over the foundation. For aircraft use a draining-primary variant that can target the ground,
+  force-firing at a cell rather than an object. Record admitted initial pass, pending-round mark
+  and ammunition through run completion. Expected: no immediate per-shot spending, but ordinary
+  pending run-round spending at S-0501 claim 15's boundary. Any new shot record, direct reveal
+  or uncloak, attachment from the suicide weapon, or rollback of an admitted pass's pending
+  round falsifies the corresponding rule. The cell test does not settle object-target aircraft
+  continuation below. Use a healthy, non-critical-health cloaker to avoid random uncloak.
+- **D13, temporary departure (claim 17).** Named test data gives a non-balloon airborne vehicle
+  drainer eligibility to board an ordinary transport. Board between due position checks and
+  void a run if the link ended before boarding. Record actual successful boarding, both partners,
+  animation, power and balances. Expected: immediate detach, no later payouts, power recheck
+  under S-0405 claim 7, no automatic attachment after unloading. Repeat with an open-topped
+  carrier: turns inside do not preserve the link. Repeat the two-link D9 fixture if reachable:
+  both links end on departure. A surviving or automatically restored link falsifies claim 17.
+  If legal boarding while linked cannot be reached, report the fixture blocked, not a kept link.
+- **D14, drained occupants (claim 18).** Named map overrides make bunker, absorber and grinder
+  types drainable. In separate runs drain each while occupied and while an entrant approaches.
+  Pair with undrained controls. Keep bunker and grinder without output or powered-unit
+  dependencies to isolate direct drain effects. Record contacts, entry, bunker stages and link,
+  occupant shots, damage and intervals, absorber count and release, grinder consumption and
+  recipient credits. Expected: unchanged eligibility, bonuses, occupancy and recycling result.
+  Use an established bunker release input route under S-0606 claim 12; otherwise mark that
+  subtest blocked, not refused by draining. Absorber blackout does not itself prevent entry
+  or voluntary release. Recycling credit goes to the building owner; a drain credit transfer
+  needs a separately due resource-destination payout. A drain-specific refusal, lost bunker
+  bonus, ejection or changed recycling amount falsifies claim 18. Repeat output-enabled
+  variants separately to distinguish S-0405's ordinary blackout consequences.
+
 ## Open questions
 
 1. **Payout on the tick of forming or ending.** Claim 8 leaves it to turn order (S-0203 claim 4).
    D6 part c and D7 record it.
 2. **A stock attempt from a neighbouring cell.** Whether stock movement and firing timing ever let
    a Disc attempt a drain before it is over the building (claim 2): D2 part c.
-3. **Temporary departure from play.** Claim 13 does not establish which non-destructive
-   departures announce a removal, so no rule for keeping or ending those links is asserted.
+3. **Aircraft object-target continuation (Q-1442, S-0501).** The admitted pass already makes
+   a round pending (claim 16), but the attempt can clear the aircraft's target before its
+   attack run completes that pass. The original can then fault when the pass still tries to
+   scatter at its now-missing target. Safe continuation of the remaining burst and the cell
+   scatter request needs the aircraft owner's rule, rather than inventing a no-round exception. D12's cell-target case isolates the
+   pending-round rule without claiming an object-target continuation outcome.
 
 ## Questions for the project lead
 

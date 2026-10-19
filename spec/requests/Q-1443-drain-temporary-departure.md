@@ -1,9 +1,9 @@
 ---
 id: Q-1443
 title: Drain links of a party that leaves play without being destroyed
-status: open
+status: answered
 related: [S-0608, S-0402, S-0507, S-0614]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need

@@ -1,9 +1,9 @@
 ---
 id: Q-1440
 title: Where in the turn the drain tests and the drain payout come
-status: open
+status: answered
 related: [S-0608, S-0203, S-0405]
-answered-by: []
+answered-by: [S-0608]
 ---
 
 ## Need
