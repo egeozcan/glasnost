@@ -2,7 +2,7 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -79,11 +79,15 @@ addition:
 - **Nullified detonation.** A detonation that claim 15 restricts to objects under the invulnerability
   effect.
 - **Tracked flying object.** An object registered for the flying-object search: an aircraft-kind
-  object in ordinary flight, a jumpjet between lift-off and landing, or a rocket missile from the
-  end of its tilt or raise phase until it detonates (S-0506 claims 15 and 19). Rocket missiles
-  cease to be tracked before their own detonation's area damage. The movement specs own the
-  registration boundaries of the other kinds. Each is registered in the *sector* (Formulas F7)
-  of the cell it is over, which the game updates as it flies.
+  object in ordinary flight, a unit moving with the jumpjet locomotor, including a seized unit
+  (S-0502 claim 29), or a rocket missile from the end of its tilt or raise phase until it
+  detonates (S-0506 claims 15 and 19). Also included is any unit placed on the map while airborne
+  whose type has the counts-as-aircraft flag (Import mapping; S-0502 claim 29). Such placement
+  registration lasts until it goes off the map, unless its movement ends registration earlier.
+  Registration during jumpjet movement follows all the boundaries and exceptions of S-0502 claim 29, not merely
+  its height or flight state. Rocket missiles cease to be tracked before their own detonation's
+  area damage. Each is registered in a *sector* (Formulas F7), updated at the movement events
+  that its movement spec defines; S-0502 claim 29 owns these events for jumpjet movement.
 - **Sector.** One of the 20 × 20 rectangles of whole cells into which F7 divides the map for the
   flying-object search.
 - **Turn.** In claim 1, an object's share of one tick (S-0203, Terms), not an amount of rotation.
@@ -181,7 +185,15 @@ addition:
    searches; afterwards only the flying-object search can find it. Its tracking starts and
    ends at the boundaries of S-0506 claims 15 and 19, not according to its height or its
    in-the-air answer.
-   - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors), and
+   An object found by both the flying-object search and a scanned cell is a candidate twice,
+   without merging its entries (`quirks.flying_listed_double_hit`). Low jumpjets can have
+   this dual membership (S-0502 claim 31). Each eligible entry delivers its own hit, sized
+   at that entry's epicentre distance (claim 7), with the flying entry first. The second
+   entry does nothing if the first killed the object, because claim 9's eligibility tests
+   apply again. With that switch off, an object found by both searches keeps only its flying
+   entry and receives no scanned-cell entry.
+   - Backing: `measurable` (scenario A5 for the height condition; scenario A16 for the sectors,
+     and scenario A21 for dual membership, per-entry damage and lethal-first-hit exclusion), and
      S-0506 scenario R10 for rocket-missile registration at the end of tilt or raise, as
      S-0506 claim 15 specifies; S-0506 scenario R17 for rocket-missile exclusion from cell
      scans in every phase (S-0506 claim 23); `unmeasured` for the full sector membership list: A16 samples
@@ -190,7 +202,7 @@ addition:
      R11 records impact damage and effects, not the missile's eligibility for a nested flying-object
      search during that damage
    - Confidence: high for the height condition and rocket-missile cell exclusion; medium for
-     the set of tracked objects and for F7 (Open questions: dual membership for other flying kinds)
+     the set of tracked objects and for F7; high for unmerged entries and their per-hit eligibility
 
 ### Distance, exclusions and order
 
@@ -844,6 +856,12 @@ A projectile that is no longer in play after its area damage creates nothing (cl
   of F7, so it can miss a flying object within *R*. Off: every tracked flying object is a
   candidate once, in claim 11's global order of starting the current tracking period; sector
   changes do not reorder it.
+- **`quirks.flying_listed_double_hit`** (default: on, the original). An object found through
+  both the flying-object search and scanned cells keeps both entries and can take two hits,
+  the flying entry first, each at its own distance (claim 6). Off: it keeps only its flying
+  entry, giving one candidate per object found by both searches. This does not merge a
+  building's foundation entries or repeated cell scans for objects absent from the flying
+  search, which remain governed by their own switches.
 - **`quirks.flying_candidates_unfiltered`** (default: on). A tracked flying object found by claim 6
   is not left out for being the source object or a listed harvester (claim 9). Off: the same two
   exclusions apply to it as to objects in scanned cells.
@@ -917,6 +935,7 @@ warnings above are design rules, not claimed oracle observations.
 |---|---|---|---|
 | rules, warhead section, `CellSpread` | spread *S* | decimal (single) | 0 |
 | no user-data key | within-sector arrival order and alternative global tracking order (claim 11, F7) | fixed behaviour; `quirks.flying_search_sectors` is an engine option, not an imported field | sector search on |
+| rules, unit type section, `ConsideredAircraft` | counts-as-aircraft flag: registration when placed airborne (Terms; S-0502 claim 29) | boolean | no |
 | rules, warhead section, `Parasite` | parasite flag: projectile area damage replaced by attachment (claim 2; S-0614 claim 1) | boolean | no |
 | rules, warhead section, `ElectricAssault` | electric-charge effect: when selected, replaces projectile area damage but preserves shared effects (claim 2; S-0518 claim 11) | boolean | no |
 | rules, warhead section, `Airstrike` | air-strike flag: designation projectiles make no area hits but preserve shared effects (claim 2; S-0519 claim 16) | boolean (S-0003) | no |
@@ -1450,18 +1469,28 @@ out-and-back variant on our engine with `quirks.flying_search_sectors` off. *A* 
 starting it again while *B* remains tracked instead makes *B* precede *A*. This validates
 claim 11's design rule, not any off-state behaviour of the original.
 
-## Open questions
+**A21. Flying and cell-listed entries (claim 6).** *Setup:* use S-0502 scenario J28's
+low-jumpjet descent and take-off fixtures, including the elevated decoy detonation for take-off.
+Use a named map override with delivered damage 100, spread 3 cells, edge fraction 0.5,
+versus 100 % for the target's armour, no other warhead effects, and target health 10000.
+The target is non-veteran, not prone, with object and house armour 1.0. Keep the source
+object distinct from the target. Use the common skirmish settings above, game speed 2,
+director and other mods off. *Procedure:* cause one detonation while the read-only recorder
+confirms the target is both tracked and listed in the scanned cell layer. Record both
+candidate distances, health changes and their order. Repeat with the target's health below
+the first hit's predicted damage. Use three qualifying runs of each take-off, descent and
+lethal variant, voiding runs with unrelated damage or absent dual membership.
+*Expected:* in the surviving variants, two successive hits, flying first, each losing the
+amount F3 gives at its own recorded claim-7 distance; no assumption that their amounts are
+equal. In the lethal variant, one effective hit and one destruction, with no second damage
+or death effect. A single hit on a surviving dual-listed target, a wrong per-hit amount,
+reversed distinguishable entry effects, or a second effective hit after destruction falsifies
+claim 6. S-0502 scenario J28 supplies the grounded and high-flight single-entry controls.
+*Engine-only replay:* with `quirks.flying_listed_double_hit` off, each dual-membership variant
+has only the flying entry and its predicted damage. This is the alternative's design rule,
+not an oracle measurement.
 
-- S-0209 claim 13 excludes an aircraft using ordinary flight at positive terrain-relative
-  height from cell layers, so it cannot receive a second entry that way. Rocket missiles in
-  rocket-flight movement are likewise excluded from cell layers in every phase (S-0506 claim 23),
-  irrespective of height or tracking membership. Whether other tracked flying kinds, such as
-  jumpjets, can also be listed remains open; if listed they could receive two entries.
-  Claim 10 would halve both entries for an aircraft in the air, not just one.
-- Exactly when flying kinds other than rocket missiles are registered and unregistered
-  (lift-off, landing, leaving the map), which the movement specs own; rocket-missile boundaries
-  are S-0506 claims 15 and 19. Once an object is tracked, sector-crossing order is specified
-  by claim 11 and F7 (Q-0614), not an open question.
+## Open questions
 - The order of several eligible bridge tests on one cell (claim 18) lacks a fixture that
   distinguishes every pair. Bridge-piece acceptance and attempt effects are specified by
   S-0511 claims 1 to 15, not open here.
