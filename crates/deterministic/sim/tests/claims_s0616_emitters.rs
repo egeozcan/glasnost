@@ -1186,6 +1186,33 @@ fn s0306_claim_27_railgun_hits_along_the_beam() {
     assert_eq!(hp(&w, friend), hf, "distance 0: nothing is strictly nearer");
 }
 
+/// spec: S-0306 claim 27 (revision 15, Q-1405 answered: Degenerate comparisons, a candidate exactly on an axis-aligned beam or any candidate of a zero-length beam has a line distance that is not a number and qualifies whatever the hit distance) and Edge cases (quirks.railgun_collinear_hits off: the finite Euclidean distance to the line, to the start for a zero-length beam, strictly below the hit distance)
+#[test]
+fn s0306_claim_27_collinear_hits_both_positions() {
+    use railgun::near_line;
+    let (p, q) = (Pos::new(1000, 1000, 0), Pos::new(5000, 1000, 0));
+    let on_line = Pos::new(3000, 1000, 0);
+    let off_start = Pos::new(1300, 1000, 0);
+    for collinear in [true, false] {
+        let mut r = rail_rules();
+        r.globals.quirks.railgun_collinear_hits = collinear;
+        let (w, _, _) = duel(&r, 6);
+        // On the beam's line, hit distance 0 and below.
+        assert_eq!(near_line(&w, p, q, on_line, 0), collinear, "on the line");
+        assert_eq!(near_line(&w, p, q, on_line, -5), collinear, "below 0");
+        // A zero-length beam: 300 leptons from its start.
+        assert_eq!(near_line(&w, p, p, off_start, 128), collinear, "zero-length");
+        // Off the line by 200 leptons: finite in both positions.
+        let off_line = Pos::new(3000, 1200, 0);
+        assert!(!near_line(&w, p, q, off_line, 128));
+        assert!(near_line(&w, p, q, off_line, 256));
+        if !collinear {
+            // The zero-length beam measures to its start.
+            assert!(near_line(&w, p, p, off_start, 400), "to the start");
+        }
+    }
+}
+
 /// A destroyable-cliff tile in the catalogue of `w`, laid on cell `c` when given.
 fn cliff_tile(w: &mut World, c: Option<glasnost_map::CellXY>) {
     use glasnost_map::terrain::{TileCell, TileInfo};

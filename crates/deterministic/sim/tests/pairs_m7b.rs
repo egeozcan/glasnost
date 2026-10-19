@@ -286,6 +286,18 @@ fn a_gas_cloud_kills_a_parachutist_with_one_cloud_and_an_explosion() {
             let anims = w.gas.anims.len();
             testkit::run(&mut w, 1);
             if w.obj(id).is_none() {
+                if id == chute {
+                    // spec: S-0615 claim 1 (revision 3, Q-1421 answered: a parachutist's virus effect is created before its kind-3 death animation)
+                    let order: Vec<&str> = w
+                        .effects
+                        .iter()
+                        .filter_map(|e| match e {
+                            Effect::Anim { name, .. } => Some(name.as_str()),
+                            _ => None,
+                        })
+                        .collect();
+                    assert_eq!(order, ["PLAGUE", "BOOM"], "the virus effect first");
+                }
                 let names = w
                     .effects
                     .iter()
