@@ -12,3 +12,4 @@ crates/deterministic/sim/src/testkit.rs cite # synthetic test scenario (invented
 crates/deterministic/ai/src/fixture.rs cite # synthetic skirmish (invented rules and map for the scripted skirmish tests and the determinism gate); its numbers are test data, not game behaviour
 crates/deterministic/ai/src/fixture_m6c.rs cite # synthetic M6c skirmish (invented rules, map and pre-placed objects for the determinism gate); its numbers are test data, not game behaviour
 crates/deterministic/ai/src/fixture_m7a.rs cite # synthetic M7a skirmish (invented rules and map for the determinism gate); its numbers are test data, not game behaviour
+crates/deterministic/ai/src/fixture_m7b.rs cite # synthetic M7b skirmish (invented rules and map with a drainer for the determinism gate); its numbers are test data, not game behaviour

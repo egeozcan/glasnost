@@ -329,3 +329,311 @@ fn a_gas_cloud_kills_a_parachutist_with_one_cloud_and_an_explosion() {
     assert!(w.walkers.is_empty());
     round_trip(&w);
 }
+
+// ---------------------------------------------------------------------------
+// The drain (S-0608) with the tank bunker, the absorber, the grinder and
+// power. What a drained bunker, absorber or grinder does with its occupants
+// is request Q-1444; these tests check only what the specs say.
+
+mod drain_pairs {
+    use glasnost_map::CellXY;
+    use glasnost_rules::schema::Ruleset;
+    use glasnost_rules::sim::{
+        BuildingType, Decimal, LocomotionClass, Locomotor, MovementZone, ProjectileType, UnitType,
+        WeaponType,
+    };
+    use glasnost_sim::combat::check::Answer as Fire;
+    use glasnost_sim::combat::damage::{self, Hit};
+    use glasnost_sim::combat::fire;
+    use glasnost_sim::orders::{self, Order};
+    use glasnost_sim::rules::{Behaviour, Kind};
+    use glasnost_sim::structures::{absorb, bunker, grinder};
+    use glasnost_sim::transport::Answer;
+    use glasnost_sim::world::{ObjectId, Pos, Target, World};
+    use glasnost_sim::{drain, econ, objects, save, testkit, tick};
+
+    const SIZE: i32 = 24;
+    const ALPHA: u8 = 0;
+    const BETA: u8 = 1;
+
+    fn dec(s: &str) -> Decimal {
+        Decimal(s.into())
+    }
+
+    fn building(r: &mut Ruleset, name: &str, f: impl FnOnce(&mut BuildingType)) {
+        let mut t = BuildingType {
+            strength: Some(1000),
+            foundation: Some([2, 2]),
+            ..Default::default()
+        };
+        // A build-up sprite, so that the building can be sold (S-0408 claim 4).
+        t.econ.buildup = Some(true);
+        t.econ.buildup_frames = Some(4);
+        f(&mut t);
+        super::register(r, "buildings", name);
+        r.sim.buildings.insert(name.into(), t);
+    }
+
+    /// The combat ruleset with:
+    /// - DISC, a balloon-hovering jumpjet whose secondary SUCKER is a
+    ///   draining weapon (vertical projectile DROP);
+    /// - PLANT (output 100, drainable); DEF (drain 20, needs power);
+    /// - ABS, an infantry absorber with no base output and an extra output
+    ///   of 40 per passenger, drainable;
+    /// - GRND, a recycling building of a resource-destination type with a
+    ///   drain of 10, drainable;
+    /// - BUNK, a tank bunker with no impassable rows, drainable;
+    /// - payouts every 10 ticks of 25 credits.
+    fn rules() -> Ruleset {
+        let mut r = testkit::combat_ruleset();
+        r.sim.projectiles.insert(
+            "DROP".into(),
+            ProjectileType {
+                vertical: Some(true),
+                inviso: Some(true),
+                ..Default::default()
+            },
+        );
+        r.sim.weapons.insert(
+            "SUCKER".into(),
+            WeaponType {
+                damage: Some(1),
+                rof: Some(50),
+                range: Some(dec("0.1")),
+                speed: Some(100),
+                projectile: Some("DROP".into()),
+                warhead: Some("SA".into()),
+                drain_weapon: Some(true),
+                omni_fire: Some(true),
+                ..Default::default()
+            },
+        );
+        super::register(&mut r, "vehicles", "DISC");
+        r.sim.vehicles.insert(
+            "DISC".into(),
+            UnitType {
+                strength: Some(300),
+                speed: Some(4),
+                locomotion_class: Some(LocomotionClass::Hover),
+                movement_zone: Some(MovementZone::Fly),
+                locomotor: Some(Locomotor::Jumpjet),
+                jumpjet: Some(true),
+                jumpjet_height: Some(500),
+                balloon_hover: Some(true),
+                turret: Some(true),
+                primary: Some("Gun".into()),
+                secondary: Some("SUCKER".into()),
+                ..Default::default()
+            },
+        );
+        building(&mut r, "PLANT", |t| {
+            t.econ.power = Some(100);
+            t.combat.drainable = Some(true);
+        });
+        building(&mut r, "DEF", |t| {
+            t.econ.power = Some(-20);
+            t.powered = Some(true);
+        });
+        building(&mut r, "ABS", |t| {
+            t.infantry_absorb = Some(true);
+            t.passengers = Some(3);
+            t.size_limit = Some(dec("1"));
+            t.econ.power = Some(0);
+            t.econ.extra_power = Some(40);
+            t.combat.drainable = Some(true);
+        });
+        building(&mut r, "GRND", |t| {
+            t.grinding = Some(true);
+            t.econ.power = Some(-10);
+            t.econ.resource_destination = Some(true);
+            t.combat.drainable = Some(true);
+        });
+        building(&mut r, "BUNK", |t| {
+            t.bunker = Some(true);
+            t.number_impassable_rows = Some(0);
+            t.combat.drainable = Some(true);
+        });
+        let g = &mut r.sim.general;
+        g.drain_money_frame_delay = Some(10);
+        g.drain_money_amount = Some(25);
+        r
+    }
+
+    fn game() -> World {
+        let mut w = testkit::game_with(&rules(), SIZE, 7);
+        testkit::run(&mut w, 2);
+        w
+    }
+
+    fn at(dx: i32, dy: i32) -> CellXY {
+        testkit::mid(SIZE, dx, dy)
+    }
+
+    fn put(w: &mut World, kind: Kind, name: &str, house: u8, dx: i32, dy: i32) -> ObjectId {
+        testkit::spawn(w, kind, name, house, at(dx, dy), 0)
+    }
+
+    /// An Alpha DISC moved over `b`'s top-left cell, making a drain
+    /// attempt at it with its secondary.
+    fn drain_with_disc(w: &mut World, b: ObjectId) -> ObjectId {
+        let cell = w.obj(b).unwrap().pos.cell();
+        let d = put(w, Kind::Vehicle, "DISC", ALPHA, 9, 9);
+        objects::take_inside(w, d);
+        let p = Pos::centre(cell, 0);
+        let ground = w.surface_at(p.x, p.y);
+        objects::place(w, d, Pos::new(p.x, p.y, ground + 200), 0);
+        w.obj_mut(d).unwrap().target = Some(Target::Object(b));
+        fire::shot(w, d, 1, Target::Object(b));
+        assert_eq!(drain::partner(w, d), Some(b), "linked");
+        d
+    }
+
+    fn output(w: &World, h: u8) -> i32 {
+        w.houses[usize::from(h)].econ.power.output
+    }
+
+    fn kill(w: &mut World, id: ObjectId) {
+        let hit = Hit {
+            amount: w.obj(id).unwrap().health * 10,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: false,
+        };
+        damage::apply(w, id, hit);
+    }
+
+    fn round_trip(w: &World) {
+        let l = save::load(&save::save(w), w.rules_arc(), w.catalogue_arc()).unwrap();
+        assert_eq!(save::state_hash(&l), save::state_hash(w));
+        assert_eq!(l.drain, w.drain);
+    }
+
+    // Pair: the drain and power (S-0608 × S-0405).
+    // spec: S-0608 claim 5 (the building's house becomes due when the link forms) and S-0405 claims 5 and 7 (a drained building with output above 0: output O = 0 at the house's next working-out, low power with any drain)
+    // spec: S-0405 claim 8 (a needs-power building with a base drain above 0 is not in operation under low power)
+    // spec: S-0608 claims 13 and 14 (the drainer's killing hit ends the link; the house is due and its power is back at its next working-out)
+    #[test]
+    fn a_drained_plant_stops_the_defences_until_the_disc_dies() {
+        let mut w = game();
+        let plant = put(&mut w, Kind::Building, "PLANT", BETA, 0, 0);
+        let def = put(&mut w, Kind::Building, "DEF", BETA, 6, 0);
+        testkit::run(&mut w, 2);
+        assert_eq!(output(&w, BETA), 100);
+        assert!(econ::power::in_operation(&w, def));
+        let d = drain_with_disc(&mut w, plant);
+        testkit::run(&mut w, 2);
+        assert_eq!(output(&w, BETA), 0, "blackout");
+        assert!(!econ::power::in_operation(&w, def), "low power stops it");
+        round_trip(&w);
+        kill(&mut w, d);
+        assert!(!drain::being_drained(&w, plant));
+        testkit::run(&mut w, 2);
+        assert_eq!(output(&w, BETA), 100);
+        assert!(econ::power::in_operation(&w, def), "back in operation");
+    }
+
+    // Pair: the drain and the infantry absorber (S-0608 × S-0605).
+    // spec: S-0405 claims 1 and 5 (an absorbing building's output is its base output plus the extra output per passenger; only a drained building with output above 0 blacks its house out)
+    // spec: S-0605 claim 1 (an absorbing building refuses an entrant whose type hovers by balloon: the disc cannot go in)
+    // spec: S-0608 claims 2 and 5 (any building of a drainable type over whose foundation the drainer is gets linked)
+    #[test]
+    fn a_drained_absorber_blacks_out_only_with_passengers() {
+        let mut w = game();
+        let plant = put(&mut w, Kind::Building, "PLANT", BETA, 6, 0);
+        let def = put(&mut w, Kind::Building, "DEF", BETA, 6, 4);
+        let abs = put(&mut w, Kind::Building, "ABS", BETA, 0, 0);
+        testkit::run(&mut w, 2);
+        let d = drain_with_disc(&mut w, abs);
+        testkit::run(&mut w, 2);
+        assert_eq!(output(&w, BETA), 100, "an empty absorber has no output");
+        assert!(econ::power::in_operation(&w, def));
+        assert_eq!(
+            absorb::answer(&w, abs, d),
+            Answer::Refuses,
+            "no disc inside"
+        );
+        // The link ends; a passenger walks in (whether one may enter a
+        // drained absorber is Q-1444), and a new link forms.
+        drain::end(&mut w, abs);
+        let u = put(&mut w, Kind::Infantry, "WALKER", BETA, 3, 0);
+        while orders::blocked(&w) {
+            tick::step(&mut w);
+        }
+        assert!(orders::issue(
+            &mut w,
+            glasnost_sim::world::HouseId(BETA),
+            Order::Behaviour {
+                actor: u,
+                behaviour: Behaviour::Enter,
+                attack_move: false,
+                target: None,
+                dest: Some(Target::Object(abs)),
+            },
+        ));
+        let mut inside = false;
+        for _ in 0..600 {
+            tick::step(&mut w);
+            if absorb::absorbed_in(&w, u) == Some(abs) {
+                inside = true;
+                break;
+            }
+        }
+        assert!(inside, "the walker went in");
+        testkit::run(&mut w, 2);
+        // The plant's 100 and the passenger's 40, scaled by health (the
+        // first disc, no longer draining, may shoot at the buildings).
+        assert!(output(&w, BETA) > 100, "the passenger's extra output");
+        drain_with_disc(&mut w, abs);
+        testkit::run(&mut w, 2);
+        assert_eq!(output(&w, BETA), 0, "blackout");
+        assert!(!econ::power::in_operation(&w, def));
+        round_trip(&w);
+        let _ = plant;
+    }
+
+    // Pair: the drain and the grinder (S-0608 × S-0603).
+    // spec: S-0603 claim 2 (a recycling building refuses an entrant whose type hovers by balloon: an own disc cannot be recycled)
+    // spec: S-0608 claim 7 (a drained building of a resource-destination type pays its house's credits to the drainer's house on the payout ticks) and S-0408 claim 3 (a drained building cannot be sold)
+    #[test]
+    fn a_drained_grinder_pays_and_cannot_be_sold() {
+        let mut w = game();
+        let own = put(&mut w, Kind::Building, "GRND", ALPHA, -8, 0);
+        let g = put(&mut w, Kind::Building, "GRND", BETA, 0, 0);
+        let d = drain_with_disc(&mut w, g);
+        assert_eq!(
+            grinder::answer(&w, own, d),
+            Answer::Refuses,
+            "no disc recycled"
+        );
+        w.houses[usize::from(BETA)].credits = 1000;
+        let before = w.houses[usize::from(ALPHA)].credits;
+        testkit::run(&mut w, 30);
+        let paid = w.houses[usize::from(ALPHA)].credits - before;
+        assert!(paid >= 50 && paid % 25 == 0, "payouts of 25: {paid}");
+        assert_eq!(w.houses[usize::from(BETA)].credits, 1000 - paid);
+        assert!(!econ::sell::sellable(&w, g), "no sale while drained");
+        round_trip(&w);
+    }
+
+    // Pair: the drain and the tank bunker (S-0608 × S-0606).
+    // spec: S-0606 claim 2 row P6 (a bunker refuses an actor whose type has the balloon-hover flag: the disc cannot be bunkered)
+    // spec: S-0405 claim 9 table T1 (a drained building's firing answer is illegal) and S-0408 claim 3 (no sale); S-0405 claim 5 (a drained building without output does not black its house out)
+    #[test]
+    fn a_drained_bunker_refuses_fire_and_sale_but_no_blackout() {
+        let mut w = game();
+        let _plant = put(&mut w, Kind::Building, "PLANT", BETA, 6, 0);
+        let own = put(&mut w, Kind::Building, "BUNK", ALPHA, -8, 0);
+        let k = put(&mut w, Kind::Building, "BUNK", BETA, 0, 0);
+        testkit::run(&mut w, 2);
+        let d = drain_with_disc(&mut w, k);
+        assert!(!bunker::permits(&w, own, d), "no disc bunkered");
+        testkit::run(&mut w, 2);
+        assert_eq!(econ::power::firing_answer(&w, k), Some(Fire::Illegal));
+        assert!(!econ::sell::sellable(&w, k));
+        assert_eq!(output(&w, BETA), 100, "a bunker has no output");
+        round_trip(&w);
+    }
+}
