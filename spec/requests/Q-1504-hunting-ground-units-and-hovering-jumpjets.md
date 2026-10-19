@@ -3,7 +3,7 @@ id: Q-1504
 title: How hunting ground units find a hovering jumpjet group
 status: answered
 related: [S-0309, S-0215, S-0502, S-0615, S-0102]
-answered-by: [S-0309]
+answered-by: [S-0309, S-0502]
 ---
 
 ## Need

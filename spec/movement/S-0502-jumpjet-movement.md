@@ -2,13 +2,13 @@
 id: S-0502
 title: Movement of jumpjets
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-19
 measurements: []
-requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501]
+requests: [Q-0975, Q-0976, Q-0977, Q-0978, Q-0979, Q-0980, Q-0981, Q-1010, Q-1011, Q-1012, Q-1030, Q-1031, Q-1500, Q-1501, Q-1504]
 supersedes: []
 ---
 
@@ -1109,6 +1109,26 @@ New terms:
     - Backing: `measurable` (scenario J28 b and c)
     - Confidence: high for take-off, ascent and descent; medium for retained listings
 
+32. **Disc-laser attacks do not force a descent (Q-1504 question 2).** Firing a
+    disc-laser weapon, including its charge-up and final damage step (S-0615 claims 12,
+    13, 15 and 16), does not itself lower the firer, change its target height or put it
+    in the ground render layer.
+    - A jumpjet hovering at its movement point with a target keeps hovering under
+      claim 13. Its height still follows claims 8 and 9, including wobble; this is not
+      a separate attack-height mode. A balloon-hover type keeps full target height
+      during cruise under claim 11, whether or not it is attacking.
+    - This does not mean every attacking jumpjet is above the ground-layer boundary.
+      Low ascent, descent, retained low target height or wobble can satisfy claim 4's
+      height predicate independently of the weapon. The evaluated layer remains
+      S-0102 claim 3's height result, not a test of whether a disc laser is active.
+      S-0102 claim 4 separately owns membership in the drawing lists.
+    - A settled hover over flat terrain that remains at least 208 leptons above the
+      surface therefore does not become a ground-layer candidate for S-0309 claim 7's
+      map-wide search merely by attacking. Retaliation is a separate route to acquiring
+      the firer (S-0309 claim 18; S-0615 claim 16).
+    - Backing: `measurable` (scenario J30)
+    - Confidence: high
+
 ## Formulas
 
 All heights and positions are signed integers in leptons. Current and maximum speed and wobble
@@ -1944,6 +1964,25 @@ simple-deployer exclusions in claims 13 and 15 remain unmeasured as stated there
   the secondary, because *r*, not *r*′, is tested. A switch at another height, or one that follows the flight
   state (for example the primary while ascending above 208 leptons), falsifies claim 30. Repeat each
   target and flight-state/height subcase in 10 runs, recording the seed and input tick.
+
+- **J30 Disc-laser attack height (claim 32, Q-1504 question 2).** Common setup,
+  game speed 6, a tiny flat test map without bridges or objects beneath the observed
+  hover. Use a stock balloon-hover jumpjet vehicle with a disc-laser weapon, owned by
+  the human test house, and one stationary enemy target within weapon reach. Keep
+  the bystander computer player's unrelated objects outside the observed area.
+  First order the jumpjet to its hover cell and allow its ascent to finish. Record
+  its world and terrain heights, flight state, target height, evaluated render layer,
+  attack target, shot ticks and damage ticks through a read-only recorder, with video
+  of the beams. Then order an attack without a move, and observe three completed
+  shots while the target survives. Repeat 10 times, logging seeds and input ticks.
+  *Expected:* the jumpjet keeps hovering, its target height does not change at the
+  attack order, shot, charge-up or damage events, and its actual height follows the
+  ordinary wobble and height-control formulas. In each interval whose recorded height
+  stays at least 208 leptons, its evaluated layer remains air or top, never ground.
+  A shot-correlated height change beyond those formulas, a changed target height or
+  a ground evaluation at such a height falsifies claim 32. Target death, movement,
+  crash or interference makes that interval inconclusive. For a joint target-acquisition
+  test use S-0309 scenario A11 part k; do not infer a layer change from retaliation.
 
 ## Open questions
 
