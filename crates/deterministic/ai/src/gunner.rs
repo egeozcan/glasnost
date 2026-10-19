@@ -264,12 +264,29 @@ impl Special {
     }
 }
 
+/// The counts of [`probe`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GunnerProbe {
+    /// Armed vehicles that are not healers.
+    pub armed: usize,
+    /// Switching gunner vehicles.
+    pub gunners: usize,
+    /// Those carrying anyone.
+    pub carrying: usize,
+    /// Those empty and idle at home.
+    pub empty_home: usize,
+    /// Infantry units that would heal in one of them.
+    pub healers: usize,
+    /// Those at home or idle, free to be sent.
+    pub free: usize,
+}
+
 /// What [`Special::gunners`] sees for `house` now, for the lane's
 /// `GLASNOST_AI_GUNPROBE` lines (a diagnostic, outside the brain): its
 /// armed vehicles, its switching gunner vehicles, those carrying anyone,
 /// those empty and idle at home, its infantry that would heal in one of
 /// them, and those free at home.
-pub fn probe(w: &World, house: HouseId) -> [usize; 6] {
+pub fn probe(w: &World, house: HouseId) -> GunnerProbe {
     let script = Script::new(house, crate::brain::default_plan());
     let home = script.home(w);
     let at_home = |o: &glasnost_sim::world::Object| {
@@ -310,12 +327,12 @@ pub fn probe(w: &World, house: HouseId) -> [usize; 6] {
         .iter()
         .filter(|o| free_infantry(w, o.id) && (at_home(o) || scripted::idle(w, o.id)))
         .count();
-    [
+    GunnerProbe {
         armed,
-        gunners.len(),
+        gunners: gunners.len(),
         carrying,
         empty_home,
-        healers.len(),
+        healers: healers.len(),
         free,
-    ]
+    }
 }

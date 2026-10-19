@@ -748,7 +748,7 @@ impl Brain {
         let me = &w.houses[usize::from(house.0)];
         let enemies = self.script.seen_enemies(w);
         let r = 256 * i64::from(w.rules().superweapons.shield_radius); // spec: S-0513 F3 (256 leptons per cell of the radius R)
-        let points: Vec<(bool, i64, i64)> = w
+        let points: Vec<(bool, CellXY, i64, i64)> = w
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Building)
@@ -758,13 +758,18 @@ impl Brain {
             })
             .map(|o| {
                 let p = w.reference_point(o.id);
-                (o.owner == Some(house), i64::from(p.x), i64::from(p.y))
+                (
+                    o.owner == Some(house),
+                    p.cell(),
+                    i64::from(p.x),
+                    i64::from(p.y),
+                )
             })
             .collect();
         let mut cands: Vec<CellXY> = points
             .iter()
-            .filter(|&&(own, _, _)| own)
-            .map(|&(_, x, y)| CellXY::new((x / 256) as i32, (y / 256) as i32))
+            .filter(|&&(own, _, _, _)| own)
+            .map(|&(_, c, _, _)| c)
             .filter(|&c| enemies.iter().any(|&(_, e)| dist2(e, c) <= DEFEND * DEFEND))
             .collect();
         cands.sort_by_key(|c| (c.y, c.x));
@@ -775,7 +780,7 @@ impl Brain {
                 let (cx, cy) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0513 F3 (the target cell centre)
                 let n = points
                     .iter()
-                    .filter(|&&(_, x, y)| (x - cx).pow(2) + (y - cy).pow(2) < r * r)
+                    .filter(|&&(_, _, x, y)| (x - cx) * (x - cx) + (y - cy) * (y - cy) < r * r)
                     .count();
                 (n, c)
             })

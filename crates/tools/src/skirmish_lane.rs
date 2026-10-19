@@ -656,8 +656,14 @@ fn play_ai(
         }
         if gun_probe > 0 && w.tick % gun_probe == 0 {
             for h in 0..PLAYERS {
-                let [armed, gunners, carrying, empty_home, healers, free] =
-                    glasnost_ai::gunner::probe(w, HouseId(h as u8));
+                let glasnost_ai::gunner::GunnerProbe {
+                    armed,
+                    gunners,
+                    carrying,
+                    empty_home,
+                    healers,
+                    free,
+                } = glasnost_ai::gunner::probe(w, HouseId(h as u8));
                 if gunners > 0 {
                     println!(
                         "gunprobe tick {} house {h} armed {armed} gunners {gunners} carrying {carrying} empty-idle-home {empty_home} healers {healers} free-home {free}",
@@ -1822,9 +1828,9 @@ impl EconTrace {
             now.insert(i, (item.object, item.owed));
         }
         self.owed = now;
-        for h in 0..PLAYERS {
+        for (h, paid) in paid_now.iter().enumerate() {
             let c = w.houses[h].credits;
-            let gained = i64::from(c - self.last_credits[h]) + paid_now[h];
+            let gained = i64::from(c - self.last_credits[h]) + paid;
             if gained > 0 {
                 self.earned[h] += gained;
             }

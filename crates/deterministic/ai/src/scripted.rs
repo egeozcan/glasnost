@@ -828,7 +828,9 @@ impl Script {
             }
         }
         let n = self.plan.harvesters;
-        (cells.len() / CELLS_PER_HARVESTER).clamp(n, 2 * n)
+        // A person stops at twice the plan's harvesters: more queue at the
+        // refineries.
+        (cells.len() / CELLS_PER_HARVESTER).clamp(n, 2 * n) // nocite: tuning of our own opponent
     }
 
     /// Whether the house keeps the plan's harvester count (deployed slave
