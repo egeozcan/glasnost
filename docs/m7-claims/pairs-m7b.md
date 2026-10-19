@@ -91,13 +91,14 @@ The first run on the user's install failed 12 tests. Every failure was in the te
 in the simulation: the type it chose, when it read the result, or a precondition that the
 installed data does not give. Each was checked against the spec before the scene was changed. For
 example, S-0612 claim 10 puts the sweep's damage before the takeover, and S-0607 claims 17 and 20
-let a unit dropped on a clear cell survive, still seized. Where the installed sweep destroys the
-building of a pair, the test runs again with the domination's damage set to 0 and says so.
+let a unit dropped on a clear cell survive, still seized. Where the sweep's damage destroys the
+building of a pair before the takeover, the test runs again with the domination's damage set to 0
+and says so.
 
 The second run took 2.6 s once built and ran 42 tests: 37 pass and 5 skip, none fail. Six of the
-passes are partial (`PASS (...)`), and the reason is given in the table. The five skips are facts
-of the installed data, not results: four drain rows have no drainable building of their kind, and
-one cloning row has a cloning building that cannot be mind-controlled.
+passes are partial (`PASS (...)`). The five skips are not results: the installed data cannot form
+those pairs. The run prints the reason for each partial pass and skip; the reasons describe the
+installed data, so they stay in the git-ignored run output and out of this file.
 
 | Pair | Relation test | Result on the user's install |
 |---|---|---|
@@ -120,18 +121,18 @@ one cloning row has a cloning building that cannot be mind-controlled.
 | Force Shield × gas clouds | `m7b_a_gas_cloud_does_nothing_to_a_shielded_building` | PASS |
 | Special-hit effects × gas deaths | `m7b_a_gas_cloud_kills_a_parachutist_with_one_cloud_and_an_explosion` | PASS |
 | Special-hit effects × the lift fall | `m7b_a_lift_fall_crushes_silently_but_its_impact_makes_a_burning_walker` | PASS |
-| Cloning Vats × mind control | `m7b_cloning_a_controlled_vat_clones_for_its_controller_and_ranks_last_when_released` | SKIP the cloning building is psionics-immune: it cannot be taken |
-| Cloning Vats × Psychic Dominator | `m7b_cloning_a_domination_leaves_a_vat_with_its_owner` | PASS (sweep damage 0: the reference sweep destroys the cloning building) |
+| Cloning Vats × mind control | `m7b_cloning_a_controlled_vat_clones_for_its_controller_and_ranks_last_when_released` | SKIP (the installed data cannot form the pair; the run prints why) |
+| Cloning Vats × Psychic Dominator | `m7b_cloning_a_domination_leaves_a_vat_with_its_owner` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |
 | Cloning Vats × Genetic Mutator | `m7b_cloning_a_mutation_made_unit_is_not_cloned` | PASS |
 | Cloning Vats × absorber | `m7b_cloning_a_passenger_let_out_of_an_absorber_is_not_cloned` | PASS |
-| Psychic Dominator × absorber | `m7b_dominator_a_domination_spares_an_absorbed_passenger` | PASS (sweep damage 0: the reference sweep destroys the absorber; the unit beside lies outside the swept cells) |
-| Psychic Dominator × tank bunker | `m7b_dominator_a_domination_takes_a_bunkered_vehicle_and_leaves_the_link` | PASS (sweep damage 0: the reference sweep destroys the bunker) |
-| Psychic Dominator × mind control | `m7b_dominator_a_domination_takes_a_controller_and_a_controlled_unit` | PASS (part 2 not formed: the controller is psionics-immune) |
-| Drain × absorber | `m7b_drain_a_drained_absorber_blacks_out_only_with_passengers` | PASS (the drainer's death hurt the absorber) |
-| Drain × tank bunker occupant | `m7b_drain_a_drained_bunker_keeps_its_vehicle_firing` | SKIP no drainable tank bunker |
-| Drain × tank bunker | `m7b_drain_a_drained_bunker_refuses_fire_and_sale_but_no_blackout` | SKIP no drainable tank bunker |
-| Drain × grinder | `m7b_drain_a_drained_grinder_pays_and_cannot_be_sold` | SKIP no drainable recycling building |
-| Drain × grinder recycling | `m7b_drain_a_drained_grinder_still_recycles_for_its_owner` | SKIP no drainable recycling building |
+| Psychic Dominator × absorber | `m7b_dominator_a_domination_spares_an_absorbed_passenger` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |
+| Psychic Dominator × tank bunker | `m7b_dominator_a_domination_takes_a_bunkered_vehicle_and_leaves_the_link` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |
+| Psychic Dominator × mind control | `m7b_dominator_a_domination_takes_a_controller_and_a_controlled_unit` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |
+| Drain × absorber | `m7b_drain_a_drained_absorber_blacks_out_only_with_passengers` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |
+| Drain × tank bunker occupant | `m7b_drain_a_drained_bunker_keeps_its_vehicle_firing` | SKIP (the installed data cannot form the pair; the run prints why) |
+| Drain × tank bunker | `m7b_drain_a_drained_bunker_refuses_fire_and_sale_but_no_blackout` | SKIP (the installed data cannot form the pair; the run prints why) |
+| Drain × grinder | `m7b_drain_a_drained_grinder_pays_and_cannot_be_sold` | SKIP (the installed data cannot form the pair; the run prints why) |
+| Drain × grinder recycling | `m7b_drain_a_drained_grinder_still_recycles_for_its_owner` | SKIP (the installed data cannot form the pair; the run prints why) |
 | Drain × power | `m7b_drain_a_drained_plant_stops_the_defences_until_the_disc_dies` | PASS |
 | Force Shield × drain (interim of request Q-1507) | `m7b_drain_a_shielded_plant_is_drained_under_the_q1507_interim` | PASS |
 | Genetic Mutator × tank bunker | `m7b_mutator_a_launch_on_a_tank_bunker_leaves_it_and_its_vehicle` | PASS |
@@ -142,4 +143,4 @@ one cloning row has a cloning building that cannot be mind-controlled.
 | Force Shield × gattling | `m7b_shield_a_gattling_fires_at_a_shielded_building_and_spins_up_for_nothing` | PASS |
 | Force Shield × magnetic lift | `m7b_shield_a_lift_seizes_a_vehicle_inside_a_shield` | PASS |
 | Force Shield × Genetic Mutator | `m7b_shield_a_mutation_inside_a_shield_converts_its_infantry` | PASS |
-| Force Shield × mind control (and Cloning Vats) | `m7b_shield_a_shielded_vat_refuses_mind_control_and_keeps_cloning` | PASS (control part: the cloning building is psionics-immune, so only the refusal shows) |
+| Force Shield × mind control (and Cloning Vats) | `m7b_shield_a_shielded_vat_refuses_mind_control_and_keeps_cloning` | PASS, partial (part of the scene not formed on the installed data; the run prints which) |

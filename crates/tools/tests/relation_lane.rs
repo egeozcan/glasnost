@@ -531,7 +531,7 @@ fn dominate(w: &mut World, h: u8, c: CellXY) -> Option<Vec<ObjectId>> {
 }
 
 /// The reference rules with the domination's sweep damage set to 0, for
-/// the pairs whose building the reference sweep destroys before the
+/// a pair whose building the sweep's damage destroys on a run before the
 /// takeover can be seen (S-0612 claim 10: the damage comes first).
 fn without_sweep_damage(r: &Arc<SimRules>) -> Arc<SimRules> {
     let mut x = (**r).clone();
