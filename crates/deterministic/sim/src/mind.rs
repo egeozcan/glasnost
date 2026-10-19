@@ -812,7 +812,9 @@ pub fn converted(w: &mut World, old: ObjectId, new: ObjectId) {
 /// Psychic domination by house `h` reaches object `id` (claim 13, S-0612
 /// claims 13 and 14). Returns whether it became permanently controlled.
 /// Seam: S-0612 (M7b) is not built, so no superweapon calls this yet; its
-/// own-house switch belongs to it.
+/// own-house switch belongs to it. A dominated drainer's link then ends by
+/// S-0608 claim 11's alliance test, which reads the owners in the drainer's
+/// turn (`crate::drain`), so the drain needs nothing more from S-0612.
 pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0601 claim 13 (not a building)
