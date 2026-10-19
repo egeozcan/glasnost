@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 14
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0083, Q-0970]
 supersedes: []
@@ -60,8 +60,8 @@ S-0301's term (Terms and claim 10).
   (claim 6).
 - **Airborne.** An object is airborne when the original counts it as in the air. For aircraft,
   use S-0501 claim 18's *in-the-air answer*, as defined in its Terms, not its distinct *in flight*
-  test. The movement specs own the exact test for other objects; S-0303 (claim 10) and S-0309 use
-  the same test.
+  test. For other objects, use S-0307 Terms (*airborne*); S-0502 claim 30 confirms this test
+  for units using jumpjet locomotion. S-0303 (claim 10) and S-0309 use the same test.
 - **Water target.** A target object that is not airborne, not on a bridge deck, and whose cell has
   the land type *water* or *beach* (S-0211).
 - **Kamikaze aircraft.** An aircraft in the dive by which it crashes itself into its target. The
