@@ -69,6 +69,7 @@ Raw per-game harness output stays with the oracle operator (outside this reposit
 
 ## Notes
 
+- **Computer players:** both houses were the original's computer players, so every rule the original gives only to computer-controlled owners applied to their units (for example retaliation and scatter outside the human rules). A comparison must give its two houses the same rules (S-0215, houses in our engine).
 - **Cliff cells in large groups:** the ground around W is not flat everywhere. A group of more than about 5 columns on side A reaches cells west of W that are cliff cells between two height levels (Q-1502 lists them). The harness placed units there like anywhere else. In the stock games of the pairings Q-1502 names, every game still ended by the third sample with one side owning nothing, none at the frame limit.
 - **Reproducing it:** the setup uses a stock map, so a comparison against this record runs in the local lane, with the map read from the game directory; a test on a map of our own measures something else and is not checked against it.
 - **Time to kill is not recorded:** the harness samples only every 304 frames, so `end_frame` is a coarse window (most fights end by the first or second sample). A finer measurement needs another method.
