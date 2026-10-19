@@ -1780,6 +1780,22 @@ pub struct Quirks {
     // spec: S-0615 claim 16 and Edge cases
     #[serde(default = "on")]
     pub disc_laser_no_house: bool,
+    /// A disc laser whose weapon has the unlimited range compares its re-check distance with that negative value as it is, so it is cancelled at its first step and never deals damage; off: unlimited range never cancels a disc laser on distance.
+    // spec: S-0615 claim 14 and Edge cases
+    #[serde(default = "on")]
+    pub disc_laser_unlimited_range: bool,
+    /// A railgun candidate whose calculated line distance is not a number (exact collinearity among others) qualifies whatever the hit distance; off: the finite Euclidean distance to the beam's line (to its start for a zero-length beam), strictly below the hit distance.
+    // spec: S-0306 claim 27 and Edge cases
+    #[serde(default = "on")]
+    pub railgun_collinear_hits: bool,
+    /// An object found by both the flying-object search and a scanned cell of a detonation keeps both entries and can take two hits, the flying entry first; off: it keeps only its flying entry.
+    // spec: S-0303 claim 6 and Edge cases
+    #[serde(default = "on")]
+    pub flying_listed_double_hit: bool,
+    /// A jumpjet touching down in the bridge or parachute falling state, or no longer alive or in play, stays a tracked flying object; off: every touchdown ends its registration.
+    // spec: S-0502 claim 29 and Edge cases
+    #[serde(default = "on")]
+    pub jumpjet_falling_touchdown_tracked: bool,
     /// A damaging animation's damage accumulator starts at 1.0, so its first advance already delivers 1 when δ < 1; off: it starts at 0.0. Implemented for the burning walker's expiring advances (S-0615 claim 11), the only animation the simulation plays with damage.
     // spec: S-0109 claim 17, F5 and Edge cases
     #[serde(default = "on")]
@@ -2343,6 +2359,10 @@ impl Default for Quirks {
             refused_mutation_frees_position: true,
             infantry_animation_occupancy: true,
             disc_laser_no_house: true,
+            disc_laser_unlimited_range: true,
+            railgun_collinear_hits: true,
+            flying_listed_double_hit: true,
+            jumpjet_falling_touchdown_tracked: true,
             anim_damage_starts_at_one: true,
             dominator_damage_storm_house: true,
             dominator_marks_own_objects: true,
@@ -3503,6 +3523,16 @@ impl Quirks {
                 self.infantry_animation_occupancy,
             ),
             ("disc_laser_no_house", self.disc_laser_no_house),
+            (
+                "disc_laser_unlimited_range",
+                self.disc_laser_unlimited_range,
+            ),
+            ("railgun_collinear_hits", self.railgun_collinear_hits),
+            ("flying_listed_double_hit", self.flying_listed_double_hit),
+            (
+                "jumpjet_falling_touchdown_tracked",
+                self.jumpjet_falling_touchdown_tracked,
+            ),
             ("anim_damage_starts_at_one", self.anim_damage_starts_at_one),
             (
                 "dominator_damage_storm_house",

@@ -108,7 +108,10 @@ pub struct House {
     /// Houses this house counts as allies, itself included (S-0209 Terms).
     pub allies: Vec<HouseId>,
     /// Human-controlled (an AI house of our engine counts as one, glossary
-    /// *AI house*).
+    /// *AI house*). A player house with this clear is a test-only
+    /// computer-controlled player house (glossary; S-0215 Terms): it follows
+    /// the original's computer-controlled-owner rules, as the neutral and
+    /// special houses do.
     pub human: bool,
     /// House skill level (S-0209 Terms; 0 for every house of our engine in
     /// a skirmish).

@@ -99,8 +99,11 @@ pub const M6C_TICKS: i32 = 12_000;
 /// revisions 5 and 6: the jumpjet stop when a grip ends): seed 1 still
 /// plays all its ticks but gives only 2 takeover orders; seed 2, the
 /// lowest that plays all its ticks, has every counter at least 3 but the
-/// sensor orders' 2.
-pub const M7A_SEED: u32 = 2;
+/// sensor orders' 2. Moved from 2 to 1 at M7b step 1c (the S-0405 r20,
+/// S-0502 r18 and S-0309 r21 revisions): Alpha wins seed 2 at tick
+/// 11 331; seed 1, the lowest that plays all its ticks, has every counter
+/// at least 3 but the sensor orders' 2.
+pub const M7A_SEED: u32 = 1;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

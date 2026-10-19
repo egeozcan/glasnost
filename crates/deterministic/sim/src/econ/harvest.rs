@@ -1756,14 +1756,15 @@ pub fn purifier_count(w: &World, house: HouseId) -> i64 {
         })
         .count() as i64;
     let h = &w.houses[usize::from(house.0)];
-    let virtual_ = match h.role {
+    let virtual_ = if h.human {
         // spec: S-0402 claim 12 (virtual purifiers: never for a player house of our engine, AI houses included)
-        HouseRole::Player => 0,
-        // spec: S-0402 claim 12 (the neutral and special houses: the list entry their difficulty index selects, index 1 in every skirmish; a missing list or entry counts 0)
-        HouseRole::Neutral | HouseRole::Special => usize::try_from(h.econ.setup.difficulty)
+        0
+    } else {
+        // spec: S-0402 claim 12 (the neutral and special houses: the list entry their difficulty index selects, index 1 in every skirmish; a missing list or entry counts 0) and glossary (a test-only computer-controlled player house by its oracle difficulty index)
+        usize::try_from(h.econ.setup.difficulty)
             .ok()
             .and_then(|i| r.econ.harvest.virtual_purifiers.get(i))
-            .map_or(0, |&v| i64::from(v)),
+            .map_or(0, |&v| i64::from(v))
     };
     real + virtual_
 }
@@ -1832,8 +1833,8 @@ pub fn guard_rule(w: &mut World, id: ObjectId) -> bool {
         return false;
     };
     let h = &w.houses[usize::from(owner.0)];
-    let applies = if h.role != HouseRole::Player && !h.human {
-        // spec: S-0402 claim 13 (the computer-controlled rule, kept by the neutral and special houses: a refinery of its dock types and no no-field record)
+    let applies = if !h.human {
+        // spec: S-0402 claim 13 (the computer-controlled rule, kept by the neutral and special houses and a test-only computer-controlled player house, glossary: a refinery of its dock types and no no-field record)
         owns_dock(w, id) && !h.econ.harvest.no_field
     } else if u.teleporter {
         // spec: S-0402 claim 17 (a chrono miner: a neighbouring building of its owner with the refinery flag, or full and still moving; every player house)
@@ -1908,11 +1909,8 @@ pub fn slave_wake_rule_holds(w: &mut World, id: ObjectId) -> bool {
     let r = w.rules_arc();
     // spec: S-0402 claim 14 (the group at rest: no slave sent out since the group last came together)
     let at_rest = g.state == super::slaves::GroupState::AtRest;
-    // spec: S-0402 claim 14 (the computer-controlled condition: not for player houses in our engine; the neutral and special houses keep it)
-    let computer = o.owner.is_some_and(|h| {
-        let house = &w.houses[usize::from(h.0)];
-        house.role != HouseRole::Player && !house.human
-    });
+    // spec: S-0402 claim 14 (the computer-controlled condition: not for player houses in our engine; the neutral and special houses keep it, as does a test-only computer-controlled player house, glossary)
+    let computer = o.owner.is_some_and(|h| !w.houses[usize::from(h.0)].human);
     let here = o.pos.cell();
     let on_ore = w.cells.cell(here).is_some_and(|c| c.land == land::TIBERIUM);
     let range = r.econ.harvest.slave_short_scan;

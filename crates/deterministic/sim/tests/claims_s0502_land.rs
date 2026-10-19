@@ -761,3 +761,30 @@ fn claim_21_neighbour_step_at_the_end_of_an_ascent() {
     };
     assert_eq!(direction(at(0, 0), n), draw as usize);
 }
+
+// spec: S-0502 claim 32 (firing a disc-laser weapon does not lower a hovering jumpjet, change its target height or put it in the ground layer: it keeps hovering under claim 13)
+#[test]
+fn claim_32_disc_laser_attacks_do_not_force_a_descent() {
+    let mut r = ruleset();
+    let rifle = r.sim.weapons.get_mut("Rifle").unwrap();
+    rifle.disk_laser = Some(true);
+    rifle.laser_inner_color = Some([200, 100, 50]);
+    rifle.laser_outer_color = Some([100, 50, 25]);
+    rifle.laser_outer_spread = Some([10, 10, 10]);
+    let mut w = testkit::game_with(&r, SIZE, 7);
+    testkit::run(&mut w, 4);
+    let u = hoverer(&mut w, "JJ", Kind::Infantry, 16, 18);
+    let ht = j(&w, u).ht;
+    let mut fired = false;
+    for _ in 0..120 {
+        step(&mut w);
+        fired |= !w.discs.is_empty();
+        assert_eq!(phase(&w, u), Phase::Hovering);
+        assert_eq!(j(&w, u).ht, ht, "the target height is unchanged");
+        assert!(
+            !glasnost_sim::temporal::ground_layer(&w, u),
+            "not in the ground render layer"
+        );
+    }
+    assert!(fired, "the jumpjet fired its disc laser");
+}

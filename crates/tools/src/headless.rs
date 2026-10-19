@@ -185,6 +185,7 @@ async fn smoke_async(
                         | Effect::SpecialAnims { .. }
                         | Effect::Bunkered { .. }
                         | Effect::Seized { .. }
+                        | Effect::Deactivated { .. }
                         | Effect::Dropped { .. }
                         | Effect::Disc { .. }
                         | Effect::Beam { .. }

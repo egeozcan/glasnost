@@ -2547,6 +2547,27 @@ fn map_wide_search_skips_other_regions() {
     );
 }
 
+// spec: S-0309 claim 7 and table C row zone (revision 21, Q-1502 answered: two cells of no reach region of the searcher's movement zone count as the same region; a searcher standing on such a cell considers only objects on such cells, anywhere on the map, and one on open ground never considers an object on such a cell)
+#[test]
+fn cells_of_no_reach_region_compare_as_one_region() {
+    let mut w = walled_game(&base());
+    // The rock column at mid + 2 is a cell of no reach region for every zone.
+    let a = veh(&mut w, "CART", 0, 2, 0);
+    let near = veh(&mut w, "T0", 1, 0, 0);
+    let far = veh(&mut w, "T1", 1, 2, 12);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(far),
+        "the cliff searcher picks the far cliff enemy, not the open-ground one"
+    );
+    let b = veh(&mut w, "CART", 0, -2, 12);
+    assert_eq!(
+        acquire::search(&mut w, b, SearchKind::MapWide, SearchContext::Hunt),
+        Some(near),
+        "an open-ground searcher never considers the enemy on the cliff cell"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The money thief (claim 5, table C rows capture and storage) and claim 25
 // part e's capture exception.
@@ -2669,4 +2690,66 @@ fn table_c_exists_building_awaiting_removal() {
     o.combat.killed = true;
     assert!(w.obj(b).unwrap().on_map, "still in its foundation cells");
     assert_eq!(range_search(&mut w, a), None);
+}
+
+// Test-only computer-controlled player houses (S-0309 Terms, Test-only
+// exception; S-0215 Terms and claims 18 and 19; glossary).
+
+/// A game whose house 1 is a player house marked as a test-only
+/// computer-controlled player house (`human` clear).
+fn game_test_house(r: &Ruleset) -> World {
+    let mut w = game(r);
+    assert_eq!(w.houses[1].role, HouseRole::Player);
+    w.houses[1].human = false;
+    w
+}
+
+// spec: S-0309 claim 25 part b and Terms (Test-only exception: a marked player house's deploy-to-fire vehicle and no-auto-fire object search like any other; an unmarked player house's never search)
+#[test]
+fn test_house_deploy_to_fire_and_no_auto_fire_search() {
+    let mut r = base();
+    r.sim.vehicles.get_mut("T1").unwrap().primary = Some("Gun".into());
+    r.sim.vehicles.get_mut("T1").unwrap().deploy_to_fire = Some(true);
+    r.sim.vehicles.get_mut("T2").unwrap().primary = Some("Gun".into());
+    r.sim.vehicles.get_mut("T2").unwrap().combat.no_auto_fire = Some(true);
+    let mut w = game_test_house(&r);
+    let dtf = veh(&mut w, "T1", 1, 0, 0);
+    let naf = veh(&mut w, "T2", 1, 2, 0);
+    assert_eq!(classes(&w, dtf), GROUND);
+    assert_eq!(classes(&w, naf), GROUND);
+    let dtf0 = veh(&mut w, "T1", 0, 0, 4);
+    let naf0 = veh(&mut w, "T2", 0, 2, 4);
+    assert_eq!(classes(&w, dtf0), NONE);
+    assert_eq!(classes(&w, naf0), NONE);
+}
+
+// spec: S-0215 claim 18 and S-0309 claim 25 part h (a marked test house's mobile actor retaliates outside guard, area guard and patrol and with a target held, as the neutral and special houses' do; an unmarked player house's does not)
+#[test]
+fn test_house_retaliation_outside_the_listed_behaviours() {
+    for human in [true, false] {
+        let mut w = game(&base());
+        w.houses[1].human = human;
+        let a = veh(&mut w, "CART", 1, 0, 0);
+        let x = veh(&mut w, "T1", 0, 2, 0);
+        set_beh(&mut w, a, Behaviour::Move);
+        acquire::retaliate(&mut w, a, x);
+        assert_eq!(retaliated(&w, a, x), !human, "human {human}: in move");
+    }
+}
+
+// spec: S-0215 claim 18 and Terms (the test-only exception does not remove the retaliate-property requirement)
+#[test]
+fn test_house_needs_the_retaliate_property() {
+    let mut r = base();
+    r.sim
+        .behaviours
+        .entry(Behaviour::Move.key().into())
+        .or_default()
+        .retaliate = Some(false);
+    let mut w = game_test_house(&r);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let x = veh(&mut w, "T1", 0, 2, 0);
+    set_beh(&mut w, a, Behaviour::Move);
+    acquire::retaliate(&mut w, a, x);
+    assert!(!retaliated(&w, a, x));
 }

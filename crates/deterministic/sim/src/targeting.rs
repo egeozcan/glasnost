@@ -275,8 +275,9 @@ pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
 /// selection (S-0214 claim 19): an own selectable infantry unit, vehicle,
 /// aircraft or vehicle-like building in play, not already selected, not
 /// tethered to a building that stands on its cell, not a bunkered vehicle
-/// or an occupied bunker (S-0606 claim 11). Deactivated objects and slaves
-/// controlled by a master are excluded too; neither state exists yet.
+/// or an occupied bunker (S-0606 claim 11), not a vehicle disabled by the
+/// loss of its control centre (S-0405 claim 20). Slaves controlled by a
+/// master are excluded too; that state does not exist yet.
 pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0214 claim 19 (own infantry, vehicles and aircraft; ordinary buildings excluded, vehicle-like buildings taken)
@@ -286,12 +287,9 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
         Kind::Terrain => false,
     };
     // spec: S-0214 claim 19 (a unit tethered to a building is excluded while its cell holds that building)
-    let tether = crate::econ::tethered(w, id)
-        && o.contact.and_then(|k| w.obj(k)).is_some_and(|b| {
-            b.kind == Kind::Building
-                && crate::objects::foundation_cells(b.pos.cell(), b.foundation)
-                    .contains(&o.pos.cell())
-        });
+    let tether = crate::econ::power::tethered_in_own_cell(w, id);
+    // spec: S-0214 claim 19 and S-0405 claim 20 (an ordinary band box does not take a disabled vehicle)
+    let deactivated = disabled(w, id);
     // spec: S-0214 claim 19 and S-0606 claim 11 (a bunkered vehicle and an occupied bunker are excluded from the ordinary band box)
     let bunker = crate::structures::bunker::bunkered(w, id)
         || (crate::structures::bunker::is_bunker(w, id)
@@ -302,6 +300,7 @@ pub fn box_eligible(w: &World, house: HouseId, selection: &[ObjectId], id: Objec
         && selectable(w, id)
         && !selection.contains(&id)
         && !tether
+        && !deactivated
         && !bunker
 }
 
@@ -389,7 +388,9 @@ pub fn movable(w: &World, house: HouseId, id: ObjectId) -> bool {
         // spec: S-0214 Terms and S-0614 claim 8 (not held)
         // spec: S-0214 Terms and S-0606 claim 11 (not held inside a tank bunker)
         Some(Kind::Infantry | Kind::Vehicle) => {
-            !crate::parasite::held(w, id) && !crate::structures::bunker::bunkered(w, id)
+            !disabled(w, id)
+                && !crate::parasite::held(w, id)
+                && !crate::structures::bunker::bunkered(w, id)
         }
         Some(Kind::Aircraft) => {
             !unit(w, id).is_some_and(|u| u.raw.spawned.unwrap_or(false))
@@ -603,8 +604,9 @@ fn planted_bomb(w: &World, house: HouseId, id: ObjectId) -> bool {
 
 /// Disabled (S-0214 Terms): paralysed, or a vehicle playing its death
 /// sequence; neither exists before M4.
-fn disabled(_w: &World, _id: ObjectId) -> bool {
-    false
+fn disabled(w: &World, id: ObjectId) -> bool {
+    // spec: S-0405 claim 20 (a vehicle disabled by the loss of its control centre is neither movable nor able to fire in S-0214's sense)
+    crate::econ::power::unit_disabled(w, id)
 }
 
 /// A carrier aircraft (S-0214 Import mapping, `Carryall`).

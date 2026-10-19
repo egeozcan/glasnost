@@ -747,3 +747,59 @@ fn claim_4_comes_first_whatever_the_warhead_names() {
         );
     }
 }
+
+// spec: S-0502 claim 29 (revision 18, Q-1500 answered: a unit of any type seized by magnetic lift is registered as a tracked flying object from its first jumpjet update, a take-off) and claim 30 (Q-1501 answered: a seized unit is in the air by the same height test, r ≥ 208 leptons)
+#[test]
+fn a_seized_unit_is_tracked_and_in_the_air_by_height() {
+    let (mut w, _l, v) = seized(|_| {});
+    assert!(
+        run_until(&mut w, 60, |w| jump::phase(w, v) != Some(Phase::Grounded)),
+        "the seized unit takes off"
+    );
+    assert!(glasnost_sim::combat::flying::tracked(&w, v));
+    assert!(
+        !glasnost_sim::combat::weapon::in_air(&w, v),
+        "low after take-off"
+    );
+    assert!(run_until(&mut w, 400, |w| height(w, v) >= 208));
+    assert!(
+        glasnost_sim::combat::weapon::in_air(&w, v),
+        "at 208 leptons or more it is in the air"
+    );
+}
+
+// spec: S-0607 claim 7 (revision 10: when the seize's search finds no cell the unit has no movement commitment and stays grounded, with no take-off registration) and S-0502 claim 29 (revision 19, Seized units)
+#[test]
+fn a_seized_unit_with_no_cell_stays_grounded_and_untracked() {
+    let mut w = world(|_| {});
+    let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
+    let v = spawn(&mut w, Kind::Vehicle, "VICT", 1, at(2, 0));
+    // Rock everywhere but the lifter's cell: the jumpjet search finds no cell.
+    for dx in -45..45 {
+        for dy in -45..45 {
+            if (dx, dy) != (0, 0)
+                && let Some(c) = w.cells.grid.get_mut(at(dx, dy))
+            {
+                c.land = glasnost_map::terrain::land::ROCK;
+            }
+        }
+    }
+    for dx in -45..45 {
+        for dy in -45..45 {
+            if w.cells.cell(at(dx, dy)).is_some() {
+                glasnost_sim::regions::cell_changed(&mut w, at(dx, dy));
+            }
+        }
+    }
+    glasnost_sim::regions::ensure(&mut w);
+    beam(&mut w, l, v);
+    assert!(glasnost_sim::lift::seized(&w, v));
+    for _ in 0..30 {
+        glasnost_sim::testkit::run(&mut w, 1);
+        assert_eq!(jump::phase(&w, v), Some(Phase::Grounded), "no take-off");
+        assert!(
+            !glasnost_sim::combat::flying::tracked(&w, v),
+            "not registered"
+        );
+    }
+}

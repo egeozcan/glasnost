@@ -919,8 +919,18 @@ fn s0215_deployer_in_guard_undeploys() {
 /// The tick on which the walker of house 1 starts its deploy sequence by
 /// S-0215 claim 31's auto-deploy row, within 300 ticks of being put in
 /// guard, and that processing's delay; the auto-deploy delay list is
-/// `list`, house 1 is neutral when `neutral`.
+/// `list`, house 1 is neutral when `neutral`; with `test_index` it stays a
+/// player house marked as a test-only computer-controlled player house with
+/// that difficulty index.
 fn auto_deploy_tick(list: Option<Vec<i32>>, neutral: bool) -> Option<(i32, i32, i32)> {
+    auto_deploy_tick_as(list, neutral, None)
+}
+
+fn auto_deploy_tick_as(
+    list: Option<Vec<i32>>,
+    neutral: bool,
+    test_index: Option<i32>,
+) -> Option<(i32, i32, i32)> {
     let mut r = testkit::ruleset();
     r.sim.general.ai_auto_deploy_frame_delay = list;
     let walker = r.sim.infantry.get_mut("WALKER").unwrap();
@@ -949,6 +959,10 @@ fn auto_deploy_tick(list: Option<Vec<i32>>, neutral: bool) -> Option<(i32, i32, 
     }
     if neutral {
         make_neutral(&mut w, 1);
+    }
+    if let Some(i) = test_index {
+        w.houses[1].human = false;
+        w.houses[1].econ.setup.difficulty = i;
     }
     let inf = of(&w, 1, Kind::Infantry, 0)[0];
     let s = w.tick;
@@ -979,6 +993,25 @@ fn s0215_claim_31_auto_deploy_of_non_player_houses() {
     assert_eq!(auto_deploy_tick(Some(vec![300, 40, 5]), false), None);
     assert_eq!(auto_deploy_tick(Some(vec![40]), true), None);
     assert_eq!(auto_deploy_tick(None, true), None);
+}
+
+// spec: S-0215 claim 31 and S-0309 Terms (Test-only exception: a marked test-only computer-controlled player house auto-deploys, with A the list's entry for its own difficulty index)
+#[test]
+fn s0215_claim_31_auto_deploy_of_a_test_house_by_its_index() {
+    let (s, at, _) =
+        auto_deploy_tick_as(Some(vec![40, 250, 250]), false, Some(0)).expect("deploys");
+    assert!(at > s + 40, "deployed at {at}, start {s}");
+    let dr = testkit::rules().behaviour(Behaviour::Guard).rate_delay;
+    assert!(
+        at <= s + 40 + dr + 3,
+        "index 0: deployed at {at}, start {s}"
+    );
+    // Index 0 with a one-entry list applies; index 2 with a two-entry list does not.
+    assert!(auto_deploy_tick_as(Some(vec![40]), false, Some(0)).is_some());
+    assert_eq!(
+        auto_deploy_tick_as(Some(vec![40, 40]), false, Some(2)),
+        None
+    );
 }
 
 // ---------------------------------------------------------------------------

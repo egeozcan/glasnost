@@ -633,3 +633,59 @@ fn s0303_claim_17_resource_loss_needs_both_flags() {
         assert_eq!(stage(&w, c), Some(want), "chain {chain}, flag {flag}");
     }
 }
+
+// spec: S-0109 claim 17 (revision 31, Q-1425 answered: each delivery of a damaging animation is an area detonation with resource reduction allowed, the expiring advances of a burning walker included; S-0303 claim 17's gates: the overlay's chain-reaction flag, the warhead's resource flag, trunc(D / 10) bales of the delivered integer amount)
+#[test]
+fn s0109_claim_17_walker_damage_takes_bales() {
+    use glasnost_rules::sim::{AnimationType, Decimal, WarheadType};
+    for (chain, want) in [(true, true), (false, false)] {
+        let mut r = ruleset();
+        r.sim.overlays.get_mut("OV00").unwrap().chain_reaction = Some(chain);
+        r.sim.warheads.insert(
+            "FLAMEX".into(),
+            WarheadType {
+                tiberium: Some(true),
+                ..Default::default()
+            },
+        );
+        r.registries
+            .entry("animations".into())
+            .or_default()
+            .push("BURNX".into());
+        r.sim.animations.insert(
+            "BURNX".into(),
+            AnimationType {
+                frame_count: Some(80),
+                is_flaming_guy: Some(true),
+                running_frames: Some(4),
+                // Each delivery is 10, one bale by trunc(D / 10).
+                damage: Some(Decimal("10".into())),
+                ..Default::default()
+            },
+        );
+        r.sim.general.flame_damage2 = Some("FLAMEX".into());
+        let c = at(0, 0);
+        let mut w = game_with_ore(&r, &[(c, ORE, 10)], 7);
+        // Boxed in by rock: the walker expires where it stands.
+        for (dx, dy) in glasnost_sim::regions::STEPS {
+            let n = glasnost_map::CellXY::new(c.x + dx, c.y + dy);
+            w.cells.grid.get_mut(n).unwrap().land = land::ROCK;
+        }
+        let a = w
+            .rules()
+            .animations
+            .iter()
+            .position(|x| x.name == "BURNX")
+            .unwrap() as u32;
+        glasnost_sim::walker::create(&mut w, a, glasnost_sim::world::Pos::centre(c, 0));
+        for _ in 0..40 {
+            if w.walkers.is_empty() {
+                break;
+            }
+            testkit::run(&mut w, 1);
+        }
+        assert!(w.walkers.is_empty(), "the walker expired");
+        let left = stage(&w, c).unwrap_or(0);
+        assert_eq!(left < 10, want, "chain {chain}: stage {left}");
+    }
+}

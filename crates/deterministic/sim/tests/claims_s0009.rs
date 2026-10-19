@@ -676,6 +676,27 @@ fn claim_45_neutral_house_area_guard() {
     assert!(behaviours(0).iter().all(|b| *b == Some(Behaviour::Guard)));
 }
 
+/// spec: S-0009 claim 45 (the starting units of a house that is not human-controlled start in area guard) and glossary (a test-only computer-controlled player house)
+#[test]
+fn claim_45_test_house_area_guard() {
+    let mut s = starting_scene();
+    // Beta stays a player house but is marked not human-controlled.
+    s.setup.houses[1].human = false;
+    s.setup.houses[0].ai = true;
+    let w = load(&s).expect("loads");
+    let behaviours = |h: u8| -> Vec<Option<Behaviour>> {
+        w.objects
+            .values()
+            .filter(|o| o.owner == Some(glasnost_sim::world::HouseId(h)))
+            .map(|o| o.beh.current)
+            .collect()
+    };
+    let test = behaviours(1);
+    assert!(!test.is_empty());
+    assert!(test.iter().all(|b| *b == Some(Behaviour::AreaGuard)));
+    assert!(behaviours(0).iter().all(|b| *b == Some(Behaviour::Guard)));
+}
+
 /// spec: S-0009 claim 19 (the first house on random takes R(0, N − 1); a later one the free position whose distance sum is largest)
 #[test]
 fn claim_19_farthest_sum() {

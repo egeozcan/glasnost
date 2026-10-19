@@ -23,6 +23,10 @@ pub struct TypeSounds {
     pub deploy: Option<String>,
     /// `UndeploySound` (S-0107 Import mapping).
     pub undeploy: Option<String>,
+    /// `DeactivateSound`, vehicles (S-0405 Import mapping).
+    pub deactivate: Option<String>,
+    /// `ActivateSound`, vehicles (S-0405 Import mapping).
+    pub activate: Option<String>,
     /// `PackupSound`, building types (S-0415 Import mapping).
     pub packup: Option<String>,
     /// `CrushSound` (S-0210 Import mapping).
@@ -477,6 +481,13 @@ impl SoundNames {
                     // spec: S-0415 Import mapping (`DeploySound`, `PackupSound`), S-0107 Import mapping (`DeploySound`, `UndeploySound`)
                     deploy: f("DeploySound"),
                     undeploy: f("UndeploySound"),
+                    // spec: S-0405 Import mapping (`DeactivateSound`, `ActivateSound`, vehicle section; absent: no sound)
+                    deactivate: (kind == Kind::Vehicle)
+                        .then(|| f("DeactivateSound"))
+                        .flatten(),
+                    activate: (kind == Kind::Vehicle)
+                        .then(|| f("ActivateSound"))
+                        .flatten(),
                     packup: if kind == Kind::Building {
                         f("PackupSound")
                     } else {

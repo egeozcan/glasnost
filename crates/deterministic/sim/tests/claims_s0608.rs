@@ -482,7 +482,7 @@ fn quirk_relink_strands_previous_both_positions() {
         let ended = events(&w).contains(&DrainEvent::Ended);
         assert_eq!(ended, !strands);
         if strands {
-            // Claim 3 a reads the newest link only (Q-1441 interim).
+            // Claim 3 a reads the newest link only (Q-1441: the earlier rule, kept until S-0608 revision 5 is taken in).
             assert_ne!(check::check(&w, d, obj(first), 0, false), Answer::Illegal);
             // The stranded first building keeps paying the drainer's house.
             set_credits(&mut w, BETA, 1000);

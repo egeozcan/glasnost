@@ -232,8 +232,11 @@ fn height(w: &World, x: i32, y: i32, old: i32) -> i32 {
     if old - t > CLIMB { t + DECK_LIFT } else { t }
 }
 
-/// Claim 10's test after a step or a placement: start falling.
-fn fall_check(w: &World, wk: &mut Walker) {
+/// Claim 10's test after a step or a placement: start falling. A fall
+/// that starts here has its first descent in the same update, straight
+/// after the step or placement: from rate 0 its height changes by 0 and
+/// only its rate follows S-0511's recurrence.
+fn fall_check(w: &mut World, id: ObjectId, wk: &mut Walker) {
     if wk.falling {
         return;
     }
@@ -245,9 +248,28 @@ fn fall_check(w: &World, wk: &mut Walker) {
         && !w.high_bridge(neighbour(c, 6))
         && !w.high_bridge(neighbour(c, 0))
     {
-        // The first descent comes at the walker's next update, from rate 0 (interim, Q-1424).
         wk.falling = true;
+        // spec: S-0615 claim 10 (First descent: the descent processing runs in the same update as the step or placement that started the fall, straight after it; Starting rate: 0, the rate held since creation)
+        descend(w, id, wk);
     }
+}
+
+/// Claim 11's removal test: an expiring walker whose stage is at least
+/// ⌊*N* / 2⌋ − 1 is removed. Returns whether it was.
+fn removal_test(w: &mut World, id: ObjectId, wk: &Walker) -> bool {
+    let n = w
+        .rules()
+        .animations
+        .get(wk.anim as usize)
+        .and_then(|a| a.frames)
+        // spec: S-0615 claim 11 and Import mapping (Unknown frame count: N = 0, as S-0109 F2 for a type with no sprite, so the threshold is −1; a departure with no switch, the importer warns)
+        .unwrap_or(0);
+    // spec: S-0615 claim 11 (an expiring walker whose stage is at least ⌊N / 2⌋ − 1 is removed; Short sprites: the formula stands)
+    if wk.stage >= n / 2 - 1 {
+        remove(w, id);
+        return true;
+    }
+    false
 }
 
 /// Starts expiry (claim 11): stage 8 *R* + 1; from claims 4 or 9 the
@@ -341,7 +363,7 @@ fn advance_damage(w: &mut World, wk: &mut Walker) {
     wk.acc = b.sub(F64::from_i64(i64::from(n), mode), mode);
     // spec: S-0109 claim 17 and Import mapping (FlameDamage2 for every type but the invisibility animation; absent: the amount is taken, no damage)
     // spec: S-0302 claim 1 (a damaging animation's area detonation: no attacker, no attacking house)
-    // spec: S-0303 claim 17 (the other producers allow resource reduction; interim for a damaging animation, Q-1425)
+    // spec: S-0109 claim 17 (each delivery is an area detonation with resource reduction allowed, no attacker and no attacking house, the expiring advances of a burning walker included; S-0303 claim 17's gates)
     area::detonate(
         w,
         Detonation {
@@ -361,16 +383,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         return;
     };
     if wk.expiring {
-        let n = w
-            .rules()
-            .animations
-            .get(wk.anim as usize)
-            .and_then(|a| a.frames)
-            // N unknown: 0, so removed at the first expiring update (interim, Q-1427).
-            .unwrap_or(0);
-        // spec: S-0615 claim 11 (at the start of each update, an expiring walker whose stage is at least ⌊N / 2⌋ − 1 is removed)
-        if wk.stage >= n / 2 - 1 {
-            remove(w, id);
+        // spec: S-0615 claim 11 (at the start of each update the removal test; Removed before advancing: no advance and no damage over time in the removing update)
+        if removal_test(w, id, &wk) {
             return;
         }
         // spec: S-0615 claim 11 (a one-update stage delay: one stage per update, the first on a later update than expiry's start)
@@ -395,7 +409,13 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // spec: S-0615 claim 4 (the first update chooses without the retry and water tests and does not move; none: expiry at once)
         match choose(w, wk.pos) {
             Some(p) => wk.dest = Some(p),
-            None => expire(w, &mut wk, true),
+            None => {
+                expire(w, &mut wk, true);
+                // spec: S-0615 claim 11 (the removal test is also made at the end of the update in which a first-update choice of none started expiry)
+                if removal_test(w, id, &wk) {
+                    return;
+                }
+            }
         }
         w.walkers.insert(id, wk);
         return;
@@ -403,7 +423,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
     // spec: S-0615 claim 8 (a step when the horizontal table-root distance is 19 leptons or more)
     if distance(w, wk.pos, d) >= ARRIVAL {
         run(w, &mut wk, d);
-        fall_check(w, &mut wk);
+        fall_check(w, id, &mut wk);
         w.walkers.insert(id, wk);
         return;
     }
@@ -420,7 +440,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             let z = height(w, d.x, d.y, wk.pos.z);
             wk.pos = Pos::new(d.x, d.y, z);
             wk.dest = Some(p);
-            fall_check(w, &mut wk);
+            fall_check(w, id, &mut wk);
         }
         _ => expire(w, &mut wk, true),
     }

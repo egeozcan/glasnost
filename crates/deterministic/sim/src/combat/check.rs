@@ -260,7 +260,8 @@ fn full_health(w: &World, x: ObjectId) -> bool {
 
 /// The drain refusals of S-0608 claim 3 against object `x`: (a) the
 /// building the firer drains (its newest link; a stranded first link is
-/// Q-1441's, interim: not this part), whatever the weapon; (b) a draining
+/// Q-1441's, answered by S-0608 revision 5 and not yet taken in: not this
+/// part), whatever the weapon; (b) a draining
 /// weapon against an object already being drained, by any drainer; (c) a
 /// draining weapon against an object whose type is not drainable. No
 /// alliance or ownership test.
@@ -301,6 +302,14 @@ pub fn check(
     {
         return Answer::Rearming;
     }
+    // spec: S-0301 claim 9 (Deactivated firers within rank 4) and S-0405 claim 20: a deactivated vehicle gets illegal for every target and weapon, a force-fire target included; the refusal yields to the slave-bound firer's illegal (not in our engine), the own-gripped-target rearming (above) and the materialising firer's rearming, and outranks every other rank-4 answer
+    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
+        if crate::teleport::phasing_in(w, firer) {
+            // spec: S-0301 claim 9 rank 4 (the firer is materialising: rearming) and S-0207 claim 20 (f) (phasing in)
+            return Answer::Rearming;
+        }
+        return Answer::Illegal;
+    }
     // spec: S-0310 claim 11 (an infantry healer: illegal when its target is absent, not infantry or at full health; above the general part)
     if kind == Kind::Infantry
         && let Some(wp) = weapon
@@ -332,7 +341,7 @@ pub fn check(
     if let Some(Target::Object(x)) = target
         && drain_refused(w, firer, wr.drain, x)
     {
-        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (interim: after the projectile tests, before the other rank-4 tests)
+        // spec: S-0608 claim 3 and S-0301 claim 9 rank 4 (illegal: the building the firer drains, whatever the weapon; a draining weapon against an object already being drained or of a type that is not drainable). Q-1441 (answered by S-0608 revision 5, not yet taken in; the earlier rule kept: after the projectile tests, before the other rank-4 tests)
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0610 claims 3 and 6 (a berserk-causing warhead against a psionics-immune type or a bunkered vehicle; a berserk firer against a berserk-friendly type: illegal)
@@ -351,11 +360,11 @@ pub fn check(
     {
         // spec: S-0513 claim 27 (a protected object is an illegal target for a weapon whose warhead is a parasite warhead)
         let parasite = r.combat.warhead_of(weapon).is_some_and(|h| h.parasite);
-        // spec: S-0513 claim 28 (departure: every player house takes the human rule; the neutral and special houses get illegal against a protected object)
+        // spec: S-0513 claim 28 (departure: every player house takes the human rule; the neutral and special houses, and a test-only computer-controlled player house (glossary), get illegal against a protected object)
         let player = o
             .owner
             .and_then(|h| w.houses.get(usize::from(h.0)))
-            .is_none_or(|h| h.role == crate::world::HouseRole::Player);
+            .is_none_or(|h| h.human);
         if parasite || !player {
             return Answer::Illegal;
         }

@@ -41,6 +41,10 @@ pub struct Disc {
     pub start: u8,
     /// The updates it has had.
     pub updates: u8,
+    /// Its firer or target was lost (claim 14) at some moment since the
+    /// shot: it makes no further step.
+    #[serde(default)]
+    pub lost: bool,
 }
 
 /// The number of ring points (S-0615 claim 17).
@@ -51,6 +55,9 @@ pub const RING_RADIUS: i32 = 240; // spec: S-0615 Constants (ring radius: 240 le
 
 /// The arc steps before the final step (S-0615 claim 13).
 pub const ARC_STEPS: u8 = 8; // spec: S-0615 Constants (arc steps: 8, plus a final step)
+
+/// The deck height over a bridge cell, leptons (claim 16).
+const DECK: i32 = 416; // spec: S-0615 claim 16 (the deck height of 416 leptons, S-0511)
 
 /// The update in which a disc laser is removed: tick *T* + 18 (F5).
 const REMOVAL_UPDATE: u8 = 18; // spec: S-0615 F5 (removal in tick T + 18; its first update is in T + 1)
@@ -123,6 +130,7 @@ pub fn shot(w: &mut World, firer: ObjectId, weapon: WeaponId, target: Target, da
         damage,
         start: start_point(f),
         updates: 0,
+        lost: false,
     };
     // spec: S-0203 claim 1 row 12 (disc lasers, the most recently fired first)
     w.discs.insert(0, disc);
@@ -134,29 +142,49 @@ pub fn shot(w: &mut World, firer: ObjectId, weapon: WeaponId, target: Target, da
     });
 }
 
-/// Whether an object is in play for a disc laser (claim 14): it exists, is
-/// on the map, is not inside a building or bunker and is not killed.
+/// Whether an object is still held by a disc laser (claim 14): it exists,
+/// is on the map, is not inside a building and is not destroyed. A
+/// bunkered vehicle stays on the map (S-0606) and is held.
 fn in_play(w: &World, x: ObjectId) -> bool {
-    // spec: S-0615 claim 14 (cancelled as soon as its firer or target leaves play: off the map, removed, or no longer a valid object to point at; a killed object counts as gone, interim, Q-1422)
+    // spec: S-0615 claim 14 (lost when destroyed, the hit that brings its health to 0 at once even when it stays in play; when it leaves the map, a building garrison included; when it is removed; a bunkered vehicle is not lost)
     w.obj(x).is_some_and(|o| {
         o.on_map && o.structure.inside.is_none() && !crate::combat::damage::dead(o)
-    }) && crate::structures::bunker::bunkered_in(w, x).is_none()
+    })
 }
 
-/// Whether the firer or the target has left play (claim 14).
+/// Whether the firer or the target has been lost (claim 14): at some
+/// moment since the shot ([`object_lost`]), or now.
 fn lost(w: &World, d: &Disc) -> bool {
-    !in_play(w, d.firer) || matches!(d.target, Target::Object(t) if !in_play(w, t))
+    d.lost || !in_play(w, d.firer) || matches!(d.target, Target::Object(t) if !in_play(w, t))
+}
+
+/// An object is lost to the disc lasers (claim 14): it leaves the map, is
+/// removed or begins to cloak. Every disc laser whose firer or target it is
+/// is cancelled for good, also when the object comes back before the next
+/// step.
+pub fn object_lost(w: &mut World, id: ObjectId) {
+    for d in &mut w.discs {
+        // spec: S-0615 claim 14 (the loss applies at the moment it happens, wherever in the tick, and is permanent: there is no later re-test, the disc laser makes no further step)
+        if d.firer == id || d.target == Target::Object(id) {
+            d.lost = true;
+        }
+    }
 }
 
 /// The distance of the range re-check (claim 14).
 pub fn recheck_distance(w: &World, firer: ObjectId, target: Target) -> i32 {
     let r = w.rules();
-    // The firer at its reference point, the target at its target point (interim, Q-1422).
-    let s = w.reference_point(firer);
-    let m = crate::combat::range::target_point(w, target);
+    // spec: S-0615 claim 14 (from the firer's position, not its fire point)
+    let s = w.obj(firer).map_or_else(Pos::default, |o| o.pos);
+    let m = match target {
+        // spec: S-0615 claim 14 (to the target's position, not its target point)
+        Target::Object(x) => w.obj(x).map_or_else(Pos::default, |o| o.pos),
+        // spec: S-0615 claim 14 (a cell target at its centre at the terrain height there; a bridge deck over the cell is not counted)
+        Target::Cell(_) => crate::combat::range::target_point(w, target),
+    };
     let (dx, dy) = (i64::from(s.x - m.x), i64::from(s.y - m.y));
-    // spec: S-0615 claim 14 (the vertical difference is 0 when the firer is in the air)
-    let dz = if crate::combat::weapon::airborne_by_height(w, firer) {
+    // spec: S-0615 claim 14 (the vertical difference is 0 when the firer is airborne in S-0308's sense)
+    let dz = if crate::combat::weapon::in_air(w, firer) {
         0
     } else {
         i64::from(s.z - m.z)
@@ -184,14 +212,33 @@ fn recheck(w: &World, d: &Disc) -> bool {
     if crate::jump::crashing(w, d.firer) || crate::air::crashing(w, d.firer) {
         return false;
     }
-    let range = w.rules().combat.weapon(d.weapon).range;
-    // spec: S-0615 claim 14 (removed when the distance exceeds the weapon's range field, with no additional range term of S-0307)
-    // An unlimited range field (−512) is compared as it is, so it always cancels (interim, Q-1426).
+    let r = w.rules();
+    // The range R₀ after quirks.negative_range_fields (S-0307 claim 1): off, a negative field other than the unlimited value is 0.
+    let range = r.combat.weapon(d.weapon).range;
+    // spec: S-0615 claim 14 and Edge cases (quirks.disc_laser_unlimited_range off: the unlimited range of S-0307 claim 2 never cancels on distance)
+    if range == crate::combat::range::UNLIMITED && !r.quirks.disc_laser_unlimited_range {
+        return true;
+    }
+    // spec: S-0615 claim 14 (removed when the distance exceeds R₀, with no additional range term of S-0307; signed integer comparison, equality passes; the unlimited and other negative values are compared as they are, so every distance exceeds them)
     recheck_distance(w, d.firer, d.target) <= range
 }
 
+/// The point of the final beam and detonation (claim 16): an object
+/// target's target point; a cell target's centre at the terrain height
+/// there, raised by the deck height when the cell carries a bridge deck.
+pub fn final_point(w: &World, target: Target) -> Pos {
+    let mut p = crate::combat::range::target_point(w, target);
+    if let Target::Cell(c) = target
+        && w.high_bridge(c)
+    {
+        // spec: S-0615 claim 16 (a cell target: raised by the deck height of 416 leptons, S-0511, when the cell carries a bridge deck)
+        p.z += DECK;
+    }
+    p
+}
+
 /// The detonation of the final step (claim 16): at the target's target
-/// point, *D*ₛ and the weapon's warhead, the firer as attacker, no attacking
+/// point ([`final_point`]), *D*ₛ and the weapon's warhead, the firer as attacker, no attacking
 /// house (`quirks.disc_laser_no_house`; off: the firer's owner), resource
 /// reduction allowed.
 pub fn detonation(w: &World, d: &Disc) -> Detonation {
@@ -204,7 +251,7 @@ pub fn detonation(w: &World, d: &Disc) -> Detonation {
     };
     // spec: S-0615 claim 16 (at the target's target point; D_s and the weapon's warhead; the firer is the attacker; resource reduction allowed, S-0303 claim 17)
     Detonation {
-        point: crate::combat::range::target_point(w, d.target),
+        point: final_point(w, d.target),
         damage: d.damage,
         warhead: w.rules().combat.weapon(d.weapon).warhead,
         source: Some(d.firer),
@@ -329,9 +376,8 @@ fn step(w: &mut World, d: &mut Disc) -> bool {
         event: DiscEvent::Hit { report },
         pos: det.point,
     });
-    // Area damage only: no explosion animation, debris or special-hit selection, which S-0303
-    // claims 21 and 22 tie to a projectile (interim, Q-1420).
-    area::detonate(w, det);
+    // spec: S-0615 claim 16, S-0303 claim 23 and S-0514 claim 20 (area damage only, claims 1 to 20 of S-0303: no explosion animation, debris, light flash, radiation, nullify animation or special-hit selection; the result has no further effect)
+    let _ = area::detonate(w, det);
     // spec: S-0615 claim 16 (removed at its next update)
     true
 }
