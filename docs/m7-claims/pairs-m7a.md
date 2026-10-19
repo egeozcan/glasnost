@@ -46,8 +46,7 @@ them. None is left open.
 
 ## Local relation tests on the reference ruleset
 
-PLAN §M7 also asks for a local relation test on the reference ruleset for each pair. M7a has none
-yet. The local lane (`crates/app/tests/m7a_lane.rs`, scenes for berserk, the psychic sensor
-and reveal, mind control and overload, gattling spin, gas clouds, the absorber, the grinder, the
-bunker and the magnetic lift) exercises each ability on the installed data, one at a time,
-and the AI lane plays them together, but neither checks a pair. This is carried to M7b.
+PLAN §M7 also asks for a local relation test on the reference ruleset for each pair. M7b step 4b
+adds them for the 16 M7a pairs too, in `crates/tools/tests/relation_lane.rs` (the tests named
+`m7a_<synthetic test name>`). The run command and the results on the user's install are in
+[pairs-m7b.md](pairs-m7b.md#local-relation-tests-on-the-reference-ruleset): all 16 M7a tests pass.

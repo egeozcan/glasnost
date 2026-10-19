@@ -123,6 +123,8 @@ The lane also builds the game's search order (S-0005) and checks the stock outco
 
 The map lane (M2): the local lane above also decodes every map it finds (`maps decoded (S-0009), no panic`, with importer warnings by kind). `GLASNOST_GAME_DIR=<install> cargo test --release -p glasnost-app --test map_lane -- --nocapture` finds every map by content, loads each with its rules (the map as the map layer), builds its scene, times the build, a CPU redraw of a 1280×720 view and 120 scrolling GPU redraws, counts provisional notes and dropped objects, and writes one screenshot per theater (plus a minimap and a close-up of the first unit) to `local-lane/`. `GLASNOST_MAP_LIMIT=n` limits the maps built, `GLASNOST_MAP_SHOTS=n` the screenshots per theater, and `WGPU_BACKEND=gl` times the GL backend.
 
+The relation lane (M7b step 4b): `GLASNOST_GAME_DIR=<your install> cargo test --release -p glasnost-tools --test relation_lane -- --ignored --nocapture --test-threads=1` runs one test for each interaction pair of [pairs-m7a.md](m7-claims/pairs-m7a.md) and [pairs-m7b.md](m7-claims/pairs-m7b.md) on the installed rules (`arena::reference_rules`). Each test finds its types by their flags, never by name, asserts only the direction of the relation, and prints `relation <test>: PASS`, `PASS (<what was not formed>)` or `SKIP <reason>`, with no type names and no values. Without the variable every test prints `SKIP no install`; CI never runs the lane. The results of the last run are in pairs-m7b.md.
+
 ### Provisional placeholders
 
 Behaviour that needs a spec stays out of code; where a spec leaves a gap, the code carries an explicit placeholder tied to a spec request (see the table in "Import" below).
