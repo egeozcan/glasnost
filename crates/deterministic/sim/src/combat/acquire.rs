@@ -799,15 +799,33 @@ fn rho2(w: &World, a: ObjectId, b: ObjectId) -> i64 {
 }
 
 /// Whether T's cell lies in the connected region of A's movement zone that
-/// holds A's cell (S-0309 claims 7 and 11; S-0212).
-fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
+/// holds A's cell (S-0309 claims 7 and 11; S-0212 claim 4). A's own cell
+/// is read for its deck whenever it is a bridge cell, whatever layer A is
+/// in; T's cell is read in the layer T occupies, always for A's movement
+/// zone. Two cells of no reach region count as the same region. When A's
+/// deck read finds no bridge link, the restriction is omitted.
+pub fn same_zone(w: &World, a: ObjectId, t: ObjectId) -> bool {
+    use crate::regions::{Reach, reach_read};
     let (Some(ao), Some(to)) = (w.obj(a), w.obj(t)) else {
         return false;
     };
     let Some(u) = w.rules().unit(ao.kind, ao.type_index) else {
         return true;
     };
-    crate::regions::same_region(w, u.zone, ao.pos.cell(), ao.layer, to.pos.cell(), to.layer)
+    // spec: S-0309 claim 7 (revision 21, Q-1502 answered: the searcher's own cell is read for its deck whenever it is a bridge cell, whatever layer the searcher is in)
+    let own = reach_read(w, ao.pos.cell(), u.zone, true);
+    if own == Reach::LoneDeck {
+        // spec: S-0309 claims 7 and 11 (no-link deck exception: the searcher's own deck read finds no bridge link, so the connected-region restriction is omitted for the whole search)
+        return true;
+    }
+    // spec: S-0309 claim 7 (the object's cell is read in the layer the object occupies, for the searcher's movement zone)
+    let other = reach_read(w, to.pos.cell(), u.zone, to.layer == crate::world::Layer::Deck);
+    // spec: S-0309 claims 7 and 11 and S-0212 claim 4 (regions compared as S-0212 claim 4 does: two cells of no reach region count as the same region, and so do two off-map cells; a no-link deck read differs from every other region)
+    match (own, other) {
+        (Reach::Region(x), Reach::Region(y)) => x == y,
+        (Reach::None, Reach::None) | (Reach::OffMap, Reach::OffMap) => true,
+        _ => false,
+    }
 }
 
 /// v(X → Y): the versus value of the weapon X would use against Y, 0 when

@@ -1855,6 +1855,29 @@ fn a_low_span_marks_its_band_and_stays_disabled() {
     assert!(path::burrow_ok(&w, cell(3, 2)));
 }
 
+// spec: S-0309 claim 7 (revision 21, Q-1502 answered: the searcher's own cell is read for its deck whenever it is a bridge cell, whatever layer it is in; when that read finds no bridge link the connected-region restriction is omitted for the whole search)
+#[test]
+fn the_search_region_reads_the_searchers_deck() {
+    let (mut w, car) = river(&[]);
+    let mut c = w.obj(car).unwrap().clone();
+    c.pos = glasnost_sim::world::Pos::centre(cell(3, 0), 0);
+    let a = glasnost_sim::world::ObjectId(9000);
+    w.objects.insert(a, c);
+    // The car stands on the near bank; the searcher on the ground under the deck at (3, 0), a cell of no reach region read for its ground.
+    assert_eq!(regions::reach_in(&w, cell(3, 0), MovementZone::Normal), Reach::None);
+    assert!(
+        glasnost_sim::combat::acquire::same_zone(&w, a, car),
+        "the deck read through the link gives the bank's region"
+    );
+    // Off every link's line by 2 cells: the deck read finds no link.
+    w.obj_mut(a).unwrap().pos = glasnost_sim::world::Pos::centre(cell(3, -2), 0);
+    w.obj_mut(car).unwrap().pos = glasnost_sim::world::Pos::centre(cell(12, 9), 0);
+    assert!(
+        glasnost_sim::combat::acquire::same_zone(&w, a, car),
+        "no-link deck exception: no object is rejected for its region"
+    );
+}
+
 // spec: S-0212 claim 4 (a bridge cell read for its deck: through the first link within 1 cell; enabled: the first end's reach region; none found: a reach region of its own)
 // spec: S-0212 claim 6 (the destination read for its deck when it is a bridge cell: an order onto a deck over the river passes the gate)
 #[test]

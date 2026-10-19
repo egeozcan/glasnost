@@ -2547,6 +2547,27 @@ fn map_wide_search_skips_other_regions() {
     );
 }
 
+// spec: S-0309 claim 7 and table C row zone (revision 21, Q-1502 answered: two cells of no reach region of the searcher's movement zone count as the same region; a searcher standing on such a cell considers only objects on such cells, anywhere on the map, and one on open ground never considers an object on such a cell)
+#[test]
+fn cells_of_no_reach_region_compare_as_one_region() {
+    let mut w = walled_game(&base());
+    // The rock column at mid + 2 is a cell of no reach region for every zone.
+    let a = veh(&mut w, "CART", 0, 2, 0);
+    let near = veh(&mut w, "T0", 1, 0, 0);
+    let far = veh(&mut w, "T1", 1, 2, 12);
+    assert_eq!(
+        acquire::search(&mut w, a, SearchKind::MapWide, SearchContext::Hunt),
+        Some(far),
+        "the cliff searcher picks the far cliff enemy, not the open-ground one"
+    );
+    let b = veh(&mut w, "CART", 0, -2, 12);
+    assert_eq!(
+        acquire::search(&mut w, b, SearchKind::MapWide, SearchContext::Hunt),
+        Some(near),
+        "an open-ground searcher never considers the enemy on the cliff cell"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The money thief (claim 5, table C rows capture and storage) and claim 25
 // part e's capture exception.
