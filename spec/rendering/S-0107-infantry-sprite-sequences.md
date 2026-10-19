@@ -2,7 +2,7 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 17
+revision: 18
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -584,7 +584,11 @@ used by this spec only:
 
     In the rows that show no sequence (1, 2, 3, 8 and the replacement of row 7), the unit is
     removed at once, unless its type has the crash flag and a crash begins instead (jumpjet locomotor,
-    another spec). Rows 5 to 8 apply only to types that are not marked "not human".
+    another spec). For row 7's successful replacement, a crash changes only the victim's
+    removal: the conversion animation still starts in the death tick and follows its ordinary
+    ownership and infantry-creation rules (S-0611 claim 7). The victim's standing position is
+    marked taken again at crash entry; the animation's later freeing need not wait for the crash
+    to end (S-0611 claim 7). Rows 5 to 8 apply only to types that are not marked "not human".
 
     The death requests of rows 4 to 7 go through claim 6 like any other start request. Being
     forced only overrides the interruptible attribute (row 5 of claim 6), so they are turned down
@@ -651,7 +655,9 @@ used by this spec only:
       damage that ignores defences, part (d) for corpse-list precedence and the raw draw,
       part (e) for the type's death-animation list, part (f) for virus-effect ordering and count, and
       S-0615 claim 3's scenario DK1 for the crash exception in the ordinary-human no-animation
-      cases); `unmeasured` (the crash exception in the other no-sequence cases: no controlled
+      cases, and S-0611 claim 7's scenario MU13 for row 7's successful replacement during a crash,
+      its retained standing mark and independent conversion animation); `unmeasured` (the crash
+      exception in the remaining no-sequence cases: no controlled
       fixture in these scenarios distinguishes crashing from removal for each such case, and
       the exhaustive absence of starts of *die-3* to *die-5*: finite runs can falsify that
       absence but cannot confirm every start path; row 1, the water case, and the sentence of the cyborg paragraph that
