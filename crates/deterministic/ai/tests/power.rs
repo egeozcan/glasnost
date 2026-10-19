@@ -300,6 +300,62 @@ fn defends_a_harvester_under_fire() {
     let _ = b.think(&w);
     let _ = b.think(&w);
     assert_eq!(b.special_uses().economy_defence, 1);
+    // With a second raider beside the first, the gun sent from where it
+    // stands is not sent at the other one at the next think either: it waits
+    // for its order while the raider it was sent at still raids.
+    let mut two = w.clone();
+    let second = testkit::spawn(&mut two, Kind::Infantry, "WALKER", 1, at(3, 5), 0);
+    if let Some(o) = two.obj_mut(second) {
+        o.target = Some(Target::Object(minr));
+    }
+    let mut b2 = Brain::with_plan(
+        &two,
+        &fixture::map(),
+        HouseId(0),
+        glasnost_ai::brain::default_plan(),
+    );
+    let first = b2.think(&two);
+    let hit = attacked(&first, gun).expect("the gun defends");
+    for o in first {
+        orders::issue(&mut two, HouseId(0), o);
+    }
+    assert_eq!(b2.special_uses().economy_defence, 1);
+    // The raider it is shooting at turns on it (it is no raider any more,
+    // the other one is): the gun keeps its fight.
+    let mut turned = two.clone();
+    if let Some(o) = turned.obj_mut(gun) {
+        o.target = Some(Target::Object(hit));
+    }
+    if let Some(o) = turned.obj_mut(hit) {
+        o.target = Some(Target::Object(gun));
+    }
+    let mut b3 = b2.clone();
+    assert_eq!(attacked(&b3.think(&turned), gun), None, "keeps its fight");
+    assert_eq!(b3.special_uses().economy_defence, 1);
+    // It took the order but holds neither raider as its target nor its
+    // destination (busy, not idle, on the same cell).
+    if let Some(o) = two.obj_mut(gun) {
+        o.beh.current = Some(Behaviour::Attack);
+        o.target = None;
+        o.dest = Some(Target::Cell(at(-6, -6)));
+    }
+    assert!(!glasnost_ai::scripted::idle(&two, gun));
+    assert_eq!(
+        attacked(&b2.think(&two), gun),
+        None,
+        "no switch between raiders"
+    );
+    assert_eq!(b2.special_uses().economy_defence, 1);
+    // A gun on its way to the raider under an attack order (no target yet,
+    // the raider its destination) is not sent again.
+    let mut going = w.clone();
+    if let Some(o) = going.obj_mut(gun) {
+        o.beh.current = Some(Behaviour::Attack);
+        o.target = None;
+        o.dest = Some(Target::Object(raider));
+    }
+    let (sent, n) = think(&going);
+    assert_eq!((sent, n), (None, 0), "on its way already");
     // Once it has moved and lost its target (another order) while the
     // raider still shoots at the harvester, it is sent again at once.
     let mut moved = w.clone();

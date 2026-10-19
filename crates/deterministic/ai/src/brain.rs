@@ -1488,12 +1488,34 @@ impl Brain {
         let Some(home) = self.script.home(w) else {
             return;
         };
+        let house = self.house();
         for id in self.script.of_role(w, Role::Army) {
             let Some(o) = w.obj(id) else { continue };
             let at = o.pos.cell();
             let near_home = dist2(at, home) <= RECALL * RECALL;
-            let busy = matches!(o.target, Some(Target::Object(t))
-                if intruders.iter().chain(&raiders).any(|&(e, _)| e == t));
+            // A threat: an intruder, a raider, or an enemy that is shooting
+            // at one of the house's own (a raider the unit was sent at turns
+            // on the unit and is no raider any more; the fight goes on).
+            let threat = |t: Option<Target>| {
+                matches!(t, Some(Target::Object(t))
+                if intruders.iter().chain(&raiders).any(|&(e, _)| e == t)
+                    || w.obj(t).is_some_and(|x| {
+                        x.owner.is_some_and(|h| h != house)
+                            && matches!(x.target, Some(Target::Object(v))
+                                if w.obj(v).is_some_and(|v| v.owner == Some(house)))
+                    }))
+            };
+            // A unit shooting at a threat, or on its way to one under an
+            // attack order (the order's destination, S-0213 table T3 (f),
+            // stays when the unit has no target in the meantime), is about
+            // it already: a person does not click it again on every cell.
+            let attacking = matches!(o.beh.current, Some(Behaviour::Attack))
+                || matches!(o.beh.queued, Some(Behaviour::Attack));
+            let busy = threat(o.target) || (attacking && threat(o.dest));
+            // A unit sent from where it stands at a raider that still raids
+            // waits for that order to be judged (`memory`): it is not sent
+            // at another raider each tick in the meantime.
+            let sent = threat(self.special.memory.sent_here(w, id));
             // A unit on its way into a recycling building (S-0603) is left to go;
             // so is a vehicle on its way into a tank bunker, and a bunkered one
             // is left to the bunker part (`bunker`), which lets it out (S-0606).
@@ -1504,7 +1526,7 @@ impl Brain {
                 || glasnost_sim::structures::bunker::bunkered(w, id);
             // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: the brain gives it none, and counts none)
             let berserk = glasnost_sim::psychic::berserk(w, id);
-            if busy || bound || berserk {
+            if busy || sent || bound || berserk {
                 continue;
             }
             // A unit already sent at the raider from where it stands, or

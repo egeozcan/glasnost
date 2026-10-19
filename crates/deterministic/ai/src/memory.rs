@@ -165,6 +165,17 @@ impl Memory {
             .any(|g| g.unit == unit && g.goal == goal && g.at == at)
     }
 
+    /// The goal `unit` was sent for from the cell it stands on, while that
+    /// order is still being judged (it has not moved since): what a person
+    /// who just clicked sees the unit still holding.
+    pub fn sent_here(&self, w: &World, unit: ObjectId) -> Option<Target> {
+        let at = w.obj(unit).map(|o| o.pos.cell())?;
+        self.given
+            .iter()
+            .find(|g| g.unit == unit && g.at == at)
+            .map(|g| g.goal)
+    }
+
     /// How many (unit, goal) pairs are blocked now (diagnostics).
     pub fn blocked(&self) -> usize {
         self.failed.len()
