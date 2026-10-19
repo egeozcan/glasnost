@@ -16,7 +16,7 @@ This is M7b step 1e. It takes in the two revisions that step 1d listed as not ta
 **Retired interims** (in code comments, `docs/development.md` and the ledgers):
 - Q-1505 (a vehicle on a repair depot at the last control centre's loss). Replaced by S-0405 claim 13's *Repair depots* paragraph. The interim said "passed over when our depot exchange tethers it (a pad depot does, an ordinary depot does not)". The answer reads the tether only: a pad depot can still serve an untethered vehicle, which is disabled. `power::tethered_in_own_cell` already tested exactly that (the tether to the contact building, and that building's foundation holding the vehicle's cell), so no code changed. The comment in `econ::power::set_disabled`, the S-0405 paragraph in `docs/development.md` and row 13 of `docs/m5-claims/S-0405.md` now cite revision 21.
 
-**New requests:** none. Q-1505's request file still says `status: open`, although S-0405 revision 21 answers it; the lead should mark it answered (as for Q-1460 at step 1d).
+**New requests:** none. Q-1505's request file is already marked answered by S-0405 (aba2af6).
 
 ## S-0405 revision 21 (from 20)
 
