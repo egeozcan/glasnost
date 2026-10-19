@@ -1,9 +1,9 @@
 ---
 id: Q-1503
 title: What a vehicle disabled by the loss of its control centre cannot do
-status: open
+status: answered
 related: [S-0405, S-0616, S-0301, S-0215]
-answered-by: []
+answered-by: [S-0405]
 ---
 
 ## Need

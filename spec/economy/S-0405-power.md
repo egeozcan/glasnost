@@ -2,13 +2,13 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0180, Q-0224, Q-0276]
+requests: [Q-0180, Q-0224, Q-0276, Q-1503]
 supersedes: []
 ---
 
@@ -418,9 +418,20 @@ house's own update in a tick, which comes after the turn pass and before orders 
     stops being in operation, or is lost), every vehicle of the house whose type is the powered unit
     of the building type that just stopped, and that is not off the map, is disabled; when the count
     goes from 0 to 1, every vehicle of the house whose type is the powered unit of the building that
-    just came into operation is enabled again. A vehicle whose type has the powered-unit flag and
-    that enters a cell while its house has no active control centre is disabled too, unless the cell
-    holds a building (a vehicle in a factory or on a repair depot stays enabled). A disabled vehicle
+    just came into operation, and that is not off the map, is enabled again. A vehicle that is off
+    the map at either transition is passed over: it keeps the state it had.
+    At the 1-to-0 transition a vehicle that is tethered (glossary) to the building standing in its
+    own cell is passed over too and stays enabled, for example a new vehicle still in its factory
+    (S-0417 claims 2 and 7).
+    A vehicle whose type has the powered-unit flag is disabled too when it completes its arrival
+    in a cell while its house has no active control centre, unless the cell holds a building (a
+    vehicle in a factory or on a repair depot stays enabled). An arrival is the end of a step of
+    its own movement into the cell, which covers driving out of a factory, being unloaded, landing
+    after a fall, arriving by a chrono jump and coming out of a tunnel or a burrow. Being placed on
+    a cell by the map, or created on one, is not an arrival (Q-1503 part 2): such a vehicle stays
+    enabled, and can act normally, until its first completed arrival in a cell without a building.
+    Disabling and enabling also reset the vehicle's behaviour; claim 20 gives these one-off
+    effects and what a disabled vehicle cannot do. A disabled vehicle
     is inactive until enabled, but disabling does not imply immediate rest: a hovering vehicle can
     still spin, settle and retain residual travel, and over water can fall and be destroyed.
     S-0503 claims 8 and 10–11 own these hover effects and their conditions, including restoration
@@ -435,14 +446,16 @@ house's own update in a tick, which comes after the turn pass and before orders 
     paralysis or being without a driver does not by itself enter that state; those conditions
     may coexist with it. S-0616 claim 1 owns the sparks and their timing.
     - Backing: `measurable` (scenario W8, parts a to i, part h for off-map vehicles at disabling,
+      part j for placement and the first arrival, part k for the tethered exception at a factory,
       S-0616 scenarios P1 and P23 for the deactivated-vehicle sparks).
       Hover effects inherit the backing and confidence of S-0503 claims 8 and 10–11, with
       scenario H7 there testing ordinary disabling, settling, spin, residual travel and water loss.
-      `unmeasured` for off-map vehicles at enabling and for loss or owner-change transitions
-      (W8 tests disabling off-map and switch transitions only; no scenario part covers these
-      other cases).
-    - Confidence: medium (the count and its two transitions, the deactivated-state distinction), low (the cell-entry rule and its
-      building exception)
+      `unmeasured` for off-map vehicles at enabling, for loss or owner-change transitions and
+      for the arrival kinds other than driving (no scenario part covers them, and a disabled
+      vehicle cannot be ordered into a transport).
+    - Confidence: medium (the count and its two transitions, the off-map and tethered exceptions,
+      the deactivated-state distinction, the cell-entry rule's arrival timing and placement
+      exception); low (the building exception of the cell-entry rule)
 
 14. **Spy satellite.** The map reveal of a spy satellite (S-0409 owns it) does not depend on
     power: neither low power, nor a blackout, nor switching the building off stops it, whether or
@@ -534,6 +547,58 @@ house's own update in a tick, which comes after the turn pass and before orders 
     - Backing: `measurable` (W14)
     - Confidence: high (shortage split and scale), medium (settled display interpretation)
 
+20. **What disabling does, and what a disabled vehicle cannot do (Q-1503).** "Disabled" here is
+    claim 13's state, the *deactivated* state of S-0616 claim 1.
+    - **At disabling.** Each vehicle that claim 13 disables gets the guard reset of S-0215 (Terms,
+      claim 9): it loses its target and its destination, and *guard* is forced, which a vehicle
+      whose current behaviour is *wait* refuses (S-0215 claim 9). It is removed from the
+      selection, and its locomotor is switched off (S-0207 claim 16 g, S-0503 claims 8 and
+      10–11). The 1-to-0 transition does
+      this to every vehicle claim 13 names, including one that is already disabled.
+    - **At enabling.** Each vehicle that claim 13 enables gets the same guard reset and has its
+      locomotor switched on again, whether or not it was disabled. So an enabled vehicle of the
+      powered-unit type, such as one passed over at the earlier 1-to-0 transition, also loses its
+      target, destination and behaviour when the centre returns.
+    - **Sounds.** A vehicle that becomes disabled plays its type's deactivation sound at its
+      position, and a disabled vehicle that becomes enabled plays its type's activation sound
+      (Import mapping). A vehicle that was already in the new state plays nothing. Playback is
+      S-0701's.
+    - **Firing.** The firing check (S-0301 claim 9) answers *illegal* for every target and every
+      weapon of a disabled vehicle, so it fires at nothing, a target given by force-fire included.
+    - **Targets.** It acquires no target. Every candidate fails S-0309's firing-check test.
+    - **Orders.** It is neither *movable* nor *able to fire* in S-0214's sense, so every order
+      that needs either is refused for it: move, attack, guard, stop, scatter and enter.
+      An ordinary band box does not take it (S-0214 claim 19). A click can still select it, with
+      its type's deactivated selection response (S-0214 claim 12). An AI house's orders are
+      bound by the same rules (glossary, *AI house*). The refusal is made when an order is
+      given, not when it is carried out: an order accepted before the disabling and carried out
+      after it still sets its behaviour, target and destination (the reset has already
+      happened), though the firing check goes on refusing every shot.
+    - **Its turn and behaviour.** It still takes its turn and processes its current behaviour
+      (S-0616 claim 1 for its sparks). With no target and no destination, *guard* gives it
+      nothing to do.
+    - **Movement and turning.** It starts no new movement of its own: the reset clears its
+      destination, no order can give it one, and a scatter request is refused because its
+      locomotor is off. A hovering vehicle's remaining motion is S-0503's. The disabled state
+      itself stops neither its body nor its turret from turning; it only leaves them nothing to
+      turn towards.
+    - **As a target.** It is targeted, attacked, crushed and damaged like any other vehicle.
+      No targeting or damage rule reads the disabled state.
+    - **Passengers.** The disabled state of an open-topped transport does not stop its passengers
+      from firing out of it.
+    - **Drawing.** A voxel vehicle is drawn at half brightness: trunc(*b* / 2), where *b* is the
+      brightness it would otherwise be drawn at (S-0104 claim 13), after any flash or effect
+      tint. Whether a sprite-drawn vehicle is darkened too is open (Open questions).
+    - Backing: `measurable` (scenario W8, part a for orders, part j for firing and acquisition,
+      part l for the reset at enabling). Drawing and sounds are `measurable` by inspection in
+      W8 part a, whose run records a screenshot and the sounds. The late order is `unmeasured`:
+      it needs an order and a disabling in the same tick. Passengers are `unmeasured`: no
+      scenario part puts a disabled open-topped transport in play.
+    - Confidence: high (firing and acquisition, the guard reset, deselection, orders refused,
+      being a normal target); medium (enabling resets every vehicle of the type, the turn
+      continuing, drawing, sounds); low (the late order, passengers, no new movement for a
+      vehicle whose locomotor does not itself stop when switched off)
+
 ## Formulas
 
 All results in power units are integers (S-0205, claim 1). The formulas display RZ₅₃ for
@@ -623,8 +688,9 @@ is implementer design, not a further game-state rule. No formula here prescribes
 | active control centre | the building's first turn in which it is not in operation, or its loss | not active (Terms; claim 13) |
 | switched on | applicable power-off order (live building on the map, type without the firestorm-wall flag), type with a base drain above 0 or the needs-power flag | switched off; building output and drain 0; house totals follow claim 7 |
 | switched off | applicable power-on order (live building on the map, type without the firestorm-wall flag), no pulse | switched on |
-| active control centres 1 | the last one stops | its powered-unit vehicles disabled (claim 13) |
-| active control centres 0 | one comes into operation | its powered-unit vehicles enabled |
+| active control centres 1 | the last one stops | its powered-unit vehicles on the map disabled, except one tethered to the building in its cell (claim 13) |
+| active control centres 0 | one comes into operation | its powered-unit vehicles enabled, each with a guard reset (claim 20) |
+| enabled powered-unit vehicle, no active control centre | completes an arrival in a cell without a building (not placement or creation) | disabled: guard reset, deselected, locomotor off (claims 13, 20) |
 
 Observable ordering: a building's in-operation state uses the house totals as last worked out
 (claim 7), so a defence that loses power by a building's death in tick *n* still fires in the turns
@@ -684,6 +750,7 @@ remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-04
 | Rules, building section, `TogglePower` | whether input offers power mode on the building (S-0214, claim 13) | boolean | yes |
 | Rules, building section, `PowersUnit` | the control centre's powered unit (claim 13) | vehicle type name | none |
 | Rules, vehicle section, `PoweredUnit` | powered-unit flag (claim 13) | boolean | no |
+| Rules, vehicle section, `DeactivateSound`, `ActivateSound` | the sounds played at disabling and enabling (claim 20; playback S-0701) | sound name (S-0003); a name that names no sound keeps the value in force | none (no sound) |
 | Rules, building section, `Drainable` | drainable type (S-0608 claims 1–3 own eligibility and attachment) | boolean | no |
 | Rules, building section, `SuperGapRadiusInCells` | super-gap radius (claim 16; this spec owns the key) | integer, cells | 0 |
 | Rules, `[General]`, `SpyPowerBlackout` | spy blackout length *d* (claim 6) | integer, ticks | 0; keeps |
@@ -907,7 +974,7 @@ switched off the house has full power (W3's second pair).
   a drain of 10 and powered unit X; a plant that covers every drain (full power throughout, so low
   power never decides the result); vehicle type X with the powered-unit flag, and vehicle type
   X' with no powered-unit flag, used only in part (f); vehicle type Z with the powered-unit flag
-  that no centre names; an own repair depot; two vehicles of each of X and Z, and one of X'. For part
+  that no centre names; an own repair depot; an own factory that can build X (part k); two vehicles of each of X and Z, and one of X'. For part
   c the file adds a second control-centre type K2 (same flags and drain) with powered unit Y,
   one of each centre, and vehicles of X and Y. For part h the file adds an own test transport type
   that can carry the X' vehicle. The centres are switched off by power orders (the type's drain
@@ -927,8 +994,27 @@ switched off the house has full power (W3's second pair).
     off while the vehicle is inside; then unload it onto a cell with no building and give it
     orders.
   - (i) continue (c) by switching K2 off too, then switch K on again with K2 still off.
+  - (j) (Q-1503) a second test map, with no control centre for the house at any time. The X
+    and Z types are armed with a weapon that can hit the enemy test vehicle, and have passive
+    acquisition enabled. One X vehicle and one Z vehicle are placed by the map on cells without
+    a building, each with an unarmed enemy test vehicle (strength high enough to outlast the run)
+    already in its weapon range. Let the game run for 300 ticks without orders, then order each
+    vehicle one cell away to a cell without a building, then try a force-fire order and a move
+    order on each.
+  - (k) with K on, an own test factory for X starts building an X vehicle. Switch K off on the
+    tick the new vehicle appears inside the factory, before it leaves.
+  - (l) with the variant of K of (f) (powered unit X', whose type lacks the flag, so no
+    cell-entry disabling applies) and K2 both on, switch the variant off, then K2 (only Y is
+    disabled, and X' stays enabled with no centre active). Give the X' vehicle an attack order
+    on an enemy test building far out of its range, and switch the variant on again while the
+    vehicle is driving towards it.
 - *Runs:* three per part.
-- *Observable:* whether the vehicles move and obey orders.
+- *Observable:* whether the vehicles move and obey orders. In part a also record a screenshot
+  of a disabled X vehicle beside an enabled X' vehicle on the same ground, and the sounds played
+  at disabling and enabling. In part j record the ticks of every shot fired by the placed
+  vehicles, the ticks of their cell arrivals, and their health and their enemies' health. In
+  part k record whether the new vehicle leaves the factory and where it is disabled. In part l
+  record whether the X' vehicle keeps its target and keeps driving after the variant comes on.
 - *Expected:* (a) both X vehicles are disabled and refuse orders; a hovering vehicle can still
   settle, spin and travel residually as S-0503 claims 8 and 10–11 specify (scenario H7 there tests
   those effects and water destruction). (b) Both work again; (c) the X vehicles
@@ -939,7 +1025,18 @@ switched off the house has full power (W3's second pair).
   cell-entry rule does not apply to it because its type lacks the powered-unit flag). (i) On
   the count's 1-to-0 transition only Y is disabled; X keeps working. Bringing K back enables
   X only, so Y stays disabled until K2 itself causes a later 0-to-1 transition.
-- *Falsified if:* (a) or (b) differ, or in (c) the X vehicles stop, or in (d) the Z vehicle keeps
+  In part a the disabled vehicle is drawn darker than the enabled one (claim 20). (j) The
+  placed vehicles in range fire and acquire targets from the start, and those out of range
+  stay where they are, as enabled vehicles do. Each vehicle stops firing once it has arrived
+  in the next cell; from then on it fires at nothing, a force-fire order is refused, and it
+  ignores the move order. Its enemy takes no damage after that arrival. (k) The new vehicle
+  is passed over while tethered to its factory, drives out, and is disabled on its first
+  arrival in a cell without a building (its type has the flag). (l) The X' vehicle
+  drops its target and stops on the tick the variant comes on (claim 20's reset at enabling).
+- *Falsified if:* in (j) a placed vehicle does not fire before its first arrival, or fires or
+  moves under orders after it, or in (k) the new vehicle stays in the factory or is not
+  disabled outside it, or in (l) the X' vehicle keeps its target when the variant comes on,
+  or (a) or (b) differ, or in (c) the X vehicles stop, or in (d) the Z vehicle keeps
   working, or in (e) it is disabled on the depot's cell or stays enabled afterwards, or in (f) the
   X' vehicle is unaffected, or in (g) the Z vehicle works again, or in (h) the X' vehicle is
   disabled after it is unloaded, or in (i) either vehicle type differs from the expected state.
@@ -1081,6 +1178,14 @@ switched off the house has full power (W3's second pair).
   No transition duration or colour choice is tested by this scenario.
 
 ## Open questions
+
+- Whether a sprite-drawn vehicle is darkened while disabled, as a voxel vehicle is (claim 20).
+- Whether a vehicle docked on a repair depot is tethered to it when the last control centre
+  stops, and so passed over (claim 13). Only the factory case is established.
+
+- Whether a disabled vehicle whose locomotor keeps working when switched off can still be moved
+  by a behaviour that gives it a destination, for example one whose *wait* behaviour refused the
+  guard reset (claim 20). No such path is known in a skirmish.
 
 - Whether any input or scripted path gives a gap building its deploy behaviour, so that claim 16 can
   occur in a skirmish.
