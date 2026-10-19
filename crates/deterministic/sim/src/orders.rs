@@ -202,6 +202,9 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     if !crate::econ::sidebar::legal(w, house, &order) {
         return false;
     }
+    if refused_while_disabled(w, &order) {
+        return false;
+    }
     let limit = w.rules().quirks.pending_order_limit;
     let Some(h) = w.houses.get_mut(usize::from(house.0)) else {
         return false;
@@ -212,6 +215,25 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
     }
     h.pending.push(order);
     true
+}
+
+/// Whether an order is refused because its actor is a vehicle disabled by
+/// the loss of its control centre (S-0405 claim 20): such a vehicle is
+/// neither movable nor able to fire, so every order that needs either is
+/// refused when it is given, a computer house's included: behaviour orders
+/// (move, attack, guard, enter and the rest), stop, scatter, deploy and the
+/// guard spot. An order given before the disabling is still carried out.
+fn refused_while_disabled(w: &World, order: &Order) -> bool {
+    let actor = match *order {
+        Order::Behaviour { actor, .. }
+        | Order::Stop { actor }
+        | Order::Scatter { actor }
+        | Order::Deploy { actor }
+        | Order::GuardSpot { actor, .. } => actor,
+        _ => return false,
+    };
+    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: orders that need a movable or able-to-fire actor are refused for a disabled vehicle at the time the order is given, not when it is carried out; an AI house's orders are bound by the same rules)
+    w.obj(actor).is_some_and(|o| o.kind == Kind::Vehicle) && crate::econ::power::unit_disabled(w, actor)
 }
 
 /// Applies every house's pending orders (S-0213 claims 1 and 3): houses

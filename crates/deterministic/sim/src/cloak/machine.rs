@@ -479,6 +479,8 @@ pub fn late_turn(w: &mut World, id: ObjectId) {
 /// are seams (those locomotors are not built). Entering play alone, unloading included, is not one: the disc is
 /// added by [`entered_map`] with no adjacency test.
 pub fn cell_movement_completed(w: &mut World, id: ObjectId) {
+    // spec: S-0405 claim 13 (revision 20: a powered-unit vehicle is disabled when it completes its arrival in a cell, which covers driving, landing after a fall and arriving by a chrono jump; placement and creation are not arrivals)
+    crate::econ::power::arrival(w, id);
     let Some(o) = w.obj(id) else { return };
     if !o.on_map || !o.kind.is_mobile() {
         return;

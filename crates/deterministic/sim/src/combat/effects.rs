@@ -151,6 +151,12 @@ pub enum Effect {
         /// The seized unit.
         unit: ObjectId,
     },
+    /// A vehicle was disabled by the loss of its control centre (S-0405
+    /// claims 13 and 20): it is removed from the selection.
+    Deactivated {
+        /// The disabled vehicle.
+        unit: ObjectId,
+    },
     /// A unit dropped by magnetic lift is deselected by the stop on
     /// dropping (S-0607 claim 13): it is removed from the selection.
     Dropped {
@@ -358,6 +364,12 @@ pub enum InfiltrationRow {
 pub enum Sound {
     /// A type's deploy sound (S-0415 claims 6 and 9, S-0517 claim 12).
     Deploy,
+    /// A vehicle type's deactivation sound, played at its position when it
+    /// becomes disabled (S-0405 claim 20, `DeactivateSound`).
+    Deactivate,
+    /// A vehicle type's activation sound, played at its position when it
+    /// stops being disabled (S-0405 claim 20, `ActivateSound`).
+    Activate,
     /// A vehicle type's undeploy sound (S-0517 claim 12).
     Undeploy,
     /// A building type's pack-up sound, when it has one (S-0415 claim 9).

@@ -367,7 +367,7 @@ fn missing_death_type_still_removes() {
     }
 }
 
-// spec: S-0615 claim 3 (kinds 0 and 11 and above: no animation, removed at once, no dispatch draw; a negative kind likewise, interim Q-1423)
+// spec: S-0615 claim 3 (kinds 0 and 11 and above: no animation, removed at once, no dispatch draw; a negative kind likewise, S-0615 r3)
 #[test]
 fn kinds_without_animation() {
     let r = rules();

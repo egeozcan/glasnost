@@ -294,6 +294,10 @@ pub fn check(
     if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
         return Answer::Busy;
     }
+    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: the firing check answers illegal for every target and every weapon of a disabled vehicle, a force-fire target included; placed at the head of rank 4, interim Q-1506)
+    if kind == Kind::Vehicle && crate::econ::power::unit_disabled(w, firer) {
+        return Answer::Illegal;
+    }
     // spec: S-0301 claim 9 (grip refusals within rank 4) and S-0607 claim 11 (a firing check by the lifter against its own gripped unit answers rearming, with any weapon, ahead of every test of the target's layer, height, kind or armour and of every projectile test; of S-0301 claim 9's rank-4 answers only the materialising firer's rearming, which gives the same answer, and the refusal of a firer bound to a slave master, which our engine does not have, precede it)
     if weapon.is_some()
         && let Some(Target::Object(x)) = target

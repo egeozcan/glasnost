@@ -203,8 +203,8 @@ pub fn turn(w: &mut World, id: ObjectId, moved: bool) {
             // spec: S-0314 claim 8 and S-0408 claim 13 (a building whose repair is on steps in its turn); S-0203 claim 12 (after the group update, so a delivery in it can pay this turn's step)
             crate::econ::sell::building_turn(w, id);
         }
-        // A vehicle master's group update comes before its movement (S-0203 claim 12; `tick::object_turn`).
-        Kind::Vehicle => crate::econ::power::vehicle_turn(w, id),
+        // A vehicle master's group update comes before its movement (S-0203 claim 12; `tick::object_turn`); its cell-entry disabling is at its arrivals (S-0405 claim 13).
+        Kind::Vehicle => {}
         // spec: S-0401 claim 15 (an ore mine draws and spreads in its own turn)
         Kind::Terrain => crate::econ::resource::mine_turn(w, id),
         // spec: S-0402 claim 21 (a slave group's updates come during the master's turns)

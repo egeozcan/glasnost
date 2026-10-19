@@ -401,9 +401,10 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
 
 /// Keys each approved spec's import mapping names, for the `spec` column of
 /// keys this converter does not interpret yet.
-// spec: S-0003, S-0004, S-0006, S-0007, S-0101 to S-0108, S-0301 to S-0315 (Import mapping key names)
+// spec: S-0003, S-0004, S-0006, S-0007, S-0101 to S-0108, S-0301 to S-0315, S-0405 (Import mapping key names)
 const NAMED: &[(&str, &[&str])] = &[
     ("S-0301", &["CompEasyBonus"]),
+    ("S-0405", &["ActivateSound", "DeactivateSound"]),
     (
         "S-0303",
         &[

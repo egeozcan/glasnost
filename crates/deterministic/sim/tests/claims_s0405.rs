@@ -989,3 +989,193 @@ fn claim_8_manned_state_saved_and_hashed() {
         glasnost_sim::save::state_hash(&l)
     );
 }
+
+/// [`rules`] with the combat ruleset's weapons, projectiles and warheads,
+/// and DRONE armed with Gun.
+fn armed_rules() -> Ruleset {
+    let mut r = rules();
+    let c = testkit::combat_ruleset();
+    r.sim.weapons = c.sim.weapons.clone();
+    r.sim.projectiles = c.sim.projectiles.clone();
+    r.sim.warheads = c.sim.warheads.clone();
+    for (k, v) in &c.registries {
+        if k != "buildings" && k != "vehicles" && k != "infantry" {
+            r.registries.insert(k.clone(), v.clone());
+        }
+    }
+    r.sim.vehicles.get_mut("DRONE").unwrap().primary = Some("Gun".into());
+    r
+}
+
+fn drone(w: &mut World, house: u8, dx: i32, dy: i32) -> ObjectId {
+    testkit::spawn(
+        w,
+        Kind::Vehicle,
+        "DRONE",
+        house,
+        testkit::mid(SIZE, dx, dy),
+        0,
+    )
+}
+
+fn effects_of(w: &World, id: ObjectId) -> (bool, Vec<glasnost_sim::combat::effects::Sound>) {
+    use glasnost_sim::combat::effects::Effect;
+    let deselected = w
+        .effects
+        .iter()
+        .any(|e| matches!(e, Effect::Deactivated { unit } if *unit == id));
+    let pos = w.obj(id).map(|o| o.pos);
+    let sounds = w
+        .effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Sound { sound, pos: p, .. } if *p == pos => Some(*sound),
+            _ => None,
+        })
+        .collect();
+    (deselected, sounds)
+}
+
+// spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling a guard reset, deselection, the locomotor switched off and the deactivation sound; the firing check answers illegal for every target, so it acquires nothing and a force-fire is refused; orders that need a movable or able-to-fire actor are refused when given; it is still a target like any other vehicle)
+#[test]
+fn claim_20_what_a_disabled_vehicle_cannot_do() {
+    use glasnost_sim::combat::effects::Sound;
+    use glasnost_sim::world::Target;
+    let mut w = game(&armed_rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let d = drone(&mut w, 0, -4, 4);
+    let foe = drone(&mut w, 1, -2, 4);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    let shot = |w: &World| {
+        glasnost_sim::combat::check::check(w, d, Some(Target::Object(foe)), 0, false)
+    };
+    assert_ne!(shot(&w), Answer::Illegal, "enabled: a legal target");
+    w.effects.clear();
+    order(&mut w, A, Order::PowerOff { actor: k });
+    let mut seen = (false, Vec::new());
+    for _ in 0..3 {
+        step(&mut w);
+        let (des, s) = effects_of(&w, d);
+        seen.0 |= des;
+        seen.1.extend(s);
+        w.effects.clear();
+    }
+    assert!(power::unit_disabled(&w, d));
+    assert!(seen.0, "deselected");
+    assert_eq!(seen.1, [Sound::Deactivate]);
+    assert_eq!(shot(&w), Answer::Illegal, "illegal for every target");
+    let o = w.obj(d).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_eq!(o.target, None);
+    assert!(
+        !glasnost_sim::orders::issue(
+            &mut w,
+            A,
+            Order::Behaviour {
+                actor: d,
+                behaviour: Behaviour::Attack,
+                attack_move: false,
+                target: Some(Target::Object(foe)),
+                dest: None,
+            }
+        ),
+        "a force-fire order is refused"
+    );
+    assert!(
+        !glasnost_sim::orders::issue(&mut w, A, Order::Stop { actor: d }),
+        "a stop order is refused"
+    );
+    assert!(!glasnost_sim::targeting::movable(&w, A, d));
+    assert!(!glasnost_sim::targeting::able_to_fire(&w, A, d));
+    assert!(!glasnost_sim::targeting::box_eligible(&w, A, &[], d));
+    for _ in 0..60 {
+        step(&mut w);
+    }
+    assert_eq!(w.obj(d).unwrap().target, None, "it acquires no target");
+    assert!(
+        glasnost_sim::combat::check::check(&w, foe, Some(Target::Object(d)), 0, false)
+            != Answer::Illegal,
+        "it is a target like any other vehicle"
+    );
+    // Enabling: the activation sound and a guard reset.
+    order(&mut w, A, Order::PowerOn { actor: k });
+    let mut sounds = Vec::new();
+    for _ in 0..3 {
+        step(&mut w);
+        sounds.extend(effects_of(&w, d).1);
+        w.effects.clear();
+    }
+    assert!(!power::unit_disabled(&w, d));
+    assert_eq!(sounds, [Sound::Activate]);
+}
+
+// spec: S-0405 claim 20 (at enabling every vehicle claim 13 enables gets the guard reset, also one that was not disabled; it plays no activation sound) and claim 13 (a vehicle off the map at either transition is passed over and keeps its state)
+#[test]
+fn claim_20_enabling_resets_an_enabled_vehicle_and_skips_off_map() {
+    let mut r = rules();
+    r.globals.quirks.shared_control_centre_count = false;
+    let mut w = game(&r);
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    order(&mut w, A, Order::PowerOff { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    // Two vehicles that arrive while the centre is off: placement is not an arrival, so both stay enabled.
+    let on_map = drone(&mut w, 0, -4, 4);
+    let off_map = drone(&mut w, 0, -4, 6);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(!power::unit_disabled(&w, on_map), "placement is not an arrival");
+    w.obj_mut(off_map).unwrap().econ.building.unit_disabled = true;
+    glasnost_sim::objects::take_inside(&mut w, off_map);
+    let spot = glasnost_sim::world::Target::Cell(testkit::mid(SIZE, 0, 9));
+    w.obj_mut(on_map).unwrap().guard_spot = Some(spot);
+    order(&mut w, A, Order::PowerOn { actor: k });
+    w.effects.clear();
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    let o = w.obj(on_map).unwrap();
+    assert_eq!(o.guard_spot, None, "the guard reset at enabling");
+    assert!(effects_of(&w, on_map).1.is_empty(), "no activation sound");
+    assert!(
+        power::unit_disabled(&w, off_map),
+        "off the map at enabling: passed over"
+    );
+}
+
+// spec: S-0405 claim 13 (revision 20, Q-1503 answered: at the 1-to-0 transition a vehicle tethered to the building standing in its own cell is passed over and stays enabled)
+#[test]
+fn claim_13_tethered_vehicle_is_passed_over() {
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let f = put(&mut w, "CONS", 0, -4, 4);
+    let d = drone(&mut w, 0, -4, 4);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    {
+        let o = w.obj_mut(d).unwrap();
+        o.contact = Some(f);
+        o.econ.exit = Some(glasnost_sim::econ::release::Exit {
+            factory: f,
+            tethered: true,
+            place: 0,
+        });
+    }
+    assert!(power::tethered_in_own_cell(&w, d));
+    order(&mut w, A, Order::PowerOff { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(!power::unit_disabled(&w, d), "tethered in its factory's cell");
+}

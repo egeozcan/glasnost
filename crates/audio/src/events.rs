@@ -760,6 +760,7 @@ impl Audio {
             Effect::SpecialAnims { .. }
             | Effect::Bunkered { .. }
             | Effect::Seized { .. }
+            | Effect::Deactivated { .. }
             | Effect::Dropped { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
             Effect::SupportBeam { .. } => {}
@@ -1008,6 +1009,13 @@ impl Audio {
             // spec: S-0415 claims 6 and 9 (the type's deploy sound at its position)
             Sound::Deploy if mine => {
                 self.play_in(w, ts.deploy.as_deref(), at);
+            }
+            // spec: S-0405 claim 20 (the vehicle type's deactivation or activation sound at its position, heard by every player)
+            Sound::Deactivate => {
+                self.play_in(w, ts.deactivate.as_deref(), at);
+            }
+            Sound::Activate => {
+                self.play_in(w, ts.activate.as_deref(), at);
             }
             // spec: S-0517 claim 12 (the vehicle type's undeploy sound at its position)
             Sound::Undeploy if mine => {
