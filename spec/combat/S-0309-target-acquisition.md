@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 20
+revision: 21
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
-requests: [Q-0061, Q-0079, Q-0162]
+requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504]
 supersedes: []
 ---
 
@@ -430,8 +430,8 @@ this spec:
    acquisition has no aircraft class (claim 6), so the aircraft pass does not run for it. For a
    searcher that is a mobile object other than an aircraft,
    a ground-layer object is considered only if its cell lies in the same connected region of the
-   searcher's movement zone (S-0212) as the searcher's own cell, measured in the cell layer the
-   object occupies. There is no distance limit. So an object that is neither an aircraft nor in
+   searcher's movement zone (S-0212 claim 4) as the searcher's own cell, measured in the cell layer
+   the object occupies, except for the no-link deck case below. There is no distance limit. So an object that is neither an aircraft nor in
    the ground layer, such as a hovering unit with jumpjet movement (air or top layer, S-0102
    claim 3), is never found by a map-wide search, whatever the searcher's weapons can hit
    (`quirks.hunt_ground_layer_only`, Edge cases).
@@ -443,13 +443,69 @@ this spec:
    Without the aircraft search class, the first pass does not run, but a search for vehicles
    still accepts a landed aircraft in the second pass (claim 5), with distance in leptons.
    The order of the two passes decides ties (claim 17), not which distance unit an aircraft uses.
+
+   *Cells of no reach region.* Except for the no-link searcher case below, the connected-region
+   test compares reach regions as S-0212 claim 4 does: two cells of no reach region of the
+   searcher's movement zone count as lying in the same region, wherever they are on the map.
+   The searcher's own cell is read for its deck (S-0212 claim 4) whenever it is a bridge cell,
+   whatever layer the searcher is in; the object's cell is read in the layer the object occupies,
+   always for the searcher's movement zone, never the object's.
+
+   *No-link deck exception.* If the searcher's own deck read finds no bridge link, target
+   acquisition omits the connected-region restriction for the whole search: no object or
+   visited cell is rejected for its reach region. This is a search eligibility exception, not
+   a change to S-0212 claim 4's definition of reach regions. In particular, two no-link deck
+   reads are never compared in this search. If the searcher's read instead gives any other
+   region, an object's no-link deck read fails the comparison, since S-0212 claim 4 makes that
+   deck region distinct from every other region. The exception also governs the area-search
+   cell test of claim 11. All other eligibility tests remain in force. This exception is low
+   confidence and unmeasured (backing below).
+
+   Away from that exception:
+   - a searcher on a cell of a reach region never considers an object standing on a cell of no
+     reach region of the searcher's movement zone (for example a cliff cell that this zone cannot
+     use, S-0212 claim 4), however close it is,
+   - a searcher standing on a cell of no reach region of its own movement zone considers only
+     objects on cells of no reach region of that zone, anywhere on the map: not its enemies on open
+     ground, but, for example, an enemy on another cliff cell or, for a land movement zone, on
+     water,
+   - neither unit leaves its cell because of the search: a hunting actor whose search finds nothing
+     stays put (S-0215, claim 27).
+
+   Such an object can still become a target through the searches and events that have no
+   connected-region test: range searches (claim 11, including a map-wide search turned into one
+   by the limited-scan mark of claim 22) and retaliation (claim 18).
+
+   *Hovering jumpjets.* The aircraft pass holds aircraft-kind objects only, not infantry units or
+   vehicles with jumpjet movement, so a hunting actor's own map-wide search never picks a jumpjet
+   while it is outside the ground layer. A hunting actor can still attack one in these ways:
+   - it picked the jumpjet while that was in the ground layer (before lift-off, after landing,
+     or while its height keeps it in the ground layer, S-0102 claim 3) and still holds it: a
+     target set by a map-wide search is not an opportunity target (claim 24), so later searches
+     keep it (claim 4) after the jumpjet rises,
+   - the airborne scan of a range search (claim 9) reaches tracked flying objects, hovering
+     jumpjets among them (S-0303, Terms); a hunting vehicle runs such a search in place of its
+     map-wide search only while it has the limited-scan mark (claim 22),
+   - retaliation (claim 18) has no render-layer test, and the disc-laser weapon makes its firer
+     the attacker (S-0615, claim 16). A hunting actor retaliates only when the *hunt* behaviour
+     has the retaliate property, which the user's behaviour data sets (S-0215, claim 18 and Import
+     mapping), and when the owner rules of S-0215 claim 18 allow it.
    - Backing: `measurable` (scenario A11: part a for the absent distance limit, part b for the
      zone test, part f for the ground-layer restriction, part g for the aircraft pass coming
-     first, parts h and i for landed aircraft in both passes and their distance units; scenario A12, parts d and e, for a healer's second pass; scenario A15, part e, run 3,
+     first, parts h and i for landed aircraft in both passes and their distance units, part j for
+     cells of no reach region, part k for the hovering jumpjet and the paths that reach it; scenario A12, parts d and e, for a healer's second pass; scenario A15, part e, run 3,
      for the allied objects an engineer of the neutral house considers). The objects considered by a
      searcher whose type attacks friendlies, that is berserk or that is such a passenger follow
-     table C's rows "friendly" and "controller's allies", whose scenarios are named there
-   - Confidence: medium (the ground-layer restriction, the zone test and the order of the passes)
+     table C's rows "friendly" and "controller's allies", whose scenarios are named there. The deck
+     read of the searcher's own cell is `unmeasured`: it differs from a read in the searcher's own
+     layer only for a searcher under a bridge whose deck and ground lie in different reach
+     regions, and which deck region S-0212 claim 4 then gives depends on bridge links that no
+     scenario of this spec places at will. The no-link deck exception, on both the searcher and
+     object sides and for visited area-search cells, is also `unmeasured`: no proposed fixture
+     establishes a bridge cell with no matching link, so A11 does not test that exception
+   - Confidence: medium (the ground-layer restriction, the zone test and the order of the passes),
+     high (cells of no reach region), low (the deck read
+     of the searcher's own cell and the no-link deck exception)
 
 8. **Radius of range and area searches.** The radius *R* in leptons, and from it the number of
    rings *n*, follow Formulas F1. For a range search *R* is the type's guard range if that is not 0
@@ -550,11 +606,18 @@ this spec:
     - Confidence: high (one object per cell); medium (the bridge rule); low (the passengers of a
       mind-controlled open-topped transport and the fall-back to the last object)
 
-11. **A cell in another movement zone is skipped.** For a mobile searcher other than an aircraft, an
+11. **A cell in another reach region is skipped.** For a mobile searcher other than an aircraft, an
     area search (and a map-wide search, claim 7) skips every cell that is not in the same connected
-    region of the searcher's movement zone as the searcher's own cell. A range search does not.
-    - Backing: `measurable` (scenario A11, parts b, d and e)
-    - Confidence: medium
+    region of the searcher's movement zone as the searcher's own cell, except for claim 7's
+    no-link deck case. A range search does not.
+    Both the visited cell and the searcher's own cell are read for their decks when they are
+    bridge cells, and the regions are compared as in claim 7 (S-0212 claim 4), so two cells of no
+    reach region of that zone count as the same region. Claim 7's no-link searcher exception
+    omits this restriction for every visited cell, including other no-link decks, rather than
+    comparing two no-link reads under S-0212 claim 4.
+    - Backing: `measurable` (scenario A11, parts b, d, e and j); `unmeasured` for the deck reads
+      and the no-link deck exception, for the reasons in claim 7
+    - Confidence: medium (low for the deck reads and the no-link deck exception)
 
 ### Which objects are candidates
 
@@ -708,9 +771,14 @@ this spec:
       the artillery flag: never,
     - *X* is not the parasite attached to it (S-0614 claim 17).
 
+    No condition concerns where *X* is: retaliation has no connected-region test (claims 7 and 11)
+    and no render-layer test, so an attacker standing on a cell of no reach region of *A*'s movement
+    zone, or a hovering jumpjet, is retaliated against like any other attacker.
+
     For the neutral and special houses claim 25, part h, gives the conditions that differ.
     - Backing: `measurable` (scenario A5, including the veterancy-ability variant of the charges
-      row)
+      row; scenario A11, parts j and k, for attackers on a cell of no reach region and hovering
+      jumpjets)
     - Confidence: high (the flag, slaves, spawners, alliance, mean damage, the firing check),
       medium (mind controllers, the charges and artillery rows, the parasite row)
 
@@ -1181,7 +1249,7 @@ truncated toward zero (Notation above), so the difference is an integer.
 | playfield | *T* is not on the playfield | medium | A14, part h |
 | no-threat | *T*'s current behaviour has the no-threat property (S-0215, claim 16) | high | A14, part f |
 | underground | *T*'s height above the surface is below −20 leptons | high | A14, part b |
-| zone | *T*'s cell is outside the connected region of *A*'s movement zone that holds *A*'s own cell, in the searches that claims 7 and 11 restrict | medium | A11, parts b and d |
+| zone | *T*'s cell is outside the connected region of *A*'s movement zone that holds *A*'s own cell, in the searches that claims 7 and 11 restrict (compared as claim 7 gives: two cells of no reach region of that zone count as the same region). No rejection by this row when *A*'s own deck read finds no bridge link, as claim 7 specifies | medium (low for the no-link deck exception) | A11, parts b, d and j; the no-link deck exception is `unmeasured` (claim 7) |
 | friendly | *T* is allied with *A*, and *A* is neither a healer for acquisition nor an engineer; or *T* is allied with *A*, *A* is a healer for acquisition or an engineer, and *T*'s health ratio is 1. The row does not apply when *A* has a friendly-row exception (Terms: *A*'s type attacks friendlies, *A* is berserk, *A* has the permanent-berserk mark, or *A* is a passenger of a mind-controlled open-topped transport) | high (low for the passenger exception) | A12 (infantry and vehicle healers; a building healer is `unmeasured`, claim 6, backing); A3, part c, and A8, part f (attacks friendlies and berserk); A14, part l (the passenger exception); the permanent-berserk exception is `unmeasured`, since nothing in our engine sets the mark (Edge cases); the engineer exemption by A15, part e, run 2 (an engineer of the neutral house, to which claim 25, part d, offers allied objects) |
 | healer | *A* is an infantry unit or vehicle that is a healer for acquisition (so its search has the *friendly* modifier, claim 6) and *T* is not allied with *A*. The row applies whatever friendly-row exception *A* has | high | A12, parts d and e |
 | healer aircraft | *A* is a vehicle that is a healer for acquisition, *T* is allied with *A*, and *T* is an aircraft whose height above the surface is above 0 leptons or that stands on a cell holding a building. The row does not apply when *A* has a friendly-row exception | high (medium for the waiver) | A12, part c; the waiver is `unmeasured` (claim 6, backing) |
@@ -2081,7 +2149,16 @@ set in the test map's override sections.
   Parts c and d use game speed 6, no engine add-on and no mods (the named test files of a scenario excepted),
   the common bystander void rule, and three fresh runs per setting.
 
-**A11: map-wide search (claims 1, 7, 11, 22).**
+**A11: map-wide search (claims 1, 7, 11, 18, 22).**
+Use tiny purpose-made skirmish maps, game speed 6 and the common three fresh runs per setting.
+Place actors with their named initial behaviours in the map; no player order to a computer-owned
+actor is assumed. Use the read-only target and tick recorders, adding current behaviour,
+processing and targeting timers, position and render layer for parts j and k. Keep unrelated
+computer activity outside the observed area; void a run if it acts on a test object. For a
+predicted absence of acquisition in j or k, observe 300 ticks after the first qualifying search,
+with repeated search opportunities and the stated conditions maintained. No qualifying search
+makes a run inconclusive. A qualifying pick different from the prediction is a falsifier, not
+an excluded run. Named test data gives targets enough health to survive through the observation.
 - *Part a:* a unit ordered to hunt on a map with targets far away: it moves towards a target out of
   sight range.
 - *Part b:* an infantry unit hunting, with the only enemy on an island it cannot reach: it does not
@@ -2128,8 +2205,65 @@ set in the test map's override sections.
   *Falsified if:* either pick differs. Together h and i distinguish two-pass scoring from either
   a single-pass rule or a rule using cells in both passes. Repeat both with the aircraft on a pad,
   recording its render layer and connected region to exclude layer or zone confounds.
+- *Part j (cells of no reach region, claims 7, 11 and 18; Q-1502):* a test map with a cliff edge
+  whose upper and lower cells the infantry and ground vehicle movement zones cannot use (S-0212,
+  recorded as cells of no reach region), with computer-controlled test houses and the target
+  recorder. Runs: (1) an enemy infantry unit placed on such a cell, unarmed, and a hunting armed
+  vehicle on open ground 6 cells away. *Expected:* the vehicle never picks it and the infantry unit
+  never leaves its cell. (2) As run 1, with the vehicle in *guard* and the infantry unit within its
+  guard range and its weapon's reach. *Expected:* it picks and fires at it (range search, no
+  region test). (3) A hunting
+  armed infantry unit placed on such a cell, with one enemy on open ground and one enemy infantry
+  unit, unarmed, on another such cell at least 30 cells away (out of sight). *Expected:* it picks
+  the far cliff enemy, never the open-ground one. (4) A human-owned vehicle on open ground
+  in *guard*, targetless with passive acquisition disabled in the test map, and an enemy
+  computer-owned armed infantry unit on a cliff cell in *guard*. Place them within both weapons'
+  reach and within the vehicle's sight; the infantry acquires and shoots the vehicle by its
+  range search. Enable the retaliate property of *guard* in the named test data, and satisfy
+  every other retaliation condition of claim 18 and S-0215 claim 18. Record the first hit,
+  the vehicle's target before and after it, and its first return shot. *Expected:* the vehicle
+  takes the cliff infantry as its target after the hit and fires back, despite that target's
+  cell having no reach region. Control: disable only the vehicle's retaliate flag; it remains
+  targetless after the hit. Passive acquisition stays disabled in both runs, so a range-search
+  pick cannot masquerade as retaliation. *Falsified if:* run 1 picks the cliff unit or the
+  unit moves, run 2 does not pick it, run 3 picks the open-ground enemy or nothing, or run 4
+  fails to retaliate under the stated conditions or its control takes the attacker as target.
+  (5) Repeat run 3 with the searching infantry placed in *area guard*, its guard spot at its
+  initial cliff cell, and both enemies within the area radius and weapon reach. Place the
+  second cliff enemy in a visited ring and leave every earlier visited cell without an eligible
+  enemy. *Expected:* the area search picks the cliff enemy, not the open-ground one.
+  *Falsified if:* its first qualifying area search picks the open-ground enemy or nothing.
+  Stop each run after its first qualifying pick or return shot, and before a pursuit can
+  obscure that pick. A run without the specified initial cell, behaviour and region states
+  is inconclusive, not confirmation.
+- *Part k (hovering jumpjet, claims 4, 7, 9, 18 and 24; Q-1504):* a vehicle with an anti-air
+  weapon, computer-owned and placed in *hunt* by the test map, and one human-owned enemy
+  vehicle with jumpjet movement. Give orders only to the human-owned jumpjet. Record targets,
+  the hunter's behaviour, and the jumpjet's height and render layer every tick. Keep the
+  hunter targetless until the qualifying search in each run. Runs: (1) the jumpjet unarmed,
+  ordered to a cell within the hunter's weapon reach and
+  given no further order once it hovers there; count only runs whose first hunt search occurs
+  after it is hovering. A longer hunt processing delay in the named test data may provide the
+  input window.
+  *Expected:* the hunter never picks it while it hovers. (2) As run 1, but leave the jumpjet
+  on the ground until the hunter's target recorder shows its acquisition, then order lift-off.
+  *Expected:* the hunter picks it on the ground and keeps it as target after it rises,
+  firing at it while it hovers.
+  (3) As run 1 with the jumpjet armed with a disc-laser weapon (S-0615) and attacking the hunter,
+  once with the *hunt* behaviour's retaliate property off and once with it on (test data).
+  *Expected:* with it off the hunter never targets the hovering jumpjet; with it on it targets it
+  after the first hit (retaliation, no layer test). Count only hits for which the hunter is
+  targetless, still in *hunt*, and satisfies every other retaliation condition of claim 18
+  and S-0215 claim 18; absence of such a hit is inconclusive. (4) As run 1 with the hunter
+  placed in *guard* by the test map and the jumpjet within its guard range and its weapon's reach. *Expected:* it picks it (airborne
+  scan of the range search). *Falsified if:* run 1 or the property-off run of 3 picks the hovering
+  jumpjet, run 2 drops it when it rises, the property-on run of 3 does not retaliate, or run 4
+  does not pick it. For run 4 place the jumpjet in a tracked sector reached by claim 9's
+  search, so a sector omission does not decide the result. Any run in which the recorded
+  render layer of the jumpjet becomes the ground layer while it attacks is set aside and reported for S-0502: a jumpjet in the ground layer is
+  found by the map-wide search.
 - *Falsified if:* part b picks the unreachable target, part a does not move, part c differs as it
-  says, part d picks the island enemy, part e does not, or parts f to i differ as they say.
+  says, part d picks the island enemy, part e does not, or parts f to k differ as they say.
 
 **A12: healers (claim 6).** A healing infantry type next to two damaged allied infantry and one
 damaged allied vehicle: it heals the infantry only, the more damaged first when the strength
@@ -2541,9 +2675,15 @@ scenario random state each tick, and identify attack processings using the proce
 
 ## Changes for other specs
 
-None. S-0215 claim 33 already includes the charging break-off exception and its backing
-through scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from
-targeting-timer resets.
+S-0212 claim 4: its backing should distinguish its own pathfinding scenarios from the
+new acquisition fixture in A11 part j here. Map-placed cliff infantry provide a proposed
+measurement of two cells of no reach region being compared; the statement that no such
+placement is known is no longer current. This is proposed backing, not a measured result.
+No change is needed to its no-link deck-region definition: claims 7 and 11 here explicitly
+omit that comparison when the searcher's own deck read has no link.
+
+S-0215 claim 33 already includes the charging break-off exception and its backing through
+scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from timer resets.
 
 ## Questions for the project lead
 
