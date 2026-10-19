@@ -2,11 +2,11 @@
 id: S-0409
 title: Shroud and sight (explored and seen cells, sight radius and shape, height blocking, gap generators, re-covering, reveal on fire)
 topic: visibility
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0110, Q-0111, Q-0460, Q-0649]
 supersedes: []
@@ -986,7 +986,7 @@ Entries labelled fixed rules below are not optional corrections. Only entries na
 | No user key | surrounded marks after explored-only whole-map reveal, including border cells (claims 3, 15 and 18; S1 row 10) | engine rule; non-legal neighbours use the shared explored state under `quirks.offmap_cells_shared` | no independent setting; with that quirk off, non-legal neighbours are unexplored |
 | Rules, building type section, `SpySat` | spy-satellite flag (claim 15) | boolean | no |
 | Rules, building type section, `Radar` | radar flag, for infiltration (claim 15) and S-0410 | boolean | no |
-| Rules, weapon section, `RevealOnFire` | reveal-on-fire flag (claim 16) | boolean | no |
+| Rules, weapon section, `RevealOnFire` | reveal-on-fire flag (claim 16) | boolean | yes |
 | Rules, `[General]`, `LeptonsPerSightIncrease` | leptons per sight increase *P* (F1) | integer, leptons | 50 |
 | Rules, `[General]`, `RevealByHeight` | reveal-by-height flag (claim 7) | boolean | yes |
 | Rules, `[General]`, `VeteranSight` | veteran sight factor (S-0311 F4) | decimal | 1.0 |
