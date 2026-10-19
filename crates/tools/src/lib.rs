@@ -11,6 +11,7 @@
 pub mod arena;
 pub mod headless;
 pub mod local_lane;
+pub mod oracle;
 pub mod side_audit;
 pub mod skirmish_lane;
 pub mod stats;

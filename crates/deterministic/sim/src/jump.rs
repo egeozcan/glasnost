@@ -532,6 +532,7 @@ pub fn start_in_flight(w: &mut World, id: ObjectId, phase: Phase, height: i32) {
         let c = pos(w, id).cell();
         claim_slot(w, id, c);
     }
+    took_off(w, id);
 }
 
 /// The jumpjet leaves the map or goes inside: every mark, the reservation
@@ -544,6 +545,8 @@ pub fn leaving(w: &mut World, id: ObjectId) {
     unlist(w, id);
     release_reservation(w, id);
     release_slot(w, id);
+    // spec: S-0303 Terms (a jumpjet that leaves play is no longer a tracked flying object; Q-1500)
+    crate::combat::flying::unregister(w, id);
 }
 
 /// Takes the jumpjet out of the cell list it is in (claim 4): the cell of
@@ -592,6 +595,8 @@ fn leave_ground(w: &mut World, id: ObjectId) {
 fn settle(w: &mut World, id: ObjectId, layer: Layer) {
     let Some(o) = w.obj(id) else { return };
     let cell = o.pos.cell();
+    // spec: S-0303 Terms and S-0502 claim 15 (a jumpjet that lands is no longer a tracked flying object; Q-1500)
+    crate::combat::flying::unregister(w, id);
     unlist(w, id);
     w.cells.leave_both(cell, id);
     list_at(w, id, layer);
@@ -1321,6 +1326,34 @@ fn move_to(w: &mut World, id: ObjectId, x: i32, y: i32) {
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.x = x;
         ob.pos.y = y;
+    }
+    // spec: S-0303 Terms (a tracked flying object's sector follows the cell it is over as it flies)
+    crate::combat::flying::moved(w, id);
+}
+
+/// Whether the unit's own type is a jumpjet type (glossary *jumpjet type*:
+/// its type's locomotor is the jumpjet locomotor). A unit seized by a
+/// magnetic beam flies with a temporary jumpjet locomotor but is not one.
+pub fn jumpjet_type(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.locomotor == crate::rules::Locomotor::Jump)
+    })
+}
+
+/// A jumpjet takes off: from now until it lands it is a tracked flying
+/// object (S-0303 Terms: "a jumpjet between lift-off and landing"; S-0502
+/// Open questions: "from take-off until it lands or crashes"), which the
+/// above-terrain detonations of S-0303 claim 6 read. The exact boundaries
+/// and the double entry of a low jumpjet that is also cell-listed (claim 4)
+/// are open (S-0303 Open questions, Q-1500): this is the literal
+/// composition of the two rules, take-off at claim 5, landing at the
+/// touchdown of claim 15 or any other settling, leaving play at [`leaving`].
+fn took_off(w: &mut World, id: ObjectId) {
+    if jumpjet_type(w, id) {
+        // spec: S-0303 Terms and S-0502 claim 5 (a jumpjet is tracked from take-off; Q-1500)
+        crate::combat::flying::register(w, id);
     }
 }
 

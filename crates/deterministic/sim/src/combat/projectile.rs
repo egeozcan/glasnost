@@ -1372,8 +1372,17 @@ fn detonation_point(
         Target::Cell(_) => dr,
     };
     let em = w.rules().combat.warhead_of(pr.weapon).is_some_and(|h| h.em);
-    // spec: S-0306 claim 20 (c) (threshold 42; 128 for a target airborne in another render layer, which no object is)
-    if !em && ds < 42 {
+    // spec: S-0306 claim 20 (c) (threshold 42 for a target that is not airborne or is airborne in the ground render layer; 128 for a target airborne in another render layer)
+    let threshold = match t {
+        Target::Object(x)
+            if crate::combat::weapon::in_air(w, x) && !crate::temporal::ground_layer(w, x) =>
+        {
+            128
+        }
+        _ => 42,
+    };
+    // spec: S-0306 claim 20 (c) (below the threshold and no electromagnetic flag: the target point; else D_R below 32: the reference point)
+    if !em && ds < threshold {
         aim_target_point(w, t)
     } else if dr < 32 {
         rp

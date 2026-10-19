@@ -1088,6 +1088,7 @@ dependencies = [
  "glasnost-sim",
  "glasnost-vfs",
  "pollster",
+ "sha2",
 ]
 
 [[package]]

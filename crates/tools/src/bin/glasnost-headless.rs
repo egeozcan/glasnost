@@ -34,14 +34,20 @@
 //!   map over N seeds; prints win rates, times to kill and survivors. On
 //!   the synthetic ruleset, or on the install's reference ruleset when
 //!   `GLASNOST_GAME_DIR` is set (then also written to the git-ignored
-//!   `local-lane/arena.txt`). `arena --records` runs every arena
-//!   measurement record's matchup and compares it with the record.
+//!   `local-lane/arena.txt`). `arena --records` runs the fenced-block
+//!   arena records of that module's alternative format, if any.
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless arena --record <ID|all>
+//!   [options]`: the oracle arena (`glasnost_tools::oracle`): the lead's
+//!   arena records (M-0001 to M-0003: front matter plus the sibling CSV)
+//!   played in our engine with their setup and compared per pairing;
+//!   writes the git-ignored `local-lane/m7b/arena/ours-<ID>.csv` and
+//!   `oracle-<ID>.txt`.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
-use glasnost_tools::{arena, headless, skirmish_lane, trigger_lane};
+use glasnost_tools::{arena, headless, oracle, skirmish_lane, trigger_lane};
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
     args.get(i).and_then(|a| a.parse().ok()).unwrap_or(default)
@@ -204,6 +210,29 @@ fn main() -> ExitCode {
                         "glasnost-headless: could not read the install ({:?})",
                         e.kind()
                     );
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("arena") if args[1..].iter().any(|a| a == "--record") => {
+            let cli = match oracle::parse_cli(&args[1..]) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless arena: {e}\nusage: glasnost-headless {}",
+                        oracle::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR);
+            match oracle::run_cli(&cli, dir.as_deref().map(std::path::Path::new)) {
+                Ok(report) => {
+                    print!("{report}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless arena: {e}");
                     ExitCode::FAILURE
                 }
             }

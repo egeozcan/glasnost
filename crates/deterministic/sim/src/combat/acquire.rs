@@ -1045,8 +1045,11 @@ pub fn search(
         for pass in 0..2 {
             for &x in &ids {
                 let Some(o) = w.obj(x) else { continue };
-                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer; no object leaves the ground layer in our engine, so landed aircraft are among them, considered again after the first pass with their own tests and score)
+                // spec: S-0309 claim 7 (the second pass considers every infantry unit, vehicle, aircraft and building of the ground render layer, so landed aircraft are among them, considered again after the first pass; an object neither an aircraft nor in the ground layer, such as a hovering jumpjet, is never found)
                 if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
+                    continue;
+                }
+                if pass == 1 && !crate::temporal::ground_layer(w, x) {
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);
@@ -1075,7 +1078,30 @@ pub fn search(
                 .unwrap_or(ao.pos.cell()),
             _ => ao.pos.cell(),
         };
-        // Flying objects (claim 9) need tracked flying objects: none fly in our engine.
+        // spec: S-0309 claim 9 (a range or area search that looks for aircraft first scans the tracked flying objects that S-0303's flying-object search finds around the centre cell, radius max(n, 1) cells; they precede cell candidates on equal scores, and count in K for the early stops)
+        if c.aircraft && matches!(kind, SearchKind::Range | SearchKind::Area) {
+            // spec: S-0309 table C row "class" (the scan of airborne objects also accepts infantry and vehicles)
+            let ca = Classes {
+                infantry: true,
+                vehicles: true,
+                ..c
+            };
+            for x in crate::combat::flying::candidates(w, centre, nrings) {
+                let Some(o) = w.obj(x) else { continue };
+                // spec: S-0309 claim 9 (only objects on the map and not in the ground render layer, each once; allied ones only with the friendly-row exceptions)
+                if x == a || !o.on_map || crate::temporal::ground_layer(w, x) {
+                    continue;
+                }
+                if w.allied(ao.owner, o.owner) && !friendly_exception(w, a) {
+                    continue;
+                }
+                if candidate(w, a, x, ca, big_r, kind, false)
+                    && let Some(s) = score(w, a, x, false)
+                {
+                    cands.push((x, s));
+                }
+            }
+        }
         let only_aircraft =
             kind == SearchKind::Range && c.aircraft && !c.infantry && !c.vehicles && !c.buildings;
         if !only_aircraft && nrings >= 1 {

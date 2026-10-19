@@ -216,6 +216,7 @@ fn grounded_outcome(w: &mut World, id: ObjectId) {
         j.ht = f.height;
         j.phase = Phase::Ascending;
     });
+    took_off(w, id);
 }
 
 fn ascending_outcome(w: &mut World, id: ObjectId) {
