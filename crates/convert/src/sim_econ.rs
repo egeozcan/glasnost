@@ -1124,6 +1124,56 @@ const GENERAL_SW: &[(&str, &[u8], &str, Form, &str)] = &[
         Text,
         "S-0611",
     ),
+    // spec: S-0612 Import mapping (the two animation types and the warhead are references, absent none; the percentage, range and damage integers, absent 50, 2 and 50; PsychicDominatorActivateSound a sound name, absent none)
+    (
+        "dominator_first_anim",
+        GENERAL,
+        "DominatorFirstAnim",
+        Ref(Kind::Animations),
+        "S-0612",
+    ),
+    (
+        "dominator_second_anim",
+        GENERAL,
+        "DominatorSecondAnim",
+        Ref(Kind::Animations),
+        "S-0612",
+    ),
+    (
+        "dominator_fire_at_percentage",
+        GENERAL,
+        "DominatorFireAtPercentage",
+        Int,
+        "S-0612",
+    ),
+    (
+        "dominator_capture_range",
+        GENERAL,
+        "DominatorCaptureRange",
+        Int,
+        "S-0612",
+    ),
+    (
+        "dominator_damage",
+        GENERAL,
+        "DominatorDamage",
+        Int,
+        "S-0612",
+    ),
+    (
+        "dominator_warhead",
+        GENERAL,
+        "DominatorWarhead",
+        Ref(Kind::Warheads),
+        "S-0612",
+    ),
+    (
+        "psychic_dominator_activate_sound",
+        AUDIO_VISUAL,
+        "PsychicDominatorActivateSound",
+        Text,
+        "S-0612",
+    ),
 ];
 
 /// The coverage rows of the keys this module converts: (category, key,

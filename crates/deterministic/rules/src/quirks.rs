@@ -1784,14 +1784,34 @@ pub struct Quirks {
     // spec: S-0109 claim 17, F5 and Edge cases
     #[serde(default = "on")]
     pub anim_damage_starts_at_one: bool,
-    /// A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house. Not implemented yet (M7).
+    /// A dominator strike's area damage names the current storm owner as attacking house, sampled before the storm's own update; off: the dominating house.
     // spec: S-0612 claim 9 and Edge cases; S-0302 claim 1
     #[serde(default = "on")]
     pub dominator_damage_storm_house: bool,
-    /// A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone. Not implemented yet (M7).
+    /// A dominator strike makes the dominating house's own objects permanently controlled with a ring; off: they are left alone.
     // spec: S-0612 claim 14 and Edge cases; S-0601 claim 13
     #[serde(default = "on")]
     pub dominator_marks_own_objects: bool,
+    /// A dominator sweep visits only the ground layer of each swept cell, so an object on a bridge deck is never reached; off: the deck layer of a swept cell is visited after its ground layer, in the same way.
+    // spec: S-0612 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub dominator_ground_layer_only: bool,
+    /// A dominator sweep examines, in each swept cell, only the start object (the nearest to the cell's top corner, S-0207 F8) and the objects listed after it, up to the first listing that is no infantry, vehicle, aircraft or building; off: every listed infantry, vehicle and aircraft of the layer is examined, in listing order.
+    // spec: S-0612 claim 12 and Edge cases
+    #[serde(default = "on")]
+    pub dominator_sweep_from_nearest: bool,
+    /// A dominator sweep takes over an examined object that is still in play while dying; off: a dying object is not examined.
+    // spec: S-0612 claim 13 and Edge cases
+    #[serde(default = "on")]
+    pub dominator_takes_dying: bool,
+    /// With a zero ambient change rate the current ambient never moves, even for nuke and dominator fades; off: it jumps straight to the target.
+    // spec: S-0104 claim 4 and Edge cases (Zero change rate freezes ambient); S-0612 claim 7
+    #[serde(default = "on")]
+    pub zero_rate_freezes_ambient: bool,
+    /// The map's dominator fade rate is stored in thousandths and used as ticks (a map value of 1 means 1000 ticks); off: the map value is a number of ticks, truncated as the nuke rate is.
+    // spec: S-0104 claim 4 and Edge cases (Dominator fade rate scale)
+    #[serde(default = "on")]
+    pub dominator_rate_thousandths: bool,
     /// Removing an upgrade makes the immediate superweapon availability check only when the upgrade names a first superweapon; off: an upgrade naming either superweapon field makes it.
     // spec: S-0512 claim 2 and Edge cases
     #[serde(default = "on")]
@@ -2326,6 +2346,11 @@ impl Default for Quirks {
             anim_damage_starts_at_one: true,
             dominator_damage_storm_house: true,
             dominator_marks_own_objects: true,
+            dominator_ground_layer_only: true,
+            dominator_sweep_from_nearest: true,
+            dominator_takes_dying: true,
+            zero_rate_freezes_ambient: true,
+            dominator_rate_thousandths: true,
             superweapon_upgrade_second_removal_waits: true,
             superweapon_grant_suspends_by_house_power: true,
             superweapon_restart_ignores_suspension: true,
@@ -3488,6 +3513,20 @@ impl Quirks {
                 self.dominator_marks_own_objects,
             ),
             (
+                "dominator_ground_layer_only",
+                self.dominator_ground_layer_only,
+            ),
+            (
+                "dominator_sweep_from_nearest",
+                self.dominator_sweep_from_nearest,
+            ),
+            ("dominator_takes_dying", self.dominator_takes_dying),
+            ("zero_rate_freezes_ambient", self.zero_rate_freezes_ambient),
+            (
+                "dominator_rate_thousandths",
+                self.dominator_rate_thousandths,
+            ),
+            (
                 "superweapon_upgrade_second_removal_waits",
                 self.superweapon_upgrade_second_removal_waits,
             ),
@@ -3753,8 +3792,8 @@ mod tests {
             ("triggers", &["S-0011", "S-0524"][..]),
             ("rules-import", &["S-0006"][..]),
             ("rendering", &["S-0107"][..]),
-            // The M7 superweapon specs (S-0612 and after) are not built yet.
-            ("superweapons", &["S-0512", "S-0513"][..]),
+            // The M7b superweapons built: S-0612 (S-0611 names no switch of its own here).
+            ("superweapons", &["S-0512", "S-0513", "S-0612"][..]),
         ] {
             for e in std::fs::read_dir(format!("{root}/{dir}")).expect("spec dir") {
                 let p = e.expect("entry").path();

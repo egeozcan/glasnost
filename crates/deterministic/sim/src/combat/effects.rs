@@ -319,6 +319,16 @@ pub enum Effect {
         /// What happened.
         event: crate::mutation::MakerEvent,
     },
+    /// A psychic domination event (S-0612): started, swept, an object
+    /// taken over, the final phase, over, a blast ring removed.
+    Domination {
+        /// What happened.
+        event: crate::domination::DomEvent,
+        /// The dominating house, if any.
+        house: Option<HouseId>,
+        /// Where (the target cell's centre; a taken object's position).
+        pos: Pos,
+    },
     /// A superweapon presentation event (S-0512 claim 5, S-0513 claim 5).
     Superweapon {
         /// What happened.

@@ -195,6 +195,12 @@ struct Game {
     mutator_launches: usize,
     conversions: usize,
     infantry_mutated: usize,
+    /// Psychic domination (S-0612): launches, objects taken over, objects
+    /// the sweep's area damage hurt and destroyed.
+    dominator_launches: usize,
+    dominated: usize,
+    dominator_damaged: usize,
+    dominator_killed: usize,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -718,6 +724,10 @@ fn play_ai(
     g.mutator_launches = tally.mutator_launches;
     g.conversions = tally.conversions;
     g.infantry_mutated = tally.infantry_mutated;
+    g.dominator_launches = tally.dominator_launches;
+    g.dominated = tally.dominated;
+    g.dominator_damaged = tally.dominator_damaged;
+    g.dominator_killed = tally.dominator_killed;
     g.ready_ticks = tally.ready_ticks;
     g.ticks = glasnost_sim::tick::ticks_run(&game.world);
     g.orders = game.replay().orders.len();
@@ -902,6 +912,15 @@ pub struct Tally {
     /// Infantry made by a conversion animation's end (S-0611 claims 9 to
     /// 12).
     pub infantry_mutated: usize,
+    /// Psychic dominator launches (S-0612 claim 1: the activation sound).
+    pub dominator_launches: usize,
+    /// Objects a sweep took over (S-0612 claim 14).
+    pub dominated: usize,
+    /// Objects a sweep's area damage hurt and that survived it (S-0612
+    /// claim 9).
+    pub dominator_damaged: usize,
+    /// Objects a sweep's area damage destroyed (S-0612 claim 9).
+    pub dominator_killed: usize,
     /// The burning walkers after the last tick.
     walkers_before: BTreeSet<u32>,
     /// The seized units after the last tick.
@@ -959,6 +978,18 @@ impl Tally {
                     },
                 ..
             } => self.infantry_mutated += 1,
+            Effect::Superweapon {
+                event: glasnost_sim::superweapons::SwEvent::DominatorSound,
+                ..
+            } => self.dominator_launches += 1,
+            Effect::Domination { event, .. } => match event {
+                glasnost_sim::domination::DomEvent::Taken(_) => self.dominated += 1,
+                glasnost_sim::domination::DomEvent::Damage { damaged, killed } => {
+                    self.dominator_damaged += *damaged as usize;
+                    self.dominator_killed += *killed as usize;
+                }
+                _ => {}
+            },
             _ => {}
         }
         if let Effect::Drain { event, .. } = e {
@@ -2105,8 +2136,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches
                     )
                 })
                 .collect();
@@ -2201,6 +2232,11 @@ fn report(
                 s,
                 "  mutation: mutator launches {}, infantry-making animations {}, infantry mutated {}",
                 g.mutator_launches, g.conversions, g.infantry_mutated
+            );
+            let _ = writeln!(
+                s,
+                "  psychic domination: dominator launches {}, objects taken over {}, objects damaged {}, killed {}",
+                g.dominator_launches, g.dominated, g.dominator_damaged, g.dominator_killed
             );
         }
         let f: Vec<String> = g

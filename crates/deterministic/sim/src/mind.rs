@@ -17,17 +17,18 @@
 //! Seams:
 //! - S-0608 (drain links): [`drain_link_formed`] releases every victim of
 //!   a drained controlling building, called by `drain` when a link forms.
-//! - S-0612 (psychic domination, M7b): [`dominate`] sets the permanent state
-//!   of claim 13; no superweapon calls it yet. Its own-house switch
-//!   `quirks.dominator_marks_own_objects` is S-0612's and is wired there.
+//! - S-0612 (psychic domination): [`dominate`] sets the permanent state of
+//!   claim 13 for each object the sweep takes over (`crate::domination`).
+//!   Its own-house switch `quirks.dominator_marks_own_objects` is S-0612's
+//!   and is wired there.
 //! - The grinder fate of claim 8 ([`grinder_fate`]) is S-0603 claim 14's
 //!   search (`structures::grinder`); none found falls back to *hunt*, as
 //!   claim 8 says for a failed assignment. The bio-reactor fate
 //!   ([`bio_reactor_fate`]) is S-0605 claim 16's search; accepted absorption
 //!   (S-0605 claim 7) calls [`release_one`].
-//! - S-0612 (the Psychic Dominator) is not built (M7b): its takeover of a
-//!   bunkered vehicle keeps the bunker link (S-0606 claim 15), which an
-//!   owner change never ends here.
+//! - S-0612 (the Psychic Dominator): its takeover of a bunkered vehicle
+//!   keeps the bunker link (S-0606 claim 15), which an owner change never
+//!   ends here.
 //! - Teams: our engine has no scripted teams, so the team fate falls back to
 //!   *hunt* and leaving a team is nothing (claim 6).
 //! - Particle systems: the overload sparks take their ten placement draws
@@ -811,11 +812,27 @@ pub fn converted(w: &mut World, old: ObjectId, new: ObjectId) {
 
 /// Psychic domination by house `h` reaches object `id` (claim 13, S-0612
 /// claims 13 and 14). Returns whether it became permanently controlled.
-/// Seam: S-0612 (M7b) is not built, so no superweapon calls this yet; its
-/// own-house switch belongs to it. A dominated drainer's link then ends by
-/// S-0608 claim 11's alliance test, which reads the owners in the drainer's
-/// turn (`crate::drain`), so the drain needs nothing more from S-0612.
+/// The Psychic Dominator's sweep (S-0612 claims 13 and 14,
+/// `crate::domination`) calls this for each examined object; its own-house
+/// switch `quirks.dominator_marks_own_objects` is tested there. A
+/// dominated drainer's link then ends by S-0608 claim 11's alliance test,
+/// which reads the owners in the drainer's turn (`crate::drain`).
 pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
+    if !dominable(w, id) {
+        return false;
+    }
+    // spec: S-0601 claim 13 (a controlled object is first released by its controller, with all of claim 9's effects)
+    release_one(w, id);
+    // spec: S-0601 claim 13 (then it belongs to the dominating house; no owner change when it already does)
+    set_owner(w, id, Some(h));
+    // spec: S-0601 claim 13 and S-0612 claim 14 (it becomes permanently controlled, never cleared; no original owner is recorded; a set, so one ring however often it is taken)
+    w.mind.permanent.insert(id);
+    true
+}
+
+/// Whether permanent control may take `id` (S-0601 claim 13's tests, the
+/// conditions of S-0612 claim 13 and no others).
+pub fn dominable(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0601 claim 13 (not a building)
     if o.kind == Kind::Building || o.kind == Kind::Terrain {
@@ -837,16 +854,7 @@ pub fn dominate(w: &mut World, id: ObjectId, h: HouseId) -> bool {
         return false;
     }
     // spec: S-0601 claim 13 (not in the air)
-    if crate::combat::weapon::in_air(w, id) {
-        return false;
-    }
-    // spec: S-0601 claim 13 (a controlled object is first released by its controller, with all of claim 9's effects)
-    release_one(w, id);
-    // spec: S-0601 claim 13 (then it belongs to the dominating house; no owner change when it already does)
-    set_owner(w, id, Some(h));
-    // spec: S-0601 claim 13 (it becomes permanently controlled, never cleared; no original owner is recorded)
-    w.mind.permanent.insert(id);
-    true
+    !crate::combat::weapon::in_air(w, id)
 }
 
 // ---------------------------------------------------------------------------

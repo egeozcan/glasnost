@@ -1,10 +1,10 @@
-//! The M7b duel of the gate exercises the drain, and its replay reproduces
-//! the final state.
+//! The M7b duel of the gate exercises the drain, the genetic mutator and
+//! the psychic dominator, and its replay reproduces the final state.
 
 use glasnost_ai::{fixture, fixture_m7b as kit, game::Game};
 use glasnost_sim_gate::{M7B_SEED, M7B_TICKS, m7b};
 
-// spec: S-0608 claims 1, 2, 5, 7 to 10 and 14 (drain links formed, credits moved by payouts, drained buildings, links ended): the gate's M7b duel uses the drain, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
+// spec: S-0608 claims 1, 2, 5, 7 to 10 and 14 (drain links formed, credits moved by payouts, drained buildings, links ended), S-0611 claims 2 and 4 (mutator launches and cell-mode conversions) and S-0612 claims 1, 4 and 14 (dominator launches, sweeps and takeovers): the gate's M7b duel uses the drain, the mutator and the dominator, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
 #[test]
 #[ignore = "long; run in release by `cargo xtask gate`"]
 fn the_drain_is_exercised_and_the_replay_reproduces_the_game() {

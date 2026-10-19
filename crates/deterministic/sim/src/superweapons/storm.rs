@@ -108,8 +108,10 @@ fn start(w: &mut World) {
         crate::econ::radar::start_outage(w, h, duration);
     }
     let p = super::cell_point(w, centre, false);
-    // spec: S-0513 claim 15 (a radar event at the centre cell; the lighting re-evaluation is presentation, read from the storm state)
+    // spec: S-0513 claim 15 (a radar event at the centre cell)
     super::event(w, SwEvent::Radar, owner, None, Some(p));
+    // spec: S-0513 claim 15 and S-0104 claim 5 (an ion storm starting re-evaluates the lighting)
+    crate::lighting::reevaluate(w);
     if w.rules().superweapons.storm.print_text {
         // spec: S-0513 claim 15 (with the storm-message flag: the storm sound and the storm-start message for every player)
         super::event(w, SwEvent::StormStart, owner, None, Some(p));
@@ -281,9 +283,11 @@ pub fn update(w: &mut World) {
     {
         let s = &mut w.sw.storm;
         if s.state == StormState::Clearing && t > s.clearing_since && w.sw.clouds.is_empty() {
-            // spec: S-0513 claim 19 (idle in the first weather update after clearing began that finds no present cloud at its start; owner none; the lighting re-evaluation is presentation)
+            // spec: S-0513 claim 19 (idle in the first weather update after clearing began that finds no present cloud at its start; owner none)
             s.state = StormState::Idle;
             s.owner = None;
+            // spec: S-0513 claim 19 and S-0104 claim 5 (an ion storm ending re-evaluates the lighting; this tick's fade already stepped towards the old target)
+            crate::lighting::reevaluate(w);
         }
     }
     // spec: S-0513 claim 18 and T1 (in every weather update, in every storm state, pending clouds strike first, newest first)

@@ -187,14 +187,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     // S-0104
     (
-        "zero_rate_freezes_ambient",
-        "S-0104 claim 4: the ambient fade's timing is not modelled (render::light::ambient_step takes one step)",
-    ),
-    (
-        "dominator_rate_thousandths",
-        "S-0104 claim 4: no dominator effect and no fade timing",
-    ),
-    (
         "split_effect_priority",
         "S-0104 claim 2: the lighting effects in force (nuke, dominator, ion storm, chrono flash) are not modelled",
     ),

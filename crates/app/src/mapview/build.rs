@@ -14,7 +14,7 @@ use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
 use glasnost_convert::theater::{Catalogue, alternate_image_mark, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
-use glasnost_fmt::image::IndexedImage;
+use glasnost_fmt::image::{IndexedImage, Palette};
 use glasnost_fmt::shp::Shp;
 use glasnost_fmt::tmp::Tmp;
 use glasnost_fmt::vpl::Vpl;
@@ -22,7 +22,7 @@ use glasnost_fmt::vxl::Vxl;
 use glasnost_ini::Document;
 use glasnost_ini::value;
 use glasnost_map::objects::{HealthKind, ListKind, facing_from_value, starting_health};
-use glasnost_map::{CellGrid, CellXY, Map, NO_OVERLAY};
+use glasnost_map::{CellGrid, CellXY, LightingSet, Map, NO_OVERLAY};
 use glasnost_num::geom::n_step;
 use glasnost_num::{F64, Rounding};
 use glasnost_render::compose::{
@@ -968,6 +968,12 @@ pub struct Painter {
     /// image larger than the retained limit (S-0105 claim 22: once per
     /// model).
     oversized: BTreeSet<Vec<u8>>,
+    /// The building light sources the cells were lit with (S-0104 claim
+    /// 12), kept for a relight.
+    sources: Vec<LightSource>,
+    /// The cell-pass items of terrain tiles (diamonds and extra images)
+    /// with their cells, for a relight.
+    tile_items: Vec<(usize, CellXY)>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1201,43 +1207,19 @@ impl Builder<'_> {
                 ],
             ));
         }
-        let side = i32::from(self.map.cells.footprint().coordinate_side());
-        let mut cells = vec![None; (side * side) as usize];
-        let q = LightQuirks::default();
+        self.p.sources = sources;
         // spec: S-0104 claim 1 (the map's normal set; current, base and target ambient start equal; tint in hundredths)
-        let tint = l.tint;
-        for (c, cell) in self.map.cells.iter() {
-            cells[(c.y * side + c.x) as usize] = Some(light::full_recompute(
-                l.ambient,
-                l.level,
-                l.ground,
-                tint,
-                (c.x, c.y),
-                i32::from(cell.level),
-                &sources,
-                self.options.detail,
-                &q,
-            ));
-        }
-        self.p.lights = Lights { side, cells };
+        self.p
+            .compute_lights(self.map, l.ambient, l, self.options.detail);
     }
 
     fn tile_row(&mut self, table: TileTable, brightness: i32) -> Shade {
-        let (base, n) = match self.p.rows.tiles.get(&table) {
-            Some(r) => *r,
-            None => {
-                // spec: S-0103 claim 8 (terrain tiles use the tile palette, shaded by their cell's table)
-                let t = light::shade_table(&self.palettes.tile, table.tint(), table.rows(), None);
-                let base = self.built.scene.rows.len();
-                for row in &t {
-                    self.built.scene.add_row(row565(row));
-                }
-                self.p.rows.tiles.insert(table, (base, t.len()));
-                (base, t.len())
-            }
-        };
-        // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
-        Shade::new(base, n, brightness)
+        self.p.tile_row_in(
+            &mut self.built.scene,
+            &self.palettes.tile,
+            table,
+            brightness,
+        )
     }
 
     fn house_row(&mut self, hsv: [u8; 3], brightness: i32) -> Shade {
@@ -1517,6 +1499,7 @@ impl Builder<'_> {
                 None => (TileTable::Neutral, NEUTRAL_BRIGHTNESS),
             };
             let row = self.tile_row(table, b);
+            let first = self.built.scene.items.len();
             let mut push = |image: u32, depth: Option<u32>, x: i32, y: i32, paint: Paint| {
                 self.built.scene.items.push(Item {
                     image,
@@ -1541,6 +1524,8 @@ impl Builder<'_> {
                 // index 0 transparent; drawn right after its own cell's diamond)
                 push(ei, ed, left + dx, top + dy, Paint::Lit(row));
             }
+            let pushed = first..self.built.scene.items.len();
+            self.p.tile_items.extend(pushed.map(|i| (i, c)));
         }
     }
 
@@ -4185,7 +4170,100 @@ impl Painter {
             tile_files: BTreeMap::new(),
             companion: None,
             oversized: BTreeSet::new(),
+            sources: Vec::new(),
+            tile_items: Vec::new(),
         }
+    }
+
+    /// Lights every cell afresh with ambient `ambient` (hundredths) and
+    /// lighting set `set`'s level factor, ground bias and tint (S-0104
+    /// claims 5 and 9).
+    fn compute_lights(&mut self, map: &Map, ambient: i32, set: LightingSet, detail: DetailLevel) {
+        let side = i32::from(map.cells.footprint().coordinate_side());
+        let mut cells = vec![None; (side * side) as usize];
+        let q = LightQuirks::default();
+        for (c, cell) in map.cells.iter() {
+            cells[(c.y * side + c.x) as usize] = Some(light::full_recompute(
+                ambient,
+                set.level,
+                set.ground,
+                set.tint,
+                (c.x, c.y),
+                i32::from(cell.level),
+                &self.sources,
+                detail,
+                &q,
+            ));
+        }
+        self.lights = Lights { side, cells };
+    }
+
+    /// The shade row of tile table `table` at brightness `b`, adding the
+    /// table's rows to `scene` the first time.
+    fn tile_row_in(
+        &mut self,
+        scene: &mut Scene,
+        palette: &Palette,
+        table: TileTable,
+        b: i32,
+    ) -> Shade {
+        let (base, n) = match self.rows.tiles.get(&table) {
+            Some(r) => *r,
+            None => {
+                // spec: S-0103 claim 8 (terrain tiles use the tile palette, shaded by their cell's table)
+                let t = light::shade_table(palette, table.tint(), table.rows(), None);
+                let base = scene.rows.len();
+                for row in &t {
+                    scene.add_row(row565(row));
+                }
+                self.rows.tiles.insert(table, (base, t.len()));
+                (base, t.len())
+            }
+        };
+        // spec: S-0104 claim 15, S-0110 claim 5 (each pixel takes the row of its light-alpha value)
+        Shade::new(base, n, b)
+    }
+
+    /// Relights the game's view to the simulation's global lighting
+    /// (S-0104 claims 4, 5 and 9; `glasnost_sim::lighting`): every cell
+    /// at current ambient `ambient` with the chosen set `set`'s level
+    /// factor, ground bias and tint, and the terrain tiles of the cell pass
+    /// `items` shaded again. Objects pick the new cell light up when they
+    /// are next drawn.
+    ///
+    /// Our presentation: a full recompute of every cell with the chosen
+    /// set's terms and its tint as the map tint, which stands in for claim
+    /// 5's retint of the tintable tables and claim 9's incremental update;
+    /// claim 10's and claim 16's height terms and the static objects of
+    /// the cell pass are not followed (a seam of the view, not of the
+    /// game).
+    pub fn relight(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        items: &mut [Item],
+        ambient: i32,
+        set: LightingSet,
+    ) {
+        self.compute_lights(inputs.map, ambient, set, inputs.options.detail);
+        let tiles = std::mem::take(&mut self.tile_items);
+        for &(i, c) in &tiles {
+            let Some(item) = items.get_mut(i) else {
+                continue;
+            };
+            let (table, b) = match self.lights.get(c) {
+                // spec: S-0104 claim 13 (a terrain tile, ground and extra image: the cell's scaled ground level)
+                Some(l) => (l.table, l.scaled_ground),
+                None => (TileTable::Neutral, NEUTRAL_BRIGHTNESS),
+            };
+            let row = self.tile_row_in(scene, &inputs.palettes.tile, table, b);
+            item.paint = match item.paint {
+                Paint::LitDiamond(_) => Paint::LitDiamond(row),
+                Paint::Lit(_) => Paint::Lit(row),
+                other => other,
+            };
+        }
+        self.tile_items = tiles;
     }
 
     /// The voxel buffer, for the next game of the program (S-0105 claim

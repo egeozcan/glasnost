@@ -454,9 +454,9 @@ impl Brain {
     /// The kind of superweapon type `i` when the brain fires it: every kind
     /// of the Allied and Soviet sides (the nuclear strike, the weather
     /// storm, the iron curtain, the teleport's two stages, the paradrops, the
-    /// spy plane and the force shield), the psychic reveal (S-0610) and the
-    /// genetic mutator (S-0611, `mutator`). The psychic dominator is not
-    /// built (S-0612; M7b) and gives none.
+    /// spy plane and the force shield), the psychic reveal (S-0610), the
+    /// genetic mutator (S-0611, `mutator`) and the psychic dominator
+    /// (S-0612, `dominator`).
     fn fired_kind(w: &World, i: u32) -> Option<glasnost_sim::superweapons::SwKind> {
         use glasnost_sim::superweapons::SwKind;
         let k = w.rules().superweapons.types.get(i as usize)?.kind?;
@@ -473,6 +473,7 @@ impl Brain {
                 | SwKind::ForceShield
                 | SwKind::PsychicReveal
                 | SwKind::Genetic
+                | SwKind::Dominator
         )
         .then_some(k)
     }
@@ -559,6 +560,10 @@ impl Brain {
     fn fire_superweapons(&mut self, w: &World, out: &mut Vec<Order>) {
         use glasnost_sim::superweapons::{StormState, SwKind, charge};
         let h = self.house();
+        // The enemy units an earlier launch of this think already reaches:
+        // a person does not fire a second superweapon at a group the first
+        // one takes (the mutator's victims leave play at once).
+        let mut spent: Vec<glasnost_sim::world::ObjectId> = Vec::new();
         for (i, t) in w.rules().superweapons.types.iter().enumerate() {
             let i = i as u32;
             let ready = charge::get(w, h, i).is_some_and(|r| r.granted && r.ready && !r.suspended);
@@ -576,6 +581,7 @@ impl Brain {
                 Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
                 Some(SwKind::Genetic) => crate::mutator::mutate_cell(&self.script, w),
+                Some(SwKind::Dominator) => crate::dominator::dominate_cell(&self.script, w, &spent),
                 _ => None,
             };
             if let Some(cell) = cell {
@@ -585,6 +591,11 @@ impl Brain {
                 }
                 if t.kind == Some(SwKind::Genetic) {
                     self.special.count_mutator_launch();
+                    spent.extend(crate::mutator::reached(w, cell));
+                }
+                if t.kind == Some(SwKind::Dominator) {
+                    self.special.count_dominator_launch();
+                    spent.extend(crate::dominator::reached(w, cell));
                 }
             }
         }
