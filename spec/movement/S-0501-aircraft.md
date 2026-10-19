@@ -2,11 +2,11 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 17
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-19
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872]
 supersedes: []
@@ -381,8 +381,24 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     attempt is instead a drop under claim 20 and S-0522 claim 11, without those ordinary-shot
     effects. If a burst releases the last passenger, its remaining attempts use the ordinary
     shot rules: there is no new firing check between them.
-    - Backing: `measurable` (scenarios AC7, AC8, AC9 and AC23)
-    - Confidence: high
+
+    **Drain continuation (departure).** Drain attempts have S-0608 claims 1, 2 and 16's
+    effects instead of ordinary-shot effects. When an attempt clears the object target of
+    an aircraft that remains in play, our engine cancels the remaining attempts of that burst,
+    sends no scatter request for that pass, and enters *done* with a 1-tick processing delay. This overrides the normal
+    post-firing transitions in T1 for every kind of aircraft and every firing pass. It neither
+    restores the target nor undoes a formed drain link, and it retains any pending round for
+    claim 15's ordinary spending boundary. It does not itself clear the destination or start
+    a rearm countdown. The original can fault after such target clearing when the aircraft
+    continues its burst or tries to scatter at the missing target. This legal-data fault has
+    no quirk switch or importer warning. A cell-target drain attempt keeps its target and
+    uses the normal pass transitions, not this departure.
+    - Backing: `measurable` (scenarios AC7, AC8, AC9 and AC23; S-0608 claim 16,
+      scenario D12 for cell-target drain attempts). The safe object-target continuation is
+      `unmeasured`: it is our engine's departure, checked by AC28, not an oracle outcome.
+      The original fault is `unmeasured`: no destructive crash test is proposed
+    - Confidence: high for the ordinary run and pending-round admission; medium for the
+      drain composition; the safe continuation is a design rule
 
 13. **Strafing run.** A strafer that reaches its target makes five firing passes in one run: the
     first pass fires its full burst, the next four fire one shot each. The passes after the first
@@ -419,6 +435,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 15. **Pending ammunition spent once per run.** The initial firing pass admitted by the firing check
     makes one round pending for the run, whatever its burst and however many passes the run
     has. Drop attempts count for this bookkeeping even if every attempt is refused.
+    An admitted initial pass using a draining weapon also makes its round pending, even
+    though its attempts make no ordinary shot and use no ordinary per-shot ammunition
+    (S-0608 claim 16). Neither failed attachment nor target clearing rolls that round back.
+    Claim 12's safe continuation keeps it pending until the usual spending boundary.
     The round is taken from the count at the next point where the run either starts its next
     approach or ends, or, if the aircraft leaves *attack* first, at the end of that aircraft's
     update, including a change that starts a queued behaviour in that update. At the *done*
@@ -429,14 +449,19 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     drops' immediate spending is separate from that round. A run that never reaches an
     admitted initial firing pass makes no round pending. This replaces the ordinary per-shot
     spending of S-0301 claim 10 for aircraft.
-    - Backing: `measurable` (scenarios AC7 and AC8; S-0522 claim 11, scenario P7)
+    - Backing: `measurable` (scenarios AC7 and AC8, S-0522 claim 11 scenario P7,
+      and S-0608 claim 16 scenario D12 for cell-target drain admission). Object-target
+      continuation is the design departure of claim 12, not an oracle outcome
     - Confidence: high
 
-16. **Scatter.** Every firing pass sends a scatter request (S-0215 claim 19) to the occupants of
+16. **Scatter.** Except for claim 12's target-clearing drain departure, every firing pass
+    sends a scatter request (S-0215 claim 19) to the occupants of
     the target's ground cell layer. Its threat point is the aircraft's current position.
     It is forced and not move-anywhere. The cell-wide forwarding gates of S-0209 claim 11
     still apply: the cell request need not reach every occupant, or be accepted.
-    - Backing: `measurable` (scenarios AC9 and AC23)
+    - Backing: `measurable` for ordinary scatter (scenarios AC9 and AC23).
+      The target-clearing drain exception is `unmeasured`: it is claim 12's design
+      departure, checked only on our engine by AC28
     - Confidence: high
 
 17. **End of the run.** A run ends when the aircraft has no target or no ammunition left. Then:
@@ -1313,7 +1338,9 @@ division truncated toward zero.
 made before that update's movement tick; claim 42 gives the guidance requests that follow them,
 which decide the direction of travel. Firing attempts in this table use claim 20 while a
 first passenger exists, rather than ordinary-shot effects; the run-level pending round and
-processing delays are unchanged.
+processing delays are unchanged. Drain attempts use S-0608 claims 1 and 16 instead of
+ordinary-shot effects. Claim 12's target-clearing departure overrides every firing row:
+no remaining burst attempts or scatter, *done*, 1 tick; any pending round is retained.
 
 | State | Event | Result |
 |---|---|---|
@@ -1405,6 +1432,10 @@ attacking in that same pass; it does not require either neighbour to have been r
 
 ## Edge cases and quirks
 
+- **Drain clears an aircraft's object target** (departure, claim 12). Cancel the remaining
+  burst attempts and that pass's scatter request, keeping the admitted pass's pending round.
+  For an aircraft that remains in play, *done* is due after 1 tick. Drain-link effects remain
+  S-0608's. No crash-reproduction switch or importer warning applies.
 - **Half reload with a target** (`quirks.aircraft_half_reload_with_target`, default on). An aircraft
   on a pad with a target is never reloaded past ⌊*A* / 2⌋ rounds while it keeps the target; the pad
   acknowledges the reload without adding a round, repairing or releasing it in that step. Fixed behaviour: reload to full
@@ -1496,6 +1527,7 @@ attacking in that same pass; it does not require either neighbour to have been r
 | `InitialAmmo` | rules, type | starting ammunition | S-0301 claim 10 | −1 (use maximum) |
 | `Spawns`, `SpawnsNumber`, `SpawnRegenRate`, `SpawnReloadRate` | rules, type | S-0506 Import mapping | — | S-0506 |
 | `Camera` | rules, weapon | camera weapon (visiting test) | boolean | no |
+| `DrainWeapon` | rules, weapon | drain attempts and target-clearing continuation (claims 12 and 15); S-0608 claims 1 and 16 | boolean | no |
 | `Burst`, `ROF`, `Range`, `Speed`, `Projectile` | rules, weapon | S-0301, S-0306 | — | those specs |
 | `ROT` | rules, projectile | strafing test (at most 1), bomb rule (exactly 0), aimed redirection (exactly 1) | signed integer | S-0306 |
 | `Inviso` | rules, projectile | strafing test | boolean | S-0306 |
@@ -2099,6 +2131,34 @@ listed in Open questions are not claimed confirmed by these scenarios.
   manufacture flags or remove listings. The lower vehicle being refused solely by
   the resting aircraft, or persistent deck refusal after its listing and flag have
   gone with every other condition unchanged, falsifies the stated consequences.
+
+- **AC28 Drain attempts in aircraft runs (claims 12, 15 and 16).** For the original,
+  use S-0608 claim 16's D12 cell-target fixture and its recorder: a named draining-primary
+  aircraft variant with finite ammunition, no passengers and ground-target eligibility.
+  Force-fire at a cell. Record pass admission, pending-round mark, ammunition, rearm
+  countdown and target through the next spending boundary. Expect a pending round at
+  initial admission, no immediate per-shot spending or new rearm countdown from the drain
+  attempt, and one pending round spent at claim 15's boundary. A rolled-back mark or
+  missing boundary spending falsifies the bookkeeping claim. D12 supplies the common
+  skirmish settings and repeats. Do not use an object target to test the original fault.
+
+  **Engine-only departure check, not an oracle measurement.** On a small skirmish map,
+  give that aircraft a burst longer than one attempt, ammunition for more than one run,
+  and a drainable enemy building. Test both a position over its foundation and one outside
+  it but within weapon range. Repeat for ordinary, fighter and strafing runs, five runs
+  per variant at speed index 2, with only the named test-map overrides active. Use the
+  bystander's AI-house counterpart giving no orders and the common void rule. Record attempted shots, target, destination, pending
+  round, ammunition, link, scatter requests and processing ticks. Expect exactly one
+  attempt before target clearing, no remaining burst attempts or pass scatter, *done*
+  due 1 tick later and the pending round spent there while ammunition is positive.
+  Attachment succeeds only over the foundation. Neither case restores the target or
+  cancels a formed link; the departure itself does not change the destination or rearm
+  countdown. Later fall-back effects remain ordinary. Any contrary outcome fails the
+  departure check, not a claim about the original. For a separate engine-only fixture,
+  initialize an aircraft at a later single-shot pass with one round already pending and
+  a drainable object target. Its target-clearing attempt creates no second pending round
+  and likewise reaches *done* after 1 tick without scatter. This constructed engine state
+  is not an allowed way to prepare an oracle measurement.
 
 ## Open questions
 
