@@ -2,7 +2,7 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 16
+revision: 17
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -963,10 +963,14 @@ game state. They answer Q-1570.
       the first definition's single-shade palette, which has one shade row only. It is never the
       owner's colour, and the cell's light does not change it. Whether that palette's shade table
       takes the light's colour is S-0104's (claim 3).
+    - **Depth.** A non-flat voxel projectile neither tests nor writes depth: it is not an
+      upright depth reader with zero bias. A flat voxel projectile reads depth with the flat
+      profile and strict test of S-0102 claims 10, 12 and 13, with final bias −65 depth units
+      and no height-lift term. It never writes depth.
     - **No shadow.** A voxel projectile never draws a shadow, whatever its shadow flag.
     - The rotating flag, the animation fields and the palette flags of claim 31 do not affect it.
-    - Backing: `measurable` (scenario P42 parts d and e)
-    - Confidence: high (orientation, steps, frame 0, no shadow, fresh drawing); medium (the shade
+    - Backing: `measurable` (scenario P42 parts d and e; depth: S-0102 scenario D45)
+    - Confidence: high (orientation, steps, frame 0, depth, no shadow, fresh drawing); medium (the shade
       rule and the palette selection)
 
 31. **Sprite palette and brightness.** A sprite body uses the first of these palettes that applies:
@@ -2808,6 +2812,12 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   no turret or barrel model even when files named for them exist; the same picture at every tick
   with the same ψ and e. Falsified by smooth pitch, pitch on a sprite, a shadow or a drawn
   turret model.
+- **Model depth variant (claim 30).** Use S-0102 scenario D45's paired flat and non-flat
+  voxel-projectile fixture behind a high bridge, cliff and building, at two projectile heights.
+  Expected: the non-flat model ignores stored depth; the flat model passes the strict flat
+  test with final bias −65 depth units and no height-lift term. Neither changes stored depth
+  or hides a later reader through depth writes. Depth hiding of the non-flat model, a different
+  flat acceptance boundary or any depth write falsifies the claim.
 - **Part e, voxel light and palette.** With the projectile of part d flying level east (ψ = 8,
   e = 8), capture its pixels; repeat with the colour definition key absent, set to a known
   definition name in a different letter case, and set to an unknown name; then repeat over the
