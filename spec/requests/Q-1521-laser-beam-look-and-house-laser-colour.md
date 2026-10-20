@@ -1,9 +1,9 @@
 ---
 id: Q-1521
 title: How a laser beam is drawn, and where a house's laser colour comes from
-status: open
+status: answered
 related: [S-0518, S-0615, S-0102, S-0103]
-answered-by: []
+answered-by: [S-0518]
 ---
 
 ## Need
