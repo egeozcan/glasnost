@@ -1946,6 +1946,7 @@ What each item's retake from main showed and what was done. Final shots: `local-
 | m7a/absorber-* "levels do not change" | live buildings drew their slot animations at their first frame only, whatever their state | slot animations play by state (S-0108 claims 11, 12, 15, 17, F9, 20); the level is at half with no infantry and high with one or more (two states only, so first-in and full look alike) |
 | m7a/bunker-occupied, bunker-firing "walls not up" | same cause | the bunker's wall slots start and stop with the sim's special-animation effect (S-0606) |
 | m6b/vehicle-repaired-at-depot "no repair arm" | no spec says what starts the depot's special-1 and production slots | request Q-1550; nothing starts them meanwhile |
+| m7a/gattling-* "red explosion", "stage 2 not visible" | the red picture was our muzzle placeholder; no shot animation was made | shot animations by S-0301 r27 (claims 20 to 23, F7, F8): each stage's weapon plays its own list entry at the launch point, attached to a vehicle firer; the target line is request Q-1580 |
 
 ### Particles (Q-1520)
 
