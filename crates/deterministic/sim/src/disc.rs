@@ -343,7 +343,7 @@ fn step(w: &mut World, d: &mut Disc) -> bool {
             });
         }
         for (p, q) in arc_pairs(d.start, k) {
-            // spec: S-0615 claim 15 (each beam lasts 8 − k ticks and fades from full to half intensity)
+            // spec: S-0615 claim 15 (revision 4: each arc beam has D = 8 − k ticks and fade parameters S = 1, E = 0.5, S-0518 claim 19)
             w.effects.push(Effect::Beam {
                 from: at(p),
                 to: at(q),
@@ -359,7 +359,7 @@ fn step(w: &mut World, d: &mut Disc) -> bool {
     let a = (i32::from(d.start) + 8).rem_euclid(RING_POINTS);
     let det = detonation(w, d);
     let duration = w.rules().combat.weapon(d.weapon).laser_duration;
-    // spec: S-0615 claim 16 (a beam from ring point a to the target's target point, lasting the laser-duration field, fading from full to none)
+    // spec: S-0615 claim 16 (revision 4: a beam from ring point a to the target's target point, D the laser-duration field, fade parameters S = 1, E = 0, S-0518 claim 19)
     w.effects.push(Effect::Beam {
         from: at(a),
         to: det.point,

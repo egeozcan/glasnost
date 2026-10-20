@@ -60,7 +60,7 @@ pub fn look(w: &World, id: ObjectId, v: Option<HouseId>) -> Look {
     match o.cloak.state {
         CloakState::Uncloaked => Look::Normal,
         CloakState::Cloaked => cloaked_look(w, id, v),
-        // spec: S-0516 claim 28 (the fading table covers stage k > 0)
+        // spec: S-0516 claim 28 (revision 12: fading at stage 0 is drawn normally; the fading table covers stage k > 0)
         CloakState::Cloaking | CloakState::Uncloaking if o.cloak.stage <= 0 => Look::Normal,
         CloakState::Cloaking | CloakState::Uncloaking => {
             let x = fade_fraction(o.cloak.stage, w.rules().cloak.stages);
