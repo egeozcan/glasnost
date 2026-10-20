@@ -2,11 +2,11 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646]
 supersedes: []
@@ -296,7 +296,9 @@ a carrier's controller is launching ordinary aircraft.
    - Confidence: high
 
 8. **Repair at a yard, and the starting distance.** A naval yard whose type has the repair flag
-   repairs vessels by the depot rules of S-0314 (claim 6). Claim 12 specifies the naval-yard
+   repairs vessels by the depot rules of S-0314 (claim 6). It also takes S-0108 claim 20's
+   repair-cycle animation-slot rows; only that claim's every-tick depot row excludes naval types.
+   Claim 12 specifies the naval-yard
    docking point and stopping rule; click legality remains S-0214's building-entry rule, and
    ordinary enter behaviour is S-0215 claim 29. An enter order or initial contact is not itself
    a paid repair. Before its settling phase a depot (land
@@ -314,7 +316,9 @@ a carrier's controller is launching ordinary aircraft.
    within the starting distance, not in the tick it comes to rest. The settling phase's separate
    200-lepton distance check controls approach and stopping, not eligibility for a repair step.
    It is not a second repair-distance gate.
-   - Backing: `measurable` (N8) for thresholds, spatial distance and delays. Complete docking-point
+   - Backing: `measurable` (N8) for thresholds, spatial distance and delays. Animation-slot rules
+     inherit S-0108 claim 20's backings, including B18's naval-yard control and the unmeasured
+     limitation for the every-tick row outside repair. Complete docking-point
      selection is `unmeasured` here: no scenario covers every building and dock-place combination.
    - Confidence: high for thresholds, locomotor test, spatial distance and 3-tick delay,
      medium for *D* while waiting and the exact docking point at each yard
