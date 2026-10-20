@@ -563,8 +563,8 @@ impl GasRules {
                             .as_ref()
                             .map_or(F64::from_i64(0, mode), |d| d.value(mode)),
                         // spec: S-0616 Import mapping (Translucent25State, Translucent50State: 8-bit unsigned stages, absent 255)
-                        stage25: t.translucent25_state.unwrap_or(255) as u8,
-                        stage50: t.translucent50_state.unwrap_or(255) as u8,
+                        stage25: t.translucent25_state.unwrap_or(255) as u8, // spec: S-0616 Import mapping (Translucent25State absent 255)
+                        stage50: t.translucent50_state.unwrap_or(255) as u8, // spec: S-0616 Import mapping (Translucent50State absent 255)
                     },
                 }
             })
@@ -723,6 +723,15 @@ pub struct Particle {
     pub aim: Pos,
 }
 
+/// An 8-bit RGB colour (S-0616 F16).
+pub type Rgb = [u8; 3]; // nocite: RGB channels
+
+/// Black, the colour of an empty list (S-0616 F16).
+fn own_black() -> Rgb {
+    // spec: S-0616 F16 (with an empty list c₀ is black; colours are 8-bit RGB triples)
+    [0; 3]
+}
+
 impl ColourState {
     /// The state at creation (S-0616 F16): the own colour from the type's
     /// colour list and start colours with the creation colour draw `r`
@@ -732,7 +741,7 @@ impl ColourState {
         let own = if look.colours.is_empty() {
             // spec: S-0616 F16 (with an empty list c₀ is black)
             [0; 3]
-        } else if look.start == [[0; 3]; 2] {
+        } else if look.start.iter().flatten().all(|&x| x == 0) {
             // spec: S-0616 F16 (with both start colours black c₀ is list entry 0 and there is no draw)
             look.colours[0]
         } else {
@@ -743,13 +752,13 @@ impl ColourState {
             let f = single(single(F64::from_i64(i64::from(r), m)).mul(k, m));
             let one_minus = single(F64::from_i64(1, m).sub(f, m));
             let [s1, s2] = look.start;
-            let mut c = [0u8; 3];
-            for ch in 0..3 {
+            let mut c = own_black();
+            for (ch, out) in c.iter_mut().enumerate() {
                 // spec: S-0616 F16 (c₀ = trunc(s₁ × (1 − f) + s₂ × f), clamped to 0 … 255, single precision)
                 let a = single(F64::from_i64(i64::from(s1[ch]), m).mul(one_minus, m));
                 let b = single(F64::from_i64(i64::from(s2[ch]), m).mul(f, m));
                 let v = single(a.add(b, m)).to_i32_common();
-                c[ch] = v.clamp(0, 255) as u8;
+                *out = v.clamp(0, 255) as u8; // spec: S-0616 F16 (clamped to 0 … 255)
             }
             c
         };
@@ -787,7 +796,7 @@ impl ColourState {
     /// The drawn colour before the light-alpha step (S-0616 claim 29, F16):
     /// from *A* (the own colour while *i* = 0, else list entry *i*) towards
     /// *B* (entry *i* + 1, or *A* when the list has none).
-    pub fn drawn(&self, look: &ParticleLook, m: Rounding) -> [u8; 3] {
+    pub fn drawn(&self, look: &ParticleLook, m: Rounding) -> Rgb {
         let i = usize::try_from(self.index).unwrap_or(0);
         let a = if i == 0 {
             self.own
@@ -797,14 +806,14 @@ impl ColourState {
         // spec: S-0616 claim 29 (short lists, departure: no entry i + 1 moves towards A)
         let b = look.colours.get(i + 1).copied().unwrap_or(a);
         let one_minus = F64::from_i64(1, m).sub(self.t, m);
-        let mut c = [0u8; 3];
-        for ch in 0..3 {
+        let mut c = own_black();
+        for (ch, out) in c.iter_mut().enumerate() {
             // spec: S-0616 F16 (c = trunc(A × (1 − t) + B × t), floating point)
             let v = F64::from_i64(i64::from(a[ch]), m)
                 .mul(one_minus, m)
                 .add(F64::from_i64(i64::from(b[ch]), m).mul(self.t, m), m)
                 .to_i32_common();
-            c[ch] = v.clamp(0, 255) as u8;
+            *out = v.clamp(0, 255) as u8; // spec: S-0616 F16 (8-bit channels of colours of the list, so in 0 … 255)
         }
         c
     }
