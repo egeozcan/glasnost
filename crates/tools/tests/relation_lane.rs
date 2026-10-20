@@ -2233,11 +2233,11 @@ fn m7b_shield_a_lift_seizes_a_vehicle_inside_a_shield() {
     pass(name);
 }
 
-// spec: S-0513 claims 27, 28 and 31, S-0608 claims 3 and 5; Q-1507 (open, interim: not refused, the link forms)
+// spec: S-0513 claims 27 (revision 19), 28 and 31, S-0608 claims 3, 5 and 19 (protection does not stop a drain)
 #[test]
 #[ignore = "local relation lane: needs GLASNOST_GAME_DIR"]
-fn m7b_drain_a_shielded_plant_is_drained_under_the_q1507_interim() {
-    let name = "m7b_drain_a_shielded_plant_is_drained_under_the_q1507_interim";
+fn m7b_drain_a_shielded_plant_is_drained() {
+    let name = "m7b_drain_a_shielded_plant_is_drained";
     let r = need!(name, reference(), "no install");
     need!(
         name,

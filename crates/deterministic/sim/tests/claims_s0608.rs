@@ -1299,3 +1299,109 @@ fn claim_17_failed_boarding_keeps_the_link() {
     assert!(!glasnost_sim::transport::arrival(&mut w, l), "turned away");
     assert_eq!(drain::partner(&w, l), Some(b));
 }
+
+// ---------------------------------------------------------------------------
+// Claim 19: protection does not stop a drain (Q-1507).
+
+fn protect_for(w: &mut World, id: ObjectId, kind: glasnost_sim::superweapons::ProtectKind, d: i32) {
+    glasnost_sim::superweapons::protect::start(w, id, kind, d);
+    assert!(glasnost_sim::superweapons::protected(w, id));
+}
+
+// spec: S-0608 claim 19 (forming: an attempt against a building under either protection kind forms the link as against an unprotected one; the firing check gives a player house no extra answer; payouts follow claim 7) and S-0513 claim 27 (revision 19: protection does not refuse a draining weapon's attempt)
+#[test]
+fn claim_19_a_protected_building_is_drained() {
+    use glasnost_sim::superweapons::ProtectKind;
+    for kind in [ProtectKind::Curtain, ProtectKind::ForceShield] {
+        let mut w = game();
+        let b = put(&mut w, Kind::Building, "BOTH", BETA, 0, 0);
+        let d = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 0, 0);
+        protect_for(&mut w, b, kind, 1000);
+        assert_ne!(check::check(&w, d, obj(b), 1, false), Answer::Illegal);
+        attempt(&mut w, d, b);
+        assert_eq!(drain::partner(&w, d), Some(b), "{kind:?}: the link forms");
+        set_credits(&mut w, BETA, 1000);
+        set_credits(&mut w, ALPHA, 0);
+        assert_eq!(payouts(&mut w, 2 * P).len(), 2, "{kind:?}: due payouts");
+        assert_eq!(credits(&w, ALPHA), 2 * A);
+        assert_eq!(
+            w.houses[usize::from(BETA)].econ.power.output,
+            0,
+            "{kind:?}: the drain blackout"
+        );
+        assert!(glasnost_sim::superweapons::protected(&w, b));
+        round_trip(&w);
+    }
+}
+
+// spec: S-0608 claim 19 (protection starting on the drained building or on the drainer while linked, and its end, change nothing: the link and the payouts go on until claims 11 to 13 or 17 end it)
+#[test]
+fn claim_19_protection_starting_and_ending_changes_nothing() {
+    use glasnost_sim::superweapons::ProtectKind;
+    for kind in [ProtectKind::Curtain, ProtectKind::ForceShield] {
+        for on_drainer in [false, true] {
+            let (mut w, d, b) = linked("REF");
+            set_credits(&mut w, BETA, 1000);
+            set_credits(&mut w, ALPHA, 0);
+            protect_for(&mut w, if on_drainer { d } else { b }, kind, 3 * P);
+            let p = payouts(&mut w, 2 * P);
+            assert_eq!(p.len(), 2, "{kind:?} {on_drainer}: payouts while protected");
+            assert_eq!(drain::partner(&w, d), Some(b));
+            round_trip(&w);
+            let done = until(&mut w, 10 * P, |w| {
+                !glasnost_sim::superweapons::protected(w, d)
+                    && !glasnost_sim::superweapons::protected(w, b)
+            });
+            assert!(done, "the protection ends");
+            assert_eq!(
+                drain::partner(&w, d),
+                Some(b),
+                "{kind:?} {on_drainer}: no detach at the end"
+            );
+            assert_eq!(payouts(&mut w, 2 * P).len(), 2, "payouts go on");
+        }
+    }
+}
+
+// spec: S-0608 claim 19 (who may fire: a firer of a non-player house gets S-0513 claim 28's illegal answer against a protected target with its draining weapon, and makes no attempt; a draining weapon given a parasite warhead is refused as any weapon by S-0513 claim 27)
+#[test]
+fn claim_19_non_player_houses_and_parasite_drainers_are_refused() {
+    use glasnost_sim::superweapons::ProtectKind;
+    let mut r = rules();
+    let mut sap = r.sim.warheads["SA"].clone();
+    sap.parasite = Some(true);
+    r.sim.warheads.insert("SAP".into(), sap);
+    let mut sucker = r.sim.weapons["SUCKER"].clone();
+    sucker.warhead = Some("SAP".into());
+    r.sim.weapons.insert("SUCKPAR".into(), sucker);
+    vehicle(&mut r, "PDISC", |t| {
+        t.primary = Some("Gun".into());
+        t.secondary = Some("SUCKPAR".into());
+    });
+    let mut w = testkit::game_with_non_players(&r, SIZE, 7);
+    while orders::blocked(&w) {
+        tick::step(&mut w);
+    }
+    let b = put(&mut w, Kind::Building, "PLANT", BETA, 0, 0);
+    let mine = put(&mut w, Kind::Vehicle, "DISC", ALPHA, 0, 0);
+    // House 2 is the neutral house (testkit::game_with_non_players).
+    let neutral = put(&mut w, Kind::Vehicle, "DISC", 2, 0, 0);
+    let parasite = put(&mut w, Kind::Vehicle, "PDISC", ALPHA, 0, 0);
+    assert_ne!(
+        check::check(&w, neutral, obj(b), 1, false),
+        Answer::Illegal,
+        "unprotected: no refusal"
+    );
+    assert_ne!(
+        check::check(&w, parasite, obj(b), 1, false),
+        Answer::Illegal,
+        "unprotected: no refusal"
+    );
+    protect_for(&mut w, b, ProtectKind::Curtain, 1000);
+    assert_ne!(check::check(&w, mine, obj(b), 1, false), Answer::Illegal);
+    assert_eq!(check::check(&w, neutral, obj(b), 1, false), Answer::Illegal);
+    assert_eq!(
+        check::check(&w, parasite, obj(b), 1, false),
+        Answer::Illegal
+    );
+}

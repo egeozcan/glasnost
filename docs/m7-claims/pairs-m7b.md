@@ -30,7 +30,7 @@ the claims of both sides, and checks that the state hash survives a save/load ro
 | Force Shield × Psychic Dominator: the sweep's area damage spares the shielded building and hurts one just outside the radius; infantry within the radius is not shielded and is taken; no building is taken | `shield_pairs::a_domination_over_a_shielded_base_takes_its_units_and_spares_its_buildings` | S-0513, S-0612, S-0302 |
 | Force Shield × Genetic Mutator: infantry within the radius is not shielded and converts; the made unit is the launching house's | `shield_pairs::a_mutation_inside_a_shield_converts_its_infantry` | S-0513, S-0611 |
 | Force Shield × magnetic lift: a vehicle within the radius is not shielded and is seized | `shield_pairs::a_lift_seizes_a_vehicle_inside_a_shield` | S-0513, S-0607 |
-| Force Shield × drain (interim of request Q-1507): the drainer links to a shielded power plant and the link holds while it is protected | `drain_pairs::a_shielded_plant_is_drained_under_the_q1507_interim` | S-0513, S-0608 |
+| Force Shield × drain (S-0608 claim 19, answering Q-1507): the drainer links to a shielded power plant and the link holds while it is protected | `drain_pairs::a_shielded_plant_is_drained` | S-0513, S-0608 |
 | Cloning Vats × mind control: a controlled vat copies for its controller's house and not for its owner; released back, it ranks after the owner's other vat, so the order of copies flips | `cloning_pairs::a_controlled_vat_clones_for_its_controller_and_ranks_last_when_released` | S-0404, S-0601 |
 | Cloning Vats × Genetic Mutator: the unit a conversion makes is not copied; a factory release is | `cloning_pairs::a_mutation_made_unit_is_not_cloned` | S-0404, S-0611 |
 | Cloning Vats × absorber: a passenger that the deploy order lets out is not copied | `cloning_pairs::a_passenger_let_out_of_an_absorber_is_not_cloned` | S-0404, S-0605 |
@@ -49,9 +49,9 @@ The Force Shield and Cloning Vats rows are M7b step 4a. The shield is launched w
 `superweapons::protect::force_shield`, never by writing protection on an object. It protects only
 the buildings of houses allied with the launching house (S-0513 claim 31), so the shield rows
 check its buildings, and the infantry and vehicles inside the radius as unprotected. A drain on a
-protected building is request Q-1507: S-0513 claim 27's list of what protection refuses has no
-drain row, and S-0608 claim 3 has no protection row. The test checks the interim, the literal
-reading (the link forms and holds). The scenario wording of S-0601 (a unit under a house's force
+protected building was request Q-1507; S-0608 revision 6 claim 19 and S-0513 revision 19 claim 27
+answer it with the reading the interim had (the link forms and holds), so the test now cites
+claim 19 (M7b step 1f). The scenario wording of S-0601 (a unit under a house's force
 shield) reads as if a shield protected units; claim 31 says it does not, and the tests follow
 claim 31.
 
@@ -134,7 +134,7 @@ installed data, so they stay in the git-ignored run output and out of this file.
 | Drain × grinder | `m7b_drain_a_drained_grinder_pays_and_cannot_be_sold` | SKIP (the installed data cannot form the pair; the run prints why) |
 | Drain × grinder recycling | `m7b_drain_a_drained_grinder_still_recycles_for_its_owner` | SKIP (the installed data cannot form the pair; the run prints why) |
 | Drain × power | `m7b_drain_a_drained_plant_stops_the_defences_until_the_disc_dies` | PASS |
-| Force Shield × drain (interim of request Q-1507) | `m7b_drain_a_shielded_plant_is_drained_under_the_q1507_interim` | PASS |
+| Force Shield × drain (S-0608 claim 19) | `m7b_drain_a_shielded_plant_is_drained` | PASS |
 | Genetic Mutator × tank bunker | `m7b_mutator_a_launch_on_a_tank_bunker_leaves_it_and_its_vehicle` | PASS |
 | Genetic Mutator × absorber | `m7b_mutator_a_launch_on_an_absorber_spares_its_passenger_and_takes_an_entrant` | PASS |
 | Genetic Mutator × magnetic lift | `m7b_mutator_a_launch_under_a_seized_vehicle_takes_only_the_infantry` | PASS |

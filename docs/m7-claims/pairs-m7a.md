@@ -42,7 +42,7 @@ them. None is left open.
 - Psychic Dominator (S-0612) with controlled units, bunkers and the absorber: built at M7b step 3.5.
 - Special-hit effects (S-0615) with the lift fall and gas deaths: built at M7b step 3.2.
 - Cloning Vats, and the Force Shield against the M7a weapons: built at M7b step 4a. The drain on a
-  protected building waits for request Q-1507 and tests its interim.
+  protected building follows S-0608 claim 19 (Q-1507 answered; M7b step 1f).
 
 ## Local relation tests on the reference ruleset
 

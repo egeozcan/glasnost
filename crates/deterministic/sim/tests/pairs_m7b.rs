@@ -925,12 +925,11 @@ mod drain_pairs {
         round_trip(&w);
     }
 
-    // Pair: the drain and the force shield (S-0608 × S-0513), interim of request Q-1507.
-    // spec: S-0513 claim 31 (the launching house's building within the radius is protected) and claim 27 (the list of what protection refuses besides damage has no drain row) with claim 28 (a player house may fire at a protected object)
-    // spec: S-0608 claim 3 (the firing check's drain refusals: the own building, already drained, not drainable; no protection row) and claim 5 (the attempt forms the link)
-    // Q-1507 (open): whether protection refuses or ends a drain link; interim: the literal reading, not refused, the link forms and holds while protected.
+    // Pair: the drain and the force shield (S-0608 × S-0513).
+    // spec: S-0513 claim 31 (the launching house's building within the radius is protected) and claim 27 (revision 19: protection does not refuse a draining weapon's attempt, does not stop a link forming and does not end one) with claim 28 (a player house may fire at a protected object)
+    // spec: S-0608 claim 19 (protection does not stop a drain: the attempt forms the link as on an unprotected building, and the link holds while protected) with claims 3 and 5
     #[test]
-    fn a_shielded_plant_is_drained_under_the_q1507_interim() {
+    fn a_shielded_plant_is_drained() {
         let mut r = rules();
         super::add_shield(&mut r);
         let mut w = testkit::game_with(&r, SIZE, 7);
