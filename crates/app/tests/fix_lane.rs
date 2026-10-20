@@ -404,6 +404,11 @@ fn rally_point_from_a_factory() {
             Some(Door::Closed) => Some("door-closed-unloading"),
             None => None,
         };
+        // The body comes back at the end of the unload: a type without a door
+        // sprite shows its deploying sprite for the whole unload, whatever
+        // the door state (S-0108 claims 22 and 23).
+        let name = name.or((door.is_none() && doors.contains(&"door-closed-unloading"))
+            .then_some("door-after-unload"));
         let tick = w.tick;
         if let Some(name) = name
             && !doors.contains(&name)
