@@ -211,6 +211,27 @@ pub struct Beam {
     pub look: Look,
 }
 
+/// A railgun system's laser beam (S-0616 claim 31, S-0518 claim 18's
+/// "Other specs"): from the system's position to its target point, inner
+/// colour the type's laser colour, outer and spread black, 10 ticks, not
+/// blinking, fading from 0.5 to 0; the Terms defaults leave the
+/// house-colour flag off, so it takes the ordinary drawing (claim 21).
+pub fn rail_beam(from: Pos, to: Pos, born: i32, inner: [u8; 3]) -> Beam {
+    let look = Look::Ordinary {
+        inner,
+        // spec: S-0616 claim 31 (outer colour and spread black)
+        outer: [0; 3],
+        spread: [0; 3],
+        // spec: S-0616 claim 31 (not blinking)
+        blink: false,
+    };
+    // spec: S-0616 claim 31 (lasting 10 ticks, fading to 0); S-0518 claim 20 (not a building: a = 0)
+    let mut b = Beam::new(from, to, 0, born, 10, NONE, look);
+    // spec: S-0616 claim 31 (fading from intensity 0.5)
+    b.start = HALF;
+    b
+}
+
 impl Beam {
     /// A beam between world points `from` and `to` (S-0518 claim 20):
     /// projected with their height lift, with the biases
@@ -1056,6 +1077,9 @@ pub struct Settings {
     pub limits: (i32, i32),
     /// Each house's laser colour *L* by house index (S-0518 claim 17).
     pub house_laser: Vec<[u8; 3]>,
+    /// Each particle-system type's laser colour when it has the laser
+    /// flag, by simulation system-type index (S-0616 claim 31).
+    pub rails: Vec<Option<[u8; 3]>>,
 }
 
 impl Settings {
@@ -1087,6 +1111,24 @@ impl Settings {
                 )
             })
             .collect();
+        let rails = rules
+            .gas
+            .systems
+            .iter()
+            .map(|t| {
+                let idx =
+                    super::build::find_type(import, Kind::ParticleSystems, t.name.as_bytes())?;
+                // spec: S-0616 Import mapping (Laser: boolean, absent no; LaserColor: colour, absent 0, 0, 0)
+                super::build::rule_bool(import, Kind::ParticleSystems, idx, b"Laser", false).then(
+                    || {
+                        let c =
+                            super::build::rule(import, Kind::ParticleSystems, idx, b"LaserColor")
+                                .map_or([0; 3], |v| value::int_tuple_or(v, [0; 3]).0);
+                        channels(c)
+                    },
+                )
+            })
+            .collect();
         let global = |section: &[u8], key: &[u8]| {
             import
                 .outcome
@@ -1115,6 +1157,7 @@ impl Settings {
             ),
             // spec: S-0518 claim 17 (each house's L from its display colour, S-0103 claim 15)
             house_laser: house_rgb.iter().map(|&c| laser_colour(c)).collect(),
+            rails,
         }
     }
 }
@@ -1275,6 +1318,18 @@ impl Lines {
                     // No spec draws an electric bolt yet.
                     LineEffect::Bolt | LineEffect::None => {}
                 }
+            }
+            Effect::RailLine {
+                system_type,
+                from,
+                to,
+            } => {
+                // spec: S-0616 claim 31 (only a type with the laser flag makes a beam)
+                let Some(Some(inner)) = self.settings.rails.get(system_type as usize).copied()
+                else {
+                    return;
+                };
+                self.beams.push(rail_beam(from, to, now, inner));
             }
             Effect::Wave { id, from, to } => {
                 self.waves.insert(

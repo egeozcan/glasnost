@@ -596,3 +596,57 @@ fn wave_pixels() {
             .all(|c| c[1] == 100 && c[0] > 96 && c[2] > 96)
     );
 }
+
+/// spec: S-0616 claim 31 (railgun laser: inner the type's laser colour, outer and spread black, 10 ticks, not blinking, 0.5 to 0)
+/// spec: S-0518 claim 18 (other specs' beams carry their parameters; the Terms defaults leave the house-colour flag off)
+#[test]
+fn railgun_laser_beam() {
+    let b = rail_beam(pos(1000, 1000, 0), pos(2000, 1000, 0), 7, [0, 200, 0]);
+    assert_eq!(b.born, 7);
+    assert_eq!(b.duration, 10);
+    assert_eq!((b.start, b.end, b.fade), (HALF, NONE, true));
+    assert_eq!(
+        b.look,
+        Look::Ordinary {
+            inner: [0, 200, 0],
+            outer: [0, 0, 0],
+            spread: [0, 0, 0],
+            blink: false,
+        }
+    );
+    // spec: S-0518 claim 20 (not a building: a = 0, so b₀ = b₁ = −L(0) − 2 on flat ground)
+    assert_eq!(b.bias, (-2, -2));
+    assert_eq!(b.age(16), Some(9));
+    assert_eq!(b.age(17), None);
+    // spec: S-0518 claim 19 (I runs from S = 0.5 to E + (S − E)/D = 0.05 on the last drawn tick)
+    assert_eq!(intensity(&b, 0, RZ), HALF);
+    assert_eq!(scaled(256, intensity(&b, 9, RZ), RZ), 12);
+    // Pixels: the centre line only (black outer: no outer lines), dimmer as it fades.
+    let flat = Beam {
+        from: (0, 1),
+        to: (3, 1),
+        sector: 1,
+        born: 0,
+        ..b
+    };
+    let mut d = |_: i32, _: i32| 0;
+    let mut fine = || true;
+    let first = draw(
+        beam_spots(&flat, 0, &mut frame_with(1, &mut fine, &mut d)),
+        4,
+        3,
+    );
+    let last = draw(
+        beam_spots(&flat, 9, &mut frame_with(1, &mut fine, &mut d)),
+        4,
+        3,
+    );
+    let g0 = widen(first.color[4]);
+    let g9 = widen(last.color[4]);
+    assert!(
+        g0[0] == 0 && g0[2] == 0 && g0[1] > g9[1] && g9[1] > 0,
+        "{g0:?} {g9:?}"
+    );
+    assert_eq!(widen(first.color[0]), [0, 0, 0]);
+    assert_eq!(widen(first.color[8]), [0, 0, 0]);
+}

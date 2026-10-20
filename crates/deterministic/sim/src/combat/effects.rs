@@ -339,6 +339,17 @@ pub enum Effect {
         /// The shot's impact point.
         to: Pos,
     },
+    /// A railgun system emitted its line (S-0616 claims 17 and 31): the
+    /// view draws the type's laser beam, when the type has one. Drawing
+    /// only.
+    RailLine {
+        /// The system type, by registration index.
+        system_type: u32,
+        /// The system's position.
+        from: Pos,
+        /// The system's target point.
+        to: Pos,
+    },
     /// A drain link formed, ended or paid (S-0608 claims 5, 7 and 14).
     /// Presentation and counting only: a payout has no message and no
     /// sound (claim 7).

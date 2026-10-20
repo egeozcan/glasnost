@@ -1941,6 +1941,7 @@ impl Live {
                 | Effect::Beam { .. }
                 | Effect::Line { .. }
                 | Effect::Wave { .. }
+                | Effect::RailLine { .. }
                 | Effect::Drain { .. }
                 | Effect::Maker { .. }
                 | Effect::Domination { .. }

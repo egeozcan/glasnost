@@ -286,7 +286,7 @@ pub fn anim_own_section(import: &Import, idx: usize) -> &[u8] {
 }
 
 /// A rules key of a type, as layered.
-fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
+pub(crate) fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
     import
         .outcome
         .registries
