@@ -130,8 +130,8 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 20 | approved | — |
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 23 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 34 | approved | — |
-| [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 2 | approved | — |
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 18 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 21 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 19 | approved | — |
+| [S-0611](combat/S-0611-mutation.md) | Mutation | combat | 3 | approved | — |

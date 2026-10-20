@@ -2,13 +2,13 @@
 id: S-0611
 title: Mutation
 topic: combat
-revision: 2
+revision: 3
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-1461]
+requests: [Q-1461, Q-1460]
 supersedes: []
 ---
 
@@ -38,6 +38,8 @@ Skirmish only; network games and campaigns are out of scope.
 - **Standing-position choice and entry outcomes:** S-0208 claim 3, S-0209 claims 4 and 5, and
   their placement use in S-0614 claim 20.
 - **Copies made by a cloning building** are production (S-0404, S-0417), not mutation.
+- **Spawn controllers and slave groups** of a made type: S-0506 claim 1 and S-0402 claim 19.
+  This spec only counts and orders their creation draws and numbers within an attempt (claim 14).
 
 ## Terms
 
@@ -61,6 +63,10 @@ Skirmish only; network games and campaigns are out of scope.
   when it is off. The **explosion warhead** and the **cell warhead** are the two warheads the rules'
   special-weapons section names for them.
 - **Mutation point.** The world point of a launch, F1.
+- **Creation set.** The objects one creation of a made unit brings into existence: the unit,
+  the initial slot objects of its spawn controller (*spawn controller* and *slot*: S-0506),
+  the initial slaves of its slave group (*slave place*: S-0402), and recursively theirs
+  (claim 14, F5).
 - **Civilian house, effect block, swept layer, occupancy record, attacking house, damage that
   ignores defences:** glossary.
 
@@ -273,9 +279,10 @@ Skirmish only; network games and campaigns are out of scope.
     animation is removed otherwise. Each attempt takes its own position-choice draw when the
     point is at terrain height inside the usable area, its class is centre and no earlier
     position-choice refusal applies. The owner of claim 9 is resolved again at each attempt.
-    In the original each failed attempt also builds a unit that is never placed; our engine
-    builds none (documented departure, no switch; Open questions), but retains claim 14's
-    scenario-stream consumption and creation-number reservation.
+    In the original each failed attempt also builds a unit that is never placed, together
+    with any objects that unit's type creates with it (claim 14); our engine builds none of
+    them (documented departure, no switch; Open questions), but retains claim 14's
+    scenario-stream consumption and creation-number reservations for all of them.
     - Backing: `measurable` (scenarios MU9 and MU10) for the delay and retry; `unmeasured` for
       the never-placed object, which has no established observable
     - Confidence: medium
@@ -303,38 +310,72 @@ Skirmish only; network games and campaigns are out of scope.
 
 14. **Draws and numbering of creation attempts (Q-1460).** Every end attempt that has a
     valid made type and a resolved owner (claim 9), successful or refused, takes one raw
-    creation draw from the scenario random stream (S-0202 claim 10). Its standing-position
+    creation draw from the scenario random stream for the made unit (S-0202 claim 10), plus
+    the draws of the rest of its creation set below. Its standing-position
     choice uses the state left by that draw: when claim 10's position choice applies, it
     takes one ranged draw over the inclusive integer range 0 to 3 only for a centre-class
     point with no earlier vehicle/object refusal (S-0208 claim 3). Thus a vehicle blocking
     the ground record gives one raw creation draw and no position-choice draw, even at a
-    centre-class point. A centre-class choice with all selectable infantry positions taken
+    centre-class point (for a made type whose creation set is the unit alone; otherwise the
+    whole set's draws replace the single raw value in this paragraph). A centre-class choice with all selectable infantry positions taken
     still takes the ranged draw and then fails. A clear centre-class placement takes the
     raw draw followed by that ranged draw. Side-class and non-terrain-height placements
     take the creation draw but no position-choice draw. None of these draws is undone by
     refusal. These are the creation and placement draws, not a count of unrelated animation
-    events or effects elsewhere in the same tick. They describe the infantry object's own
-    creation and placement, not additional objects created by special properties of a made
-    type. Such type-specific auxiliary creation is outside this claim's draw and number totals.
+    events or effects elsewhere in the same tick.
     The object-present refusal inherits S-0208 claim 3's `unmeasured` backing: no practical
     fixture isolates that flag from other refusals; MU12 tests the vehicle refusal instead.
 
     In the original the attempted infantry unit itself also consumes one number from the
     shared object creation counter, even when it is never placed. Refusal neither returns that
     number nor restores the counter. It assigns no control group and advances no automatic
-    control-group numbering: new infantry starts ungrouped. Our engine keeps its own
-    deterministic creation counter rather than matching the original's global numbers
-    (the departure also used by S-0306 claim 13), but reserves one number per attempt,
-    including a refused attempt, without reuse. Avoiding an unplaced object under claim 11
-    must not undo that reservation or the creation draw. When claim 9 creates nothing
+    control-group numbering: new infantry starts ungrouped.
+
+    **Objects created with the made unit.** A made type can name objects that every creation
+    of it brings along. An attempt, refused or successful, creates this **creation set**:
+    - the made infantry unit itself,
+    - when its type names a spawned type and a spawn count *N* ≥ 1, the *N* initial slot
+      objects of its spawn controller (S-0506 claim 1),
+    - when its type names a slave infantry type and a slave count *M* ≥ 1, the *M* initial
+      slaves of its slave group (S-0402 claim 19),
+    - in turn, the initial slot objects and slaves of each of those objects' own types, and
+      so on.
+
+    Each member takes one raw creation draw and one number from the shared creation counter,
+    its number after its own draw, and the created objects start ungrouped. F5 gives the
+    order: the made unit's draw and number come first, then its slot objects in slot order,
+    then its slaves in place order, and claim 10's position-choice draw, when it applies,
+    comes after the whole set. The observable draw and number order is recursive: each slot object's own slot objects and slaves take their draws and numbers before the next slot object's draws and numbers; after all slot objects and their descendants, each slave's own slot objects and slaves take their draws and numbers before the next slave's draws and numbers. All members are
+    owned by the house resolved for the attempt (claim 9). With no spawned or slave type, or
+    with counts of 0 or less, the set is the made unit alone, so the totals above are
+    unchanged. After a successful attempt the slot objects and slaves stay off the map as
+    S-0506 claim 1 and S-0402 claim 19 describe.
+    Every other controller that a type's settings give an object at its creation takes no
+    draw and no number: the takeover controller of a mind-control primary weapon (S-0601),
+    the latching controller of a parasite primary weapon (S-0614), the temporal controller of
+    a temporal primary weapon (S-0514) and the airstrike designator (S-0519).
+
+    On a refused attempt the whole set stays off the map in the original. None of it ever
+    enters play, so none of it, nor the controllers it carries, acts or draws in a later tick.
+    No draw or number of the set is undone, and the next attempt creates a fresh set.
+
+    Our engine keeps its own deterministic creation counter rather than matching the
+    original's global numbers (the departure also used by S-0306 claim 13). It reserves one
+    number per member of the creation set, at each attempt, refused or successful, in the order
+    above and without reuse. Avoiding unplaced objects under claim 11 must not undo those
+    reservations or any creation draw of the set. When claim 9 creates nothing
     because the index is invalid or no owner can be resolved, no unit-creation draw or
     unit number is consumed in our engine. The invalid-index case is F4's safe design
     departure, not a guarantee about the original's undefined access.
-    - Backing: `measurable` (scenario MU12) for original draw composition, counter advance
-      and absence of a control group; `unmeasured` for no resolved owner, because no normal-input
-      skirmish without a civilian house is established (claim 9). Our counter reservation
-      without an unplaced object and invalid-index handling are design
-    - Confidence: high
+    - Backing: `measurable` (scenario MU12) for original draw composition, creation-set
+      draws and numbers, counter advance and absence of a control group; `unmeasured` for no
+      resolved owner, because no normal-input skirmish without a civilian house is established
+      (claim 9). Our counter reservation without unplaced objects and invalid-index handling
+      are design
+    - Confidence: high for the made unit's own draw, number and order; high for slot objects
+      and slaves taking a draw and a number each after the made unit and before the position
+      choice; medium for the depth-first order of nested sets and for the absence of later
+      activity of a refused set
 
 ## Formulas
 
@@ -352,6 +393,19 @@ Skirmish only; network games and campaigns are out of scope.
   when 0 ≤ *i* < *n*. Otherwise nothing is made. (The original's own bound lets *i* = *n* through
   and reads beyond the list: undefined in the original, nothing in our engine, with an importer
   warning. Negative values other than −1 are treated the same way.)
+- **F5. Creation-set sequence (claim 14).** For an object *o* of type *T*, let *S*(*o*) be
+  its *N* initial slot objects in slot order when *T* names a spawned type and *N* ≥ 1 (else
+  none), and *V*(*o*) its *M* initial slaves in place order when *T* names a slave type and
+  *M* ≥ 1 (else none). The creation sequence is
+  *C*(*o*) = ⟨raw(*o*), num(*o*)⟩ · *C*(*s*₁) · … · *C*(*s*_N) · *C*(*v*₁) · … · *C*(*v*_M),
+  where · is concatenation, raw is one raw scenario-stream value and num one creation number.
+  An end attempt with a valid made type and a resolved owner produces *C*(*u*) for the made
+  unit *u*, followed by claim 10's position-choice draw when that choice applies. Its totals
+  are |*C*(*u*)| raw values and as many numbers, where |*C*(*o*)| counts the pairs: |*C*(*o*)| = 1 + Σ |*C*(*s*ᵢ)| + Σ |*C*(*v*ⱼ)|.
+  Integer counts, exact. A chain of spawned and slave types that leads back to a type already
+  in it has no finite sequence: the original's result is undefined, and our engine's importer
+  warns and gives the type that closes the cycle no initial fill when it is created inside
+  that chain (bad-data design departure; `unmeasured`, design).
 
 ## Constants
 
@@ -370,8 +424,8 @@ Skirmish only; network games and campaigns are out of scope.
 | infantry alive | killed, S-0107 claim 17 reaches row 7, claim 6 test passes | leaves play in the same tick subject to claim 7's crash exception, shared death effects and credit (S-0312 claim 8); conversion animation starts at its position |
 | infantry alive | killed, row 7 reached, claim 6 test refuses | die-2 request of S-0107 claim 17; position shown free (claim 7) |
 | conversion animation playing | each update | its position marked taken, cell's infantry house set to its owner (claim 8) |
-| conversion animation playing | last pass ends, no follow-up type, index valid | owner resolved (claim 9); unit created and placed; animation removed |
-| conversion animation playing | same, placement refused | no unit; one frame stepped back; retry when the frame is next due (claim 11) |
+| conversion animation playing | last pass ends, no follow-up type, index valid | owner resolved (claim 9); creation set created (claim 14), unit placed; animation removed |
+| conversion animation playing | same, placement refused | creation set created but never placed (claim 14); no unit; one frame stepped back; retry when the frame is next due (claim 11) |
 | conversion animation playing | same, no owner and no civilian house, or index invalid | animation removed, nothing created |
 
 **Ordering consequences.**
@@ -430,13 +484,17 @@ Skirmish only; network games and campaigns are out of scope.
 | Rules, warhead section | `InfDeath` | the mutating death kind is the value 9 (S-0107 maps the key) | integer | 0 |
 | Rules, superweapon section | `Type` | the genetic mutation superweapon is S-0512's genetic-conversion kind (S-0512 maps the key and its kind words) | name | as S-0512 |
 | Rules, superweapon section | `Range`, `LineMultiplier` | not read by the effect (claim 2) | — | — |
+| Rules, made infantry type section (and each created object's type) | `Spawns`, `SpawnsNumber` | spawned type and spawn count *N* of F5; slot objects join the creation set of claim 14 (S-0506 maps the keys) | as S-0506 | as S-0506 (none, 0: no slot objects) |
+| Rules, made infantry type section (and each created object's type) | `Enslaves`, `SlavesNumber` | slave type and slave count *M* of F5; slaves join the creation set of claim 14 (S-0402 maps the keys) | as S-0402 | as S-0402 (none, 0: no slaves) |
+| Rules, weapon's warhead section and type section | `MindControl`, `Parasite`, `Temporal` (primary weapon's warhead), `AirstrikeTeam` | controllers made at creation that take no draw and no number (claim 14); S-0601, S-0614, S-0514 and S-0519 map the keys | boolean, integer | as their owners |
 
 - A warhead reference left empty: what the original does with a missing explosion or cell warhead
   is not established (Open questions). Our engine delivers no hits for that mode and the importer
   warns once.
 - An index *i* with *i* ≥ *n*, or negative other than −1: nothing is made and the importer warns
   (F4). Claims 11 and 14's retry draws and number reservations use the made type selected by
-  the existing animation/list mapping; they have no additional imported setting.
+  the existing animation/list mapping, and the spawn and slave settings of that type (and of
+  the types it creates) in the rows above set the size of each attempt's creation set (F5).
 - The civilian house is found by the side named Civilian, an engine constant (S-0414 Import
   mapping), not stock data.
 - Announcement and radar-event bindings are S-0701's and S-0410's.
@@ -600,8 +658,23 @@ index names.
   for intervening creations: its number includes the consumed attempt numbers. Any rollback
   falsifies the numbering rule. Each attempted infantry object has no control group.
   A recorded group assignment falsifies that rule.
-  Engine-only check: refused attempts create no retained object but still consume their draw
-  and one deterministic creation number; neither is returned for later reuse.
+  Creation-set variants (claim 14, F5): named map overrides give the made type invented
+  settings: a spawned type with count *k* = 2; a slave type with count *m* = 3; both
+  together; a spawned type whose own type names a slave type with count 1; and, separately,
+  a mind-control or temporal primary weapon only. Block placement with the vehicle and
+  record at least two refused attempts, then a successful one. Expected per refused attempt:
+  1 + *k* + *m* raw values (with nesting, 1 + *k*(1 + 1) for the nested variant) before any
+  position-choice draw, and the counter advancing by the same amount; the made unit's
+  number is the lowest, then the slot objects' numbers, then the slaves'. In the nested
+  variant each slot object's slave number directly follows that slot object's number. The
+  weapon-only variant adds nothing to the ordinary totals. Between attempts no further draw
+  is attributable to the refused sets. A successful attempt gives the same composition,
+  followed by the position-choice draw. A different count, any draw of the set after the
+  position choice, a slave number before a slot number of the same set, or an extra draw
+  for the weapon-only variant falsifies the creation-set rule.
+  Engine-only check: refused attempts create no retained object but still consume every
+  draw of their creation set and one deterministic creation number per member; none is
+  returned for later reuse.
 - **MU13 (crash-flag conversion, claims 7 and 8; Q-1461).** Normal-speed skirmish with
   director off, house A's mutating weapon and house B's ordinary human infantry type with
   no personal death-animation list, no cyborg or jumpjet type flag, and a named map override
@@ -631,11 +704,8 @@ fixture or observable consequence of an unplaced unit has been established, and 
 effect fixture is known for the sweep interruption. They do not override the defined safe results.
 
 1. What the original does when the explosion or cell warhead is missing (no stock data reaches it).
-2. Whether the unit the original builds on each refused placement attempt (claim 11) affects
-   anything observable, such as house unit counts or build limits. Our engine builds none.
+2. Whether the unit the original builds on each refused placement attempt (claim 11), and the
+   slot objects and slaves of its creation set (claim 14), affect anything observable, such as
+   house unit counts or build limits. Our engine builds none of them.
 3. Whether a death effect of a cell-mode victim that removes the next listed infantry unit of the
    same cell can stop the sweep of that cell (no stock case known).
-4. Q-1460 question 3, beyond the attempted infantry's own number and control group: the
-   additional draw and number totals for made types whose special properties create auxiliary
-   objects at construction are not established here. Claim 14 answers the ordinary retry,
-   successful placement, draw order and non-rollback rules, not that type-specific extension.

@@ -1,9 +1,9 @@
 ---
 id: Q-1460
 title: The random draws of a refused creation attempt at the end of an infantry-making animation
-status: open
+status: answered
 related: [S-0611, S-0202, S-0109, S-0208]
-answered-by: []
+answered-by: [S-0611]
 ---
 
 ## Need
