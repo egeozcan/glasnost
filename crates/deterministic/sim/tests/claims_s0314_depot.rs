@@ -885,19 +885,20 @@ fn claim_22_contact_loss_by_phase() {
             // waiting, as for a vehicle that came to rest out of range.
             w.obj_mut(d).unwrap().beh.progress = 0;
         }
-        assert!(run_until(&mut w, 600, |w| {
-            let b = &w.obj(d).unwrap().beh;
-            b.current == Some(Behaviour::Repair) && b.progress == phase
-        }), "phase {phase} reached");
+        assert!(
+            run_until(&mut w, 600, |w| {
+                let b = &w.obj(d).unwrap().beh;
+                b.current == Some(Behaviour::Repair) && b.progress == phase
+            }),
+            "phase {phase} reached"
+        );
         damage::apply(&mut w, v, lethal());
         assert!(w.obj(v).is_none());
         let trace = trace_to_guard(&mut w, d, 4 * dd + 20);
         let (last, before) = trace.split_last().expect("a trace");
         assert_eq!(last.0, Some(Behaviour::Guard), "phase {phase}: {trace:?}");
         assert!(
-            before
-                .iter()
-                .all(|&(b, _)| b == Some(Behaviour::Repair)),
+            before.iter().all(|&(b, _)| b == Some(Behaviour::Repair)),
             "phase {phase}: in repair until the return: {trace:?}"
         );
         match phase {

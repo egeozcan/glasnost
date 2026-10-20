@@ -265,7 +265,10 @@ fn s0611_f5_mixed_cycle_closer_keeps_no_controller_or_group() {
     assert_eq!(slaves(&w, made[1]), vec![made[2]]);
     let closer = made[2];
     let check = |w: &World| {
-        assert!(w.obj(closer).unwrap().spawn.is_none(), "no spawn controller");
+        assert!(
+            w.obj(closer).unwrap().spawn.is_none(),
+            "no spawn controller"
+        );
         assert!(
             glasnost_sim::econ::slaves::group_of(w, closer).is_none(),
             "no slave group"

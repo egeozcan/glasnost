@@ -642,7 +642,11 @@ fn disc_laser_beam_parameters() {
     assert_eq!(to_256(&fin, 3), 64);
     assert_eq!(fin.age(4), None, "no zero-intensity tick");
     for d in [0, -2] {
-        assert_eq!(beam(&mut lines, d, true, None).age(0), None, "D = {d}: no beam");
+        assert_eq!(
+            beam(&mut lines, d, true, None).age(0),
+            None,
+            "D = {d}: no beam"
+        );
     }
     // House colours: the house laser colour, that colour halved, the spread
     // kept, drawn ordinarily and not blinking.
