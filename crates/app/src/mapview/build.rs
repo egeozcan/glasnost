@@ -227,7 +227,9 @@ mod notes {
     pub const TERRAIN_STRENGTH: &str = "the rules did not resolve: a terrain object type without a strength key is drawn with image frame 0 (its strength from the game-wide tree strength, S-0102 claim 23, needs the typed rules)";
     pub const ORE_MINE_STAGE: &str = "an ore mine's animation (S-0401 claim 15) is not played: it shows image frame 0, its stage at placement (S-0102 claim 23)";
     pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
-    pub const SLOT_ANIMS_STILL: &str = "building slot animations (S-0108 claim 11) are drawn at their first image frame: animation playback (S-0109) is not implemented, so they do not advance and power (S-0108 claim 13) does not change them";
+    pub const SLOT_ANIMS_STILL: &str = "the static scene's building slot animations (S-0108 claim 11) are drawn at their first image frame: they do not advance and power (S-0108 claim 13) does not change them";
+    /// See [`SLOT_ANIMS_STILL`].
+    pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 15 (empty storage), 17 and 20 and S-0606's walls; power (S-0108 claims 13 and 14), silo fill, the superweapon, turret and upgrade slots, and a repair depot's special-1 start (Q-1550) are not modelled";
     /// The importer warning of S-0102 claim 33: the shared building depth
     /// image file and why it is unavailable.
     pub fn no_companion(failure: &str) -> String {
@@ -1007,6 +1009,9 @@ struct Builder<'a> {
     built: Built,
     /// Whether the builder draws the live game's objects ([`Painter::mobiles`]).
     live: bool,
+    /// The running slot animations of the live building being drawn
+    /// (S-0108), in place of the set-up slots at their first image frame.
+    live_slots: Option<Vec<LiveSlot>>,
 }
 
 /// A decoded tile cell: diamond image, its depth data and template
@@ -1127,6 +1132,7 @@ pub fn build_parts_with(
         p: Painter::new(art, canvas),
         built: Built::default(),
         live: false,
+        live_slots: None,
     };
     b.light_cells();
     b.tiles();
@@ -2566,10 +2572,12 @@ impl Builder<'_> {
         items
     }
 
-    /// The slot animations a building starts when it is placed (S-0108
-    /// claims 10 and 11), each drawn at its first image frame as an
-    /// animation of its own in its type's layer (S-0102 claim 17): ground
-    /// layer entries go to `ground`, the others to [`Built::layered`].
+    /// A building's slot animations (S-0108 claims 10 and 11), each drawn
+    /// as an animation of its own in its type's layer (S-0102 claim 17):
+    /// ground layer entries go to `ground`, the others to
+    /// [`Built::layered`]. A live building draws the ones running
+    /// ([`LiveSlot`]), a building of the static scene those the set-up
+    /// starts, at their first image frame.
     #[allow(clippy::too_many_arguments)]
     fn slot_animations(
         &mut self,
@@ -2590,31 +2598,36 @@ impl Builder<'_> {
         else {
             return;
         };
-        let refinery = rule_bool(self.import, Kind::Buildings, i, b"Refinery", false);
-        // spec: S-0108 claim 11 (placed during the set-up: idle and active-1 … active-4, occupied
-        // variants allowed; grand opening of a building completed in play: a refinery only the active
-        // slot of its fill level, which is active-1 with no stored ore by claim 15, others the same
-        // five slots)
-        let starts: &[&[u8]] = if self.live && refinery {
-            &slots::SETUP_SLOTS[1..2]
-        } else {
-            &slots::SETUP_SLOTS
-        };
-        let defs: Vec<slots::SlotDef> = starts
-            .iter()
-            .map(|base| slots::read_slot(&self.p.art, &image, base))
-            .collect();
-        let mut any = false;
-        for def in defs {
-            // spec: S-0108 claim 11 (no occupants at placement: the damaged or the normal variant)
-            let name = slots::variant(&def, damaged, false, true).to_vec();
-            if name.is_empty() {
-                continue;
-            }
-            // Unknown names start nothing here (S-0108 claim 11 leaves them unmeasured).
-            let Some(a) = find_type(self.import, Kind::Animations, &name) else {
-                continue;
+        // A live building draws its running slot animations at their current image frames
+        // (S-0108 Terms; S-0109 claim 1); a building of the static scene the slots the set-up
+        // starts, at their first image frame.
+        let running = self.live_slots.take();
+        let still = running.is_none();
+        let entries: Vec<(slots::SlotDef, usize, Option<(i32, i32, i32)>)> =
+            if let Some(list) = running {
+                list.into_iter()
+                    .map(|s| (s.def, s.idx, Some((s.frame, s.stage, s.end))))
+                    .collect()
+            } else {
+                // spec: S-0108 claim 11 (placed during the set-up: idle and active-1 … active-4,
+                // occupied variants allowed)
+                slots::SETUP_SLOTS
+                    .iter()
+                    .map(|base| slots::read_slot(&self.p.art, &image, base))
+                    .filter_map(|def| {
+                        // spec: S-0108 claim 11 (no occupants at placement: the damaged or the normal variant)
+                        let name = slots::variant(&def, damaged, false, true).to_vec();
+                        if name.is_empty() {
+                            return None;
+                        }
+                        // Unknown names start nothing here (S-0108 claim 11 leaves them unmeasured).
+                        let a = find_type(self.import, Kind::Animations, &name)?;
+                        Some((def, a, None))
+                    })
+                    .collect()
             };
+        let mut any = false;
+        for (def, a, at) in entries {
             let Some(art) = self.import.arts.get(&(Kind::Animations, a)).cloned() else {
                 continue;
             };
@@ -2634,8 +2647,16 @@ impl Builder<'_> {
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
             let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
-            let code = slots::first_translucency(&t, self.options.detail.number(), n);
-            let frame = slots::first_frame(&t, n);
+            let detail = self.options.detail.number();
+            let (frame, code) = match at {
+                // spec: S-0109 claims 1 and 20 (image frame a + k; the code from stage k and end E,
+                // translucency level 0)
+                Some((frame, stage, end)) => (frame, slots::translucency(&t, detail, stage, end)),
+                None => (
+                    slots::first_frame(&t, n),
+                    slots::first_translucency(&t, detail, n),
+                ),
+            };
             // spec: S-0102 claim 17 (the slot's depth adjustment replaces the type's)
             let items = self.anim_items(
                 &sprite,
@@ -2665,7 +2686,11 @@ impl Builder<'_> {
             }
         }
         if any {
-            self.note(notes::SLOT_ANIMS_STILL);
+            self.note(if still {
+                notes::SLOT_ANIMS_STILL
+            } else {
+                notes::SLOT_ANIMS_LIVE
+            });
         }
     }
 
@@ -4491,6 +4516,7 @@ impl Painter {
                 ..Default::default()
             },
             live: true,
+            live_slots: None,
         };
         let entries = mobiles.iter().map(|m| b.mobile(m)).collect();
         *self = b.p;
@@ -4527,6 +4553,7 @@ impl Painter {
                 ..Default::default()
             },
             live: true,
+            live_slots: None,
         };
         let start = b.built.scene.items.len();
         b.overlays_in(cells, true);
@@ -4566,6 +4593,7 @@ impl Painter {
                 ..Default::default()
             },
             live: true,
+            live_slots: None,
         };
         let out = list.iter().map(|a| b.live_anim(a)).collect();
         *self = b.p;
@@ -4603,11 +4631,23 @@ impl Painter {
                 ..Default::default()
             },
             live: true,
+            live_slots: None,
         };
         let out = list.iter().map(|d| b.live_particle(d)).collect();
         *self = b.p;
         *scene = b.built.scene;
         (out, b.built.notes)
+    }
+
+    /// Building type `idx`'s slot definitions, from the art section its
+    /// image name names (S-0108 Import mapping).
+    pub fn slot_defs(&self, inputs: &Inputs, idx: usize) -> super::slot_play::Defs {
+        inputs
+            .import
+            .arts
+            .get(&(Kind::Buildings, idx))
+            .map(|a| super::slot_play::read_defs(&self.art, &a.image))
+            .unwrap_or_default()
     }
 
     /// The import's animation type `idx`'s art fields and the image-frame
@@ -4654,6 +4694,7 @@ impl Painter {
                 ..Default::default()
             },
             live: true,
+            live_slots: None,
         };
         let mut out = Vec::new();
         for d in list {
@@ -4671,6 +4712,7 @@ impl Painter {
                 None => (false, false),
             };
             let mut ground = Vec::new();
+            b.live_slots = Some(d.slots.clone());
             let mut items = b.building_items(
                 d.idx,
                 &art,
@@ -4705,7 +4747,7 @@ impl Painter {
 
 /// Whether a building with health `h` of strength `strength` is damaged
 /// and badly damaged (S-0108 F3).
-fn condition_of(r: &SimRules, h: i32, strength: i32) -> (bool, bool) {
+pub(super) fn condition_of(r: &SimRules, h: i32, strength: i32) -> (bool, bool) {
     if strength == 0 {
         return (false, false);
     }
@@ -4736,6 +4778,8 @@ pub struct LiveBuilding {
     pub anim: u32,
     /// It holds at least one garrison occupant (S-0108 Terms, claim 2).
     pub occupied: bool,
+    /// Its running slot animations (S-0108 Terms), in slot order.
+    pub slots: Vec<LiveSlot>,
     /// Item object code.
     pub object: u32,
     /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108
@@ -4747,6 +4791,22 @@ pub struct LiveBuilding {
     /// Its protection appearance in the shown tick (S-0513 claim 29,
     /// S-0102 claim 34).
     pub protection: Option<super::protection::Look>,
+}
+
+/// A running slot animation of a live building, as the drawing takes it
+/// (S-0108 Terms; S-0109 claims 1 and 20).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LiveSlot {
+    /// Its slot's definition (displacement, depth adjustment, y-sort).
+    pub def: slots::SlotDef,
+    /// Its current type's import registration index.
+    pub idx: usize,
+    /// Image frame *a* + *k*.
+    pub frame: i32,
+    /// Stage *k*.
+    pub stage: i32,
+    /// End field *E* in play.
+    pub end: i32,
 }
 
 /// A greyscale-free minimap: each cell as two pixels with its tile radar

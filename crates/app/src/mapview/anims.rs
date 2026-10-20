@@ -168,6 +168,18 @@ mod tests {
         out
     }
 
+    // spec: S-0108 Terms (a replacing slot animation continues from the old one's image frame) and
+    // S-0109 claim 1 (image frame a + k)
+    #[test]
+    fn continue_from_keeps_the_image_frame() {
+        let q = AnimQuirks::default();
+        let mut env = TestEnv::new();
+        let mut a = Player::new(b"A", ty("Start=2", 10, (0, 0)), 0, None, &mut env, &q);
+        assert_eq!(a.frame(), 2);
+        a.continue_from(6);
+        assert_eq!((a.frame(), a.stage()), (6, 4));
+    }
+
     // spec: S-0109 claims 1, 2, 5, 6 and 16, scenario AN1 (T1: rate 100, every frame held 9 ticks,
     // lifetime 9N; T2: rate 300, end 6, frames 0 … 5, 3 ticks each)
     #[test]

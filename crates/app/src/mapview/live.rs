@@ -37,6 +37,7 @@ use super::build::{
     Painter, ShadowAnchor, find_type, rule_int,
 };
 use super::combat::{self, Cache, Counts, Marker, Ratios, Transient, TransientKind};
+use super::slot_play;
 use super::unload::{self, Unloading};
 
 /// The flag that marks an [`glasnost_render::scene::Item::object`] code as
@@ -317,6 +318,52 @@ pub struct Live {
     /// The serial of the teleport source marker shown to the viewer
     /// (S-0513 claim 33), while it plays.
     source_marker: Option<u32>,
+    /// Each building's running slot animations (S-0108; presentation
+    /// state).
+    slot_anims: BTreeMap<ObjectId, slot_play::Slots<SlotAnim>>,
+    /// Each building type's slot definitions, by import registration
+    /// index, read when the type is first drawn.
+    slot_defs: BTreeMap<usize, slot_play::Defs>,
+    /// The walls' slot starts and stops the last tick reported (S-0606
+    /// claims 6, 12 and 16): building, slots, start, damaged variant.
+    special_events: Vec<(ObjectId, [u8; 2], bool, bool)>,
+}
+
+/// A running slot animation of a building (S-0108 Terms), played by
+/// S-0109's playback.
+#[derive(Clone, Debug)]
+pub struct SlotAnim {
+    player: Player,
+    /// Its current type's entry.
+    entry: AnimEntry,
+}
+
+/// Starts slot animations for [`slot_play`]: an animation type of the
+/// import by name, created in tick `now`.
+struct SlotMaker<'a, 'b> {
+    env: &'a mut AnimEnv<'b>,
+    now: i32,
+}
+
+impl slot_play::Make<SlotAnim> for SlotMaker<'_, '_> {
+    fn make(&mut self, name: &[u8], from: Option<&SlotAnim>) -> Option<SlotAnim> {
+        // spec: S-0108 Terms (a name that names no animation type starts nothing)
+        let (entry, play) = self.env.lookup(name);
+        let entry = entry?;
+        let mut player = Player::new(
+            name,
+            play,
+            self.now,
+            None,
+            &mut *self.env,
+            &AnimQuirks::default(),
+        );
+        if let Some(old) = from {
+            // spec: S-0108 Terms (the new animation continues from the old one's image frame)
+            player.continue_from(old.player.frame());
+        }
+        Some(SlotAnim { player, entry })
+    }
 }
 
 /// An animation type of the import, for playback.
@@ -814,6 +861,9 @@ impl Live {
             move_flash,
             viewer: None,
             source_marker: None,
+            slot_anims: BTreeMap::new(),
+            slot_defs: BTreeMap::new(),
+            special_events: Vec::new(),
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -920,7 +970,147 @@ impl Live {
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
         self.take_effects();
+        self.update_slots();
         self.sync_ground();
+    }
+
+    /// The buildings' slot animations after a tick (S-0108 claims 11, 12,
+    /// 17 and 20; S-0606 claims 6, 12 and 16): each running one plays
+    /// (S-0109), those that finished on their own leave their slot, then
+    /// the building's update starts and stops slots and the walls' events
+    /// of the tick apply. A building whose type has not been drawn yet
+    /// waits for its slot definitions.
+    fn update_slots(&mut self) {
+        let now = self.shown_tick();
+        let events = std::mem::take(&mut self.special_events);
+        let w = &self.world;
+        let mode = self.rules.mode;
+        let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State)> = w
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .filter_map(|o| {
+                let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
+                let r = self.rules.buildings.get(o.type_index as usize)?;
+                let extra = self
+                    .rules
+                    .econ
+                    .power
+                    .buildings
+                    .get(o.type_index as usize)
+                    .map_or(0, |p| p.extra_output);
+                let kind = slot_play::TypeKind {
+                    refinery: r.raw.econ.refinery.unwrap_or(false),
+                    // spec: S-0108 claim 17 (absorbs infantry and gives a positive extra power per held infantry)
+                    absorbs: r.absorb.infantry && extra > 0,
+                    depot: r.building.unit_repair,
+                    naval: r.naval,
+                    delayed_fire: r.building.anim_delayed_fire,
+                };
+                let sizes: Vec<glasnost_num::F64> =
+                    glasnost_sim::structures::absorb::passengers(w, o.id)
+                        .iter()
+                        .filter_map(|p| w.obj(*p))
+                        .map(|p| {
+                            w.rules()
+                                .unit(p.kind, p.type_index)
+                                // spec: S-0108 Import mapping (Size absent: 1)
+                                .map_or_else(|| glasnost_num::F64::from_i64(1, mode), |t| t.size)
+                        })
+                        .collect();
+                let in_repair = o.beh.current == Some(Behaviour::Repair);
+                let st = slot_play::State {
+                    // spec: S-0108 claims 11 and 17 (completed and not in the construction state)
+                    completed: o.beh.current != Some(Behaviour::Construction),
+                    // spec: S-0108 claim 11 (a building of the map was placed during the game's set-up)
+                    setup: self.building_ids.values().any(|b| *b == o.id),
+                    damaged: super::build::condition_of(&self.rules, o.health, r.strength).0,
+                    // spec: S-0108 Terms (occupied: at least one occupant; held infantry are not occupants)
+                    occupied: !o.structure.occupants.is_empty(),
+                    // spec: S-0108 claim 17, F9 (the held infantry's total size)
+                    held_size: slot_play::held_size(&sizes, mode),
+                    in_repair,
+                    // spec: S-0108 claim 20 and S-0314 claim 6 (repairing a docked unit: in its repair
+                    // behaviour with a serviced vehicle)
+                    repairing: in_repair && o.depot.serviced.is_some(),
+                };
+                Some((o.id, idx, kind, st))
+            })
+            .collect();
+        self.slot_anims
+            .retain(|id, _| present.iter().any(|(p, ..)| p == id));
+        let mut env = AnimEnv {
+            table: &self.anim_table,
+            rules: &self.rules,
+            rng: &mut self.cosmetic,
+            speed: self.world.game_speed,
+        };
+        let q = AnimQuirks::default();
+        for (id, idx, kind, st) in present {
+            let Some(defs) = self.slot_defs.get(&idx) else {
+                continue;
+            };
+            let slots = self.slot_anims.entry(id).or_default();
+            let mut finished = Vec::new();
+            for (slot, r) in &mut slots.running {
+                let before = r.anim.player.name.clone();
+                // spec: S-0109 claims 5 to 16 (each running slot animation plays; claim 16: it ends)
+                if !r.anim.player.update(now, &mut env, &q) {
+                    finished.push(*slot);
+                } else if r.anim.player.name != before
+                    && let Some(e) = env.lookup(&r.anim.player.name).0
+                {
+                    // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
+                    r.anim.entry = e;
+                }
+            }
+            let mut mk = SlotMaker { env: &mut env, now };
+            for slot in finished {
+                slots.finished(slot, &kind, defs, &st, &mut mk);
+            }
+            slots.update(&kind, defs, &st, &mut mk);
+            for (_, pair, start, damaged) in events.iter().filter(|(b, ..)| *b == id) {
+                slots.walls(*pair, *start, *damaged, defs, &mut mk);
+            }
+        }
+    }
+
+    /// A building's running slot animations as the drawing takes them.
+    fn slot_draws(&self, id: ObjectId, idx: usize) -> Vec<super::build::LiveSlot> {
+        let (Some(slots), Some(defs)) = (self.slot_anims.get(&id), self.slot_defs.get(&idx)) else {
+            return Vec::new();
+        };
+        slots
+            .running
+            .iter()
+            .filter(|(_, r)| r.anim.entry.sprite)
+            .filter_map(|(slot, r)| {
+                Some(super::build::LiveSlot {
+                    def: defs.get(slot)?.clone(),
+                    idx: r.anim.entry.idx,
+                    frame: r.anim.player.frame(),
+                    stage: r.anim.player.stage(),
+                    end: r.anim.player.play.end,
+                })
+            })
+            .collect()
+    }
+
+    /// The names of a building's running slot animations, in slot order
+    /// (tests and lanes).
+    pub fn slot_names(&self, id: ObjectId) -> Vec<String> {
+        self.slot_anims.get(&id).map_or_else(Vec::new, |s| {
+            s.running
+                .iter()
+                .map(|(slot, r)| {
+                    format!(
+                        "{slot:?}={} frame {}",
+                        String::from_utf8_lossy(&r.name),
+                        r.anim.player.frame()
+                    )
+                })
+                .collect()
+        })
     }
 
     /// The attached animations' owners and positions (tests).
@@ -1568,6 +1758,16 @@ impl Live {
                     self.counts.gas_hits += 1;
                     continue;
                 }
+                Effect::SpecialAnims {
+                    building,
+                    slots,
+                    start,
+                    damaged,
+                } => {
+                    // spec: S-0606 claims 6, 12 and 16 (the walls' special slots start or stop)
+                    self.special_events.push((building, slots, start, damaged));
+                    continue;
+                }
                 Effect::Sound { .. }
                 | Effect::Mind { .. }
                 | Effect::Consumed { .. }
@@ -1580,7 +1780,6 @@ impl Live {
                 | Effect::Captured { .. }
                 | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. }
-                | Effect::SpecialAnims { .. }
                 | Effect::Bunkered { .. }
                 | Effect::Seized { .. }
                 | Effect::Deactivated { .. }
@@ -1883,6 +2082,20 @@ impl Live {
         // The game's own buildings (deployed or placed) and the map's gates
         // follow, in object ID order (our placeholder order; the map's
         // other buildings keep their place in the cell pass).
+        // Each drawn type's slot definitions, read once (S-0108 Import mapping).
+        let drawn_types: Vec<usize> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .filter_map(|o| *self.types.get(&(o.kind, o.type_index))?)
+            .collect();
+        for idx in drawn_types {
+            if !self.slot_defs.contains_key(&idx) {
+                let defs = self.painter.slot_defs(inputs, idx);
+                self.slot_defs.insert(idx, defs);
+            }
+        }
         let own: Vec<(ObjectId, LiveBuilding)> = self
             .world
             .objects
@@ -1923,6 +2136,7 @@ impl Live {
                         object: sim_code(o.id),
                         unloading: self.unloading_of(o),
                         // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)
+                        slots: self.slot_draws(o.id, idx),
                         gate_door: (self
                             .rules
                             .buildings
