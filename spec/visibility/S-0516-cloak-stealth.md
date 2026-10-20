@@ -2,11 +2,11 @@
 id: S-0516
 title: Cloak and stealth (cloaking, cloak fields, sensors, disguise)
 topic: visibility
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0720, Q-0721, Q-0722, Q-0723, Q-0724, Q-0725, Q-0726, Q-0727, Q-0728, Q-0729, Q-0791, Q-0792, Q-0795, Q-0796]
 supersedes: []
@@ -674,7 +674,7 @@ Two kinds of rule are kept apart throughout.
     - Confidence: medium
 
 28. **How V sees a cloaking or cloaked vehicle, infantry unit or aircraft.**
-    - **Uncloaked:** drawn normally.
+    - **Uncloaked, or fading at stage 0:** drawn normally.
     - **Fading at stage *k* > 0,** by fade fraction *x*:
 
       | *x* | Drawn |
@@ -694,8 +694,13 @@ Two kinds of rule are kept apart throughout.
       Otherwise it is not drawn at all for *V*.
     - **Buildings:** fade levels 1–5 draw 25 % translucent and 6–10 draw 50 % translucent. Levels
       11 to 15 follow the fully cloaked rule.
-    - Backing: `measurable` (CS1, part b; CS12)
-    - Confidence: high
+
+    A protected object drawn translucent or rippling keeps its protection brightness and takes
+    no protection colour mask (S-0513 claim 29b).
+    - Backing: `measurable` (CS1, part b; CS12); protection appearance inherits S-0513
+      claim 29b's backing and measurement scenario
+    - Confidence: high for cloak appearance; protection appearance inherits S-0513
+      claim 29b's confidence
 
 29. **Shadows.** A vehicle's shadow is not drawn, for any viewer, while its cloak state is anything
     but uncloaked.
@@ -1103,15 +1108,26 @@ F6, owner's disguise cycle (integers):
   Fixed behaviour: only hits that lower health uncloak.
 - **`quirks.mirage_adjacent_check_cadence`** (default on). The neighbouring-infantry check runs on
   7 ticks of 8. Fixed behaviour: it runs only on ticks that are multiples of 8.
-- **Empty default-disguise list.** If the game-wide default-disguise list is empty, the draw of
-  claim 33 (c) reads past the list in the original. Our engine treats an empty list as "no
-  disguise is taken" and draws nothing, with an importer warning; this is a data error, not a switch.
-- **Disguised infantry with no disguise type.** In the original, when a side has no default
-  disguise, the infantry's image falls back on the *local player's* side default. Our engine uses
-  the owner's side default, so what is drawn never depends on the viewer's side. This is a
-  display-only bug, so it gets no switch.
+- **Empty default-disguise list.** Our engine treats an empty game-wide default-disguise list
+  as "no disguise is taken" and draws nothing, with an importer warning; this is a data error,
+  not a switch. The original instead attempts a selection outside the empty list.
+  - Backing: `measurable` for the engine's safe result (CS22 part a); the original's invalid
+    selection is `unmeasured` because no safe, reproducible observable outcome is established.
+  - Confidence: high
+- **Disguised infantry with no disguise type.** When resolving a missing infantry disguise
+  type, our engine uses the owner's side default, never the viewer's side default. The original
+  instead falls back on the local player's side default, a display-only bug with no switch.
+  This does not invent a default when the owner's side default is itself absent.
+  - Backing: `measurable` (add a measurement scenario using named fixture data that supplies
+    a missing disguise type and distinct usable owner/local-player defaults; record the
+    resulting type and repeat with the defaults swapped).
+  - Confidence: medium
 - **Very large stage counts.** With *N* ≥ 256, the first uncloaking stage has *x* ≥ 255. Such an
   object is not drawn for non-owners at that stage, but it is not hidden in game logic.
+  - Backing: `measurable` for the image (CS1 part b) and the game-state distinction (add a
+    measurement scenario using named fixture data with *N* ≥ 256; during the first uncloaking
+    stage, record the non-owner image and an otherwise-valid ordinary targeting/order result).
+  - Confidence: high for the image; medium for the game-state distinction
 - **`quirks.mobile_sensor_removal_centre`** (default on). Leaving play removes a mobile
   sensor's disc around its current position cell, producing the coverage drift of claim 22
   when it has not yet completed movement into that cell. Off: remove the disc actually last
@@ -1172,9 +1188,11 @@ F6, owner's disguise cycle (integers):
 All scenarios use the measurement setup, game-speed index 2, 800 × 600 pixels, no engine add-on and no mods (the named test files of a scenario excepted), and a small purpose-made skirmish map. One bystander computer player
 is kept outside the observed area under the glossary's void rule. Named fixture **CS-fixture**
 means that map's temporary override sections: only the abilities, weapons, radii, timing fields
-or health conditions explicitly required by a sub-test are changed, with other data stock.
-Cloak generators, self-cloaking infantry and EMP attacks require this fixture because stock
-skirmish data does not provide those test combinations. Remove all overrides afterwards.
+or health conditions explicitly required by a sub-test are changed; unrelated data is left
+unchanged. All named test subjects below are CS-fixture roles, not assertions about any shipped
+type's settings. Explicitly configure each role's required cloak sources, sensor range,
+disguise flags and weapon properties. Where a source must be absent, clear it in the fixture
+and provide no field or crate granting it. Remove all overrides afterwards.
 
 Use tick-stamped screen and sound capture, scripted input and a read-only recorder. Repeat each
 deterministic sub-test three times. Record target lines, selection, radar pixels, images, sound
@@ -1189,8 +1207,9 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
 - **CS1, timings.** Setup: an infantry type that cloaks by itself, at full health, on open ground.
   - **(a)** Record the tick at which it starts cloaking and the tick at which it becomes fully
     cloaked. Expected: *c* · *S* ticks with the imported *S* and *N*. Falsified by another value.
-  - **(b)** Record each positive stage and its image as owner and as an unsensing enemy.
-    Repeat with a self-cloaking vehicle to observe its shadow. Expected: below fraction 64,
+  - **(b)** Record stage 0 and each positive stage and its image as owner and as an unsensing
+    enemy. Repeat with a self-cloaking vehicle to observe its shadow. Expected: stage 0 draws
+    normally; at positive stages below fraction 64,
     25 % translucency; 64–191, 50 %; 192–254, an enemy sees rippling and the owner sees
     50 %; at least 255, no enemy image and 50 % for the owner. Use a large stage count
     to reach the last band while uncloaking. Fully cloaked, only the owner sees the
@@ -1208,24 +1227,30 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     CS-fixture. Expected: one game-wide sound at each start, located at the unit, never
     the type-specific sound. A missing, duplicate or wrong sound falsifies claim 15.
     CS17 separately checks silent aborts and repeated causes.
-  - **(e)** Repeat (c) with a stock submarine. Expected: it is submerged throughout all three
+  - **(e)** Repeat (c) with a fixture underwater vehicle given its own cloak flag and a
+    visibility-requiring weapon. Expected: it is submerged throughout all three
     non-uncloaked states and cannot fire its visibility-requiring weapon until surfacing
     completes after F2 ticks. Earlier firing or a different state boundary falsifies claim 41.
 - **CS2, sources.**
-  - **(a)** Record a stock submarine's placement at a yard within the usable area, before
-    its first ordinary update. Expected: initially uncloaked, then normal submerging on an
-    eligible update, not an immediate full cloak. Compare outside-usable-area placement
+  - **(a)** Record the fixture self-cloaking underwater vehicle's placement at a compatible
+    yard within the usable area, before its first ordinary update. Expected: initially
+    uncloaked, then normal submerging on an eligible update, not an immediate full cloak. Compare outside-usable-area placement
     with the same own cloak flag: that placement is forced fully cloaked.
-  - **(b)** A test file gives an aircraft type and a building type the cloak flag. Expected:
-    neither cloaks.
+  - **(b)** Give a landed aircraft and a building the type cloak flag only, with no crate,
+    ability or field source. Keep them otherwise ready at full health. Expected: neither
+    starts cloaking. Either starting falsifies the type-flag restriction.
   - **(c)** A cloak-stop vehicle: ordered to move while uncloaked, it never starts cloaking. Once
     fully cloaked and then moved, it stays cloaked.
   - **(d)** Place a landed aircraft inside its owner's field, then repeat airborne.
     Expected: a ready landed aircraft starts cloaking; an airborne one does not. After
     cloaking while landed, take off without another uncloak cause: it stays fully cloaked.
     A failed eligible landed start, airborne start or takeoff-only uncloak falsifies it.
-- **CS3, ready conditions.** A self-cloaker with an enemy inside its weapon range does not start
-  cloaking. When the enemy leaves, it starts at once.
+- **CS3, ready conditions.** Give a full-health self-cloaker a retained enemy target inside
+  its attack range, with all other start blockers absent. Keep rearm expired and prevent
+  firing with a separate weapon restriction. Record target, range and cloak state. Expected:
+  no start until the target leaves attack range, then a start on the first eligible update.
+  A start with that in-range target or an unexplained wait after it leaves falsifies the rule.
+  Mere enemy presence without a retained target is not the tested blocker.
 - **CS4, the red-health draw.** Use CS-fixture self-cloakers below, exactly at and above
   the red ratio, with no other start blocker. Across fresh skirmishes collect at least
   1000 eligible start updates and 1000 eligible abort-band updates; record the random
@@ -1241,8 +1266,10 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     no abort draw outside that band. An inconsistent transition or draw falsifies it.
     No sound accompanies an abort. CS18 A isolates the completing-step boundary.
 - **CS5, the cloak field.**
-  - **(a)** A friendly tank parks inside a powered generator's field. Expected: it cloaks with no
-    delay, even at low health.
+  - **(a)** An own vehicle with no independent cloak source parks inside an operational
+    generator's field, with no readiness blocker. Expected: it starts cloaking on the field
+    re-evaluation even at low health, without a health draw; the normal fade duration still
+    applies. A health-dependent wait or draw falsifies this field-start rule.
   - **(b)** It drives out. Expected: it uncloaks on leaving.
 - **CS6, EMP.** Disable an own-flag self-cloaker with a fixture EMP attack, then let it
   finish any hit-triggered uncloak and cloak again inside its owner's field while still
@@ -1306,7 +1333,7 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     15 ticks after the field reaches it.
   - Place an allied sensor unit next to the building. Expected: the building uncloaks.
 - **CS11, field shape and rate.**
-  - Record which cells' units cloak for a test file radius of 4, and for the stock radius.
+  - Record which cells' units cloak for invented fixture radii of 4 and 11 cells.
     Expected: F5's candidate circle, with claim 20's own-centre interruptions and omissions.
   - Cut power. Expected: rings leave one per tick.
   - Overlap two generators and sell one. Expected: units in the overlap uncloak briefly.
@@ -1331,13 +1358,17 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     owner's counts are decremented. Transfer at capture or old-owner subtraction on
     removal falsifies claim 23.
 - **CS13, disguise acquisition.**
-  - **(a)** Give a spy an unobstructed legal infantry target across the map, using its
-    unlimited-range disguise weapon. Record movement, detonation, both objects' health,
-    and copied disguise type/house. Expected: no approach movement, unchanged target
+  - **(a)** Give a fixture infantry disguiser an unobstructed legal infantry target across
+    the map. Configure its weapon with unlimited range and a disguise-making warhead. Record
+    movement, detonation, both objects' health, and copied disguise type/house. Expected: no approach movement, unchanged target
     health, firer copies the target's type and owner; a disguised target instead supplies
     its disguise type/house. Movement required solely for disguise range, damage, or the
     wrong copied identity falsifies claim 31. CS17 tests the vehicle target-kind matrix.
-  - **(b)** A new spy shows its side default to an enemy, who still auto-targets it.
+  - **(b)** Create fixture infantry with both disguise capability and permanent disguise,
+    with a valid side-default infantry type explicitly supplied. Record its disguise type,
+    disguise house and an unsensing enemy's acquisition. Expected: the default type and
+    owner's house are held, while the enemy can still acquire it. A different identity or
+    refusal solely from this default disguise falsifies claim 32.
   - **(c)** Disguise permanent infantry as another house, then deliver an accepted surviving
     hit. Expected: its disguise resets to its owner's side default, rather than preserving
     the copied identity or becoming undisguised. Clear the permanent flag in a separate
@@ -1352,8 +1383,8 @@ inconclusive, not confirming evidence. CS17 supplements CS1–CS16 for clauses n
     the infantry has left.
   - **(c)** A hit delays re-disguise by the lockout length of S-0302 claim 12.
 - **CS15, appears disguised.**
-  - **(a)** A spy disguised as an infantry unit of house *E* is not auto-targeted by *E*'s
-    vehicles. *E*'s allies are not fooled when the spy's owner is their ally.
+  - **(a)** Fixture infantry disguised as an infantry unit of house *E* is not auto-targeted by *E*'s
+    vehicles. *E*'s allies are not fooled when the disguiser's owner is their ally.
   - **(b)** A powered detector building of the enemy makes its units acquire it within the range.
   - **(c)** With the auto-crush rule enabled in CS-fixture, put a crushable enemy infantry
     disguiser within crush range of an idle crusher, disguised as the crusher's house and
@@ -1418,7 +1449,7 @@ image, sound, targeting result or draw count falsifies the stated expectation.
 | 33, 34 | Move temporary infantry/vehicle disguisers; introduce neighbours on all 8 tick phases, ground/bridge layers, contact and lockout. Compare damage on permanent/temporary types. Try transport entry and capture. For undeployment, use S-0517's P8 (b) fixture and record disguise at the first undeploy processing and at completion, with and without a deploying presentation. | Only temporary vehicles lose disguise while moving. Adjacent checks skip ticks divisible by 8. An eligible still vehicle draws once. Damage follows S-0302 claim 12. The listed non-removal events preserve disguise. Undeployment clears disguise at the first step, before animated completion, or at the immediate step without a presentation; a disguise lost before the step makes that trial inconclusive. |
 | 35, 36 | Vary disguise house among observer, ally and enemy. Vary ownership and detector coverage. Observe acquisition, retaliation, automatic crush choice versus ordered drive-through, cell entry, cursor, hover bar/name, insignia and scenery selection/flash. | Outcomes using claim 35 change with its predicate as claim 36 and the owning specs state. Disguise blocks automatic crush choice, not an otherwise valid drive-through. Detection changes the observer's treatment, not the copied disguise. |
 | 37–39 | Capture the owner's full 256-tick cycle and each Table B band. Compare ally/enemy images and radar colours. Fire vehicles using two fake-blink times, also while undisguised; compare infantry. | Owner bands/cycle hold. Non-owners see real during vehicle fake blink, then the same disguise again. Infantry firing starts no fake blink. Radar uses owner colour when the owner allies the viewer, otherwise a non-empty disguise house's colour; repeat opposite one-way alliances as CS16 (c). |
-| 41 | Compare stock submarines with an underwater fixture vehicle stripped of all cloak sources. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
+| 41 | Compare two fixture underwater vehicles, one given its own cloak flag and one stripped of all cloak sources. Give both a visibility-requiring weapon. Fire after surfacing; add sensors and then cause adjacency reveal. | The control stays surfaced. Ordinary transitions give submerged states and F2 surfacing delay. Sensing alone does not surface it; adjacency can. |
 
 Zero-speed check (claim 7's quirk): record cloaking and subsequent firing over 256 ticks with
 speed 0 and *N* ≥ 2 in CS-fixture. Expected: cloaking advances one stage per tick but uncloaking does not
@@ -1452,9 +1483,9 @@ unavailable state construction are identified below rather than counted as measu
   take effect immediately, not wait for hold. Any ordinary fade step in an excluded
   boundary, burst catch-up, or delayed applicable event falsifies this engine contract.
   These checks do not establish the original's unresolved per-kind continuation.
-- **B — Mobile disc and removal (claim 22; Q-0721).** Drive a stock sensor vessel past a
-  stationary cloaked witness at the disc edge, outside adjacency range. Record boundary
-  crossing, completed-cell arrival and first visibility. Expected: coverage changes on
+- **B — Mobile disc and removal (claim 22; Q-0721).** Give a fixture ship a positive sensor
+  range and drive it past a stationary cloaked witness at the disc edge, outside adjacency
+  range. Record boundary crossing, completed-cell arrival and first visibility. Expected: coverage changes on
   arrival, not crossing. Repeat with temporary ground-sensor data. Arrange destruction
   between crossing and arrival by a tick-timed incoming shot. Probe old-only, shared and
   new-only crescent cells afterwards, including an unrelated sensor contributing to the
@@ -1521,9 +1552,10 @@ unavailable state construction are identified below rather than counted as measu
   rather than relying on unsupported disguise art. Compare owner, ally and enemy targeters,
   with and without detector coverage. Expected: the disguised flag makes the game-state
   predicate true for every house, while independent targeting restrictions still apply.
-  For radar, observe a stock terrain-disguising vehicle from a hostile house on explored
-  ground. Compare its pixel with the neutral fallback colour, and change the imported
-  fallback colour definition in a separate fixture run. Expected: its no-house radar mark
+  For radar, give a fixture vehicle disguise capability, the disguise-when-still flag and
+  a nonempty terrain-disguise list. Let it acquire a no-house disguise while still, then
+  observe it from a hostile house on explored ground. Compare its pixel with the neutral
+  fallback colour, and change the imported fallback colour definition in a separate fixture run. Expected: its no-house radar mark
   follows that colour, not the owner, and remains present. Either another colour or absence
   solely because the disguise house is none falsifies claim 38. For no-house infantry,
   no ordinary creation route is established: if a sanctioned fixture can supply that state,
@@ -1690,6 +1722,49 @@ Use a powered positive-radius generator and separately a zero-type-radius one.
   has covered nothing. Repeat ordinary shrinking already at radius 0 as a no-restart
   control. No inside restart on immediate collapse, a boundary restart, or a restart from
   the ordinary zero-radius stop update falsifies the corresponding rule.
+
+### CS22: Edge-case controls
+
+Use CS-fixture and the common map, recording setup and three repeats.
+
+- **(a) Empty disguise list, engine only.** Supply an empty terrain-disguise list and an
+  otherwise eligible still vehicle that can disguise when still. Observe importer warnings,
+  disguise state and random-stream draws for 256 ticks with no adjacent enemies or contact.
+  Expected: a warning, no acquired disguise and no disguise-selection draw. A disguise,
+  selection draw or missing warning falsifies the safe import rule. This does not test or
+  require the original's invalid selection outcome.
+- **(b) Missing infantry disguise type.** In CS-fixture, create permanent-disguise infantry
+  for a house whose side default is absent. Supply two distinct usable infantry defaults
+  for the other two sides, naming them **fallback A** and **fallback B**, with recognisably
+  different images. Transfer the subject by mind control to a house of one of those sides,
+  without clearing or reacquiring its disguise, and observe from a local player of the other
+  side. Record the disguised flag, absent held disguise type, current owner and both side
+  defaults, together with the resulting drawn type. Keep detector coverage, fake blink and
+  other image effects absent. Repeat with fallback A and fallback B swapped between those
+  sides, three runs for each arrangement under the common setup. Expected in the original:
+  the missing held type resolves to the local player's default in each arrangement. On our
+  engine it resolves to the current owner's default instead. A different resolved image
+  with the required missing type and distinct defaults falsifies the corresponding fallback
+  rule. A transfer that fills or clears the disguise type makes the run inconclusive, not
+  confirmation. This test neither writes game state nor assumes a missing owner default
+  invents a usable type.
+- **(c) Undrawn initial uncloak stage.** In CS-fixture set the invented stage count to
+  *N* = 512 stages and speed to *S* = 16 ticks per stage. Place a full-health self-cloaking
+  infantry subject and a hostile ordinary attacker on explored open ground, within legal
+  weapon range but outside sensor adjacency. Give the attacker's house removable sensor
+  coverage and retain its ordinary attack order through the subject's cloak start and
+  completion. Hold the attacker rearming until the observation interval, then force the
+  subject to uncloak with a surviving accepted hit. Remove coverage after uncloaking
+  starts and let the otherwise-ready attacker make its due firing attempt before the
+  first fading-stage step. Record cloak state, stage, coverage, retained target, the
+  non-owner image and shot creation with its target and resulting health change. Repeat
+  three times, with matched fully uncloaked and fully cloaked unsensed controls. Expected:
+  the initial uncloaking stage is 511, with fade fraction 255; the unsensing non-owner sees
+  no image, yet its retained ordinary attack can fire. The uncloaked control also permits
+  firing; the fully cloaked unsensed control refuses it. An image at that initial stage,
+  or a cloak-only firing refusal while the subject is uncloaking and all other conditions
+  are met, falsifies the corresponding rule. Lost targeting, an expired observation stage
+  or any independent firing restriction makes the run inconclusive.
 
 ## Open questions
 
