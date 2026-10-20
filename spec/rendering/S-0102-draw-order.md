@@ -2,7 +2,7 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 22
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -602,7 +602,7 @@ screen rows.
     - Backing: `measurable` (scenario D22 (a) to (c)); first-frame full ordering follows
       claim 6's departure, tested by D3.
     - Confidence: high for the layer rule, replacement of both values and defined first-frame order
-18. **Shadows of voxel models.** The voxel shadow of a vehicle or aircraft is drawn as part of that object's
+18. **Shadows of voxel models and vehicle target lines.** The voxel shadow of a vehicle or aircraft is drawn as part of that object's
     own drawing in the object pass, so it is drawn in the object's own layer at the object's place
     in that layer's list. It is not drawn in a pass of its own, and an aircraft's shadow is not
     drawn in the ground layer. It is drawn only when the object's movement type gives it a shadow,
@@ -618,6 +618,12 @@ screen rows.
       building's body), it is hidden or shown as a whole, like an upright drawing, not cut along a
       fixed row.
 
+    A vehicle's target line (S-0301 claim 24) appears at that vehicle's place in its layer's
+    drawing order. It covers its own vehicle and objects drawn earlier in that order; objects
+    drawn later and the status extras (claim 1) cover it. This covering relation does not depend
+    on scene depth. Unlike the beam effects of claim 2, the line is not a post-layer effect. It
+    neither tests nor writes depth.
+
     Where an aircraft's shadow and its own body overlap and both pass the depth test, the body is
     shown undarkened: the shadow never paints over its own aircraft. For vehicles, every shadow
     appearance, fresh or reused, excludes non-transparent pixels of the current completed body,
@@ -630,8 +636,10 @@ screen rows.
     S-0105 claim 39 fixes that drawing-only defect without a switch.
     - Backing: `measurable` (scenario D23, including D23 (d) for Q-0213 and D23 (e) for
       aircraft own-body overlap). The bias value itself is tested only relative to the
-      body's (both use *U*).
-    - Confidence: high for the drawing inside the object's own drawing (and so its layer and list
+      body's (both use *U*). Target-line covering order and depth-test independence are
+      `measurable` (D46; S-0301 scenario F20 part i). The line's absence of a depth write is
+      `unmeasured`: that scenario does not isolate a later depth reader that distinguishes a write.
+    - Confidence: medium for target-line ordering and depth behaviour; high for the drawing inside the object's own drawing (and so its layer and list
       place), the reader-only test, the bias *U*, the upright profile and current vehicle
       own-image exclusions; corrected reuse is a departure tested against this spec, not the
       original. Medium for visible vehicle overlap and for an
@@ -2604,6 +2612,15 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   flat acceptance differing from that strict test falsifies the claim. A run with no overlapping
   non-transparent model pixels is inconclusive. The fixture supplies any
   altered speed needed to capture the crossing.
+
+**D46 — Vehicle target-line compositing (claim 18).** Use S-0301 scenario F20's named
+map and test vehicle at speed index 2, with the common measurement setup and bystander void
+rule. Repeat part i three times, capturing tick-labelled drawn frames while another vehicle
+crosses the line, once earlier and once later in ground-layer order; arrange visible status
+extras across it too. Expect line pixels over its own vehicle and the earlier vehicle, but
+under the later vehicle and the status extras, independently of scene depth. Contrary covering
+order or depth-dependent disappearance falsifies the corresponding rule. This reuses F20's
+visible-order test; it does not measure absence of a depth write.
 
 ## Open questions
 
