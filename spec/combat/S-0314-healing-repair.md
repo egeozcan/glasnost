@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 30
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162]
 supersedes: []
@@ -222,8 +222,11 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      Distance is the floating-point spatial distance, including height, truncated toward zero
      to integer leptons, not distance to the building centre (S-0504 claim 8).
      A successful check schedules settling 3 ticks later; coming to rest alone takes no step.
-   - *Settling.* At that later processing, provided the vehicle still stands still and its
-     locomotor has finished settling, the depot asks for one repair step (claim 3). On *not needed* the vehicle is sent away at once, as below, and no repair-complete announcement is
+   - *Settling.* While the depot's *production* slot animation runs, settling takes no
+     repair step and rechecks after 1 tick. This matters only for a type combining the repair
+     flag with a role that starts that slot (S-0108 claim 20). Otherwise, at that later
+     processing, provided the vehicle still stands still and its locomotor has finished
+     settling, the depot asks for one repair step (claim 3). On *not needed* the vehicle is sent away at once, as below, and no repair-complete announcement is
      made (unlike *not needed* in the working phase). On
      *cannot pay* nothing happens and the depot asks again at its next processing, *D* ticks later,
      for as long as the vehicle stays. On *more needed* or *done* the depot starts working.
@@ -281,6 +284,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    original's rules for owners that are not human-controlled (glossary, *AI house*, *Player houses
    only*). It holds for no player house: the vehicles of an *AI house*, like a person's, follow the
    destination rule above, and our AI sends them on by ordinary orders.
+   *Uncharacterised original branch.* On the transition from a paid settling step to working,
+   the original has an additional vehicle-state condition under which a vehicle whose owner
+   is not human-controlled sends the depot back to waiting without starting work. The condition
+   is not characterised here, so this is an open question, not an unconditional refusal of
+   repair. Under our house rules it concerns only the neutral and special houses, not AI
+   player houses, just as the guard-spot return above does.
    - **A type that is also a vehicle bunker.** For a type with both the unit-repair and bunker flags,
      each repair processing carries out at most one row of the bunker's table and also runs this
      claim's depot step in the same processing; S-0606 claim 20 owns the combined rules and the
@@ -290,7 +299,10 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    - Backing: `measurable` (scenario H4, parts a to f, H16 b for an allied depot's owner and
      announcement distinction, H18 b for a moving vehicle, H21 for departure and blocked-exit
      retries, and S-0504 N8 for the waiting gate, spatial distance and 3-tick delay; S-0701 claim 28, G7 for the suppression row and trigger/depot pair), except the
-     following cases.
+     following cases. The *production*-slot settling hold is `measurable` (H23), with the
+     combined-role restriction of S-0108 claim 20. The uncharacterised original non-human-owner
+     branch is `unmeasured`: its additional vehicle-state condition is not established, so no
+     reproducible setup and expected outcome are available.
      `unmeasured` for the return to the guard spot of a non-player house: no input of
      the measurement setup makes a vehicle of the original's neutral or special house, or of its
      computer player, dock at a depot in a way that can be timed and recorded, and a player house
@@ -303,7 +315,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
      (the settling step, the phase *D* + *K*<sub>u</sub> − 1, the return to settling after *cannot
      pay*, the owner conditions of the two announcements, that the settling *not needed* makes no
      announcement, and that *not needed* is tested before *cannot pay*), and low (the return to
-     the guard spot; the moving step's exact phase)
+     the guard spot; the moving step's exact phase; the uncharacterised non-human-owner branch).
+     Confidence: high for the *production*-slot settling hold.
 
 7. **Hospital.** An infantry unit inside a hospital gets repair steps at a cost of 0, on the
    timing of the depot's working phase with the infantry repair count *K*<sub>i</sub> (Formulas
@@ -885,13 +898,22 @@ only the vehicle in that place.
       it on again, and the vehicle stays immobile under every later order
       (`quirks.depot_loss_strands_hover`). No such effect was found for other land locomotors.
     - *A vehicle destroyed while in contact* frees its place. A depot left without any contact
-      plays its idle animations and returns to *guard*.
+      reacts at its next repair processing. In waiting it returns to *guard* at that processing
+      without an animation wait. In working it enters settling and rechecks after 1 tick.
+      In settling it stays in its repair behaviour, checking every tick, until its *special-3*
+      slot animation is no longer running, and only then returns to *guard*. The slot's duration
+      from the art data is deterministic simulation state: neither visibility nor drawing-frame
+      cadence changes this wait. S-0108 claim 20 owns the slot changes: *special-3* and
+      *active-1* start on loss of contact in waiting or working, and in settling when
+      *production* or *special-2* is running; *idle* follows when *special-3* finishes.
     - *Power.* Neither the owner's low power nor the depot being switched off stops or slows the
       servicing of a vehicle already in contact: steps, costs and timings are claim 6's. Being
       switched off refuses only new acceptance, including a queued vehicle's (claims 16 and 23).
       Low power refuses nothing here.
-    - Backing: `measurable` (H18 c, d and e).
-    - Confidence: high (sale notice and release, no power test), medium (behaviour after
+    - Backing: `measurable` (H18 c, d and e; S-0108 claim 20, B18 g for the no-contact
+      settling hold and deterministic animation timing).
+    - Confidence: high (sale notice and release, no power test), medium (the no-contact
+      settling hold, behaviour after
       destruction, hover stranding), low (the scatter request, no stranding for other land
       locomotors)
 
@@ -1142,7 +1164,11 @@ Backing and confidence are claim 15's.
 | entering with contact, tether present or absent | arrival in the supplied docking-point cell | depot sets its ready mark and queues repair; vehicle queues sleep, neither with immediate start and without creating tether or requesting a body turn (claim 17; S-0215 claim 11 owns subsequent starts) |
 | waiting for a contacted vehicle, tethered or not | processing finds it still within its starting distance | settling scheduled 3 ticks later (claim 6) |
 | waiting for a contacted vehicle, tethered or not | moving or outside its starting distance | waiting, next processing after *D* ticks |
-| settling scheduled | later processing finds the vehicle still and its locomotor settled | settling step (claim 3) |
+| settling, with contact | *production* slot animation running | no step; recheck after 1 tick (claim 6) |
+| settling scheduled | later processing finds no *production* slot animation, the vehicle still and its locomotor settled | settling step (claim 3) |
+| waiting, no contact | repair processing | return to *guard* without animation wait (claim 22) |
+| working, no contact | repair processing | settling; recheck after 1 tick (claim 22) |
+| settling, no contact | repair processing | remain in repair and recheck after 1 tick while *special-3* runs; otherwise return to *guard* (claim 22) |
 | settling | *not needed* | sent away |
 | settling | *cannot pay* | asks again after *D* ticks |
 | settling | *more needed* or *done* | working; the next step falls due *D* + *K*<sub>u</sub> − 1 ticks later |
@@ -1937,9 +1963,16 @@ damaged to half strength unless a part says otherwise.
 - *d, destruction:* destroy the depot (scripted damage outside the vehicle) in the same two
   cases. Expected: contacts released; the approaching vehicle falls back to *guard*; the docked
   vehicle stays in *sleep* and does not fire at an enemy test unit placed in range. Then
-  destroy a docked vehicle instead: the depot returns to *guard* and accepts another vehicle.
+  destroy the contacted vehicle instead, separately during waiting, settling and working.
+  Log depot behaviour and slot-animation starts and ends every tick. Expected: waiting returns
+  to *guard* at its next processing without waiting for *special-3*; working enters settling
+  with a 1-tick retry; no-contact settling checks every tick and returns to *guard* only once
+  *special-3* is no longer running. Repeat the settling hold with the depot off-screen and at
+  different drawing-frame cadences: the simulation ticks of the animation end and guard return
+  do not change (S-0108 claim 20, B18 g). Then order another vehicle to enter.
   *Falsified if:* a contact survives, the approaching vehicle keeps its depot order, the docked
-  vehicle fires, or the depot refuses the next vehicle.
+  vehicle fires, no-contact settling returns to *guard* while *special-3* still runs, the wait
+  changes with drawing cadence, or the depot refuses the next otherwise eligible vehicle.
 - *e, locomotors:* repeat c and d with a hovering vehicle after its settling step, then give
   move orders. Expected: it never moves. Repeat with a tracked vehicle and record whether
   it moves (claim 22's low-confidence part).
@@ -2155,7 +2188,29 @@ A departure-destination and contact-event trace is a proposed harness addition, 
   after the same-turn parasite step falsifies the respective added claim.
 The measurement scenario requires a read-only record of the ordered events; end-of-tick positions in a video frame alone are insufficient to establish local ordering.
 
+### H23 — Production-slot hold during settling (claim 6)
+
+- **Setup:** a tiny test map, one human house and a remote bystander computer player, fixed
+  seed, speed index 2, director and mods off. Use an explicitly non-stock combined-role test
+  type: a repair depot that also has a role starting its *production* slot, as S-0108 claim 20
+  describes, with a finite slot duration and an otherwise eligible damaged contacted vehicle.
+  Record depot phase, slot lifetime, health and credits each tick with the bench recorder.
+  No recorder writes to simulation state are permitted. Void a run if the bystander interferes.
+- **Procedure:** make the production role start the slot before the due settling processing.
+  Keep the vehicle still, its locomotor settled and its owner able to pay. Repeat three times.
+- **Observable:** ticks of settling checks, slot completion and the first paid repair step.
+- **Expected:** no health gain or repair payment while the slot runs; settling rechecks each
+  tick. Once the slot is absent, the next check can take the normal settling step.
+- **Falsified if:** a repair step occurs while the slot runs, or the hold uses the ordinary
+  processing delay instead of 1 tick. If the combined roles cannot establish concurrent
+  production and settling through normal inputs, report the fixture as unreached, not confirmed.
+
 ## Open questions
+
+- Which additional vehicle-state condition makes the original's non-human-owner branch return
+  a depot from a paid settling step to waiting without starting work (claim 6), and what
+  subsequent vehicle orders result? Only neutral and special houses retain this branch in our
+  engine; it is not an AI-player repair exception. No reproducible fixture is established.
 
 - Whether drive and other non-hovering land locomotors ignore being switched off entirely
   (claim 22, low confidence). H18 e records it.
