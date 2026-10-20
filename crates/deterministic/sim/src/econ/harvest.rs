@@ -69,6 +69,9 @@ pub struct GroupType {
 /// An infantry type's slave fields (S-0402 claim 14; Import mapping).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct InfantryHarvest {
+    /// The slave group its objects create (claim 19; S-0611 claim 14), if
+    /// its type names a slave type.
+    pub group: Option<GroupType>,
     /// The interval between bales *h*, ticks (`HarvestRate`).
     pub harvest_rate: i32,
     /// The capacity (`Storage`), bales.
@@ -128,6 +131,9 @@ pub struct Rules {
     pub virtual_purifiers: Vec<i32>,
     /// Vehicle types by index.
     pub vehicles: Vec<UnitHarvest>,
+    /// The slave group of each aircraft type's objects, by index (claim
+    /// 19; S-0611 claim 14 and S-0506 scenario R1).
+    pub aircraft_groups: Vec<Option<GroupType>>,
     /// Building types by index.
     pub buildings: Vec<BuildingHarvest>,
     /// Income factor *M* per country, a single widened to double.
@@ -152,6 +158,36 @@ fn scan_cells(
 }
 
 impl Rules {
+    /// The slave group that objects of a type create (claim 19), if the
+    /// type names a slave type.
+    pub fn group_of(&self, kind: Kind, index: u32) -> Option<GroupType> {
+        let i = index as usize;
+        match kind {
+            Kind::Infantry => self.infantry.get(i)?.group,
+            Kind::Vehicle => self.vehicles.get(i)?.group,
+            Kind::Aircraft => *self.aircraft_groups.get(i)?,
+            Kind::Building => self.buildings.get(i)?.group,
+            _ => None,
+        }
+    }
+
+    /// Every type that names a slave type, by kind and index.
+    pub fn masters(&self) -> Vec<(Kind, u32)> {
+        let mut v = Vec::new();
+        let mut add = |k: Kind, gs: &mut dyn Iterator<Item = Option<GroupType>>| {
+            for (i, g) in gs.enumerate() {
+                if g.is_some() {
+                    v.push((k, i as u32));
+                }
+            }
+        };
+        add(Kind::Infantry, &mut self.infantry.iter().map(|x| x.group));
+        add(Kind::Vehicle, &mut self.vehicles.iter().map(|x| x.group));
+        add(Kind::Aircraft, &mut self.aircraft_groups.iter().copied());
+        add(Kind::Building, &mut self.buildings.iter().map(|x| x.group));
+        v
+    }
+
     /// The harvest rules of a resolved ruleset.
     pub fn new(r: &Ruleset, mode: Rounding) -> Self {
         let g = &r.sim.general.economy;
@@ -186,6 +222,8 @@ impl Rules {
             .map(|n| {
                 let u = r.sim.infantry.get(n).cloned().unwrap_or_default();
                 InfantryHarvest {
+                    // spec: S-0402 claim 19 and S-0611 claim 14 (any created object whose type names a slave type creates its group, a made infantry type included)
+                    group: group(&u.econ),
                     // spec: S-0402 Import mapping (HarvestRate absent: 1; Storage absent: 0)
                     harvest_rate: u.econ.harvest_rate.unwrap_or(1),
                     capacity: u.storage.unwrap_or(0),
@@ -214,6 +252,13 @@ impl Rules {
                         && e.resource_destination.unwrap_or(false)
                         && e.enslaves.is_some(),
                 }
+            })
+            .collect();
+        let aircraft_groups = reg("aircraft")
+            .iter()
+            .map(|n| {
+                // spec: S-0402 claim 19 and S-0611 F5 (an aircraft type, a slot object's type included, that names a slave type creates its group)
+                r.sim.aircraft.get(n).and_then(|u| group(&u.econ))
             })
             .collect();
         let buildings = buildings_reg
@@ -286,6 +331,7 @@ impl Rules {
             // spec: S-0402 Import mapping (AIVirtualPurifiers absent: empty)
             virtual_purifiers: g.ai_virtual_purifiers.clone().unwrap_or_default(),
             vehicles,
+            aircraft_groups,
             buildings,
             income,
         }

@@ -1019,6 +1019,125 @@ fn claim_11_placement_refused() {
     assert!(unit.is_some());
 }
 
+/// Runs a refused-then-made conversion of a victim at position `p` with a
+/// vehicle blocking the cell (MU12's setup), checking every refused
+/// attempt's draws and numbers against `set` members, and returns the made
+/// unit with the draws of its creation tick.
+fn refused_then_made(r: &Ruleset, p: u8, set: u32) -> (World, ObjectId, Vec<ObjectId>, u64) {
+    let mut w = game(r);
+    let c = at(0, 0);
+    let v = put(&mut w, "WALKER", BETA, c, p);
+    mutate(&mut w, v, None, Some(ALPHA));
+    let m = makers(&w)[0];
+    let car = sw_common::spawn(&mut w, "CART", BETA, 0, 0);
+    let objects_before = w.objects.len();
+    let launchers_before = w.spawned.launcher.len();
+    let controllers_before = w.mind.controllers.len();
+    let next_before = w.next_id;
+    let mut refused = 0;
+    for _ in 0..12 {
+        let draws = w.rng.taken();
+        step(&mut w);
+        let n = maker_events(&w)
+            .iter()
+            .filter(|e| e.0 == m && e.1 == MakerEvent::Refused)
+            .count();
+        if n > 0 {
+            // spec: S-0611 claim 14 and F5 (a refused attempt under a vehicle takes one raw creation draw per member of its creation set and no position-choice draw)
+            assert_eq!(w.rng.taken() - draws, n as u64 * u64::from(set));
+        }
+        refused += n;
+    }
+    assert!(refused >= 2, "it keeps retrying: {refused}");
+    // spec: S-0611 claim 14 (a refused set never enters play; our engine keeps none of it, nor the records its creation made)
+    assert_eq!(w.objects.len(), objects_before);
+    assert_eq!(w.spawned.launcher.len(), launchers_before);
+    assert_eq!(w.mind.controllers.len(), controllers_before);
+    // spec: S-0611 claim 14 (one creation number per member of the set at each attempt, never given back)
+    assert_eq!(w.next_id, next_before + refused as u32 * set);
+    sw_common::remove(&mut w, car);
+    let (unit, mut rng, draws, first) = loop {
+        let (rng, draws, first) = (w.rng.clone(), w.rng.taken(), w.next_id);
+        step(&mut w);
+        if let Some((_, MakerEvent::Ended { unit, .. }, _, _)) = maker_events(&w)
+            .into_iter()
+            .find(|e| e.0 == m && matches!(e.1, MakerEvent::Ended { .. }))
+        {
+            break (unit.unwrap(), rng, draws, first);
+        }
+    };
+    let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
+    assert_eq!(unit.0, first);
+    assert_eq!(made.len() as u32, set, "the whole set, kept on success");
+    for &x in &made {
+        // spec: S-0611 F5 (each member's raw value, then its number, in sequence order: the set's draws come first in the attempt)
+        assert_eq!(w.obj(x).unwrap().report_value, (rng.raw() & 0xFFFF) as u16);
+        // spec: S-0611 claim 14 (every member owned by the attempt's house)
+        assert_eq!(w.obj(x).unwrap().owner, Some(ALPHA));
+    }
+    let taken = w.rng.taken() - draws;
+    (w, unit, made, taken)
+}
+
+/// BRUTE with a spawned type (SPYP ×2) and a slave type (WALKER ×3): MU12's
+/// combined variant.
+fn set_rules() -> Ruleset {
+    let mut r = rules(false);
+    let b = r.sim.infantry.get_mut("BRUTE").unwrap();
+    b.combat.spawns = Some("SPYP".into());
+    b.combat.spawns_number = Some(2);
+    b.econ.enslaves = Some("WALKER".into());
+    b.econ.slaves_number = Some(3);
+    r
+}
+
+// spec: S-0611 claim 14 and F5 (Q-1460: a made type with k = 2 slot objects and m = 3 slaves: each attempt, refused or made, takes 1 + k + m raw draws and as many numbers; the made unit's number is the lowest, then the slot objects', then the slaves'; none is undone)
+#[test]
+fn claim_14_creation_set_draws_and_numbers() {
+    let r = set_rules();
+    let (w, unit, made, draws) = refused_then_made(&r, position::RIGHT, 6);
+    // spec: S-0611 claim 10 (a side-class point: no position-choice draw)
+    assert_eq!(draws, 6);
+    let c = w.obj(unit).unwrap().spawn.clone().unwrap();
+    let slots: Vec<ObjectId> = c.slots.iter().map(|s| s.object.unwrap()).collect();
+    assert_eq!(slots, made[1..3]);
+    let slaves = glasnost_sim::econ::slaves::slaves_of(&w, unit);
+    assert_eq!(slaves, made[3..6]);
+    for &x in &made[1..] {
+        // spec: S-0611 claim 14 (after a successful attempt the slot objects and slaves stay off the map)
+        assert!(!w.obj(x).unwrap().on_map);
+    }
+}
+
+// spec: S-0611 claim 14 and F5 (claim 10's position-choice draw comes after the whole creation set)
+#[test]
+fn claim_14_position_choice_after_the_set() {
+    let r = set_rules();
+    let (_, _, _, draws) = refused_then_made(&r, position::CENTRE, 6);
+    assert_eq!(draws, 6 + 1, "the set's six, then the ranged draw");
+}
+
+// spec: S-0611 claim 14 (a mind-control primary weapon's controller takes no draw and no number: the set is the made unit alone)
+#[test]
+fn claim_14_weapon_controllers_take_nothing() {
+    let mut r = rules(false);
+    r.sim.warheads.insert(
+        "MIND".into(),
+        WarheadType {
+            verses: Some(vec![d("1"); 11]),
+            mind_control: Some(true),
+            ..Default::default()
+        },
+    );
+    let mut ray = r.sim.weapons["Rifle"].clone();
+    ray.warhead = Some("MIND".into());
+    r.sim.weapons.insert("Ray".into(), ray);
+    r.sim.infantry.get_mut("BRUTE").unwrap().primary = Some("Ray".into());
+    let (w, unit, _, draws) = refused_then_made(&r, position::RIGHT, 1);
+    assert_eq!(draws, 1);
+    assert!(w.mind.controllers.contains_key(&unit), "it has its controller");
+}
+
 // ---------------------------------------------------------------------------
 // Claim 13: each victim converts once.
 // ---------------------------------------------------------------------------

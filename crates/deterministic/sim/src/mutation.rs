@@ -647,17 +647,19 @@ fn place(w: &mut World, unit: ObjectId, p: Pos) -> bool {
 }
 
 /// Takes a made unit that could not be placed out of the game again: our
-/// engine keeps no never-placed object (claim 11's departure). The object,
-/// and whatever its creation made with it, is removed; its creation draw
-/// and its creation number stay consumed and are never reused (claim 14,
-/// Q-1460).
+/// engine keeps no never-placed object (claim 11's departure). The object
+/// and its creation set (claim 14: slot objects, slaves and theirs) are
+/// removed with the records their creation made; every draw and creation
+/// number of the set stays consumed and is never reused (claim 14, Q-1460).
 fn discard(w: &mut World, unit: ObjectId) {
     let made: Vec<ObjectId> = w.objects.range(unit..).map(|(&k, _)| k).collect();
     for id in made {
         w.mind.controllers.remove(&id);
+        // spec: S-0611 claim 14 (a refused set never enters play: none of it, nor the controllers it carries, acts in a later tick)
+        w.spawned.launcher.remove(&id);
         w.objects.remove(&id);
     }
-    // spec: S-0611 claim 14 (one creation number reserved per attempt, a refused attempt included, without reuse: the counter is not rolled back)
+    // spec: S-0611 claim 14 (one creation number reserved per member of the creation set, a refused attempt included, without reuse: the counter is not rolled back)
 }
 
 /// One creation attempt at the end of an infantry-making animation
@@ -704,9 +706,10 @@ fn attempt(w: &mut World, id: ObjectId, m: &mut Maker) -> Attempt {
         return Attempt::Nothing;
     };
     // spec: S-0611 claim 10 (a fresh object of the made type: full health, starting experience under S-0311 claim 11, no passengers, no inherited order)
+    // spec: S-0611 claim 14 and F5 (the attempt creates the whole creation set, refused or not, every member owned by the attempt's house; the position-choice draw comes after the whole set)
     let unit = crate::objects::create(w, Kind::Infantry, ty, Some(house));
     if !place(w, unit, m.pos) {
-        // spec: S-0611 claims 11 and 14 (no unit appears; our engine builds none, a documented departure; the creation draw, then the position-choice draw where claim 10's choice applies, are not undone)
+        // spec: S-0611 claims 11 and 14 (no unit appears; our engine builds none of the creation set, a documented departure; the set's creation draws, then the position-choice draw where claim 10's choice applies, are not undone)
         discard(w, unit);
         return Attempt::Refused;
     }

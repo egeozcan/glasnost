@@ -116,12 +116,7 @@ pub struct SlaveState {
 
 fn group_type(w: &World, id: ObjectId) -> Option<harvest::GroupType> {
     let o = w.obj(id)?;
-    let h = &w.rules().econ.harvest;
-    match o.kind {
-        Kind::Vehicle => h.vehicles.get(o.type_index as usize)?.group,
-        Kind::Building => h.buildings.get(o.type_index as usize)?.group,
-        _ => None,
-    }
+    w.rules().econ.harvest.group_of(o.kind, o.type_index)
 }
 
 fn group(w: &World, id: ObjectId) -> Option<SlaveGroup> {
@@ -204,9 +199,15 @@ pub fn wake(w: &mut World, id: ObjectId) {
 }
 
 /// Creates one slave of type `ty` for `master`, inside and off the map.
-fn new_slave(w: &mut World, master: ObjectId, ty: u32, owner: Option<HouseId>) -> ObjectId {
-    // spec: S-0402 claim 19 (each initial or replacement slave takes the ordinary object-creation draw, S-0202 claim 10; keeping it inside takes no placement draw)
-    let s = crate::objects::create(w, Kind::Infantry, ty, owner);
+fn new_slave(
+    w: &mut World,
+    master: ObjectId,
+    ty: u32,
+    owner: Option<HouseId>,
+    chain: &mut crate::objects::Chain,
+) -> ObjectId {
+    // spec: S-0402 claim 19 (each initial or replacement slave takes the ordinary object-creation draw, S-0202 claim 10, then its creation number; keeping it inside takes no placement draw)
+    let s = crate::objects::create_in(w, Kind::Infantry, ty, owner, chain);
     let n = w.rules().econ.resource.tiberiums.len();
     if let Some(o) = w.obj_mut(s) {
         o.econ.slave = Some(SlaveState {
@@ -221,6 +222,15 @@ fn new_slave(w: &mut World, master: ObjectId, ty: u32, owner: Option<HouseId>) -
 /// The creation of an object whose type names a slave type (S-0402 claims
 /// 19 to 21): its group, with its initial slaves.
 pub fn created(w: &mut World, id: ObjectId) {
+    let Some(t) = w.obj(id).map(|o| (o.kind, o.type_index)) else {
+        return;
+    };
+    created_in(w, id, &mut vec![t]);
+}
+
+/// [`created`] inside a creation set whose enclosing creations, the new
+/// master's own type last, are `chain` (S-0611 claim 14 and F5).
+pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects::Chain) {
     let Some(g) = group_type(w, id) else { return };
     // spec: S-0402 claim 19 (owned by the miner's house)
     let owner = w.obj(id).and_then(|o| o.owner);
@@ -228,7 +238,8 @@ pub fn created(w: &mut World, id: ObjectId) {
     let mut members = Vec::new();
     // spec: S-0402 claim 19 (a positive count N creates N infantry of the named type; 0 or less creates none)
     for _ in 0..g.count.max(0) {
-        let s = new_slave(w, id, g.slave, owner);
+        // spec: S-0402 claim 19 and S-0611 F5 (in place order, each slave's own creation set before the next slave)
+        let s = new_slave(w, id, g.slave, owner, chain);
         // spec: S-0402 claim 19 (they start ready, inside and off the map)
         members.push(Member {
             id: Some(s),
@@ -553,7 +564,8 @@ fn place_effects(w: &mut World, id: ObjectId, i: usize) {
         if t.wrapping_sub(m.since) >= g.regen {
             // spec: S-0402 claim 23 (a replacement belongs to the master's current house)
             let owner = w.obj(id).and_then(|o| o.owner);
-            let s = new_slave(w, id, g.slave_type, owner);
+            // A fresh creation, outside any other creation in progress (an empty chain).
+            let s = new_slave(w, id, g.slave_type, owner, &mut Vec::new());
             set_group(w, id, |g| {
                 if let Some(x) = g.members.get_mut(i) {
                     // spec: S-0402 claim 14 (a replacement is created inside the miner), claim 19 (ready) and the Terms (it keeps its place)
