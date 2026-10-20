@@ -2,11 +2,11 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130]
 supersedes: []
@@ -1046,8 +1046,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     The transferred slaves are not replaced by a second working group.
 
     Each initial or replacement infantry creation takes the ordinary object-creation draw
-    (S-0202 claim 10). Keeping it inside takes no placement search or placement draw.
-    - Backing: `measurable` (scenario H15)
+    (S-0202 claim 10). Each initial slave also takes one creation number after its own draw.
+    The initial slaves' draws and numbers follow the master's own draw and number and those
+    of any initial spawn-slot objects made in the same creation, in slave-place order.
+    Nested creation sets complete before the next slot or place, as specified by S-0611
+    claim 14 and F5. Keeping a slave inside takes no placement search or placement draw.
+    - Backing: `measurable` (scenario H15; S-0611 scenario MU12 for creation-set ordering)
     - Confidence: high for creation, count, ownership, hidden state and no payment,
       medium for the creation-source and draw controls
 
@@ -2448,16 +2452,20 @@ is wrong). *Runs:* 3.
   map-created miner, a starting miner, and a grand-opening free unit whose type is the miner.
   Separately create a deployed building of the slave-miner type. Record creation counts,
   owners, inside/on-map state, last-rest tick, credits, per-type owned and ever-built counts,
-  built total and creation draws. Controls use counts 0 and 1 and a miner without a slave type.
+  built total, creation draws and creation numbers. Controls use counts 0 and 1 and a miner
+  without a slave type. For combined spawn-slot and slave creation, use S-0611 scenario MU12's
+  creation-set variants.
 - *Expected:* 3 hidden ready infantry exist at the master's creation, owned by its house,
   with no occupied infantry cells and no additional credit debit. Last-rest initially reads
-  0 even for a miner created later in the game. Each slave takes one creation draw. Their
-  creations increment eligible owned counts but never the infantry ever-built count or built
+  0 even for a miner created later in the game. Each slave takes one creation draw and then
+  one creation number, after the master's and any initial spawn-slot objects', in place order
+  (S-0611 claim 14 and F5). Their creations increment eligible owned counts but never the infantry ever-built count or built
   total, before or after release of the master. Counts 0 and 1 produce 0 and 1 initial slaves.
   A deploy/pack-up pair retains the existing working slaves under S-0415 claims 6 and 10.
 - *Falsified if:* initial creation waits for release or wake-up, uses another owner, places the
   initial slaves on cells, deducts a slave price, records creation tick as initial last-rest,
-  or raises an infantry ever-built count.
+  raises an infantry ever-built count, or allocates an initial slave's draw or number before
+  the master's or before an initial spawn-slot object's, or out of place order.
 - *Runs and tool:* 3 per creation source and 1 per count control, using scripted input and a
   read-only recorder. No harness modification is authorised.
 
