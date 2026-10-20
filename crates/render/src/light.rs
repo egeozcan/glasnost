@@ -501,6 +501,23 @@ impl LightSource {
         }
     }
 
+    /// A radiation field's light source (S-0525 claim 13): at the centre
+    /// point of the field's centre cell `centre`, with the field's reach
+    /// `radius` (leptons), counting at every detail level.
+    pub fn field(centre: (i32, i32), radius: i32, intensity: i32, tint: [i32; 3]) -> Self {
+        // spec: S-0525 claim 13 (one light source at the centre point of the centre cell)
+        let point = |cell: i32| cell * CELL_LEPTONS as i32 + 128;
+        Self {
+            x: point(centre.0),
+            y: point(centre.1),
+            radius,
+            intensity,
+            tint,
+            // spec: S-0525 claim 13 (unlike a building's light it counts at every detail level)
+            required_detail: DetailLevel::Low,
+        }
+    }
+
     /// The falloff *f* in ‰ of this light at `cell`, or `None` when it
     /// does not reach the cell's centre (S-0104 claim 11, Formulas "Cell
     /// light").
@@ -1572,6 +1589,21 @@ mod tests {
         assert_eq!(light.falloff((21, 10)), None);
         // Diagonal: Δ = (256, 256), d = ⌊√131072⌋ = 362, f = ⌊1000·2198 / 2560⌋ = 858.
         assert_eq!(light.falloff((11, 11)), Some(858));
+    }
+
+    /// spec: S-0525 claim 13 (a field's light: at the centre point of its centre cell, radius R,
+    /// counting at every detail level, low and medium included)
+    #[test]
+    fn field_light_counts_at_every_detail_level() {
+        let light = LightSource::field((10, 10), 2560, 500, [0, 1000, 0]);
+        assert_eq!((light.x, light.y), (10 * 256 + 128, 10 * 256 + 128));
+        assert_eq!(light.falloff((10, 10)), Some(1000));
+        assert_eq!(light.falloff((21, 10)), None);
+        for detail in [DetailLevel::Low, DetailLevel::Medium, DetailLevel::High] {
+            let c = full_recompute(30, 0, 0, [100; 3], (10, 10), 0, &[light], detail, &Q);
+            assert_eq!(c.unscaled_ground, 300 + 500);
+            assert_eq!(c.raw_tint[1], c.raw_tint[0] + 1000);
+        }
     }
 
     /// spec: S-0104 claim 11 (negative lights darken symmetrically; contributions add up)
