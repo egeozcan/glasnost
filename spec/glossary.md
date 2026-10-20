@@ -2,11 +2,11 @@
 id: glossary
 title: Glossary of shared terms
 topic: rules-import        # cross-cutting; every topic uses these terms
-revision: 58
+revision: 59
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
 requests: []
 supersedes: []
@@ -938,6 +938,11 @@ are animated. Not the same thing as a *terrain animation*. See S-0101 and S-0102
 **battlefield view.** The part of the game screen that shows the map, without the sidebar and the
 strip above it. See S-0101.
 
+**beam.** A straight drawn line between two points, with a duration in whole ticks and fading
+as defined by S-0518 claims 18 and 19. It is drawing only. Laser weapons and support beams use
+this term, as do other effects whose owning specs say so. Not the persistent temporal beam of
+S-0514 claims 1 to 4.
+
 **chrono flash.** The full-screen chrono warp effect that a trigger action starts, one of the
 *global effects*. It is not the chronosphere superweapon's jump (S-0104). S-0104 owns its lighting
 and counts it as in force from the tick its action runs until it finishes. S-0201 (claim 11) owns
@@ -1020,6 +1025,9 @@ projection of its ground point, written *L(z)*. See S-0101.
 **house colour.** The colour that marks a house's objects. It replaces the palette's remap range
 (indices 16 to 31) with a ramp built from the house's colour definition. See S-0103.
 
+**house laser colour.** A per-house colour derived from the house's display colour, used by
+house-colour beams. S-0518 claim 17 owns its derivation, and claim 18 owns its use for beams.
+
 **image frame.** One picture in a sprite's shape file, numbered from 0. Not a drawn frame.
 
 **marked (particle system).** The state of a particle system that emits no more and leaves play once it holds no
@@ -1041,6 +1049,10 @@ and theater palettes; the anim palette is the same in every theater. See S-0103.
 
 **render layer.** One of the five ordered lists in which objects are drawn: underground, surface,
 ground, air and top. See S-0102.
+
+**shot animation.** The animation a shot makes at its launch point, when one is chosen.
+S-0301 claims 20 to 23 own its choice, placement, attachment and exclusions. S-0109 claim 29
+owns its creation timing relative to the turn pass.
 
 **speed-normalised delay.** A delay that the original converts with the game-speed normalisation
 N(*d*, *s*) of S-0107 (Formulas F3), so that it lasts about the same real time at every game speed
@@ -2792,6 +2804,11 @@ scenario T6, part G.
   Equality supports only these two examples; it cannot confirm the exhaustive part of G3.
 
 ## Changes for other specs
+
+- **S-0301:** hand off claims 20 to 23 defining shot animations with this glossary; the
+  approved text does not yet contain them. S-0109 claim 29 already uses the term.
+- **S-0518:** hand off claim 17's house laser colour and claims 18 and 19's beam definition
+  with this glossary; the approved text does not yet contain those claims.
 
 - **S-0215:** its approved text excludes every player house from computer-controlled-owner
   rules. Qualify that exclusion as applying to normal games and add the explicitly marked
