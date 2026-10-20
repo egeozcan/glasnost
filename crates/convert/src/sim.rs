@@ -1017,11 +1017,11 @@ pub const PROTECTION_SELECTORS: [&str; 2] = ["IronCurtainColor", "ForceShieldCol
 
 /// The laser-target colour's selector key (S-0519 claim 26 and Import
 /// mapping), read like the protection selectors.
-pub const LASER_TARGET_SELECTOR: &str = "LaserTargetColor";
+pub const LASER_TARGET_SELECTOR: &str = "LaserTargetColor"; // spec: S-0519 Import mapping (rules, audio-visual section, LaserTargetColor)
 
 /// The berserk colour's selector key (S-0610 claim 7 and Import mapping),
 /// read like the protection selectors.
-pub const BERSERK_SELECTOR: &str = "BerserkColor";
+pub const BERSERK_SELECTOR: &str = "BerserkColor"; // spec: S-0610 Import mapping (BerserkColor in [AudioVisual])
 
 /// The protection selector `key` held after every rules layer, with the
 /// layer and line of the value that set it; `None` when no layer gives a

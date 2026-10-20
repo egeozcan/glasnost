@@ -1039,6 +1039,12 @@ impl Live {
         for (_, e, key) in entrants {
             live.ground.enter(e, key);
         }
+        // spec: S-0519 Import mapping (a missing bomb-icon image draws no icon, and the importer warns); S-0111 Import mapping (its palette MOUSE.PAL)
+        if inputs.assets.get(combat::BOMB_SPRITE).is_none()
+            || inputs.assets.get(combat::MOUSE_PALETTE).is_none()
+        {
+            live.notes.insert(BOMB_ICON_MISSING.to_owned());
+        }
         live.redraw(inputs, &mut built.scene);
         live
     }
@@ -3190,8 +3196,8 @@ impl Live {
                     .is_none_or(|v| glasnost_sim::bomb::visible(&self.world, v, o.id))
             {
                 let g = &r.combat.general.ivan;
-                // spec: S-0519 F3 (the icon's image frame in the current tick)
-                let frame = combat::bomb_frame(self.world.tick, b.planted, g.delay, g.flicker);
+                // spec: S-0519 F3 (the icon's image frame in the tick the picture shows, S-0201 claim 6)
+                let frame = combat::bomb_frame(self.shown_tick(), b.planted, g.delay, g.flicker);
                 let at = if o.kind == SimKind::Building {
                     // spec: S-0519 claim 24, S-0108 claim 8 (a building: the projected top corner of its foundation)
                     let c = o.pos.cell();
@@ -3199,7 +3205,7 @@ impl Live {
                     project_lifted(
                         256 * c.x,
                         256 * c.y,
-                        combat::LEVEL_HEIGHT * i32::from(level),
+                        glasnost_render::projection::LEVEL_LEPTONS * i32::from(level),
                     )
                 } else {
                     // spec: S-0519 claim 24 (a unit: the screen pixel of its position, height included)

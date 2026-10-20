@@ -661,9 +661,25 @@ fn combat_live(
     ObjectId,
     ObjectId,
 ) {
+    combat_live_with(gap, overlay_assets())
+}
+
+/// [`combat_live`] built with the assets `assets`.
+#[allow(clippy::type_complexity)]
+fn combat_live_with(
+    gap: i32,
+    assets: super::build::Assets,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+) {
     use glasnost_sim::rules::Kind as SimKind;
     let (import, catalogue, _) = context();
-    let assets = overlay_assets();
     let map = testkit::empty_map(24);
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
@@ -3886,12 +3902,13 @@ fn bomb_icon_claim24() {
     use glasnost_render::scene::Group;
     // A fresh game for each asset set: the drawing caches what it loaded.
     let run = |assets: &super::build::Assets| {
-        let (mut live, mut scene, map, import, catalogue, cart, _) = combat_live(3);
+        let (mut live, mut scene, map, import, catalogue, cart, _) =
+            combat_live_with(3, assets.clone());
         let tick = live.world.tick;
         live.world.obj_mut(cart).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
             planter: None,
             house: Some(HouseId(0)),
-            planted: tick,
+            planted: (tick - 1).max(0),
         });
         // spec: S-0519 claim 10 (the planter's house sees the bomb)
         live.set_viewer(Some(HouseId(0)));
@@ -3916,7 +3933,8 @@ fn bomb_icon_claim24() {
             .copied()
             .collect();
         let g = &live.rules.combat.general.ivan;
-        let frame = super::combat::bomb_frame(tick, tick, g.delay, g.flicker);
+        let shown = (tick - 1).max(0);
+        let frame = super::combat::bomb_frame(shown, shown, g.delay, g.flicker);
         let p = live.world.obj(cart).unwrap().pos;
         let pixels: Vec<u8> = status
             .iter()
@@ -3939,7 +3957,8 @@ fn bomb_icon_claim24() {
         other => panic!("unexpected paints {other:?}"),
     }
     assert!(!warned);
-    // Without the bomb sprite: no icon, and the importer's warning.
+    // Without the bomb sprite: no icon, and the importer's warning (at load, whether or not a bomb
+    // shows).
     let (none, _, _, _, warned) = run(&overlay_assets());
     assert_eq!(none.len(), status.len() - 1);
     assert!(warned);
