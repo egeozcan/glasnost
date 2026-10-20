@@ -207,7 +207,10 @@ impl Lane {
             let live = s.loaded.live.as_ref().expect("a live game");
             for (n, (x, y, z)) in live.playing_anims() {
                 let (wx, wy) = glasnost_render::projection::project_lifted(x, y, z);
-                println!("  anim {n} at world pixel ({wx}, {wy}), position ({x}, {y}, {z}), surface {}", live.world.surface_at(x, y));
+                println!(
+                    "  anim {n} at world pixel ({wx}, {wy}), position ({x}, {y}, {z}), surface {}",
+                    live.world.surface_at(x, y)
+                );
             }
         }
     }

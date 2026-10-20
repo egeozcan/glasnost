@@ -1135,7 +1135,10 @@ fn claim_14_weapon_controllers_take_nothing() {
     r.sim.infantry.get_mut("BRUTE").unwrap().primary = Some("Ray".into());
     let (w, unit, _, draws) = refused_then_made(&r, position::RIGHT, 1);
     assert_eq!(draws, 1);
-    assert!(w.mind.controllers.contains_key(&unit), "it has its controller");
+    assert!(
+        w.mind.controllers.contains_key(&unit),
+        "it has its controller"
+    );
 }
 
 // ---------------------------------------------------------------------------

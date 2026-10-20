@@ -147,7 +147,16 @@ fn dir8(d: u16) -> Facing {
 #[test]
 fn f7_eight_entry_and_the_double_rounding() {
     // Claim 20's table: entry e for 8-direction d.
-    for (e, d) in [(0, 7), (1, 0), (2, 1), (3, 2), (4, 3), (5, 4), (6, 5), (7, 6)] {
+    for (e, d) in [
+        (0, 7),
+        (1, 0),
+        (2, 1),
+        (3, 2),
+        (4, 3),
+        (5, 4),
+        (6, 5),
+        (7, 6),
+    ] {
         assert_eq!(shotanim::eight_entry(dir8(d), None), e, "d = {d}");
     }
     // Single rounding: the boundary of d = 0 and d = 1 is at 4096.
@@ -238,7 +247,10 @@ fn claim_20_a_other_list_lengths() {
         for d in 0..8u16 {
             w.obj_mut(a).unwrap().body = Turning::at(dir8(d));
             let got = shot_names(&mut w, a);
-            assert_eq!(got, expect.map(str::to_owned).into_iter().collect::<Vec<_>>());
+            assert_eq!(
+                got,
+                expect.map(str::to_owned).into_iter().collect::<Vec<_>>()
+            );
         }
     }
 }
@@ -524,7 +536,10 @@ mod garrisoned {
                     assert_eq!(made[0].2, None);
                     assert_eq!(made[0].3, Some(-200));
                 } else {
-                    assert!(made.is_empty(), "no animation without an occupant animation");
+                    assert!(
+                        made.is_empty(),
+                        "no animation without an occupant animation"
+                    );
                 }
             }
         }

@@ -131,7 +131,11 @@ fn s0506_claim_1_slot_objects_before_slaves() {
     assert_eq!(slots, made[1..3], "slot objects in increasing slot index");
     let g = glasnost_sim::econ::slaves::group_of(&w, made[0]).unwrap();
     let slaves: Vec<ObjectId> = g.members.iter().map(|m| m.id.unwrap()).collect();
-    assert_eq!(slaves, made[3..6], "slaves after every slot object, in place order");
+    assert_eq!(
+        slaves,
+        made[3..6],
+        "slaves after every slot object, in place order"
+    );
     for &id in &made {
         assert_eq!(w.obj(id).unwrap().owner, Some(ALPHA));
     }
@@ -172,7 +176,10 @@ fn s0402_claim_19_infantry_master_gets_its_group() {
     let mut w = game(&r);
     let made = create_set(&mut w, Kind::Infantry, "SELF");
     assert_eq!(made.len(), 3);
-    assert_eq!(glasnost_sim::econ::slaves::slaves_of(&w, made[0]), made[1..]);
+    assert_eq!(
+        glasnost_sim::econ::slaves::slaves_of(&w, made[0]),
+        made[1..]
+    );
 }
 
 // spec: S-0611 F5 (a chain of spawned and slave types leading back to a type already in it: the importer warns, and the type closing the cycle gets no initial fill inside that chain; Q-1530 interim: nor a controller or group)

@@ -386,7 +386,12 @@ const WEAPON_COMBAT: &[Row] = &[
         Ref(Kind::Animations),
         "S-0301",
     ),
-    ("assault_anim", "AssaultAnim", Ref(Kind::Animations), "S-0301"),
+    (
+        "assault_anim",
+        "AssaultAnim",
+        Ref(Kind::Animations),
+        "S-0301",
+    ),
 ];
 
 /// Combat fields of projectiles.

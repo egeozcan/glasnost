@@ -833,10 +833,16 @@ fn shot_animation_fields() {
     let base = "[Warheads]\n1=Zap\n2=Plain\n[Zap]\nOpenToppedAnim=ZAPOPEN\nAssaultAnim=ZAPGO\n\
                 [Plain]\nROF=3\n";
     let (s, _) = direct(&[base], "", &["Zap", "Plain"], &[], IniQuirks::default());
-    assert_eq!(s.weapons["Zap"].open_topped_anim.as_deref(), Some("ZAPOPEN"));
+    assert_eq!(
+        s.weapons["Zap"].open_topped_anim.as_deref(),
+        Some("ZAPOPEN")
+    );
     assert_eq!(s.weapons["Zap"].assault_anim.as_deref(), Some("ZAPGO"));
     assert_eq!(
-        (&s.weapons["Plain"].open_topped_anim, &s.weapons["Plain"].assault_anim),
+        (
+            &s.weapons["Plain"].open_topped_anim,
+            &s.weapons["Plain"].assault_anim
+        ),
         (&None, &None)
     );
     let (s, _) = sim(
