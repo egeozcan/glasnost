@@ -1,9 +1,9 @@
 ---
 id: Q-1550
 title: When a repair depot starts its special-1 (and production) slot animations
-status: open
+status: answered
 related: [S-0108, S-0314, S-0504]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need

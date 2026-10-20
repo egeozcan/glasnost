@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0540]
+requests: [Q-0540, Q-1550]
 supersedes: []
 ---
 
@@ -483,29 +483,74 @@ are out of scope.
     - Confidence: medium (the turret facing is defined in S-0206, Terms)
 
 20. **Repair-depot, recycling and delayed-fire slot rules.** These apply only to the building kinds named in
-    each row.
+    each row. A repair depot here includes a naval yard with the repair flag (S-0504 claim 8); only
+    the every-tick row below excludes a naval type. *In contact* means the depot holds a contact with a
+    vehicle in any of its contact places (S-0314 claim 17), tethered or not.
+
+    *The repair cycle.* A repair depot also starts and stops slots at the events of the repair
+    cycle of S-0314 claim 6 (waiting, settling, working). Each change happens on the tick of the
+    depot processing at which the event occurs, and every start uses the normal or damaged
+    variant, never the occupied one.
+
+    | Building | Event | Result |
+    |---|---|---|
+    | Repair depot | it enters the working phase: its settling step answers *more needed* or *done* | *special-1* starts (a running one is replaced, Terms); *active-1* and *idle* stop |
+    | Repair depot in the working phase | a step answers *done*, *not needed* or *cannot pay*, or the depot is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
+    | Repair depot in the waiting phase | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start; the depot leaves its repair behaviour |
+    | Repair depot in the settling phase, with *production* or *special-2* running | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
+
+    So *special-1* starts once per entry into the working phase, on the tick of the first paid
+    repair step (S-0314 claim 3), and again at each re-entry after a *cannot pay* return to
+    settling. Docking, the waiting check, a settling step that answers *not needed* or *cannot
+    pay*, and a working step that answers *more needed* change no slot. The repair cycle never
+    stops *special-1*: once started it runs until it finishes on its own or is replaced, and the
+    rows below then choose *special-2* or *idle*. Only claim 13's power rules, claim 12's condition
+    swaps (which restart a running slot) and removal of the building otherwise affect it.
+    When the depot sends the vehicle away, the slot changes happen on the tick of that step,
+    before the contact is released. When contact ends without a step (the vehicle is destroyed,
+    or leaves as S-0314 claims 20 to 22 say), the depot reacts at its next processing: on the
+    same or the next tick in the working and settling phases, at the waiting phase's own spacing
+    otherwise. A settling depot with no contact stays in
+    its repair behaviour, checking every tick, until *special-3* is not running, and only then
+    leaves it (S-0314 claim 22 owns that return; Questions for the project lead).
+
+    *Other repair-depot, recycling and delayed-fire rows.*
 
     | Building | Event | Result |
     |---|---|---|
     | Repair depot, not naval, not in its repair behaviour, with *production* or *special-2* running | checked every tick | *special-3* starts (normal or damaged variant), *production* and *special-2* stop |
-    | Repair depot repairing a docked unit | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *special-2* starts (normal or damaged variant) |
-    | Repair depot not repairing a docked unit | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *idle* starts (normal or damaged variant) |
+    | Repair depot in its repair behaviour and in contact | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *special-2* starts (normal or damaged variant) |
+    | Repair depot not in its repair behaviour, or not in contact | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *idle* starts (normal or damaged variant) |
     | Repair depot | *special-3* finishes on its own | *idle* starts (normal or damaged variant) |
     | Delayed-fire type that is not a repair depot | *special-1* finishes on its own | *active-1* starts (occupied variants allowed) |
     | Recycling building | *special-1* ends (on its own, or removed by anything but the building stopping or replacing it) | *active-1* starts (damaged variant when the health ratio is at or below the yellow ratio, F3; normal otherwise), provided the selected variant exists (S-0603 claim 12) |
 
     No building other than the kinds listed reacts to *special-1* or *special-3* ending.
-    - Backing: `measurable` (B18 for natural completion during repair, leaving repair and
-      delayed fire; S-0603 claim 12 and scenario G10 for recycling-building natural completion).
+
+    *What else starts these slots at a depot.* Apart from the repair cycle, only claim 13 (a
+    *light-unpowered* slot on power return) and claim 14 (a *special-outage* slot) can start a
+    depot's *special-1* to *special-3*, and only when the art sets those flags; roles the type may
+    combine with the repair flag (delayed fire, silo fill, recycling, vehicle bunker of S-0606) add
+    their own starts. Nothing in the repair cycle starts *production*: only the construction-yard,
+    vehicle-factory unloading and refinery-docking roles do, under their own specs. The rows that
+    stop *production* therefore matter only for a type that combines one of those roles with the
+    repair flag.
+    - Backing: `measurable` (B18 parts a to e for the repair-cycle rows, the working-entry tick,
+      *active-1* and *idle* stopping, the *cannot pay* restart, a destroyed vehicle, the naval
+      yard and *production* never appearing; B18 part f for natural completion during repair,
+      leaving repair and delayed fire; S-0603 claim 12 and scenario G10 for recycling-building
+      natural completion).
       Recycling-building restart after external removal is `unmeasured`: no data-only fixture
       establishes removal without the building itself stopping or replacing the slot animation.
       Restart with the selected *active-1* variant absent is also `unmeasured`: no setup establishes
       that absence at completion while allowing *active-1* to run at consumption and start
       *special-1* (S-0603 claim 12).
-      `unmeasured` for repair-depot non-natural removal of *special-1* and its completion while
-      not repairing: B18 establishes neither event. The exhaustive other-types assertion is
-      `unmeasured`: a finite set of types cannot establish it.
-    - Confidence: medium (the triggers of the repair behaviour belong to the repair spec)
+      `unmeasured` for repair-depot non-natural removal of *special-1*: B18 establishes no such
+      event. The exhaustive other-types and other-starters assertions are `unmeasured`: a finite
+      set of types cannot establish them.
+    - Confidence: high (which slots each repair-cycle event starts and stops, the variants, and
+      that the cycle never starts *production* or stops *special-1*); medium (the event timing,
+      which inherits S-0314 claim 6's phases, and the settling hold while *special-3* runs)
 
 21. **Parsed but without effect.** The type's extra-damage-stage flag has no effect on how a
     building is drawn or behaves.
@@ -867,8 +912,8 @@ adjustment and y-sort (integers), and `Powered`, `PoweredLight`, `PoweredEffect`
 | `ExtraPower` | building | integer | 0 | claim 17 (must be positive) |
 | `SuperWeapon` | building | superweapon type name | none | claims 11, 18 |
 | `ChargedAnimTime` | building | decimal, held in single precision, game minutes | 999 | *t_c* (claim 18). The default is above 990, so claim 18 is off unless the data sets the key |
-| `UnitRepair` | building | boolean | false | repair depot (claim 20) |
-| `Naval` | building | boolean | false | claim 20 |
+| `UnitRepair` | building | boolean | false | repair depot: the repair-cycle rows and the other depot rows of claim 20 |
+| `Naval` | building | boolean | false | a naval type is exempt from claim 20's every-tick depot row only; the repair-cycle rows still apply |
 | `Powered` | building | boolean | false | needs power (claim 13) |
 | `Power` | building | integer | 0 | a negative value means the building draws power (claim 13) |
 | `PoweredSpecial` | building | boolean | false | special outage (claim 14) |
@@ -1193,18 +1238,45 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: any recorded turret image frame differs from (28 − *j*) mod 32 using the
     recorded facing and claim 19's rounding, including at a bin boundary.
 - **B18 (claim 20).**
-  - Setup: a repair depot and a damaged vehicle. A delayed-fire type with *special-1* and *active-1*
-    slot animations (test data if no stock type has the mark).
-  - Procedure: drive the vehicle onto the depot and let it be repaired, then drive it off. Let the
-    delayed-fire type fire.
-  - Observable: the depot's and the delayed-fire building's slot animations, per tick.
-  - Runs: one.
-  - Expected: while repairing, *special-2* follows *special-1*. After the vehicle leaves,
-    *special-3* replaces *production* or *special-2*, and *idle* starts when *special-3* finishes.
-    The delayed-fire building restarts *active-1* when *special-1* finishes on its own.
-  - Falsified if: *special-2* does not follow natural *special-1* completion during repair,
-    *special-3* does not replace the named slots after repair ends, *idle* does not follow
-    natural *special-3* completion, or the delayed-fire building fails to restart *active-1*.
+  - Setup: a land repair depot whose art names distinct test animations for *idle*, *active-1*,
+    *production* and *special-1* to *special-3* (non-looping *special-1* and *special-3*), with
+    *freeze-unpowered* left on and the owner powered. Damaged vehicles of a house with ample
+    credits and of a house with 0 credits. A naval yard with the repair flag and the same test
+    art, with a damaged vessel. A delayed-fire type with *special-1* and *active-1* slot
+    animations (test data if no stock type has the mark).
+  - Procedure and parts, each recording the depot's slot animations, its repair phase where a
+    recorder can read it, the vehicle's health and the paying house's credits per tick, from the
+    order until well after the vehicle has left:
+    - a. Order the funded vehicle onto the depot and let it be repaired to full health and sent away.
+    - b. As a, but with the 0-credit house; after some *cannot pay* retries, give that house
+      credits. Then, with a house whose credits pay for only a few steps, let the funds run out
+      during the working phase and restore them after some retries.
+    - c. As a, but destroy the vehicle during the working phase.
+    - d. Order a vehicle onto the depot and destroy it after the depot has entered its repair
+      behaviour (the vehicle at its docking point, the depot waiting) and before the first paid
+      step.
+    - e. As a, at the naval yard with the vessel.
+    - f. Let the delayed-fire type fire.
+  - Observable: the tick of each slot start and stop, the tick of the first health gain or credit
+    deduction, and the delayed-fire building's slot animations.
+  - Runs: one per part.
+  - Expected: in a, c and e, *special-1* appears on the tick of the first paid repair step, not
+    on docking, and *active-1* and *idle* disappear on that tick; *special-2* follows *special-1*'s
+    natural end while the vehicle is in contact. On the step that sends the vehicle away (a, e) or
+    the depot's first processing after it is destroyed, on the same or the next tick (c), *special-2* disappears and *special-3* and *active-1*
+    appear; *special-1*, if still running, runs to its end and *idle* follows it, and *idle*
+    follows *special-3*'s end. In b, *special-1* does not appear during *cannot pay* settling and
+    appears on the first paid step after credits arrive. When funds run out during working,
+    *special-2* stops and *special-3* and *active-1* start on the failing step; on the first paid
+    step after the credits return, *special-1* starts again and *active-1* and *idle* stop. In d, the recorded phase is waiting, *special-1* never appears, and
+    *special-3* and *active-1* appear when the depot finds no contact. *Production* never appears.
+    In f, the delayed-fire building restarts *active-1* when *special-1* finishes on its own.
+  - Falsified if: *special-1* appears on docking or on any tick other than a working-phase entry,
+    *active-1* or *idle* survives the entry, *special-2* does not follow natural *special-1*
+    completion during contact, *special-3* and *active-1* do not start on leaving the working
+    phase, the naval yard differs from the land depot in these rows, *production* appears, *idle*
+    does not follow natural *special-3* completion, or the delayed-fire building fails to
+    restart *active-1*.
 
 - **B19 (claim 5, theater-flag rule).** Clamped displayed frames are a departure tested
   against this spec on our engine, not against the original; the range and stage delay still
@@ -1289,8 +1361,9 @@ specified here.
 ## Open questions
 
 - Which behaviours put a building into the *active*, *full*, *aux-1* and *aux-2* states, and when
-  the *pre-production*, *production*, *special* and *upgrade* slots start, is for the production,
-  repair and upgrade specs. Only the image-frame mechanics are fixed here.
+  the *pre-production*, *production*, *special* and *upgrade* slots start, is for the production
+  and upgrade specs. Only the image-frame mechanics are fixed here. A repair depot's slot starts
+  are in claim 20.
 - S-0405 claim 5 identifies the drain blackout of claim 14. A separate special-outage slot
   measurement during that blackout remains wanted.
 - Body-frame selection for types marked as laser-fence posts or firestorm-wall sections is
@@ -1318,6 +1391,13 @@ specified here.
   order, which is not stated (claim 17).
 
 ## Questions for the project lead
+
+- Claim 20: the added rule that a repair depot which loses contact while settling remains in its
+  repair behaviour until its *special-3* slot animation is no longer running conflicts with
+  approved S-0314 claim 22, which says a depot left without contact returns to *guard*. Confirm
+  whether S-0314 claim 22 must be revised to match this rule, or whether S-0108 should instead
+  make an immediate return to *guard* a departure. Slot animations are drawn on the client, so
+  the choice also determines whether the simulation models *special-3*'s duration.
 
 - Confirm the proposed deterministic *full* range in claim 6 at sign-off. Unlike the original's
   unspecified range, its result is completely defined here; it adds no imported key.

@@ -94,7 +94,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0415](structures/S-0415-mcv-deploy-undeploy.md) | Deploying a vehicle into a building and packing it up again (construction yard vehicles and other deploying vehicles) | structures | 18 | approved | — |
 | [S-0517](combat/S-0517-deployable-units.md) | Deployable units (in-place vehicle deploy cycle, deploy-fire vehicles, deployed infantry firing) | combat | 10 | approved | — |
 | [S-0206](movement/S-0206-turn-rates.md) | Turn rates and turning | movement | 16 | approved | — |
-| [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 15 | approved | — |
 | [S-0207](movement/S-0207-ground-vehicle-movement.md) | Ground vehicle movement (drive locomotor) | movement | 41 | approved | — |
 | [S-0209](movement/S-0209-occupancy-crowding.md) | Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests) | movement | 43 | approved | — |
 | [S-0302](combat/S-0302-damage-resolution.md) | Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds) | combat | 30 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0107](rendering/S-0107-infantry-sprite-sequences.md) | Infantry sprite sequences | rendering | 19 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 16 | approved | — |
 | [S-0513](superweapons/S-0513-superweapon-effects.md) | Superweapon effects | superweapons | 20 | approved | — |
+| [S-0108](rendering/S-0108-building-sprites.md) | Building sprites | rendering | 16 | approved | — |
