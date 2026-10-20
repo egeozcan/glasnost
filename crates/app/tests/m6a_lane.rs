@@ -616,11 +616,16 @@ fn m6a_scenes() {
             .map(|&at| lane.spawn(Kind::Vehicle, &sn, local, at))
             .collect();
         let dest = lane.open(CellXY::new(sea.x + 12, sea.y + 12), |l| l == land::WATER);
-        for &id in &ids {
+        // The first ship stays where it is, alone, for the sinking pictures.
+        for &id in &ids[1..] {
             lane.attack(local, id, ClickOn::Cell(dest));
         }
         lane.ticks(40);
-        if let Some(c) = lane.world().obj(ids[0]).map(|o| o.pos.cell()) {
+        if let Some(c) = ids
+            .get(1)
+            .and_then(|&id| lane.world().obj(id))
+            .map(|o| o.pos.cell())
+        {
             lane.look_at(c);
             lane.ticks(1);
             lane.save("ships-moving");
