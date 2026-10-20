@@ -525,6 +525,23 @@ fn jumpjet_flies(lane: &mut Lane) {
                     x.land != land::WATER && x.land != land::ROCK && x.land != land::BEACH
                 })
                 && lane.world().cells.list(c, Layer::Ground).is_empty()
+                // Open, level land two cells around it, so that the landing is not hidden at a
+                // cliff foot or behind trees (review 2026-10-19).
+                && (-2..=2).all(|dx| {
+                    (-2..=2).all(|dy| {
+                        let k = CellXY::new(c.x + dx, c.y + dy);
+                        let (Some(a), Some(b)) =
+                            (lane.world().cells.cell(k), lane.world().cells.cell(c))
+                        else {
+                            return false;
+                        };
+                        a.level == b.level
+                            && a.slope == 0
+                            && a.land != land::WATER
+                            && a.land != land::ROCK
+                            && lane.world().cells.list(k, Layer::Ground).is_empty()
+                    })
+                })
         })
         .min_by_key(|c| ((c.x - start.x).pow(2) + (c.y - start.y).pow(2), c.y, c.x));
     println!("a cell across an obstacle found: {}", across.is_some());
@@ -902,6 +919,10 @@ fn chrono_erases(lane: &mut Lane) {
     let at_v = CellXY::new(spot.x + 3, spot.y);
     let e = lane.spawn(kind, &ename, local, at_e);
     let v = lane.spawn(Kind::Vehicle, &vname, enemy, at_v);
+    // The victim's house keeps a second vehicle out of view, so erasing the victim does not
+    // defeat it and end the game before "chrono-erased" (review 2026-10-19).
+    let keep = lane.open_land(CellXY::new(home.x - 12, home.y - 12));
+    lane.spawn(Kind::Vehicle, &vname, enemy, keep);
     lane.look_at(spot);
     lane.ticks(4);
     lane.save("chrono-before");

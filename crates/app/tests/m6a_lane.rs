@@ -158,6 +158,13 @@ impl Lane {
         s.set_centre(glasnost_render::projection::project_lifted(x, y, 0));
     }
 
+    /// Centres the view on a position's lifted projection: a missile high in the air is drawn
+    /// far up the screen from its cell (S-0101 F1 and F2).
+    fn look_at_pos(&mut self, x: i32, y: i32, z: i32) {
+        let s = self.c.session.as_mut().unwrap();
+        s.set_centre(glasnost_render::projection::project_lifted(x, y, z));
+    }
+
     fn save(&mut self, name: &str) {
         let rgba = self.c.frame_rgba();
         let (w, h) = self.c.size;
@@ -372,15 +379,15 @@ fn m6a_scenes() {
                         )
                     })
                 })
-                .map(|o| (o.pos.cell(), o.pos.z))
+                .map(|o| (o.pos.cell(), o.pos.x, o.pos.y, o.pos.z))
         };
         let mut seen = 0;
         for _ in 0..2000 {
             lane.ticks(1);
-            if let Some((c, z)) = flight(lane.world()) {
+            if let Some((c, x, y, z)) = flight(lane.world()) {
                 seen += 1;
                 println!("rocket in flight at {c:?}, height {z}");
-                lane.look_at(c);
+                lane.look_at_pos(x, y, z);
                 let name = if seen == 1 {
                     "v3-rocket-in-flight".to_string()
                 } else {

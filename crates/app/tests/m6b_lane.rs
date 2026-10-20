@@ -130,9 +130,16 @@ fn hover_crossing_water(lane: &mut Lane) {
         let w = lane.world();
         let Some(o) = w.obj(id) else { break };
         let c = o.pos.cell();
-        let on_water = w.cells.cell(c).is_some_and(|x| x.land == land::WATER);
+        // Open water two cells round, so that no shore or tree hides the craft.
+        let open = (-2..=2).all(|dy| {
+            (-2..=2).all(|dx| {
+                w.cells
+                    .cell(CellXY::new(c.x + dx, c.y + dy))
+                    .is_some_and(|x| x.land == land::WATER)
+            })
+        });
         let from_shore = (c.x - shore.x).abs().max((c.y - shore.y).abs());
-        if on_water && from_shore >= 3 && glasnost_sim::hover::moving_now(w, id) {
+        if open && from_shore >= 3 && glasnost_sim::hover::moving_now(w, id) {
             let above = glasnost_sim::hover::hover_height(w, id) > 0;
             println!(
                 "hover over water at {c:?}, {from_shore} cells out, above the surface: {above}"
