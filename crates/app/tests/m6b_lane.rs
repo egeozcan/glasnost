@@ -144,6 +144,13 @@ fn hover_crossing_water(lane: &mut Lane) {
             println!(
                 "hover over water at {c:?}, {from_shore} cells out, above the surface: {above}"
             );
+            println!(
+                "  z {}, surface {}, hover height {}, cell level {:?}",
+                o.pos.z,
+                w.surface_at(o.pos.x, o.pos.y),
+                glasnost_sim::hover::hover_height(w, id),
+                w.cells.cell(c).map(|x| x.level)
+            );
             lane.look_at(c);
             lane.ticks(1);
             lane.save("hover-crossing-water");
