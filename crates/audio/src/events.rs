@@ -763,6 +763,7 @@ impl Audio {
             // drawing and selection only; the walls sounds come through
             // Effect::Sound (S-0606 claims 7, 12 and 14).
             Effect::SpecialAnims { .. }
+            | Effect::DepotSlot { .. }
             | Effect::Bunkered { .. }
             | Effect::Seized { .. }
             | Effect::Deactivated { .. }

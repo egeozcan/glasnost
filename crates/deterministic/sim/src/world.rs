@@ -444,6 +444,9 @@ pub struct World {
     /// The psychic domination (S-0612).
     #[serde(default)]
     pub domination: crate::domination::DominationWorld,
+    /// The repair depots' modelled slot animations (S-0108 claim 20).
+    #[serde(default)]
+    pub depot_anims: crate::depot_anim::DepotAnimWorld,
     /// The game-wide lighting state (S-0104).
     #[serde(default)]
     pub lighting: crate::lighting::LightWorld,

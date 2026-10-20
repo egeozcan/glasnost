@@ -3487,6 +3487,22 @@
           "format": "int32",
           "default": null
         },
+        "slot_names": {
+          "description": "Buildings: the slot names of the *production*, *special-1*,\n*special-2* and *special-3* slots as S-0108's Import mapping reads\nthem (each cut to 15 bytes, an empty value keeping the earlier name,\nan empty damaged name taking the normal name), keyed by the slot's\nart base key, each `[normal, damaged]`; a slot with both names empty\nis left out. The repair depot's slot model reads them (S-0108 claim\n20); absent: none.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "default": null
+        },
         "soylent": {
           "description": "`Soylent`, the refund override *v* (S-0408 claim 1); absent: 0.",
           "type": [

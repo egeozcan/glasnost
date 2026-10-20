@@ -120,6 +120,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::domination::anim_turn(w, id);
         return;
     }
+    if w.depot_anims.anims.contains_key(&id) {
+        // spec: S-0108 claim 20 and S-0109 claim 5 (a repair depot's slot animation updates in its own turn)
+        crate::depot_anim::anim_turn(w, id);
+        return;
+    }
     if w.waves.contains_key(&id) {
         // spec: S-0607 claim 21 (a magnetic wave updates in its own turn of the update order)
         crate::lift::wave_turn(w, id);
@@ -257,6 +262,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if kind == Kind::Building {
         // spec: S-0609 claims 9 and 14 (a gattling building's animation advance and its passive spin-down follow the tick's behaviour processing)
         crate::gattling::building_turn(w, id);
+        // spec: S-0108 claims 12 and 20 (a repair depot's every-tick slot checks; our placement, after its behaviour processing)
+        crate::depot_anim::building_turn(w, id);
     }
     // spec: S-0519 claim 4 (a planted bomb is checked in its carrier's own turn, after the behaviour processing; not in a pass of its own)
     crate::bomb::turn(w, id);

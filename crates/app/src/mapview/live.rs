@@ -403,6 +403,10 @@ pub struct Live {
     /// The walls' slot starts and stops the last tick reported (S-0606
     /// claims 6, 12 and 16): building, slots, start, damaged variant.
     special_events: Vec<(ObjectId, [u8; 2], bool, bool)>,
+    /// The repair depots' *idle* and *active-1* starts and stops the last
+    /// tick reported (S-0108 claim 20): building, active-1 (else idle),
+    /// start, damaged variant.
+    depot_events: Vec<(ObjectId, bool, bool, bool)>,
 }
 
 /// A running slot animation of a building (S-0108 Terms), played by
@@ -986,6 +990,7 @@ impl Live {
             slot_anims: BTreeMap::new(),
             slot_defs: BTreeMap::new(),
             special_events: Vec::new(),
+            depot_events: Vec::new(),
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -1212,6 +1217,7 @@ impl Live {
     fn update_slots(&mut self) {
         let now = self.shown_tick();
         let events = std::mem::take(&mut self.special_events);
+        let depot_events = std::mem::take(&mut self.depot_events);
         let w = &self.world;
         let mode = self.rules.mode;
         let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State)> = w
@@ -1233,7 +1239,6 @@ impl Live {
                     // spec: S-0108 claim 17 (absorbs infantry and gives a positive extra power per held infantry)
                     absorbs: r.absorb.infantry && extra > 0,
                     depot: r.building.unit_repair,
-                    naval: r.naval,
                     delayed_fire: r.building.anim_delayed_fire,
                 };
                 let sizes: Vec<glasnost_num::F64> =
@@ -1247,7 +1252,6 @@ impl Live {
                                 .map_or_else(|| glasnost_num::F64::from_i64(1, mode), |t| t.size)
                         })
                         .collect();
-                let in_repair = o.beh.current == Some(Behaviour::Repair);
                 let st = slot_play::State {
                     // spec: S-0108 claims 11 and 17 (completed and not in the construction state)
                     completed: o.beh.current != Some(Behaviour::Construction),
@@ -1258,10 +1262,6 @@ impl Live {
                     occupied: !o.structure.occupants.is_empty(),
                     // spec: S-0108 claim 17, F9 (the held infantry's total size)
                     held_size: slot_play::held_size(&sizes, mode),
-                    in_repair,
-                    // spec: S-0108 claim 20 and S-0314 claim 6 (repairing a docked unit: in its repair
-                    // behaviour with a serviced vehicle)
-                    repairing: in_repair && o.depot.serviced.is_some(),
                 };
                 Some((o.id, idx, kind, st))
             })
@@ -1301,28 +1301,64 @@ impl Live {
             for (_, pair, start, damaged) in events.iter().filter(|(b, ..)| *b == id) {
                 slots.walls(*pair, *start, *damaged, defs, &mut mk);
             }
+            for (_, active1, start, damaged) in depot_events.iter().filter(|(b, ..)| *b == id) {
+                slots.depot(*active1, *start, *damaged, defs, &mut mk);
+            }
         }
     }
 
     /// A building's running slot animations as the drawing takes them.
     fn slot_draws(&self, id: ObjectId, idx: usize) -> Vec<super::build::LiveSlot> {
-        let (Some(slots), Some(defs)) = (self.slot_anims.get(&id), self.slot_defs.get(&idx)) else {
+        let Some(defs) = self.slot_defs.get(&idx) else {
             return Vec::new();
         };
-        slots
-            .running
-            .iter()
+        let mut out: Vec<(slot_play::Slot, super::build::LiveSlot)> = self
+            .slot_anims
+            .get(&id)
+            .into_iter()
+            .flat_map(|slots| slots.running.iter())
             .filter(|(_, r)| r.anim.entry.sprite)
             .filter_map(|(slot, r)| {
-                Some(super::build::LiveSlot {
-                    def: defs.get(slot)?.clone(),
-                    idx: r.anim.entry.idx,
-                    frame: r.anim.player.frame(),
-                    stage: r.anim.player.stage(),
-                    end: r.anim.player.play.end,
-                })
+                Some((
+                    *slot,
+                    super::build::LiveSlot {
+                        def: defs.get(slot)?.clone(),
+                        idx: r.anim.entry.idx,
+                        frame: r.anim.player.frame(),
+                        stage: r.anim.player.stage(),
+                        end: r.anim.player.play.end,
+                    },
+                ))
             })
-            .collect()
+            .collect();
+        // spec: S-0108 claim 20 (a repair depot's production and special-1 to special-3 slot animations are simulation state; the drawing shows them as the simulation plays them)
+        for d in glasnost_sim::depot_anim::draws(&self.world, id) {
+            let slot = match d.slot {
+                glasnost_sim::depot::DepotSlot::Production => slot_play::Slot::Production,
+                glasnost_sim::depot::DepotSlot::Special1 => slot_play::Slot::Special1,
+                glasnost_sim::depot::DepotSlot::Special2 => slot_play::Slot::Special2,
+                glasnost_sim::depot::DepotSlot::Special3 => slot_play::Slot::Special3,
+            };
+            let Some(entry) = self.anim_table.get(&d.name.as_bytes().to_ascii_uppercase()) else {
+                continue;
+            };
+            let Some(def) = defs.get(&slot) else { continue };
+            if !entry.sprite {
+                continue;
+            }
+            out.push((
+                slot,
+                super::build::LiveSlot {
+                    def: def.clone(),
+                    idx: entry.idx,
+                    frame: d.frame,
+                    stage: d.stage,
+                    end: d.end,
+                },
+            ));
+        }
+        out.sort_by_key(|(s, _)| *s);
+        out.into_iter().map(|(_, l)| l).collect()
     }
 
     /// The names of a building's running slot animations, in slot order
@@ -2053,6 +2089,16 @@ impl Live {
                 } => {
                     // spec: S-0606 claims 6, 12 and 16 (the walls' special slots start or stop)
                     self.special_events.push((building, slots, start, damaged));
+                    continue;
+                }
+                Effect::DepotSlot {
+                    building,
+                    active1,
+                    start,
+                    damaged,
+                } => {
+                    // spec: S-0108 claim 20 (a repair depot's idle or active-1 starts or stops)
+                    self.depot_events.push((building, active1, start, damaged));
                     continue;
                 }
                 Effect::Sound { .. }

@@ -183,6 +183,7 @@ async fn smoke_async(
                         | Effect::Cloak { .. }
                         | Effect::GasHit { .. }
                         | Effect::SpecialAnims { .. }
+                        | Effect::DepotSlot { .. }
                         | Effect::Bunkered { .. }
                         | Effect::Seized { .. }
                         | Effect::Deactivated { .. }

@@ -28,6 +28,7 @@ pub mod corridor;
 pub mod crates;
 pub mod crush;
 pub mod depot;
+pub mod depot_anim;
 pub mod disc;
 pub mod domination;
 pub mod drain;
