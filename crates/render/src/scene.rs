@@ -16,6 +16,7 @@ use crate::compose::{
     self, ComposeQuirks, DepthSource, DepthTest, Drawing, Frame, Paint, Profile, Row565,
     SignedImage,
 };
+use crate::spots::{self, SpotGroup};
 
 /// What an item shows, for layer toggles and object info.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -212,6 +213,11 @@ impl Filter {
     pub fn shows(&self, item: &Item) -> bool {
         (self.provisional || !item.provisional) && self.groups.contains(&item.group)
     }
+
+    /// Whether the spot group `g` passes the filter.
+    pub fn shows_spots(&self, g: &SpotGroup) -> bool {
+        (self.provisional || !g.provisional) && self.groups.contains(&g.group)
+    }
 }
 
 /// A scene.
@@ -227,6 +233,9 @@ pub struct Scene {
     pub items: Vec<Item>,
     /// Number of leading items that belong to the cell pass.
     pub cell_pass_len: usize,
+    /// Single-pixel drawings placed between items ([`spots`]), sorted by
+    /// [`SpotGroup::at`]; groups at the same place are drawn in list order.
+    pub spots: Vec<SpotGroup>,
 }
 
 impl Scene {
@@ -275,10 +284,22 @@ impl Scene {
         if let Some(a) = alpha {
             frame.set_light_alpha(a);
         }
-        for item in self.items.iter().filter(|i| filter.shows(i)) {
+        let mut spots = self.spots.iter().peekable();
+        for (n, item) in self.items.iter().enumerate() {
+            while let Some(g) = spots.next_if(|g| g.at <= n) {
+                if filter.shows_spots(g) {
+                    spots::apply(&mut frame, g, (ox, oy));
+                }
+            }
+            if !filter.shows(item) {
+                continue;
+            }
             for item in item.copies(oy) {
                 self.draw_item(&mut frame, &item, (ox, oy), quirks);
             }
+        }
+        for g in spots.filter(|g| filter.shows_spots(g)) {
+            spots::apply(&mut frame, g, (ox, oy));
         }
         frame
     }

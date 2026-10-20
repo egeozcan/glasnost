@@ -18,6 +18,7 @@ use wgpu::util::DeviceExt;
 
 use crate::compose::{ComposeQuirks, DepthTest, Paint, Profile, expand565};
 use crate::scene::{Filter, ItemDepth, Scene, View};
+use crate::spots::{SpotGroup, SpotKind};
 
 /// WGSL source.
 pub const SHADER_SOURCE: &str = include_str!("map_gpu.wgsl");
@@ -158,10 +159,13 @@ enum Role {
     BlendWriter,
     BlendReader,
     BlendIgnore,
+    /// Single-pixel drawings ([`crate::spots`]): depth readers that compute
+    /// their pixel from the copy of the target.
+    Spot,
 }
 
 /// Every role, in pipeline order.
-const ROLES: [Role; 10] = [
+const ROLES: [Role; 11] = [
     Role::Tile,
     Role::Writer,
     Role::Reader,
@@ -172,6 +176,7 @@ const ROLES: [Role; 10] = [
     Role::BlendWriter,
     Role::BlendReader,
     Role::BlendIgnore,
+    Role::Spot,
 ];
 
 impl Role {
@@ -185,14 +190,18 @@ impl Role {
     fn translucent(self) -> bool {
         matches!(
             self,
-            Role::BlendTile | Role::BlendWriter | Role::BlendReader | Role::BlendIgnore
+            Role::BlendTile
+                | Role::BlendWriter
+                | Role::BlendReader
+                | Role::BlendIgnore
+                | Role::Spot
         )
     }
 }
 
 /// GPU resources for one scene.
 pub struct MapRenderer {
-    pipelines: [wgpu::RenderPipeline; 10],
+    pipelines: [wgpu::RenderPipeline; 11],
     bind_group: wgpu::BindGroup,
     layout: wgpu::BindGroupLayout,
     view_buffer: wgpu::Buffer,
@@ -405,6 +414,8 @@ impl MapRenderer {
                 Role::BlendWriter => (wgpu::CompareFunction::Less, true),
                 Role::BlendReader => (wgpu::CompareFunction::Less, false),
                 Role::BlendIgnore => (wgpu::CompareFunction::Always, false),
+                // spec: S-0518 claim 20 (a beam reads depth and never writes it; strictly less passes)
+                Role::Spot => (wgpu::CompareFunction::Less, false),
             };
             let blend =
                 matches!(role, Role::Shadow | Role::ShadowWriter).then_some(wgpu::BlendState {
@@ -439,7 +450,11 @@ impl MapRenderer {
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some("fs_main"),
+                    entry_point: Some(if role == Role::Spot {
+                        "fs_spot"
+                    } else {
+                        "fs_main"
+                    }),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: target_format,
@@ -622,14 +637,23 @@ impl MapRenderer {
         let mut list: Vec<Instance> = Vec::new();
         // Runs of instances that share a pipeline; a translucent item is a
         // run of its own, with the view rectangle it covers.
-        let mut batches: Vec<(Role, std::ops::Range<u32>, Option<[u32; 4]>)> = Vec::new();
+        let mut batches: Vec<Batch> = Vec::new();
+        let mut spot_groups = scene.spots.iter().peekable();
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
         let copies = scene
             .items
             .iter()
-            .filter(|i| filter.shows(i))
-            .flat_map(|i| i.copies(oy));
-        for item in copies {
+            .enumerate()
+            .flat_map(|(n, i)| i.copies(oy).map(move |c| (n, c)));
+        for (n, item) in copies {
+            while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
+                if filter.shows_spots(g) {
+                    spot_instances(g, view, &mut list, &mut batches);
+                }
+            }
+            if !filter.shows(&item) {
+                continue;
+            }
             let item = &item;
             let (l, t, r, b) = scene.bounds(item);
             // spec: S-0101 F4b (an image is drawn iff its drawn extent meets the view; a bounds miss draws no pixel)
@@ -751,6 +775,9 @@ impl MapRenderer {
                 _ => batches.push((role, n - 1..n, None)),
             }
         }
+        for g in spot_groups.filter(|g| filter.shows_spots(g)) {
+            spot_instances(g, view, &mut list, &mut batches);
+        }
         if list.len() > self.instance_capacity {
             self.instance_capacity = list.len().next_power_of_two();
             self.instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -842,6 +869,96 @@ impl MapRenderer {
         drop(pass);
         list.len()
     }
+}
+
+/// A run of instances sharing a pipeline, with the view rectangle a
+/// blending run covers.
+type Batch = (Role, std::ops::Range<u32>, Option<[u32; 4]>);
+
+/// Appends the instances of spot group `g` (one 1 × 1 instance per spot in
+/// the view) and their batches. A batch reads the copy of the target taken
+/// before it, so a batch ends before a spot that hits a pixel the batch
+/// already holds: overlapping spots then apply in order, as on the CPU
+/// ([`crate::spots::apply`]). A magnetic wave's spots never repeat a pixel
+/// and read the copy around them (S-0607 claim 25).
+fn spot_instances(g: &SpotGroup, view: &View, list: &mut Vec<Instance>, batches: &mut Vec<Batch>) {
+    let (ox, oy) = view.origin;
+    let (w, h) = (view.size.0 as i32, view.size.1 as i32);
+    let mut held: std::collections::HashSet<(i32, i32)> = std::collections::HashSet::new();
+    let mut rect: Option<[i32; 4]> = None;
+    let mut start = list.len() as u32;
+    let close =
+        |list: &Vec<Instance>, start: u32, rect: Option<[i32; 4]>, batches: &mut Vec<Batch>| {
+            let n = list.len() as u32;
+            if let Some([x0, y0, x1, y1]) = rect
+                && n > start
+            {
+                let (x0, y0) = (x0.max(0), y0.max(0));
+                let (x1, y1) = (x1.min(w), y1.min(h));
+                batches.push((
+                    Role::Spot,
+                    start..n,
+                    Some([x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32]),
+                ));
+            }
+        };
+    for s in &g.spots {
+        let (x, y) = (s.x - ox, s.y - oy);
+        if x < 0 || y < 0 || x >= w || y >= h {
+            continue;
+        }
+        let (kind, colour, weights, shift) = match s.kind {
+            SpotKind::Opaque { colour } => (0u32, u32::from(colour), 0u32, (0, 0)),
+            SpotKind::Additive { rgb } => (1, rgb_word(rgb), 0, (0, 0)),
+            SpotKind::Blended {
+                rgb,
+                line,
+                screen,
+                alpha_from,
+            } => (
+                2,
+                rgb_word(rgb),
+                u32::from(line) | (u32::from(screen) << 16),
+                alpha_from,
+            ),
+            SpotKind::Flash { rgb } => (3, rgb_word(rgb), 0, (0, 0)),
+            SpotKind::Wave { shift, k } => {
+                let m = crate::spots::WAVE_MARGIN;
+                if x < m || y < m || x >= w - m || y >= h - m {
+                    continue;
+                }
+                (4, 0, u32::from(k), shift)
+            }
+        };
+        if !held.insert((x, y)) {
+            close(list, start, rect, batches);
+            start = list.len() as u32;
+            held.clear();
+            held.insert((x, y));
+            rect = None;
+        }
+        // The rectangle of target pixels the batch reads: its own pixels and,
+        // for a wave, the source pixels.
+        let (sx, sy) = (x + i32::from(shift.0), y + i32::from(shift.1));
+        let r = rect.get_or_insert([x, y, x + 1, y + 1]);
+        r[0] = r[0].min(x).min(sx);
+        r[1] = r[1].min(y).min(sy);
+        r[2] = r[2].max(x + 1).max(sx + 1);
+        r[3] = r[3].max(y + 1).max(sy + 1);
+        list.push(Instance {
+            image: [0, 0, NO_IMAGE, 1 | (1 << 16)],
+            place: [s.x, s.y, s.bias, 0],
+            depth: [0, 0, NO_IMAGE, 0],
+            paint: [kind, colour, weights, 0],
+            companion: [i32::from(shift.0), i32::from(shift.1), 0, 0],
+        });
+    }
+    close(list, start, rect, batches);
+}
+
+/// Three 8-bit channels in one word, red lowest.
+fn rgb_word(c: [u8; 3]) -> u32 {
+    u32::from(c[0]) | (u32::from(c[1]) << 8) | (u32::from(c[2]) << 16)
 }
 
 impl MapRenderer {

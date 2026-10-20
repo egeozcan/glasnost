@@ -249,3 +249,113 @@ fn blend(s: u32, d: u32, code: u32) -> u32 {
     }
     return s / 4u + 3u * (d / 4u);
 }
+
+// A 5-6-5 colour as a target colour (channels widened by repeating their
+// top bits, as `packed` reads them back).
+fn colour565(c: u32) -> vec4<f32> {
+    return vec4<f32>(expand((c >> 11u) & 31u, 5u), expand((c >> 5u) & 63u, 6u), expand(c & 31u, 5u), 1.0);
+}
+
+// The target pixel at `p` drawn before the spot batch, widened to 8-bit
+// channels with zero low bits (S-0518 F7 and F8, S-0607 F5).
+fn widened(p: vec2<i32>) -> vec3<u32> {
+    let s = packed(textureLoad(backdrop, p, 0));
+    return vec3<u32>(s.r << 3u, s.g << 2u, s.b << 3u);
+}
+
+// 8-bit channels reduced to 5-6-5 by dropping the low bits.
+fn pack565(c: vec3<u32>) -> u32 {
+    return ((c.r >> 3u) << 11u) | ((c.g >> 2u) << 5u) | (c.b >> 3u);
+}
+
+fn unpack_rgb(w: u32) -> vec3<u32> {
+    return vec3<u32>(w & 255u, (w >> 8u) & 255u, (w >> 16u) & 255u);
+}
+
+// Single-pixel drawings (spots.rs): paint.x the kind (0 opaque, 1 additive,
+// 2 blended, 3 beam flash, 4 magnetic wave), paint.y the colour (5-6-5 for
+// opaque, else 8-bit channels red lowest), paint.z the blended weights
+// T[w] | T[256 − w] << 16 or the wave's k, companion.xy the alpha or
+// source offset, place.z the depth bias.
+@fragment
+fn fs_spot(in: Varyings) -> Fragment {
+    let px = vec2<i32>(floor(in.position.xy));
+    let kind = in.paint.x;
+    var depth = row_depth(px.y) + in.place.z;
+    if kind == 3u {
+        // S-0514 F8: (d(r) + b) mod 65536.
+        depth = ((depth % 65536) + 65536) % 65536;
+    }
+    depth = clamp(depth, 0, 65535);
+    let a = textureLoad(light_alpha, px, 0).r;
+    let d = widened(px);
+    var c: vec3<u32>;
+    if kind == 0u {
+        // S-0518 claim 23: opaque, light-alpha does not apply.
+        var out0: Fragment;
+        out0.color = colour565(in.paint.y);
+        out0.depth = f32(depth) / 65536.0;
+        return out0;
+    } else if kind == 1u {
+        // S-0518 F7.
+        let l = unpack_rgb(in.paint.y);
+        var t = d + (l * a) / 128u;
+        var k = 0u;
+        var x = 0u;
+        for (var i = 0; i < 3; i++) {
+            if t[i] >= 255u {
+                k += 1u;
+                x += t[i] - 255u;
+            }
+        }
+        var spill = 0u;
+        if k == 1u {
+            spill = x / 2u;
+        } else if k == 2u {
+            spill = x;
+        }
+        for (var i = 0; i < 3; i++) {
+            if t[i] < 255u {
+                t[i] += spill;
+            }
+        }
+        c = min(t, vec3<u32>(255u));
+    } else if kind == 2u {
+        // S-0518 F8, with the pair's first pixel's light-alpha.
+        let ap = clamp(px + in.companion.xy, vec2<i32>(0), view.size - vec2<i32>(1));
+        let a2 = textureLoad(light_alpha, ap, 0).r;
+        if a2 == 0u {
+            discard;
+        }
+        let l = unpack_rgb(in.paint.y);
+        let tw = in.paint.z & 0xFFFFu;
+        let tr = in.paint.z >> 16u;
+        c = d;
+        for (var i = 0; i < 3; i++) {
+            if l[i] > 0u {
+                c[i] = min(((d[i] * tr + l[i] * tw) * a2) >> 15u, 255u);
+            }
+        }
+    } else if kind == 3u {
+        // S-0514 claim 25.
+        if a == 0u {
+            discard;
+        }
+        let p = unpack_rgb(in.paint.y);
+        let l = vec3<u32>((p.r >> 3u) << 3u, (p.g >> 2u) << 2u, (p.b >> 3u) << 3u);
+        if a == 127u {
+            c = l;
+        } else {
+            c = min((l * a) / 128u, vec3<u32>(255u));
+        }
+    } else {
+        // S-0607 F5: the source pixel as before the wave drew, boosted.
+        let s = widened(px + in.companion.xy);
+        let k = in.paint.z;
+        c = vec3<u32>(min(s.r + ((k / 2u) * s.r) / 256u, 255u), s.g, min(s.b + (4u * k * s.b) / 256u, 255u));
+    }
+    var out: Fragment;
+    out.color = colour565(pack565(c));
+    out.depth = f32(depth) / 65536.0;
+    return out;
+}

@@ -825,3 +825,133 @@ fn gpu_protection_mask_matches_cpu() {
         .count();
     assert_eq!(differing, 0);
 }
+
+/// spec: S-0518 claims 20 to 23, F7, F8 (opaque, additive and blended beam pixels: strict depth
+/// test without depth write, overlapping samples composed in order, the pair's first light-alpha);
+/// S-0514 claim 25, F8 (beam flash pixels); S-0607 claim 25, F5 (the wave reads the picture from
+/// before it, 3-pixel view-edge margin)
+///
+/// Spot groups of every kind, some overlapping, some failing depth, one
+/// between items and the rest after them, draw the same on the GPU as on the
+/// CPU, exactly.
+#[test]
+fn gpu_spots_match_cpu() {
+    use glasnost_render::spots::{Spot, SpotGroup, SpotKind, easing};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let mut wave = Vec::new();
+    for y in 0..40 {
+        for x in 0..50 {
+            wave.push(Spot {
+                x: x + 2,
+                y: y + 1,
+                bias: (x % 7) * 40 - 120,
+                kind: SpotKind::Wave {
+                    shift: [(1, 0), (-2, 0), (0, 1), (0, -2)][((x + y) % 4) as usize],
+                    k: 110 + 8 * ((x * y) % 10) as u16,
+                },
+            });
+        }
+    }
+    s.spots.push(SpotGroup {
+        at: 6,
+        group: Group::Effects,
+        provisional: false,
+        spots: wave,
+    });
+    let mut beams = Vec::new();
+    for k in 0..90 {
+        let (x, y) = (k + 3, 10 + k / 3);
+        let bias = [-200, -2, 30, 400][(k % 4) as usize];
+        let rgb = [
+            (k * 37 % 256) as u8,
+            (k * 91 % 256) as u8,
+            (k * 13 % 256) as u8,
+        ];
+        let w = (k as u32 * 29) % 257;
+        for kind in [
+            SpotKind::Additive { rgb },
+            SpotKind::Additive { rgb: [200, 40, 0] },
+            SpotKind::Blended {
+                rgb,
+                line: easing(w),
+                screen: easing(256 - w),
+                alpha_from: (0, -1),
+            },
+            SpotKind::Opaque {
+                colour: (k as u16).wrapping_mul(2971),
+            },
+            SpotKind::Flash { rgb },
+        ]
+        .into_iter()
+        .skip((k % 3) as usize)
+        {
+            beams.push(Spot { x, y, bias, kind });
+            beams.push(Spot {
+                x,
+                y: y + 1,
+                bias,
+                kind,
+            });
+        }
+    }
+    s.spots.push(SpotGroup {
+        at: usize::MAX,
+        group: Group::Effects,
+        provisional: false,
+        spots: beams,
+    });
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (128u32, 72u32);
+    for (origin, step) in [((0, 0), 1usize), ((5, 3), 7)] {
+        let view = View {
+            origin,
+            size,
+            reference: DEPTH_REFERENCE,
+        };
+        let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+            .map(|i| [127, 0, 64, 200, 127][(i * step) % 5])
+            .collect();
+        let filter = Filter::default();
+        let q = ComposeQuirks::default();
+        let cpu = s
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        let plain = scene()
+            .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+            .to_rgba();
+        assert!(
+            cpu.chunks(4)
+                .zip(plain.chunks(4))
+                .filter(|(a, b)| a != b)
+                .count()
+                > 300,
+            "the spots show"
+        );
+        let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+        let mut encoder = device.create_command_encoder(&Default::default());
+        r.render_lit(
+            &device,
+            &queue,
+            &mut encoder,
+            &color,
+            &depth.create_view(&Default::default()),
+            &s,
+            &view,
+            &filter,
+            &q,
+            Some(&alpha),
+        );
+        queue.submit([encoder.finish()]);
+        let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+        let differing = cpu
+            .chunks(4)
+            .zip(gpu.chunks(4))
+            .filter(|(a, b)| a[..3] != b[..3])
+            .count();
+        assert_eq!(differing, 0, "view at {origin:?}");
+    }
+}
