@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 18
+revision: 19
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0087, Q-0212]
+requests: [Q-0087, Q-0212, Q-1525]
 supersedes: []
 ---
 
@@ -36,6 +36,7 @@ used by this spec only:
 - **Drawn as its disguise for a viewing house:** the presentation test of S-0516 claim 37,
   distinct from the game-state test *appears disguised* of S-0516 claim 35. Here the viewing
   house is the local player's house.
+- **Shadow height** *h*ₛ: the height from which the generic infantry shadow is placed (claim 19 b).
 - **Body sprite** (glossary *sprite*): the infantry type's body sprite holds *L* image frames. The
   first ⌊L/2⌋ image frames are body image frames, the second half are their shadows in the same
   order.
@@ -693,24 +694,58 @@ used by this spec only:
     - Confidence: high (the rule), medium (when sequences started by other behaviour, such as idle
       actions and orders, play a frame-0 cue, which depends on when that behaviour runs in the tick)
 
-19. **Shadows.** An infantry unit whose height above the surface is 0 and whose type does not
-    suppress shadows (Import mapping) also draws shadow image frame *frame* + ⌊L/2⌋ of its body
-    sprite, at the same screen position, as a darkening. A unit standing on a bridge deck has a
-    height above the surface of 0 (Terms), so it draws this shadow too. A unit whose height above
-    the surface is not 0 draws no shadow image frame from its own body sprite. When its height
-    above the surface is above 0, a generic infantry-shadow sprite is drawn instead, image frame 1,
-    at the ground position below the unit. For a unit that is not on a bridge deck but is above a
-    bridge cell at or above the deck, the deck counts as the ground for this generic shadow, under
-    a further condition on the neighbouring cells that is not specified here. No game option or
-    data turns the body-sprite shadow off for all units.
-    - Backing: `measurable` (scenario M11); `unmeasured` (the neighbouring-cell condition of the
-      case above a bridge deck: it is not identified, so no scenario can set it up, and
-      the negative-height case: M11 has no controlled below-surface placement, and
-      the absence of a global body-shadow disable: the proposed screenshots do not exhaust
-      all options and data)
-    - Confidence: high (on the ground and on a bridge deck), medium (the generic shadow and its
-      image frame number, and that nothing turns the body-sprite shadow off for all units), low
-      (the case above a bridge deck)
+19. **Shadows.** Shadows are presentation only; no game state depends on them. Write *h* for the
+    unit's height above the surface in leptons (glossary; over a high-bridge cell, for a unit not
+    on the deck, that is the height above the ground under the bridge).
+    - (a) *Own shadow.* An infantry unit with *h* = 0 whose type does not suppress shadows (Import
+      mapping) also draws shadow image frame *frame* + ⌊L/2⌋ of its body sprite, at the same
+      screen position, as a darkening. A unit standing on a bridge deck has *h* = 0 (Terms), so
+      it draws this shadow too. A unit with *h* not 0 draws no shadow image frame from its own
+      body sprite. No game option or data turns the body-sprite shadow off for all units.
+    - (b) *Generic shadow height.* For a unit with *h* not 0, the *shadow height* *h*ₛ (integer
+      leptons, exact) is *h* − 416 (the deck height of 4 height levels, Constants) when all three
+      of these hold, and *h* otherwise:
+      - the cell the unit is over is a high-bridge cell (S-0211 claim 15),
+      - *h* ≥ 416,
+      - the neighbouring cell one step across the bridge towards lower coordinates is also a
+        high-bridge cell: the cell (*x*, *y* − 1) when the unit's cell has a bridge axis along cell
+        *x*, the cell (*x* − 1, *y*) when it is along cell *y* (S-0212 Terms, *bridge axis*).
+
+      So above the deck the deck counts as the ground, except over the high-bridge cells whose
+      lower-coordinate neighbour across the bridge carries no deck (normally one edge row of the
+      deck), where the shadow falls on the ground under the bridge.
+    - (c) *When the generic shadow is drawn.* A unit with *h* not 0 draws the generic infantry
+      shadow exactly when *h*ₛ > 0. The exception is a unit with drop-pod movement: it never
+      draws the generic shadow, and while *h* > 0 it draws the drop-pod shadow of S-0102
+      claim 13 instead. No shadow of either kind is drawn while *h* < 0. No generic shadow
+      is drawn while *h*ₛ = 0 (a unit exactly at deck height over a deck cell that is not on
+      the deck); this does not suppress a drop-pod shadow when *h* > 0. The type's shadow-suppression flag (Import mapping)
+      does not suppress the generic shadow, and no game option or detail level turns it off.
+    - (d) *What is drawn.* The generic shadow is always image frame 1 of the generic
+      infantry-shadow sprite, one fixed file shared by every infantry type (Import mapping). No
+      rules, art or map field, type, house, theater, facing, sequence or height selects another
+      file or image frame, and its size does not change with height; only its draw point moves,
+      *L*(*h*ₛ) rows below the unit's draw point (S-0102 claim 20). It is a darkening (S-0102
+      claim 26): no palette, brightness or light enters it. It is drawn right before the unit's
+      body, so where they overlap the body is drawn over it and the generic shadow never darkens
+      its own unit (unlike the own shadow, S-0102 claim 28). If the file cannot be found, or
+      holds fewer than two image frames, no generic shadow is drawn and nothing else changes.
+    - Backing: `measurable` (scenario M11 for part a and the hovering case; M20 for parts b to d:
+      (a) the frame, the darkening, the fixed size over a fall and the detail levels, (b) the order against the body,
+      (c) the bridge rule on both edge rows of both axes, (d) the shadow-suppression flag, (e) a
+      replacement file with one image frame). The following parts are `unmeasured` here:
+      *h* < 0 (no controlled below-surface placement is known), the exact *h*ₛ = 0 boundary
+      (the proposed fall captures need not reach that exact height before landing),
+      drop-pod exclusion and its shadow (no controlled legal skirmish start is specified),
+      bridge-cell descent below deck height (M20(c) may land on the deck instead),
+      a file that cannot be found at all (the shipped archives always hold it),
+      the exhaustive independence from all other data, options, detail levels, types, houses,
+      theaters, facings and sequences (M11 and M20 test only their named cases, not every
+      combination); and the absence of game-state effects or an importer warning for a missing
+      shadow file (no scenario isolates those outcomes).
+    - Confidence: high (parts a, c and d); medium (part b: the neighbour rule is read, but which cells carry
+      a deck and an axis depends on the marking rules of S-0211 claim 15 and S-0212 Terms; and
+      that nothing turns the body-sprite shadow off for all units)
 
 20. **Unused kinds.** The kinds guard, *tumble* and *deployed-idle* are read from the art
     (Import mapping), but no stock behaviour ever starts any of the three. Their entries therefore
@@ -871,6 +906,7 @@ damage at all is an open question.
 | Idle comment chance | 1 in 3 | draws | Unsynchronised random stream, draw 0 of 0 to 2 |
 | Value length limit | 31 | bytes of text | Sequence art values (claim 22, Import mapping, `quirks.sequence_value_length_limit`) |
 | Generic shadow image frame | 1 | image frame | Of the generic infantry-shadow sprite (claim 19) |
+| Generic shadow deck lift | 416 | leptons | 4 height levels, the deck height of S-0511; subtracted to give *h*ₛ (claim 19 b) |
 
 **T1. Engine table per sequence kind** (I = interruptible, b = base delay in ticks, n = normalised
 by game speed):
@@ -1181,7 +1217,7 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   | `DeadBodies` | infantry type | list of animation names | empty | the type's corpse list (claim 17) |
   | `DeathAnims` | infantry type | list of animation names | empty | death animations indexed by death kind (claim 17) |
   | `JumpJet` | any unit type | boolean | false | jumpjet type (claims 10, 11, 12, 17) |
-  | `NoShadow` | any unit type | boolean | false | suppresses the body-sprite shadow (claim 19) |
+  | `NoShadow` | any unit type | boolean | false | suppresses the body-sprite shadow only (claim 19 a); the generic shadow is drawn regardless (claim 19 c) |
   | `MovementZone` | any unit type | movement zone name | `Normal` | the amphibious-destroyer value enables the water substitutions (claim 7) |
   | `Storage` | any unit type | integer | 0 | storage capacity (claim 7) |
   | `Strength` | any object type | integer | 0 | the strength of F5; the importer warns when it is 0 or below for an infantry type (F5) |
@@ -1209,7 +1245,17 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
 
   No matching registered type means no unit receives this designation. Any infantry type
   with the matching registry name receives it, regardless of its art or display name.
-  Claim 19 uses the generic infantry-shadow sprite for an airborne infantry unit.
+- **Generic infantry-shadow sprite (claim 19, Q-1525).** Presentation only. The file has a fixed
+  name built into the engine; no rules, art or map key names or overrides it.
+
+  | Input | Form | When absent | Use |
+  |---|---|---|---|
+  | game data file `INFSHDW.SHP`, found by the name lookup of S-0005 | sprite file; image frame 1 is used | no generic shadow is drawn; no importer warning, nothing else changes | the generic infantry shadow of claim 19 (c, d) |
+
+  The name gets no theater extension, letter substitution, generic fallback or arctic suffix
+  (S-0007 claims 6 to 10 do not apply to it). A file that holds fewer than two image frames
+  draws no generic shadow either. The lookup is the same for every infantry type, so a mod
+  changes the generic shadow only by supplying a file of that name.
 
 ## Measurement scenarios
 
@@ -1649,7 +1695,7 @@ whose …") means any stock type with that property; the property is a precondit
     per variant. Reversed event or draw order, a second virus effect for the parachutist,
     or any virus effect for the ground own-list variant falsifies the respective rule.
 - **M11 (claim 19).** Screenshot a soldier standing on the ground, one standing on a bridge deck,
-  and a jumpjet soldier hovering. Expected: the two standing soldiers show their own shadow, image
+  and a jumpjet soldier hovering over flat ground away from bridges. Expected: the two standing soldiers show their own shadow, image
   frame *frame* + ⌊L/2⌋. The hovering one has the generic shadow on the ground below it, drawn as
   image frame 1 of the generic infantry-shadow sprite (matched against that sprite's image frames
   in the capture), and no body-sprite shadow. Falsified if either standing soldier shows no body-sprite shadow or a
@@ -1785,6 +1831,48 @@ whose …") means any stock type with that property; the property is a precondit
     section's frames. Control: a reference of exactly 31 bytes selects that same section.
     Falsified by the full-name section's frames or by failure of the control. Runs: three per
     variant. ASCII makes the byte count explicit; no decoded-character limit is assumed.
+- **M20 (claim 19 b to d, Q-1525).** Use the common skirmish measurement setup above,
+  no engine add-on and no mods (the named test files and purpose-made test maps excepted),
+  highest detail level, game speed 6, 800 × 600. Captures
+  are frame grabs of the ground under one soldier; a recorder (glossary) that only reads the
+  game's state also logs the soldier's world height each tick, so *h* and *h*ₛ are known for
+  every grab.
+  - (a) Frame, darkening, size. On a tiny flat clear map, drop paratroopers over open ground
+    (any stock paradrop means; S-0522 owns how they fall). Grab the ground under one trooper
+    every 4 ticks of its fall, and once more after it lands. Expected: at every grab with *h* > 0,
+    the darkened pixels match image frame 1 of the generic infantry-shadow sprite (Import
+    mapping), with the same width and height at every height, each pixel the ground pixel with
+    every channel halved and rounded down (S-0102 F7), centred *L*(*h*) rows below the trooper's
+    draw point; after landing, the own shadow frame *frame* + ⌊L/2⌋ instead. Falsified by any
+    other image frame or file, a size that changes with height, a shadow at a different point,
+    channel values that differ from the predicted darkening, a missing own shadow after landing,
+    or a generic shadow after landing. Repeat one drop at the lowest detail level:
+    expected the same shadow; falsified if it is missing.
+  - (b) Order against the body. In the grabs of (a) whose shadow overlaps the trooper's body
+    (the last few above the ground), compare the overlapping body pixels with the same body
+    frame drawn alone. Expected: unchanged (the body is drawn over the shadow). Falsified if the
+    body is darkened there.
+  - (c) Bridges. A test map with one straight high bridge along cell *x* and one along cell
+    *y*, over clear ground. Drop one trooper over each of the four deck cells across each bridge,
+    so that the cell of lowest *y* (along *x*) or lowest *x* (along *y*) is included. Grab every
+    4 ticks while the trooper is above the deck. Expected: over the three cells whose
+    lower-coordinate neighbour across the bridge is a deck cell, the shadow sits *L*(*h* − 416)
+    rows below the draw point (on the deck); over the edge cell it sits *L*(*h*) rows below (on
+    the ground under the bridge, where the deck may hide it). Record only visible pixels for
+    placement comparisons; an entirely hidden shadow does not confirm its point. Repeat from
+    another view position if clipping hides the comparison. A case with no visible diagnostic
+    pixels remains unmeasured. Falsified by a visible shadow at a point other than the one
+    predicted for that cell, in particular if the edge cell behaves like the other three,
+    or any of the three uses *L*(*h*). A trooper may land on the deck without descending below
+    it; this part does not claim to test the below-deck or exact deck-height boundary.
+  - (d) Shadow suppression. Repeat (a) with named test rules that suppress the trooper type's
+    shadows. Expected: the generic shadow still appears while it falls; after landing no own
+    shadow. Falsified if the generic shadow is missing during the fall or an own shadow
+    remains after landing.
+  - (e) Short file. Repeat (a) with a loose replacement generic infantry-shadow file that holds
+    only one image frame. Expected: no shadow at any height above 0. Falsified by any shadow
+    during the fall.
+  - Runs: one drop per part and case; no random draw is involved in the drawing.
 
 **Cross-spec scenario alignment confirmed.** S-0202 scenarios R5(a) and R6(a) count the
 behaviour-processing delay draws (S-0215 claims 6 and 24), and R5(a) distinguishes idle-timer
@@ -1792,13 +1880,33 @@ expiry from the first eligible later processing. Their setup includes a distant 
 player and accounts for its unrelated draws. These scenario corrections do not change S-0202's
 generator or F4's constant.
 
+## Changes for other specs
+
+**Cross-spec changes to confirm before hand-off.** These are required companion changes.
+This draft resolves cases that the current companion specs still exclude or leave open.
+
+- **S-0102 claims 11, 13 and 20:** replace the unresolved above-high-bridge generic-shadow
+  case with claim 19(b–d)'s shadow height and placement. The generic shadow's final depth bias
+  is −5 − *L*(*z* − *h*ₛ), in integer depth units, with *z* the unit's world height in leptons
+  and *L* the height lift. Its profile is flat and it does not write depth. Update the
+  corresponding constant, backing and open question; M20(c) proposes placement observations,
+  not a separate isolation of that depth bias. Claim 28 must distinguish the generic shadow
+  drawn before its body from the own shadow drawn after it. Claim 20 must retain the
+  drop-pod exception of claim 19(c). These changes are required, not assertions that the
+  current S-0102 already specifies the resolved bridge case.
+- **S-0007 claim 21:** exempt the generic infantry-shadow sprite from the assertion that no
+  object loads a separate shadow file. It is a fixed-name shared file, not a companion file
+  selected by the infantry type's art. Claim 19 and the Import mapping here own its selection.
+  M20(e) supplies the short-file scenario. The drop-pod shadow of S-0102 claim 13 also needs
+  an exception to that universal assertion.
+
 ## Open questions
 
 - With a fire frame larger than *C*, the firing kind completes before the shot. The
   unit then stays in the attack state only while its next sequence has a non-zero delay (claim
   11), so a standing unit would never fire. Stock data may never do this; not measured.
-- The per-object condition of the water death case and of the cyborg case (claim 17), and the
-  neighbouring-cell condition of the generic shadow over a bridge (claim 19), are not identified.
+- The per-object condition of the water death case and of the cyborg case (claim 17) is not
+  identified.
 - A killed unit whose death request claim 6 turns down while it falls under a parachute (a type
   marked "not human", claim 17), or because its entry has no image frames
   (`quirks.refused_death_keeps_unit`), is not removed by the death handling and keeps its current

@@ -1,9 +1,9 @@
 ---
 id: Q-1525
 title: Which sprite file is the generic infantry shadow, and how is it drawn
-status: open
+status: answered
 related: [S-0107, S-0102, S-0103, S-0007]
-answered-by: []
+answered-by: [S-0107]
 ---
 
 ## Need
