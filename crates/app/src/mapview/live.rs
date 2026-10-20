@@ -127,6 +127,37 @@ impl Pacer {
     }
 }
 
+/// Where each magnetic wave goes in an air-layer list: the index of the
+/// entrant it is drawn before, or the list's length for its end. `afters`
+/// gives each wave's next animation serial at its creation, in creation
+/// order.
+///
+/// S-0607 claim 26 places a wave after every animation made before it
+/// (serial below its `after`). Past the last of those, our interim puts it
+/// before the first particle or newer animation, otherwise at the end; its
+/// place against mobile objects and static entries is open (claim 26 orders
+/// it only against animations).
+pub(crate) fn wave_slots(list: &[Entrant], afters: impl Iterator<Item = u32>) -> Vec<usize> {
+    afters
+        .map(|after| {
+            // spec: S-0607 claim 26 (after the animations made before the wave)
+            let start = list
+                .iter()
+                .rposition(|e| matches!(*e, Entrant::Anim(s) if s < after))
+                .map_or(0, |i| i + 1);
+            // Our interim: before the next particle or newer animation, else at the end.
+            list[start..]
+                .iter()
+                .position(|e| match *e {
+                    Entrant::Anim(s) => s >= after,
+                    Entrant::Particle(_) => true,
+                    _ => false,
+                })
+                .map_or(list.len(), |j| start + j)
+        })
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // The ground layer (S-0102 claim 6)
 // ---------------------------------------------------------------------------
@@ -1325,7 +1356,12 @@ impl Live {
         use glasnost_sim::cloak::view;
         let w = &self.world;
         let v = self.viewer.or_else(|| w.obj(id).and_then(|o| o.owner));
-        cloak_items(view::look(w, id, v), view::shadow(w, id), self.erased_code(id), items);
+        cloak_items(
+            view::look(w, id, v),
+            view::shadow(w, id),
+            self.erased_code(id),
+            items,
+        );
     }
 
     /// The translucency of an object being erased or phasing in (S-0514
@@ -2634,7 +2670,6 @@ impl Live {
             layers.push(l);
             layers.sort();
         }
-        let mut waves = waves.iter().peekable();
         let wave_group = |scene: &mut Scene, spots: &Vec<glasnost_render::spots::Spot>| {
             scene.spots.push(SpotGroup {
                 at: scene.items.len(),
@@ -2644,17 +2679,15 @@ impl Live {
             });
         };
         for layer in layers {
-            for e in self.layers.list(layer) {
-                if wave_layer == Some(layer) {
-                    // spec: S-0607 claim 26 (a wave enters the air layer's list at its creation, after the animations made before it)
-                    // Our interim: a wave also precedes every particle of the list (Q-1520's particle order is open).
-                    while let Some((_, spots)) = waves.next_if(|(after, _)| match *e {
-                        Entrant::Anim(serial) => *after <= serial,
-                        Entrant::Particle(_) => true,
-                        _ => false,
-                    }) {
-                        wave_group(scene, spots);
-                    }
+            let list = self.layers.list(layer);
+            let slots = if wave_layer == Some(layer) {
+                wave_slots(list, waves.iter().map(|(after, _)| *after))
+            } else {
+                Vec::new()
+            };
+            for (i, e) in list.iter().enumerate() {
+                for ((_, spots), _) in waves.iter().zip(&slots).filter(|(_, s)| **s == i) {
+                    wave_group(scene, spots);
                 }
                 match *e {
                     Entrant::Layered(i) => {
@@ -2682,12 +2715,8 @@ impl Live {
                     Entrant::Static(_) => {}
                 }
             }
-            if wave_layer == Some(layer) {
-                // Our interim: waves made after every animation of the list close it
-                // (S-0607 claim 26 does not place them against particles or objects).
-                for (_, spots) in waves.by_ref() {
-                    wave_group(scene, spots);
-                }
+            for ((_, spots), _) in waves.iter().zip(&slots).filter(|(_, s)| **s == list.len()) {
+                wave_group(scene, spots);
             }
         }
     }

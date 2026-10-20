@@ -18,7 +18,7 @@ use super::build::{
     Attitude, InfantryFrame, Inputs, LiveBuilding, Mobile, Options, ShadowAnchor, build_parts,
     infantry_frame,
 };
-use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code};
+use super::live::{Entrant, GroundLayer, Live, Pacer, period_ms, sim_code, wave_slots};
 use super::tests::{RULES, context, context_with, scene_map_text, shp};
 use super::unload::{DoorView, Unloading};
 
@@ -3259,4 +3259,32 @@ fn protection_translucent_slot_animation_interim() {
         blended[0].0.rho, body.rho,
         "the protected building's brightness"
     );
+}
+
+/// spec: S-0607 claim 26 (a wave is drawn after the air layer's animations made before it, even when a particle precedes such an animation in the list)
+#[test]
+fn magnetic_wave_follows_the_older_animations_of_the_air_list() {
+    let p = Entrant::Particle(ObjectId(40));
+    let m = Entrant::Object(ObjectId(41));
+    // Animations 3 and 4 were made before the wave (its next serial was 5), 6 after it.
+    let list = [
+        p,
+        Entrant::Anim(3),
+        m,
+        p,
+        Entrant::Anim(4),
+        Entrant::Anim(6),
+        p,
+    ];
+    // After animation 4 (index 4), before the newer animation 6 (index 5).
+    assert_eq!(wave_slots(&list, [5].into_iter()), vec![5]);
+    // Without a newer animation: before the first particle past the older ones.
+    let list = [p, Entrant::Anim(3), m, p];
+    assert_eq!(wave_slots(&list, [5].into_iter()), vec![3]);
+    // Nothing after the older animations: at the end.
+    let list = [Entrant::Anim(3), m];
+    assert_eq!(wave_slots(&list, [5].into_iter()), vec![2]);
+    // No older animation: before the first particle or newer animation.
+    let list = [m, Entrant::Anim(7), p];
+    assert_eq!(wave_slots(&list, [5, 8].into_iter()), vec![1, 2]);
 }
