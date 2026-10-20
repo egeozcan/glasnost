@@ -375,6 +375,7 @@ fn start_anim(w: &mut World, anim: u32, pos: Pos) -> Option<ObjectId> {
         pos,
         delay: drawn,
         reverse: false,
+        z_adjust: None,
     });
     // spec: S-0109 claim 5 (an animation updates in its own turn; created outside the turn pass, its first turn comes in the next turn pass)
     w.update.enter(id);

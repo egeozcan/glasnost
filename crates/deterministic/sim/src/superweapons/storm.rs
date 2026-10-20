@@ -236,6 +236,7 @@ fn make_cloud(w: &mut World, cell: CellXY) {
         pos,
         delay,
         reverse: false,
+        z_adjust: None,
     });
     let t = w.tick;
     let d = stage_delay(w, anim, delay);

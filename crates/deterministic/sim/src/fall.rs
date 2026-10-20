@@ -52,6 +52,10 @@ pub fn bomb_mark(w: &World, id: ObjectId) -> bool {
 /// Starts a fall (S-0511 claims 9 and 10): the object keeps the fall rate it
 /// already holds, and gets the bomb mark when `bomb` is set.
 pub fn start(w: &mut World, id: ObjectId, bomb: bool) {
+    if bomb && !falling(w, id) && w.obj(id).is_some() {
+        // spec: S-0102 claim 4 (an object dropped so as to explode when it reaches the ground is re-filed once when its fall starts)
+        crate::combat::effects::layer_refile(w, id);
+    }
     if let Some(o) = w.obj_mut(id) {
         o.fall.falling = true;
         // spec: S-0511 claim 10 (its fall rate starts from the value it already holds)
@@ -111,6 +115,17 @@ fn landing_surface(w: &World, o: &crate::world::Object) -> i32 {
 /// processing; while it still falls its locomotor does not advance.
 /// Returns whether it moved.
 pub fn turn(w: &mut World, id: ObjectId) -> bool {
+    if w.obj(id).is_none() {
+        return false;
+    }
+    // spec: S-0102 claim 4 (falling: the layer before this tick's fall, compared with the one after it)
+    let heights = crate::jump::layer_heights(w, id);
+    let moved = fall_step(w, id);
+    crate::combat::effects::layer_check(w, id, heights);
+    moved
+}
+
+fn fall_step(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     let v = o.fall.rate;
     let pos = o.pos;

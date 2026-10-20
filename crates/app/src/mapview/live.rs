@@ -324,6 +324,9 @@ pub struct Live {
     /// The mobile objects' layers and the lists of the layers other than
     /// ground (S-0102 claims 3, 4 and 7; presentation state).
     layers: super::layers::Layers,
+    /// The tick's layer moments of S-0102 claim 4 the simulation reported,
+    /// in order, until the layers take them.
+    layer_moments: Vec<super::layers::Moment>,
     /// The drawing's quirk switches (S-0102 Edge cases).
     view_quirks: super::quirks::ViewQuirks,
     /// Images and rows the combat drawing added.
@@ -922,6 +925,7 @@ impl Live {
             effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
             layers: super::layers::Layers::default(),
+            layer_moments: Vec::new(),
             view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
@@ -969,7 +973,7 @@ impl Live {
             let layer = live.static_layered[i].0;
             live.layers.place(Entrant::Layered(i), layer);
         }
-        live.layers.evaluate_mobiles(&live.world, false, true);
+        live.layers.evaluate_mobiles(&live.world, false, true, &[]);
         // Objects enter the ground layer in the order they are put on the
         // map, which is object ID order (S-0203 claim 3, S-0009 claim 43); a
         // static entry enters with its building or animated terrain object,
@@ -1062,6 +1066,15 @@ impl Live {
     /// members, keys and order, and the tick's presentation events
     /// (taken out of the world: read them before).
     pub fn after_tick(&mut self) {
+        self.layer_moments = self
+            .world
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::LayerMoment { object, check } => Some((*object, *check)),
+                _ => None,
+            })
+            .collect();
         self.take_effects();
         self.update_slots();
         self.sync_layers(true);
@@ -1094,7 +1107,9 @@ impl Live {
     fn sync_layers(&mut self, tick: bool) {
         use super::slots::Layer;
         let events_only = self.view_quirks.layer_change_on_events_only;
-        self.layers.evaluate_mobiles(&self.world, tick, events_only);
+        let moments = std::mem::take(&mut self.layer_moments);
+        self.layers
+            .evaluate_mobiles(&self.world, tick, events_only, &moments);
         let anims: BTreeMap<u32, Layer> = self.anims.iter().map(|a| (a.serial, a.layer)).collect();
         let particles: BTreeSet<ObjectId> = self
             .world
@@ -1828,6 +1843,7 @@ impl Live {
                 pos,
                 delay,
                 reverse,
+                z_adjust,
             } = e
             {
                 self.counts.anims += 1;
@@ -1841,6 +1857,12 @@ impl Live {
                     // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation is drawn with
                     // its object: the owner's house-colour palette, at brightness 1000)
                     a.carrier = Some((house, NEUTRAL_LIGHT));
+                }
+                if z_adjust.is_some()
+                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                {
+                    // spec: S-0102 claim 13 and S-0506 claim 19 (its creator replaces the animation's depth adjustment: −15 for a rocket detonation's explosion)
+                    a.z_adjust = *z_adjust;
                 }
                 if !sprite && self.debug_markers {
                     self.transients.push(Transient {
@@ -1981,6 +2003,7 @@ impl Live {
                 | Effect::Drain { .. }
                 | Effect::Maker { .. }
                 | Effect::Domination { .. }
+                | Effect::LayerMoment { .. }
                 | Effect::Walker { .. } => continue,
             };
             self.transients.push(Transient {

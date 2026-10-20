@@ -702,6 +702,8 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     }
     let before = pos(w, id);
     let start = j.phase;
+    // spec: S-0102 claim 4 (the layer is evaluated just before the tick's movement step)
+    let heights = layer_heights(w, id);
     physics(w, id);
     if w.obj(id).is_none() {
         return false;
@@ -721,6 +723,17 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     if matches!(start, Phase::Ascending | Phase::Cruising) {
         // spec: S-0502 claim 29 (revision 18, Q-1500 answered: in each update of ascending or cruising over a different cell, the registration moves to the new cell's sector with S-0303 claim 11's arrival order; hovering, descending and crashing updates do not move it)
         crate::combat::flying::moved(w, id);
+    }
+    let end = phase(w, id);
+    // spec: S-0102 claim 4 (a crash fall tick re-files: the update entering crashing, each crashing update and the one ending the fall)
+    let crash_tick = start == Phase::Crashing
+        || end == Some(Phase::Crashing)
+        || (end == Some(Phase::Crashed) && start != Phase::Crashed);
+    if crash_tick {
+        crate::combat::effects::layer_refile(w, id);
+    } else {
+        // spec: S-0102 claim 4 (and just after it: re-filed only when the two evaluations differ)
+        crate::combat::effects::layer_check(w, id, heights);
     }
     let after = pos(w, id);
     (after.x, after.y) != (before.x, before.y)

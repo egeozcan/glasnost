@@ -642,7 +642,21 @@ const LISTING_HEIGHT: i32 = 208;
 /// bridge-adjusted height, a new listing qualifies exactly when *r* < 208
 /// leptons or *r*′ = 0. The 208 test reads *r*, not *r*′.
 pub fn placement_qualifies(w: &World, id: ObjectId) -> bool {
-    let Some(o) = w.obj(id) else { return false };
+    if w.obj(id).is_none() {
+        return false;
+    }
+    let h = layer_heights(w, id);
+    // spec: S-0502 claim 4 (exactly when r < 208 leptons or r′ = 0 leptons; the 208-lepton comparison uses r, not r′)
+    h.r < LISTING_HEIGHT || h.adjusted == 0
+}
+
+/// The two heights of S-0502 claim 4's exact height predicate, which are
+/// also those of S-0102's jumpjet layer rule (*State and ordering*): *r*,
+/// the height above the surface, and the bridge-adjusted *r*′.
+pub fn layer_heights(w: &World, id: ObjectId) -> crate::combat::effects::LayerHeights {
+    let Some(o) = w.obj(id) else {
+        return Default::default();
+    };
     let on_deck = st(w, id).is_some_and(|j| j.on_deck);
     let r = height_above(w, id);
     // spec: S-0502 claim 4 and S-0102 claim 3 (r′ = r − 416 only over a high-bridge cell, with the on-deck state unset, r ≥ 416 and no bridge/parachute falling state, otherwise r′ = r; starting a crash does not set the falling state)
@@ -655,8 +669,7 @@ pub fn placement_qualifies(w: &World, id: ObjectId) -> bool {
     } else {
         r
     };
-    // spec: S-0502 claim 4 (exactly when r < 208 leptons or r′ = 0 leptons; the 208-lepton comparison uses r, not r′)
-    r < LISTING_HEIGHT || adjusted == 0
+    crate::combat::effects::LayerHeights { r, adjusted }
 }
 
 // ---------------------------------------------------------------------------

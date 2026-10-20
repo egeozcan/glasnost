@@ -20,7 +20,6 @@ These are filed in spec/requests/ and wait for the spec side (see "Two machines"
 interim rule in docs/development.md, *Visual review 2026-10-19*.
 
 - Q-1529: whether the shrouded-centre-cell protection row reaches a building's slot animations (S-0513).
-- Q-1561: where a missile's explosion is placed when its nose point is below the surface (S-0506). Its round was running at handoff and may be answered by now.
 - Q-1562: how a particle type's colour list reads malformed triples (S-0202).
 - Q-1590: whether a railgun system without a held particle type makes its laser (S-0616).
 

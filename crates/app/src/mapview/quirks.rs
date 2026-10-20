@@ -47,8 +47,12 @@ pub struct ViewQuirks {
     /// are sorted like the ground layer.
     pub unsorted_upper_layers: bool,
     /// `quirks.layer_change_on_events_only` (S-0102 claim 4): a mobile
-    /// object's layer is evaluated only at claim 4's moments. Off: every
-    /// tick (it moves when its layer differs).
+    /// object's layer is evaluated only at claim 4's moments, and the
+    /// checks of jumpjet movement and falling compare the layers before and
+    /// after the object's own step, not the list it is in. Off: the checks
+    /// give way to a sweep every tick that moves an object whose evaluated
+    /// layer differs from the list it is in; claim 4's re-files happen in
+    /// both states.
     pub layer_change_on_events_only: bool,
 }
 
