@@ -372,6 +372,13 @@ fn follow_spin(
     let mut changes = Vec::new();
     let mut last = glasnost_sim::gattling::spin(lane.world(), g).stage;
     let mut saved = std::collections::BTreeSet::new();
+    // GLASNOST_TRACE_SHOTS=n: also saves the first n frames that show a
+    // shot animation of `g` at one of its fire points (S-0301 claim 22).
+    let mut shots = std::env::var("GLASNOST_TRACE_SHOTS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0);
+    let mut shot_n = 0;
     for _ in 0..ticks {
         for &t in targets.iter().chain([&g]) {
             let full = lane.full_health(t);
@@ -386,6 +393,24 @@ fn follow_spin(
             break;
         };
         let aim = o.target;
+        if shots > 0 {
+            let w = lane.world();
+            let own = (o.pos.x, o.pos.y, o.pos.z);
+            let points: Vec<_> = (0..18)
+                .flat_map(|slot| {
+                    [0, 1].map(|k| glasnost_sim::combat::position::fire_point(w, g, slot, k))
+                })
+                .map(|p| (p.x, p.y, p.z))
+                .filter(|&p| p != own)
+                .collect();
+            let s = lane.c.session.as_ref().unwrap();
+            let live = s.loaded.live.as_ref().expect("a live game");
+            if live.playing_anims().iter().any(|(_, p)| points.contains(p)) {
+                shots -= 1;
+                shot_n += 1;
+                lane.save(&format!("{name}-shot{shot_n}"));
+            }
+        }
         let s = glasnost_sim::gattling::spin(lane.world(), g);
         if lane.world().tick % 300 == 0 {
             println!(
@@ -1627,6 +1652,69 @@ impl Lane {
              with art {art}, without sprite {none}, drawn now {drawn}",
             self.world().tick
         );
+        // GLASNOST_TRACE_ANIMS=1: the animations playing in this shot, and
+        // the armed objects on screen, by position and screen point.
+        if std::env::var_os("GLASNOST_TRACE_ANIMS").is_some() {
+            let s = self.c.session.as_ref().unwrap();
+            let live = s.loaded.live.as_ref().expect("a live game");
+            for (i, (name, (x, y, z))) in live.playing_anims().into_iter().enumerate() {
+                let p = self.screen_of(x, y, z);
+                println!("  animation {i} {name} at position ({x}, {y}, {z}), screen {p:?}");
+            }
+            let w = self.world();
+            let t = w.tick;
+            for (id, o) in w.objects.iter() {
+                let p = self.screen_of(o.pos.x, o.pos.y, o.pos.z);
+                let m = s.map_rect();
+                if !o.on_map || p.0 < m.x || p.1 < m.y || p.0 > m.x + m.w || p.1 > m.y + m.h {
+                    continue;
+                }
+                if glasnost_sim::combat::veterancy::type_combat(w, *id).is_none() {
+                    continue;
+                }
+                let fp0 = glasnost_sim::combat::position::fire_point(w, *id, 0, 0);
+                let fp1 = glasnost_sim::combat::position::fire_point(w, *id, 0, 1);
+                println!(
+                    "  object {id:?} {:?} at {:?} screen {p:?}, body {} turret {}, \
+                     fire point (slot 0, k 0) {:?} screen {:?}, (k 1) {:?} screen {:?}",
+                    o.kind,
+                    (o.pos.x, o.pos.y, o.pos.z),
+                    o.body.value(t),
+                    o.turret.value(t),
+                    (fp0.x, fp0.y, fp0.z),
+                    self.screen_of(fp0.x, fp0.y, fp0.z),
+                    (fp1.x, fp1.y, fp1.z),
+                    self.screen_of(fp1.x, fp1.y, fp1.z),
+                );
+            }
+        }
+        // GLASNOST_TRACE_BOX="x0,y0,x1,y1,step": the distinct items over a grid of screen points.
+        if let Ok(b) = std::env::var("GLASNOST_TRACE_BOX") {
+            let n: Vec<i32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+            if let [x0, y0, x1, y1, step] = n[..] {
+                let mut seen = std::collections::BTreeSet::new();
+                for x in (x0..x1).step_by(step.max(1) as usize) {
+                    for y in (y0..y1).step_by(step.max(1) as usize) {
+                        let s = self.c.session.as_mut().unwrap();
+                        seen.extend(s.trace_at(glasnost_ui::geom::Point::new(x, y)));
+                    }
+                }
+                println!("trace box {name}: {} distinct items", seen.len());
+                for l in seen {
+                    println!("  {l}");
+                }
+            }
+        }
+    }
+
+    /// The screen point of the world position (x, y, z): S-0101's
+    /// projection with the height lift, less the view origin.
+    fn screen_of(&self, x: i32, y: i32, z: i32) -> (i32, i32) {
+        let s = self.c.session.as_ref().unwrap();
+        let (wx, wy) = glasnost_render::projection::project_lifted(x, y, z);
+        let v = s.view();
+        let m = s.map_rect();
+        (wx - v.origin.0 + m.x, wy - v.origin.1 + m.y)
     }
 
     fn spawn(&mut self, kind: Kind, name: &str, house: HouseId, at: CellXY) -> ObjectId {
