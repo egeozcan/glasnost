@@ -2,11 +2,11 @@
 id: S-0613
 title: Gas clouds
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0662, Q-1240, Q-1241, Q-1242, Q-1244]
 supersedes: []
@@ -285,9 +285,10 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     field in ticks, or one more tick when the particle's object number is odd; F8 also covers
     nonpositive fields. Then, whenever the particle stage equals the type's end-stage field, the particle
     is marked dead if its type has the delete-at-stage-limit flag; otherwise its particle stage restarts at
-    0 (not at the start-stage field). The drawn image-frame number is the particle stage itself:
-    the type's start-frame field is not added for gas.
-    - Backing: `measurable` (scenario G5: the successor's life ends at the stage limit)
+    0 (not at the start-stage field). The drawn image-frame number is the particle stage itself.
+    No kind adds the type's start-frame field (S-0616 claim 25).
+    - Backing: `measurable` (scenario G5: the successor's life ends at the stage limit,
+      and S-0616 claim 25 for the other kinds' frame tests)
     - Confidence: high
 
 16. **Drawing detail.** A particle whose type deals no damage is not drawn while the measured
@@ -295,8 +296,12 @@ does (immunities, poison, berserk, death kinds) belongs to the specs named below
     lowest detail setting. Damaging gas particles bypass this particular suppression. At the
     highest detail setting, a particle with translucency 25 or 50 uses that translucency,
     a stored signed translucency from 75 through 127 uses 75. At other detail settings it is drawn opaque.
-    Translucency is reduced modulo 256 at creation.
-    - Backing: `measurable` (scenario G11, visual). The adaptive cutoff's settings import and
+    Translucency is reduced modulo 256 at creation. The value drawn is the particle's own stored
+    translucency, which S-0616 claim 26 changes for smoke successors, smoke emission and the fire
+    stage fields. The performance cutoff applies to particles of every kind, and at the lowest
+    detail setting smoke and spark particles are not drawn at all (S-0616 claim 23).
+    - Backing: `measurable` (scenario G11, visual; S-0616 claims 23 and 26 for the other kinds'
+      detail suppression and stored translucency changes). The adaptive cutoff's settings import and
       defaults remain `unmeasured` here: those inputs have not been traced or independently
       varied, so no fixed cutoff is claimed (Open questions).
     - Confidence: medium
@@ -551,7 +556,7 @@ Ordering consequences:
 | Lifetime | particle type `MaxEC` | integer, ticks | 1 |
 | Damage amount | particle type `Damage` | integer, health points per hit before damage resolution | 0 health points |
 | Warhead | particle type `Warhead` | warhead name | none |
-| Start frame (not added for gas drawing) | particle type `StartFrame` | integer frame index, dimensionless | 0 |
+| Start frame (not added for any kind's drawing) | particle type `StartFrame` | integer frame index, dimensionless | 0 |
 | Start stage | particle type `StartStateAI` | integer stage index, dimensionless; reduced to signed 8-bit | 0 |
 | End stage | particle type `EndStateAI` | integer stage index, dimensionless; reduced to signed 8-bit | 0 |
 | Stage advance | particle type `StateAIAdvance` | integer, ticks; reduced to signed 8-bit | 4 ticks |
