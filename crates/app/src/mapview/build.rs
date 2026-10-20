@@ -971,6 +971,9 @@ pub struct Painter {
     /// The building light sources the cells were lit with (S-0104 claim
     /// 12), kept for a relight.
     sources: Vec<LightSource>,
+    /// The radiation fields' light sources the cells were last lit with
+    /// (S-0525 claim 13), after the building lights.
+    field_sources: Vec<LightSource>,
     /// The cell-pass items of terrain tiles (diamonds and extra images)
     /// with their cells, for a relight.
     tile_items: Vec<(usize, CellXY)>,
@@ -1622,11 +1625,17 @@ impl Builder<'_> {
                 railroad: rule(self.import, k, idx, b"Land")
                     .is_some_and(|v| value::text(v, usize::MAX).eq_ignore_ascii_case(b"Railroad")),
             };
-            // spec: S-0009 claim 12 (crate overlays never appear in skirmish or multiplayer, quirks.skirmish_drops_map_crates)
+            // spec: S-0009 claim 12 (the map's crate overlays never appear in skirmish or multiplayer,
+            // quirks.skirmish_drops_map_crates); S-0520 claim 3 (a crate placed during play is an overlay
+            // of the cell and is drawn)
             let drops_crates = self
                 .rules
                 .is_none_or(|r| r.quirks.skirmish_drops_map_crates);
-            if self.cells_loaded.is_none() && self.options.skirmish && flags.crate_ && drops_crates
+            if !live
+                && self.cells_loaded.is_none()
+                && self.options.skirmish
+                && flags.crate_
+                && drops_crates
             {
                 continue;
             }
@@ -3142,6 +3151,8 @@ impl Builder<'_> {
             alternative: false,
             attitude: Attitude::None,
             disabled: false,
+            // spec: S-0107 claim 19 (a map unit stands on its surface)
+            above: 0,
         };
         Some(self.mobile(&m))
     }
@@ -3346,9 +3357,12 @@ impl Builder<'_> {
         ) {
             items.push(item);
         }
-        // spec: S-0107 claim 19 (on the ground: shadow frame + ⌊L/2⌋ at the same position, unless suppressed);
+        // spec: S-0107 claim 19 (height above the surface 0: shadow frame + ⌊L/2⌋ at the same position, unless
+        // suppressed; any other height: no body-sprite shadow. The generic infantry shadow drawn above 0 has no
+        // named sprite yet, so nothing is drawn for it: Q-1525);
         // S-0102 claims 20 and 28 (drawn right after the body; it darkens the body's own pixels)
-        if !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
+        if m.above == 0
+            && !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
             && let Some(item) = self.place_sprite(
                 &sprite,
                 frame + n / 2,
@@ -4087,6 +4101,10 @@ pub struct Mobile {
     /// a voxel vehicle is then drawn at half its brightness). `false`
     /// without a game state.
     pub disabled: bool,
+    /// The height above the surface in leptons (glossary; 0 on a bridge
+    /// deck): an infantry unit above 0 draws no body-sprite shadow
+    /// (S-0107 claim 19). 0 without a game state.
+    pub above: i32,
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
@@ -4187,6 +4205,7 @@ impl Painter {
             companion: None,
             oversized: BTreeSet::new(),
             sources: Vec::new(),
+            field_sources: Vec::new(),
             tile_items: Vec::new(),
         }
     }
@@ -4198,6 +4217,13 @@ impl Painter {
         let side = i32::from(map.cells.footprint().coordinate_side());
         let mut cells = vec![None; (side * side) as usize];
         let q = LightQuirks::default();
+        // spec: S-0525 claim 13 (field lights add up with the other light sources)
+        let sources: Vec<LightSource> = self
+            .sources
+            .iter()
+            .chain(&self.field_sources)
+            .copied()
+            .collect();
         for (c, cell) in map.cells.iter() {
             cells[(c.y * side + c.x) as usize] = Some(light::full_recompute(
                 ambient,
@@ -4206,7 +4232,7 @@ impl Painter {
                 set.tint,
                 (c.x, c.y),
                 i32::from(cell.level),
-                &self.sources,
+                &sources,
                 detail,
                 &q,
             ));
@@ -4280,6 +4306,17 @@ impl Painter {
             };
         }
         self.tile_items = tiles;
+    }
+
+    /// Sets the radiation fields' light sources (S-0525 claim 13); returns
+    /// whether they changed, so that the caller relights (claim 13: every
+    /// change relights the cells it reaches in the same tick).
+    pub fn set_field_lights(&mut self, lights: Vec<LightSource>) -> bool {
+        if lights == self.field_sources {
+            return false;
+        }
+        self.field_sources = lights;
+        true
     }
 
     /// The voxel buffer, for the next game of the program (S-0105 claim

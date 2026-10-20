@@ -270,6 +270,11 @@ pub struct Live {
     cache: Cache,
     /// Shots, detonations and animations still shown.
     transients: Vec<Transient>,
+    /// Laser beams still shown (S-0518 claim 6, S-0615 claims 15 and 16).
+    beams: Vec<combat::Beam>,
+    /// Each house's display RGB by house index (S-0103 claim 15), the
+    /// stand-in for its laser colour (Q-1521).
+    house_rgb: Vec<[u8; 3]>,
     /// Counts of the combat events seen.
     pub counts: Counts,
     /// The selection whose status extras are drawn (presentation state).
@@ -606,6 +611,10 @@ fn skirmish_setup(rules: &SimRules) -> Result<GameSetup, String> {
     ))
 }
 
+/// Neutral brightness, ‰ (S-0103 claim 8: a deploy or undeploy animation is
+/// drawn at brightness 1000).
+const NEUTRAL_LIGHT: i32 = 1000; // spec: S-0103 claim 8 (brightness of row 3 for deploy and undeploy animations)
+
 /// The house names of the map format's human and computer placeholders
 /// (S-0009 Import mapping), given to the skirmish's two houses.
 pub const HUMAN_HOUSE: &str = "<human player>"; // spec: S-0009 Import mapping (house names)
@@ -623,6 +632,19 @@ impl Live {
         started: (World, Arc<SimRules>, GameSetup, Vec<String>),
     ) -> Self {
         let (world, rules, setup, substituted) = started;
+        // spec: S-0103 claim 15 (a house's display RGB, sampled once at colour setup; 8-bit channels)
+        let house_rgb = world
+            .houses
+            .iter()
+            .map(|h| {
+                super::build::owner_radar_colour(
+                    inputs.import,
+                    inputs.options,
+                    h.name.as_bytes(),
+                    [8, 8, 8], // nocite: 8-bit channels, no display narrowing
+                )
+            })
+            .collect();
         let mut types = BTreeMap::new();
         let mut undrawn = BTreeSet::new();
         for o in world.objects.values() {
@@ -751,6 +773,8 @@ impl Live {
             ground: GroundLayer::default(),
             cache: Cache::default(),
             transients: Vec::new(),
+            beams: Vec::new(),
+            house_rgb,
             counts: Counts::default(),
             marked: Vec::new(),
             hovered: None,
@@ -882,6 +906,12 @@ impl Live {
             .iter()
             .filter_map(|a| a.owner.map(|o| (o, a.pos)))
             .collect()
+    }
+
+    /// Every playing animation's carrier house name and brightness (tests).
+    #[cfg(test)]
+    pub(super) fn anim_colours(&self) -> Vec<Option<(Vec<u8>, i32)>> {
+        self.anims.iter().map(|a| a.carrier.clone()).collect()
     }
 
     /// The attached animations' owners and carrier house names (tests).
@@ -1027,6 +1057,26 @@ impl Live {
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
+    }
+
+    /// The owner's house name of the vehicle at `pos` whose deploying
+    /// presentation (S-0517 claims 4 and 6) is the animation `name`, if one
+    /// is there: the animation is that unit's own deploy or undeploy
+    /// animation (S-0103 claim 8 row 3).
+    fn deploying_owner(&self, name: &str, pos: glasnost_sim::world::Pos) -> Option<Vec<u8>> {
+        let w = &self.world;
+        w.objects
+            .values()
+            .filter(|o| o.pos == pos && o.kind == SimKind::Vehicle)
+            .find(|o| {
+                self.rules
+                    .unit(o.kind, o.type_index)
+                    .and_then(|u| u.deploying_anim.as_deref())
+                    .is_some_and(|d| d.eq_ignore_ascii_case(name))
+            })
+            .and_then(|o| o.owner)
+            .and_then(|h| w.houses.get(usize::from(h.0)))
+            .map(|h| h.name.as_bytes().to_vec())
     }
 
     /// A paratrooper's parachute (S-0522 claim 13): the parachute type
@@ -1283,7 +1333,6 @@ impl Live {
         let now = self.shown_tick();
         let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
         let effects = std::mem::take(&mut self.world.effects);
-        let mut art_cells = BTreeSet::new();
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -1309,11 +1358,18 @@ impl Live {
             } = e
             {
                 self.counts.anims += 1;
+                let serial = self.anim_serial;
                 // spec: S-0109 claims 5 and 29 (created before or during the turn pass: first update
                 // in the creation tick; the lost update of claim 29 needs playback in the simulation)
-                if self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse) {
-                    art_cells.insert(pos.cell());
-                } else if self.debug_markers {
+                let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, *reverse);
+                if let Some(house) = self.deploying_owner(name, *pos)
+                    && let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial)
+                {
+                    // spec: S-0103 claim 8 row 3 (a unit's deploy or undeploy animation is drawn with
+                    // its object: the owner's house-colour palette, at brightness 1000)
+                    a.carrier = Some((house, NEUTRAL_LIGHT));
+                }
+                if !sprite && self.debug_markers {
                     self.transients.push(Transient {
                         kind: TransientKind::Anim,
                         at: at(*pos),
@@ -1385,44 +1441,82 @@ impl Live {
         self.update_anims(now);
         for e in effects {
             if let Effect::SupportBeam {
-                from, to, duration, ..
+                from,
+                to,
+                duration,
+                house,
             } = e
             {
-                // S-0518 claim 6: a support beam, drawn as nine marks from the supporter to the master for its duration.
-                let (a, b) = (at(from), at(to));
-                for i in 0..=8 {
-                    self.transients.push(Transient {
-                        kind: TransientKind::Beam(duration.max(1)),
-                        at: (a.0 + (b.0 - a.0) * i / 8, a.1 + (b.1 - a.1) * i / 8),
-                        born: now,
-                    });
-                }
+                // spec: S-0518 claim 6 (the beam lasts L_s ticks, is 3 pixels thick and has the house's laser colour)
+                const SUPPORT_BEAM_WIDTH: i32 = 3;
+                // The house's laser colour is not defined by any spec (Q-1521 question 1): the
+                // house display RGB of S-0103 claim 15 stands in for it.
+                let colour = self.house_colour(house);
+                self.beams.push(combat::Beam {
+                    a: at(from),
+                    b: at(to),
+                    born: now,
+                    life: duration,
+                    width: SUPPORT_BEAM_WIDTH,
+                    inner: colour,
+                    outer: None,
+                    fade: combat::Fade::None,
+                });
                 continue;
             }
             if let Effect::Beam {
-                from, to, duration, ..
+                from,
+                to,
+                duration,
+                fade_out,
+                colours,
+                house,
             } = e
             {
-                // S-0615 claims 15 and 16: a disc laser beam, drawn as nine marks for its duration (the beam's look is an open question of S-0615).
-                let (a, b) = (at(from), at(to));
-                for i in 0..=8 {
-                    self.transients.push(Transient {
-                        kind: TransientKind::Beam(duration.max(1)),
-                        at: (a.0 + (b.0 - a.0) * i / 8, a.1 + (b.1 - a.1) * i / 8),
-                        born: now,
-                    });
-                }
+                // spec: S-0615 claims 15 and 16 (inner, outer and spread colours; with the house-colour
+                // flag the inner is the house laser colour and the outer that colour halved, toward zero)
+                let channel = |c: [i32; 3]| c.map(|v| v.clamp(0, 255) as u8); // nocite: 8-bit colour channels
+                let [inner, outer, spread] = colours;
+                let (inner, outer) = match house {
+                    Some(_) => {
+                        let h = self.house_colour(house).map(i32::from);
+                        let [i, o, _] = glasnost_sim::disc::house_colours(h, spread);
+                        (channel(i), channel(o))
+                    }
+                    None => (channel(inner), channel(outer)),
+                };
+                self.beams.push(combat::Beam {
+                    a: at(from),
+                    b: at(to),
+                    born: now,
+                    life: duration,
+                    // Q-1521 question 2: a one-pixel core with a one-pixel edge (our interim rule).
+                    width: 1,
+                    inner,
+                    outer: Some(outer),
+                    fade: if fade_out {
+                        combat::Fade::ToNone
+                    } else {
+                        combat::Fade::ToHalf
+                    },
+                });
                 continue;
             }
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
+                    // No shot animation is made yet (Q-1523); the game client draws nothing of
+                    // its own at the muzzle, the viewer's debug layer marks it.
+                    if !self.debug_markers {
+                        continue;
+                    }
                     (TransientKind::Muzzle, from)
                 }
                 Effect::Detonation { pos, radius, .. } => {
                     self.counts.detonations += 1;
-                    // The game client draws no burst where the detonation's animation art plays.
-                    if !self.debug_markers && art_cells.contains(&pos.cell()) {
+                    // The game client draws only the detonation's animation art (S-0303 claim 21);
+                    // the viewer's debug layer marks every detonation.
+                    if !self.debug_markers {
                         continue;
                     }
                     (TransientKind::Burst(combat::burst_half_width(radius)), pos)
@@ -1467,6 +1561,7 @@ impl Live {
             });
         }
         self.transients.retain(|t| t.marker(now).is_some());
+        self.beams.retain(|b| b.shown(now));
         self.counts.most_in_flight = self.counts.most_in_flight.max(self.world.projectiles.len());
         self.counts.most_gas = self
             .counts
@@ -1622,6 +1717,8 @@ impl Live {
             attitude: attitude(w, o),
             // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
+            // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)
+            above: w.height_above_surface(id),
         })
     }
 
@@ -1692,7 +1789,20 @@ impl Live {
         // lighting among them): the cells and the terrain are lit again.
         let l = &self.world.lighting;
         let key = (l.current, l.choice);
-        let relit = key != self.lit;
+        // spec: S-0525 claim 13 (each field is a light source; every change of it relights the cells it reaches)
+        let fields = glasnost_sim::radiation::lights(&self.world)
+            .iter()
+            .map(|l| {
+                glasnost_render::light::LightSource::field(
+                    (l.centre.x, l.centre.y),
+                    l.radius,
+                    l.intensity,
+                    l.tint,
+                )
+            })
+            .collect();
+        let fields_changed = self.painter.set_field_lights(fields);
+        let relit = key != self.lit || fields_changed;
         if relit {
             let set =
                 glasnost_sim::lighting::set_of(l, key.1).unwrap_or(inputs.map.lighting.normal);
@@ -1873,6 +1983,15 @@ impl Live {
         }
     }
 
+    /// The display RGB of house `house` (S-0103 claim 15), white for no
+    /// house (our choice).
+    fn house_colour(&self, house: Option<HouseId>) -> [u8; 3] {
+        house
+            .and_then(|h| self.house_rgb.get(h.0 as usize))
+            .copied()
+            .unwrap_or([255, 255, 255]) // nocite: white, our stand-in for no house
+    }
+
     /// Draws the combat placeholders after the object pass: projectiles in
     /// flight (invisible ones are not drawn) and the shots, detonations and
     /// animations still shown. Our own presentation, provisional.
@@ -1927,9 +2046,10 @@ impl Live {
                 scene.items.push(item);
             }
         }
-        // S-0525: the reach of every radiation field, as a ring (our placeholder for the field's light).
+        // S-0525: the reach of every radiation field, as a ring, in the viewer's debug layer only (the
+        // game client draws the field's light, claim 13).
         for f in &self.world.radiation.fields {
-            if f.spread < 0 {
+            if f.spread < 0 || !self.debug_markers {
                 continue;
             }
             let p = glasnost_sim::world::Pos::centre(f.centre, 0);
@@ -1942,8 +2062,15 @@ impl Live {
                 .marker_item(scene, m, project_lifted(p.x, p.y, z));
             scene.items.push(item);
         }
-        // S-0520: every crate on the map, a box on its cell (our placeholder).
-        for place in self.world.crates.places.values() {
+        // S-0520: every crate place, a box on its cell, in the viewer's debug layer only (the game
+        // client draws the crate as its cell's overlay, S-0520 Terms, S-0112).
+        for place in self
+            .world
+            .crates
+            .places
+            .values()
+            .filter(|_| self.debug_markers)
+        {
             let p = glasnost_sim::world::Pos::centre(place.cell, 0);
             let z = self.world.surface_at(p.x, p.y);
             let item =
@@ -1951,10 +2078,12 @@ impl Live {
                     .marker_item(scene, Marker::Crate, project_lifted(p.x, p.y, z + 40));
             scene.items.push(item);
         }
-        // S-0519: planted bombs the viewer sees, charges counting down and buildings marked by a strike (our placeholders).
+        // S-0519: planted bombs the viewer sees, charges counting down and buildings marked by a strike,
+        // in the viewer's debug layer only: how the game draws them is open (Q-1524).
         let viewer = self.viewer;
         let mut extra: Vec<(Marker, (i32, i32))> = Vec::new();
-        for o in self.world.objects.values().filter(|o| o.on_map) {
+        let debug = self.debug_markers;
+        for o in self.world.objects.values().filter(|o| o.on_map && debug) {
             let z = self.world.surface_at(o.pos.x, o.pos.y);
             let at = project_lifted(o.pos.x, o.pos.y, z + 200);
             if let Some(b) = o.combat.bomb
@@ -1983,6 +2112,13 @@ impl Live {
         for t in &self.transients {
             if let Some(m) = t.marker(now) {
                 let item = self.cache.marker_item(scene, m, t.at);
+                scene.items.push(item);
+            }
+        }
+        // spec: S-0102 claim 2 (beam effects after all layers)
+        for b in &self.beams {
+            if b.shown(now) {
+                let item = self.cache.beam_item(scene, b, now);
                 scene.items.push(item);
             }
         }

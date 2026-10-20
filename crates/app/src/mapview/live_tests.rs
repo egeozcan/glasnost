@@ -151,7 +151,8 @@ fn infantry_frames() {
 }
 
 /// spec: S-0101 F1 and F2 (the drawn point is the projection of the
-/// position), S-0102 claim 5 (sort key X + Y), S-0107 claim 2 (frame)
+/// position), S-0102 claim 5 (sort key X + Y), S-0107 claim 2 (frame) and claim 19
+/// (no body-sprite shadow above the surface)
 #[test]
 fn dynamic_pass_places_mobiles_at_their_projected_point() {
     let (import, catalogue, assets) = context();
@@ -205,6 +206,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         alternative: false,
         attitude: Attitude::None,
         disabled: false,
+        above: 0,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -230,6 +232,23 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
     let (px, py) = project_lifted(moved.0, moved.1, moved.2);
     assert_eq!((body.x, body.y), (px - 1, py - 1));
     assert_eq!(scene.images.len(), images);
+    // spec: S-0107 claim 19 (height above the surface 0: the body-sprite shadow; above 0, as a
+    // dropping paratrooper: none, the generic shadow left undrawn until Q-1525 names its sprite)
+    let mut shadows = |above| {
+        let m = Mobile {
+            above,
+            ..man(pos, 1)
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
+        entries[0]
+            .items
+            .iter()
+            .filter(|i| i.paint == Paint::Shadow)
+            .count()
+    };
+    assert_eq!(shadows(0), 1);
+    assert_eq!(shadows(104), 0);
+    assert_eq!(shadows(-20), 0);
 }
 
 /// spec: S-0402 claim 5a and F8 (the fixed harvesting sprite: its F8 image
@@ -270,6 +289,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         alternative: false,
         attitude: Attitude::None,
         disabled: false,
+        above: 0,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1445,6 +1465,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         alternative: false,
         attitude: Attitude::None,
         disabled: false,
+        above: 0,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1479,6 +1500,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
             alternative: false,
             attitude: Attitude::None,
             disabled: false,
+            above: 0,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1636,6 +1658,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             alternative,
             attitude: Attitude::None,
             disabled: false,
+            above: 0,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1724,6 +1747,7 @@ fn aircraft_attitude_is_drawn() {
         alternative: false,
         attitude,
         disabled: false,
+        above: 0,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -1873,6 +1897,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             alternative: false,
             attitude: Attitude::None,
             disabled,
+            above: 0,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -1893,4 +1918,257 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
         "the disabled body takes ρ of trunc(b / 2)"
     );
     assert!(off < on);
+}
+
+// ---------------------------------------------------------------------------
+// Beams and the game client's placeholders (visual review 2026-10-19)
+// ---------------------------------------------------------------------------
+
+/// The synthetic live game of [`synthetic_live`] in the game client's mode
+/// (no debug markers), with the inputs' parts.
+#[allow(clippy::type_complexity)]
+fn client_live() -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    super::build::Assets,
+) {
+    let (import, catalogue, assets) = context();
+    let map = testkit::map();
+    let (mut live, scene) = synthetic_live();
+    live.set_debug_markers(false);
+    (live, scene, map, import, catalogue, assets)
+}
+
+/// The beam items of a scene: effects painted with a plain row whose image
+/// holds palette index 1.
+fn beam_items(scene: &Scene) -> Vec<glasnost_render::scene::Item> {
+    use glasnost_render::scene::Group;
+    scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Effects && matches!(i.paint, Paint::Row(_)))
+        .filter(|i| scene.images[i.image as usize].pixels().contains(&1))
+        .copied()
+        .collect()
+}
+
+/// spec: S-0518 claim 6 (a support beam lasts L_s ticks and is 3 pixels thick, in the house's laser
+/// colour, Q-1521 interim: the house display RGB of S-0103 claim 15), S-0102 claim 2 (beam effects
+/// after all layers)
+#[test]
+fn support_beam_is_a_three_pixel_line_for_its_life() {
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (mut live, mut scene, map, import, catalogue, assets) = client_live();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    // From (4, 6) to (6, 4) cells: the same screen row, 2 × 2 × 30 = 120 pixels apart (S-0101 F1).
+    let from = Pos {
+        x: 4 * 256,
+        y: 6 * 256,
+        z: 0,
+    };
+    let to = Pos {
+        x: 6 * 256,
+        y: 4 * 256,
+        z: 0,
+    };
+    live.world.effects.push(Effect::SupportBeam {
+        from,
+        to,
+        duration: 3,
+        house: Some(HouseId(0)),
+    });
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let beams = beam_items(&scene);
+    assert_eq!(beams.len(), 1);
+    let b = beams[0];
+    let img = &scene.images[b.image as usize];
+    let (w, h) = (img.width() as usize, img.height() as usize);
+    // Every column inside the line holds exactly 3 pixels of the beam.
+    let mid = w / 2;
+    let column = (0..h).filter(|&y| img.pixels()[y * w + mid] == 1).count();
+    assert_eq!(column, 3);
+    // In the house display RGB, after every other drawing.
+    let name = live.world.houses[0].name.clone();
+    let rgb = super::build::owner_radar_colour(&import, &options, name.as_bytes(), [8, 8, 8]);
+    let Paint::Row(r) = b.paint else {
+        unreachable!()
+    };
+    assert_eq!(
+        scene.rows[r][1],
+        glasnost_render::compose::pack565(glasnost_fmt::image::Rgb8::new(rgb[0], rgb[1], rgb[2]))
+    );
+    assert_eq!(b.test, DepthTest::Ignore);
+    // Shown for 3 ticks, then gone.
+    for _ in 0..2 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        assert_eq!(beam_items(&scene).len(), 1);
+    }
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert!(beam_items(&scene).is_empty());
+}
+
+/// spec: S-0615 claims 15 and 16 (the disc laser's beams: inner and outer colours; the final beam
+/// fades from full intensity to none, an arc beam to half; Q-1521 interim: linear darkening)
+#[test]
+fn disc_laser_beam_fades_in_its_colours() {
+    use super::combat::{Beam, Fade, faded};
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (mut live, mut scene, map, import, catalogue, assets) = client_live();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.step();
+    live.world.effects.push(Effect::Beam {
+        from: Pos {
+            x: 4 * 256,
+            y: 4 * 256,
+            z: 0,
+        },
+        to: Pos {
+            x: 7 * 256,
+            y: 5 * 256,
+            z: 0,
+        },
+        duration: 4,
+        fade_out: true,
+        colours: [[200, 100, 40], [100, 50, 20], [0, 0, 0]],
+        house: None,
+    });
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let row = |scene: &Scene| {
+        let b = beam_items(scene)[0];
+        let Paint::Row(r) = b.paint else {
+            unreachable!()
+        };
+        (scene.rows[r][1], scene.rows[r][2], b)
+    };
+    let pack = |c: [u8; 3]| {
+        glasnost_render::compose::pack565(glasnost_fmt::image::Rgb8::new(c[0], c[1], c[2]))
+    };
+    let (inner, outer, b) = row(&scene);
+    assert_eq!((inner, outer), (pack([200, 100, 40]), pack([100, 50, 20])));
+    // The outer colour is the edge around the inner line.
+    assert!(scene.images[b.image as usize].pixels().contains(&2));
+    // Two ticks into four: half intensity on the way to none.
+    live.step();
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    let (inner, _, _) = row(&scene);
+    assert_eq!(inner, pack([100, 50, 20]));
+    // The intensity rule itself: half at the end of an arc beam, none at the end of the final beam.
+    let beam = |fade| Beam {
+        a: (0, 0),
+        b: (10, 0),
+        born: 0,
+        life: 8,
+        width: 1,
+        inner: [200; 3],
+        outer: None,
+        fade,
+    };
+    assert_eq!(beam(Fade::ToHalf).intensity(8), 128);
+    assert_eq!(beam(Fade::ToNone).intensity(8), 0);
+    assert_eq!(beam(Fade::None).intensity(8), 256);
+    assert_eq!(faded([200, 100, 40], 128), [100, 50, 20]);
+}
+
+/// Q-1523 (no shot animation yet, so nothing at the muzzle), S-0303 claim 21 (a detonation shows its
+/// explosion animation only), Q-1524 (no bomb, charge or strike-mark drawing): the game client draws
+/// none of our own placeholders for shots and detonations; the viewer's debug layer does.
+#[test]
+fn game_client_draws_no_shot_or_burst_placeholders() {
+    use glasnost_render::scene::Group;
+    let (mut live, mut scene, map, import, catalogue, cart, walker) = combat_live(3);
+    let assets = overlay_assets();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_debug_markers(false);
+    for _ in 0..400 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        // Only projectile markers (7 × 7) remain among the placeholders.
+        assert!(
+            scene
+                .items
+                .iter()
+                .filter(|i| i.group == Group::Effects && i.provisional)
+                .all(|i| scene.images[i.image as usize].width() == 7),
+            "no muzzle or burst marker in the game client"
+        );
+        if live.world.obj(cart).is_none() || live.world.obj(walker).is_none() {
+            break;
+        }
+    }
+    assert!(live.counts.shots > 0 && live.counts.detonations > 0);
+}
+
+/// spec: S-0103 claim 8 row 3 and "Brightness of row 3" (a unit's deploy or undeploy animation is
+/// drawn with its object: the owner's house-colour palette at brightness 1000); row 5 (any other
+/// animation at the same place stays unowned)
+#[test]
+fn deploying_presentation_takes_the_owners_palette() {
+    use glasnost_sim::combat::effects::Effect;
+    let (mut live, _, _, _, _, cart, _) = combat_live(3);
+    let o = live.world.obj(cart).unwrap();
+    let (pos, ty) = (o.pos, o.type_index as usize);
+    let owner = live.world.houses[usize::from(o.owner.unwrap().0)]
+        .name
+        .clone();
+    let mut rules = (*live.rules).clone();
+    rules.vehicles[ty].deploying_anim = Some("DEPLOYX".into());
+    live.rules = std::sync::Arc::new(rules);
+    for name in ["deployx", "OTHERX"] {
+        live.world.effects.push(Effect::Anim {
+            name: name.into(),
+            pos,
+            delay: None,
+            reverse: false,
+        });
+    }
+    live.after_tick();
+    assert_eq!(
+        live.anim_colours(),
+        [Some((owner.into_bytes(), 1000)), None],
+        "the deploy animation in its owner's colours at 1000, the other one unowned"
+    );
 }

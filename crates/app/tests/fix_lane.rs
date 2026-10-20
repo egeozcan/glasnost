@@ -157,8 +157,7 @@ fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
 /// Starts a skirmish from the menu on a window of `size`.
 fn start(size: (i32, i32)) -> Option<(Client, Shots)> {
     let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
-    let out =
-        png::lane_out("visual-fix-2");
+    let out = png::lane_out("visual-fix-2");
     std::fs::create_dir_all(&out).unwrap();
     let mut c = Client::new();
     c.resize(size);

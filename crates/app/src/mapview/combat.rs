@@ -539,6 +539,127 @@ fn marker_image(m: Marker) -> IndexedImage {
     }
 }
 
+/// How a beam's intensity goes down over its life (S-0615 claims 15 and
+/// 16).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fade {
+    /// It keeps full intensity (a prism support beam, S-0518 claim 6 gives
+    /// no fade).
+    None,
+    /// From full intensity to half (a disc laser's arc beams).
+    ToHalf,
+    /// From full intensity to none (a disc laser's final beam).
+    ToNone,
+}
+
+/// A laser beam the view draws after the layers (S-0102 claim 2): a
+/// straight line between two projected points for its life. The look is
+/// our interim rule of Q-1521 (docs/development.md, *Visual review
+/// 2026-10-19*): opaque, of its thickness, in its inner colour with an
+/// optional one-pixel edge in its outer colour, its fade a darkening.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Beam {
+    /// World pixels of its two ends.
+    pub a: (i32, i32),
+    /// See `a`.
+    pub b: (i32, i32),
+    /// Tick of creation.
+    pub born: i32,
+    /// Ticks it lasts.
+    pub life: i32,
+    /// Thickness in pixels.
+    pub width: i32,
+    /// Inner colour.
+    pub inner: [u8; 3],
+    /// Outer colour, drawn as a one-pixel edge, when it has one.
+    pub outer: Option<[u8; 3]>,
+    /// How it fades.
+    pub fade: Fade,
+}
+
+impl Beam {
+    /// Whether it is still shown at tick `now`.
+    pub fn shown(&self, now: i32) -> bool {
+        let age = now - self.born;
+        (0..self.life.max(1)).contains(&age)
+    }
+
+    /// Its intensity at tick `now` in 256ths: linear over its life (Q-1521
+    /// question 3, our interim rule).
+    pub fn intensity(&self, now: i32) -> i32 {
+        let age = (now - self.born).clamp(0, self.life.max(1));
+        let life = self.life.max(1);
+        // spec: S-0615 claims 15 and 16 (full intensity at the start; half, or none, at the end)
+        let end = match self.fade {
+            Fade::None => 256,   // nocite: full intensity in 256ths, our scale
+            Fade::ToHalf => 128, // nocite: half of our 256ths scale
+            Fade::ToNone => 0,
+        };
+        256 - (256 - end) * age / life // nocite: our 256ths scale
+    }
+}
+
+/// A colour darkened to `intensity` 256ths.
+pub fn faded(c: [u8; 3], intensity: i32) -> [u8; 3] {
+    c.map(|v| (i32::from(v) * intensity.clamp(0, 256) / 256) as u8) // nocite: our 256ths scale
+}
+
+/// The image of a line from (0, 0) to `d` (pixels) of thickness `width`:
+/// palette index 1 inside, index 2 on a one-pixel edge when `edge` is set,
+/// 0 elsewhere; and the image's top-left corner relative to the line's
+/// start. A pixel is inside when its centre lies within `width` / 2 of the
+/// segment.
+pub fn beam_image(d: (i32, i32), width: i32, edge: bool) -> (IndexedImage, (i32, i32)) {
+    let w = width.max(1);
+    let pad = w / 2 + 2;
+    let (x0, y0) = (d.0.min(0) - pad, d.1.min(0) - pad);
+    let (x1, y1) = (d.0.max(0) + pad, d.1.max(0) + pad);
+    let (iw, ih) = (x1 - x0 + 1, y1 - y0 + 1);
+    let (dx, dy) = (i64::from(d.0), i64::from(d.1));
+    let len2 = dx * dx + dy * dy;
+    // Twice the distance from the segment, squared, against the thickness.
+    let dist4 = |px: i64, py: i64| -> i64 {
+        let dot = px * dx + py * dy;
+        if len2 == 0 || dot <= 0 {
+            4 * (px * px + py * py)
+        } else if dot >= len2 {
+            let (qx, qy) = (px - dx, py - dy);
+            4 * (qx * qx + qy * qy)
+        } else {
+            let cross = px * dy - py * dx;
+            // 4 · cross² / len², rounded up so that a pixel is never taken in early.
+            (4 * cross * cross + len2 - 1) / len2
+        }
+    };
+    let core = i64::from(w) * i64::from(w);
+    let rim = i64::from(w + 2) * i64::from(w + 2);
+    let mut px = vec![0u8; (iw * ih) as usize];
+    for y in 0..ih {
+        for x in 0..iw {
+            let q = dist4(i64::from(x + x0), i64::from(y + y0));
+            px[(y * iw + x) as usize] = if q <= core {
+                1
+            } else if edge && q <= rim {
+                2
+            } else {
+                0
+            };
+        }
+    }
+    (
+        IndexedImage::new(iw as u32, ih as u32, px).expect("sized"),
+        (x0, y0),
+    )
+}
+
+/// A palette row with `inner` at index 1 and `outer` at index 2.
+fn beam_row(inner: [u8; 3], outer: [u8; 3]) -> [u16; 256] {
+    let mut row = [0u16; 256];
+    row[1] = pack565(Rgb8::new(inner[0], inner[1], inner[2]));
+    row[2] = pack565(Rgb8::new(outer[0], outer[1], outer[2]));
+    row
+}
+
 /// A short-lived marker: what, where (world pixel of its centre), and the
 /// tick it was created.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -560,9 +681,6 @@ pub enum TransientKind {
     Burst(i32),
     /// An animation.
     Anim,
-    /// A point of a prism support beam, shown for this many ticks (S-0518
-    /// claim 6; our placeholder: a row of marks along the beam).
-    Beam(i32),
 }
 
 impl Transient {
@@ -579,7 +697,6 @@ impl Transient {
                 stage: age * BURST_STAGES / BURST_TICKS,
             }),
             TransientKind::Anim => (age < ANIM_TICKS).then_some(Marker::Anim),
-            TransientKind::Beam(life) => (age < life).then_some(Marker::Muzzle),
         }
     }
 }
@@ -624,7 +741,12 @@ pub struct Cache {
     overlay_row: Option<Option<usize>>,
     markers: BTreeMap<Marker, u32>,
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
+    beam_rows: BTreeMap<([u8; 3], [u8; 3]), usize>,
+    beam_images: BTreeMap<BeamShape, (u32, (i32, i32))>,
 }
+
+/// A beam image's key: its end-point difference, width and whether it has an edge.
+type BeamShape = ((i32, i32), i32, bool);
 
 impl Cache {
     /// The placeholder row, added on first use.
@@ -677,6 +799,38 @@ impl Cache {
                 (i32::from(shp.width), i32::from(shp.height)),
             ))
         })
+    }
+
+    /// The item of beam `beam` at tick `now` (S-0102 claim 2: after the
+    /// layers, so no depth test).
+    pub fn beam_item(&mut self, scene: &mut Scene, beam: &Beam, now: i32) -> Item {
+        let i = beam.intensity(now);
+        let inner = faded(beam.inner, i);
+        let outer = faded(beam.outer.unwrap_or(beam.inner), i);
+        let row = *self
+            .beam_rows
+            .entry((inner, outer))
+            .or_insert_with(|| scene.add_row(beam_row(inner, outer)));
+        let d = (beam.b.0 - beam.a.0, beam.b.1 - beam.a.1);
+        let (image, off) = *self
+            .beam_images
+            .entry((d, beam.width, beam.outer.is_some()))
+            .or_insert_with(|| {
+                let (img, off) = beam_image(d, beam.width, beam.outer.is_some());
+                (scene.add_image(img), off)
+            });
+        Item {
+            image,
+            x: beam.a.0 + off.0,
+            y: beam.a.1 + off.1,
+            test: DepthTest::Ignore,
+            depth: flat(),
+            paint: Paint::Row(row),
+            group: Group::Effects,
+            provisional: true,
+            object: None,
+            stack: None,
+        }
     }
 
     /// A placeholder item centred on world pixel `at`.
