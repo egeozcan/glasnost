@@ -19,6 +19,7 @@ pub mod protection;
 pub mod quirks;
 pub mod radar;
 pub mod sidebar;
+pub mod slot_play;
 pub mod slots;
 #[cfg(test)]
 mod tests;

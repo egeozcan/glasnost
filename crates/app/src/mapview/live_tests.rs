@@ -918,6 +918,7 @@ fn live_building_items(
             facing: 0,
             anim: 0,
             occupied: false,
+            slots: Vec::new(),
             object: sim_code(ObjectId(5)),
             unloading,
             gate_door,
@@ -2506,6 +2507,7 @@ fn protection_building_body_rows() {
                     unloading: None,
                     gate_door: None,
                     protection,
+                    slots: Vec::new(),
                 }],
             );
             let body = drawn[0]

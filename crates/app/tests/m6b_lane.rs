@@ -452,6 +452,7 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
             lane.look_at(at);
             lane.ticks(1);
             lane.save(shot);
+            lane.print_slots(depot);
             saved = true;
         }
         if pm >= 1000 || (docked.is_some() && !tethered) {
@@ -469,6 +470,7 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
         lane.look_at(at);
         lane.ticks(1);
         lane.save(shot);
+        lane.print_slots(depot);
     }
 }
 
@@ -1498,6 +1500,13 @@ impl Lane {
             k.anims_without_sprite,
             k.anims_drawn,
         )
+    }
+
+    /// A building's running slot animations (S-0108), printed.
+    fn print_slots(&self, id: ObjectId) {
+        let s = self.c.session.as_ref().unwrap();
+        let live = s.loaded.live.as_ref().expect("a live game");
+        println!("  slot animations: {:?}", live.slot_names(id));
     }
 
     fn save(&mut self, name: &str) {

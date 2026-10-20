@@ -610,6 +610,7 @@ fn absorber(lane: &mut Lane) {
     lane.look_at(CellXY::new(at.x + 1, at.y + 2));
     lane.ticks(2);
     lane.save("absorber-before");
+    lane.print_slots(b);
     for &u in &units {
         let n = lane.order(local, u, ClickOn::Object(b));
         let wait = glasnost_sim::structures::absorb::waiting_for(lane.world(), u).is_some();
@@ -634,6 +635,7 @@ fn absorber(lane: &mut Lane) {
                 power(lane).0 > start.0
             );
             lane.save("absorber-first-in");
+            lane.print_slots(b);
             shot = true;
         }
         if n == 3 {
@@ -649,6 +651,7 @@ fn absorber(lane: &mut Lane) {
     lane.c.session.as_mut().unwrap().play.selection = vec![b];
     lane.ticks(1);
     lane.save("absorber-full-selected");
+    lane.print_slots(b);
     let n = lane.order(local, b, ClickOn::Object(b));
     println!("deploy click on the absorber: {n} orders");
     for t in 0..600 {
@@ -674,6 +677,7 @@ fn absorber(lane: &mut Lane) {
         power(lane).0 == start.0
     );
     lane.save("absorber-released");
+    lane.print_slots(b);
 }
 
 /// A recycling building type (S-0603 Terms: the grinding flag) and its
@@ -848,6 +852,7 @@ fn bunker(lane: &mut Lane) {
     lane.look_at(CellXY::new(at.x + 1, at.y + 1));
     lane.ticks(2);
     lane.save("bunker-before");
+    lane.print_slots(b);
     let cursor = targeting::cursor(
         lane.world(),
         local,
@@ -870,6 +875,7 @@ fn bunker(lane: &mut Lane) {
         }
         if s == Some(Stage::DrivingIn) && !driving_shot {
             lane.save("bunker-driving-in");
+            lane.print_slots(b);
             driving_shot = true;
         }
         if bunker::bunkered_in(lane.world(), v) == Some(b) {
@@ -885,7 +891,21 @@ fn bunker(lane: &mut Lane) {
     lane.ticks(10);
     let facing = lane.world().obj(v).map(|o| o.body.target);
     println!("bunkered vehicle body facing {facing:?}");
+    // The walls rise as special-1 and special-2 play (S-0606 claim 6, S-0109): wait until
+    // their slot animations have held still for 60 ticks (or gone), at most 900 ticks.
+    let (mut last, mut still) = (lane.slot_list(b), 0);
+    for t in 0..900 {
+        lane.ticks(1);
+        let now = lane.slot_list(b);
+        still = if now == last { still + 1 } else { 0 };
+        last = now;
+        if still >= 60 {
+            println!("wall slots settled after {t} more ticks");
+            break;
+        }
+    }
     lane.save("bunker-occupied");
+    lane.print_slots(b);
     if let (Some(fname), Some(enemy)) = (foe_ty, lane.enemy()) {
         let foe = lane.spawn(
             Kind::Vehicle,
@@ -902,6 +922,7 @@ fn bunker(lane: &mut Lane) {
                 println!("the enemy vehicle is hit from inside after {t} ticks");
                 lane.ticks(4);
                 lane.save("bunker-firing");
+                lane.print_slots(b);
                 shot = true;
             }
             if hp <= 0 {
@@ -923,11 +944,15 @@ fn bunker(lane: &mut Lane) {
         lane.ticks(1);
         if !bunker::bunkered(lane.world(), v) {
             println!("let out after {t} ticks; bunker stage {:?}", stage(lane));
+            lane.ticks(5);
+            lane.save("bunker-walls-down");
+            lane.print_slots(b);
             break;
         }
     }
     lane.ticks(60);
     lane.save("bunker-released");
+    lane.print_slots(b);
 }
 
 /// A lifter type by its flags (S-0607 Terms: a vehicle whose first weapon's
@@ -1575,6 +1600,17 @@ impl Lane {
             k.anims_without_sprite,
             k.anims_drawn,
         )
+    }
+
+    /// A building's running slot animations (S-0108) with their frames.
+    fn slot_list(&self, id: ObjectId) -> Vec<String> {
+        let s = self.c.session.as_ref().unwrap();
+        s.loaded.live.as_ref().expect("a live game").slot_names(id)
+    }
+
+    /// A building's running slot animations (S-0108), printed.
+    fn print_slots(&self, id: ObjectId) {
+        println!("  slot animations: {:?}", self.slot_list(id));
     }
 
     fn save(&mut self, name: &str) {

@@ -371,6 +371,15 @@ impl Player {
         self.k = self.k.saturating_sub(self.step);
     }
 
+    /// Continues from image frame `frame`: the stage becomes `frame` − *a*,
+    /// so the next drawing shows that image frame (S-0108 Terms, starting
+    /// a slot that already holds an animation).
+    pub fn continue_from(&mut self, frame: i32) {
+        // spec: S-0108 Terms (the new animation continues from the old one's image frame) and
+        // S-0109 claim 1 (image frame a + k)
+        self.k = frame.saturating_sub(self.play.start);
+    }
+
     /// Makes the current pass the last: the remaining passes become 0
     /// (S-0522 claim 13, a parachute still present when its paratrooper
     /// lands; S-0109 claim 7).

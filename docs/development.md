@@ -1906,6 +1906,7 @@ Interim rules, each tied to a request:
 | `mapview::protection::Masks::read` | a curtain or force-shield selector outside 0 … 15 gives the mask K = 0 (the drawing keeps the brightness envelope); the scene notes it | Q-1527 |
 | `build::building_items`, `live::Live::apply_cloak` | a protected building's bib, under-door and door images keep their ordinary look (no envelope brightness, no mask); a protected unit drawn translucent while it cloaks keeps the envelope brightness in its blended source but takes no mask | Q-1528 |
 | `live::Live::redraw` | a map-placed building is drawn live (after the overlays, like the map's gates) while it is protected, so its body can show the appearance; it returns to the cell pass when protection ends | none (our placeholder order) |
+| `mapview::slot_play` | nothing starts a repair depot's *special-1* or *production* slot animation; a depot shows its grand-opening slots (S-0108 claim 11), and S-0108 claim 20's depot rows apply only if such a slot were running | Q-1550 |
 
 ### Item results
 
