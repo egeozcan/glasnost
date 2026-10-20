@@ -64,7 +64,17 @@ The user was asked whether to move the optional balance patch earlier and has no
 ## Two machines
 
 The clean-room split means the spec workspace (decompilation, spec drafts, the round orchestrator) is
-never pushed anywhere; it lives only on the original machine, with a local backup on its data drive.
-From another computer, a lead session can brief and review implementer work, run check, test and
-gate, and file requests, but spec answers need a session on the original machine. The lead's
-working memory and the per-round logs are also there.
+never pushed anywhere. To take over on another computer:
+
+1. Clone this repo.
+2. Copy `glasnost-lead-portable.tgz` from the original machine's data-drive backup folder
+   (`/var/mnt/data/backups/glasnost/`) and unpack it in the home folder.
+   - It holds the spec workspace, with its own `LEAD-HANDOFF.md`: setup steps on a new machine, the
+     round mechanics and the prepared rounds.
+   - It also holds the implementer briefs and logs, the last scrub reviews, the lead's memory notes and
+     the implementer sandbox settings.
+   - Keep it private, like the workspace itself.
+3. Without the archive, a lead session can still brief and review implementer work, run check, test and
+   gate, and file requests, but it cannot answer spec requests.
+
+`docs/m7v-report.md` holds the visual-fix session's closing report once it has ended.
