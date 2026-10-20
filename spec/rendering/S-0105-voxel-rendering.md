@@ -2,11 +2,11 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 21
+revision: 22
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950]
 supersedes: []
@@ -393,8 +393,9 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     by the draw; it shows the shade that index was last given by an earlier fresh draw (`quirks.voxel_stale_normal_shades`):
     - Only fresh draws give shades. A reused image (claim 26) gives none.
     - Fresh draws of voxel parts give shades by F4, to the indices their own table covers.
-    - Projectiles and debris drawn as voxel models also give shades to the indices their table covers, by a
-      rule that belongs to their own specs.
+    - Projectiles drawn as voxel models also give shades to the indices their table covers,
+      by S-0306 F16 (claim 30). Debris drawn as voxel models also gives shades to the indices
+      its table covers, by a rule that belongs to its own spec.
     - An index that no draw has given a shade since the program started has shade 0. Starting a
       new game does not reset the shades.
     - Backing: `measurable` (MS-16; its game-change run for shades kept across games and its
