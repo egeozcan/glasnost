@@ -15,6 +15,7 @@ mod live_tests;
 pub mod load;
 pub mod particles;
 pub mod png;
+pub mod protection;
 pub mod quirks;
 pub mod radar;
 pub mod sidebar;

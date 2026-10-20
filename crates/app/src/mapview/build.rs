@@ -2247,7 +2247,7 @@ impl Builder<'_> {
             let items = self.building_items(
                 // spec: S-0105 claim 16 and S-0609 claim 14 (a map-placed building has not spun: counter 0)
                 i, &art, p.cell, cell.level, &p.owner, condition, false, facing, 0, object, None,
-                None, ground,
+                None, None, ground,
             );
             self.built.scene.items.extend(items);
         }
@@ -2275,6 +2275,7 @@ impl Builder<'_> {
         object: u32,
         unloading: Option<Unloading>,
         gate_door: Option<unload::DoorView>,
+        protection: Option<super::protection::Look>,
         ground: &mut Vec<GroundEntry>,
     ) -> Vec<Item> {
         let mut items = Vec::new();
@@ -2306,19 +2307,33 @@ impl Builder<'_> {
             .art_value(Kind::Buildings, i, b"TerrainPalette")
             .and_then(value::boolean)
             .unwrap_or(false);
-        let row = if terrain_palette {
-            // spec: S-0103 claim 8, S-0104 claim 13 (terrain-palette building: the centre cell's table and scaled ground)
-            let (w, h) = self.foundation(i);
-            let (cx, cy) = light::building_centre_cell((cell.x, cell.y), (w, h));
-            let centre = CellXY::new(cx, cy);
-            let l = self.p.lights.get(centre);
-            self.tile_row(
-                l.map_or(TileTable::Neutral, |l| l.table),
-                l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground),
-            )
-        } else {
-            // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
-            self.house_row(hsv, u)
+        // The building's row at its ordinary brightness adjusted by `look`.
+        let lit = |b: &mut Self, look: Option<super::protection::Look>| {
+            if terrain_palette {
+                // spec: S-0103 claim 8, S-0104 claim 13 (terrain-palette building: the centre cell's table and scaled ground)
+                let (w, h) = b.foundation(i);
+                let (cx, cy) = light::building_centre_cell((cell.x, cell.y), (w, h));
+                let centre = CellXY::new(cx, cy);
+                let l = b.p.lights.get(centre);
+                let table = l.map_or(TileTable::Neutral, |l| l.table);
+                let ground = l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground);
+                b.tile_row(table, super::protection::brightness(look, ground))
+            } else {
+                // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
+                b.house_row(hsv, super::protection::brightness(look, u))
+            }
+        };
+        let row = lit(self, None);
+        // spec: S-0102 claim 34 (a protected building body drawn as a sprite: S-0513 F9's brightness
+        // before the shade-row selection; the force-shield selector's mask when force-shielded, none
+        // under the curtain)
+        let shield_mask = match protection {
+            Some(_) => self.protection_masks().building(protection),
+            None => 0,
+        };
+        let body_row = match protection {
+            Some(_) => lit(self, protection).with_mask(shield_mask),
+            None => row,
         };
         let Some(body_sprite) = art.sprite.clone() else {
             return items;
@@ -2398,7 +2413,7 @@ impl Builder<'_> {
                     bias: body_bias,
                     companion,
                 },
-                Paint::Lit(row),
+                Paint::Lit(body_row),
                 Group::Buildings,
                 false,
                 Some(object),
@@ -2522,7 +2537,21 @@ impl Builder<'_> {
         // Voxel turret or barrel in the object pass (S-0105 claims 5, 9, 37; S-0102 claims 5, 13).
         let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
         if turret_voxel || art.voxels.contains_key("barrel") {
-            parts.extend(self.building_voxels(i, art, facing, anim, anchor, lz, u, hsv, object));
+            // spec: S-0102 claim 34 (a building voxel turret/barrel: S-0513 F9's brightness; the
+            // force-shield selector's mask for the force shield, none for the curtain)
+            let b = super::protection::brightness(protection, u);
+            parts.extend(self.building_voxels(
+                i,
+                art,
+                facing,
+                anim,
+                anchor,
+                lz,
+                b,
+                shield_mask,
+                hsv,
+                object,
+            ));
         }
         if !parts.is_empty() {
             // spec: S-0102 F4 (key = 256·(c_x + c_y) + 32 for a voxel turret − 16 for a gate)
@@ -2974,6 +3003,7 @@ impl Builder<'_> {
         anchor: (i32, i32),
         lz: i32,
         brightness: i32,
+        mask: u16,
         hsv: [u8; 3],
         object: u32,
     ) -> Vec<Item> {
@@ -3001,8 +3031,9 @@ impl Builder<'_> {
             .unwrap_or(false);
         // spec: S-0102 claim 13 (a building's voxel parts: −L(z) + the turret slot depth adjustment)
         let bias = -lz + rule_int(self.import, k, idx, b"TurretAnimZAdjust", 0);
-        // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell)
-        let row = self.house_row(hsv, brightness);
+        // spec: S-0104 claim 13 (every part of an ordinary building: U of its top-left cell);
+        // S-0102 claim 34 (a protected building's parts: the adjusted brightness and its mask)
+        let row = self.house_row(hsv, brightness).with_mask(mask);
         let model_of = |b: &mut Self, part: &'static str| {
             let file = art.voxels.get(part)?.clone();
             b.voxel_model(&file).map(|m| (m, file, part))
@@ -3223,6 +3254,8 @@ impl Builder<'_> {
             disabled: false,
             // spec: S-0107 claim 19 (a map unit stands on its surface)
             above: 0,
+            // A map unit is not protected before any tick (S-0513 claim 25).
+            protection: None,
         };
         Some(self.mobile(&m))
     }
@@ -3264,6 +3297,16 @@ impl Builder<'_> {
     }
 
     /// The rules' extra-light value in ‰ (S-0104 claim 13), 0 when absent.
+    /// The protection colour masks of the import's selectors (S-0102 claim
+    /// 34, F9), noting a selector outside the table (Q-1527).
+    fn protection_masks(&mut self) -> super::protection::Masks {
+        let (masks, notes) = super::protection::Masks::read(self.import);
+        for n in notes {
+            self.note(&n);
+        }
+        masks
+    }
+
     fn extra_light(&self, key: &[u8]) -> i32 {
         self.import
             .outcome
@@ -3332,7 +3375,17 @@ impl Builder<'_> {
             } else {
                 ground + extra
             };
-            let row = self.house_row(hsv, b);
+            // spec: S-0513 F9, S-0102 claim 34 (protection changes the ordinary brightness before the shade-row selection)
+            let b = super::protection::brightness(m.protection, b);
+            // spec: S-0102 claim 34 (the vehicle's body and voxel turret and barrel share the mask of its row)
+            let mask = match m.protection {
+                Some(_) => {
+                    self.protection_masks()
+                        .mobile(m.protection, m.kind == Kind::Vehicles, voxel)
+                }
+                None => 0,
+            };
+            let row = self.house_row(hsv, b).with_mask(mask);
             let body = self.vehicle_items(m, point, u, row);
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
             let mut items: Vec<Item> = m
@@ -4175,6 +4228,9 @@ pub struct Mobile {
     /// deck): an infantry unit above 0 draws no body-sprite shadow
     /// (S-0107 claim 19). 0 without a game state.
     pub above: i32,
+    /// Its protection appearance in the shown tick (S-0513 claim 29,
+    /// S-0102 claim 34); `None` without a game state.
+    pub protection: Option<super::protection::Look>,
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
@@ -4628,6 +4684,7 @@ impl Painter {
                 d.object,
                 d.unloading,
                 d.gate_door,
+                d.protection,
                 &mut ground,
             );
             for g in ground {
@@ -4687,6 +4744,9 @@ pub struct LiveBuilding {
     /// The door of a gate (S-0215 claim 35; S-0108 claim 4); `None` for
     /// any other building.
     pub gate_door: Option<unload::DoorView>,
+    /// Its protection appearance in the shown tick (S-0513 claim 29,
+    /// S-0102 claim 34).
+    pub protection: Option<super::protection::Look>,
 }
 
 /// A greyscale-free minimap: each cell as two pixels with its tile radar

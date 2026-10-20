@@ -840,13 +840,15 @@ pub struct Protection {
     pub duration: i32,
     /// The kind.
     pub kind: ProtectKind,
-    /// The brightness envelope's phase, up to its draw (claim 29).
+    /// The brightness envelope's phase (claim 29).
     pub tint: Tint,
 }
 
-/// The protection brightness envelope's phases up to its draw (S-0513
-/// claim 29). Only the draw is game state; the phases after Initial
-/// dimming, their factors and F9 are presentation and not built.
+/// The protection brightness envelope's phases (S-0513 claim 29), each
+/// with the tick it was entered in. The phases advance only in the object's
+/// own protected turns, so they are kept here; the draw on entering Initial
+/// dimming is game state, the factors they give (`protect::factor`) and
+/// F9 are presentation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tint {
     /// Before the first protected turn *q*.
@@ -856,8 +858,28 @@ pub enum Tint {
     Rise(i32),
     /// Bright hold, entered in this tick.
     BrightHold(i32),
-    /// Initial dimming entered and its draw taken.
-    Dimming,
+    /// Initial dimming: entered in tick `since` with its draw taken, for
+    /// `length` = 20 + the draw ticks.
+    Dimming {
+        /// The tick it was entered in.
+        since: i32,
+        /// Its length in ticks.
+        length: i32,
+    },
+    /// Pulse rise, entered in this tick.
+    PulseRise(i32),
+    /// Pulse fall, entered in this tick.
+    PulseFall(i32),
+    /// Low hold, entered in this tick.
+    LowHold(i32),
+    /// Final rise, entered in this tick.
+    FinalRise(i32),
+    /// Final bright hold, entered in this tick.
+    FinalHold(i32),
+    /// Return to ordinary, entered in this tick.
+    Return(i32),
+    /// Ordinary until protection expires.
+    Ordinary,
 }
 
 /// An object's superweapon state.

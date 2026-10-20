@@ -207,6 +207,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         attitude: Attitude::None,
         disabled: false,
         above: 0,
+        protection: None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -290,6 +291,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         attitude: Attitude::None,
         disabled: false,
         above: 0,
+        protection: None,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -919,6 +921,7 @@ fn live_building_items(
             object: sim_code(ObjectId(5)),
             unloading,
             gate_door,
+            protection: None,
         }],
     );
     // spec: S-0108 claim 8 (centred on the foundation's top corner; canvas 40 wide)
@@ -1466,6 +1469,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         attitude: Attitude::None,
         disabled: false,
         above: 0,
+        protection: None,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1501,6 +1505,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
             attitude: Attitude::None,
             disabled: false,
             above: 0,
+            protection: None,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1659,6 +1664,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             attitude: Attitude::None,
             disabled: false,
             above: 0,
+            protection: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1748,6 +1754,7 @@ fn aircraft_attitude_is_drawn() {
         attitude,
         disabled: false,
         above: 0,
+        protection: None,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -1898,6 +1905,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             attitude: Attitude::None,
             disabled,
             above: 0,
+            protection: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -2357,4 +2365,186 @@ fn particles_draw_their_sprites_in_the_air_layer() {
     live.set_debug_markers(true);
     live.redraw(&inputs, &mut scene);
     assert_eq!(effect_items(&scene, true), 1, "the debug view marks it");
+}
+
+/// The rules of the protection tests: the curtain selector names table
+/// position 1 and the force-shield selector position 2 (invented triples).
+fn protection_rules() -> String {
+    format!(
+        "{RULES}[AudioVisual]\nIronCurtainColor=1\nForceShieldColor=2\n[ColorAdd]\nA=0,0,0\nB=7,19,3\nC=1,0,1\n"
+    )
+}
+
+/// The painter inputs of a protection test, drawn by `f`.
+fn with_protection_inputs<T>(
+    voxel: bool,
+    f: impl FnOnce(&Inputs, &mut super::build::Painter, &mut Scene) -> T,
+) -> T {
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    let (mut import, catalogue, mut assets) = context_with(&protection_rules());
+    if voxel {
+        let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        art.voxels.insert("body".into(), b"car.vxl".to_vec());
+        assets.insert(
+            b"car.vxl",
+            VxlWriter {
+                model: &synthetic_model(),
+            }
+            .write(),
+        );
+    }
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    f(&inputs, &mut painter, &mut scene)
+}
+
+/// The shades of the lit (non-shadow) items.
+fn lit_shades(items: &[glasnost_render::scene::Item]) -> Vec<glasnost_render::compose::Shade> {
+    items
+        .iter()
+        .filter_map(|i| match i.paint {
+            Paint::Lit(s) => Some(s),
+            _ => None,
+        })
+        .collect()
+}
+
+/// spec: S-0102 claim 34 and F9 (a curtain-protected vehicle drawn as voxels takes the curtain
+/// selector's mask on its body; drawn as a sprite it takes none); S-0513 claim 29 and F9 (both take
+/// the envelope's brightness before the shade-row selection: factor 512 doubles it)
+#[test]
+fn protection_curtain_vehicle_rows() {
+    use super::protection::Look;
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let curtain = protection_mask([7, 19, 3], PixelLayout::Rgb565);
+    for voxel in [true, false] {
+        let (plain, shown) = with_protection_inputs(voxel, |inputs, painter, scene| {
+            let car = |protection| Mobile {
+                kind: Kind::Vehicles,
+                idx: 0,
+                owner: b"Neutral".to_vec(),
+                pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+                body: 8192,
+                turret: 8192,
+                elevation: 0,
+                anim: 0,
+                infantry: None,
+                object: sim_code(ObjectId(9)),
+                harvesting: None,
+                shadow: None,
+                alternative: false,
+                attitude: Attitude::None,
+                disabled: false,
+                above: 0,
+                protection,
+            };
+            let look = Look {
+                kind: ProtectKind::Curtain,
+                factor: Some(512),
+            };
+            let (plain, _) = painter.mobiles(inputs, scene, &[car(None)]);
+            let (shown, _) = painter.mobiles(inputs, scene, &[car(Some(look))]);
+            (lit_shades(&plain[0].items), lit_shades(&shown[0].items))
+        });
+        assert!(
+            !plain.is_empty() && plain.len() == shown.len(),
+            "voxel {voxel}"
+        );
+        for (p, s) in plain.iter().zip(&shown) {
+            assert_eq!(p.mask, 0);
+            assert_eq!(s.mask, if voxel { curtain } else { 0 }, "voxel {voxel}");
+            assert!(s.rho > p.rho, "brighter: {} > {}", s.rho, p.rho);
+        }
+    }
+}
+
+/// spec: S-0102 claim 34 (a force-shielded building body drawn as a sprite takes the force-shield
+/// selector's mask; a curtain-protected one takes none; both take the envelope's brightness, S-0513
+/// F9; its shadow keeps its ordinary darkening)
+#[test]
+fn protection_building_body_rows() {
+    use super::protection::Look;
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    let draw = |protection| {
+        with_protection_inputs(false, |inputs, painter, scene| {
+            let (drawn, _) = painter.buildings(
+                inputs,
+                scene,
+                &[LiveBuilding {
+                    idx: 0,
+                    cell: glasnost_map::CellXY::new(2, 2),
+                    owner: b"Neutral".to_vec(),
+                    health: (1, 1),
+                    facing: 0,
+                    anim: 0,
+                    occupied: false,
+                    object: sim_code(ObjectId(5)),
+                    unloading: None,
+                    gate_door: None,
+                    protection,
+                }],
+            );
+            let body = drawn[0]
+                .iter()
+                .find(|i| {
+                    i.test == DepthTest::Writer
+                        && matches!(
+                            i.depth,
+                            ItemDepth::Profile {
+                                profile: Profile::Upright,
+                                ..
+                            }
+                        )
+                })
+                .map(|i| i.paint);
+            let shadows = drawn[0].iter().filter(|i| i.paint == Paint::Shadow).count();
+            (body, shadows)
+        })
+    };
+    let body = |look| match draw(look).0 {
+        Some(Paint::Lit(s)) => s,
+        p => panic!("no lit body: {p:?}"),
+    };
+    let look = |kind| {
+        Some(Look {
+            kind,
+            factor: Some(512),
+        })
+    };
+    let plain = body(None);
+    let shielded = body(look(ProtectKind::ForceShield));
+    let curtained = body(look(ProtectKind::Curtain));
+    assert_eq!(plain.mask, 0);
+    assert_eq!(shielded.mask, shield);
+    assert_eq!(curtained.mask, 0);
+    assert!(shielded.rho > plain.rho && curtained.rho == shielded.rho);
+    assert_eq!(
+        draw(look(ProtectKind::ForceShield)).1,
+        draw(None).1,
+        "shadow unchanged"
+    );
 }

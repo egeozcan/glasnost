@@ -36,7 +36,8 @@ struct Instance {
     @location(2) depth: vec4<u32>,
     // Palette row (the table's first row when z > 0); y: bit 0 set for a
     // tile diamond (no transparent index), bits 1 and 2 the translucency
-    // code (S-0102 claim 32); z the shade table's row count N for a drawing
+    // code (S-0102 claim 32), bits 16 to 31 the protection colour mask K
+    // (S-0102 claim 34, F9); z the shade table's row count N for a drawing
     // that reads the light-alpha values, else 0; w its rho.
     @location(3) paint: vec4<u32>,
     // The companion depth image's world x, y, width and height.
@@ -180,6 +181,19 @@ fn fs_main(in: Varyings) -> Fragment {
     var out: Fragment;
     out.color = textureLoad(rows, vec2<i32>(column * 256 + i32(index), y), 0);
     let code = (in.paint.y >> 1u) & 3u;
+    let mask = in.paint.y >> 16u;
+    if code == 0u && mask != 0u {
+        // S-0102 claim 34 and F9: the opaque pixel becomes S | K, the packed
+        // shaded pixel united with the mask.
+        let s = packed(out.color);
+        let u = ((s.r << 11u) | (s.g << 5u) | s.b) | mask;
+        out.color = vec4<f32>(
+            expand((u >> 11u) & 31u, 5u),
+            expand((u >> 5u) & 63u, 6u),
+            expand(u & 31u, 5u),
+            1.0,
+        );
+    }
     if code != 0u {
         // S-0102 claim 32 and F8: blend the packed source channels with the
         // packed channels already drawn there, each channel by itself.
