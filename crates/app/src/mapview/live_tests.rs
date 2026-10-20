@@ -208,6 +208,8 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         disabled: false,
         above: 0,
         protection: None,
+        generic_shadow: None,
+        berserk: None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -234,7 +236,8 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
     assert_eq!((body.x, body.y), (px - 1, py - 1));
     assert_eq!(scene.images.len(), images);
     // spec: S-0107 claim 19 (height above the surface 0: the body-sprite shadow; above 0, as a
-    // dropping paratrooper: none, the generic shadow left undrawn until Q-1525 names its sprite)
+    // dropping paratrooper: none from the body sprite; the generic shadow comes only with a
+    // shadow height, none here)
     let mut shadows = |above| {
         let m = Mobile {
             above,
@@ -292,6 +295,8 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         disabled: false,
         above: 0,
         protection: None,
+        generic_shadow: None,
+        berserk: None,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -980,6 +985,7 @@ fn live_building_items(
             unloading,
             gate_door,
             protection: None,
+            adjust: Default::default(),
         }],
     );
     // spec: S-0108 claim 8 (centred on the foundation's top corner; canvas 40 wide)
@@ -1641,6 +1647,8 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         disabled: false,
         above: 0,
         protection: None,
+        generic_shadow: None,
+        berserk: None,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1677,6 +1685,8 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
             disabled: false,
             above: 0,
             protection: None,
+            generic_shadow: None,
+            berserk: None,
             ..jet(1500)
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[m]);
@@ -1836,6 +1846,8 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             disabled: false,
             above: 0,
             protection: None,
+            generic_shadow: None,
+            berserk: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1926,6 +1938,8 @@ fn aircraft_attitude_is_drawn() {
         disabled: false,
         above: 0,
         protection: None,
+        generic_shadow: None,
+        berserk: None,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -2077,6 +2091,8 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             disabled,
             above: 0,
             protection: None,
+            generic_shadow: None,
+            berserk: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -2384,7 +2400,7 @@ fn warp_phasing_in_is_drawn_half_translucent() {
 }
 
 /// S-0301 claim 23 (no default or placeholder picture at the muzzle), S-0303 claim 21 (a detonation shows its
-/// explosion animation only), Q-1524 (no bomb, charge or strike-mark drawing): the game client draws
+/// explosion animation only): the game client draws
 /// none of our own placeholders for shots and detonations; the viewer's debug layer does.
 #[test]
 fn game_client_draws_no_shot_or_burst_placeholders() {
@@ -2753,8 +2769,18 @@ fn with_protection_inputs<T>(
     voxel: bool,
     f: impl FnOnce(&Inputs, &mut super::build::Painter, &mut Scene) -> T,
 ) -> T {
+    with_rules_inputs(voxel, &protection_rules(), f)
+}
+
+/// The painter inputs of the rules `rules` (CARX drawn as voxels when
+/// `voxel`), drawn by `f`.
+fn with_rules_inputs<T>(
+    voxel: bool,
+    rules: &str,
+    f: impl FnOnce(&Inputs, &mut super::build::Painter, &mut Scene) -> T,
+) -> T {
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
-    let (mut import, catalogue, mut assets) = context_with(&protection_rules());
+    let (mut import, catalogue, mut assets) = context_with(rules);
     if voxel {
         let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
         art.voxels.insert("body".into(), b"car.vxl".to_vec());
@@ -2832,6 +2858,8 @@ fn protection_curtain_vehicle_rows() {
                 disabled: false,
                 above: 0,
                 protection,
+                generic_shadow: None,
+                berserk: None,
             };
             let look = Look {
                 kind: ProtectKind::Curtain,
@@ -2880,6 +2908,7 @@ fn protection_building_body_rows() {
                     unloading: None,
                     gate_door: None,
                     protection,
+                    adjust: Default::default(),
                     slots: Vec::new(),
                 }],
             );
@@ -2943,7 +2972,7 @@ fn protected_hut_items(
     roles: &[&'static str],
     slot_art: &str,
     building: LiveBuilding,
-    cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::Look>,
+    cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook>,
 ) -> Vec<glasnost_render::scene::Item> {
     use super::tests::{ART, art_of, context_full};
     let rules = format!("{}[Animations]\n0=SLOTA\n{rules_extra}", protection_rules());
@@ -3012,6 +3041,7 @@ fn hut(protection: Option<super::protection::Look>, unloading: Option<Unloading>
         unloading,
         gate_door: None,
         protection,
+        adjust: Default::default(),
     }
 }
 
@@ -3031,14 +3061,24 @@ fn lit_parts(
 /// HUTX's foundation cells (2 × 2 from cell (2, 2)), each under `look`.
 fn hut_cells(
     look: Option<super::protection::Look>,
-) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::Look> {
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook> {
     look.map(|l| {
-        [(2, 2), (3, 2), (2, 3), (3, 3)]
-            .map(|(x, y)| (glasnost_map::CellXY::new(x, y), l))
-            .into_iter()
-            .collect()
+        hut_cells_with(super::protection::BuildingLook {
+            protection: Some(l),
+            ..Default::default()
+        })
     })
     .unwrap_or_default()
+}
+
+/// HUTX's four foundation cells, each with the building look `look`.
+fn hut_cells_with(
+    look: super::protection::BuildingLook,
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook> {
+    [(2, 2), (3, 2), (2, 3), (3, 3)]
+        .map(|(x, y)| (glasnost_map::CellXY::new(x, y), look))
+        .into_iter()
+        .collect()
 }
 
 /// A running SLOTA slot animation displaced `y` pixels down.
@@ -3163,6 +3203,7 @@ fn protection_claim29b_shrouded_centre_cell() {
     let m = super::protection::Masks {
         curtain: 0x1234,
         shield: 0x0841,
+        ..Default::default()
     };
     let look = Some(bright(ProtectKind::Curtain));
     assert_eq!(m.mobile(look, true, true), 0x1234);
@@ -3367,4 +3408,539 @@ fn magnetic_wave_follows_the_older_animations_of_the_air_list() {
     // No older animation: before the first particle or newer animation.
     let list = [m, Entrant::Anim(7), p];
     assert_eq!(wave_slots(&list, [5, 8].into_iter()), vec![1, 2]);
+}
+
+// ---------------------------------------------------------------------------
+// Sprites and effects of intake 14B: the charge flash and the strike mark on
+// buildings (S-0519 claims 25 and 26, F7), the bomb icon (claim 24), the
+// berserk mask (S-0610 claim 7) and the generic infantry shadow (S-0107
+// claim 19)
+// ---------------------------------------------------------------------------
+
+/// HUTX's body (first lit part) and its SLOTA slot animation (last lit
+/// part) under `protection` and `adjust`, with the laser-target selector 1
+/// and the slot animation's art `art`.
+fn marked_hut(
+    protection: Option<super::protection::Look>,
+    adjust: glasnost_sim::mark::Adjust,
+    art: &str,
+) -> (
+    glasnost_render::compose::Shade,
+    glasnost_render::compose::Shade,
+) {
+    let mut b = hut(protection, None);
+    b.adjust = adjust;
+    b.slots = vec![slot_a(0)];
+    let look = super::protection::BuildingLook { protection, adjust };
+    let cells = if look.active() {
+        hut_cells_with(look)
+    } else {
+        Default::default()
+    };
+    let parts = lit_parts(&protected_hut_items(
+        "[AudioVisual]\nLaserTargetColor=1\n",
+        &[],
+        art,
+        b,
+        cells,
+    ));
+    (parts[0].2, parts.last().expect("the slot animation").2)
+}
+
+/// spec: S-0519 claim 26 (a marked building's body sprite and the opaque building animations at
+/// its cells take the laser-target selector's mask, united with the force-shield mask; curtain
+/// protection adds none; the mask never pulses), F7 (marked in a phase with a factor:
+/// min(2000, ⌊m × b₂ / 256⌋); without a factor: b₂), S-0102 claim 34 animation rule (the normal
+/// light override still forces the animation's brightness)
+#[test]
+fn mark_claim26_body_and_slot_rows() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::mark::Adjust;
+    use glasnost_sim::superweapons::ProtectKind;
+    let laser = protection_mask([7, 19, 3], PixelLayout::Rgb565);
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    let marked = |m: Option<i32>| Adjust {
+        mark: Some(m),
+        ..Default::default()
+    };
+    let (plain_body, plain_slot) = marked_hut(None, Adjust::default(), "");
+    assert_eq!((plain_body.mask, plain_slot.mask), (0, 0));
+    // Marked at factor 512: twice the brightness, the laser-target mask on body and animation.
+    let (body, slot) = marked_hut(None, marked(Some(512)), "");
+    assert_eq!((body.mask, slot.mask), (laser, laser));
+    assert!(body.rho > plain_body.rho && slot.rho > plain_slot.rho);
+    // Marked in a phase without a factor: the brightness unchanged, the mask the same.
+    let (body, slot) = marked_hut(None, marked(None), "");
+    assert_eq!((body.mask, slot.mask), (laser, laser));
+    assert_eq!((body.rho, slot.rho), (plain_body.rho, plain_slot.rho));
+    // Force-shielded too: the union of both masks; curtain-protected: the laser mask alone.
+    let (body, slot) = marked_hut(
+        Some(bright(ProtectKind::ForceShield)),
+        marked(Some(256)),
+        "",
+    );
+    assert_eq!((body.mask, slot.mask), (laser | shield, laser | shield));
+    let (body, _) = marked_hut(Some(bright(ProtectKind::Curtain)), marked(Some(256)), "");
+    assert_eq!(body.mask, laser);
+    // The normal-light override still wins for the animation; the mask stays.
+    let (_, normal_plain) = marked_hut(None, Adjust::default(), "UseNormalLight=yes\n");
+    let (_, normal) = marked_hut(None, marked(Some(512)), "UseNormalLight=yes\n");
+    assert_eq!(normal.rho, normal_plain.rho);
+    assert_eq!(normal.mask, laser);
+}
+
+/// spec: S-0519 claim 25 and F6 (the flash is on when c mod 4 is 2 or 3: the body and the
+/// animations with stored brightness are brightened; no colour change), F7 (unmarked and
+/// unprotected: b₁)
+#[test]
+fn flash_claim25_body_and_slot_rows() {
+    use glasnost_sim::mark::Adjust;
+    let flash = |c| Adjust {
+        flash: c,
+        ..Default::default()
+    };
+    let (plain_body, plain_slot) = marked_hut(None, Adjust::default(), "");
+    for c in [2, 3, 6, 7] {
+        let (body, slot) = marked_hut(None, flash(c), "");
+        assert_eq!((body.mask, slot.mask), (0, 0), "no colour change, c {c}");
+        assert!(
+            body.rho > plain_body.rho && slot.rho > plain_slot.rho,
+            "on, c {c}"
+        );
+    }
+    for c in [1, 4, 5] {
+        let (body, slot) = marked_hut(None, flash(c), "");
+        assert_eq!(
+            (body.rho, slot.rho),
+            (plain_body.rho, plain_slot.rho),
+            "off, c {c}"
+        );
+    }
+}
+
+/// spec: S-0519 F7 (b₁ = F6's flashed value, b₂ = P(b₁), then the mark factor capped at 2000 ‰;
+/// a negative b₂ rounds toward minus infinity), S-0513 F9 (P), S-0519 claim 26 (a building that
+/// is also force-shielded takes the union of both masks; curtain adds none), S-0610 claim 7 (the
+/// berserk mask: voxel vehicle and infantry, none for a sprite vehicle or an aircraft, none for
+/// infantry whose cell centre is shrouded)
+#[test]
+fn building_look_and_mask_tables() {
+    use super::protection::{BuildingLook, Look, Masks, MobileKind};
+    use glasnost_sim::mark::Adjust;
+    use glasnost_sim::superweapons::ProtectKind;
+    let look = |flash, protection: Option<Look>, mark| BuildingLook {
+        protection,
+        adjust: Adjust {
+            flash,
+            protection: None,
+            mark,
+        },
+    };
+    let shielded = Some(bright(ProtectKind::ForceShield));
+    assert_eq!(look(0, None, None).brightness(800), 800);
+    assert_eq!(look(2, None, None).brightness(800), 1300, "flash on: +500");
+    assert_eq!(
+        look(2, None, None).brightness(1600),
+        1100,
+        "above 1500: −500"
+    );
+    assert_eq!(look(1, None, None).brightness(800), 800, "flash off");
+    // Protection at factor 512 doubles the flashed value; the mark then scales it, capped.
+    assert_eq!(look(2, shielded, None).brightness(400), 1800);
+    assert_eq!(
+        look(2, shielded, None).brightness(800),
+        2000,
+        "S-0513 F9's cap"
+    );
+    assert_eq!(look(0, shielded, Some(Some(256))).brightness(700), 1400);
+    assert_eq!(
+        look(0, None, Some(Some(512))).brightness(1500),
+        2000,
+        "capped"
+    );
+    assert_eq!(
+        look(0, None, Some(Some(384))).brightness(-10),
+        -15,
+        "toward minus infinity"
+    );
+    assert_eq!(look(0, None, Some(None)).brightness(700), 700);
+    assert!(look(1, None, None).active() && !look(0, None, None).active());
+    let m = Masks {
+        curtain: 0x0001,
+        shield: 0x0840,
+        laser: 0x1002,
+        berserk: 0x2004,
+    };
+    let curtained = Some(bright(ProtectKind::Curtain));
+    assert_eq!(m.building_look(look(0, None, Some(None))), 0x1002);
+    assert_eq!(m.building_look(look(0, shielded, Some(None))), 0x1842);
+    assert_eq!(m.building_look(look(0, curtained, Some(None))), 0x1002);
+    assert_eq!(
+        m.building_look(look(3, None, None)),
+        0,
+        "the flash adds no mask"
+    );
+    assert_eq!(m.berserk_of(true, MobileKind::VoxelVehicle, false), 0x2004);
+    assert_eq!(m.berserk_of(true, MobileKind::SpriteVehicle, false), 0);
+    assert_eq!(m.berserk_of(true, MobileKind::Aircraft, false), 0);
+    assert_eq!(m.berserk_of(true, MobileKind::Infantry, false), 0x2004);
+    assert_eq!(
+        m.berserk_of(true, MobileKind::Infantry, true),
+        0,
+        "cell centre shrouded"
+    );
+    assert_eq!(m.berserk_of(false, MobileKind::VoxelVehicle, false), 0);
+}
+
+/// The rules of a berserk test: berserk selector 1 and the curtain selector 2.
+fn berserk_rules() -> String {
+    format!(
+        "{RULES}[AudioVisual]\nBerserkColor=1\nIronCurtainColor=2\n[ColorAdd]\nA=0,0,0\nB=7,19,3\nC=1,0,1\n"
+    )
+}
+
+/// A synthetic mobile of `kind` at cell (2, 3).
+fn plain_mobile(kind: Kind) -> Mobile {
+    Mobile {
+        kind,
+        idx: 0,
+        owner: b"Neutral".to_vec(),
+        pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+        body: 8192,
+        turret: 8192,
+        elevation: 0,
+        anim: 0,
+        infantry: (kind == Kind::Infantry).then_some(InfantryFrame {
+            start: 3,
+            count: 1,
+            multiplier: 2,
+            stage: 0,
+        }),
+        object: sim_code(ObjectId(9)),
+        harvesting: None,
+        shadow: None,
+        alternative: false,
+        attitude: Attitude::None,
+        disabled: false,
+        above: 0,
+        protection: None,
+        generic_shadow: None,
+        berserk: None,
+    }
+}
+
+/// spec: S-0610 claim 7 (the berserk selector's triple becomes the mask by S-0102 F9: a voxel
+/// vehicle's body and voxel parts take it, united with the curtain mask when both apply; a
+/// sprite vehicle takes none; an infantry sprite body takes it unless the centre of its cell is
+/// shrouded for the viewer; the mask changes no brightness; shadows keep their darkening)
+#[test]
+fn berserk_claim7_rows() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let berserk = protection_mask([7, 19, 3], PixelLayout::Rgb565);
+    let curtain = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    for voxel in [true, false] {
+        let (plain, mad, both) =
+            with_rules_inputs(voxel, &berserk_rules(), |inputs, painter, scene| {
+                let car = |berserk, protection| Mobile {
+                    berserk,
+                    protection,
+                    ..plain_mobile(Kind::Vehicles)
+                };
+                let curtained = Some(super::protection::Look {
+                    kind: ProtectKind::Curtain,
+                    factor: None,
+                    shrouded: false,
+                });
+                let (plain, _) = painter.mobiles(inputs, scene, &[car(None, None)]);
+                let (mad, _) = painter.mobiles(inputs, scene, &[car(Some(false), None)]);
+                let (both, _) = painter.mobiles(inputs, scene, &[car(Some(false), curtained)]);
+                (
+                    lit_shades(&plain[0].items),
+                    lit_shades(&mad[0].items),
+                    lit_shades(&both[0].items),
+                )
+            });
+        assert!(
+            !plain.is_empty() && plain.len() == mad.len(),
+            "voxel {voxel}"
+        );
+        for ((p, m), b) in plain.iter().zip(&mad).zip(&both) {
+            assert_eq!(p.mask, 0);
+            assert_eq!(m.mask, if voxel { berserk } else { 0 }, "voxel {voxel}");
+            assert_eq!(
+                b.mask,
+                if voxel { berserk | curtain } else { 0 },
+                "voxel {voxel}"
+            );
+            assert_eq!(m.rho, p.rho, "no brightness change");
+        }
+    }
+    let (plain, mad, hidden) =
+        with_rules_inputs(false, &berserk_rules(), |inputs, painter, scene| {
+            let man = |berserk| Mobile {
+                berserk,
+                ..plain_mobile(Kind::Infantry)
+            };
+            let shades = |painter: &mut super::build::Painter, scene: &mut Scene, b| {
+                let (e, _) = painter.mobiles(inputs, scene, &[man(b)]);
+                let shadow_paint = e[0]
+                    .items
+                    .iter()
+                    .filter(|i| i.paint == Paint::Shadow)
+                    .count();
+                (lit_shades(&e[0].items), shadow_paint)
+            };
+            (
+                shades(painter, scene, None),
+                shades(painter, scene, Some(false)),
+                shades(painter, scene, Some(true)),
+            )
+        });
+    assert_eq!(plain.0.len(), 1);
+    assert_eq!(plain.0[0].mask, 0);
+    assert_eq!(mad.0[0].mask, berserk);
+    assert_eq!(mad.0[0].rho, plain.0[0].rho);
+    assert_eq!(
+        hidden.0[0].mask, 0,
+        "the cell centre shrouded for the viewer"
+    );
+    assert_eq!(mad.1, plain.1, "shadows unchanged");
+}
+
+/// The items `painter` draws for MANX at height 520 with shadow height
+/// `hs`, the generic shadow sprite `file` among the assets.
+fn generic_shadow_items(
+    hs: Option<i32>,
+    file: Option<Vec<u8>>,
+) -> (Vec<glasnost_render::scene::Item>, (i32, i32)) {
+    let (import, catalogue, mut assets) = context();
+    if let Some(f) = file {
+        assets.insert(super::build::GENERIC_SHADOW_FILE, f);
+    }
+    let map = decode(
+        &Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new()),
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    let mut m = plain_mobile(Kind::Infantry);
+    m.pos.2 = 520;
+    m.above = 520;
+    m.generic_shadow = hs;
+    let (e, _) = painter.mobiles(&inputs, &mut scene, &[m.clone()]);
+    (
+        e[0].items.clone(),
+        project_lifted(m.pos.0, m.pos.1, m.pos.2),
+    )
+}
+
+/// spec: S-0107 claim 19 (c, d) (the generic shadow: image frame 1 of the fixed generic
+/// infantry-shadow sprite, a darkening, centred L(hₛ) rows below the draw point, drawn right
+/// before the body, its size fixed; a file that cannot be found or holds fewer than two image
+/// frames draws nothing, and nothing else changes), S-0102 claim 13 (−5 − L(z − hₛ), flat, no
+/// depth write) and claim 20
+#[test]
+fn generic_infantry_shadow_claim19() {
+    use glasnost_render::projection::height_lift;
+    let file = super::tests::shp((16, 8), 3, (4, 2), (6, 3));
+    let (items, (px, py)) = generic_shadow_items(Some(104), Some(file.clone()));
+    assert_eq!(
+        items.len(),
+        2,
+        "the generic shadow and the body, no body-sprite shadow"
+    );
+    let (shadow, body) = (items[0], items[1]);
+    assert_eq!(shadow.paint, Paint::Shadow);
+    assert_ne!(body.paint, Paint::Shadow);
+    // Canvas 16 × 8 centred L(104) = 15 rows below the draw point, frame at (6, 3).
+    assert_eq!(
+        (shadow.x, shadow.y),
+        (px - 8 + 6, py + height_lift(104) - 4 + 3)
+    );
+    assert_eq!(
+        shadow.depth,
+        ItemDepth::Profile {
+            profile: Profile::Flat,
+            bias: -5 - height_lift(520 - 104),
+            companion: None,
+        }
+    );
+    assert_eq!(shadow.test, DepthTest::Reader);
+    // No shadow height: no generic shadow; a short or missing file: none, the body unchanged.
+    let (none, _) = generic_shadow_items(None, Some(file));
+    assert_eq!(none.len(), 1);
+    let short = super::tests::shp((16, 8), 1, (4, 2), (6, 3));
+    let (short, _) = generic_shadow_items(Some(104), Some(short));
+    assert_eq!(short.len(), 1);
+    let (missing, _) = generic_shadow_items(Some(104), None);
+    assert_eq!(missing, none);
+}
+
+/// spec: S-0107 claim 19 (b, c) (hₛ = h − 416 over a high-bridge cell when h ≥ 416 and the
+/// neighbour one step across the bridge towards lower coordinates is a high-bridge cell too, else
+/// h; the generic shadow exactly when hₛ > 0; nothing at h = 0 or h < 0)
+#[test]
+fn generic_shadow_height_claim19b() {
+    use glasnost_sim::cells::Axis;
+    use glasnost_sim::rules::Kind as SimKind;
+    let (mut live, _) = synthetic_live();
+    let man = live
+        .world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Infantry && o.on_map)
+        .map(|o| o.id)
+        .expect("the scenario has infantry");
+    let c = live.world.obj(man).unwrap().pos.cell();
+    let surface = {
+        let p = live.world.obj(man).unwrap().pos;
+        live.world.surface_at(p.x, p.y)
+    };
+    let set_h = |live: &mut Live, h| live.world.obj_mut(man).unwrap().pos.z = surface + h;
+    let hs = |live: &Live| super::live::generic_shadow(&live.world, live.world.obj(man).unwrap());
+    set_h(&mut live, 0);
+    assert_eq!(hs(&live), None, "h = 0: the own shadow instead");
+    set_h(&mut live, -20);
+    assert_eq!(hs(&live), None, "h < 0: no shadow");
+    set_h(&mut live, 300);
+    assert_eq!(hs(&live), Some(300), "ordinary terrain: hₛ = h");
+    // The unit's cell a high-bridge cell along x, its neighbour (x, y − 1) without a deck.
+    let mark = |live: &mut Live, cell: glasnost_map::CellXY, axis| {
+        let i = live.world.cells.idx(cell).unwrap();
+        live.world.cells.deck[i] = true;
+        live.world.cells.bridge_axis[i] = axis;
+    };
+    mark(&mut live, c, Axis::X);
+    set_h(&mut live, 500);
+    assert_eq!(
+        hs(&live),
+        Some(500),
+        "the edge row: the shadow falls under the bridge"
+    );
+    mark(&mut live, glasnost_map::CellXY::new(c.x, c.y - 1), Axis::X);
+    assert_eq!(hs(&live), Some(84), "over the deck: h − 416");
+    set_h(&mut live, 416);
+    assert_eq!(hs(&live), None, "hₛ = 0: none");
+    set_h(&mut live, 300);
+    assert_eq!(hs(&live), Some(300), "below deck height: h");
+    // Along y the neighbour is (x − 1, y), which has no deck.
+    let i = live.world.cells.idx(c).unwrap();
+    live.world.cells.bridge_axis[i] = Axis::Y;
+    set_h(&mut live, 500);
+    assert_eq!(hs(&live), Some(500));
+}
+
+/// spec: S-0519 F3 (frame = min(11, 2⌊(n − t) / q⌋ + b), q = ⌊D / 6⌋ with 0 taken as 1, b = 1
+/// when (n mod 2F) ≥ F, and b = 0 when F = 0)
+#[test]
+fn bomb_icon_frame_f3() {
+    use super::combat::bomb_frame;
+    // D = 450: q = 75; F = 5.
+    assert_eq!(bomb_frame(100, 100, 450, 5), 0);
+    assert_eq!(bomb_frame(105, 100, 450, 5), 1);
+    assert_eq!(bomb_frame(172, 100, 450, 5), 0);
+    assert_eq!(bomb_frame(182, 100, 450, 5), 2);
+    assert_eq!(bomb_frame(186, 100, 450, 5), 3);
+    assert_eq!(bomb_frame(10_000, 100, 450, 5), 11);
+    // D below 6: q = 1; F = 0: b = 0.
+    assert_eq!(bomb_frame(103, 100, 5, 0), 6);
+    assert_eq!(bomb_frame(115, 100, 5, 0), 11);
+}
+
+/// The overlay assets plus the bomb sprite (12 frames on 10 × 10, frame i
+/// a 2 × 2 block of value i + 1 at (4, 4)) and a cursor palette.
+fn bomb_assets() -> super::build::Assets {
+    let mut assets = overlay_assets();
+    assets.insert(
+        super::combat::BOMB_SPRITE,
+        super::tests::shp((10, 10), 12, (2, 2), (4, 4)),
+    );
+    let pal: Vec<u8> = (0..768u32).map(|i| (i * 3 % 64) as u8).collect();
+    assets.insert(super::combat::MOUSE_PALETTE, pal);
+    assets
+}
+
+/// spec: S-0519 claim 24 (the bomb icon: the F3 image frame of the bomb sprite through the cursor
+/// palette, neutral and without remapping; centred on a unit's projected position, height
+/// included; the first of the carrier's status extras, with no depth test), S-0519 Import mapping
+/// (a missing image: no icon is drawn, and a warning)
+#[test]
+fn bomb_icon_claim24() {
+    use glasnost_render::scene::Group;
+    // A fresh game for each asset set: the drawing caches what it loaded.
+    let run = |assets: &super::build::Assets| {
+        let (mut live, mut scene, map, import, catalogue, cart, _) = combat_live(3);
+        let tick = live.world.tick;
+        live.world.obj_mut(cart).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
+            planter: None,
+            house: Some(HouseId(0)),
+            planted: tick,
+        });
+        // spec: S-0519 claim 10 (the planter's house sees the bomb)
+        live.set_viewer(Some(HouseId(0)));
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        live.set_marks(&[cart], None);
+        live.redraw_status(&inputs, &mut scene);
+        let status: Vec<_> = scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+            .copied()
+            .collect();
+        let g = &live.rules.combat.general.ivan;
+        let frame = super::combat::bomb_frame(tick, tick, g.delay, g.flicker);
+        let p = live.world.obj(cart).unwrap().pos;
+        let pixels: Vec<u8> = status
+            .iter()
+            .map(|i| scene.images[i.image as usize].pixels()[0])
+            .collect();
+        let warned = live.notes.contains(super::live::BOMB_ICON_MISSING);
+        (status, pixels, frame, project_lifted(p.x, p.y, p.z), warned)
+    };
+    let (status, pixels, frame, (ax, ay), warned) = run(&bomb_assets());
+    let icon = status[0];
+    // Frame f is a block of value f + 1.
+    assert_eq!(pixels[0], frame as u8 + 1);
+    assert_eq!((icon.x, icon.y), (ax - 5 + 4, ay - 5 + 4));
+    assert_eq!(icon.test, DepthTest::Ignore);
+    assert!(status.len() > 1, "the bar and bracket follow the icon");
+    match (icon.paint, status[1].paint) {
+        (Paint::Row(a), Paint::Row(b)) => {
+            assert_ne!(a, b, "the cursor palette, not the overlay one")
+        }
+        other => panic!("unexpected paints {other:?}"),
+    }
+    assert!(!warned);
+    // Without the bomb sprite: no icon, and the importer's warning.
+    let (none, _, _, _, warned) = run(&overlay_assets());
+    assert_eq!(none.len(), status.len() - 1);
+    assert!(warned);
 }

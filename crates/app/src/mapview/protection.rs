@@ -5,11 +5,18 @@
 //! (`glasnost_sim::superweapons::protect`); this module turns them into a
 //! drawing's brightness and colour mask. The mask is the imported
 //! colour-adjustment triple a selector names, packed once in our 5-6-5
-//! layout; which drawing takes which mask is S-0102 claim 34's table.
+//! layout; which drawing takes which mask is S-0102 claim 34's table. The
+//! same table gives the laser-target mask of an air-strike-marked building
+//! (S-0519 claim 26) and the berserk mask (S-0610 claim 7), and a
+//! building's brightness combines its charge flash, protection and mark by
+//! S-0519 F7 ([`BuildingLook`]).
 
 use glasnost_convert::Import;
-use glasnost_convert::sim::{PROTECTION_SELECTORS, protection_selector};
+use glasnost_convert::sim::{
+    BERSERK_SELECTOR, LASER_TARGET_SELECTOR, PROTECTION_SELECTORS, protection_selector,
+};
 use glasnost_render::compose::{PixelLayout, protection_mask};
+use glasnost_sim::mark::Adjust;
 use glasnost_sim::superweapons::{ProtectKind, protect};
 use glasnost_sim::world::Object;
 
@@ -59,6 +66,42 @@ pub fn brightness(look: Option<Look>, b: i32) -> i32 {
     look.map_or(b, |l| l.brightness(b))
 }
 
+/// A building's look in the shown tick: its protection look and what
+/// S-0519 F7 combines with it, the charge flash count and the air-strike
+/// mark.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BuildingLook {
+    /// Its protection look (S-0513 claim 29), shroud test included.
+    pub protection: Option<Look>,
+    /// Its flash count and mark in the shown tick (S-0519 claims 25 and
+    /// 26); the protection factor in it is replaced by `protection`'s.
+    pub adjust: Adjust,
+}
+
+impl BuildingLook {
+    /// The brightness *b*₃ of ordinary brightness `b` ‰ (S-0519 F7),
+    /// which then selects the shade row (S-0104 claim 15).
+    pub fn brightness(&self, b: i32) -> i32 {
+        // spec: S-0519 F7 (b₁ the flashed value of F6, b₂ = P(b₁) by S-0513 F9, then the mark factor)
+        Adjust {
+            protection: self.protection.map(|l| l.factor),
+            ..self.adjust
+        }
+        .brightness(b)
+    }
+
+    /// Whether the building is marked by an air strike (S-0519 claim 26).
+    pub fn marked(&self) -> bool {
+        self.adjust.mark.is_some()
+    }
+
+    /// Whether anything of this look changes the building's drawing: it
+    /// is protected, marked, or has flash ticks to come.
+    pub fn active(&self) -> bool {
+        self.protection.is_some() || self.marked() || self.adjust.flash > 0
+    }
+}
+
 /// The two protection colour masks, packed for our 5-6-5 frames (S-0102
 /// F9).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -67,6 +110,10 @@ pub struct Masks {
     pub curtain: u16,
     /// The force-shield selector's mask.
     pub shield: u16,
+    /// The laser-target selector's mask (S-0519 claim 26).
+    pub laser: u16,
+    /// The berserk selector's mask (S-0610 claim 7).
+    pub berserk: u16,
 }
 
 /// The colour-adjustment triple a selector names, or `None` when it names
@@ -92,13 +139,50 @@ impl Masks {
     pub fn read(import: &Import) -> Self {
         let mask = |key: &str| {
             // spec: S-0513 Import mapping (IronCurtainColor and ForceShieldColor: zero-based
-            // integer positions held after every layer; absent: 0)
+            // integer positions held after every layer; absent: 0); S-0519 Import mapping
+            // (LaserTargetColor, a position in the table, default 0) and S-0610 Import mapping
+            // (BerserkColor, zero-based, default 0; absent in a later layer retains it)
             let selector = protection_selector(&import.outcome, key).map_or(0, |(v, _, _)| v);
             // spec: S-0102 claim 34, F9 (the selected RGB byte triple, packed once in the surface's layout; our frames are 5-6-5)
             mask_of(selected(import, selector), PixelLayout::Rgb565)
         };
         let [curtain, shield] = PROTECTION_SELECTORS.map(mask);
-        Self { curtain, shield }
+        // spec: S-0519 claim 26 (the laser-target colour is read from the rules at drawing time)
+        let laser = mask(LASER_TARGET_SELECTOR);
+        // spec: S-0610 claim 7 (the berserk selector's triple becomes the berserk mask by S-0102 F9); Edge cases (outside 0 to 15: no mask)
+        let berserk = mask(BERSERK_SELECTOR);
+        Self {
+            curtain,
+            shield,
+            laser,
+            berserk,
+        }
+    }
+
+    /// The berserk mask of a mobile drawing (S-0610 claim 7): a voxel
+    /// vehicle's body and voxel turret and barrel, and an infantry sprite
+    /// body unless its cell's centre is shrouded for the viewer
+    /// (`shrouded`); none for a sprite vehicle and an aircraft.
+    pub fn berserk_of(&self, berserk: bool, kind: MobileKind, shrouded: bool) -> u16 {
+        match kind {
+            // spec: S-0610 claim 7 (vehicle drawn as voxels: body and voxel turret/barrel)
+            MobileKind::VoxelVehicle if berserk => self.berserk,
+            // spec: S-0610 claim 7 (infantry sprite body: yes, unless the centre of its cell is shrouded for the viewing player)
+            MobileKind::Infantry if berserk && !shrouded => self.berserk,
+            // spec: S-0610 claim 7 (sprite vehicle, including a voxel turret on a sprite body, and aircraft: none)
+            _ => 0,
+        }
+    }
+
+    /// The colour mask of a building's body sprite, its voxel turret or
+    /// barrel, or an opaque slot animation over its cells, under `look`
+    /// (S-0102 claim 34 and its animation rule): the force-shield mask as
+    /// [`Masks::building`] gives it, united with the laser-target mask while
+    /// the building is marked (S-0519 claim 26).
+    pub fn building_look(&self, look: BuildingLook) -> u16 {
+        // spec: S-0519 claim 26 (marked: the laser-target mask, by bitwise union with the force-shield mask when both apply; curtain protection and the charge flash add none)
+        let laser = if look.marked() { self.laser } else { 0 };
+        self.building(look.protection) | laser
     }
 
     /// The mask of a vehicle or aircraft drawing (S-0102 claim 34): only a
@@ -137,6 +221,19 @@ impl Masks {
     }
 }
 
+/// What a mobile drawing is, for the berserk mask (S-0610 claim 7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MobileKind {
+    /// A vehicle drawn as voxels.
+    VoxelVehicle,
+    /// A vehicle drawn as a sprite.
+    SpriteVehicle,
+    /// An infantry unit.
+    Infantry,
+    /// An aircraft.
+    Aircraft,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +256,7 @@ mod tests {
         let m = Masks {
             curtain: 0x1234,
             shield: 0x0841,
+            ..Masks::default()
         };
         let (c, f) = (look(ProtectKind::Curtain), look(ProtectKind::ForceShield));
         assert_eq!(m.mobile(c, true, true), 0x1234, "voxel vehicle");
@@ -263,5 +361,50 @@ mod tests {
             shrouded: false,
         };
         assert_eq!(ordinary.brightness(2400), 2400, "not newly capped");
+    }
+
+    /// spec: S-0519 claim 26 and Import mapping (LaserTargetColor: a table position, default 0),
+    /// S-0610 claim 7 and Import mapping (BerserkColor: zero-based, default 0), Edge cases (a
+    /// berserk selector outside 0 to 15: the importer warns and no mask), S-0102 F9 (no selected
+    /// adjustment: K = 0); the laser-target warning is Q-1621's interim
+    #[test]
+    fn laser_and_berserk_selectors() {
+        use glasnost_convert::{ImportOptions, convert, inputs::InputFile, inputs::Inputs};
+        let import = |audio: &str| {
+            let text = format!("[ColorAdd]\nA=9,9,9\nB=7,19,3\nC=1,0,1\n[AudioVisual]\n{audio}");
+            convert(
+                &Inputs {
+                    base: Some(InputFile {
+                        name: "rules.ini".into(),
+                        origin: "test".into(),
+                        bytes: text.into_bytes(),
+                    }),
+                    ..Default::default()
+                },
+                &ImportOptions::default(),
+            )
+        };
+        let k = |rgb| protection_mask(rgb, PixelLayout::Rgb565);
+        let m = Masks::read(&import(""));
+        assert_eq!(
+            (m.laser, m.berserk),
+            (k([9, 9, 9]), k([9, 9, 9])),
+            "absent: 0"
+        );
+        let m = Masks::read(&import("LaserTargetColor=1\nBerserkColor=2\n"));
+        assert_eq!((m.laser, m.berserk), (k([7, 19, 3]), k([1, 0, 1])));
+        let bad = import("LaserTargetColor=16\nBerserkColor=-1\n");
+        let m = Masks::read(&bad);
+        assert_eq!((m.laser, m.berserk), (0, 0));
+        for key in ["LaserTargetColor=16", "BerserkColor=-1"] {
+            assert_eq!(
+                bad.warnings
+                    .iter()
+                    .filter(|w| w.message.contains(key))
+                    .count(),
+                1,
+                "{key}"
+            );
+        }
     }
 }

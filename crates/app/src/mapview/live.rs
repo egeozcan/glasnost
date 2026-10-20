@@ -2241,17 +2241,28 @@ impl Live {
         Some(look.shrouded(shrouded))
     }
 
-    /// The protection look of the building occupying each cell, for the
-    /// slot animations' mask (S-0102 claim 34, animation rule).
-    fn protected_cells(&self) -> BTreeMap<CellXY, super::protection::Look> {
+    /// The look of a building in the shown tick: its protection look, and
+    /// its charge flash count and air-strike mark (S-0519 F7).
+    fn building_look(&self, o: &Object) -> super::protection::BuildingLook {
+        super::protection::BuildingLook {
+            protection: self.protection_look(o),
+            // spec: S-0519 claims 25 and 26 (the flash count and the mark's phase as the last tick's turns left them; the factor in the shown tick)
+            adjust: glasnost_sim::mark::Adjust::of(&self.world, o.id, self.shown_tick()),
+        }
+    }
+
+    /// The look of the building occupying each cell, for the slot
+    /// animations' mask (S-0102 claim 34, animation rule; S-0519 claim 26).
+    fn protected_cells(&self) -> BTreeMap<CellXY, super::protection::BuildingLook> {
         let mut cells = BTreeMap::new();
         for o in self.world.objects.values() {
             if o.kind != SimKind::Building || !o.on_map {
                 continue;
             }
-            let Some(look) = self.protection_look(o) else {
+            let look = self.building_look(o);
+            if !look.active() {
                 continue;
-            };
+            }
             // spec: S-0406 claim 2 (the cells a building occupies: its foundation cells)
             for c in glasnost_sim::econ::placement::foundation_cells(
                 &self.world,
@@ -2375,6 +2386,14 @@ impl Live {
             above: w.height_above_surface(id),
             // spec: S-0513 claims 29 and 29b (the envelope's phase as the last tick's turns left it, F7 in that tick; the centre-cell shroud test)
             protection: self.protection_look(o),
+            generic_shadow: (kind == Kind::Infantry)
+                .then(|| generic_shadow(w, o))
+                .flatten(),
+            // spec: S-0610 claim 7 (berserk vehicles and infantry; the infantry's cell centre shrouded for the viewer)
+            berserk: glasnost_sim::psychic::berserk(w, id).then(|| {
+                self.viewer
+                    .is_some_and(|v| !glasnost_sim::econ::shroud::explored(w, v, o.pos.cell()))
+            }),
         })
     }
 
@@ -2417,19 +2436,19 @@ impl Live {
             .map(|(i, _)| *i)
             .collect();
         gone.extend(self.live_gates.iter().copied());
-        // The map's buildings while protected are drawn live too, so that
-        // their bodies show the protection appearance (S-0102 claim 34; our
-        // placeholder order, as for the gates). So are those being erased, so
-        // that their bodies show half see-through (S-0514 claim 27).
-        let shown = self.shown_tick();
+        // The map's buildings while protected, flashing or marked are drawn
+        // live too, so that their bodies show the protection appearance
+        // (S-0102 claim 34), the charge flash (S-0519 claim 25: each on/off
+        // change repaints the body) and the mark (claim 26: every frame);
+        // our placeholder order, as for the gates. So are those being
+        // erased, so that their bodies show half see-through (S-0514 claim
+        // 27).
         let protected_map: BTreeSet<u32> = self
             .building_ids
             .iter()
             .filter(|(_, id)| {
                 self.world.obj(**id).is_some_and(|o| {
-                    o.on_map
-                        && (super::protection::Look::of(o, shown).is_some()
-                            || self.erased_code(o.id).is_some())
+                    o.on_map && (self.building_look(o).active() || self.erased_code(o.id).is_some())
                 })
             })
             .map(|(code, _)| *code)
@@ -2567,6 +2586,8 @@ impl Live {
                         .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
                         // spec: S-0513 claims 29 and 29b (the envelope's phase as the last tick's turns left it, F7 in that tick; the centre-cell shroud test)
                         protection: self.protection_look(o),
+                        // spec: S-0519 claims 25 and 26, F7 (the flash count and the mark)
+                        adjust: self.building_look(o).adjust,
                     },
                 ))
             })
@@ -2620,7 +2641,7 @@ impl Live {
         let mut particle_items = self.particle_items(inputs, scene);
         particle_items.extend(self.projectile_items(inputs, scene));
         scene.spots.clear();
-        let waves = self.lines.wave_spots(shown, self.rules.mode);
+        let waves = self.lines.wave_spots(self.shown_tick(), self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
         // top after it; each unsorted)
         self.draw_layers(
@@ -3100,36 +3121,6 @@ impl Live {
                     .marker_item(scene, Marker::Crate, project_lifted(p.x, p.y, z + 40));
             scene.items.push(item);
         }
-        // S-0519: planted bombs the viewer sees, charges counting down and buildings marked by a strike,
-        // in the viewer's debug layer only: how the game draws them is open (Q-1524).
-        let viewer = self.viewer;
-        let mut extra: Vec<(Marker, (i32, i32))> = Vec::new();
-        let debug = self.debug_markers;
-        for o in self.world.objects.values().filter(|o| o.on_map && debug) {
-            let z = self.world.surface_at(o.pos.x, o.pos.y);
-            let at = project_lifted(o.pos.x, o.pos.y, z + 200);
-            if let Some(b) = o.combat.bomb
-                && viewer.is_none_or(|v| glasnost_sim::bomb::visible(&self.world, v, o.id))
-            {
-                let g = &self.rules.combat.general.ivan;
-                let q = (g.delay / 6).max(1); // spec: S-0519 F3 (q = floor(D / 6); 0 becomes 1)
-                let big_f = g.flicker.max(1);
-                let n = self.world.tick;
-                let bit = i32::from(n.rem_euclid(2 * big_f) >= big_f);
-                let frame = (2 * ((n - b.planted) / q) + bit).clamp(0, 11); // spec: S-0519 F3 (frame = min(11, 2 floor((n - t) / q) + b))
-                extra.push((Marker::Bomb { frame }, at));
-            }
-            if o.combat.charge_planter.is_some() && o.combat.delay_kill_until.is_some() {
-                extra.push((Marker::Charge, at));
-            }
-            if glasnost_sim::strike::marked(&self.world, o.id) {
-                extra.push((Marker::Marked, project_lifted(o.pos.x, o.pos.y, z)));
-            }
-        }
-        for (m, at) in extra {
-            let item = self.cache.marker_item(scene, m, at);
-            scene.items.push(item);
-        }
         let now = self.shown_tick();
         for t in &self.transients {
             if let Some(m) = t.marker(now) {
@@ -3192,6 +3183,39 @@ impl Live {
                 continue;
             }
             let infantry = o.kind == SimKind::Infantry;
+            // spec: S-0519 claim 24 (the bomb icon is the first of its carrier's status extras, so its own extras paint over it)
+            if let Some(b) = o.combat.bomb
+                && self
+                    .viewer
+                    .is_none_or(|v| glasnost_sim::bomb::visible(&self.world, v, o.id))
+            {
+                let g = &r.combat.general.ivan;
+                // spec: S-0519 F3 (the icon's image frame in the current tick)
+                let frame = combat::bomb_frame(self.world.tick, b.planted, g.delay, g.flicker);
+                let at = if o.kind == SimKind::Building {
+                    // spec: S-0519 claim 24, S-0108 claim 8 (a building: the projected top corner of its foundation)
+                    let c = o.pos.cell();
+                    let level = self.world.cells.grid.get(c).map_or(0, |c| c.level);
+                    project_lifted(
+                        256 * c.x,
+                        256 * c.y,
+                        combat::LEVEL_HEIGHT * i32::from(level),
+                    )
+                } else {
+                    // spec: S-0519 claim 24 (a unit: the screen pixel of its position, height included)
+                    project_lifted(o.pos.x, o.pos.y, o.pos.z)
+                };
+                match self
+                    .cache
+                    .bomb_item(scene, inputs.assets, at, frame, Some(sim_code(o.id)))
+                {
+                    Some(item) => items.push(item),
+                    // spec: S-0519 Import mapping (missing bomb-icon image or palette: no icon is drawn; the importer warns)
+                    None => {
+                        self.notes.insert(BOMB_ICON_MISSING.to_owned());
+                    }
+                }
+            }
             let bar = shows.iter().find(|(id, _)| *id == o.id).map(|(_, s)| *s);
             let insignia = combat::insignia(o.combat.experience, infantry);
             if bar.is_none() && insignia.is_none() {
@@ -3448,4 +3472,42 @@ pub(super) fn cloak_items(
 pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
     // spec: S-0102 claim 5 (sort key X + Y in leptons; height plays no part)
     i64::from(o.pos.x) + i64::from(o.pos.y)
+}
+
+/// The note for a bomb icon that cannot be drawn (S-0519 Import mapping).
+pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP, its image frame or the cursor palette MOUSE.PAL is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+
+/// The shadow height *h*ₛ of infantry unit `o`'s generic shadow, or `None`
+/// when it draws none (S-0107 claim 19 b and c): only off the surface, and
+/// never for a type with drop-pod movement.
+pub(super) fn generic_shadow(w: &World, o: &Object) -> Option<i32> {
+    // spec: S-0107 claim 19 and Terms (h: the height above the surface; 0 on a bridge deck)
+    let h = w.height_above_surface(o.id);
+    // spec: S-0107 claim 19 (a) (h = 0: the own shadow instead)
+    if h == 0 {
+        return None;
+    }
+    // spec: S-0107 claim 19 (c) (a unit with drop-pod movement never draws the generic shadow)
+    if w.rules()
+        .unit(o.kind, o.type_index)
+        .is_some_and(|u| u.raw.locomotor == Some(glasnost_rules::sim::Locomotor::DropPod))
+    {
+        return None;
+    }
+    let c = o.pos.cell();
+    // spec: S-0107 claim 19 (b) (the neighbour one step across the bridge towards lower coordinates: (x, y − 1) for an axis along x, (x − 1, y) along y)
+    let neighbour = match w.cells.axis(c) {
+        glasnost_sim::cells::Axis::X => Some(CellXY::new(c.x, c.y - 1)),
+        glasnost_sim::cells::Axis::Y => Some(CellXY::new(c.x - 1, c.y)),
+        glasnost_sim::cells::Axis::None => None,
+    };
+    // spec: S-0107 claim 19 (b) (h − 416, the deck height, over a high-bridge cell with h ≥ 416 whose neighbour is also a high-bridge cell; h otherwise)
+    let deck = glasnost_sim::hover::DECK;
+    let hs = if w.high_bridge(c) && h >= deck && neighbour.is_some_and(|n| w.high_bridge(n)) {
+        h - deck
+    } else {
+        h
+    };
+    // spec: S-0107 claim 19 (c) (drawn exactly when hₛ > 0; nothing while h < 0)
+    (h > 0 && hs > 0).then_some(hs)
 }

@@ -287,7 +287,7 @@ mod notes {
     pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
     pub const SLOT_ANIMS_STILL: &str = "the static scene's building slot animations (S-0108 claim 11) are drawn at their first image frame: they do not advance and power (S-0108 claim 13) does not change them";
     /// See [`SLOT_ANIMS_STILL`].
-    pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 15 (empty storage), 17 and 20 and S-0606's walls; power (S-0108 claims 13 and 14), silo fill, the superweapon, turret and upgrade slots, and a repair depot's special-1 start (Q-1550) are not modelled";
+    pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 15 (empty storage), 17 and 20 and S-0606's walls; power (S-0108 claims 13 and 14), silo fill, the superweapon, turret and upgrade slots are not modelled; a repair depot's production and special slots are the simulation's (S-0108 claim 20)";
     /// The importer warning of S-0102 claim 33: the shared building depth
     /// image file and why it is unavailable.
     pub fn no_companion(failure: &str) -> String {
@@ -826,11 +826,16 @@ pub fn wanted_files(
         super::combat::PIP_SPRITE,
         super::combat::BRACKET_SPRITE,
         super::combat::OVERLAY_PALETTE,
+        // spec: S-0519 claim 24 and S-0111 Import mapping (the bomb icon and its cursor palette)
+        super::combat::BOMB_SPRITE,
+        super::combat::MOUSE_PALETTE,
     ] {
         out.insert(upper(f));
     }
     // spec: S-0402 Import mapping (the fixed harvesting sprite of claim 5a)
     out.insert(upper(super::harvesting::SPRITE_FILE));
+    // spec: S-0107 Import mapping (the generic infantry-shadow sprite of claim 19, a fixed file)
+    out.insert(upper(GENERIC_SHADOW_FILE));
     // spec: S-0103 claim 13 (the sidebar icon palette)
     out.insert(upper(glasnost_render::palette::ICON_PALETTE_FILE));
     out
@@ -1053,7 +1058,7 @@ pub struct Painter {
     /// The protection look of the building occupying each cell, for the
     /// live game's building slot animations (S-0102 claim 34, animation
     /// rule); empty for the static scene.
-    protected_cells: BTreeMap<CellXY, super::protection::Look>,
+    protected_cells: BTreeMap<CellXY, super::protection::BuildingLook>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -2371,8 +2376,20 @@ impl Builder<'_> {
             // A map-placed building is not unloading when the scene is built.
             let items = self.building_items(
                 // spec: S-0105 claim 16 and S-0609 claim 14 (a map-placed building has not spun: counter 0)
-                i, &art, p.cell, cell.level, &p.owner, condition, false, facing, 0, object, None,
-                None, None, ground,
+                i,
+                &art,
+                p.cell,
+                cell.level,
+                &p.owner,
+                condition,
+                false,
+                facing,
+                0,
+                object,
+                None,
+                None,
+                Default::default(),
+                ground,
             );
             self.built.scene.items.extend(items);
         }
@@ -2400,7 +2417,7 @@ impl Builder<'_> {
         object: u32,
         unloading: Option<Unloading>,
         gate_door: Option<unload::DoorView>,
-        protection: Option<super::protection::Look>,
+        look: super::protection::BuildingLook,
         ground: &mut Vec<GroundEntry>,
     ) -> Vec<Item> {
         let mut items = Vec::new();
@@ -2433,7 +2450,7 @@ impl Builder<'_> {
             .and_then(value::boolean)
             .unwrap_or(false);
         // The building's row at its ordinary brightness adjusted by `look`.
-        let lit = |b: &mut Self, look: Option<super::protection::Look>| {
+        let lit = |b: &mut Self, look: super::protection::BuildingLook| {
             if terrain_palette {
                 // spec: S-0103 claim 8, S-0104 claim 13 (terrain-palette building: the centre cell's table and scaled ground)
                 let (w, h) = b.foundation(i);
@@ -2442,29 +2459,39 @@ impl Builder<'_> {
                 let l = b.p.lights.get(centre);
                 let table = l.map_or(TileTable::Neutral, |l| l.table);
                 let ground = l.map_or(NEUTRAL_BRIGHTNESS, |l| l.scaled_ground);
-                b.tile_row(table, super::protection::brightness(look, ground))
+                b.tile_row(table, look.brightness(ground))
             } else {
                 // spec: S-0104 claim 13 (an ordinary building: U of its top-left foundation cell)
-                b.house_row(hsv, super::protection::brightness(look, u))
+                b.house_row(hsv, look.brightness(u))
             }
         };
-        let row = lit(self, None);
+        let row = lit(self, super::protection::BuildingLook::default());
         // spec: S-0102 claim 34 (a protected building body drawn as a sprite: S-0513 F9's brightness
         // before the shade-row selection; the force-shield selector's mask when force-shielded, none
-        // under the curtain)
-        let shield_mask = match protection {
-            Some(_) => self.protection_masks().building(protection),
-            None => 0,
-        };
-        let body_row = match protection {
-            Some(_) => lit(self, protection).with_mask(shield_mask),
-            None => row,
+        // under the curtain); S-0519 claims 25 and 26, F7 (the flash and the mark's factor reach the
+        // body however it is drawn; a marked body takes the laser-target mask, united with the
+        // force-shield mask)
+        let shield_mask = self.protection_masks().building_look(look);
+        let body_row = if look.active() {
+            lit(self, look).with_mask(shield_mask)
+        } else {
+            row
         };
         // spec: S-0513 claim 29b (the bib, under-door and under-roof-door images, the image drawn
         // in place of the body and the door image take the body's envelope and mask: the
         // force-shield mask under the force shield, none under the curtain; the door's mask is
-        // the drawing correction)
-        let accessory_row = body_row;
+        // the drawing correction); S-0519 claims 25 and 26 (the flash and the mark reach the body,
+        // its voxel parts and its animations only: accessory drawings stay outside)
+        let protected = super::protection::BuildingLook {
+            protection: look.protection,
+            ..Default::default()
+        };
+        let accessory_row = match look.protection {
+            Some(_) => {
+                lit(self, protected).with_mask(self.protection_masks().building(look.protection))
+            }
+            None => row,
+        };
         let Some(body_sprite) = art.sprite.clone() else {
             return items;
         };
@@ -2627,8 +2654,9 @@ impl Builder<'_> {
             }
         }
         // spec: S-0102 claim 34 (a building slot animation drawn with its building's palette and
-        // stored brightness: the protected building's brightness, refreshed on each building turn)
-        let slot_u = super::protection::brightness(protection, u);
+        // stored brightness: the protected building's brightness, refreshed on each building turn);
+        // S-0519 F7 (the same b₃ is the stored brightness: flash, protection and mark)
+        let slot_u = look.brightness(u);
         self.slot_animations(i, cell, z, slot_u, hsv, damaged, object, ground);
         // The building's parts in the object pass: the door image, then its voxel turret or barrel
         // (our placeholder order between the two).
@@ -2673,8 +2701,9 @@ impl Builder<'_> {
         let turret_voxel = rule_bool(self.import, Kind::Buildings, i, b"TurretAnimIsVoxel", false);
         if turret_voxel || art.voxels.contains_key("barrel") {
             // spec: S-0102 claim 34 (a building voxel turret/barrel: S-0513 F9's brightness; the
-            // force-shield selector's mask for the force shield, none for the curtain)
-            let b = super::protection::brightness(protection, u);
+            // force-shield selector's mask for the force shield, none for the curtain); S-0519
+            // claims 25 and 26, F7 (flash and mark reach the voxel parts; the marked body's mask)
+            let b = look.brightness(u);
             parts.extend(self.building_voxels(
                 i,
                 art,
@@ -2794,10 +2823,17 @@ impl Builder<'_> {
             // opaque drawings; one whose own art draws it translucent takes no mask (our interim
             // reading: S-0513 Open questions leave it open, and F8's blend takes no mask). An
             // occupying building whose centre cell is shrouded supplies no mask (Q-1529 interim:
-            // S-0513 claim 29b's shroud row read as reaching its slot animations)
-            let look = self.p.protected_cells.get(&anim_cell).copied();
+            // S-0513 claim 29b's shroud row read as reaching its slot animations). The building
+            // occupying the cell also supplies the laser-target mask while it is marked, united with
+            // the force-shield mask (S-0519 claim 26, S-0102 claim 34 animation rule)
+            let look = self
+                .p
+                .protected_cells
+                .get(&anim_cell)
+                .copied()
+                .unwrap_or_default();
             let row = if code == 0 {
-                row.with_mask(self.protection_masks().building(look))
+                row.with_mask(self.protection_masks().building_look(look))
             } else {
                 row
             };
@@ -3745,6 +3781,10 @@ impl Builder<'_> {
             above: 0,
             // A map unit is not protected before any tick (S-0513 claim 25).
             protection: None,
+            // spec: S-0107 claim 19 (a map unit stands on its surface: h = 0, no generic shadow)
+            generic_shadow: None,
+            // A map unit is not berserk before any tick (S-0610 claim 4).
+            berserk: None,
         };
         Some(self.mobile(&m))
     }
@@ -3840,7 +3880,16 @@ impl Builder<'_> {
             .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
         let items = if m.kind == Kind::Infantry {
             // spec: S-0104 claim 13 (infantry: U + extra infantry light; shadowed cells need the theater spec)
-            let row = self.house_row(hsv, ground + self.extra_light(b"ExtraInfantryLight"));
+            // spec: S-0610 claim 7 (a berserk infantry sprite body takes the berserk mask, unless the
+            // centre of its cell is shrouded for the viewer; S-0102 F9's union after the shade row)
+            let mask = self.protection_masks().berserk_of(
+                m.berserk.is_some(),
+                super::protection::MobileKind::Infantry,
+                m.berserk == Some(true),
+            );
+            let row = self
+                .house_row(hsv, ground + self.extra_light(b"ExtraInfantryLight"))
+                .with_mask(mask);
             self.infantry_items(m, point, u, row)
         } else {
             // spec: S-0104 claim 13 (vehicles: U + extra unit light; aircraft on the ground: U + extra aircraft light)
@@ -3863,13 +3912,20 @@ impl Builder<'_> {
             // spec: S-0513 F9, S-0102 claim 34 (protection changes the ordinary brightness before the shade-row selection)
             let b = super::protection::brightness(m.protection, b);
             // spec: S-0102 claim 34 (the vehicle's body and voxel turret and barrel share the mask of its row)
-            let mask = match m.protection {
-                Some(_) => {
-                    self.protection_masks()
-                        .mobile(m.protection, m.kind == Kind::Vehicles, voxel)
-                }
+            let masks = self.protection_masks();
+            let curtain = match m.protection {
+                Some(_) => masks.mobile(m.protection, m.kind == Kind::Vehicles, voxel),
                 None => 0,
             };
+            let kind = match (m.kind, voxel) {
+                (Kind::Vehicles, true) => super::protection::MobileKind::VoxelVehicle,
+                (Kind::Vehicles, false) => super::protection::MobileKind::SpriteVehicle,
+                _ => super::protection::MobileKind::Aircraft,
+            };
+            // spec: S-0610 claim 7 (a berserk vehicle drawn as voxels: body and voxel turret/barrel
+            // take the berserk mask, united with the curtain mask when both apply; a sprite vehicle
+            // and an aircraft take none)
+            let mask = curtain | masks.berserk_of(m.berserk.is_some(), kind, false);
             let row = self.house_row(hsv, b).with_mask(mask);
             let body = self.vehicle_items(m, point, u, row);
             // spec: S-0402 claim 5a (composited before both the vehicle's shadow and its body)
@@ -3947,6 +4003,33 @@ impl Builder<'_> {
         };
         let lz = height_lift(m.pos.2);
         let mut items = Vec::new();
+        // spec: S-0107 claim 19 (c, d) and S-0102 claim 20 (the generic shadow when h is not 0 and
+        // hₛ > 0: image frame 1 of the fixed generic infantry-shadow sprite, a darkening, centred
+        // L(hₛ) rows below the draw point, right before the body; a file that cannot be found or
+        // holds fewer than two image frames draws nothing, without a warning)
+        if let Some(hs) = m.generic_shadow
+            && self
+                .sprite_frames(GENERIC_SHADOW_FILE)
+                .is_some_and(|n| n > GENERIC_SHADOW_FRAME)
+            && let Some(item) = self.place_sprite(
+                GENERIC_SHADOW_FILE,
+                GENERIC_SHADOW_FRAME,
+                (point.0, point.1 + height_lift(hs)),
+                DepthTest::Reader,
+                // spec: S-0102 claim 13 (generic shadow of an infantry unit with hₛ > 0: −5 − L(z − hₛ), flat, no depth write)
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: GENERIC_SHADOW_BIAS - height_lift(m.pos.2 - hs),
+                    companion: None,
+                },
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                Some(m.object),
+            )
+        {
+            items.push(item);
+        }
         // spec: S-0102 claim 13 (infantry body, h = 0: U − 12, upright, reader)
         if let Some(item) = self.place_sprite(
             &sprite,
@@ -3966,8 +4049,7 @@ impl Builder<'_> {
             items.push(item);
         }
         // spec: S-0107 claim 19 (height above the surface 0: shadow frame + ⌊L/2⌋ at the same position, unless
-        // suppressed; any other height: no body-sprite shadow. The generic infantry shadow drawn above 0 has no
-        // named sprite yet, so nothing is drawn for it: Q-1525);
+        // suppressed; any other height: no body-sprite shadow, the generic shadow above instead);
         // S-0102 claims 20 and 28 (drawn right after the body; it darkens the body's own pixels)
         if m.above == 0
             && !rule_bool(self.import, m.kind, m.idx, b"NoShadow", false)
@@ -4668,6 +4750,13 @@ pub fn infantry_frame(f: &InfantryFrame, facing: u16) -> i32 {
         }
 }
 
+/// The generic infantry-shadow sprite (S-0107 claim 19 d), a fixed file.
+pub const GENERIC_SHADOW_FILE: &[u8] = b"INFSHDW.SHP"; // spec: S-0107 Import mapping (game data file INFSHDW.SHP, found by the name lookup of S-0005)
+/// The image frame of the generic infantry shadow.
+pub const GENERIC_SHADOW_FRAME: usize = 1; // spec: S-0107 Constants (generic shadow image frame 1)
+/// The generic infantry shadow's depth bias, before −*L*(*z* − *h*ₛ).
+pub const GENERIC_SHADOW_BIAS: i32 = -5; // spec: S-0102 Constants (generic infantry shadow bias −5)
+
 /// A mobile object to draw: its type, owner, position and pose.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mobile {
@@ -4716,6 +4805,14 @@ pub struct Mobile {
     /// Its protection appearance in the shown tick (S-0513 claim 29,
     /// S-0102 claim 34); `None` without a game state.
     pub protection: Option<super::protection::Look>,
+    /// For an infantry unit whose height above the surface is not 0: the
+    /// shadow height *h*ₛ of its generic shadow when one is drawn (S-0107
+    /// claim 19 b and c); `None` otherwise and without a game state.
+    pub generic_shadow: Option<i32>,
+    /// While berserk: whether the centre of its cell is shrouded for the
+    /// viewer (S-0610 claim 7); `None` when not berserk or without a game
+    /// state.
+    pub berserk: Option<bool>,
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
@@ -4825,7 +4922,10 @@ impl Painter {
     /// Sets the protection look of the building occupying each cell, which
     /// the next [`Painter::buildings`] draws building slot animations by
     /// (S-0102 claim 34, animation rule).
-    pub fn set_protected_cells(&mut self, cells: BTreeMap<CellXY, super::protection::Look>) {
+    pub fn set_protected_cells(
+        &mut self,
+        cells: BTreeMap<CellXY, super::protection::BuildingLook>,
+    ) {
         self.protected_cells = cells;
     }
 
@@ -5283,7 +5383,10 @@ impl Painter {
                 d.object,
                 d.unloading,
                 d.gate_door,
-                d.protection,
+                super::protection::BuildingLook {
+                    protection: d.protection,
+                    adjust: d.adjust,
+                },
                 &mut ground,
             );
             for g in ground {
@@ -5348,6 +5451,9 @@ pub struct LiveBuilding {
     /// Its protection appearance in the shown tick (S-0513 claim 29,
     /// S-0102 claim 34).
     pub protection: Option<super::protection::Look>,
+    /// Its charge flash count and air-strike mark in the shown tick
+    /// (S-0519 claims 25 and 26, F7).
+    pub adjust: glasnost_sim::mark::Adjust,
 }
 
 /// A running slot animation of a live building, as the drawing takes it
