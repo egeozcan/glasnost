@@ -2341,6 +2341,48 @@ fn erasure_translucency_combines_with_the_cloak() {
     assert_eq!(combine_codes(None, None), None);
 }
 
+/// spec: S-0513 claim 40 and S-0514 claim 27 (an object phasing in by a warp, from departure until
+/// the arrival hold ends, is drawn with code 2, as is the leaving stage of a body being erased;
+/// a pending warp is not)
+#[test]
+fn warp_phasing_in_is_drawn_half_translucent() {
+    use glasnost_render::compose::Translucency;
+    use glasnost_sim::superweapons::warp::{Member, Stage};
+    let (mut live, _scene, _map, _import, _catalogue, cart, _walker) = combat_live(3);
+    let pos = live.world.obj(cart).unwrap().pos;
+    let set = |live: &mut Live, stage: Option<Stage>| {
+        live.world.obj_mut(cart).unwrap().sw.warp = stage.map(|stage| Member {
+            stage,
+            house: HouseId(0),
+            landing: pos,
+            redirected: false,
+            fell_back: false,
+            refused: false,
+            entry_ok: true,
+        });
+    };
+    assert_eq!(live.erased_code(cart), None);
+    for stage in [
+        Stage::Leaving(0),
+        Stage::Expired,
+        Stage::Blocked,
+        Stage::Away,
+        Stage::Placed,
+        Stage::Hold(0),
+    ] {
+        set(&mut live, Some(stage));
+        assert_eq!(
+            live.erased_code(cart),
+            Some(Translucency::Half),
+            "{stage:?}"
+        );
+    }
+    set(&mut live, Some(Stage::Pending));
+    assert_eq!(live.erased_code(cart), None, "pending");
+    set(&mut live, None);
+    assert_eq!(live.erased_code(cart), None);
+}
+
 /// S-0301 claim 23 (no default or placeholder picture at the muzzle), S-0303 claim 21 (a detonation shows its
 /// explosion animation only), Q-1524 (no bomb, charge or strike-mark drawing): the game client draws
 /// none of our own placeholders for shots and detonations; the viewer's debug layer does.
