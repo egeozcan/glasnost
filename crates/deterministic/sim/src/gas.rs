@@ -158,6 +158,25 @@ pub struct ParticleType {
     pub radius: i32,
     /// The spark fields *X*, *Y*, *Z*ₘ and *Z*ᵣ (S-0616 F10).
     pub spark: [i32; 4], // nocite: the four spark velocity fields of S-0616 F10
+    /// The look of a particle: colour list, start colours, colour speed
+    /// and the fire translucency stages (S-0616 claims 26 and 29).
+    pub look: ParticleLook,
+}
+
+/// A particle type's drawing fields that its updates change state by
+/// (S-0616 claims 26 and 29, F16; Import mapping).
+#[derive(Clone, Debug, Default)]
+pub struct ParticleLook {
+    /// The colour list, 8-bit RGB triples in order.
+    pub colours: Vec<[u8; 3]>, // nocite: RGB channels
+    /// The two start colours *s*₁ and *s*₂.
+    pub start: [[u8; 3]; 2], // nocite: two RGB colours
+    /// The colour speed *v*, a double.
+    pub speed: F64,
+    /// The translucent-25 stage field, an 8-bit unsigned stage.
+    pub stage25: u8,
+    /// The translucent-50 stage field, an 8-bit unsigned stage.
+    pub stage50: u8,
 }
 
 /// A particle-system type's fields (S-0613 Import mapping).
@@ -178,6 +197,8 @@ pub struct SystemType {
     pub slowdown: F32,
     /// The smoke spawn cut-off (S-0616 claim 9).
     pub cutoff: F32,
+    /// The smoke translucency cut-off τ (S-0616 claim 9, F4).
+    pub translucency_cutoff: F32,
     /// The smoke spawn radius σ (S-0616 F4).
     pub spawn_radius: i32,
     /// The particle cap κ (S-0616 F10; the smoke cap quirk).
@@ -523,6 +544,28 @@ impl GasRules {
                         t.min_z_velocity.unwrap_or(0),
                         t.z_velocity_range.unwrap_or(1),
                     ],
+                    look: ParticleLook {
+                        // spec: S-0616 Import mapping (ColorList: 8-bit RGB triples, absent empty)
+                        colours: t
+                            .color_list
+                            .iter()
+                            .flatten()
+                            .map(|c| c.map(|x| x as u8))
+                            .collect(),
+                        // spec: S-0616 Import mapping (StartColor1, StartColor2 absent black)
+                        start: [
+                            t.start_color1.unwrap_or([0; 3]).map(|x| x as u8),
+                            t.start_color2.unwrap_or([0; 3]).map(|x| x as u8),
+                        ],
+                        // spec: S-0616 Import mapping (ColorSpeed: a double, absent 0.0)
+                        speed: t
+                            .color_speed
+                            .as_ref()
+                            .map_or(F64::from_i64(0, mode), |d| d.value(mode)),
+                        // spec: S-0616 Import mapping (Translucent25State, Translucent50State: 8-bit unsigned stages, absent 255)
+                        stage25: t.translucent25_state.unwrap_or(255) as u8,
+                        stage50: t.translucent50_state.unwrap_or(255) as u8,
+                    },
                 }
             })
             .collect();
@@ -541,6 +584,8 @@ impl GasRules {
                     // spec: S-0616 Import mapping (Slowdown, SpawnCutoff: single-precision numbers, absent 0.0)
                     slowdown: single(&t.slowdown, mode),
                     cutoff: single(&t.spawn_cutoff, mode),
+                    // spec: S-0616 Import mapping (SpawnTranslucencyCutoff: a single-precision number, absent 0.0)
+                    translucency_cutoff: single(&t.spawn_translucency_cutoff, mode),
                     // spec: S-0616 Import mapping (SpawnRadius absent 0)
                     spawn_radius: t.spawn_radius.unwrap_or(0),
                     // spec: S-0616 Import mapping (ParticleCap absent 50)
@@ -664,6 +709,117 @@ pub struct Particle {
     pub step: [i32; 3], // nocite: vector and matrix dimensions (three axes)
     /// Its own stage-advance value (S-0616 claim 19).
     pub advance: i8,
+    /// Its translucency value, 8 bits, kept modulo 256 (S-0616 claim 26).
+    #[serde(default)]
+    pub translucency: u8,
+    /// A pixel kind's colour state (S-0616 claim 29, F16).
+    #[serde(default)]
+    pub colour: ColourState,
+    /// Its creation position (S-0616 F15).
+    #[serde(default)]
+    pub origin: Pos,
+    /// The target point it was given at creation (S-0616 F15).
+    #[serde(default)]
+    pub aim: Pos,
+}
+
+impl ColourState {
+    /// The state at creation (S-0616 F16): the own colour from the type's
+    /// colour list and start colours with the creation colour draw `r`
+    /// (taken only when the type has one, S-0202 claim 15), *i* = 0 and
+    /// *t* = 0.
+    pub fn new(look: &ParticleLook, r: Option<i32>, m: Rounding) -> Self {
+        let own = if look.colours.is_empty() {
+            // spec: S-0616 F16 (with an empty list c₀ is black)
+            [0; 3]
+        } else if look.start == [[0; 3]; 2] {
+            // spec: S-0616 F16 (with both start colours black c₀ is list entry 0 and there is no draw)
+            look.colours[0]
+        } else {
+            let r = r.unwrap_or(0);
+            let single = |x: F64| x.to_f32(m).to_f64();
+            // spec: S-0616 F16 (f = r × 4.656613 × 10⁻¹⁰ in single precision)
+            let k = single(crate::rules::nearest_double("4.656613e-10")); // spec: S-0616 F16 (the single-precision scale 4.656613 × 10⁻¹⁰)
+            let f = single(single(F64::from_i64(i64::from(r), m)).mul(k, m));
+            let one_minus = single(F64::from_i64(1, m).sub(f, m));
+            let [s1, s2] = look.start;
+            let mut c = [0u8; 3];
+            for ch in 0..3 {
+                // spec: S-0616 F16 (c₀ = trunc(s₁ × (1 − f) + s₂ × f), clamped to 0 … 255, single precision)
+                let a = single(F64::from_i64(i64::from(s1[ch]), m).mul(one_minus, m));
+                let b = single(F64::from_i64(i64::from(s2[ch]), m).mul(f, m));
+                let v = single(a.add(b, m)).to_i32_common();
+                c[ch] = v.clamp(0, 255) as u8;
+            }
+            c
+        };
+        ColourState {
+            own,
+            index: 0,
+            t: F64::from_i64(0, m),
+        }
+    }
+
+    /// One update's colour step (S-0616 claims 16, 18 and 29, F16) with
+    /// the update's colour draw `r`.
+    pub fn advance(&mut self, look: &ParticleLook, r: i32, m: Rounding) {
+        // spec: S-0616 F16 and Constants (t ← (r × 4.656612877414201 × 10⁻¹⁰ × 0.05 + v) + t, double precision, summed in that order)
+        let k = crate::rules::nearest_double("4.656612877414201e-10"); // spec: S-0616 Constants (scale 4.656612877414201 × 10⁻¹⁰)
+        let jitter = crate::rules::nearest_double("0.05"); // spec: S-0616 Constants (colour progress jitter 0.05)
+        let step = F64::from_i64(i64::from(r), m)
+            .mul(k, m)
+            .mul(jitter, m)
+            .add(look.speed, m);
+        self.t = step.add(self.t, m);
+        let one = F64::from_i64(1, m);
+        if self.t.gt(one) {
+            let n = i32::try_from(look.colours.len()).unwrap_or(i32::MAX);
+            // spec: S-0616 F16 (when i < n − 2: t ← 0 and i ← i + 1; otherwise t ← 1.0)
+            if self.index < n - 2 {
+                self.t = F64::from_i64(0, m);
+                self.index += 1;
+            } else {
+                self.t = one;
+            }
+        }
+    }
+
+    /// The drawn colour before the light-alpha step (S-0616 claim 29, F16):
+    /// from *A* (the own colour while *i* = 0, else list entry *i*) towards
+    /// *B* (entry *i* + 1, or *A* when the list has none).
+    pub fn drawn(&self, look: &ParticleLook, m: Rounding) -> [u8; 3] {
+        let i = usize::try_from(self.index).unwrap_or(0);
+        let a = if i == 0 {
+            self.own
+        } else {
+            look.colours.get(i).copied().unwrap_or(self.own)
+        };
+        // spec: S-0616 claim 29 (short lists, departure: no entry i + 1 moves towards A)
+        let b = look.colours.get(i + 1).copied().unwrap_or(a);
+        let one_minus = F64::from_i64(1, m).sub(self.t, m);
+        let mut c = [0u8; 3];
+        for ch in 0..3 {
+            // spec: S-0616 F16 (c = trunc(A × (1 − t) + B × t), floating point)
+            let v = F64::from_i64(i64::from(a[ch]), m)
+                .mul(one_minus, m)
+                .add(F64::from_i64(i64::from(b[ch]), m).mul(self.t, m), m)
+                .to_i32_common();
+            c[ch] = v.clamp(0, 255) as u8;
+        }
+        c
+    }
+}
+
+/// A particle's colour state (S-0616 claim 29, F16): own colour *c*₀,
+/// colour index *i* and colour progress *t*.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColourState {
+    /// The own colour *c*₀, 8-bit RGB.
+    pub own: [u8; 3], // nocite: RGB channels
+    /// The colour index *i*.
+    pub index: i32,
+    /// The colour progress *t*, a double.
+    pub t: F64,
 }
 
 /// One particle system (S-0613 Terms).
@@ -790,7 +946,7 @@ pub(crate) fn add_particle(
 ) -> Option<ObjectId> {
     let rules = w.rules_arc();
     let t = rules.gas.particles.get(ti as usize)?;
-    let (life, smoke) = creation_draws(w, t.draw);
+    let (life, smoke, colour) = creation_draws(w, t.draw);
     let h = w.surface_at(at.x, at.y);
     let id = w.new_id();
     let mode = rules.mode;
@@ -822,6 +978,13 @@ pub(crate) fn add_particle(
         fvel: [F32(0); 3], // nocite: vector and matrix dimensions (three axes)
         step: [0; 3],      // nocite: vector and matrix dimensions (three axes)
         advance,
+        // spec: S-0616 claim 26 (at creation: the type's translucency field, kept modulo 256)
+        translucency: t.translucency as u8,
+        // spec: S-0616 claim 29 and F16 (own colour, i = 0 and t = 0 at creation)
+        colour: ColourState::new(&t.look, colour, mode),
+        // spec: S-0616 F15 (the creation position and the target point given at creation)
+        origin: Pos::new(at.x, at.y, at.z.max(h)),
+        aim: target,
     };
     // spec: S-0613 claim 5 (a new particle is added at the end of its system's list)
     w.gas.systems.get_mut(&sys)?.particles.push(p);
@@ -831,7 +994,7 @@ pub(crate) fn add_particle(
 /// A particle's creation draws (S-0202 claim 15) in table order; returns
 /// the remaining lifetime *E* (claim 5, F9) and the smoke speed variation
 /// (0 for other kinds).
-pub(crate) fn creation_draws(w: &mut World, p: ParticleRules) -> (u16, i32) {
+pub(crate) fn creation_draws(w: &mut World, p: ParticleRules) -> (u16, i32, Option<i32>) {
     let half = w.rules().quirks.ranged_draw_half_span;
     let mut smoke = 0;
     if p.smoke {
@@ -843,12 +1006,14 @@ pub(crate) fn creation_draws(w: &mut World, p: ParticleRules) -> (u16, i32) {
     let modulus = if p.railgun { RAILGUN_MODULUS } else { p.max_ec };
     // spec: S-0613 F9, S-0202 claim 15 and S-0205 claim 3 (u = |r rem E_max|, in 0 … |m| − 1 for a nonzero modulus m, the remainder first; a remainder by 0 is the dividend, our engine's departure; the importer warns)
     let u = magnitude(glasnost_num::int::rem(r, modulus));
-    if p.colour_draw {
+    let colour = if p.colour_draw {
         // spec: S-0202 claim 15 (one ranged draw R(0, 2147483646) for the starting-colour interpolation)
-        let _ = w.rng.ranged(0, 2147483646, half);
-    }
+        Some(w.rng.ranged(0, 2147483646, half))
+    } else {
+        None
+    };
     // spec: S-0613 claim 5 and F9 (E = (E_max + u) mod 65536, an unsigned 16-bit count)
-    (p.max_ec.wrapping_add(u) as u16, smoke)
+    (p.max_ec.wrapping_add(u) as u16, smoke, colour)
 }
 
 /// One particle requested by an animation's middle event (S-0109 claim 14):
@@ -1483,6 +1648,7 @@ mod tests {
             normalized: false,
             radius: 0,
             spark: [1, 1, 0, 1],
+            look: ParticleLook::default(),
         }
     }
 
@@ -1502,6 +1668,10 @@ mod tests {
             fvel: [F32(0); 3],
             step: [0; 3],
             advance: 0,
+            translucency: 0,
+            colour: ColourState::default(),
+            origin: Pos::default(),
+            aim: Pos::default(),
         }
     }
 

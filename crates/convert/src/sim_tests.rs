@@ -1180,6 +1180,49 @@ fn particle_fields() {
     assert!(!warned(&w, "particle Beam: MaxEC 0"));
 }
 
+/// spec: S-0202 Import mapping (ColorList: parenthesised triples, components
+/// reduced modulo 256), S-0616 Import mapping (ColorSpeed a double;
+/// Translucent25State, Translucent50State stages; SpawnTranslucencyCutoff a
+/// single-precision number) and claim 29 (a spark or railgun type with
+/// fewer than two entries warns; a sprite kind does not)
+#[test]
+fn particle_look_fields() {
+    let base = "[Particles]\n0=Glow\n1=Lone\n2=Bare\n3=Puff\n[ParticleSystems]\n0=Cloud\n\
+                [Glow]\nBehavesLike=Spark\nColorList=(1,2,3),(256,-1,7)\nColorSpeed=0.25\n\
+                [Lone]\nBehavesLike=Railgun\nColorList=(9,9,9)\n\
+                [Bare]\nBehavesLike=Spark\n\
+                [Puff]\nBehavesLike=Fire\nTranslucent25State=3\nTranslucent50State=5\n\
+                [Cloud]\nSpawnTranslucencyCutoff=0.75\n";
+    let (s, w) = sim(base, "", "");
+    let glow = &s.particles["Glow"];
+    assert_eq!(glow.color_count, Some(2));
+    assert_eq!(glow.color_list, Some(vec![[1, 2, 3], [0, 255, 7]]));
+    assert_eq!(
+        glow.color_speed.as_ref().map(|d| d.0.as_str()),
+        Some("25e-2")
+    );
+    assert_eq!(s.particles["Lone"].color_list, Some(vec![[9, 9, 9]]));
+    assert_eq!(s.particles["Bare"].color_list, None);
+    let puff = &s.particles["Puff"];
+    assert_eq!(
+        (puff.translucent25_state, puff.translucent50_state),
+        (Some(3), Some(5))
+    );
+    assert_eq!(puff.color_list, None);
+    let cloud = &s.particle_systems["Cloud"];
+    assert_eq!(
+        cloud
+            .spawn_translucency_cutoff
+            .as_ref()
+            .map(|d| d.0.as_str()),
+        Some("75e-2")
+    );
+    assert!(!warned(&w, "particle Glow: a spark or railgun type"));
+    assert!(warned(&w, "particle Lone: a spark or railgun type with 1"));
+    assert!(warned(&w, "particle Bare: a spark or railgun type with 0"));
+    assert!(!warned(&w, "particle Puff: a spark or railgun type"));
+}
+
 /// spec: S-0215 Import mapping (ApproachTargetResetMultiplier, an integer in [General]; CanApproachTarget, a type boolean; absent keeps the held value)
 #[test]
 fn approach_keys() {

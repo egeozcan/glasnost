@@ -2452,6 +2452,10 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         fvel: [F32(0); 3],
         step: [0; 3],
         advance: 0,
+        translucency: 0,
+        colour: Default::default(),
+        origin: pos,
+        aim: pos,
     };
     let cloud = sim_rules.gas.system("CLOUD").unwrap();
     let mut system = ParticleSystem::new(

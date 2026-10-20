@@ -541,6 +541,22 @@ pub struct ParticleType {
     /// `ZVelocityRange`, the spark *Z*ᵣ field (S-0616 F10; absent 1).
     #[serde(default)]
     pub z_velocity_range: Option<i32>,
+    /// `ColorList`, the colours in order, each component reduced modulo
+    /// 256 (S-0616 claim 29, F16; S-0202 Import mapping; absent empty).
+    #[serde(default)]
+    pub color_list: Option<Vec<[i32; 3]>>, // spec: S-0202 Import mapping (parenthesised RGB triples)
+    /// `ColorSpeed`, the colour speed *v*, a double (S-0616 F16; absent
+    /// 0.0).
+    #[serde(default)]
+    pub color_speed: Option<Decimal>,
+    /// `Translucent25State`, the fire stage that sets translucency 25
+    /// (S-0616 claim 26; absent 255).
+    #[serde(default)]
+    pub translucent25_state: Option<i32>,
+    /// `Translucent50State`, the fire stage that sets translucency 50
+    /// (S-0616 claim 26; absent 255).
+    #[serde(default)]
+    pub translucent50_state: Option<i32>,
 }
 
 /// A particle-system type's fields (S-0613 Import mapping).
@@ -569,6 +585,10 @@ pub struct ParticleSystemType {
     /// (S-0616 Import mapping; absent 0.0).
     #[serde(default)]
     pub spawn_cutoff: Option<Decimal>,
+    /// `SpawnTranslucencyCutoff`, the smoke translucency cut-off τ, a
+    /// single-precision decimal (S-0616 claim 9, F4; absent 0.0).
+    #[serde(default)]
+    pub spawn_translucency_cutoff: Option<Decimal>,
     /// `SpawnRadius`, the smoke spawn radius σ in leptons (S-0616 Import
     /// mapping; absent 0).
     #[serde(default)]
