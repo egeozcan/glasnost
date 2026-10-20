@@ -31,6 +31,41 @@ pub const TINT_RISE: i32 = 6;
 // spec: S-0513 claim 29 (Bright hold: 4 ticks)
 pub const TINT_HOLD: i32 = 4;
 
+/// The base length of the envelope's Initial dimming, before its draw is
+/// added (claim 29).
+// spec: S-0513 claim 29 (Initial dimming: 20 + R(−5, 5) ticks)
+pub const TINT_DIMMING: i32 = 20;
+
+/// The length of the envelope's Pulse rise (claim 29).
+// spec: S-0513 claim 29 (Pulse rise: 8 ticks)
+pub const TINT_PULSE_RISE: i32 = 8;
+
+/// The length of the envelope's Pulse fall (claim 29).
+// spec: S-0513 claim 29 (Pulse fall: 16 ticks)
+pub const TINT_PULSE_FALL: i32 = 16;
+
+/// Pulse fall leads to Low hold when the remaining protection is below
+/// this many ticks (claim 29).
+// spec: S-0513 claim 29 (Low hold if P < 54 ticks, otherwise Pulse rise)
+pub const TINT_LOW_ENTRY: i32 = 54;
+
+/// Low hold ends at a turn that finds the remaining protection below this
+/// many ticks (claim 29).
+// spec: S-0513 claim 29 (Low hold until a turn finds P < 31 ticks)
+pub const TINT_LOW_EXIT: i32 = 31;
+
+/// The length of the envelope's Final rise (claim 29).
+// spec: S-0513 claim 29 (Final rise: 6 ticks)
+pub const TINT_FINAL_RISE: i32 = 6;
+
+/// The length of the envelope's Final bright hold (claim 29).
+// spec: S-0513 claim 29 (Final bright hold: 4 ticks)
+pub const TINT_FINAL_HOLD: i32 = 4;
+
+/// The length of the envelope's Return to ordinary (claim 29).
+// spec: S-0513 claim 29 (Return to ordinary: 20 ticks)
+pub const TINT_RETURN: i32 = 20;
+
 /// The tint draw's range (Constants).
 // spec: S-0513 Constants (tint draw range −5 … 5 ticks)
 const TINT_DRAW: (i32, i32) = (-5, 5);
@@ -236,8 +271,7 @@ pub fn fade_update(w: &mut World, h: HouseId) {
     }
 }
 
-/// The protection envelope's phases up to its draw, in the object's own
-/// turn (claim 29).
+/// The protection envelope's phases, in the object's own turn (claim 29).
 pub fn tint_turn(w: &mut World, id: ObjectId) {
     let t = w.tick;
     let Some(p) = w.obj(id).and_then(|o| o.sw.protection) else {
@@ -247,20 +281,95 @@ pub fn tint_turn(w: &mut World, id: ObjectId) {
         // spec: S-0513 claim 29 (expiry before Initial dimming prevents the draw; no turns while unprotected advance the envelope)
         return;
     }
+    // spec: S-0513 claim 29 (P, the remaining protection in integer ticks)
+    let remaining = p.start + p.duration - t;
     // spec: S-0513 claim 29 (at most one phase transition per turn, when t − s ≥ L; the next phase is entered in that turn's tick)
     let next = match p.tint {
         // spec: S-0513 claim 29 (Initial rise starts at q, the first turn while this application protects the object)
         Tint::BeforeFirstTurn => Tint::Rise(t),
         Tint::Rise(s) if t - s >= TINT_RISE => Tint::BrightHold(t),
-        Tint::BrightHold(s) if t - s >= TINT_HOLD => Tint::Dimming,
+        Tint::BrightHold(s) if t - s >= TINT_HOLD => {
+            let half = w.rules().quirks.ranged_draw_half_span;
+            // spec: S-0513 claim 29 (exactly one ranged draw R(−5, 5) from the scenario stream on entering Initial dimming; it gives the phase its length 20 + the draw)
+            let d = w.rng.ranged(TINT_DRAW.0, TINT_DRAW.1, half);
+            Tint::Dimming {
+                since: t,
+                length: TINT_DIMMING + d,
+            }
+        }
+        Tint::Dimming { since, length } if t - since >= length => Tint::PulseRise(t),
+        Tint::PulseRise(s) if t - s >= TINT_PULSE_RISE => Tint::PulseFall(t),
+        // spec: S-0513 claim 29 (the remaining-time test happens only at the transition)
+        Tint::PulseFall(s) if t - s >= TINT_PULSE_FALL && remaining < TINT_LOW_ENTRY => {
+            Tint::LowHold(t)
+        }
+        Tint::PulseFall(s) if t - s >= TINT_PULSE_FALL => Tint::PulseRise(t),
+        // spec: S-0513 claim 29 (Low hold occupies at least its entry turn; a later turn that finds P < 31 starts Final rise)
+        Tint::LowHold(s) if t > s && remaining < TINT_LOW_EXIT => Tint::FinalRise(t),
+        Tint::FinalRise(s) if t - s >= TINT_FINAL_RISE => Tint::FinalHold(t),
+        Tint::FinalHold(s) if t - s >= TINT_FINAL_HOLD => Tint::Return(t),
+        Tint::Return(s) if t - s >= TINT_RETURN => Tint::Ordinary,
         _ => return,
     };
     if let Some(p) = w.obj_mut(id).and_then(|o| o.sw.protection.as_mut()) {
         p.tint = next;
     }
-    if next == Tint::Dimming {
-        let half = w.rules().quirks.ranged_draw_half_span;
-        // spec: S-0513 claim 29 (exactly one ranged draw R(−5, 5) from the scenario stream on entering Initial dimming; its length 20 + the draw is presentation)
-        let _ = w.rng.ranged(TINT_DRAW.0, TINT_DRAW.1, half);
+}
+
+/// The protection an object's drawing shows in tick `t` (claim 29, F7):
+/// its kind and the envelope's phase factor *m* ([`factor`]), while it is
+/// protected in `t`; `None` otherwise, which removes the whole appearance.
+pub fn appearance(p: &Protection, t: i32) -> Option<(ProtectKind, Option<i32>)> {
+    // spec: S-0513 F7 (protected exactly when t ≥ t₀, t − t₀ < D and D > 0); claim 29 (expiry immediately removes the appearance)
+    if !(t >= p.start && t - p.start < p.duration && p.duration > 0) {
+        return None;
     }
+    Some((p.kind, factor(p.tint, t)))
+}
+
+/// The envelope's dimensionless phase factor *m* in tick `t` (claim 29's
+/// phase table); `None` before the first protected turn and in Ordinary,
+/// where F9 leaves the brightness unchanged.
+pub fn factor(tint: Tint, t: i32) -> Option<i32> {
+    // spec: S-0513 claim 29 (a phase of length L entered in tick s has r = max(0, L − (t − s)) in tick t)
+    let r = |s: i32, l: i32| (l - (t - s)).max(0);
+    // spec: S-0513 claim 29 (the phase table; integer arithmetic, divisions truncated toward zero)
+    let m = match tint {
+        // spec: S-0513 claim 29 (before the first protected turn: 256); F9 (brightness unchanged, not newly capped)
+        Tint::BeforeFirstTurn => return None,
+        // spec: S-0513 claim 29 (Initial rise: trunc((12 − r) × 256 / 6))
+        Tint::Rise(s) => (12 - r(s, TINT_RISE)) * 256 / 6,
+        // spec: S-0513 claim 29 (Bright hold: 512)
+        Tint::BrightHold(_) => 512,
+        // spec: S-0513 claim 29 (Initial dimming: trunc((461 × r + 1020) / 20))
+        Tint::Dimming { since, length } => (461 * r(since, length) + 1020) / 20,
+        // spec: S-0513 claim 29 (Pulse rise: trunc((1024 − 77 × r) / 8))
+        Tint::PulseRise(s) => (1024 - 77 * r(s, TINT_PULSE_RISE)) / 8,
+        // spec: S-0513 claim 29 (Pulse fall: trunc((77 × r + 816) / 16))
+        Tint::PulseFall(s) => (77 * r(s, TINT_PULSE_FALL) + 816) / 16,
+        // spec: S-0513 claim 29 (Low hold: 51)
+        Tint::LowHold(_) => 51,
+        // spec: S-0513 claim 29 (Final rise: trunc((3072 − 461 × r) / 6))
+        Tint::FinalRise(s) => (3072 - 461 * r(s, TINT_FINAL_RISE)) / 6,
+        // spec: S-0513 claim 29 (Final bright hold: 512)
+        Tint::FinalHold(_) => 512,
+        // spec: S-0513 claim 29 (Return to ordinary: trunc((r + 20) × 256 / 20))
+        Tint::Return(s) => (r(s, TINT_RETURN) + 20) * 256 / 20,
+        // spec: S-0513 claim 29 (Ordinary: 256); F9 (brightness unchanged, not newly capped)
+        Tint::Ordinary => return None,
+    };
+    Some(m)
+}
+
+/// The protection-adjusted brightness *b*′ of ordinary brightness `b` ‰
+/// under phase factor `m` (F9); no factor (before the first protected
+/// turn, in Ordinary, without protection) leaves `b` unchanged.
+pub fn brightness(b: i32, m: Option<i32>) -> i32 {
+    let Some(m) = m else {
+        // spec: S-0513 F9 (before the first protected turn, after Ordinary begins and without protection, brightness is unchanged, not newly capped)
+        return b;
+    };
+    // spec: S-0513 F9 (b′ = min(2000, ⌊b × m / 256⌋) ‰, integer multiplication, division truncated toward zero)
+    let v = i64::from(b) * i64::from(m) / 256;
+    v.min(2000) as i32 // spec: S-0513 F9 (the 2000 ‰ cap)
 }

@@ -482,10 +482,10 @@ fn claim29_missed_turns_postpone_the_phase_and_schedule_no_draw_of_their_own() {
     w.tick = q + 30;
     assert_eq!(w.rng.taken(), taken);
     protect::tint_turn(&mut w, id);
-    assert_eq!(
+    assert!(matches!(
         w.obj(id).unwrap().sw.protection.unwrap().tint,
-        superweapons::Tint::Dimming
-    );
+        superweapons::Tint::Dimming { since, .. } if since == q + 30
+    ));
     assert_eq!(
         w.rng.taken(),
         taken + 1,
@@ -536,6 +536,196 @@ fn claim29_protection_ended_before_the_phase_takes_no_draw() {
         step(&mut b);
     }
     assert_eq!(a.rng, b.rng);
+}
+
+/// The envelope phase of `id` after a turn at tick `t`.
+fn turn_at(w: &mut World, id: ObjectId, t: i32) -> superweapons::Tint {
+    w.tick = t;
+    protect::tint_turn(w, id);
+    w.obj(id).unwrap().sw.protection.unwrap().tint
+}
+
+#[test]
+fn claim29_the_whole_envelope_with_uninterrupted_turns() {
+    // spec: S-0513 claim 29 (the phase table: Initial rise 6, Bright hold 4, Initial dimming 20 + R(−5, 5), Pulse rise 8, Pulse fall 16, Low hold if P < 54 at its end, otherwise Pulse rise; Low hold until a turn finds P < 31; Final rise 6, Final bright hold 4, Return 20, then Ordinary)
+    use superweapons::Tint;
+    let r = ruleset();
+    let mut w = game(&r);
+    let id = spawn(&mut w, "CART", BETA, 0, 0);
+    let q = w.tick;
+    let d = 400;
+    protect::start(&mut w, id, ProtectKind::Curtain, d);
+    let mut seen = Vec::new();
+    let mut last = Tint::BeforeFirstTurn;
+    for t in q..q + d {
+        let now = turn_at(&mut w, id, t);
+        if now != last {
+            seen.push((t, now));
+            last = now;
+        }
+    }
+    let ticks: Vec<i32> = seen.iter().map(|(t, _)| t - q).collect();
+    assert_eq!(seen[0].1, Tint::Rise(q));
+    assert_eq!(seen[1].1, Tint::BrightHold(q + 6));
+    let Tint::Dimming { since, length } = seen[2].1 else {
+        panic!("{seen:?}");
+    };
+    assert_eq!(since, q + 10, "the draw's turn q + 10");
+    assert!((15..=25).contains(&length), "20 + R(−5, 5): {length}");
+    assert_eq!(seen[3].1, Tint::PulseRise(q + 10 + length));
+    // Pulses of 8 + 16 ticks while P ≥ 54 at the end of a Pulse fall.
+    let mut i = 3;
+    let mut t = q + 10 + length;
+    loop {
+        assert_eq!(seen[i].1, Tint::PulseRise(t), "{ticks:?}");
+        assert_eq!(seen[i + 1].1, Tint::PulseFall(t + 8), "{ticks:?}");
+        t += 24;
+        let p = q + d - t;
+        if p < 54 {
+            assert_eq!(seen[i + 2].1, Tint::LowHold(t), "P = {p}");
+            break;
+        }
+        i += 2;
+    }
+    let low = seen
+        .iter()
+        .position(|s| matches!(s.1, Tint::LowHold(_)))
+        .unwrap();
+    // The first turn with P < 31: t = q + d − 30.
+    let f = (q + d - 30).max(t + 1);
+    assert_eq!(seen[low + 1].1, Tint::FinalRise(f));
+    assert_eq!(seen[low + 2].1, Tint::FinalHold(f + 6));
+    assert_eq!(seen[low + 3].1, Tint::Return(f + 10));
+    // Return lasts 20 ticks: with P < 31 at Final rise, protection expires
+    // before or as Ordinary would begin.
+    assert_eq!(seen.len(), low + 4, "{seen:?}");
+    assert_eq!(
+        protect::appearance(&w.obj(id).unwrap().sw.protection.unwrap(), q + d),
+        None
+    );
+}
+
+#[test]
+fn claim29_low_hold_lasts_its_entry_turn_and_tests_strictly() {
+    // spec: S-0513 claim 29 (Pulse fall ends in Low hold only if P < 54 at that turn, strictly; Low hold occupies at least its entry turn even when P < 31 already; Final rise starts at a later turn finding P < 31, strictly)
+    use superweapons::Tint;
+    let r = ruleset();
+    let mut w = game(&r);
+    let id = spawn(&mut w, "CART", BETA, 0, 0);
+    let q = w.tick;
+    // P = 54 at the end of Pulse fall: another Pulse rise.
+    protect::start(&mut w, id, ProtectKind::Curtain, 100);
+    let start = q;
+    let set = |w: &mut World, tint: Tint| {
+        w.obj_mut(id).unwrap().sw.protection.as_mut().unwrap().tint = tint;
+    };
+    set(&mut w, Tint::PulseFall(start + 30));
+    assert_eq!(
+        turn_at(&mut w, id, start + 46),
+        Tint::PulseRise(start + 46),
+        "P = 54"
+    );
+    set(&mut w, Tint::PulseFall(start + 31));
+    assert_eq!(
+        turn_at(&mut w, id, start + 47),
+        Tint::LowHold(start + 47),
+        "P = 53"
+    );
+    // Entered with P < 31 already: no Final rise in its entry turn.
+    set(&mut w, Tint::PulseFall(start + 54));
+    assert_eq!(
+        turn_at(&mut w, id, start + 70),
+        Tint::LowHold(start + 70),
+        "P = 30"
+    );
+    assert_eq!(turn_at(&mut w, id, start + 70), Tint::LowHold(start + 70));
+    assert_eq!(turn_at(&mut w, id, start + 71), Tint::FinalRise(start + 71));
+    // P = 31 holds; P = 30 rises.
+    set(&mut w, Tint::LowHold(start + 60));
+    assert_eq!(
+        turn_at(&mut w, id, start + 69),
+        Tint::LowHold(start + 60),
+        "P = 31"
+    );
+    assert_eq!(
+        turn_at(&mut w, id, start + 70),
+        Tint::FinalRise(start + 70),
+        "P = 30"
+    );
+}
+
+#[test]
+fn claim29_the_phase_factors() {
+    // spec: S-0513 claim 29 (the factor column, r = max(0, L − (t − s)), divisions truncated toward zero)
+    use protect::factor;
+    use superweapons::Tint;
+    assert_eq!(factor(Tint::BeforeFirstTurn, 50), None);
+    assert_eq!(factor(Tint::Ordinary, 50), None);
+    // Initial rise: 256 at its entry, 512 when it ends; trunc((12 − r) × 256 / 6).
+    assert_eq!(factor(Tint::Rise(10), 10), Some(256));
+    assert_eq!(factor(Tint::Rise(10), 11), Some(298));
+    assert_eq!(factor(Tint::Rise(10), 16), Some(512));
+    assert_eq!(factor(Tint::BrightHold(10), 12), Some(512));
+    // Initial dimming of any length: trunc((461 r + 1020) / 20), 51 at r = 0.
+    let dim = |length| Tint::Dimming { since: 0, length };
+    assert_eq!(factor(dim(20), 0), Some(512));
+    assert_eq!(factor(dim(25), 0), Some((461 * 25 + 1020) / 20));
+    assert_eq!(factor(dim(15), 0), Some((461 * 15 + 1020) / 20));
+    assert_eq!(factor(dim(15), 15), Some(51));
+    assert_eq!(factor(dim(15), 40), Some(51), "r stays 0 past the end");
+    // Pulse rise 51 → 128, Pulse fall 128 → 51, Low hold 51.
+    assert_eq!(factor(Tint::PulseRise(0), 0), Some(51));
+    assert_eq!(factor(Tint::PulseRise(0), 8), Some(128));
+    assert_eq!(factor(Tint::PulseFall(0), 0), Some(128));
+    assert_eq!(factor(Tint::PulseFall(0), 16), Some(51));
+    assert_eq!(factor(Tint::LowHold(0), 99), Some(51));
+    // Final rise 51 → 512, Final bright hold 512, Return 512 → 256.
+    assert_eq!(factor(Tint::FinalRise(0), 0), Some(51));
+    assert_eq!(factor(Tint::FinalRise(0), 3), Some((3072 - 461 * 3) / 6));
+    assert_eq!(factor(Tint::FinalRise(0), 6), Some(512));
+    assert_eq!(factor(Tint::FinalHold(0), 2), Some(512));
+    assert_eq!(factor(Tint::Return(0), 0), Some(512));
+    assert_eq!(factor(Tint::Return(0), 7), Some((13 + 20) * 256 / 20));
+    assert_eq!(factor(Tint::Return(0), 20), Some(256));
+}
+
+#[test]
+fn f9_protection_brightness() {
+    // spec: S-0513 F9 (b′ = min(2000, ⌊b × m / 256⌋); unchanged and not capped without a factor)
+    use protect::brightness;
+    assert_eq!(brightness(1000, Some(512)), 2000);
+    assert_eq!(brightness(1500, Some(512)), 2000, "capped");
+    assert_eq!(brightness(1000, Some(51)), 199);
+    assert_eq!(brightness(999, Some(298)), 999 * 298 / 256);
+    assert_eq!(
+        brightness(2400, Some(256)),
+        2000,
+        "a factor of 256 inside a phase caps"
+    );
+    assert_eq!(brightness(2400, None), 2400, "no factor: not newly capped");
+    assert_eq!(brightness(0, Some(512)), 0);
+}
+
+#[test]
+fn claim29_f7_the_appearance_ends_with_the_protection() {
+    // spec: S-0513 claim 29 (expiry immediately removes the appearance regardless of the phase); F7 (protected exactly when t − t₀ < D)
+    use superweapons::{Protection, Tint};
+    let p = Protection {
+        start: 10,
+        duration: 30,
+        kind: ProtectKind::ForceShield,
+        tint: Tint::BrightHold(12),
+    };
+    assert_eq!(protect::appearance(&p, 9), None);
+    assert_eq!(
+        protect::appearance(&p, 12),
+        Some((ProtectKind::ForceShield, Some(512)))
+    );
+    assert_eq!(
+        protect::appearance(&p, 39),
+        Some((ProtectKind::ForceShield, Some(512)))
+    );
+    assert_eq!(protect::appearance(&p, 40), None);
 }
 
 // --- Claims 30 to 32 -------------------------------------------------------------
