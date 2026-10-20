@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 11
+revision: 12
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540]
 supersedes: []
 ---
 
@@ -700,7 +700,8 @@ stands alone. This spec adds the terms after them.
 
 ### Drawing (presentation only)
 
-Claims 23 to 31 answer Q-1520. Drawing is done by the client and is presentation only: drawing
+Claims 23 to 31 answer Q-1520; claims 27 and 28 also answer Q-1540 (depth profile, depth bias,
+and that no particle is drawn without a depth test). Drawing is done by the client and is presentation only: drawing
 itself changes no game state, takes no draw from the scenario random stream and feeds nothing
 back into play (claim 2). A draw taken during a particle-system turn may affect only presentation,
 as claim 15 specifies for its light draw. The colour progress of claim 29 is particle state that
@@ -785,8 +786,17 @@ fire and no kind; *pixel kinds* are spark and railgun.
     (S-0102 claim 19). The drawing reads depth and never writes it, with an upright depth profile
     and the depth bias −15 − *L*(*z*), *z* the height of the particle's position in leptons
     (S-0102 claim 13 and F2). No shadow is drawn for any particle.
+    - **Same for every sprite kind.** The profile and the bias are the same for gas, smoke, fire
+      and no-kind particles, at every detail setting and translucency, and no field of the
+      particle type or the system type changes them. The value −15 − *L*(*z*) is final: nothing
+      further is added (no −2 as for animations and sprite units, and no depth-adjustment field,
+      which particle types do not have). So, like any upright reader, a particle is hidden only by
+      depth writers (terrain tiles, overlays, trees, building images; S-0102 claim 10) whose stored
+      depth is nearer than its own. Its overlap with another particle, a unit, a projectile or an
+      animation is decided by draw order alone (claim 30), never through depth.
     - Backing: `measurable` (scenario P28)
-    - Confidence: high for the centring and the absence of a shadow; medium for the depth bias.
+    - Confidence: high for the centring, the absence of a shadow, the upright profile and the
+      constant −15; medium for the depth order that results on screen, until P28 is run.
 
 28. **A spark or railgun particle is one pixel.** A particle of a pixel kind is drawn as a single
     pixel, never as a sprite or a line, at the screen pixel of its position with its height lift
@@ -804,6 +814,12 @@ fire and no kind; *pixel kinds* are spark and railgun.
     - it is always opaque, at every detail setting.
     The railgun's helix is just the arrangement of these pixels (claim 17); its laser is a separate
     drawing (claim 31).
+    - **No particle is drawn without a depth test.** Every drawn particle is depth-tested and none
+      writes depth: a sprite particle by claim 27, a pixel particle by the test above, at every
+      detail setting. The test above is S-0102 F2's flat profile on a one-row drawing with bias
+      −50 − *L*(*z*), so no rounding Q applies. No particle is drawn as a line; the line seen with
+      a railgun is the system's laser (claim 31), whose depth handling belongs to the laser's own
+      spec (Q-1521).
     - Backing: `measurable` (scenario P29)
     - Confidence: high for the single pixel, the colour and the light-alpha rule; medium for the
       depth value.
@@ -1280,6 +1296,7 @@ Rules file, particle sections:
 | `MinZVelocity`, `ZVelocityRange` | spark *Z*ₘ, *Z*ᵣ (F10) | integers, leptons per tick | 0, 1 |
 | `ColorList`, `StartColor1`, `StartColor2`, `ColorSpeed` | colour list, start colours *s*₁ and *s*₂, colour speed *v* of a pixel-kind particle (claim 29, F16); the creation colour draw of S-0202 claim 15 depends on them; no effect on sprite kinds | colour list of 8-bit RGB triples (S-0202 Import mapping), colours, double | empty, black, black, 0.0. A spark or railgun type with fewer than two entries: importer warning (claim 29) |
 | `Translucency` | starting translucency (claim 26) | integer, kept modulo 256 | 0 |
+| none (engine constants, not imported) | depth profile and bias of a particle (claims 27, 28): upright with −15 − *L*(*z*) for a sprite kind, a one-row flat test with −50 − *L*(*z*) for a pixel kind | — | always these constants; the behaviour kind chooses sprite or pixel kind, and no other particle or system key changes them |
 | `Translucent25State`, `Translucent50State` | fire stage fields (claim 26); no effect on other kinds | 8-bit unsigned stages | 255, 255 (never reached) |
 | `StartFrame` | read and kept, but no effect on drawing or play (claim 25); the type's loop-frame field is likewise read and unused | integer | 0 |
 
@@ -1579,7 +1596,17 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   pixels. Expected: placement by S-0102 claim 19 on the projected point with its height lift, and
   no shadow. Part b: the particle behind a building's upright body. Expected: the body covers
   the particle where the depth bias −15 − *L*(*z*) loses. Falsified by a displaced frame, a shadow, or a
-  depth order that needs another bias.
+  depth order that needs another bias. Part c (Q-1540): on flat, evenly lit ground, a gas weapon
+  releases a cloud at the foot of a building on its far side (screen above the body), then a cloud
+  just behind a one-level cliff, and a smoke type (named test rules, no-kind and smoke variants)
+  whose column rises above the building's roof. Capture lossless frames at the highest and the
+  lowest-but-one detail setting. Observable: which pixels of each particle sprite the building
+  body and the cliff tiles cover. Expected: the cut follows the upright profile of each sprite's
+  own rectangle with bias −15 − *L*(*z*) (S-0102 F2), the same for gas, smoke, fire and no-kind
+  particles and unchanged by translucency or detail setting; the part of a smoke sprite that rises
+  above the roof's top row stays visible, while a sprite whose bottom row lies behind the body is
+  covered wherever the body's stored depth is nearer. Falsified by a cut along a flat row-by-row
+  line, by a kind-dependent cut, or by a cut that needs a further constant.
 - **P29. Spark and railgun pixels (claims 28, 29).** Named test rules: a spark type with a three-entry
   colour list of distinct pure colours, both start colours black, a colour speed of 0.1, and a
   railgun type with the same list. Fire each on flat explored ground, then with the sparks crossing
@@ -1588,7 +1615,12 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   logged draws, moving from entry 0 to entry 1 and then to entry 2, where it stays; channels scaled
   by the light-alpha at the shroud edge, and no pixel inside full shroud. Part b: start colours set
   (one black, one white). Expected: the first colour is the mix of the creation draw, and entry 0
-  never shows. Falsified by a sprite, a line, translucency, a palette-shifted colour or another colour
+  never shows. Part c (depth, claim 28): the spark type bursts at the foot of a building on its far
+  side and beside a tree, so that its pixels fall behind the body and the tree. Observable: which
+  spark pixels show over the body and the tree. Expected: a pixel is hidden exactly where
+  *d* − *L*(*z*) − 50 at its own row is not less than the stored depth, with no 3-row stepping.
+  Falsified by sparks drawn over the whole body, or hidden by a unit standing in front of them.
+  Falsified (parts a and b) by a sprite, a line, translucency, a palette-shifted colour or another colour
   path.
 - **P30. Draw order (claim 30).** Two smoke systems made at the same point a few ticks apart, then a
   projectile crossing them. Observable: which drawing covers which where they overlap. Expected:

@@ -1,9 +1,9 @@
 ---
 id: Q-1540
 title: Depth profile and bias of a particle's image
-status: open
+status: answered
 related: [S-0102, S-0613, S-0616, Q-1520]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need
