@@ -298,6 +298,10 @@ pub struct Live {
     /// registered of a name, S-0003 claim 14): its index, art fields and
     /// sprite image-frame count.
     anim_table: BTreeMap<Vec<u8>, AnimEntry>,
+    /// Every particle type of the simulation's rules, by its type index:
+    /// its import entry and whether its art has a sprite (S-0007 claim
+    /// 28), `None` for a name the import does not list.
+    particle_table: Vec<Option<(super::particles::ParticleEntry, bool)>>,
     /// The drawing's cosmetic stream, for the playback draws the
     /// simulation does not take (a seam: S-0109 claim 28 puts them on the
     /// scenario stream once playback is in the simulation).
@@ -732,6 +736,25 @@ impl Live {
                     .or_insert(AnimEntry { idx, t, n, sprite });
             }
         }
+        let names: Vec<Vec<u8>> = rules
+            .gas
+            .particles
+            .iter()
+            .map(|t| name_bytes(&t.name))
+            .collect();
+        let particle_table = super::particles::entries(inputs.import, &names)
+            .into_iter()
+            .map(|e| {
+                e.map(|e| {
+                    let sprite = inputs
+                        .import
+                        .arts
+                        .get(&(Kind::Particles, e.idx))
+                        .is_some_and(|a| a.sprite.is_some());
+                    (e, sprite)
+                })
+            })
+            .collect();
         // Our own choice: the cosmetic stream takes the game's seed, like the
         // unsynchronised stream of S-0202 claim 8.
         let cosmetic = glasnost_sim::rng::Rng::new(setup.seed);
@@ -785,6 +808,7 @@ impl Live {
             anims: Vec::new(),
             anim_serial: 0,
             anim_table,
+            particle_table,
             cosmetic,
             debug_markers: true,
             move_flash,
@@ -1920,9 +1944,12 @@ impl Live {
         }
         self.counts.anims_drawn = anim_items.len();
         self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
+        let particle_items = self.particle_items(inputs, scene);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
         // top after it; each unsorted)
-        self.draw_layers(scene, &anim_items, |l| l < super::slots::Layer::Ground);
+        self.draw_layers(scene, &anim_items, &particle_items, |l| {
+            l < super::slots::Layer::Ground
+        });
         for e in self.ground.order() {
             match e {
                 Entrant::Anim(serial) => {
@@ -1944,28 +1971,64 @@ impl Live {
                 }
             }
         }
-        self.draw_layers(scene, &anim_items, |l| l > super::slots::Layer::Ground);
+        self.draw_layers(scene, &anim_items, &particle_items, |l| {
+            l > super::slots::Layer::Ground
+        });
         self.objects_end = scene.items.len();
         self.draw_effects(scene);
         self.draw_status(inputs, scene);
     }
 
-    /// Draws the static entries and the playing animations (`anims`, by
-    /// serial number) of the layers `which` picks, layer by layer in
-    /// drawing order, each in entering order: the static entries entered
-    /// at the start, the animations as they were created (S-0102 claims 1,
-    /// 4 and 7).
+    /// The items of every particle with a sprite (S-0613, S-0616; the
+    /// interim rule of Q-1520), by system and then in each system's
+    /// particle order (Q-1520 question 7 is open).
+    fn particle_items(&mut self, inputs: &Inputs, scene: &mut Scene) -> Vec<Item> {
+        let detail = inputs.options.detail;
+        let mut list = Vec::new();
+        for s in self.world.gas.systems.values() {
+            for p in &s.particles {
+                let Some(t) = self.rules.gas.particles.get(p.type_index as usize) else {
+                    continue;
+                };
+                let Some(Some((e, true))) = self.particle_table.get(p.type_index as usize) else {
+                    continue;
+                };
+                list.push(super::build::ParticleDraw {
+                    idx: e.idx,
+                    frame: super::particles::frame(t.kind, p.stage, e.start_frame),
+                    // spec: S-0613 claim 16 (from the type's translucency only; Q-1520 interim rule)
+                    code: super::particles::translucency(t.translucency, detail),
+                    pos: (p.pos.x, p.pos.y, p.pos.z),
+                });
+            }
+        }
+        let (drawn, notes) = self.painter.particles(inputs, scene, &list);
+        self.notes.extend(notes);
+        self.counts.particles_drawn = drawn.iter().filter(|i| !i.is_empty()).count();
+        drawn.into_iter().flatten().collect()
+    }
+
+    /// Draws the static entries, the playing animations (`anims`, by
+    /// serial number) and the particles' items (`particles`, all in the
+    /// air layer) of the layers `which` picks, layer by layer in drawing
+    /// order, each in entering order: the static entries entered at the
+    /// start, the animations as they were created, then the particles
+    /// (S-0102 claims 1, 3, 4 and 7).
     fn draw_layers(
         &self,
         scene: &mut Scene,
         anims: &BTreeMap<u32, (super::slots::Layer, Vec<Item>)>,
+        particles: &[Item],
         which: impl Fn(super::slots::Layer) -> bool,
     ) {
+        // spec: S-0102 claim 3 (particles are in the air layer)
+        let particle_layer = (!particles.is_empty()).then_some(super::slots::Layer::Air);
         let mut layers: Vec<super::slots::Layer> = self
             .static_layered
             .iter()
             .map(|(l, _)| *l)
             .chain(anims.values().map(|(l, _)| *l))
+            .chain(particle_layer)
             .filter(|l| *l != super::slots::Layer::Ground && which(*l))
             .collect();
         layers.sort();
@@ -1979,6 +2042,9 @@ impl Live {
             // spec: S-0102 claim 4 (an object placed in a layer other than ground becomes its last)
             for (_, items) in anims.values().filter(|(l, _)| *l == layer) {
                 scene.items.extend_from_slice(items);
+            }
+            if particle_layer == Some(layer) {
+                scene.items.extend_from_slice(particles);
             }
         }
     }
@@ -2012,38 +2078,37 @@ impl Live {
             let item = self.cache.marker_item(scene, m, at);
             scene.items.push(item);
         }
-        // S-0613, S-0616: every particle at its position, a placeholder by its system's kind
-        // (our own pictures): a green cloud for gas and kindless systems, a puff, flame or dot otherwise.
-        for s in self.world.gas.systems.values() {
-            use glasnost_sim::gas::Behaviour;
-            let kind = rules
-                .gas
-                .systems
-                .get(s.type_index as usize)
-                .and_then(|t| t.kind);
-            let m = match kind {
-                Some(Behaviour::Smoke) => Marker::Smoke,
-                Some(Behaviour::Fire) => Marker::Fire,
-                Some(Behaviour::Spark) => Marker::Spark,
-                Some(Behaviour::Railgun) => Marker::Rail,
-                Some(Behaviour::Gas) | None => Marker::Gas,
-            };
-            let n = s.particles.len() as i64;
-            for (i, p) in s.particles.iter().enumerate() {
-                let mut q = p.pos;
-                if kind == Some(Behaviour::Railgun) && n > 1 {
-                    // The railgun line's shape is drawing only (S-0616 claim 17): the simulation keeps every
-                    // particle at the system's position, and the view spreads them evenly towards the
-                    // target point (our own presentation).
-                    let at = |a: i32, b: i32| a + ((i64::from(b - a) * i as i64) / (n - 1)) as i32;
-                    q.x = at(s.pos.x, s.target.x);
-                    q.y = at(s.pos.y, s.target.y);
-                    q.z = at(s.pos.z, s.target.z);
+        // S-0613, S-0616: the game view draws particles with their sprites (Q-1520 interim
+        // rule); the debug-markers view marks a particle whose type has no sprite, a placeholder
+        // by its system's kind (our own pictures).
+        if self.debug_markers {
+            for s in self.world.gas.systems.values() {
+                use glasnost_sim::gas::Behaviour;
+                let m = match rules
+                    .gas
+                    .systems
+                    .get(s.type_index as usize)
+                    .and_then(|t| t.kind)
+                {
+                    Some(Behaviour::Smoke) => Marker::Smoke,
+                    Some(Behaviour::Fire) => Marker::Fire,
+                    Some(Behaviour::Spark) => Marker::Spark,
+                    Some(Behaviour::Railgun) => Marker::Rail,
+                    Some(Behaviour::Gas) | None => Marker::Gas,
+                };
+                for p in &s.particles {
+                    let sprite = matches!(
+                        self.particle_table.get(p.type_index as usize),
+                        Some(Some((_, true)))
+                    );
+                    if sprite {
+                        continue;
+                    }
+                    // spec: S-0101 F1, F2 (the projected point of the position with its height)
+                    let at = project_lifted(p.pos.x, p.pos.y, p.pos.z);
+                    let item = self.cache.marker_item(scene, m, at);
+                    scene.items.push(item);
                 }
-                // spec: S-0101 F1, F2 (the projected point of the position with its height)
-                let at = project_lifted(q.x, q.y, q.z);
-                let item = self.cache.marker_item(scene, m, at);
-                scene.items.push(item);
             }
         }
         // S-0525: the reach of every radiation field, as a ring, in the viewer's debug layer only (the

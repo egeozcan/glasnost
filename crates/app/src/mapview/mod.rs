@@ -13,6 +13,7 @@ pub mod live;
 #[cfg(test)]
 mod live_tests;
 pub mod load;
+pub mod particles;
 pub mod png;
 pub mod quirks;
 pub mod radar;

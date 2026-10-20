@@ -1892,13 +1892,32 @@ Interim rules, each tied to a request:
 
 | Where | Interim rule | Request |
 |---|---|---|
-| `mapview::build` particle drawing | every particle is drawn with its sprite (S-0007 claim 28) in the air layer, centred on its projected position, with the anim palette at the unscaled ground level of its cell; frame = stage for gas, stage + start frame otherwise; translucency from the type's own value by S-0613 claim 16; a particle without a sprite draws nothing | Q-1520 |
+| `mapview::build::live_particle`, `live::Live::particle_items` | every particle is drawn with its sprite (S-0007 claim 28) in the air layer, centred on its projected position, with the anim palette at the unscaled ground level of its cell; frame = stage for a gas-kind particle type, stage + start frame otherwise; translucency from the type's own value by S-0613 claim 16; a particle without a sprite draws nothing (a marker only in the debug view); details under *Particles (Q-1520)* below | Q-1520 |
+| `mapview::build::live_particle` | a particle's image is a depth reader with the upright profile and bias −*L(z)* of its position, no further term | Q-1540 |
 | `mapview::combat::Beam`, `live::take_effects` | a beam with a spec'd thickness and duration is a straight opaque line of that thickness between the projected end points, drawn after the layers (S-0102 claim 2) for its duration; a prism support beam takes the owner house's display colour (S-0103 claim 15); the disc laser draws its inner colour with its outer colour as a one-pixel edge, darkened by S-0615's fade | Q-1521 |
 | `live::draw_effects` | no temporal beam and no magnetic wave is drawn; a unit being erased is drawn as normal | Q-1522 |
 | `glasnost_sim::combat::fire` | no shot animation is made; the game client draws no muzzle cross | Q-1523 |
 | `live::draw_effects` | nothing is drawn for a planted bomb's icon, a charged building's flash or an air-strike mark in the game client | Q-1524 |
 | `build::infantry_items` | an infantry unit whose height above the surface is not 0 draws no body-sprite shadow (S-0107 claim 19); the generic infantry shadow is not drawn | Q-1525 |
 | rendering | no berserk tint is drawn (S-0610 claim 7 gives the table entry, not how it combines with the pixels) | Q-1526 |
+
+### Particles (Q-1520)
+
+The game view draws every particle of a gas, smoke, fire, spark or railgun system with its type's sprite. It no longer draws the green, white, orange, yellow and cyan placeholder discs.
+
+- **Import.** A particle type's art follows S-0007 claim 28 (`glasnost_convert::art::lookup`, `Kind::Particles` in `KINDS`). The image name comes from its rules section, and the sprite is looked up like an infantry sprite: theater extension, letter substitution with the new-theater flag, generic fallback and arctic suffix. A type whose art section sets the voxel flag has no sprite. `mapview::build::anim_files` loads the particle sprites with the animations' sprites.
+- **Interim rule (Q-1520).**
+  - Every particle is drawn with its sprite in the air layer (S-0102 claim 3), centred on the projected point of its position with the height lift.
+  - It uses the anim palette at the unscaled ground level of its cell, like an unowned animation (S-0103 claim 8 row 5).
+  - Its frame is the stage for a gas particle (S-0613 claim 15). For the other kinds it is the stage plus the type's `StartFrame`. "Gas particle" means the particle type's own behaviour kind (S-0613 Terms), not the kind of its system. A frame outside the sprite draws nothing.
+  - Translucency follows S-0613 claim 16 from the type's translucency only: at the highest detail, 25 and 50 are used as they are, a stored 75 to 127 is drawn as 75, and any other value is opaque. Below the highest detail every particle is opaque. The stage fields (`Translucent25State`, `Translucent50State`) and a smoke successor's raised value are not drawn.
+  - The drawn-frame-rate suppression of non-damaging particles (claim 16) is not modelled, because no cutoff is claimed.
+  - Within the air layer, particles come after the air-layer animations, by system and then in each system's particle order (Q-1520 question 7).
+  - Railgun particles are drawn at their own positions, which the simulation keeps at the system's position. The placeholder used to spread them along the line.
+  - A particle whose type has no sprite draws nothing in the game view. The debug-markers view (`Live::set_debug_markers`) keeps its placeholder marker.
+- **Depth (Q-1540).** A particle's image is a depth reader (S-0102 claim 10) with the upright profile and bias −*L(z)* of its position (claim 11), with no further term. Claims 12 and 13 give no profile or bias for particles.
+- **Code.** `mapview::particles` (type entries with `StartFrame`, frame, translucency code), `mapview::build::Painter::particles` and `live_particle`, `mapview::live::Live::particle_items` and `draw_layers`.
+- **Tests.** `art::tests::particles` (S-0007 claim 28), `mapview::particles::tests` (S-0613 claims 15 and 16, scenario G11's stored values) and `live_tests::particles_draw_their_sprites_in_the_air_layer` (S-0102 claim 3; the no-sprite rule and the debug marker, Q-1520).
 
 ## Tests
 
