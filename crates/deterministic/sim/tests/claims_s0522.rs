@@ -656,8 +656,10 @@ fn s0301_claims_10_15_a_drop_spends_one_round_at_once_and_is_not_a_void_shot() {
             e,
             glasnost_sim::combat::effects::Effect::Shot { .. }
                 | glasnost_sim::combat::effects::Effect::Anim { .. }
+                | glasnost_sim::combat::effects::Effect::ShotAnim { .. }
         )),
-        "no report and no muzzle animation"
+        // spec: S-0501 claim 20 (revision 19: no shot animation, S-0301 claims 20 to 23)
+        "no report, no muzzle animation and no shot animation"
     );
     // A refused drop: the round count and the countdown stay.
     let r = rules();

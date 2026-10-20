@@ -34,12 +34,12 @@ Nothing new is saved or hashed. The save format stays 67 and the AI game format 
 | Claim | Class | Notes |
 |---|---|---|
 | Front matter (revision, date) | (c) | |
-| 6: settling with contact: while the depot's *production* slot runs, no repair step, recheck after 1 tick | changed | `depot::process_repair` checks `slot_running(.., DepotSlot::Production)` first in the settling branch with contact, before the step. Until 14B fills the seam it never holds. Test: `slot_seam_reports_no_running_slot`. |
+| 6: settling with contact: while the depot's *production* slot runs, no repair step, recheck after 1 tick | changed | `depot::process_repair` checks `slot_running(.., DepotSlot::Production)` first in the settling branch with contact, before the step. The hold cannot be reached while the seam reports false, so no test exercises it yet; 14B's slot tests will. `slot_seam_reports_no_running_slot` shows only that the seam reports false. |
 | 6: the uncharacterised non-human-owner branch (a paid settling step sent back to waiting) | (c) | the spec's own open question. Nothing is built and no request is filed. |
 | 6: backing (H23 `measurable`; the branch `unmeasured`), confidence | (c) | |
 | 22: lost contact in waiting: guard at that processing, no animation wait | changed | before, every phase went to guard. Test: `claim_22_contact_loss_by_phase` (phase 0). |
 | 22: lost contact in working: settling, recheck after 1 tick | changed | the progress moves to settling and the processing returns 1. The serviced vehicle slot is kept for the recheck. Test: `claim_22_contact_loss_by_phase` (working: settling, then guard one tick later). Fails without the change. When the loss is noticed is Q-1610. |
-| 22: lost contact in settling: stay in repair, checking every tick, until *special-3* no longer runs, then guard | changed | `slot_running(.., DepotSlot::Special3)` returns 1. Otherwise serviced is cleared and the depot guards. Test: `claim_22_contact_loss_by_phase` (settling). |
+| 22: lost contact in settling: stay in repair, checking every tick, until *special-3* no longer runs, then guard | changed | while `slot_running(.., DepotSlot::Special3)` holds, the processing returns 1. Otherwise serviced is cleared and the depot guards. Test: `claim_22_contact_loss_by_phase` (settling, with the seam false: guard). The wait itself cannot be reached until 14B fills the seam, so no test exercises it yet. |
 | 22: the slot starts themselves (*special-3* and *active-1* on a loss; *idle* after *special-3*) | seam | S-0108 claim 20, intake 14B, behind `depot::slot_running`. |
 | 22: backing (S-0108 claim 20, B18 g), confidence | (c) | |
 | State table: settling with contact and the *production* slot; settling scheduled; waiting, working and settling with no contact | changed | as claims 6 and 22. |
@@ -58,7 +58,7 @@ Nothing new is saved or hashed. The save format stays 67 and the AI game format 
 | Claim | Class | Notes |
 |---|---|---|
 | Front matter (revision) | (c) | |
-| The drop path's reference to the shot animation (S-0301 claims 20 to 23) | (c) | rewording only. The drop path does not fire a weapon: the only caller of `combat::shotanim::create` is `combat::fire`. |
+| 20: a drop attempt makes no shot animation (S-0301 claims 20 to 23; was "muzzle animation") | satisfied | `combat::fire::shot` hands an aircraft's drop to `paradrop::attempt` and returns before `combat::shotanim::create`, the only maker of a shot animation. Test: `s0301_claims_10_15_a_drop_spends_one_round_at_once_and_is_not_a_void_shot` (`claims_s0522.rs`) now also asserts no `Effect::ShotAnim`. |
 
 ## S-0504 revision 20
 
