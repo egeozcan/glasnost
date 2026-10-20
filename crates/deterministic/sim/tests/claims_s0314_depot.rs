@@ -857,6 +857,80 @@ fn claim_22_destroyed_vehicle_frees_its_place() {
         == Some(Behaviour::Guard)));
 }
 
+/// The depot's (behaviour, phase) after each tick, from now until it is
+/// back in *guard* (at most `n` ticks).
+fn trace_to_guard(w: &mut World, d: ObjectId, n: i32) -> Vec<(Option<Behaviour>, i32)> {
+    let mut out = Vec::new();
+    for _ in 0..n {
+        tick::step(w);
+        let b = &w.obj(d).unwrap().beh;
+        out.push((b.current, b.progress));
+        if b.current == Some(Behaviour::Guard) {
+            break;
+        }
+    }
+    out
+}
+
+// spec: S-0314 claim 22 (revision 31: a depot left without any contact reacts at its next repair processing: in waiting it returns to guard without an animation wait; in working it enters settling and rechecks after 1 tick; in settling it returns to guard once special-3 no longer runs, at once while the S-0108 claim 20 slot seam reports none)
+// spec: S-0314 state table (waiting, working and settling with no contact)
+#[test]
+fn claim_22_contact_loss_by_phase() {
+    for phase in 0..3 {
+        let (mut w, d, v) = docked_scene(300);
+        let dd = d_rep(&w);
+        if phase == 0 {
+            // The truck arrives close enough that the first processing
+            // already passed the waiting check; put the depot back in
+            // waiting, as for a vehicle that came to rest out of range.
+            w.obj_mut(d).unwrap().beh.progress = 0;
+        }
+        assert!(run_until(&mut w, 600, |w| {
+            let b = &w.obj(d).unwrap().beh;
+            b.current == Some(Behaviour::Repair) && b.progress == phase
+        }), "phase {phase} reached");
+        damage::apply(&mut w, v, lethal());
+        assert!(w.obj(v).is_none());
+        let trace = trace_to_guard(&mut w, d, 4 * dd + 20);
+        let (last, before) = trace.split_last().expect("a trace");
+        assert_eq!(last.0, Some(Behaviour::Guard), "phase {phase}: {trace:?}");
+        assert!(
+            before
+                .iter()
+                .all(|&(b, _)| b == Some(Behaviour::Repair)),
+            "phase {phase}: in repair until the return: {trace:?}"
+        );
+        match phase {
+            // Waiting and settling never pass through another phase.
+            0 | 1 => assert!(
+                before.iter().all(|&(_, p)| p == phase),
+                "phase {phase}: {trace:?}"
+            ),
+            // Working: settling for exactly one tick, then guard.
+            _ => {
+                let settled = before.iter().position(|&(_, p)| p == 1);
+                assert_eq!(
+                    settled,
+                    Some(before.len() - 1),
+                    "working enters settling, then guard 1 tick later: {trace:?}"
+                );
+            }
+        }
+        // The serviced place is free for the next vehicle.
+        let other = truck(&mut w, 0, -4, -4, 300);
+        assert!(depot::accepts(&w, d, other, true));
+    }
+}
+
+// spec: S-0314 claims 6 and 22 (the slot seam: no depot slot animation runs in the simulation until S-0108 claim 20's slot model is built, so neither hold applies)
+#[test]
+fn slot_seam_reports_no_running_slot() {
+    let (w, d, _) = docked_scene(300);
+    for s in [depot::DepotSlot::Production, depot::DepotSlot::Special3] {
+        assert!(!depot::slot_running(&w, d, s));
+    }
+}
+
 // spec: S-0314 claim 22 (power: a depot switched off keeps servicing a vehicle in contact; it refuses only new acceptance)
 #[test]
 fn claim_22_switched_off_keeps_servicing() {
