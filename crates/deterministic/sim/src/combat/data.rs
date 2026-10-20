@@ -710,7 +710,7 @@ pub struct VehicleCombat {
     pub sync_frames: [i32; 2], // spec: S-0301 Constants (two firing sync values)
     /// Seeker type.
     pub hunter_seeker: bool,
-    /// Target-line flag (S-0301 claim 23): drawing only.
+    /// Target-line flag (S-0301 claim 24): drawing only.
     pub target_laser: bool,
     /// Deploy-to-fire flag.
     pub deploy_to_fire: bool,

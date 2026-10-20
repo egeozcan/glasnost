@@ -1968,7 +1968,7 @@ pub struct UnitType {
     /// `HunterSeeker` (S-0301 claim 9).
     #[serde(default)]
     pub hunter_seeker: Option<bool>,
-    /// `TargetLaser`, the target-line flag (S-0301 claim 23; only a vehicle
+    /// `TargetLaser`, the target-line flag (S-0301 claim 24; only a vehicle
     /// shows the line); absent: no.
     #[serde(default)]
     pub target_laser: Option<bool>,

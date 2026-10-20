@@ -181,6 +181,15 @@ pub fn transform_point(w: &World, firer: ObjectId, flh: Flh, k: i32) -> Pos {
     claim1_point(w, firer, base, flh, k)
 }
 
+/// The turret pivot of `firer` (S-0313 Terms): the point a muzzle position
+/// of (0, 0, 0) would fire from by claim 1, from its current position, body
+/// transform and turret facing. Read-only (the target line of S-0301 claim
+/// 24 d starts there).
+pub fn turret_pivot(w: &World, firer: ObjectId) -> Pos {
+    // spec: S-0313 Terms (turret pivot: claim 1 with the muzzle position (0, 0, 0)) and S-0301 claim 24 d
+    transform_point(w, firer, [0, 0, 0], 0)
+}
+
 /// S-0313 claim 1's transform of the triple `flh` from base point `base`
 /// (claims 1 to 3, F1 and F2).
 fn claim1_point(w: &World, firer: ObjectId, base: Pos, flh: Flh, k: i32) -> Pos {

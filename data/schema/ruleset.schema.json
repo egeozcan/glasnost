@@ -12856,7 +12856,7 @@
           "default": null
         },
         "target_laser": {
-          "description": "`TargetLaser`, the target-line flag (S-0301 claim 23; only a vehicle\nshows the line); absent: no.",
+          "description": "`TargetLaser`, the target-line flag (S-0301 claim 24; only a vehicle\nshows the line); absent: no.",
           "type": [
             "boolean",
             "null"

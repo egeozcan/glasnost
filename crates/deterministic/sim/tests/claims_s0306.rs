@@ -3522,3 +3522,29 @@ fn claim20c_airborne_target_in_another_layer_uses_128() {
         "the point moves onto the target ({p:?}, {rp:?})"
     );
 }
+
+// spec: S-0306 F14 (ψ = f₃₂ of the drawn facing of (Vₓ, −V_y): east 8, north 0, south 16, west 24, up the screen 28; e = f₃₂ of the pitch: 8 level, 4 at 45° up, 0 straight up and 16 straight down; no horizontal part counts as east)
+#[test]
+fn f14_drawn_facings() {
+    let s = setup(&base(), 3, 0);
+    let f = |v: [i64; 3]| glasnost_sim::combat::projectile::drawn_facings(&s.w, v.map(n));
+    assert_eq!(f([50, 0, 0]), (8, 8));
+    assert_eq!(f([0, -50, 0]), (0, 8));
+    assert_eq!(f([-50, 0, 0]), (24, 8));
+    assert_eq!(f([0, 50, 0]), (16, 8));
+    assert_eq!(f([-50, -50, 0]), (28, 8));
+    assert_eq!(f([50, 0, 50]), (8, 4));
+    assert_eq!(f([50, 0, -50]), (8, 12));
+    assert_eq!(f([0, 0, 50]), (8, 0));
+    assert_eq!(f([0, 0, -50]), (8, 16));
+}
+
+// spec: S-0306 claim 3 (the aim point of a target that is not a moving vehicle is its reference point, no aim shift) and S-0301 claim 24 e (the target line's end point)
+#[test]
+fn claim3_led_aim_point_of_a_still_target() {
+    let s = setup(&base(), 3, 0);
+    assert_eq!(
+        glasnost_sim::combat::projectile::led_aim_point(&s.w, s.a, Target::Object(s.t)),
+        s.w.reference_point(s.t)
+    );
+}

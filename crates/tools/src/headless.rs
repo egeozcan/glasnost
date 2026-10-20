@@ -197,6 +197,7 @@ async fn smoke_async(
                         | Effect::Domination { .. }
                         | Effect::Walker { .. }
                         | Effect::ShotAnim { .. }
+                        | Effect::TargetLine { .. }
                         | Effect::LayerMoment { .. } => {}
                     }
                 }

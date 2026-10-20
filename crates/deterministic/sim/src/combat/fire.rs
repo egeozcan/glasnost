@@ -246,6 +246,18 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
         };
         // spec: S-0301 claims 18 and 22 and its ordering consequences (after the projectile is placed and after the delay draw, before a sonic wave or laser)
         crate::combat::shotanim::create(w, firer, weapon, launch);
+        // spec: S-0301 claim 24 a (every shot that reaches the shot-animation choice starts the
+        // target line of a vehicle whose type has the target-laser flag; only vehicles draw it)
+        if o.kind == Kind::Vehicle
+            && rules
+                .unit(o.kind, o.type_index)
+                .is_some_and(|u| u.vehicle.target_laser)
+        {
+            w.effects.push(crate::combat::effects::Effect::TargetLine {
+                firer,
+                house: o.owner,
+            });
+        }
     }
     let sync_frames = o.kind == Kind::Vehicle
         && rules
