@@ -589,8 +589,31 @@ fn m6a_scenes() {
         .is_some_and(|c| c.land == land::WATER);
     println!("ship type found: {}, open water: {water}", ship.is_some());
     if let (Some(sn), true) = (ship, water) {
-        let ids: Vec<ObjectId> = (0..3)
-            .map(|i| lane.spawn(Kind::Vehicle, &sn, local, CellXY::new(sea.x - 1 + i, sea.y)))
+        // Three water cells four apart, so that no ship hides another.
+        let mut cells: Vec<CellXY> = Vec::new();
+        for (dx, dy) in [
+            (0, 0),
+            (4, 0),
+            (0, 4),
+            (4, 4),
+            (8, 0),
+            (0, 8),
+            (-4, 0),
+            (0, -4),
+        ] {
+            let c = CellXY::new(sea.x + dx, sea.y + dy);
+            let wet = lane
+                .world()
+                .cells
+                .cell(c)
+                .is_some_and(|k| k.land == land::WATER);
+            if wet && cells.len() < 3 {
+                cells.push(c);
+            }
+        }
+        let ids: Vec<ObjectId> = cells
+            .iter()
+            .map(|&at| lane.spawn(Kind::Vehicle, &sn, local, at))
             .collect();
         let dest = lane.open(CellXY::new(sea.x + 12, sea.y + 12), |l| l == land::WATER);
         for &id in &ids {
@@ -601,6 +624,27 @@ fn m6a_scenes() {
             lane.look_at(c);
             lane.ticks(1);
             lane.save("ships-moving");
+        }
+        // The sinking ship at rest, so that only its height changes.
+        let mut last = None;
+        let mut still = 0;
+        for _ in 0..900 {
+            lane.ticks(1);
+            let now = lane
+                .world()
+                .obj(ids[0])
+                .map(|o| (o.pos, o.body.value(lane.world().tick)));
+            still = if now == last { still + 1 } else { 0 };
+            last = now;
+            if still >= 10 {
+                break;
+            }
+        }
+        println!("first ship at rest before the hit: {}", still >= 10);
+        if let Some(c) = lane.world().obj(ids[0]).map(|o| o.pos.cell()) {
+            lane.look_at(c);
+            lane.ticks(1);
+            lane.save("ship-before-sinking");
         }
         let hit = glasnost_sim::combat::damage::Hit {
             amount: 100_000,
@@ -614,11 +658,21 @@ fn m6a_scenes() {
         let _ = glasnost_sim::combat::damage::apply(lane.world_mut(), ids[0], hit);
         let sinking = glasnost_sim::naval::sinking(lane.world(), ids[0]);
         println!("ship set sinking by a killing hit: {sinking}");
-        lane.ticks(30);
-        if let Some(c) = lane.world().obj(ids[0]).map(|o| o.pos.cell()) {
-            lane.look_at(c);
-            lane.ticks(1);
-            lane.save("ship-sinking");
+        // A sinking vessel goes down 5 leptons a tick and leaves play below
+        // −400 (S-0504 claim 4): pictures early, half-way and after it left,
+        // from one camera place, with the other ships as the level reference.
+        {
+            for (wait, name) in [
+                (20, "ship-sinking"),
+                (40, "ship-sinking-deep"),
+                (30, "ship-sunk"),
+            ] {
+                lane.ticks(wait);
+                let w = lane.world();
+                let z = w.obj(ids[0]).map(|_| w.height_above_surface(ids[0]));
+                println!("{name}: sinking ship height above surface {z:?}");
+                lane.save(name);
+            }
         }
     }
 }

@@ -1315,7 +1315,11 @@ fn crate_pickup(lane: &mut Lane) {
         // animation (review 2026-10-19: "dollar signs for heal").
         for _ in 0..600 {
             let s = lane.c.session.as_ref().unwrap();
-            if s.loaded.live.as_ref().is_none_or(|l| l.playing_anims().is_empty()) {
+            if s.loaded
+                .live
+                .as_ref()
+                .is_none_or(|l| l.playing_anims().is_empty())
+            {
                 break;
             }
             lane.ticks(1);

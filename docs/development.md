@@ -1901,6 +1901,7 @@ Interim rules, each tied to a request:
 | `live::draw_effects` | nothing is drawn for a planted bomb's icon, a charged building's flash or an air-strike mark in the game client | Q-1524 |
 | `build::infantry_items` | an infantry unit whose height above the surface is not 0 draws no body-sprite shadow (S-0107 claim 19); the generic infantry shadow is not drawn | Q-1525 |
 | rendering | no berserk tint is drawn (S-0610 claim 7 gives the table entry, not how it combines with the pixels) | Q-1526 |
+| `live::draw_effects` | every non-invisible projectile in flight is drawn as our own 7 × 7 diamond at its projected point with its height (cyan; orange when arcing; magenta when steering), in the game client as in the viewer; no projectile art and no projectile shadow | Q-1570 |
 
 ### Particles (Q-1520)
 
