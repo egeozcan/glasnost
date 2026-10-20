@@ -215,8 +215,8 @@ fn demolish_low(w: &mut World, p: CellXY, l: Low) {
 // The engineer's entry and repair (claims 17 to 20).
 
 /// Seam: an engineer enters a bridge repair hut (S-0511 claim 17), at once,
-/// in the step in which it enters. Entering buildings is S-0509's and is
-/// not built; it and tests call this. Returns whether the entry is
+/// in the step in which it enters. Entering buildings is S-0509's
+/// (`structures::entry`), which calls this. Returns whether the entry is
 /// accepted: with `quirks.repair_consumes_engineer_always` off, an entry
 /// that would repair nothing is refused and nothing happens.
 pub fn engineer_entered_hut(w: &mut World, engineer: ObjectId, hut: ObjectId) -> bool {

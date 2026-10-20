@@ -207,8 +207,8 @@ pub fn uncloak(w: &mut World, id: ObjectId, with_sound: bool) -> bool {
 }
 
 /// Gives an object its own cloak flag: the cloaking crate's effect (S-0520
-/// claim 15, S-0516 claim 2 (d)). Seam: crates are not built; this is the
-/// call they make.
+/// claim 15, S-0516 claim 2 (d)). Called by `crates` when a cloaking
+/// crate is picked up.
 pub fn grant_own_flag(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.cloak.own = true;

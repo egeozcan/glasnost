@@ -1268,8 +1268,8 @@ fn remove_silently(w: &mut World, x: ObjectId) {
 }
 
 /// The spawner changed house (S-0506 claim 13: mind control, capture).
-/// Seam: nothing changes an object's house in our engine yet; the
-/// ownership specs call this.
+/// Called by `mind` on a takeover, a domination or a release and by
+/// `structures::ownership` on a capture.
 pub fn owner_changed(w: &mut World, spawner: ObjectId) {
     clear_slots(w, spawner);
 }
