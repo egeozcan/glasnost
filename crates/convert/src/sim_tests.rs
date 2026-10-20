@@ -1345,3 +1345,44 @@ fn bunker_depot_warning() {
     assert!(!warned(&w, "buildings Pit is both"));
     assert!(!warned(&w, "buildings Depot is both"));
 }
+
+/// spec: S-0513 claim 29a (a held protection selector below 0 or above 15 warns once for each
+/// such key, naming key and value; not reduced modulo 16; a later layer's valid value replaces an
+/// earlier bad one, and an unreadable later value keeps it), S-0513 Import mapping
+#[test]
+fn protection_selector_outside_the_table_warns() {
+    let count = |w: &[Warning], key: &str| w.iter().filter(|w| w.message.contains(key)).count();
+    let base = "[AudioVisual]\nIronCurtainColor=16\nForceShieldColor=-1\n";
+    let (_, w) = sim(base, "", "");
+    assert_eq!(count(&w, "IronCurtainColor=16 names no position"), 1);
+    assert_eq!(count(&w, "ForceShieldColor=-1 names no position"), 1);
+    let at = w
+        .iter()
+        .find(|w| w.message.contains("IronCurtainColor"))
+        .map(|w| (w.file.clone(), w.line));
+    assert_eq!(at, Some(("rules.ini (test)".to_owned(), 2)));
+    // After every layer: the map's valid value replaces the bad one.
+    let (_, w) = sim(
+        "[AudioVisual]\nIronCurtainColor=20\n",
+        "[AudioVisual]\nIronCurtainColor=5\n",
+        "",
+    );
+    assert!(!warned(&w, "IronCurtainColor"));
+    // A later value with no hexadecimal digit keeps the held selector (S-0003 claim 3), and so
+    // the warning.
+    let (_, w) = sim(
+        "[AudioVisual]\nIronCurtainColor=20\n",
+        "[AudioVisual]\nIronCurtainColor=zzh\n",
+        "",
+    );
+    assert_eq!(count(&w, "IronCurtainColor=20 names no position"), 1);
+    // 0 … 15 and an absent selector do not warn.
+    let (_, w) = sim(
+        "[AudioVisual]\nIronCurtainColor=0\nForceShieldColor=15\n",
+        "",
+        "",
+    );
+    assert!(!warned(&w, "names no position"));
+    let (_, w) = sim("", "", "");
+    assert!(!warned(&w, "names no position"));
+}

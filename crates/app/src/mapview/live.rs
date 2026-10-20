@@ -1223,6 +1223,12 @@ impl Live {
             .collect()
     }
 
+    /// The protection look of object `id` as drawn (tests).
+    #[cfg(test)]
+    pub(super) fn protection_look_of(&self, id: ObjectId) -> Option<super::protection::Look> {
+        self.protection_look(self.world.obj(id)?)
+    }
+
     /// Every playing animation's layer (tests).
     #[cfg(test)]
     pub(super) fn anim_layers(&self) -> Vec<super::slots::Layer> {
@@ -1282,33 +1288,10 @@ impl Live {
     /// yet; it is drawn 50 % translucent (our placeholder, presentation only).
     /// A disguise is not drawn as its disguise yet (S-0516 claim 37).
     fn apply_cloak(&self, id: ObjectId, items: &mut Vec<Item>) {
-        use glasnost_render::compose::{Paint, Translucency};
-        use glasnost_sim::cloak::view::{self, Look};
+        use glasnost_sim::cloak::view;
         let w = &self.world;
         let v = self.viewer.or_else(|| w.obj(id).and_then(|o| o.owner));
-        let blend = match view::look(w, id, v) {
-            Look::Normal => None,
-            // spec: S-0516 claim 28 (25 % translucent: S-0102 code 1)
-            Look::Translucent25 => Some(Translucency::Quarter),
-            // spec: S-0516 claim 28 (50 % translucent: S-0102 code 2)
-            Look::Translucent50 | Look::Rippling => Some(Translucency::Half),
-            // spec: S-0516 claim 28 (not drawn)
-            Look::Hidden => {
-                items.clear();
-                return;
-            }
-        };
-        // spec: S-0516 claim 29 (no shadow while not uncloaked)
-        if !view::shadow(w, id) {
-            items.retain(|i| i.paint != Paint::Shadow);
-        }
-        if let Some(t) = blend {
-            for i in items.iter_mut() {
-                if let Paint::Lit(s) = i.paint {
-                    i.paint = Paint::Translucent(s, t);
-                }
-            }
-        }
+        cloak_items(view::look(w, id, v), view::shadow(w, id), items);
     }
 
     /// Shows a move-target marker (S-0214 claim 30): the imported
@@ -2037,6 +2020,60 @@ impl Live {
         (self.world.tick - 1).max(0)
     }
 
+    /// The protection look of `o` in the shown tick (S-0513 claim 29),
+    /// with the centre-cell shroud test of claim 29b for the local player:
+    /// a building's centre cell is the cell under the centre of its
+    /// foundation (S-0104 claim 13), a unit's the cell that holds its
+    /// position. Without a local player nothing counts as shrouded.
+    fn protection_look(&self, o: &Object) -> Option<super::protection::Look> {
+        // spec: S-0513 claim 29 (the envelope's phase as the last tick's turns left it; F7 in that tick)
+        let look = super::protection::Look::of(o, self.shown_tick())?;
+        let w = &self.world;
+        let centre = if o.kind == SimKind::Building {
+            let size = w
+                .rules()
+                .buildings
+                .get(o.type_index as usize)
+                .map_or((1, 1), |b| b.foundation);
+            let top_left = o.pos.cell();
+            // spec: S-0513 claim 29b, S-0104 claim 13 (the cell under the foundation's centre, the larger coordinate on an even side)
+            let (x, y) =
+                glasnost_render::light::building_centre_cell((top_left.x, top_left.y), size);
+            CellXY::new(x, y)
+        } else {
+            // spec: S-0513 claim 29b (a unit's centre cell: the cell that holds its position)
+            o.pos.cell()
+        };
+        // spec: S-0513 claim 29b (centre cell under shroud for the local player: envelope, no mask)
+        let shrouded = self
+            .viewer
+            .is_some_and(|v| !glasnost_sim::econ::shroud::explored(w, v, centre));
+        Some(look.shrouded(shrouded))
+    }
+
+    /// The protection look of the building occupying each cell, for the
+    /// slot animations' mask (S-0102 claim 34, animation rule).
+    fn protected_cells(&self) -> BTreeMap<CellXY, super::protection::Look> {
+        let mut cells = BTreeMap::new();
+        for o in self.world.objects.values() {
+            if o.kind != SimKind::Building || !o.on_map {
+                continue;
+            }
+            let Some(look) = self.protection_look(o) else {
+                continue;
+            };
+            // spec: S-0406 claim 2 (the cells a building occupies: its foundation cells)
+            for c in glasnost_sim::econ::placement::foundation_cells(
+                &self.world,
+                o.type_index,
+                o.pos.cell(),
+            ) {
+                cells.insert(c, look);
+            }
+        }
+        cells
+    }
+
     /// The mobile objects that take part in the object pass's body drawing,
     /// in their current drawing order (S-0102 claims 4 to 7, S-0214 claims
     /// 24 and 25): the simulation objects of the five layers that are
@@ -2146,8 +2183,8 @@ impl Live {
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)
             above: w.height_above_surface(id),
-            // spec: S-0513 claim 29 (the envelope's phase as the last tick's turns left it; F7 in that tick)
-            protection: super::protection::Look::of(o, self.shown_tick()),
+            // spec: S-0513 claims 29 and 29b (the envelope's phase as the last tick's turns left it, F7 in that tick; the centre-cell shroud test)
+            protection: self.protection_look(o),
         })
     }
 
@@ -2334,15 +2371,18 @@ impl Live {
                             .is_some_and(|b| b.gate)
                             && o.beh.current == Some(Behaviour::Open))
                         .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
-                        // spec: S-0513 claim 29 (the envelope's phase as the last tick's turns left it; F7 in that tick)
-                        protection: super::protection::Look::of(o, self.shown_tick()),
+                        // spec: S-0513 claims 29 and 29b (the envelope's phase as the last tick's turns left it, F7 in that tick; the centre-cell shroud test)
+                        protection: self.protection_look(o),
                     },
                 ))
             })
             .collect();
         if !own.is_empty() {
             let (ids, own): (Vec<ObjectId>, Vec<LiveBuilding>) = own.into_iter().unzip();
+            let cells = self.protected_cells();
+            self.painter.set_protected_cells(cells);
             let (drawn, notes) = self.painter.buildings(inputs, scene, &own);
+            self.painter.set_protected_cells(BTreeMap::new());
             self.notes.extend(notes);
             for (id, mut items) in ids.into_iter().zip(drawn) {
                 self.apply_cloak(id, &mut items);
@@ -2961,6 +3001,44 @@ impl Live {
         let mut report = InputReport::default();
         self.issue(house, list, &mut report);
         report
+    }
+}
+
+/// Applies the cloak look `look` to an object's drawn items (S-0516
+/// claims 28 and 29): not drawn, or blended 25 % or 50 %, and its shadow
+/// only when `shadow`.
+pub(super) fn cloak_items(
+    look: glasnost_sim::cloak::view::Look,
+    shadow: bool,
+    items: &mut Vec<Item>,
+) {
+    use glasnost_render::compose::{Paint, Translucency};
+    use glasnost_sim::cloak::view::Look;
+    let blend = match look {
+        Look::Normal => None,
+        // spec: S-0516 claim 28 (25 % translucent: S-0102 code 1)
+        Look::Translucent25 => Some(Translucency::Quarter),
+        // spec: S-0516 claim 28 (50 % translucent: S-0102 code 2)
+        Look::Translucent50 | Look::Rippling => Some(Translucency::Half),
+        // spec: S-0516 claim 28 (not drawn); S-0513 claim 29b (a fully suppressed drawing: nothing)
+        Look::Hidden => {
+            items.clear();
+            return;
+        }
+    };
+    // spec: S-0516 claim 29 (no shadow while not uncloaked)
+    if !shadow {
+        items.retain(|i| i.paint != Paint::Shadow);
+    }
+    if let Some(t) = blend {
+        for i in items.iter_mut() {
+            if let Paint::Lit(s) = i.paint {
+                // spec: S-0513 claim 29b, S-0516 claim 28 (a protected object drawn translucent or
+                // rippling keeps the protection brightness of its source pixels before the F8
+                // blend and takes no mask; drawn opaque again, it takes its mask again)
+                i.paint = Paint::Translucent(s.with_mask(0), t);
+            }
+        }
     }
 }
 
