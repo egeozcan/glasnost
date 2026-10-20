@@ -2427,7 +2427,10 @@ impl Live {
         inputs: &Inputs,
         scene: &mut Scene,
     ) -> BTreeMap<ObjectId, Vec<Item>> {
+        use super::build::ParticleDraw;
+        use super::particles as look;
         let detail = inputs.options.detail;
+        let m = self.world.rules().mode;
         let mut list = Vec::new();
         let mut ids = Vec::new();
         for s in self.world.gas.systems.values() {
@@ -2435,17 +2438,41 @@ impl Live {
                 let Some(t) = self.rules.gas.particles.get(p.type_index as usize) else {
                     continue;
                 };
-                let Some(Some((e, true))) = self.particle_table.get(p.type_index as usize) else {
+                // spec: S-0616 claim 23 (every particle in play, the dead-marked too, unless the lowest detail hides its kind; by its own kind, not its system's)
+                if !look::shown(t.kind, detail) {
                     continue;
+                }
+                let pos = (p.pos.x, p.pos.y, p.pos.z);
+                let draw = if look::is_pixel(t.kind) {
+                    // spec: S-0616 claims 28 and 29, F16 (a pixel kind draws its current colour; never its sprite, translucency or stage)
+                    let rgb = p.colour.drawn(&t.look, m);
+                    ParticleDraw::Pixel { rgb, pos }
+                } else {
+                    // spec: S-0616 claim 23 (a sprite kind whose type has no sprite draws nothing)
+                    let Some(Some((e, true))) = self.particle_table.get(p.type_index as usize)
+                    else {
+                        continue;
+                    };
+                    // spec: S-0616 F15 (the screen pixels of the creation position and the target point, height lift included)
+                    let group = if t.kind == Some(glasnost_sim::gas::Behaviour::Fire) {
+                        look::fire_group(
+                            project_lifted(p.origin.x, p.origin.y, p.origin.z),
+                            project_lifted(p.aim.x, p.aim.y, p.aim.z),
+                            m,
+                        )
+                    } else {
+                        0
+                    };
+                    ParticleDraw::Sprite {
+                        idx: e.idx,
+                        frame: look::frame(t.kind, p.stage, t.end_stage, group),
+                        // spec: S-0616 claim 26 (the particle's own translucency value)
+                        code: look::translucency(p.translucency, detail),
+                        pos,
+                    }
                 };
                 ids.push(p.id);
-                list.push(super::build::ParticleDraw {
-                    idx: e.idx,
-                    frame: super::particles::frame(t.kind, p.stage, e.start_frame),
-                    // spec: S-0613 claim 16 (from the type's translucency only; Q-1520 interim rule)
-                    code: super::particles::translucency(t.translucency, detail),
-                    pos: (p.pos.x, p.pos.y, p.pos.z),
-                });
+                list.push(draw);
             }
         }
         let (drawn, notes) = self.painter.particles(inputs, scene, &list);
@@ -2558,8 +2585,8 @@ impl Live {
             let item = self.cache.marker_item(scene, m, at);
             scene.items.push(item);
         }
-        // S-0613, S-0616: the game view draws particles with their sprites (Q-1520 interim
-        // rule); the debug-markers view marks a particle whose type has no sprite, a placeholder
+        // S-0616 claims 23 to 28: the game view draws particles in the air layer; the
+        // debug-markers view marks a sprite-kind particle whose type has no sprite, a placeholder
         // by its system's kind (our own pictures).
         if self.debug_markers {
             for s in self.world.gas.systems.values() {
@@ -2581,7 +2608,12 @@ impl Live {
                         self.particle_table.get(p.type_index as usize),
                         Some(Some((_, true)))
                     );
-                    if sprite {
+                    let pixel = rules
+                        .gas
+                        .particles
+                        .get(p.type_index as usize)
+                        .is_some_and(|t| super::particles::is_pixel(t.kind));
+                    if sprite || pixel {
                         continue;
                     }
                     // spec: S-0101 F1, F2 (the projected point of the position with its height)
@@ -2811,8 +2843,7 @@ impl Live {
                     Paint::Lit(_) => "lit",
                     Paint::LitDiamond(_) => "lit-diamond",
                     Paint::Translucent(..) => "translucent",
-                    #[allow(unreachable_patterns)]
-                    _ => "other",
+                    Paint::Pixel(_) => "pixel",
                 };
                 let what = match it.object {
                     Some(code) => match self.object_of_code(code).and_then(|id| self.world.obj(id))

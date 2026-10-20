@@ -2316,13 +2316,15 @@ fn deploying_presentation_takes_the_owners_palette() {
     );
 }
 
-/// spec: S-0102 claim 3 (particles in the air layer: after the ground
-/// layer's animation, before the top layer's); S-0007 claim 28 (each with
-/// its type's sprite); S-0613 claims 15 and 16 (a gas particle's frame is
-/// its stage; translucency 50 blends at the highest detail); Q-1520 interim
-/// rule (stage plus start frame for a smoke particle; a particle whose type
-/// has no sprite draws nothing in the game view, a marker in the
-/// debug-markers view)
+/// spec: S-0102 claim 3 and S-0616 claim 30 (particles in the air layer:
+/// after the ground layer's animation, before the top layer's, in the order
+/// they were made); S-0616 claim 23 (a sprite kind with no sprite draws
+/// nothing, a marker in the debug-markers view only; the lowest detail
+/// hides smoke and spark), claim 24 (anim palette at 1000), claim 25 (gas
+/// and smoke: the stage, the start frame unused; fire: s + g × E), claim 26
+/// (the particle's own translucency value), claim 27 (upright reader, bias
+/// −15 − L(z)), claim 28 (a spark is one opaque pixel of its colour, a flat
+/// reader with bias −50 − L(z))
 #[test]
 fn particles_draw_their_sprites_in_the_air_layer() {
     use glasnost_num::F32;
@@ -2334,7 +2336,8 @@ fn particles_draw_their_sprites_in_the_air_layer() {
     use glasnost_sim::world::Pos;
     let rules = format!(
         "{RULES}[Animations]\n0=GROUNDX\n1=TOPX\n\
-         [Particles]\n0=PUFF\n1=SOOT\n2=BARE\n[PUFF]\nX=1\n[SOOT]\nStartFrame=2\n[BARE]\nX=1\n"
+         [Particles]\n0=PUFF\n1=SOOT\n2=BARE\n3=GLINT\n4=FLAME\n[PUFF]\nX=1\n[SOOT]\nStartFrame=2\n[BARE]\nX=1\n\
+         [GLINT]\nX=1\n[FLAME]\nX=1\n"
     );
     let art = format!(
         "{}[GROUNDX]\nLayer=ground\nRate=900\n[TOPX]\nLayer=top\nRate=900\n",
@@ -2352,21 +2355,29 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         (Kind::Animations, "TOPX", "topx.shp"),
         (Kind::Particles, "PUFF", "puff.shp"),
         (Kind::Particles, "SOOT", "soot.shp"),
+        (Kind::Particles, "GLINT", "glint.shp"),
+        (Kind::Particles, "FLAME", "flame.shp"),
     ] {
         let i = index(&import, kind, name);
         import
             .arts
             .insert((kind, i), super::tests::art_of(name, file));
     }
-    // Frame sizes tell the drawings apart: 7, 9, 3 and 5 pixels wide; a
-    // frame's pixels hold its number plus 1.
+    // Frame sizes tell the drawings apart: 7, 9, 3, 5, 13 and 11 pixels
+    // wide (a spark is 1); a frame's pixels hold its number plus 1.
     assets.insert(b"groundx.shp", shp((20, 20), 3, (7, 7), (2, 2)));
     assets.insert(b"topx.shp", shp((20, 20), 3, (9, 9), (2, 2)));
     assets.insert(b"puff.shp", shp((20, 20), 4, (3, 3), (2, 2)));
     assets.insert(b"soot.shp", shp((20, 20), 6, (5, 5), (2, 2)));
+    assets.insert(b"glint.shp", shp((20, 20), 4, (13, 13), (2, 2)));
+    assets.insert(b"flame.shp", shp((20, 20), 9, (11, 11), (2, 2)));
     let map = testkit::map();
     let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
     let options = Options::default();
+    let low = Options {
+        detail: glasnost_render::light::DetailLevel::Low,
+        ..Options::default()
+    };
     let inputs = Inputs {
         map: &map,
         import: &import,
@@ -2387,6 +2398,21 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         ("PUFF", kind("gas", 50)),
         ("SOOT", kind("smoke", 0)),
         ("BARE", kind("gas", 0)),
+        (
+            "GLINT",
+            ParticleType {
+                color_list: Some(vec![[1, 2, 3], [4, 5, 6]]),
+                color_count: Some(2),
+                ..kind("spark", 50)
+            },
+        ),
+        (
+            "FLAME",
+            ParticleType {
+                end_state_ai: Some(2),
+                ..kind("fire", 0)
+            },
+        ),
     ] {
         r.registries
             .entry("particles".into())
@@ -2437,7 +2463,7 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         });
     }
     live.after_tick();
-    let particle = |type_index: u32, stage: i8, id: u32| Particle {
+    let particle = |type_index: u32, stage: i8, id: u32, translucency: u8| Particle {
         id: ObjectId(id),
         type_index,
         pos,
@@ -2452,8 +2478,11 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         fvel: [F32(0); 3],
         step: [0; 3],
         advance: 0,
-        translucency: 0,
-        colour: Default::default(),
+        translucency,
+        colour: glasnost_sim::gas::ColourState {
+            own: [200, 100, 50],
+            ..Default::default()
+        },
         origin: pos,
         aim: pos,
     };
@@ -2465,37 +2494,102 @@ fn particles_draw_their_sprites_in_the_air_layer() {
         None,
         sim_rules.mode,
     );
+    // The flame flies along +x: down-right on the screen, F15 group 3.
+    let flame = Particle {
+        aim: Pos {
+            x: pos.x + 1024,
+            ..pos
+        },
+        ..particle(4, 1, 9005, 0)
+    };
     system.particles = vec![
-        particle(0, 1, 9001),
-        particle(1, 1, 9002),
-        particle(2, 0, 9003),
+        particle(0, 1, 9001, 50),
+        particle(1, 1, 9002, 0),
+        particle(2, 0, 9003, 0),
+        particle(3, 1, 9004, 50),
+        flame,
     ];
     live.world.gas.systems.insert(ObjectId(9000), system);
     live.redraw(&inputs, &mut scene);
-    assert_eq!(live.counts.particles_drawn, 2);
-    let drawn: Vec<(usize, u32, u8, Paint)> = scene
-        .items
-        .iter()
-        .enumerate()
-        .filter(|(_, i)| i.group == Group::Effects && !i.provisional)
-        .map(|(n, i)| {
-            let img = &scene.images[i.image as usize];
-            (n, img.width(), img.pixels()[0], i.paint)
-        })
-        .collect();
-    let at = |w: u32| drawn.iter().find(|d| d.1 == w).copied().unwrap();
+    assert_eq!(live.counts.particles_drawn, 4);
+    let effects = |scene: &Scene| -> Vec<(
+        usize,
+        u32,
+        u8,
+        Paint,
+        glasnost_render::scene::ItemDepth,
+        glasnost_render::compose::DepthTest,
+    )> {
+        scene
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.group == Group::Effects && !i.provisional)
+            .map(|(n, i)| {
+                let img = &scene.images[i.image as usize];
+                (n, img.width(), img.pixels()[0], i.paint, i.depth, i.test)
+            })
+            .collect()
+    };
+    let drawn = effects(&scene);
+    let at = |w: u32| drawn.iter().find(|d| d.1 == w).cloned().unwrap();
     let (ground, top, puff, soot) = (at(7), at(9), at(3), at(5));
-    assert!(ground.0 < puff.0 && puff.0 < soot.0 && soot.0 < top.0);
+    let (spark, fire) = (at(1), at(11));
+    assert!(ground.0 < puff.0 && puff.0 < soot.0 && soot.0 < spark.0);
+    assert!(spark.0 < fire.0 && fire.0 < top.0);
     assert_eq!(
         drawn.len(),
-        4,
-        "the particle without a sprite draws nothing"
+        6,
+        "the particle without a sprite draws nothing; the spark never uses its sprite"
     );
-    // The gas particle at stage 1 shows frame 1; the smoke particle frame 1 + 2.
-    assert_eq!(puff.2, 2);
-    assert_eq!(soot.2, 4);
-    assert!(matches!(puff.3, Paint::Translucent(_, Translucency::Half)));
+    // The gas and smoke particles at stage 1 show frame 1 (no start frame);
+    // the flame frame 1 + 3 × 2.
+    assert_eq!((puff.2, soot.2, fire.2), (2, 2, 8));
+    assert!(
+        matches!(puff.3, Paint::Translucent(s, Translucency::Half) if s.rho == glasnost_render::light::brightness_rho(1000) as u16)
+    );
     assert!(matches!(soot.3, Paint::Lit(_)));
+    use glasnost_render::compose::{DepthTest, Profile};
+    use glasnost_render::scene::ItemDepth;
+    assert_eq!(
+        (puff.4, puff.5),
+        (
+            ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias: -15,
+                companion: None
+            },
+            DepthTest::Reader
+        )
+    );
+    // The spark: one opaque pixel of its colour, with its translucency of 50 unused.
+    let rgb = glasnost_fmt::image::Rgb8 {
+        r: 200,
+        g: 100,
+        b: 50,
+    };
+    assert_eq!(spark.3, Paint::Pixel(rgb));
+    assert_eq!(
+        (spark.4, spark.5),
+        (
+            ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: -50,
+                companion: None
+            },
+            DepthTest::Reader
+        )
+    );
+    // At the lowest detail the smoke and the spark are not drawn.
+    let low_inputs = Inputs {
+        options: &low,
+        ..inputs
+    };
+    live.redraw(&low_inputs, &mut scene);
+    let widths: Vec<u32> = effects(&scene).iter().map(|d| d.1).collect();
+    assert_eq!(widths.len(), 4, "{widths:?}");
+    assert!(!widths.contains(&5) && !widths.contains(&1), "{widths:?}");
+    live.redraw(&inputs, &mut scene);
     assert_eq!(
         effect_items(&scene, true),
         0,

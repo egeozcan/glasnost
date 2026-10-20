@@ -644,6 +644,82 @@ fn gpu_light_alpha_matches_cpu() {
     }
 }
 
+/// spec: S-0616 claim 28 (a pixel particle: one opaque pixel of its own
+/// colour, skipped at light-alpha 0, scaled by a / 128 below 127; a flat
+/// reader with bias −50 − L(z), never writing depth)
+///
+/// Single-pixel items over the whole view, some hidden by the writers,
+/// draw the same on the GPU as on the CPU under a light-alpha gradient.
+#[test]
+fn gpu_pixel_particles_match_cpu() {
+    use glasnost_fmt::image::Rgb8;
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let dot = s.add_image(IndexedImage::new(1, 1, vec![1]).unwrap());
+    for k in 0..400i32 {
+        s.items.push(Item {
+            image: dot,
+            x: (k * 37) % 128,
+            y: (k * 11) % 72,
+            test: DepthTest::Reader,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: -50 - (k % 7) * 5,
+                companion: None,
+            },
+            paint: Paint::Pixel(Rgb8 {
+                r: (k * 13 % 256) as u8,
+                g: (k * 29 % 256) as u8,
+                b: (255 - k % 256) as u8,
+            }),
+            group: Group::Effects,
+            provisional: false,
+            object: None,
+            stack: None,
+        });
+    }
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (128u32, 72u32);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+        .map(|i| ((i * 3) % 256) as u8)
+        .collect();
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    let cpu = s
+        .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+        .to_rgba();
+    let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render_lit(
+        &device,
+        &queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        &s,
+        &view,
+        &filter,
+        &q,
+        Some(&alpha),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+    let differing = cpu
+        .chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count();
+    assert_eq!(differing, 0);
+}
+
 /// spec: S-0102 claim 34 and F9 (an opaque, depth-passing pixel becomes S ∨ K after shade
 /// selection; transparent and depth-rejected pixels stay untouched; a translucent drawing keeps
 /// its blend and takes no mask, Open questions)

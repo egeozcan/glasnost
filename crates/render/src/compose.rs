@@ -254,6 +254,11 @@ pub enum Paint {
     /// Each non-zero pixel darkens the pixel beneath: every hi-colour
     /// channel halved, rounded down (S-0102 claim 26, F7).
     Shadow,
+    /// Each non-zero pixel takes this 8-bit colour with no palette, scaled
+    /// by its light-alpha value *a* when *a* < 127 and not drawn when
+    /// *a* = 0, then packed to 5-6-5; always opaque (S-0616 claim 28, the
+    /// pixel particles).
+    Pixel(Rgb8),
 }
 
 /// A blending translucency code of S-0102 claim 32 and F8 (S-0109 claims
@@ -436,9 +441,9 @@ impl Frame {
             Paint::Lit(s) | Paint::LitDiamond(s) | Paint::Translucent(s, _) => {
                 rows.get(s.base as usize)
             }
-            Paint::Shadow => None,
+            Paint::Shadow | Paint::Pixel(_) => None,
         };
-        if !matches!(d.paint, Paint::Shadow) && first_row.is_none() {
+        if !matches!(d.paint, Paint::Shadow | Paint::Pixel(_)) && first_row.is_none() {
             return;
         }
         let diamond = matches!(d.paint, Paint::Diamond(_) | Paint::LitDiamond(_));
@@ -571,6 +576,12 @@ impl Frame {
                 self.color[i] = darken565(self.color[i]);
                 return;
             }
+            Paint::Pixel(c) => {
+                if let Some(c) = pixel_colour(c, self.alpha[i]) {
+                    self.color[i] = pack565(c);
+                }
+                return;
+            }
         };
         if let Some(row) = row {
             self.color[i] = row[usize::from(index)];
@@ -588,6 +599,26 @@ impl Frame {
         }
         out
     }
+}
+
+/// The colour a pixel particle of colour `c` takes where the light-alpha
+/// value is `a` (S-0616 claim 28, F16): none for *a* = 0, each channel
+/// times *a* / 128 truncated for *a* < 127, unchanged otherwise.
+pub fn pixel_colour(c: Rgb8, a: u8) -> Option<Rgb8> {
+    // spec: S-0616 claim 28 (not drawn when a = 0, fully shrouded)
+    if a == 0 {
+        return None;
+    }
+    // spec: S-0616 claim 28 and Constants (pixel full light-alpha 127; below it each channel × a / 128, truncated)
+    if a >= 127 {
+        return Some(c);
+    }
+    let s = |x: u8| ((u32::from(x) * u32::from(a)) / 128) as u8; // spec: S-0616 claim 28 (divided by 128)
+    Some(Rgb8 {
+        r: s(c.r),
+        g: s(c.g),
+        b: s(c.b),
+    })
 }
 
 /// Halves each channel of a 5-6-5 pixel (S-0102 claim 26, F7). Halving the
@@ -1046,6 +1077,78 @@ mod tests {
 
     /// spec: S-0102 claim 27 (the overlay-shadow rows), claim 13 (an overlay shadow: −2 − 15 × ℓ_s,
     /// flat, writes), claim 16 (rank 3: overlays before overlay shadows)
+    /// spec: S-0616 claim 28 (one pixel of the particle's colour: not drawn
+    /// at a = 0, each channel × a / 128 truncated below 127, unchanged at
+    /// 127 and above; drawn only where d − L(z) − 50 is strictly less than
+    /// the stored depth, never writing it; opaque)
+    #[test]
+    fn pixel_particles() {
+        let q = ComposeQuirks::default();
+        let img = IndexedImage::new(1, 1, vec![1]).unwrap();
+        let c = Rgb8 {
+            r: 200,
+            g: 101,
+            b: 255,
+        };
+        let draw = |bias| Drawing {
+            image: &img,
+            x: 0,
+            y: 0,
+            test: DepthTest::Reader,
+            depth: DepthSource::Profile {
+                profile: Profile::Flat,
+                bias,
+                companion: None,
+            },
+            paint: Paint::Pixel(c),
+        };
+        assert_eq!(pixel_colour(c, 0), None);
+        assert_eq!(
+            pixel_colour(c, 64),
+            Some(Rgb8 {
+                r: 100,
+                g: 50,
+                b: 127
+            })
+        );
+        assert_eq!(
+            pixel_colour(c, 126).map(|x| x.g),
+            Some(99),
+            "101 × 126 / 128"
+        );
+        assert_eq!(pixel_colour(c, 127), Some(c));
+        assert_eq!(pixel_colour(c, 255), Some(c));
+        let fresh = |alpha: u8, stored: u16| {
+            let mut f = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+            f.color[0] = 0x1234;
+            f.depth[0] = stored;
+            f.set_light_alpha(vec![alpha]);
+            f
+        };
+        let d = Frame::new(1, 1, 0, DEPTH_REFERENCE).row_depth(0);
+        // Drawn opaque over what was there; the depth stays.
+        let mut f = fresh(127, 60000);
+        f.draw(&draw(-50), &rows(), &q);
+        assert_eq!(f.color[0], pack565(c));
+        assert_eq!(f.depth[0], 60000);
+        // Scaled below 127; not drawn at 0.
+        let mut f = fresh(64, 60000);
+        f.draw(&draw(-50), &rows(), &q);
+        assert_eq!(f.color[0], pack565(pixel_colour(c, 64).unwrap()));
+        let mut f = fresh(0, 60000);
+        f.draw(&draw(-50), &rows(), &q);
+        assert_eq!(f.color[0], 0x1234);
+        // Strictly less: equal depth is not drawn, one less is.
+        let at = (d - 50) as u16;
+        let mut f = fresh(127, at);
+        f.draw(&draw(-50), &rows(), &q);
+        assert_eq!(f.color[0], 0x1234);
+        let mut f = fresh(127, at + 1);
+        f.draw(&draw(-50), &rows(), &q);
+        assert_eq!(f.color[0], pack565(c));
+        assert_eq!(f.depth[0], at + 1);
+    }
+
     #[test]
     fn overlay_shadow_rows() {
         let q = ComposeQuirks::default();

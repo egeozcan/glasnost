@@ -711,6 +711,13 @@ impl MapRenderer {
                     (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
                 }
                 Paint::Shadow => (0, 0, 0, 0),
+                // spec: S-0616 claim 28 (a pixel particle's own colour, flagged by bit 3)
+                Paint::Pixel(c) => (
+                    (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b),
+                    1 << 3,
+                    0,
+                    0,
+                ),
             };
             let ds = depth_slot.unwrap_or(Slot {
                 x: 0,

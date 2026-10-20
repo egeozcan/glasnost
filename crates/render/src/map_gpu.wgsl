@@ -34,9 +34,10 @@ struct Instance {
     // drawing with a companion depth image, whose atlas slot x, y and layer
     // are then x, y and z.
     @location(2) depth: vec4<u32>,
-    // Palette row (the table's first row when z > 0); y: bit 0 set for a
-    // tile diamond (no transparent index), bits 1 and 2 the translucency
-    // code (S-0102 claim 32), bits 16 to 31 the protection colour mask K
+    // Palette row (the table's first row when z > 0; a pixel particle's
+    // colour when y bit 3 is set); y: bit 0 set for a tile diamond (no
+    // transparent index), bits 1 and 2 the translucency code (S-0102 claim
+    // 32), bit 3 a pixel particle (S-0616 claim 28), bits 16 to 31 the protection colour mask K
     // (S-0102 claim 34, F9); z the shade table's row count N for a drawing
     // that reads the light-alpha values, else 0; w its rho.
     @location(3) paint: vec4<u32>,
@@ -168,6 +169,23 @@ fn fs_main(in: Varyings) -> Fragment {
         depth = quantise(row_depth(r1) + in.place.z) - (r1 - px.y) / 3;
     }
     depth = clamp(depth, 0, 65535);
+    if (in.paint.y & 8u) != 0u {
+        // S-0616 claim 28: a pixel particle's own colour (x = R << 16 |
+        // G << 8 | B), not drawn at light-alpha 0, each channel times a / 128
+        // (truncated) below 127, packed to 5-6-5, opaque.
+        let a = textureLoad(light_alpha, px, 0).r;
+        if a == 0u {
+            discard;
+        }
+        var c = vec3<u32>((in.paint.x >> 16u) & 255u, (in.paint.x >> 8u) & 255u, in.paint.x & 255u);
+        if a < 127u {
+            c = (c * a) / 128u;
+        }
+        var pix: Fragment;
+        pix.color = vec4<f32>(expand(c.r >> 3u, 5u), expand(c.g >> 2u, 6u), expand(c.b >> 3u, 5u), 1.0);
+        pix.depth = f32(depth) / 65536.0;
+        return pix;
+    }
     var row = i32(in.paint.x);
     if in.paint.z > 0u {
         // S-0104 claim 15: row = min(N - 1, floor(a * rho * (N - 1) / 32258)),
