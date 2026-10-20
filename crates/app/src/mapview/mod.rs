@@ -3,6 +3,7 @@
 //! minimap, layer toggles and object info.
 
 pub mod anims;
+pub mod beams;
 pub mod build;
 pub mod combat;
 pub mod cover;

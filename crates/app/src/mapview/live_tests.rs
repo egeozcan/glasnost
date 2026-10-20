@@ -2085,24 +2085,17 @@ fn client_live() -> (
     (live, scene, map, import, catalogue, assets)
 }
 
-/// The beam items of a scene: effects painted with a plain row whose image
-/// holds palette index 1.
-fn beam_items(scene: &Scene) -> Vec<glasnost_render::scene::Item> {
-    use glasnost_render::scene::Group;
-    scene
-        .items
-        .iter()
-        .filter(|i| i.group == Group::Effects && matches!(i.paint, Paint::Row(_)))
-        .filter(|i| scene.images[i.image as usize].pixels().contains(&1))
-        .copied()
-        .collect()
+/// The spot groups drawn after every item (beam effects, S-0102 claim 2).
+fn beam_groups(scene: &Scene) -> Vec<&glasnost_render::spots::SpotGroup> {
+    scene.spots.iter().filter(|g| g.at == usize::MAX).collect()
 }
 
-/// spec: S-0518 claim 6 (a support beam lasts L_s ticks and is 3 pixels thick, in the house's laser
-/// colour, Q-1521 interim: the house display RGB of S-0103 claim 15), S-0102 claim 2 (beam effects
-/// after all layers)
+/// spec: S-0518 claims 17, 18 and 22 (a support beam: inner L of the supporter's house, house-colour
+/// drawing, W = 3; coarse while the activity test fails), claim 19 (drawn for D ticks), S-0102 claim 2
+/// (beam effects after all layers and status extras)
 #[test]
-fn support_beam_is_a_three_pixel_line_for_its_life() {
+fn support_beam_draws_in_the_house_laser_colour_for_its_life() {
+    use glasnost_render::spots::{SpotKind, pack};
     use glasnost_sim::combat::effects::Effect;
     use glasnost_sim::world::Pos;
     let (mut live, mut scene, map, import, catalogue, assets) = client_live();
@@ -2119,7 +2112,7 @@ fn support_beam_is_a_three_pixel_line_for_its_life() {
         cells: None,
     };
     live.step();
-    // From (4, 6) to (6, 4) cells: the same screen row, 2 × 2 × 30 = 120 pixels apart (S-0101 F1).
+    // From (4, 6) to (6, 4) cells: the same screen row, 120 pixels apart (S-0101 F1).
     let from = Pos {
         x: 4 * 256,
         y: 6 * 256,
@@ -2138,42 +2131,43 @@ fn support_beam_is_a_three_pixel_line_for_its_life() {
     });
     live.after_tick();
     live.redraw(&inputs, &mut scene);
-    let beams = beam_items(&scene);
-    assert_eq!(beams.len(), 1);
-    let b = beams[0];
-    let img = &scene.images[b.image as usize];
-    let (w, h) = (img.width() as usize, img.height() as usize);
-    // Every column inside the line holds exactly 3 pixels of the beam.
-    let mid = w / 2;
-    let column = (0..h).filter(|&y| img.pixels()[y * w + mid] == 1).count();
-    assert_eq!(column, 3);
-    // In the house display RGB, after every other drawing.
+    let groups = beam_groups(&scene);
+    assert_eq!(groups.len(), 1);
+    // The activity count is still below the floor: coarse mode, opaque lines; the centre (drawn
+    // last) is L moved toward white at I = 1.
     let name = live.world.houses[0].name.clone();
     let rgb = super::build::owner_radar_colour(&import, &options, name.as_bytes(), [8, 8, 8]);
-    let Paint::Row(r) = b.paint else {
-        unreachable!()
-    };
+    let l = super::beams::laser_colour(rgb);
+    let centre = l.map(|c| u32::from(c) + (255 - u32::from(c)) * 255 / 256);
+    let last = groups[0].spots.last().expect("drawn");
     assert_eq!(
-        scene.rows[r][1],
-        glasnost_render::compose::pack565(glasnost_fmt::image::Rgb8::new(rgb[0], rgb[1], rgb[2]))
+        last.kind,
+        SpotKind::Opaque {
+            colour: pack(centre)
+        }
     );
-    assert_eq!(b.test, DepthTest::Ignore);
+    assert!(
+        groups[0]
+            .spots
+            .iter()
+            .all(|s| matches!(s.kind, SpotKind::Opaque { .. }))
+    );
     // Shown for 3 ticks, then gone.
     for _ in 0..2 {
         live.step();
         live.redraw(&inputs, &mut scene);
-        assert_eq!(beam_items(&scene).len(), 1);
+        assert_eq!(beam_groups(&scene).len(), 1);
     }
     live.step();
     live.redraw(&inputs, &mut scene);
-    assert!(beam_items(&scene).is_empty());
+    assert!(beam_groups(&scene).is_empty());
 }
 
-/// spec: S-0615 claims 15 and 16 (the disc laser's beams: inner and outer colours; the final beam
-/// fades from full intensity to none, an arc beam to half; Q-1521 interim: linear darkening)
+/// spec: S-0615 claims 15 and 16 with S-0518 claims 18, 19 and 21 (a disc laser's beam: ordinary
+/// drawing in its colours, additive at detail 2 with outer lines, fading toward none over D ticks)
 #[test]
 fn disc_laser_beam_fades_in_its_colours() {
-    use super::combat::{Beam, Fade, faded};
+    use glasnost_render::spots::SpotKind;
     use glasnost_sim::combat::effects::Effect;
     use glasnost_sim::world::Pos;
     let (mut live, mut scene, map, import, catalogue, assets) = client_live();
@@ -2208,41 +2202,107 @@ fn disc_laser_beam_fades_in_its_colours() {
     });
     live.after_tick();
     live.redraw(&inputs, &mut scene);
-    let row = |scene: &Scene| {
-        let b = beam_items(scene)[0];
-        let Paint::Row(r) = b.paint else {
-            unreachable!()
-        };
-        (scene.rows[r][1], scene.rows[r][2], b)
+    let kinds = |scene: &Scene| {
+        let g = beam_groups(scene)[0];
+        (g.spots[0].kind, g.spots.last().expect("drawn").kind)
     };
-    let pack = |c: [u8; 3]| {
-        glasnost_render::compose::pack565(glasnost_fmt::image::Rgb8::new(c[0], c[1], c[2]))
-    };
-    let (inner, outer, b) = row(&scene);
-    assert_eq!((inner, outer), (pack([200, 100, 40]), pack([100, 50, 20])));
-    // The outer colour is the edge around the inner line.
-    assert!(scene.images[b.image as usize].pixels().contains(&2));
-    // Two ticks into four: half intensity on the way to none.
+    // The outer lines first, the centre last, each at I = 1.
+    assert_eq!(
+        kinds(&scene),
+        (
+            SpotKind::Additive { rgb: [100, 50, 20] },
+            SpotKind::Additive {
+                rgb: [200, 100, 40]
+            }
+        )
+    );
+    // P = 2 of D = 4: I = 1/2 on the way to none.
     live.step();
     live.step();
     live.redraw(&inputs, &mut scene);
-    let (inner, _, _) = row(&scene);
-    assert_eq!(inner, pack([100, 50, 20]));
-    // The intensity rule itself: half at the end of an arc beam, none at the end of the final beam.
-    let beam = |fade| Beam {
-        a: (0, 0),
-        b: (10, 0),
-        born: 0,
-        life: 8,
-        width: 1,
-        inner: [200; 3],
-        outer: None,
-        fade,
+    assert_eq!(kinds(&scene).1, SpotKind::Additive { rgb: [100, 50, 20] });
+}
+
+/// spec: S-0607 claim 26 (the magnetic wave is drawn in the air layer, before the effects after the
+/// layers), claim 25 (it is drawn until removed and then vanishes at once)
+#[test]
+fn magnetic_wave_is_drawn_in_the_air_layer_until_removed() {
+    use glasnost_render::spots::SpotKind;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (mut live, mut scene, map, import, catalogue, assets) = client_live();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
     };
-    assert_eq!(beam(Fade::ToHalf).intensity(8), 128);
-    assert_eq!(beam(Fade::ToNone).intensity(8), 0);
-    assert_eq!(beam(Fade::None).intensity(8), 256);
-    assert_eq!(faded([200, 100, 40], 128), [100, 50, 20]);
+    live.step();
+    let firer = *live.world.objects.keys().next().expect("an object");
+    let id = ObjectId(1 << 20);
+    // An ended wave: its ends stay those it was made with.
+    live.world.waves.insert(
+        id,
+        glasnost_sim::lift::Wave {
+            firer,
+            target: Target::Cell(glasnost_map::CellXY::new(5, 5)),
+            a: glasnost_num::soft::F64::ZERO,
+            b: glasnost_num::soft::F64::ZERO,
+            ended: true,
+        },
+    );
+    live.world.effects.push(Effect::Wave {
+        id,
+        from: Pos {
+            x: 4 * 256,
+            y: 4 * 256,
+            z: 0,
+        },
+        to: Pos {
+            x: 7 * 256,
+            y: 4 * 256,
+            z: 0,
+        },
+    });
+    live.after_tick();
+    live.redraw(&inputs, &mut scene);
+    let waves: Vec<_> = scene
+        .spots
+        .iter()
+        .filter(|g| {
+            g.spots
+                .iter()
+                .any(|s| matches!(s.kind, SpotKind::Wave { .. }))
+        })
+        .collect();
+    assert_eq!(waves.len(), 1);
+    assert!(waves[0].at >= scene.cell_pass_len && waves[0].at <= scene.items.len());
+    live.world.waves.remove(&id);
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    assert!(scene.spots.is_empty());
+}
+
+/// spec: S-0514 claim 27 with S-0109 Terms (an erased body's code 2 or 3 combines with the cloak's:
+/// the larger, except that 1 and 2 give 3)
+#[test]
+fn erasure_translucency_combines_with_the_cloak() {
+    use super::live::combine_codes;
+    use glasnost_render::compose::Translucency::{Half, Quarter, ThreeQuarter};
+    assert_eq!(combine_codes(None, Some(Half)), Some(Half));
+    assert_eq!(combine_codes(Some(Quarter), Some(Half)), Some(ThreeQuarter));
+    assert_eq!(combine_codes(Some(Half), Some(Half)), Some(Half));
+    assert_eq!(
+        combine_codes(Some(Quarter), Some(ThreeQuarter)),
+        Some(ThreeQuarter)
+    );
+    assert_eq!(combine_codes(None, None), None);
 }
 
 /// S-0301 claim 23 (no default or placeholder picture at the muzzle), S-0303 claim 21 (a detonation shows its
@@ -3107,7 +3167,7 @@ fn protection_claim29b_translucent_drawings() {
         (Look::Rippling, Translucency::Half),
     ] {
         let mut items = vec![item];
-        cloak_items(look, false, &mut items);
+        cloak_items(look, false, None, &mut items);
         assert_eq!(
             items[0].paint,
             Paint::Translucent(shade.with_mask(0), t),
@@ -3115,10 +3175,10 @@ fn protection_claim29b_translucent_drawings() {
         );
     }
     let mut items = vec![item];
-    cloak_items(Look::Normal, true, &mut items);
+    cloak_items(Look::Normal, true, None, &mut items);
     assert_eq!(items[0].paint, Paint::Lit(shade), "opaque: the mask again");
     let mut items = vec![item];
-    cloak_items(Look::Hidden, true, &mut items);
+    cloak_items(Look::Hidden, true, None, &mut items);
     assert!(items.is_empty(), "nothing is drawn");
 }
 

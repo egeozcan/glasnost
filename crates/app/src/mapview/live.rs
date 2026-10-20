@@ -32,6 +32,7 @@ use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, Layer, Object, ObjectId, World};
 
 use super::anims::{self, AnimQuirks, Playback, Player};
+use super::beams;
 use super::build::{
     AnimDraw, Attitude, Built, GameMode, GroundEntry, InfantryFrame, Inputs, LiveBuilding, Mobile,
     Painter, ShadowAnchor, find_type, rule_int,
@@ -48,6 +49,24 @@ pub const SIM_OBJECT: u32 = 1 << 31;
 /// The item object code of a simulation object.
 pub fn sim_code(id: ObjectId) -> u32 {
     SIM_OBJECT | id.0
+}
+
+/// Two translucency codes combined (S-0109 Terms): the larger of the two,
+/// except that 1 and 2 combine to 3.
+pub fn combine_codes(
+    a: Option<glasnost_render::compose::Translucency>,
+    b: Option<glasnost_render::compose::Translucency>,
+) -> Option<glasnost_render::compose::Translucency> {
+    use glasnost_render::compose::Translucency;
+    let code = |t: Option<Translucency>| t.map_or(0, Translucency::code);
+    let (a, b) = (code(a), code(b));
+    // spec: S-0109 Terms (two codes combine to the larger, except that 1 and 2 combine to 3)
+    let c = if a.min(b) == 1 && a.max(b) == 2 {
+        3
+    } else {
+        a.max(b)
+    };
+    Translucency::from_code(c as i32)
 }
 
 /// The fixed seed of the viewer's sandbox games (our own choice: the
@@ -280,11 +299,12 @@ pub struct Live {
     cache: Cache,
     /// Shots, detonations and animations still shown.
     transients: Vec<Transient>,
-    /// Laser beams still shown (S-0518 claim 6, S-0615 claims 15 and 16).
-    beams: Vec<combat::Beam>,
-    /// Each house's display RGB by house index (S-0103 claim 15), the
-    /// stand-in for its laser colour (Q-1521).
-    house_rgb: Vec<[u8; 3]>,
+    /// The beams, beam flashes and magnetic waves shown (S-0518 claims 17
+    /// to 23, S-0514 claims 23 to 26, S-0607 claims 25 and 26).
+    lines: beams::Lines,
+    /// The building types (import indices) whose art has the double-thick
+    /// flag (S-0514 claim 27).
+    double_thick: BTreeSet<usize>,
     /// Counts of the combat events seen.
     pub counts: Counts,
     /// The selection whose status extras are drawn (presentation state).
@@ -699,7 +719,7 @@ impl Live {
     ) -> Self {
         let (world, rules, setup, substituted) = started;
         // spec: S-0103 claim 15 (a house's display RGB, sampled once at colour setup; 8-bit channels)
-        let house_rgb = world
+        let house_rgb: Vec<[u8; 3]> = world
             .houses
             .iter()
             .map(|h| {
@@ -830,6 +850,20 @@ impl Live {
             .and_then(|k| k.value.as_deref())
             .map(|v| glasnost_ini::value::text(v, usize::MAX).to_vec())
             .filter(|n| !n.is_empty() && !glasnost_ini::value::is_no_type(n));
+        let lines = beams::Lines::new(beams::Settings::read(inputs.import, &rules, &house_rgb));
+        // spec: S-0514 Import mapping (DoubleThick, building art: boolean, absent no)
+        let double_thick = (0..inputs
+            .import
+            .outcome
+            .registries
+            .get(&Kind::Buildings)
+            .map_or(0, |r| r.len()))
+            .filter(|&i| {
+                painter
+                    .art_bool(inputs.import, Kind::Buildings, i, b"DoubleThick")
+                    .unwrap_or(false)
+            })
+            .collect();
         let mut live = Self {
             world,
             rules,
@@ -860,8 +894,8 @@ impl Live {
             view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
-            beams: Vec::new(),
-            house_rgb,
+            lines,
+            double_thick,
             counts: Counts::default(),
             marked: Vec::new(),
             hovered: None,
@@ -1291,7 +1325,35 @@ impl Live {
         use glasnost_sim::cloak::view;
         let w = &self.world;
         let v = self.viewer.or_else(|| w.obj(id).and_then(|o| o.owner));
-        cloak_items(view::look(w, id, v), view::shadow(w, id), items);
+        cloak_items(view::look(w, id, v), view::shadow(w, id), self.erased_code(id), items);
+    }
+
+    /// The translucency of an object being erased or phasing in (S-0514
+    /// claim 27): code 2, or 3 for a building whose art has the
+    /// double-thick flag; `None` otherwise.
+    fn erased_code(&self, id: ObjectId) -> Option<glasnost_render::compose::Translucency> {
+        use glasnost_render::compose::Translucency;
+        let w = &self.world;
+        // spec: S-0514 claim 27 (while being erased, the leaving stage included, or phasing in, S-0513 claim 40)
+        if !(glasnost_sim::superweapons::being_erased(w, id)
+            || glasnost_sim::superweapons::warp::phasing(w, id))
+        {
+            return None;
+        }
+        let o = w.obj(id)?;
+        let thick = o.kind == SimKind::Building
+            && self
+                .types
+                .get(&(o.kind, o.type_index))
+                .copied()
+                .flatten()
+                .is_some_and(|idx| self.double_thick.contains(&idx));
+        // spec: S-0514 claim 27 (code 2; code 3 for a building whose art has the double-thick flag)
+        Some(if thick {
+            Translucency::ThreeQuarter
+        } else {
+            Translucency::Half
+        })
     }
 
     /// Shows a move-target marker (S-0214 claim 30): the imported
@@ -1815,69 +1877,12 @@ impl Live {
         self.follow_dominations(now);
         self.follow_drainers();
         self.update_anims(now);
+        let next_anim = self.anim_serial;
+        for e in &effects {
+            // spec: S-0518 claims 6 and 18, S-0615 claims 15 and 16, S-0514 claim 23, S-0607 claim 25 (the line effects of the tick)
+            self.lines.take(&self.world, e, now, next_anim);
+        }
         for e in effects {
-            if let Effect::SupportBeam {
-                from,
-                to,
-                duration,
-                house,
-            } = e
-            {
-                // spec: S-0518 claim 6 (the beam lasts L_s ticks, is 3 pixels thick and has the house's laser colour)
-                const SUPPORT_BEAM_WIDTH: i32 = 3;
-                // The house's laser colour is not defined by any spec (Q-1521 question 1): the
-                // house display RGB of S-0103 claim 15 stands in for it.
-                let colour = self.house_colour(house);
-                self.beams.push(combat::Beam {
-                    a: at(from),
-                    b: at(to),
-                    born: now,
-                    life: duration,
-                    width: SUPPORT_BEAM_WIDTH,
-                    inner: colour,
-                    outer: None,
-                    fade: combat::Fade::None,
-                });
-                continue;
-            }
-            if let Effect::Beam {
-                from,
-                to,
-                duration,
-                fade_out,
-                colours,
-                house,
-            } = e
-            {
-                // spec: S-0615 claims 15 and 16 (inner, outer and spread colours; with the house-colour
-                // flag the inner is the house laser colour and the outer that colour halved, toward zero)
-                let channel = |c: [i32; 3]| c.map(|v| v.clamp(0, 255) as u8); // nocite: 8-bit colour channels
-                let [inner, outer, spread] = colours;
-                let (inner, outer) = match house {
-                    Some(_) => {
-                        let h = self.house_colour(house).map(i32::from);
-                        let [i, o, _] = glasnost_sim::disc::house_colours(h, spread);
-                        (channel(i), channel(o))
-                    }
-                    None => (channel(inner), channel(outer)),
-                };
-                self.beams.push(combat::Beam {
-                    a: at(from),
-                    b: at(to),
-                    born: now,
-                    life: duration,
-                    // Q-1521 question 2: a one-pixel core with a one-pixel edge (our interim rule).
-                    width: 1,
-                    inner,
-                    outer: Some(outer),
-                    fade: if fade_out {
-                        combat::Fade::ToNone
-                    } else {
-                        combat::Fade::ToHalf
-                    },
-                });
-                continue;
-            }
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
@@ -1934,6 +1939,8 @@ impl Live {
                 | Effect::Dropped { .. }
                 | Effect::Disc { .. }
                 | Effect::Beam { .. }
+                | Effect::Line { .. }
+                | Effect::Wave { .. }
                 | Effect::Drain { .. }
                 | Effect::Maker { .. }
                 | Effect::Domination { .. }
@@ -1946,7 +1953,8 @@ impl Live {
             });
         }
         self.transients.retain(|t| t.marker(now).is_some());
-        self.beams.retain(|b| b.shown(now));
+        self.lines
+            .after_tick(&self.world, now, self.world.game_speed);
         self.counts.most_in_flight = self.counts.most_in_flight.max(self.world.projectiles.len());
         self.counts.most_gas = self
             .counts
@@ -2228,15 +2236,18 @@ impl Live {
         gone.extend(self.live_gates.iter().copied());
         // The map's buildings while protected are drawn live too, so that
         // their bodies show the protection appearance (S-0102 claim 34; our
-        // placeholder order, as for the gates).
+        // placeholder order, as for the gates). So are those being erased, so
+        // that their bodies show half see-through (S-0514 claim 27).
         let shown = self.shown_tick();
         let protected_map: BTreeSet<u32> = self
             .building_ids
             .iter()
             .filter(|(_, id)| {
-                self.world
-                    .obj(**id)
-                    .is_some_and(|o| o.on_map && super::protection::Look::of(o, shown).is_some())
+                self.world.obj(**id).is_some_and(|o| {
+                    o.on_map
+                        && (super::protection::Look::of(o, shown).is_some()
+                            || self.erased_code(o.id).is_some())
+                })
             })
             .map(|(code, _)| *code)
             .collect();
@@ -2424,11 +2435,18 @@ impl Live {
         self.counts.anims_drawn = anim_items.len();
         self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
         let particle_items = self.particle_items(inputs, scene);
+        scene.spots.clear();
+        let waves = self.lines.wave_spots(shown, self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
         // top after it; each unsorted)
-        self.draw_layers(scene, &anim_items, &particle_items, &mut by_code, |l| {
-            l < super::slots::Layer::Ground
-        });
+        self.draw_layers(
+            scene,
+            &anim_items,
+            &particle_items,
+            &mut by_code,
+            &[],
+            |l| l < super::slots::Layer::Ground,
+        );
         for e in self.ground.order() {
             match e {
                 Entrant::Anim(serial) => {
@@ -2451,12 +2469,49 @@ impl Live {
                 Entrant::Layered(_) | Entrant::Particle(_) => {}
             }
         }
-        self.draw_layers(scene, &anim_items, &particle_items, &mut by_code, |l| {
-            l > super::slots::Layer::Ground
-        });
+        self.draw_layers(
+            scene,
+            &anim_items,
+            &particle_items,
+            &mut by_code,
+            &waves,
+            |l| l > super::slots::Layer::Ground,
+        );
         self.objects_end = scene.items.len();
         self.draw_effects(scene);
+        self.draw_lines(inputs, scene);
         self.draw_status(inputs, scene);
+    }
+
+    /// The beams and beam flashes of the shown tick (S-0518 claims 19 to
+    /// 23, S-0514 claims 24 to 26), after all layers and the status extras
+    /// (S-0102 claim 2): lasers first, then beam flashes (S-0514 claim 26).
+    fn draw_lines(&mut self, inputs: &Inputs, scene: &mut Scene) {
+        use glasnost_render::light::DetailLevel;
+        use glasnost_render::spots::SpotGroup;
+        // spec: S-0518 Import mapping (the detail level of S-0104: 0, 1 or 2)
+        let detail = match inputs.options.detail {
+            DetailLevel::Low => 0,
+            DetailLevel::Medium => 1,
+            DetailLevel::High => 2,
+        };
+        let now = self.shown_tick();
+        let quirk = self.rules.quirks.ranged_draw_half_span;
+        let cosmetic = &mut self.cosmetic;
+        // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
+        let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
+        let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
+        for spots in [beams, flashes] {
+            if !spots.is_empty() {
+                // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
+                scene.spots.push(SpotGroup {
+                    at: usize::MAX,
+                    group: glasnost_render::scene::Group::Effects,
+                    provisional: false,
+                    spots,
+                });
+            }
+        }
     }
 
     /// The items of every particle with a sprite (S-0613, S-0616; the
@@ -2555,18 +2610,51 @@ impl Live {
     /// layer in drawing order, each in its list's order (S-0102 claims 1,
     /// 3, 4 and 7; S-0616 claim 30): the static entries, the playing
     /// animations (`anims`, by serial number), the particles (`particles`)
-    /// and the mobile objects (`mobiles`, taken out as drawn).
+    /// and the mobile objects (`mobiles`, taken out as drawn); the
+    /// magnetic waves (`waves`, with the next animation serial at their
+    /// creation) in the air layer (S-0607 claim 26).
     fn draw_layers(
         &self,
         scene: &mut Scene,
         anims: &BTreeMap<u32, (super::slots::Layer, Vec<Item>)>,
         particles: &BTreeMap<ObjectId, Vec<Item>>,
         mobiles: &mut BTreeMap<u32, GroundEntry>,
+        waves: &[(u32, Vec<glasnost_render::spots::Spot>)],
         which: impl Fn(super::slots::Layer) -> bool,
     ) {
-        let layers: Vec<super::slots::Layer> = self.layers.upper().filter(|l| which(*l)).collect();
+        use super::slots::Layer;
+        use glasnost_render::spots::SpotGroup;
+        let mut layers: Vec<Layer> = self.layers.upper().filter(|l| which(*l)).collect();
+        // spec: S-0607 claim 26 (a magnetic wave is an object of the air layer)
+        let wave_layer = (!waves.is_empty() && which(Layer::Air)).then_some(Layer::Air);
+        if let Some(l) = wave_layer
+            && !layers.contains(&l)
+        {
+            layers.push(l);
+            layers.sort();
+        }
+        let mut waves = waves.iter().peekable();
+        let wave_group = |scene: &mut Scene, spots: &Vec<glasnost_render::spots::Spot>| {
+            scene.spots.push(SpotGroup {
+                at: scene.items.len(),
+                group: glasnost_render::scene::Group::Effects,
+                provisional: false,
+                spots: spots.clone(),
+            });
+        };
         for layer in layers {
             for e in self.layers.list(layer) {
+                if wave_layer == Some(layer) {
+                    // spec: S-0607 claim 26 (a wave enters the air layer's list at its creation, after the animations made before it)
+                    // Our interim: a wave also precedes every particle of the list (Q-1520's particle order is open).
+                    while let Some((_, spots)) = waves.next_if(|(after, _)| match *e {
+                        Entrant::Anim(serial) => *after <= serial,
+                        Entrant::Particle(_) => true,
+                        _ => false,
+                    }) {
+                        wave_group(scene, spots);
+                    }
+                }
                 match *e {
                     Entrant::Layered(i) => {
                         if let Some((_, g)) = self.static_layered.get(i)
@@ -2593,16 +2681,14 @@ impl Live {
                     Entrant::Static(_) => {}
                 }
             }
+            if wave_layer == Some(layer) {
+                // Our interim: waves made after every animation of the list close it
+                // (S-0607 claim 26 does not place them against particles or objects).
+                for (_, spots) in waves.by_ref() {
+                    wave_group(scene, spots);
+                }
+            }
         }
-    }
-
-    /// The display RGB of house `house` (S-0103 claim 15), white for no
-    /// house (our choice).
-    fn house_colour(&self, house: Option<HouseId>) -> [u8; 3] {
-        house
-            .and_then(|h| self.house_rgb.get(h.0 as usize))
-            .copied()
-            .unwrap_or([255, 255, 255]) // nocite: white, our stand-in for no house
     }
 
     /// Draws the combat placeholders after the object pass: projectiles in
@@ -2729,13 +2815,6 @@ impl Live {
         for t in &self.transients {
             if let Some(m) = t.marker(now) {
                 let item = self.cache.marker_item(scene, m, t.at);
-                scene.items.push(item);
-            }
-        }
-        // spec: S-0102 claim 2 (beam effects after all layers)
-        for b in &self.beams {
-            if b.shown(now) {
-                let item = self.cache.beam_item(scene, b, now);
                 scene.items.push(item);
             }
         }
@@ -3010,6 +3089,7 @@ impl Live {
 pub(super) fn cloak_items(
     look: glasnost_sim::cloak::view::Look,
     shadow: bool,
+    erased: Option<glasnost_render::compose::Translucency>,
     items: &mut Vec<Item>,
 ) {
     use glasnost_render::compose::{Paint, Translucency};
@@ -3030,6 +3110,8 @@ pub(super) fn cloak_items(
     if !shadow {
         items.retain(|i| i.paint != Paint::Shadow);
     }
+    // spec: S-0514 claim 27 (an erased or phasing body's code combines with the cloak's, S-0109 Terms)
+    let blend = combine_codes(blend, erased);
     if let Some(t) = blend {
         for i in items.iter_mut() {
             if let Paint::Lit(s) = i.paint {
