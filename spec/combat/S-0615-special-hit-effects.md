@@ -2,11 +2,11 @@
 id: S-0615
 title: Special-hit effects (death-kind animations, the burning walker and the disc laser)
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-1420, Q-1421, Q-1422, Q-1423, Q-1424, Q-1426, Q-1427]
 supersedes: []
@@ -59,7 +59,7 @@ S-0109 and S-0203. *Disc laser* is as in S-0203 (Terms). *Shot damage D*ₛ is a
 | expiring | The final state of a burning walker, in which it plays its dying frames and is then removed (claim 11). |
 | ring point | One of the 16 points around a disc-laser firer between which the disc laser's arc beams run (claim 17). |
 | arc step *k* | A disc laser's step counter, from 0 to 8 (claim 13). |
-| beam | A drawing-only line of laser light with a duration in ticks, an intensity that fades over that duration and three colours: inner, outer and spread. It has no effect in play. The look of a beam is shared with ordinary laser weapons and is not owned here (Open questions). |
+| beam | A drawing-only line of laser light as in S-0518 claims 17 to 23. This spec supplies its endpoints, duration, colours and intensity parameters; S-0518 owns its lifetime and drawing. |
 
 ## Behaviour
 
@@ -386,11 +386,16 @@ S-0109 and S-0203. *Disc laser* is as in S-0203 (Terms). *Shot damage D*ₛ is a
       - one from ring point *b* = (*i*₀ − *k*) mod 16 to ring point *b* − 1 (mod 16).
 
       So the two arcs start on the far side of the firer and close on the side facing the target.
-    - **Beam settings.** Each beam lasts 8 − *k* ticks and fades from full intensity to half
-      intensity. Its colours are the weapon's inner, outer and spread laser colours.
+    - **Beam settings.** Each beam has duration *D* = 8 − *k* ticks and fade parameters
+      *S* = 1, *E* = 0.5 in S-0518 claim 19 and F6. Its last drawn tick has intensity
+      0.5 + 0.5/*D*, not 0.5. Its colours are the weapon's inner, outer and spread laser colours.
+      Both arc beams and the final beam use ordinary drawing (S-0518 claim 21), with fading on
+      and blinking off, even when the weapon selects house colours. The weapon's house-colour
+      flag changes the supplied colours only, not the drawing style.
     - **House colours.** When the weapon has the house-colour flag, the inner colour is the
-      firer's house laser colour and the outer colour is that colour with each channel halved,
-      toward zero, using integer channel arithmetic. The weapon's spread colour is kept.
+      firer's house laser colour (S-0518 claim 17) and the outer colour is that colour with each
+      channel halved, toward zero, using integer channel arithmetic. The weapon's spread colour
+      is kept.
     - **Ring position.** The ring points are placed around the firer's fire point for weapon slot
       0 (S-0313), taken at the time of the step, at that point's height.
     - **Next step.** *k* then rises by 1 and the next step comes two updates later.
@@ -400,8 +405,11 @@ S-0109 and S-0203. *Disc laser* is as in S-0203 (Terms). *Shot damage D*ₛ is a
 16. **The final step.** At *k* = 8 the two arcs meet: *a* = *b* = *i*₀ + 8 (mod 16), the ring point
     facing the target as of the shot. After a passing re-check, these effects occur in that update:
     - **Beam.** A beam is drawn from ring point *a* to the target's target point (where shots aimed
-      at it detonate). It lasts the weapon's laser-duration field in ticks, fades from full
-      intensity to none, and uses claim 15's colours. For a cell target the point is the cell's
+      at it detonate). Its duration *D* is the weapon's laser-duration field in ticks, with fade
+      parameters *S* = 1 and *E* = 0 (S-0518 claim 19 and F6). For positive *D*, intensity is 1
+      at creation and 1/*D* on the last drawn tick; no zero-intensity tick is drawn. A nonpositive
+      *D* gives no visible beam. It uses claim 15's colours and ordinary drawing. For a cell
+      target the point is the cell's
       centre at the terrain height there, raised by the deck height of 416 leptons (S-0511) when
       the cell carries a bridge deck.
     - **Detonation.** A detonation is made at that same point (S-0303). The amount is
@@ -439,9 +447,10 @@ S-0109 and S-0203. *Disc laser* is as in S-0203 (Terms). *Shot damage D*ₛ is a
     - Backing: `measurable` (DL5)
     - Confidence: high (radius, order); see Edge cases for points 14 and 15
 
-18. **Draws.** A disc laser draws nothing from either random stream itself. Its detonation draws as
-    S-0303 says, and its report variant uses a value stored at the firer's creation (S-0701 claim
-    21).
+18. **Draws.** Creating and updating a disc laser consumes no random draw itself. Drawing its
+    beams can consume unsynchronised spread-colour draws as in S-0518 claim 21, including when
+    the weapon selects house colours. Its detonation draws as S-0303 says, and its report variant
+    uses a value stored at the firer's creation (S-0701 claim 21).
     - Backing: `measurable` (DL1 with the stream recorder)
     - Confidence: high
 
@@ -493,8 +502,9 @@ All divisions, floors and residues here are integer operations.
 
 **F5. Disc-laser schedule** (claim 13). Shot in tick *T*'s turn pass; arc step *k* (0 ≤ *k* ≤ 7) in
 tick *T* + 1 + 2*k*, final step in tick *T* + 17, removal in tick *T* + 18. Arc beams of step *k* last
-8 − *k* ticks. Tick and step arithmetic here is exact integer arithmetic; the drawing
-lifetime boundary is shared with ordinary beams and is not established here.
+8 − *k* ticks. Tick and step arithmetic here is exact integer arithmetic. S-0518 claim 19 owns
+the drawing lifetime boundary, and S-0518 F6 gives the single-precision intensity calculation
+with the parameters of claims 15 and 16.
 
 **F6. Ring point positions** (claim 17). For point *i* (0 to 15), the angle in whole degrees is
 
@@ -529,8 +539,8 @@ at 225° and 247° (Edge cases).
 | Arc steps | 8 | steps | Plus a final step |
 | Updates per arc step | 2 | updates | Claim 13 |
 | Shot to damage | 17 | ticks | F5 |
-| Arc beam intensity | 1.0 to 0.5 | fraction | Claim 15 |
-| Final beam intensity | 1.0 to 0 | fraction | Claim 16 |
+| Arc beam fade parameters | *S* = 1, *E* = 0.5 | fraction | Claim 15; *E* is not drawn |
+| Final beam fade parameters | *S* = 1, *E* = 0 | fraction | Claim 16; *E* is not drawn |
 
 ## State and ordering
 
@@ -737,8 +747,9 @@ building in range. Record the tick of the shot (burst count change), the tick th
 drops, and the tick of the report sound. Expected: health drops in tick *T* + 17, before that
 tick's object turns; report in the same tick; the charge-up sound in *T* + 1. Repeat 10 times.
 Record every arc step: expect *T* + 1, +3, …, +15, then the final step in *T* + 17 and
-removal in *T* + 18. Record both random streams: expect no draws attributable to the disc laser
-itself, apart from ordinary detonation consequences and sound-system draws owned by S-0701.
+removal in *T* + 18. Record both random streams: expect no creation or update draws attributable to the disc laser
+itself. Separate ordinary detonation consequences, sound-system draws owned by S-0701 and
+beam-drawing spread draws owned by S-0518 claim 21.
 Repeat with two shots in the same tick: expect newest disc laser first, as S-0203 claim 1 says.
 A different tick, order or extra producer draw falsifies claims 13 or 18.
 
@@ -790,8 +801,13 @@ and 1.0 to 0 parameters. Named test-map weapon colours distinguish inner, outer 
 then enable house colours: expect house inner, integer-halved outer and unchanged spread.
 Move firer and target while charging: new segments follow the current slot-0 fire point, old
 segments stay put, the closing index stays fixed and the final endpoint follows the target.
-A different endpoint, colour, duration or index falsifies claims 15 or 17, except the two original
-display errors explicitly noted above. Exact beam rasterisation remains outside this spec.
+At detail level 1 or 2, record each beam's drawn-tick intensity: expect S-0518 claim 19 and F6,
+with the arc beam's last intensity 0.5 + 0.5/*D* and the final beam's last intensity 1/*D*.
+Repeat with house colours enabled: expect S-0518 claim 21's ordinary centre and outer lines,
+not claim 22's house-colour drawing, and its conditional unsynchronised spread draws. Compare
+assigned house colours against S-0518 claim 17. A different endpoint, colour, duration, index,
+intensity or drawing style falsifies claims 15 to 17, except the original display errors
+explicitly noted above. Exact beam rasterisation belongs to S-0518 claims 20 to 23.
 
 **DL6. Shot state and defaults (claim 12, Import mapping).** A named test-map vehicle clone has
 a disc weapon, finite ammunition and a multi-shot burst. Record projectile count, ammunition,
@@ -821,9 +837,6 @@ other projectile-only effect falsifies the corresponding part of claim 16.
 
 ## Open questions
 
-- **Beam look.** The rasterisation of a beam (thickness, how inner, outer and spread colours and the
-  intensity combine) is shared with ordinary laser weapons. No approved spec owns it; this spec
-  only gives the parameters.
 - **Water and beach height test.** Claim 9's test of height above the terrain; confirm by FW1 with
   a walker arriving on a deck over water (expected: no expiry from this test).
 - **Unusual walker art.** Full expiry behaviour for nonzero start frames, reversed playback,
