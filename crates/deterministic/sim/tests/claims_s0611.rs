@@ -1141,6 +1141,69 @@ fn claim_14_weapon_controllers_take_nothing() {
     );
 }
 
+// spec: S-0611 claim 14 (revision 4, scenario MU12's controller-only variants: a parasite primary weapon's controller and an airstrike designator take no draw and no number either; each variant alone)
+#[test]
+fn claim_14_parasite_and_designator_take_nothing() {
+    for variant in ["parasite", "designator"] {
+        let mut r = rules(false);
+        r.sim.warheads.insert(
+            "CTRL".into(),
+            WarheadType {
+                verses: Some(vec![d("1"); 11]),
+                parasite: Some(variant == "parasite"),
+                airstrike: Some(variant == "designator"),
+                ..Default::default()
+            },
+        );
+        let mut ray = r.sim.weapons["Rifle"].clone();
+        ray.warhead = Some("CTRL".into());
+        r.sim.weapons.insert("Ray".into(), ray);
+        let brute = r.sim.infantry.get_mut("BRUTE").unwrap();
+        brute.primary = Some("Ray".into());
+        if variant == "designator" {
+            brute.combat.airstrike_team = Some(2);
+            brute.combat.airstrike_team_type = Some("WALKER".into());
+        }
+        let (_, _, _, draws) = refused_then_made(&r, position::RIGHT, 1);
+        assert_eq!(draws, 1, "{variant}: the made unit alone");
+    }
+}
+
+// spec: S-0611 claim 5 (revision 4: height alone is no conversion ban; S-0302 claim 17 resets an airborne mutating hit's amount, but one that does not ignore defences can still kill through the minimum damage, so an ordinary human type in the air with neither the jumpjet type nor a parachute converts; an ignore-defences hit stays at 0 and kills nothing)
+#[test]
+fn claim_5_height_is_no_conversion_ban() {
+    let r = rules(false);
+    let c = at(0, 0);
+    for ignore in [false, true] {
+        let mut w = game(&r);
+        let v = put(&mut w, "WALKER", BETA, c, position::RIGHT);
+        w.obj_mut(v).unwrap().pos.z += 300;
+        w.obj_mut(v).unwrap().health = 1;
+        assert!(w.height_above_surface(v) > 0);
+        let h = warhead(&w, "Mutate");
+        damage::apply(
+            &mut w,
+            v,
+            Hit {
+                amount: 100,
+                warhead: Some(h),
+                distance: 0,
+                attacker: None,
+                house: Some(ALPHA),
+                ignore_defences: ignore,
+                no_escape: false,
+            },
+        );
+        if ignore {
+            assert_eq!(w.obj(v).map(|o| o.health), Some(1), "amount 0: alive");
+            assert!(makers(&w).is_empty());
+        } else {
+            assert!(w.obj(v).is_none(), "killed by the minimum damage");
+            assert_eq!(makers(&w).len(), 1, "and converted in the air");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Claim 13: each victim converts once.
 // ---------------------------------------------------------------------------
