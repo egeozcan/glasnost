@@ -1903,6 +1903,40 @@ Interim rules, each tied to a request:
 | rendering | no berserk tint is drawn (S-0610 claim 7 gives the table entry, not how it combines with the pixels) | Q-1526 |
 | `live::draw_effects` | every non-invisible projectile in flight is drawn as our own 7 × 7 diamond at its projected point with its height (cyan; orange when arcing; magenta when steering), in the game client as in the viewer; no projectile art and no projectile shadow | Q-1570 |
 
+### Item results
+
+What each item's retake from main showed and what was done. Final shots: `local-lane/visual-fix-3/<item>.png`.
+
+| Item | Finding | Fix or answer |
+|---|---|---|
+| m7a/mind-overload "no damage" | the shot was taken two ticks after the take, before the first pulse check (the 31st overload update), and the victim count made one pulse lethal | scene picks the smallest count whose pulse hurts without killing and shoots just after the first hit (S-0601 claim 16); spark particles follow S-0616's drawing |
+| m7a/mind-* "green circles" | our placeholder markers | gone from the game client (debug view only) |
+| m6c/crate-heal "dollar signs", crate-money "no signs" | the money crate's animation was created on the pickup tick and still playing in the next scene's shot | scene waits until no animation plays before each crate; each shot shows its own crate's animation, with a before shot |
+| m6c/crate-reveal "should there be a crate" | no before shot | `crate-reveal-before` added |
+| m6a/ship-sinking, m6b/ship-sinking-anims | the three ships shared one cell and the hit ship was still turning; a sinking ship is drawn *L(z)* lower and is never hidden by the water, its depth being anchored to its ground footprint (S-0102 claim 11) | scene sinks a lone ship at rest and shoots it before, at −100, at −300 and gone (S-0504 claim 4) |
+| m6a/drone-inside-vehicle "random rocket" | a V3 rocket left on the ground by the earlier V3 scene; current main has none there. Projectiles are still our diamond | no change; projectile art is request Q-1570 (interim above) |
+| visual-fix-2/door-closed-unloading | the factory art names no door sprite, so no door image is drawn; the deploying sprite (open doorway) replaces the body for the whole unload whatever the door state (S-0108 claims 22, 23) | already right; `door-after-unload` shows the body back |
+| m6c/attitude/aircraft-on-pad, aircraft-and-pad "no shadow" | the aircraft is landed (on the ground, in contact with its pad); its shadow is drawn, half-scale (S-0105 claim 31) and anchored to the terrain (claim 40), and lies wholly under its body | already right |
+| m6b/v3-rocket-anims "2 rockets" | one rocket in flight 120 px above its launch cell; the launcher shows its alternative body (S-0105 claim 12) | already right |
+| m6b/v3-rocket-impact-anims "no rockets" | the missile is removed after its detonation (S-0506 claim 19); its explosion animation is created at the nose point | rocket: already right; why the explosion picture does not show is with the layer and depth work below |
+| m6c/attitude/v3-rocket-in-flight-2/-3 "fire in the middle of the launcher" | the take-off animations of a set-C missile play at the missile's position during pause and raise (S-0506 claims 7, 21) | already right |
+| m6b/hover-crossing-water "sticks to the ground" | the craft is 95 leptons above the water (14 px), so its body nearly covers its shadow | already right; the scene prints the heights |
+| m6b/cloaked-as-enemy, cloaking-as-enemy "what should I see" | the enemy sees the unit half see-through while it fades and nothing once cloaked (look `Translucent50`, then `Hidden`) | already right |
+| m6b/sw-chronosphere "3 blue dots" | the warp-out animations at the three members' old positions (S-0513 claim 39) | already right |
+| visual-fix/yuri-radar "a barracks" | the Oct 14 file is the Yuri barracks under a wrong label (M6c review item 7) | `GLASNOST_RADAR_TYPE=radar` shoots every radar-flagged building type found in the data |
+| map-DESERT-24 "two Tesla towers" | the lead's files are from Oct 14, before the M6c fix (S-0007 claim 34) | re-shot: one coil |
+| m6c/jumpjet-landed "awkward next to the cliff" | the scene picked a cliff foot | scene requires level open ground |
+| m6c/chrono-erased "defeat screen" | the retake no longer shows it | a second victim vehicle keeps the enemy alive |
+| m6a/v3-rocket-in-flight, -1, -2 | the camera looked at the rocket's ground cell | the camera follows the rocket's lifted point |
+| m6a/v3-rocket-in-flight-3 "no shadow" | the installed rocket type has the no-shadow option (S-0105 claim 31) | already right |
+| m6a/ships-moving, m6b ships "boxes" | `Marker::Anim`, our marker for an animation without art | debug view only |
+| m6c/radiation-* "opaque green ring" | our placeholder ring | the field is a light source (S-0525 claim 13); ring debug only |
+| m6c/deploy-* "colours off" | deploy animations drawn without the owner's palette | owner's palette at brightness 1000 (S-0103 claim 8) |
+| m6c/crate-before "a rectangle" | our crate box | the crate's own overlay (S-0520) |
+| m6c/terror-charge, terror-strike | our placeholders | nothing drawn in the game client (Q-1524) |
+| m6b/paratroopers-* "no shadows" | the body-sprite shadow is not drawn above the surface (S-0107 claim 19); the generic shadow is unspecified | Q-1525 |
+| m7a/berserk-* | no tint spec for how the colour combines | Q-1526 |
+
 ### Particles (Q-1520)
 
 The game view draws every particle of a gas, smoke, fire, spark or railgun system with its type's sprite. It no longer draws the green, white, orange, yellow and cyan placeholder discs.
