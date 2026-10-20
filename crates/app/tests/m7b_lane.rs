@@ -1373,11 +1373,7 @@ impl Lane {
     /// Starts a skirmish on the `map`-th offered map.
     fn start_on(map: usize) -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
-        let out = std::env::var_os("GLASNOST_LANE_OUT")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| {
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/m7b")
-            });
+        let out = png::lane_out("m7b");
         std::fs::create_dir_all(&out).unwrap();
         let mut c = Client::new();
         c.resize((1280, 800));

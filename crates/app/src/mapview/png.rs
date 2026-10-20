@@ -61,3 +61,17 @@ pub fn png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     chunk(b"IEND", &[]);
     out
 }
+
+/// The output folder of a local-lane screenshot run: `GLASNOST_LANE_OUT`
+/// when set (an absolute path as given, a relative one under the
+/// repository's git-ignored `local-lane/`), otherwise `local-lane/<default>`.
+/// Every lane uses this, so that one variable redirects any of them and no
+/// run overwrites another run's pictures by accident.
+pub fn lane_out(default: &str) -> std::path::PathBuf {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane");
+    match std::env::var_os("GLASNOST_LANE_OUT") {
+        Some(p) if std::path::Path::new(&p).is_absolute() => std::path::PathBuf::from(p),
+        Some(p) => root.join(p),
+        None => root.join(default),
+    }
+}

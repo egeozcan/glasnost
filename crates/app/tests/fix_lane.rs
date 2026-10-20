@@ -158,7 +158,7 @@ fn ticks(c: &mut Client, clock: &mut i64, n: usize) {
 fn start(size: (i32, i32)) -> Option<(Client, Shots)> {
     let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
     let out =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane/visual-fix-2");
+        png::lane_out("visual-fix-2");
     std::fs::create_dir_all(&out).unwrap();
     let mut c = Client::new();
     c.resize(size);

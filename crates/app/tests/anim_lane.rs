@@ -88,9 +88,7 @@ impl Lane {
     /// Starts a skirmish from the menu.
     fn start() -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
-        let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../local-lane")
-            .join(std::env::var("GLASNOST_LANE_OUT").unwrap_or_else(|_| "m6b".into()));
+        let out = png::lane_out("m6b");
         std::fs::create_dir_all(&out).unwrap();
         let mut c = Client::new();
         c.resize((1280, 800));
