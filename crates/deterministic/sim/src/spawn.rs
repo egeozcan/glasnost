@@ -195,6 +195,9 @@ pub struct MissileRules {
     pub spawners: BTreeMap<(Kind, u32), SpawnRules>,
     /// Parameter sets A, B and C.
     pub sets: [RocketSet; 3], // spec: S-0506 Terms (three parameter sets)
+    /// The importer's warnings about cycles of spawned and slave types
+    /// (S-0611 F5).
+    pub warnings: Vec<String>,
 }
 
 impl MissileRules {
@@ -321,7 +324,11 @@ impl MissileRules {
                 elite_warhead: warhead(&g.c_misl_elite_warhead),
             },
         ];
-        Self { spawners, sets }
+        Self {
+            spawners,
+            sets,
+            warnings: Vec::new(),
+        }
     }
 
     /// The parameter set of a rocket type, if it is one of the three
@@ -478,8 +485,9 @@ pub fn kamikaze(w: &World, id: ObjectId) -> bool {
 /// Gives a newly created object its spawn controller (S-0506 claim 1):
 /// N slots, each with a new docked slot object of the spawned type, owned
 /// by the spawner's house and off the map; the first pass 20 ticks later
-/// (claim 2).
-pub fn created(w: &mut World, id: ObjectId) {
+/// (claim 2). `chain` holds the creations in progress, the new spawner's
+/// own type last (S-0611 claim 14 and F5).
+pub(crate) fn created_in(w: &mut World, id: ObjectId, chain: &mut crate::objects::Chain) {
     let Some(r) = spawn_rules(w, id) else { return };
     let t = w.tick;
     let mut c = SpawnController {
@@ -494,7 +502,8 @@ pub fn created(w: &mut World, id: ObjectId) {
     let owner = w.obj(id).and_then(|o| o.owner);
     for i in 0..c.slots.len() {
         // spec: S-0506 claim 1 (each slot at once receives a new docked slot object; no regeneration time on the first fill)
-        let x = new_slot_object(w, id, r.spawned, owner);
+        // spec: S-0506 claim 1 and S-0611 F5 (in increasing slot index, each slot object's own creation set before the next slot object)
+        let x = new_slot_object(w, id, r.spawned, owner, chain);
         c.slots[i] = Slot {
             state: SlotState::Docked,
             object: Some(x),
@@ -515,8 +524,9 @@ fn new_slot_object(
     spawner: ObjectId,
     spawned: u32,
     owner: Option<HouseId>,
+    chain: &mut crate::objects::Chain,
 ) -> ObjectId {
-    let x = crate::objects::create(w, Kind::Aircraft, spawned, owner);
+    let x = crate::objects::create_in(w, Kind::Aircraft, spawned, owner, chain);
     w.spawned.launcher.insert(x, spawner);
     x
 }
@@ -903,7 +913,8 @@ fn slot_step(w: &mut World, spawner: ObjectId, i: usize) {
             if t >= slot.until {
                 // spec: S-0506 claim 9 (regeneration over: a new object for the spawner's current house, off the map, docked)
                 let owner = w.obj(spawner).and_then(|o| o.owner);
-                let x = new_slot_object(w, spawner, r.spawned, owner);
+                // A fresh creation, outside any other creation in progress (an empty chain).
+                let x = new_slot_object(w, spawner, r.spawned, owner, &mut Vec::new());
                 if let Some(c) = controller_mut(w, spawner) {
                     c.slots[i] = Slot {
                         state: SlotState::Docked,

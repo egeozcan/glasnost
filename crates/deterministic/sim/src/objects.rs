@@ -47,18 +47,108 @@ pub fn occ_quirks(w: &World) -> OccupancyQuirks {
     }
 }
 
-/// Creates an object (not yet on the map). Every creation of an infantry,
-/// vehicle, aircraft or building object takes one raw value from the
-/// scenario random stream (S-0202 claim 10). A type that names a slave
-/// type creates its slave group as part of the creation (S-0402 claim
-/// 19).
+/// Creates an object (not yet on the map) with its creation set (S-0611
+/// claim 14 and F5). Every creation of an infantry, vehicle, aircraft or
+/// building object takes one raw value from the scenario random stream
+/// (S-0202 claim 10), then its creation number. A spawner's initial slot
+/// objects (S-0506 claim 1) and then a slave type's initial slaves
+/// (S-0402 claim 19) are created as part of the creation, each with its
+/// own creation set before the next.
 pub fn create(w: &mut World, kind: Kind, type_index: u32, owner: Option<HouseId>) -> ObjectId {
+    create_in(w, kind, type_index, owner, &mut Vec::new())
+}
+
+/// The types whose creation is in progress in one creation set, outermost
+/// first (S-0611 F5's chain of spawned and slave types).
+pub(crate) type Chain = Vec<(Kind, u32)>;
+
+/// [`create`] inside a creation set whose enclosing creations are `chain`.
+pub(crate) fn create_in(
+    w: &mut World,
+    kind: Kind,
+    type_index: u32,
+    owner: Option<HouseId>,
+    chain: &mut Chain,
+) -> ObjectId {
     let id = create_converted(w, kind, type_index, owner);
-    // spec: S-0402 claim 19 (the group is created as part of the object's own creation, after the object's own creation draw)
-    crate::econ::slaves::created(w, id);
-    // spec: S-0506 claim 1 (a spawner gets its spawn controller and its full slots when it is created)
-    crate::spawn::created(w, id);
+    fill(w, id, chain);
     id
+}
+
+/// The initial fill of a new object `id` (S-0611 claim 14 and F5): its
+/// slot objects in slot order, then its slaves in place order, each with
+/// its own creation set before the next.
+pub(crate) fn fill(w: &mut World, id: ObjectId, chain: &mut Chain) {
+    let Some(t) = w.obj(id).map(|o| (o.kind, o.type_index)) else {
+        return;
+    };
+    if chain.contains(&t) {
+        // spec: S-0611 F5 (a chain of spawned and slave types leading back to a type already in it: the type that closes the cycle gets no initial fill when it is created inside that chain; the importer warns)
+        // Q-1530 interim: it gets no spawn controller and no slave group either, so nothing refills it later.
+        return;
+    }
+    chain.push(t);
+    // spec: S-0611 claim 14 and F5, S-0506 claim 1 (a spawner gets its spawn controller and its full slots when it is created; the slot objects' draws and numbers come after the spawner's own, in increasing slot index)
+    crate::spawn::created_in(w, id, chain);
+    // spec: S-0611 claim 14 and F5, S-0402 claim 19 (the group is created as part of the object's own creation; its slaves' draws and numbers follow the master's and those of all initial slot objects and their descendants, in place order)
+    crate::econ::slaves::created_in(w, id, chain);
+    chain.pop();
+}
+
+/// The warnings of S-0611 F5: each spawned or slave type that closes a
+/// cycle of spawned and slave types. The importer reports them with the
+/// missile rules.
+pub(crate) fn creation_cycles(
+    missiles: &crate::spawn::MissileRules,
+    harvest: &crate::econ::harvest::Rules,
+) -> Vec<String> {
+    let children = |t: (Kind, u32)| -> Vec<(Kind, u32)> {
+        let mut v = Vec::new();
+        // spec: S-0611 F5 (S(o): the slot objects of a type naming a spawned type with N ≥ 1)
+        if let Some(s) = missiles.spawners.get(&t) {
+            v.push((Kind::Aircraft, s.spawned));
+        }
+        // spec: S-0611 F5 (V(o): the slaves of a type naming a slave type with M ≥ 1)
+        if let Some(g) = harvest.group_of(t.0, t.1)
+            && g.count >= 1
+        {
+            v.push((Kind::Infantry, g.slave));
+        }
+        v
+    };
+    let mut roots: Vec<(Kind, u32)> = missiles.spawners.keys().copied().collect();
+    roots.extend(harvest.masters());
+    roots.sort();
+    roots.dedup();
+    let mut warned = std::collections::BTreeSet::new();
+    for root in roots {
+        let mut path = vec![root];
+        // Each frame holds the children of a path entry still to visit, last first.
+        let rev = |mut v: Vec<(Kind, u32)>| {
+            v.reverse();
+            v
+        };
+        let mut stack = vec![rev(children(root))];
+        while let Some(kids) = stack.last_mut() {
+            let Some(k) = kids.pop() else {
+                stack.pop();
+                path.pop();
+                continue;
+            };
+            if path.contains(&k) {
+                warned.insert(k);
+                continue;
+            }
+            path.push(k);
+            stack.push(rev(children(k)));
+        }
+    }
+    warned
+        .into_iter()
+        .map(|(kind, i)| {
+            format!("S-0611 F5: the {kind:?} type at index {i} closes a cycle of spawned and slave types; inside that chain it is created with no initial fill")
+        })
+        .collect()
 }
 
 /// [`create`] for the object a conversion makes (S-0415 claims 6 and 10):
