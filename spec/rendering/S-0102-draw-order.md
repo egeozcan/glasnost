@@ -2,13 +2,13 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 23
+revision: 24
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
 measurements: []
-requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742]
+requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742, Q-1560]
 supersedes: []
 ---
 
@@ -149,7 +149,7 @@ screen rows.
      - walking, driving, hovering, ship and teleport movement: D2, D3, D14, D19 (d).
      - flying movement, in the air and on the ground: D2, D5, D12, D14.
      - jumpjet movement, all three rows, and the jumpjet cruise height with its minimum and default:
-       D2, D12, D18; the exact two-height predicate also uses D12 (b).
+       D2, D12, D18; the exact two-height predicate, including the bridge rule, also uses D12 (b).
      - rocket movement: D19 (a).
      - buildings on the ground: D4.
      - projectiles: D2 (b).
@@ -169,10 +169,9 @@ screen rows.
        from their layer list (claim 16), so their place in the ground list has no visible effect.
      - buildings, terrain objects and other objects in the air, the global cruise height and its
        400-lepton default: no reproducible setup lifts such an object off the ground.
-     - the bridge rule for units with jumpjet movement (*State and ordering*): the moments at which
-       such a unit's layer is
-       evaluated in flight are not settled (Open questions), so no setup can make the rule show at a
-       known moment.
+     - the independently falling branch of the jumpjet bridge rule: no reproducible sequence
+       combines that state with a placement at the discriminating bridge height; D12 (b)
+       tests this branch only as an engine definition, as in S-0502 claim 4.
      - particle systems: a system's only own drawing is its spotlight (S-0616 claim 31); its place
        in the ground layer is not measured.
      - the veinhole monster: no reproducible setup distinguishes this object from an ordinary
@@ -182,26 +181,76 @@ screen rows.
      stay in the ground list, see Open questions); the jumpjet cruise
      height minimum and the cruise height being also the hover height (medium). The exact
      jumpjet two-height predicate and the distinction between falling and crashing are high
-     confidence; the original's in-flight re-evaluation moments remain unresolved; the veinhole monster (medium: it is in no layer, and no drawing of it in
+     confidence; the veinhole monster (medium: it is in no layer, and no drawing of it in
      a drawn frame was found); building light effects (medium)
-4. **When an object changes layer.** An object's layer is evaluated, and the object put into that
-   layer's list, when it is placed on the map, when an animation is attached to an owner object, and
-   at take-off and landing of flying, jumpjet and rocket movement (and possibly at further steps of
-   flight, see Open questions). Its layer is the one the table gives for its state and height at that
-   moment. Between those moments the
-   object stays in the list it was put into, even if its height has crossed a cruise height since.
-   Every evaluation places the object anew in the list of the layer it evaluates to, even when that
-   is the layer it was already in. In the underground, surface, air and top layers it becomes the
-   last object of the list, so it is drawn over every other object of that layer wherever both pass
-   the depth test; in the ground layer it is placed as in claim 6. So an evaluation that keeps an
-   aircraft in the top layer still brings it in front of every other object of the top layer. While an object is falling (dropped or parachuted), its layer
-   is re-evaluated every tick and changed as soon as it differs.
-   - Backing: `measurable` (scenarios D5, D12, D14) for placement, attachment, take-off and landing,
-     `unmeasured` for the falling rule: vehicles and infantry take their layer from their
-     movement type alone, so falling never changes their layer, and no reproducible setup drops an
-     object whose layer follows its height
-   - Confidence: medium for placement, attachment and the falling rule; low for exactly which steps
-     of flying and jumpjet movement re-evaluate the layer
+4. **When an object changes layer.** An object's layer is evaluated from the table under *State
+   and ordering*, for its state and height at that moment, only at the moments below. Between them
+   the object stays in the list it was last put into, even if its height has crossed a threshold
+   since. Some moments *re-file* the object: it is taken out of its list and put into the list of
+   the layer it evaluates to, even when that is the layer it was already in. In the underground,
+   surface, air and top layers a re-filed object becomes the last object of the list, so it is
+   drawn over every other object of that layer wherever both pass the depth test; in the ground
+   layer it is placed as in claim 6. Other moments only *check*: the object is re-filed only when
+   the evaluated layer differs.
+   - **Placement and attachment** (re-file): when the object is placed on the map, and when an
+     animation is attached to an owner object.
+   - **Falling** (check): while an object is falling (dropped or parachuted), every tick, comparing
+     its layer before and after that tick's fall. An object that is dropped so as to explode when
+     it reaches the ground is also re-filed once at the moment its fall starts.
+   - **Units with jumpjet movement** (check): every tick in which the unit's movement is processed (S-0502),
+     the layer is evaluated just before and just after that tick's movement step and the unit is
+     re-filed only when the two differ. On flat terrain without a bridge, its layer therefore
+     changes in the same tick as any of these: on the climb, when its height above the surface first reaches 208 leptons (ground to air,
+     or to top when its cruise height is 208 leptons) and when its bridge-adjusted height first
+     reaches its cruise height (air to top); in hovering or cruising, each time its
+     bridge-adjusted height drops below its cruise height and each time it is back at or above
+     it, as with the hover wobble or the lowered target heights of the final approach (S-0502).
+     On the descent it changes when it drops below its cruise height (top to air) and when its
+     height above the surface drops below 208 leptons (to ground), which is before touchdown. Lift-off
+     and touchdown themselves change nothing: the unit is in the ground layer on both sides of
+     them. A hovering unit whose height stays on one side of its cruise height is not re-filed,
+     so it keeps its place in its list. The "before" layer is the one evaluated at the start of
+     the movement step, not the list the unit is in: a change of its evaluated layer between two
+     movement steps that does not come from the step itself (for example a high bridge
+     destroyed under it) does not by itself trigger a re-file. If the next step leaves its
+     evaluated layer unchanged, it keeps the old list until a later step changes that evaluation.
+   - **Crash of a unit with jumpjet movement** (re-file): every tick of a crash fall in which the unit's new position is
+     legal (S-0502 claim 4). Its layer changes as its height falls, and it also becomes the last
+     object of its list each such tick.
+   - **Aircraft and flying movement** (re-file), while the object has strength left, except for
+     an aircraft whose type cannot land (S-0501): at its first movement update after a take-off starts, after that
+     update's climb, so at a height above 0 and into the top layer; and at every movement update
+     of a landing, from the update in which the landing starts, at cruise height, to the one in
+     which it ends. The update that ends a landing evaluates at its landing height (S-0501),
+     which gives the ground layer at 0 leptons. A refused landing cell (S-0501 claim 7) raises the
+     aircraft and starts a take-off in that same update, so it is re-filed into the top layer.
+     Its layer value changes only at the 0-lepton boundary of S-0501 claim 7, but each re-file
+     brings it in front of every other object of the top layer, so a landing aircraft is drawn
+     over the top-layer objects that are not themselves re-filed, throughout its descent. Cruising flight that neither
+     starts a take-off nor lands re-files nothing. A type that cannot land is never re-filed by
+     take-off or landing, so it keeps the layer of its placement until a crash.
+   - **Aircraft crash** (re-file): every tick of an aircraft's crash fall in which its new
+     position is legal.
+   - **Rocket movement** (re-file), only for a missile of set C, the one that raises before its
+     ascent (S-0506): at its first pause update and at its first ascent update (the tick after its
+     raise ends). Missiles of the other sets are not re-filed after placement. The layer of rocket
+     movement is always air, so these re-files only make the missile the last object of the air
+     layer.
+   No other step of flying, jumpjet or rocket movement evaluates the layer.
+   - Backing: `measurable` (scenarios D5, D12, D14 and D47) for placement, attachment, the jumpjet
+     climb, hover and descent changes and the ordinary landable-aircraft take-off and landing
+     re-files. The non-landable exception is `unmeasured`: none of these scenarios places a
+     non-landable type on the ground and establishes its later overlap priority.
+     `unmeasured` for the falling rule (vehicles and infantry take their layer from their
+     movement type alone, so falling never changes their layer, and no reproducible setup drops
+     an object whose layer follows its height), for the start-of-step comparison (no reproducible
+     setup changes a jumpjet's evaluated layer between movement steps at a known tick) and for
+     the crash, dropped-explosive and rocket re-files (a crash fall, a dropped explosive or a
+     rocket ascent overlapping a second object of the same layer at a known tick has no
+     reproducible setup)
+   - Confidence: high for the list of moments and which of them re-file or check; medium for the
+     falling rule and for the hover flips, which depend on S-0502's wobble keeping the height
+     within one tick of its target
 
 ### Order inside a layer
 
@@ -233,11 +282,11 @@ screen rows.
 7. **Other layers are never sorted.** Objects entering the underground, surface, air or top layer
    are appended at the end of the list and never sorted. Among aircraft, for instance, the one that
    most recently entered or re-entered the layer is drawn over the others regardless of screen
-   position. Take-off is one such event, not necessarily the last one during flight (claim 4).
-   - Backing: `unmeasured` for absence of sorting in every non-ground layer: D5 is exploratory
-     for air/top order, but flight re-entry events are unresolved (claim 4), so an order change
-     cannot yet be distinguished from re-entry. No scenario here isolates underground or surface
-     insertion order either.
+   position. The first movement update after a take-off starts and every movement update of a
+   landing are such events; cruising
+   flight is not (claim 4).
+   - Backing: `measurable` (D5, D47, D12 (c)) for the top layer; `unmeasured` for the underground,
+     surface and air layers, whose insertion order no scenario here isolates
    - Confidence: high
 
 ### Depth compositing
@@ -1483,8 +1532,17 @@ companions use plain upright depth, while a valid empty rectangle retains empty 
   insertion order (claim 7). Alternative: sort them like the ground layer. With the quirk on,
   overlapping aircraft are ordered by their latest layer entry or re-entry, not by screen position.
 - **`quirks.layer_change_on_events_only`** (default: on). Layer membership is updated only at the
-  moments of claim 4. Alternative: re-evaluate every tick. Affects, for example, objects whose
-  height crosses the cruise height without one of those moments.
+  moments of claim 4, and the per-tick checks of jumpjet movement and falling compare the layer
+  evaluated before and after the object's own step, not the list the object is in. So an object
+  whose evaluated layer changes without one of those moments keeps its list: an aircraft whose
+  type cannot land and that was placed on the ground stays in the ground layer while it flies,
+  and a jumpjet whose evaluated layer changes between two of its movement steps (for example a
+  high bridge destroyed under it) keeps its list until a later step changes it again.
+  Alternative: every tick, every object in a layer list is evaluated and moved to the layer it
+  evaluates to when that differs from the list it is in; an object whose layer is unchanged is
+  not moved by this check. The re-files of claim 4 that keep the layer (placement, attachment,
+  crash ticks, the start of a dropped explosive's fall, aircraft take-off and landing, set C
+  rocket pause and ascent) happen in both states.
 - **`quirks.cliff_fudge_far_cliff_weaker`** (default: on). A high cell two steps in front gives the
   cliff fudge factor 1 and overrides a high cell one step in front, which alone gives factor 2.
   Alternative: factor 2 whenever either cell qualifies.
@@ -1635,9 +1693,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   vehicle's health bar. Observable: in the drawn frames where they overlap, whether the health bar or
   the aircraft is visible in the shared pixels. Expected: the health bar is drawn over the aircraft.
   Falsified if the aircraft covers any part of the health bar.
-- **D2, layer membership (claim 3).** Setup: a flat map. (a) A jumpjet infantry hovering below
-  its cruise height (climbing, or a type whose cruise height is set high through the override
-  section) over a vehicle on the ground, and an aircraft flying across both. (b) A projectile whose
+- **D2, layer membership (claim 3).** Setup: a flat map. (a) A jumpjet infantry climbing at
+  a recorded height of at least 208 leptons and below its cruise height (use the height
+  observations of D12 (a)) over a vehicle on the ground, and an aircraft flying across both. (b) A projectile whose
   image is marked flat, and one whose image is not, each passing over a vehicle on the ground (use a named art fixture setting the flat-image flag for the first and clearing it for the second). Observable: which image is
   visible where they overlap. Expected: (a) the aircraft (top) covers the jumpjet and the vehicle.
   The jumpjet (air) covers the vehicle wherever they overlap, whatever their screen positions.
@@ -1698,14 +1756,14 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   tick's key falls in that range. Falsified if the switch happens at the key of (a), + 32. A run in
   which the building is drawn opening or closing as a gate (claim 13) is void; if every run opens
   it, (b) is not measurable.
-- **D5, air/top insertion order (claim 7).** Setup: two aircraft of the same type take off one
-  after the other and fly crossing paths. Observable: which aircraft is on top where they overlap, and
-  which is lower on screen. Expected between layer re-entries: the aircraft that entered
-  later stays on top, even when the screen-position order reverses. An order reversal without
-  re-entry would falsify claim 7. However, flight re-entry events remain unresolved (claim 4),
-  so an order change during straight flight is inconclusive, not itself a falsifier: record it
-  to help settle that question. Take-off order alone does not predict all later overlaps.
-  This is an exploratory scenario until those events can be identified independently.
+- **D5, air/top insertion order (claims 4, 7).** Setup: two aircraft of the same type take off one
+  after the other and fly crossing paths without landing. Use a landable type, so each take-off
+  re-files it under claim 4. Observable: which aircraft is on top where
+  they overlap, and which is lower on screen. Expected: the aircraft that took off later stays on
+  top at every crossing, even when the screen-position order reverses, because cruising flight
+  re-files neither (claim 4). Falsified if the earlier take-off covers the later one at a
+  qualifying crossing, or if the order changes between two crossings while neither
+  aircraft takes off, lands or crashes.
 - **D6, tile depth (claims 9, 10).** Setup: a test map with a cliff more than 4 levels high
   facing the camera. (a) A vehicle driving along the low ground behind (map north-west of, up the screen from) the high ground's
   cliff top. (b) A vehicle driving along the cliff top. Observable: which of the vehicle's pixels are
@@ -1760,23 +1818,42 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   other overlay type comes about (3/4) × 15 ≈ 11 rows farther toward the viewer than for the wall,
   because its bias is 15 depth units nearer. Falsified if the two switch distances differ by less
   than 8 or more than 15 rows.
-- **D12, jumpjet threshold (claims 3, 4).** Setup: a flat map; a ground vehicle standing still,
-  a jumpjet infantry that lifts off from a cell next to the vehicle, climbs to its cruise height and
-  then hovers there with its image overlapping the vehicle's; an aircraft flying across both; and a
-  second jumpjet, of a type whose cruise height is set high through the override section, still
-  climbing (air layer) where its image overlaps the first jumpjet's. Observable: per drawn frame,
-  which image is on top where they overlap, and whether the first jumpjet is climbing or hovering.
-  Expected: at an evaluation during climbing with height at least 208 leptons and below cruise
-  height, the first jumpjet evaluates to the air layer: it covers the ground vehicle and is covered
-  by the aircraft. Hovering at cruise height it is in the top layer, ordered against the
-  aircraft by insertion order (claim 7), and drawn over the climbing second jumpjet. Falsified if
-  the climbing jumpjet is drawn over the flying aircraft, or if the hovering jumpjet is covered by
-  the climbing second jumpjet. If instead the first jumpjet stays under the ground vehicle throughout
-  its climb, its layer is evaluated only at lift-off, at height 0, where it evaluates to ground. That
-  answers the open question on layer re-evaluation in flight, and claims 3 and 4 then get a new
-  revision.
-  **(b) Exact height predicate.** Use the ascent, descent and crash recorder of
-  S-0502 claim 4's J3 scenario on flat land and over a high bridge, with no engine add-on and no mods (the named test files of a scenario excepted)
+- **D12, jumpjet layer changes in flight (claims 3, 4; Q-1560).** (a) Setup: a flat map at game
+  speed index 2; a ground vehicle standing still; a jumpjet infantry of a test type whose wobble
+  is switched off through the override section, whose cruise height is greater than 208 leptons,
+  which lifts off from a cell next to the vehicle,
+  climbs to its cruise height and hovers there with its image overlapping the vehicle's; an
+  aircraft flying across both; and a second jumpjet, of a type whose cruise height is set high
+  through the override section, still climbing where its image overlaps the first jumpjet's.
+  Record each jumpjet's height above the surface in leptons and match each observation to
+  the tick-labelled drawn frame, without changing the running game's state.
+  Choose the vehicle's position so that its sort key is greater than the first jumpjet's
+  throughout each ground-layer overlap; otherwise ground-layer coverage is inconclusive.
+  Observable: per tick, which image is on top where they overlap, against the recorded heights.
+  Expected: the first jumpjet is covered by the vehicle (ground) until the tick its recorded height
+  first reaches 208 leptons; from that tick it covers the vehicle and is covered by the aircraft
+  (air); from the tick its height first reaches its cruise height it is drawn over the climbing
+  second jumpjet (top), and it covers or is covered by the aircraft according to which of the two
+  entered the top layer last (claim 7). Order the move so that the first jumpjet starts its
+  descent while overlapping the vehicle and the aircraft's path again: it is covered by the
+  aircraft again from the tick it drops below its cruise height (air), and by the vehicle from the
+  tick its height drops below 208 leptons (ground), before touchdown. Falsified if any of these changes happens at a tick other than the
+  one whose recorded height crosses the threshold, if the climbing jumpjet is drawn over the
+  flying aircraft, or if it stays under the vehicle throughout its climb (layer chosen only at
+  lift-off).
+  **(c) Wobble.** Repeat (a) with a type whose wobble is on and whose cruise height minus its
+  wobble deviation is at least 208 leptons, hovering where its image overlaps a second jumpjet,
+  of a type with wobble off, that hovers at its own cruise height (top layer). Retain a move
+  order on the wobbling jumpjet throughout the observation: an idle hover with no move order
+  does not advance its height or wobble (S-0502 claim 3). Observe at least two complete
+  crossings below and back above its cruise height. Expected: the first jumpjet is
+  drawn under the second while its recorded height is below its cruise height and over it from
+  the first tick it is back at or above it, because each return re-files it as the last object
+  of the top layer. With wobble disabled on both jumpjets in a separate control, neither
+  changes its layer or overlap priority while hovering.
+  Falsified if the order does not follow the recorded height's crossings of the cruise height.
+  **(b) Exact height predicate.** Observe ascent, descent and crash placements under
+  S-0502 claim 4 on flat land and over a high bridge, with no engine add-on and no mods (the named test files of a scenario excepted)
   at game speed index 2. Record surface height, on-deck state, bridge/parachute falling state
   separately from crash state, and the evaluated layer at each actual placement. Expect ground
   exactly when *r* < 208 leptons or *r*′ = 0 leptons. A positive low flat-land height evaluating
@@ -1786,7 +1863,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   416, 417 and 516 leptons, on-deck state unset, at cruise heights 208 and 500 leptons. Expected
   ground results are respectively yes/no/no and yes/yes/no/no, independent of cruise height.
   Repeat 416 over the bridge with crashing alone (ground) and independently falling (non-ground).
-  Fixture results test the specified predicate, not the unresolved original re-evaluation moments.
+  Fixture results test the predicate; the moments it is applied at are those of claim 4.
+  The independently falling branch remains `unmeasured` in the original: no reproducible
+  sequence establishes a placement in that state at the discriminating bridge height.
 - **D13, effects and status extras (claim 2).** Setup: a flat map; a selected, damaged vehicle
   standing still (the *target vehicle*) and an aircraft that repeatedly flies across it. Each part
   adds one effect so that it overlaps both the target vehicle's health bar and the aircraft's path.
@@ -1832,7 +1911,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   vehicle. Falsified if the aircraft is drawn under the vehicle while clearly in the air, or on top of
   it after landing has finished. (c) Attachment: an animation attached to a ground vehicle (for
   example damage smoke or fire), of a type whose own layer in the art data is air or absent, and a
-  jumpjet hovering below its cruise height over the vehicle. Expected: the attached animation (ground
+  jumpjet climbing over the vehicle, observed in the ticks when its recorded height is at least
+  208 leptons and below its cruise height (D12 (a)). Expected: the attached animation (ground
   layer) is covered by the jumpjet (air layer) where they overlap. Falsified if the attached
   animation is drawn over the jumpjet.
 - **D15, depth biases by comparison (claims 10, 12, 13, 27).** Setup: a flat map at level 0; an
@@ -2491,7 +2571,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   the executable and restoring all named test data afterwards. Start a fresh session
   for each variant so no earlier loaded image can survive. Record whether loading
   reaches the battlefield; if it does, capture one front/behind probe crossing,
-  body pixels and the separate building parts. One run per variant plus a restored
+  body pixels and the separate building parts. One run per variant plus a
   restored-file control. The control must reach play and draw the building normally.
   - Remove the shared file from every loose and archive location the original searches,
     using named test copies of the containing archives with just that member removed.
@@ -2622,7 +2702,37 @@ under the later vehicle and the status extras, independently of scene depth. Con
 order or depth-dependent disappearance falsifies the corresponding rule. This reuses F20's
 visible-order test; it does not measure absence of a depth write.
 
+**D47 — Landing aircraft re-filed every tick (claim 4; Q-1560).** A flat map at speed index 2,
+the common measurement setup, two aircraft of the same type, A and B, a type that can land
+anywhere and is not bound to a landing pad (S-0501), and a free landing spot for each. Take off A, then B, so that B is the later top-layer entry. Order both to
+fly across the same point and then to land, timed so that A is still descending through B's path
+while B cruises over it. Capture tick-labelled drawn frames and each aircraft's
+height. Expect A drawn over B wherever they overlap from A's landing start until A touches down,
+although B entered the top layer later; and B drawn over A while A merely cruises before its
+landing starts. Then let B land while A, having taken off again, cruises over it: B is over A
+during B's descent. Falsified if a landing aircraft is covered by a cruising top-layer object
+that entered the layer before its landing began, or if the order changes during cruising alone.
+At touchdown (height 0) the landed aircraft goes under both the cruising aircraft and any ground
+vehicle later in the ground list, as in D14.
+
+To distinguish repeated re-filing from a single re-file at landing start, repeat with A
+already descending before B starts its take-off. Use a named rules fixture reducing descent
+speed if needed to preserve a long positive-height overlap. Record B's first positive-height
+movement update as tick *t*. B then cruises without another take-off, landing or crash.
+Expected: at qualifying overlaps from tick *t* + 1 until A's touchdown, A covers B again,
+because A has had a subsequent landing update; B's take-off cannot leave it permanently
+above A. B may cover A on tick *t* itself, depending on their update order, so that tick
+is not a falsifier. B covering A at a qualifying overlap on any later descending tick
+falsifies repeated re-filing. Repeat with the roles exchanged, one run per variant; absence
+of positive-height overlap after tick *t* makes that run inconclusive, not confirmation.
+
 ## Open questions
+
+Q-1560 is fully answered by claim 4 and scenarios D5, D12 and D47. Before this revision
+claim 4 left the in-flight moments open. A jumpjet's layer is checked around every movement
+step (questions 1 and 3); an aircraft's layer value changes only at height 0, but it is re-filed
+at its first movement update after take-off starts and at every movement update of a landing
+(question 2). No part remains open.
 
 Q-0742 question 4's explicitly listed variants are covered by claim 34 and F9 here with
 S-0513 claims 29 and 29b; this is not a complete answer for every drawing variant.
@@ -2710,11 +2820,6 @@ the current owning specs; no requested part owned here remains open.
   it. Whether it is visible at all in the original, and through which other drawing, is not
   settled; no reproducible setup distinguishes it from an ordinary terrain object. Backing:
   `unmeasured`; confidence: medium.
-- **Layer re-evaluation in flight:** with jumpjet and flying movement, an object's layer is
-  re-evaluated and the object put back into a layer list (claim 4) at take-off and landing and
-  at least once during flight; whether this happens at every move in flight (which would move it to
-  the end of its list each time) is not settled. D5 and D12
-  answer it. Low confidence.
 - **Cell pass:** the cell pass has two further parts that have not been identified, one ranked
   before the terrain tiles and one between the terrain objects and the building bodies (claim 16). The order among terrain tiles
   themselves (which matters only where two tile pixels tie) is not known.

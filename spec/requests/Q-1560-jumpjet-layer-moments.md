@@ -1,9 +1,9 @@
 ---
 id: Q-1560
 title: At which moments of a jumpjet's flight is its render layer chosen again
-status: open
+status: answered
 related: [S-0102, S-0502]
-answered-by: []
+answered-by: [S-0102]
 ---
 
 ## Need
