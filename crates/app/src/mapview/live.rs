@@ -1743,6 +1743,8 @@ impl Live {
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)
             above: w.height_above_surface(id),
+            // spec: S-0513 claim 29 (the envelope's phase as the last tick's turns left it; F7 in that tick)
+            protection: super::protection::Look::of(o, self.shown_tick()),
         })
     }
 
@@ -1784,6 +1786,21 @@ impl Live {
             .map(|(i, _)| *i)
             .collect();
         gone.extend(self.live_gates.iter().copied());
+        // The map's buildings while protected are drawn live too, so that
+        // their bodies show the protection appearance (S-0102 claim 34; our
+        // placeholder order, as for the gates).
+        let shown = self.shown_tick();
+        let protected_map: BTreeSet<u32> = self
+            .building_ids
+            .iter()
+            .filter(|(_, id)| {
+                self.world
+                    .obj(**id)
+                    .is_some_and(|o| o.on_map && super::protection::Look::of(o, shown).is_some())
+            })
+            .map(|(code, _)| *code)
+            .collect();
+        gone.extend(protected_map.iter().copied());
         // Overlays that changed during play are drawn again from the game's
         // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
         let mut changed = self.changed_overlays.clone();
@@ -1859,10 +1876,11 @@ impl Live {
             .filter(|o| {
                 o.kind == SimKind::Building
                     && o.on_map
-                    && !self
-                        .building_ids
-                        .iter()
-                        .any(|(code, id)| *id == o.id && !self.live_gates.contains(code))
+                    && !self.building_ids.iter().any(|(code, id)| {
+                        *id == o.id
+                            && !self.live_gates.contains(code)
+                            && !protected_map.contains(code)
+                    })
             })
             .filter_map(|o| {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
@@ -1898,6 +1916,8 @@ impl Live {
                             .is_some_and(|b| b.gate)
                             && o.beh.current == Some(Behaviour::Open))
                         .then(|| unload::door_view(o.beh.gate.door, self.shown_tick())),
+                        // spec: S-0513 claim 29 (the envelope's phase as the last tick's turns left it; F7 in that tick)
+                        protection: super::protection::Look::of(o, self.shown_tick()),
                     },
                 ))
             })

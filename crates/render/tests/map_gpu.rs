@@ -643,3 +643,88 @@ fn gpu_light_alpha_matches_cpu() {
         assert_eq!(differing, 0, "view at {origin:?}");
     }
 }
+
+/// spec: S-0102 claim 34 and F9 (an opaque, depth-passing pixel becomes S ∨ K after shade
+/// selection; transparent and depth-rejected pixels stay untouched; a translucent drawing keeps
+/// its blend and takes no mask, Open questions)
+///
+/// The scene with every lit item carrying a protection colour mask, some
+/// oversized (bits into another channel) and one the all-ones triple, draws
+/// the same on the GPU as on the CPU.
+#[test]
+fn gpu_protection_mask_matches_cpu() {
+    use glasnost_render::compose::{PixelLayout, Shade, Translucency, protection_mask};
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let masks = [
+        protection_mask([7, 19, 3], PixelLayout::Rgb565),
+        protection_mask([255, 255, 255], PixelLayout::Rgb565),
+        protection_mask([0, 0, 40], PixelLayout::Rgb565),
+        0,
+    ];
+    let mut s = scene();
+    for (k, item) in s.items.iter_mut().enumerate() {
+        let shade = Shade::new(0, 3, [400, 1000, 2000][k % 3]).with_mask(masks[k % 4]);
+        item.paint = match item.paint {
+            Paint::Diamond(_) => Paint::LitDiamond(shade),
+            Paint::Row(_) => Paint::Lit(shade),
+            p => p,
+        };
+    }
+    let tall = s.items[12].image;
+    s.items.push(Item {
+        image: tall,
+        x: 35,
+        y: 20,
+        test: DepthTest::Reader,
+        depth: ItemDepth::Profile {
+            profile: Profile::Upright,
+            bias: 40,
+            companion: None,
+        },
+        paint: Paint::Translucent(Shade::new(1, 1, 1000), Translucency::Half),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let size = (128u32, 72u32);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let alpha: Vec<u8> = (0..(size.0 * size.1) as usize)
+        .map(|i| (i % 256) as u8)
+        .collect();
+    let filter = Filter::default();
+    let q = ComposeQuirks::default();
+    let cpu = s
+        .compose_lit(&view, &filter, &q, Some(alpha.clone()))
+        .to_rgba();
+    let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render_lit(
+        &device,
+        &queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        &s,
+        &view,
+        &filter,
+        &q,
+        Some(&alpha),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+    let differing = cpu
+        .chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count();
+    assert_eq!(differing, 0);
+}

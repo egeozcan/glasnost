@@ -191,7 +191,8 @@ pub enum DepthSource<'a> {
 
 /// A shade table and a brightness: the rows `base … base + rows − 1` of
 /// the scene, of which each pixel takes the row its light-alpha value
-/// gives (S-0104 claim 15).
+/// gives (S-0104 claim 15), and the protection colour mask an opaque pixel
+/// takes after that (S-0102 claim 34, F9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Shade {
     /// The table's first row.
@@ -200,16 +201,26 @@ pub struct Shade {
     pub rows: u16,
     /// ρ of the drawing's brightness.
     pub rho: u16,
+    /// The protection colour mask *K* (5-6-5), 0 for none.
+    pub mask: u16,
 }
 
 impl Shade {
-    /// The table of `rows` rows from `base`, at brightness `b` ‰.
+    /// The table of `rows` rows from `base`, at brightness `b` ‰, with no
+    /// protection colour mask.
     pub fn new(base: usize, rows: usize, b: i32) -> Self {
         Self {
             base: base as u32,
             rows: rows as u16,
             rho: crate::light::brightness_rho(b) as u16,
+            // spec: S-0102 F9 (with no selected adjustment, K = 0)
+            mask: 0,
         }
+    }
+
+    /// The same shading with protection colour mask `k` (S-0102 claim 34).
+    pub fn with_mask(self, k: u16) -> Self {
+        Self { mask: k, ..self }
     }
 
     /// The row a pixel of light-alpha `alpha` takes.
@@ -535,7 +546,14 @@ impl Frame {
         let row = match paint {
             Paint::Row(r) | Paint::Diamond(r) => rows.get(r),
             // spec: S-0104 claim 15, S-0110 claim 5 (the pixel's light-alpha value picks the row)
-            Paint::Lit(s) | Paint::LitDiamond(s) => rows.get(s.row(self.alpha[i])),
+            Paint::Lit(s) | Paint::LitDiamond(s) => {
+                if let Some(row) = rows.get(s.row(self.alpha[i])) {
+                    // spec: S-0102 claim 34, F9 (an opaque, depth-passing pixel becomes S ∨ K after
+                    // palette conversion and shade selection)
+                    self.color[i] = row[usize::from(index)] | s.mask;
+                }
+                return;
+            }
             Paint::Translucent(s, t) => {
                 // spec: S-0102 claim 32 (the selected, lit hi-colour source pixel blends with the
                 // already-painted destination by F8)
@@ -590,6 +608,22 @@ pub enum PixelLayout {
     Rgb565,
     /// 5 bits for each channel.
     Rgb555,
+}
+
+/// The protection colour mask *K* of an imported colour-adjustment triple
+/// (S-0102 F9), packed once in `layout`: the triple's bytes are already
+/// mask contributions, with no 8-bit-to-hi-colour conversion, saturation
+/// or scaling, and only the low 16 bits are kept.
+pub fn protection_mask(rgb: [u8; 3], layout: PixelLayout) -> u16 {
+    let [r, g, b] = rgb.map(u32::from);
+    let k = match layout {
+        // spec: S-0102 F9 (5-6-5: K = (2048·R ∨ 32·G ∨ B) modulo 65536)
+        PixelLayout::Rgb565 => (2048 * r) | (32 * g) | b,
+        // spec: S-0102 F9 (5-5-5: K = (1024·R ∨ 32·⌊G/2⌋ ∨ B) modulo 65536)
+        PixelLayout::Rgb555 => (1024 * r) | (32 * (g / 2)) | b,
+    };
+    // spec: S-0102 F9 (only the low 16 bits are retained)
+    (k % 65536) as u16
 }
 
 /// One channel of F8 (S-0102): `s` the source channel after palette
@@ -1187,6 +1221,7 @@ mod tests {
             base: 1,
             rows: 1,
             rho: 0,
+            mask: 0,
         };
         let mut f = Frame::new(3, 1, 0, DEPTH_REFERENCE);
         let ground = img(3, 1, 1);
@@ -1251,5 +1286,103 @@ mod tests {
             &q,
         );
         assert_eq!(g.color[0], darken565(background));
+    }
+
+    /// spec: S-0102 F9 (K = (2048·R ∨ 32·G ∨ B) mod 65536 on 5-6-5 and (1024·R ∨ 32·⌊G/2⌋ ∨ B)
+    /// mod 65536 on 5-5-5: the bytes are mask contributions, not 8-bit colours; no saturation,
+    /// oversized contributions set bits of another channel, only the low 16 bits are kept)
+    #[test]
+    fn f9_protection_mask_both_layouts() {
+        assert_eq!(protection_mask([0, 0, 0], PixelLayout::Rgb565), 0);
+        assert_eq!(protection_mask([1, 0, 0], PixelLayout::Rgb565), 1 << 11);
+        assert_eq!(protection_mask([0, 3, 0], PixelLayout::Rgb565), 3 << 5);
+        assert_eq!(protection_mask([0, 0, 1], PixelLayout::Rgb565), 1);
+        assert_eq!(protection_mask([0, 3, 0], PixelLayout::Rgb555), 1 << 5);
+        assert_eq!(protection_mask([1, 0, 0], PixelLayout::Rgb555), 1 << 10);
+        // (255, 255, 255): 2048·255 ∨ 32·255 ∨ 255, low 16 bits.
+        assert_eq!(
+            protection_mask([255, 255, 255], PixelLayout::Rgb565),
+            (((2048 * 255) | (32 * 255) | 255) % 65536) as u16
+        );
+        assert_eq!(
+            protection_mask([255, 255, 255], PixelLayout::Rgb555),
+            (((1024 * 255) | (32 * 127) | 255) % 65536) as u16
+        );
+        // An oversized blue contribution reaches the green bits.
+        assert_eq!(protection_mask([0, 0, 40], PixelLayout::Rgb565), 40);
+    }
+
+    /// spec: S-0102 claim 34 and F9 (an opaque, depth-passing pixel becomes S ∨ K after shade
+    /// selection, even a black shade-row pixel; a transparent pixel and one rejected by depth
+    /// stay untouched; the mask is a union, not a saturating addition; depth rules unchanged)
+    #[test]
+    fn claim34_mask_is_a_union_on_opaque_depth_passing_pixels() {
+        let q = ComposeQuirks::default();
+        let background = pack(15, 31, 15, PixelLayout::Rgb565);
+        let black = 0u16;
+        let lit = pack(5, 9, 31, PixelLayout::Rgb565);
+        let rows: Vec<Row565> = vec![[background; 256], [black; 256], [lit; 256]];
+        let k = protection_mask([7, 19, 3], PixelLayout::Rgb565);
+        let mut f = Frame::new(4, 1, 0, DEPTH_REFERENCE);
+        let ground = img(4, 1, 1);
+        f.draw(
+            &Drawing {
+                image: &ground,
+                x: 0,
+                y: 0,
+                test: DepthTest::Writer,
+                depth: profile(Profile::Flat, 0),
+                paint: Paint::Row(0),
+            },
+            &rows,
+            &q,
+        );
+        let depth_before = f.depth.clone();
+        // Pixel 0 opaque, pixel 1 index 0 (transparent).
+        let body = IndexedImage::new(2, 1, vec![5, 0]).unwrap();
+        let shade = |base: usize| Shade::new(base, 1, 1000).with_mask(k);
+        let reader = |x, bias, base| Drawing {
+            image: &body,
+            x,
+            y: 0,
+            test: DepthTest::Reader,
+            depth: profile(Profile::Flat, bias),
+            paint: Paint::Lit(shade(base)),
+        };
+        // A black shade-row pixel takes the mask's colour.
+        f.draw(&reader(0, -1, 1), &rows, &q);
+        assert_eq!(f.color[0], k);
+        assert_eq!(f.color[1], background, "index 0 is transparent");
+        assert_eq!(f.depth, depth_before, "the mask changes no depth rule");
+        // Union: bits already set stay, no carry into another channel.
+        f.draw(&reader(0, -1, 2), &rows, &q);
+        assert_eq!(f.color[0], lit | k);
+        assert_ne!(f.color[0], lit.wrapping_add(k));
+        // Rejected by depth: untouched.
+        f.draw(&reader(2, 1, 1), &rows, &q);
+        assert_eq!(f.color[2], background);
+        // A writer stores its depth as before.
+        let mut g = Frame::new(1, 1, 0, DEPTH_REFERENCE);
+        let dot = img(1, 1, 1);
+        let plain = Drawing {
+            image: &dot,
+            x: 0,
+            y: 0,
+            test: DepthTest::Writer,
+            depth: profile(Profile::Flat, 0),
+            paint: Paint::Lit(Shade::new(2, 1, 1000)),
+        };
+        let mut h = g.clone();
+        g.draw(&plain, &rows, &q);
+        h.draw(
+            &Drawing {
+                paint: Paint::Lit(Shade::new(2, 1, 1000).with_mask(k)),
+                ..plain.clone()
+            },
+            &rows,
+            &q,
+        );
+        assert_eq!(g.depth, h.depth);
+        assert_eq!(h.color[0], g.color[0] | k);
     }
 }

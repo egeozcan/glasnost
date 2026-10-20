@@ -686,14 +686,26 @@ impl MapRenderer {
                     (role, kind, bias, 0, companion_slot)
                 }
             };
-            // `diamond` holds the diamond flag in bit 0 and the translucency
-            // code in bits 1 and 2.
+            // `diamond` holds the diamond flag in bit 0, the translucency
+            // code in bits 1 and 2 and the protection colour mask in bits 16
+            // to 31.
             let (row, diamond, shade_rows, rho) = match item.paint {
                 Paint::Row(r) => (r as u32, 0, 0, 0),
                 // spec: S-0010 claim 22 (a diamond has no transparent index)
                 Paint::Diamond(r) => (r as u32, 1, 0, 0),
-                Paint::Lit(s) => (s.base, 0, u32::from(s.rows), u32::from(s.rho)),
-                Paint::LitDiamond(s) => (s.base, 1, u32::from(s.rows), u32::from(s.rho)),
+                // spec: S-0102 claim 34, F9 (the opaque drawing's mask K)
+                Paint::Lit(s) => (
+                    s.base,
+                    u32::from(s.mask) << 16,
+                    u32::from(s.rows),
+                    u32::from(s.rho),
+                ),
+                Paint::LitDiamond(s) => (
+                    s.base,
+                    1 | (u32::from(s.mask) << 16),
+                    u32::from(s.rows),
+                    u32::from(s.rho),
+                ),
                 // spec: S-0102 claim 32 (codes 1 to 3 blend by F8)
                 Paint::Translucent(s, t) => {
                     (s.base, t.code() << 1, u32::from(s.rows), u32::from(s.rho))
