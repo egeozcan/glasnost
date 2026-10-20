@@ -108,7 +108,6 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 34 | approved | — |
 | [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 21 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
-| [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 10 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 11 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings, beam drawing) | combat | 6 | approved | — |
 | [S-0519](combat/S-0519-terror-attack-animals.md) | Terror and attack animals | combat | 6 | approved | — |
@@ -135,3 +134,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0301](combat/S-0301-firing-cycle.md) | Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check) | combat | 28 | approved | — |
 | [S-0103](rendering/S-0103-palettes-house-colour.md) | Palettes and house colour | rendering | 17 | approved | — |
 | [S-0306](combat/S-0306-projectiles.md) | Projectiles (launch, flight, homing, scatter, detonation) | combat | 17 | approved | — |
+| [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 11 | approved | — |

@@ -2,7 +2,7 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -600,7 +600,7 @@ gains are present by target removal.
 | `IsRadBeam`, weapon | Makes a beam flash on firing (claim 23) | boolean | no |
 | `IsLaser`, `IsElectricBolt`, weapon | Line effects that outrank the beam flash (claim 23) | booleans | no for each |
 | `ChronoBeamColor`, AudioVisual | Flash colour with a temporal warhead | three integers: red, green, blue | 0, 0, 0 |
-| `RadColor`, Radiation | Flash colour with any other warhead | three integers: red, green, blue | not established here |
+| `RadColor`, Radiation | Flash colour with any other warhead | byte triple: red, green, blue (S-0003 claim 11, Import mapping row C7) | value in force; (0, 0, 0) at a fresh start |
 | `DoubleThick`, building art | Code 3 instead of 2 while being erased (claim 27) | boolean | no |
 
 ## Measurement scenarios
