@@ -1,9 +1,9 @@
 ---
 id: Q-1528
 title: Protection appearance of a building's bib and door images and of a unit drawn translucent or cloaked
-status: open
+status: answered
 related: [S-0102, S-0513, S-0108, S-0109]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need

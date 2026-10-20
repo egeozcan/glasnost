@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 19
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528]
 supersedes: []
 ---
 
@@ -665,7 +665,7 @@ presentation and swept-layer rules below also apply where those specs cite them.
     sprite vehicles, aircraft, building voxel turrets and marked building animations.
     Exact packed-pixel colour composition is S-0102 claim 34 and F9, including its
     single-layout drawing correction without a quirk switch. The narrower unresolved
-    drawing variants are identified in Open questions. S-0104 claim 13 supplies ordinary brightness,
+    drawing variants are claim 29b and Open questions. S-0104 claim 13 supplies ordinary brightness,
     and its claim 15 maps the adjusted brightness to shade rows.
 
     Let *q* be the first turn of the object while this application is still protecting it,
@@ -711,9 +711,83 @@ presentation and swept-layer rules below also apply where those specs cite them.
     The draw is game state; the brightness and colour are presentation.
     - Backing: `measurable` (SW10 parts e and g). Ordinary opaque pixel composition and
       the additional drawing cases inherit S-0102 claim 34's backing (D44).
-      The unresolved variants in Open questions are not assigned guessed values
+      Accessory, translucent, shroud-edge and remembered drawings are claim 29b; the
+      variants still unresolved in Open questions are not assigned guessed values
     - Confidence: high for phase lengths, factors, draw timing relative to *q*, the ordinary
       post-turn launch boundary and the three colour-selection rows
+
+29a. **A protection selector outside the table (Q-1527).** Each of the two protection
+    selectors (curtain and force shield) is a signed integer that names a position in the
+    16-entry colour-adjustment table (S-0006 claim 2). In the original the selector is used
+    exactly as imported: it is not reduced modulo 16, not clamped and not cut to an unsigned
+    byte, so 16 does not select position 0 and −1 does not select position 15. A selector
+    below 0 or above 15 names no table position, and the colour the original then uses is not
+    defined by any imported triple. It is bad data.
+
+    **Our engine (bad data; a departure).** After every rules layer has been applied, a held
+    selector below 0 or above 15 counts as no selected adjustment: every drawing that would take that
+    selector's mask takes *K* = 0 (S-0102 F9), on 5-6-5 and 5-5-5 surfaces alike, so its
+    pixels keep only the protection brightness. The importer warns once for each such
+    selector, naming the key and its value (glossary, *importer warning*). Nothing else
+    changes. The brightness envelope of claim 29 and F9 is the same as for a valid selector,
+    the other protection kind's selector and drawings are unaffected, and no other drawing
+    reads these selectors. A selector from 0 to 15 behaves as in claim 29, including a position
+    whose triple is still the empty (0, 0, 0) entry, which also gives *K* = 0. The warning is
+    an import event; the mask outcome is presentation, and no game state depends on it.
+    - Backing: `measurable` for the original's lack of wrapping (SW10 part h); the engine rule
+      is design, checked by SW10 part h's engine fixture. The original's colour for an
+      out-of-range selector is not measured: no capture can define it.
+    - Confidence: high
+
+29b. **Protection appearance of accessory, translucent and hidden drawings (Q-1528).** The
+    rows below extend claim 29 and S-0102 claim 34 to drawings that table does not list.
+    "Envelope" means the protection brightness of claim 29 and F9. "Mask" means the
+    force-shield or curtain mask of S-0102 F9, joined to the shaded source pixel by bitwise
+    union as there. As in claim 29, curtain protection gives a building no mask. Every row is
+    presentation only: no game state depends on it.
+
+    | Drawing of a protected object | Envelope | Mask |
+    |---|---|---|
+    | Building bib (S-0108 claim 7) | yes | force-shield mask under the force shield, none under the curtain |
+    | Under-door and under-roof-door images (S-0108 claim 22) | yes | as the bib |
+    | Special gate image, deploying or roof-deploying image drawn in place of the body (S-0108 claims 4 and 22) | yes | as the body, which is the same as the bib |
+    | Door image while unloading (S-0108 claim 23) | yes | as the bib (drawing correction below) |
+    | Any drawing made translucent (25 or 50 %) or rippling by cloaking (S-0516 claim 28), including a cloaking force-shielded building and a cloaking curtain-protected voxel vehicle | yes, on the source pixels before the blend of S-0102 F8 | none |
+    | Any drawing of an object whose centre cell is under shroud for the local player | yes | none |
+    | Remembered image of a fogged building (S-0102 claim 16) | no | none |
+    | Object whose entire drawing is suppressed because it is fully cloaked for the viewer or wholly under shroud | nothing is drawn | nothing is drawn |
+
+    **Translucent drawings.** A translucent or rippling drawing of a protected object
+    is never recoloured, so whether the mask comes before or after the F8 blend
+    does not arise. Its source pixels are shaded at the protection-adjusted brightness
+    and then blended with the destination exactly as in S-0102 F8. When the same object is
+    drawn opaque again, for example when it uncloaks, it takes its mask again.
+
+    **Centre cell.** For a building the centre cell is the cell under the centre of its
+    foundation, with the larger coordinate when the foundation's width or depth is even
+    (S-0104 claim 13). For a unit it is the cell that holds its position. While that cell is
+    shrouded for the local player, every part of the object that is still drawn keeps the
+    envelope but takes no mask. This also covers parts drawn on visible cells at the edge of
+    the shroud.
+
+    **Remembered images.** A remembered image shows the building's type at the remembered
+    cell light, with no protection brightness and no mask, whatever protection the building
+    had when it was last seen. Fog of war is off in skirmish (S-0110 claim 4).
+
+    **Drawing correction (no switch, lead decision 2026-10-14).** The door image takes the
+    same mask as the body, the bib and the under-door images. The original draws the door
+    image of a force-shielded building without the mask while its body and bib take it,
+    a drawing-only defect.
+
+    The air-strike marking colour shares the same union in the original. Like claim 29 and
+    F9, these rows isolate protection with no simultaneous air-strike marking.
+    - Backing: `measurable` (SW10 part i) for the bib, under-door, replacement-body, door,
+      translucent, cloaked and shroud-edge rows. The door row's engine behaviour is design,
+      checked by the same captures against the bib. The remembered-image row is
+      `unmeasured`: fog of war is off in skirmish, as for S-0102's remembered-image rows.
+    - Confidence: high for the bib, under-door, replacement-body and door rows and for
+      translucent sprite drawings; medium for translucent and rippling voxel vehicles and
+      for the shroud-edge rule, pending SW10 part i; medium for remembered images
 
 ### Force shield
 
@@ -1411,6 +1485,10 @@ Absent-key defaults are in Import mapping.
   silo weapon, or a missing invoke, marker or blast animation type: no projectile or no animation
   is created and the importer warns (the original does not handle these safely). These invalid-data
   fallbacks are `unmeasured` design rules: the original provides no safe reference result.
+- **Out-of-range protection selector** (claim 29a): no mask and an importer warning, a departure
+  for bad data whose original colour is undefined.
+- **Presentation fixed outright.** The door image of a force-shielded building takes the
+  building's mask (claim 29b); the original omits it.
 - **Presentation fixed outright.** A warning marker is removed when its owner house leaves play.
   The original clears the wrong link before removing the marker. Backing: `unmeasured`: SW4
   tests visibility and missile expiry, not owner-house removal. Confidence: medium.
@@ -1494,8 +1572,10 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `ForceShieldDuration` | force-shield duration *D* | integer, ticks | 400 |
 | `[General]` | `ForceShieldBlackoutDuration` | blackout length (claim 30) | integer, ticks | 800 |
 | `[General]` | `ForceShieldPlayFadeSoundTime` | fade-sound lead time *P* | integer, ticks | 50 |
-| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield colour-adjustment selectors, respectively (claim 29) | integer, zero-based position in the colour-adjustment table; not a colour-definition name | 0 (selector index); absent in a later layer retains the held selector |
+| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield colour-adjustment selectors, respectively (claim 29) | integer, zero-based position in the colour-adjustment table; not a colour-definition name; a held value below 0 or above 15 gives no mask and an importer warning (claim 29a) | 0 (selector index); absent in a later layer retains the held selector |
 | `[ColorAdd]` | each entry, in section order; key spelling does not select a slot | RGB colour-adjustment triples (claim 29); layering owned by S-0006 claim 2 | three byte components, red, green, blue, parsed under S-0003; not palette components multiplied by 4 | table initially has 16 black triples (0, 0, 0); omitted entries and rules-layer clearing follow S-0006 claim 2 |
+| art, building sections | `BibShape`, `UnderDoorAnim`, `UnderRoofDoorAnim`, `DeployingAnim`, `RoofDeployingAnim`, `DoorAnim` | which accessory and replacement images exist, so which claim 29b rows apply; parse and use owned by S-0108 claims 7, 22 and 23 | text image names (S-0108 Import mapping) | none: no such image, and its claim 29b row does not arise |
+| object type sections | `Cloakable` | an object's own cloak, one way a protected object comes to be drawn translucent or rippling (claim 29b); cloak fields and every other cloaking rule are S-0516's | boolean (S-0516 Import mapping) | no |
 | `[General]` | `ChronoPlacement` | source marker | animation name | none |
 | `[General]` | `ChronoBlast`, `ChronoBlastDest` | blast at the source, blast at the destination | animation names | none |
 | `[General]` | `WarpOut` | warp-out animation (claim 39) | animation name | none |
@@ -1784,6 +1864,41 @@ is not under test.
   not establish the exact per-pixel composition formula. S-0102 claim 34 and F9 supply
   that contract; its D44 extends these captures to the other ordinary opaque drawing cases
   and tests the single-layout drawing correction with engine fixtures.
+  (h) Out-of-range selectors (claim 29a). Use SW10-g-colour.map with all 16 table positions
+  set to distinct invented triples whose three components are all non-zero, positions 0 and
+  15 among them, so that a black or nearly black result cannot match either by accident. In fresh-session runs set the
+  curtain selector to −1, then to 16, and separately the force-shield selector to −1, then 16.
+  Do not use large values: the original may read far outside the table and fail. Capture the
+  curtain vehicle and the force-shielded building as in part g at equal phase factor. Expected
+  in the original: the selector −1 does not give position 15's colour, and 16 does not give
+  position 0's; the brightness follows claim 29 unchanged; the other kind's drawings match a
+  run with the other selector valid. A colour matching position 0 or 15 falsifies "not
+  reduced". The original's actual colour is recorded but not asserted. Engine fixture: the
+  same four settings give exactly the unprotected shaded pixels at the protected brightness
+  (*K* = 0), one importer warning per offending key, and no change to the other kind; any
+  mask colour or a missing warning falsifies the engine rule. The oracle cannot falsify it.
+  (i) Accessory, translucent and shroud-edge drawings (claim 29b). Named map SW10-i.map with
+  invented distinct curtain and force-shield triples and three stationary subjects on flat,
+  neutrally lit ground: a factory with a bib, an under-door image and a door image releasing
+  a vehicle; a building inside an own cloak field (S-0516 CS5 and CS10 set-up); a voxel vehicle
+  with its own cloak (named map-layer rules giving the type the own-cloak flag, as in S-0516
+  CS1, with a vehicle in place of the infantry type). For each
+  protection kind capture the bib, under-door, door and replacement-body pixels during the
+  unload, the cloaking building and vehicle at each translucency step and in the ripple step
+  (viewed by a non-owner) and fully cloaked (viewed by the owner), and the unprotected controls
+  at the same phase factor. Then place the factory so its centre cell stays shrouded for the
+  local player while a corner of the image is visible, and capture that corner. The local
+  player is a house other than the protection's owner, not allied with it and not sharing
+  its exploration. Expected under the
+  force shield: bib, under-door and replacement body show the force-shield colour; in the
+  original the door image does not; no translucent or rippling pixel equals the source
+  joined with any mask, and each blended pixel equals F8 applied to the protected-brightness
+  source; the shroud-edge corner has the protected brightness but no colour. Under the curtain:
+  no building part shows a colour; the cloaking voxel vehicle shows no colour while translucent
+  and the curtain colour again when opaque. Any coloured translucent pixel, an uncoloured bib
+  or under-door image under the force shield, or a coloured shroud-edge corner falsifies its row.
+  Engine fixture: the door image matches the bib's mask; a door without the mask falsifies
+  the drawing correction.
 - **SW11 — force shield (claims 30 to 32).** (a) Allied buildings with reference points at
   distances just below and at 256 × *R* from the target centre, one on raised ground; an enemy
   building inside; expected: only allied buildings strictly inside F3 protected. (b) Vehicles
@@ -2081,12 +2196,12 @@ for these two kinds.
 - The absolute tick of each warp step (claim 39).
 - Q-0742 question 4: claim 29 supplies the protection envelope and its draw; S-0102
   claim 34 and F9 settle ordinary opaque composition and the sprite-vehicle, aircraft,
-  building-voxel and marked-building-animation cases. Exact mask handling for translucent
-  animations, cloaked or translucent units, building bibs and door accessories, remembered
-  images and unusual sprite-turret accessory combinations remains unconfirmed there.
-  SW10(g)'s same-pixel captures extended to those variants, with named art overrides where
-  necessary, remain proposed discriminating observations. Do not infer their colour
-  treatment from the opaque cases or from identical brightness timing.
+  building-voxel and marked-building-animation cases; claim 29b settles bibs, under-door,
+  replacement and door images, cloaked or translucent units and buildings, shroud edges and
+  remembered images (Q-1528). Still open: protected building slot animations whose own art
+  draws them translucent, and unusual sprite-turret accessory combinations. Do not infer
+  their colour treatment from the opaque cases or from identical brightness timing.
+- Q-1527 is answered by claim 29a (original not reduced; our rule *K* = 0 plus a warning).
 - Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
   S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).

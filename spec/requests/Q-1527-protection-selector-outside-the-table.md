@@ -1,9 +1,9 @@
 ---
 id: Q-1527
 title: A protection colour selector that names no position of the colour-adjustment table
-status: open
+status: answered
 related: [S-0102, S-0513, S-0006]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
