@@ -1948,6 +1948,9 @@ What each item's retake from main showed and what was done. Final shots: `local-
 | m7a/bunker-occupied, bunker-firing "walls not up" | same cause | the bunker's wall slots start and stop with the sim's special-animation effect (S-0606) |
 | m6b/vehicle-repaired-at-depot "no repair arm" | no spec says what starts the depot's special-1 and production slots | request Q-1550; nothing starts them meanwhile |
 | m7a/gattling-* "red explosion", "stage 2 not visible" | the red picture was our muzzle placeholder; no shot animation was made | shot animations by S-0301 r27 (claims 20 to 23, F7, F8): each stage's weapon plays its own list entry at the launch point, attached to a vehicle firer; the target line is request Q-1580 |
+| m6c/jumpjet-factory-away "tail inside the factory" | the jumpjet is drawn after the factory, but its depth is anchored to its ground point, which lies inside the factory's foundation, so the factory parts in front of that point hide its tail (S-0102 claims 10, 11) | already right; mobile objects are now drawn layer by layer (S-0102 claims 1 to 7); under the default switch a jumpjet stays in the ground list (request Q-1560) |
+| m7a/gas-cloud, gas-later "green blobs", berserk "chaos smoke" | our placeholder discs, then an interim sprite rule | particles drawn by S-0616 r12 claims 23 to 30 (sprite frames, per-particle translucency, pixel kinds as single pixels with the F16 colour); spotlights and the railgun laser are not drawn yet |
+| m6b/v3-rocket-impact-anims "explosion not seen" | the explosion is created at height 390 under the construction yard it hit (624), and the yard's shadow images are depth writers in front of it (S-0102 claims 10 to 14) | spec-correct depth; request Q-1561 asks whether an explosion below the surface is drawn this way |
 
 ### Particles (S-0616 claims 23 to 31)
 
