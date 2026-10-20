@@ -91,7 +91,6 @@ fn parasite_coverage() {
         ("warheads", "Paralyzes"),
         ("warheads", "Culling"),
         ("weapons", "LimboLaunch"),
-        ("weapons", "Anim"),
         ("vehicles", "Parasiteable"),
         ("infantry", "Parasiteable"),
         ("vehicles", "ReselectIfLimboed"),
@@ -100,6 +99,8 @@ fn parasite_coverage() {
     ] {
         assert_eq!(row(cat, key), (Field, "S-0614".into()), "{cat} {key}");
     }
+    // spec: S-0301 Import mapping and S-0614 (a weapon's animation list serves both)
+    assert_eq!(row("weapons", "Anim"), (Field, "S-0301, S-0614".into()));
     assert_eq!(
         row("global:General", "Wake"),
         (Field, "S-0614, S-0207, S-0312, S-0504, S-0503".into())

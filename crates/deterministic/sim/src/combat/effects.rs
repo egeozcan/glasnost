@@ -23,6 +23,26 @@ pub enum Effect {
         /// presentation of an undeploy); only the drawing reads it.
         reverse: bool,
     },
+    /// A shot animation was created (S-0301 claims 20 to 22; its creation
+    /// draws were taken in the firer's turn, S-0109 claim 29).
+    ShotAnim {
+        /// Animation type name.
+        name: String,
+        /// Where it was created: the shot's launch point.
+        pos: Pos,
+        /// The stage delay the creation's ranged draw gave (S-0109 claim 3),
+        /// as for [`Effect::Anim`].
+        delay: Option<i32>,
+        /// The firer it is attached to and its displacement from the
+        /// firer's position at creation, height included (S-0109 claim
+        /// 22): it follows the firer in the ground layer and disappears
+        /// with it. `None` for a building's, which stays where it was
+        /// created in its type's layer.
+        attached: Option<(ObjectId, Pos)>,
+        /// The depth adjustment that replaces its type's (S-0301 F8), for a
+        /// building's.
+        z_adjust: Option<i32>,
+    },
     /// A detonation happened (S-0303).
     Detonation {
         /// Where.

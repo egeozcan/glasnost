@@ -1408,6 +1408,104 @@ fn parachute_follows_its_paratrooper() {
     assert!(live.attached().is_empty(), "it disappears with its owner");
 }
 
+/// spec: S-0301 claim 22 and S-0109 claim 22 (a shot animation of a firer that is not a building
+/// is attached at its displacement from the firer, in the ground layer, follows it and disappears
+/// with it; a building's is not attached, keeps its type's layer and carries F8's depth adjustment)
+#[test]
+fn shot_animation_follows_its_firer() {
+    use super::slots::Layer;
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::world::Pos;
+    let (import, catalogue, assets) = anim_context();
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (
+            testkit::new_game(5),
+            testkit::rules(),
+            testkit::setup(5),
+            Vec::new(),
+        ),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    let firer = glasnost_sim::testkit::spawn(
+        &mut live.world,
+        glasnost_sim::rules::Kind::Infantry,
+        "WALKER",
+        0,
+        glasnost_map::CellXY::new(5, 5),
+        0,
+    );
+    let at = live.world.obj(firer).unwrap().pos;
+    let d = Pos::new(40, -30, 20);
+    let launch = Pos::new(at.x + d.x, at.y + d.y, at.z + d.z);
+    live.world.effects.push(Effect::ShotAnim {
+        name: "boomx".into(),
+        pos: launch,
+        delay: None,
+        attached: Some((firer, d)),
+        z_adjust: None,
+    });
+    // A building's: not attached, with its depth adjustment.
+    let fixed = Pos::new(at.x + 512, at.y, 0);
+    live.world.effects.push(Effect::ShotAnim {
+        name: "boomx".into(),
+        pos: fixed,
+        delay: None,
+        attached: None,
+        z_adjust: Some(-37),
+    });
+    // The same type made by an ordinary animation event, for its type's layer.
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: fixed,
+        delay: None,
+        reverse: false,
+    });
+    live.after_tick();
+    let shots = live.shot_anims();
+    assert_eq!(shots.len(), 2);
+    assert_eq!(shots[0], (Some(firer), launch, Layer::Ground, None));
+    let type_layer = *live.anim_layers().last().expect("the ordinary animation");
+    assert_eq!(shots[1], (None, fixed, type_layer, Some(-37)));
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.anims_drawn, 3, "drawn with their art");
+    assert_eq!(effect_items(&scene, true), 0, "no placeholder");
+    // The firer moves: the animation keeps its displacement.
+    let moved = Pos::new(at.x + 100, at.y + 60, at.z);
+    live.world.obj_mut(firer).unwrap().pos = moved;
+    live.after_tick();
+    let shots = live.shot_anims();
+    assert_eq!(
+        shots[0].1,
+        Pos::new(moved.x + d.x, moved.y + d.y, moved.z + d.z)
+    );
+    assert_eq!(shots[1].1, fixed, "a building's stays where it was made");
+    // The firer is removed: its animation goes with it.
+    glasnost_sim::objects::remove(&mut live.world, firer);
+    live.after_tick();
+    let shots = live.shot_anims();
+    assert_eq!(shots.len(), 1);
+    assert_eq!(shots[0].0, None);
+}
+
 /// S-0105 claim 40 (Q-0799): a flying aircraft's body is drawn at its lifted point and its shadow at the
 /// terrain surface under it, 60 pixels higher over a qualifying high bridge; on the ground both share a point.
 #[test]
@@ -2111,7 +2209,7 @@ fn disc_laser_beam_fades_in_its_colours() {
     assert_eq!(faded([200, 100, 40], 128), [100, 50, 20]);
 }
 
-/// Q-1523 (no shot animation yet, so nothing at the muzzle), S-0303 claim 21 (a detonation shows its
+/// S-0301 claim 23 (no default or placeholder picture at the muzzle), S-0303 claim 21 (a detonation shows its
 /// explosion animation only), Q-1524 (no bomb, charge or strike-mark drawing): the game client draws
 /// none of our own placeholders for shots and detonations; the viewer's debug layer does.
 #[test]

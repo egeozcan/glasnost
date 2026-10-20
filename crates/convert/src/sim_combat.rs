@@ -208,6 +208,8 @@ pub(super) const UNIT_COMBAT: &[Row] = &[
 /// Combat fields the Import mappings give for vehicle types only.
 const VEHICLE_COMBAT: &[Row] = &[
     ("hunter_seeker", "HunterSeeker", Bool, "S-0301"),
+    // spec: S-0301 Import mapping (TargetLaser: a boolean, absent no; only a vehicle shows the line)
+    ("target_laser", "TargetLaser", Bool, "S-0301"),
     ("gunner", "Gunner", Bool, "S-0308"),
     ("deploy_to_fire", "DeployToFire", Bool, "S-0309, S-0310"),
 ];
@@ -368,14 +370,23 @@ const WEAPON_COMBAT: &[Row] = &[
     ("fire_once", "FireOnce", Bool, "S-0309"),
     ("reveal_on_fire", "RevealOnFire", Bool, "S-0409"),
     ("limbo_launch", "LimboLaunch", Bool, "S-0614"),
-    ("anim", "Anim", Refs(Kind::Animations), "S-0614"),
-    // spec: S-0508 Import mapping (OccupantAnim: an animation name of the weapon, none when absent)
+    // spec: S-0301 Import mapping (Anim: the animation list, its entries in the order written; absent empty)
+    ("anim", "Anim", Refs(Kind::Animations), "S-0301, S-0614"),
+    // spec: S-0508 Import mapping (OccupantAnim: an animation name of the weapon, none when absent), S-0301 Import mapping (the occupant animation of claim 20 b)
     (
         "occupant_anim",
         "OccupantAnim",
         Ref(Kind::Animations),
-        "S-0508",
+        "S-0301, S-0508",
     ),
+    // spec: S-0301 Import mapping (OpenToppedAnim and AssaultAnim: animation type names, none when absent)
+    (
+        "open_topped_anim",
+        "OpenToppedAnim",
+        Ref(Kind::Animations),
+        "S-0301",
+    ),
+    ("assault_anim", "AssaultAnim", Ref(Kind::Animations), "S-0301"),
 ];
 
 /// Combat fields of projectiles.

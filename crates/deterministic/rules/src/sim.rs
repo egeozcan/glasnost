@@ -1948,6 +1948,10 @@ pub struct UnitType {
     /// `HunterSeeker` (S-0301 claim 9).
     #[serde(default)]
     pub hunter_seeker: Option<bool>,
+    /// `TargetLaser`, the target-line flag (S-0301 claim 23; only a vehicle
+    /// shows the line); absent: no.
+    #[serde(default)]
+    pub target_laser: Option<bool>,
     /// `MobileFire` (S-0301 claim 11, S-0310 claim 7).
     #[serde(default)]
     pub mobile_fire: Option<bool>,
@@ -2848,13 +2852,23 @@ pub struct WeaponType {
     #[serde(default)]
     pub limbo_launch: Option<bool>,
     /// `OccupantAnim`, the animation shown where an assault removes an
-    /// occupant (S-0508 claim 14, Import mapping).
+    /// occupant (S-0508 claim 14, Import mapping), and a garrisoned
+    /// building's shot animation (S-0301 claim 20 b).
     #[serde(default)]
     pub occupant_anim: Option<String>,
     /// `Anim`, animation names: the per-direction delivery animation
-    /// (S-0614 claim 9); absent: empty.
+    /// (S-0614 claim 9) and the shot animation list (S-0301 claim 20 a);
+    /// absent: empty.
     #[serde(default)]
     pub anim: Option<Vec<String>>,
+    /// `OpenToppedAnim`, the open-topped animation of a passenger firing
+    /// out (S-0301 claim 20 c); absent: none.
+    #[serde(default)]
+    pub open_topped_anim: Option<String>,
+    /// `AssaultAnim`, the assault animation, which ordinary shots never use
+    /// (S-0301 Terms); absent: none.
+    #[serde(default)]
+    pub assault_anim: Option<String>,
     /// `AttachedParticleSystem`, the effect weapon's emitter type, a
     /// particle-system name (S-0616 claim 1; absent none).
     #[serde(default)]

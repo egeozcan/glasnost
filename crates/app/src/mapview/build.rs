@@ -1050,6 +1050,9 @@ pub struct AnimDraw {
     /// paratrooper's parachute is drawn with its carrier's house-colour unit
     /// palette (S-0522 claim 18, S-0103 claim 8 row 3).
     pub carrier: Option<(Vec<u8>, i32)>,
+    /// The depth adjustment its creator gave in place of its type's: a
+    /// building's shot animation (S-0301 claim 22, F8).
+    pub z_adjust: Option<i32>,
 }
 
 /// A particle of the live game to draw (S-0613, S-0616; the interim rule
@@ -2839,8 +2842,8 @@ impl Builder<'_> {
             n,
             a.frame,
             a.pos,
-            // spec: S-0102 claim 13, Import mapping (ZAdjust: the type's depth adjustment)
-            t.z_adjust,
+            // spec: S-0102 claim 13, Import mapping (ZAdjust: the type's depth adjustment, unless its creator replaced it, S-0301 F8)
+            a.z_adjust.unwrap_or(t.z_adjust),
             (row, code),
             Group::Effects,
             None,

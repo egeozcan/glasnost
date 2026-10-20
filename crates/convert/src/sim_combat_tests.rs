@@ -826,6 +826,28 @@ fn art_combat_fields() {
     );
 }
 
+/// spec: S-0301 Import mapping (OpenToppedAnim and AssaultAnim of a weapon: an animation name, none
+/// when absent; TargetLaser of a vehicle type: boolean, no when absent)
+#[test]
+fn shot_animation_fields() {
+    let base = "[Warheads]\n1=Zap\n2=Plain\n[Zap]\nOpenToppedAnim=ZAPOPEN\nAssaultAnim=ZAPGO\n\
+                [Plain]\nROF=3\n";
+    let (s, _) = direct(&[base], "", &["Zap", "Plain"], &[], IniQuirks::default());
+    assert_eq!(s.weapons["Zap"].open_topped_anim.as_deref(), Some("ZAPOPEN"));
+    assert_eq!(s.weapons["Zap"].assault_anim.as_deref(), Some("ZAPGO"));
+    assert_eq!(
+        (&s.weapons["Plain"].open_topped_anim, &s.weapons["Plain"].assault_anim),
+        (&None, &None)
+    );
+    let (s, _) = sim(
+        "[VehicleTypes]\n1=Cart\n2=Tank\n[Cart]\nTargetLaser=yes\n[Tank]\nSpeed=2\n",
+        "",
+        "",
+    );
+    assert_eq!(s.vehicles["Cart"].target_laser, Some(true));
+    assert_eq!(s.vehicles["Tank"].target_laser, None);
+}
+
 /// spec: S-0508 Import mapping (OccupantAnim of a weapon: an animation name, created by reference, none when absent)
 #[test]
 fn occupant_animation_field() {

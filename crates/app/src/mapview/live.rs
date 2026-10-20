@@ -413,6 +413,12 @@ struct LiveAnim {
     /// The image frame a burning walker shows (S-0615 F1, or its expiring
     /// stage), in place of the playback's.
     frame: Option<i32>,
+    /// The firer a shot animation is attached to and its displacement from
+    /// the firer's position at creation (S-0301 claim 22, S-0109 claim 22).
+    shooter: Option<(ObjectId, glasnost_sim::world::Pos)>,
+    /// The depth adjustment its creator gave in place of its type's (a
+    /// building's shot animation, S-0301 F8).
+    z_adjust: Option<i32>,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -1122,6 +1128,30 @@ impl Live {
             .collect()
     }
 
+    /// The shot animations: firer (if attached), position, layer and depth
+    /// adjustment (tests).
+    #[cfg(test)]
+    pub(super) fn shot_anims(
+        &self,
+    ) -> Vec<(
+        Option<ObjectId>,
+        glasnost_sim::world::Pos,
+        super::slots::Layer,
+        Option<i32>,
+    )> {
+        self.anims
+            .iter()
+            .filter(|a| a.shooter.is_some() || a.z_adjust.is_some())
+            .map(|a| (a.shooter.map(|s| s.0), a.pos, a.layer, a.z_adjust))
+            .collect()
+    }
+
+    /// Every playing animation's layer (tests).
+    #[cfg(test)]
+    pub(super) fn anim_layers(&self) -> Vec<super::slots::Layer> {
+        self.anims.iter().map(|a| a.layer).collect()
+    }
+
     /// Every playing animation's carrier house name and brightness (tests).
     #[cfg(test)]
     pub(super) fn anim_colours(&self) -> Vec<Option<(Vec<u8>, i32)>> {
@@ -1282,6 +1312,8 @@ impl Live {
             maker: None,
             dominating: None,
             frame: None,
+            shooter: None,
+            z_adjust: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
@@ -1357,6 +1389,29 @@ impl Live {
                 // spec: S-0522 claim 13 (still present on landing: the remaining passes become 0); the parachute stays attached
                 a.player.last_pass();
             }
+            true
+        });
+    }
+
+    /// Shot animations follow their firers (S-0301 claim 22, S-0109 claim
+    /// 22): the firer's position plus the displacement at creation, also
+    /// for a passenger firing out, whose position is its transport's (S-0507
+    /// claim 15). A firer removed from the game takes its animation with it.
+    fn follow_shooters(&mut self) {
+        let world = &self.world;
+        self.anims.retain_mut(|a| {
+            let Some((id, d)) = a.shooter else {
+                return true;
+            };
+            // spec: S-0109 claim 22 (an owner removed from the game: the animation disappears at once); a passenger inside its transport is still in the game
+            let Some(o) = world
+                .obj(id)
+                .filter(|o| o.on_map || glasnost_sim::transport::riding(world, id).is_some())
+            else {
+                return false;
+            };
+            // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, height included)
+            a.pos = glasnost_sim::world::Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z);
             true
         });
     }
@@ -1578,6 +1633,38 @@ impl Live {
             {
                 self.attach_parachute(*trooper, *pos, now, *delay);
             }
+            if let Effect::ShotAnim {
+                name,
+                pos,
+                delay,
+                attached,
+                z_adjust,
+            } = e
+            {
+                self.counts.anims += 1;
+                let serial = self.anim_serial;
+                // spec: S-0301 claim 22 and S-0109 claim 29 (created in the firer's turn: first update in the creation tick; no loop delay, repeat factor 1, no reverse request)
+                let sprite = self.create_anim(&name_bytes(name), *pos, now, *delay, false);
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    if attached.is_some() {
+                        // spec: S-0301 claim 22 and S-0102 claim 3 (attached to a firer that is not a building: in the ground layer, even for an aircraft in flight)
+                        a.layer = super::slots::Layer::Ground;
+                    }
+                    a.shooter = *attached;
+                    // spec: S-0301 claim 22 and F8 (a building's: its type's layer, with the creator's depth adjustment)
+                    a.z_adjust = *z_adjust;
+                    // spec: S-0301 claim 22 (Palette: no palette of its object; row 4 or 5 of S-0103 claim 8 by its own art flags, also when attached)
+                    a.carrier = None;
+                }
+                // spec: S-0301 claim 23 (no default or placeholder picture: a type without art draws nothing; the viewer's debug layer marks it)
+                if !sprite && self.debug_markers {
+                    self.transients.push(Transient {
+                        kind: TransientKind::Anim,
+                        at: at(*pos),
+                        born: now,
+                    });
+                }
+            }
             if let Effect::Anim {
                 name,
                 pos,
@@ -1662,6 +1749,7 @@ impl Live {
             }
         }
         self.follow_owners();
+        self.follow_shooters();
         self.follow_walkers();
         self.follow_makers();
         self.follow_dominations(now);
@@ -1733,8 +1821,8 @@ impl Live {
             let (kind, pos) = match e {
                 Effect::Shot { from, .. } => {
                     self.counts.shots += 1;
-                    // No shot animation is made yet (Q-1523); the game client draws nothing of
-                    // its own at the muzzle, the viewer's debug layer marks it.
+                    // spec: S-0301 claim 23 (the shot's own picture is its shot animation, Effect::ShotAnim; no
+                    // placeholder at the launch point: only the viewer's debug layer marks the shot)
                     if !self.debug_markers {
                         continue;
                     }
@@ -1749,7 +1837,7 @@ impl Live {
                     }
                     (TransientKind::Burst(combat::burst_half_width(radius)), pos)
                 }
-                Effect::Anim { .. } => continue,
+                Effect::Anim { .. } | Effect::ShotAnim { .. } => continue,
                 Effect::Killed { .. } => {
                     self.counts.kills += 1;
                     continue;
@@ -2175,6 +2263,7 @@ impl Live {
                         end: a.player.play.end,
                         pos: (a.pos.x, a.pos.y, a.pos.z),
                         carrier: a.carrier.clone(),
+                        z_adjust: a.z_adjust,
                     },
                 ))
             })

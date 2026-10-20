@@ -31,6 +31,7 @@ pub mod position;
 pub mod projectile;
 pub mod railgun;
 pub mod range;
+pub mod shotanim;
 pub mod state;
 pub mod veterancy;
 pub mod weapon;
