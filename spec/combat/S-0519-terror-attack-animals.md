@@ -2,13 +2,13 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0986]
+requests: [Q-0986, Q-1524]
 supersedes: []
 ---
 
@@ -19,7 +19,9 @@ supersedes: []
 The special attacks of infantry and vehicles that do not work like an ordinary shot. These are
 attack animals, planted bombs (planting, legality, countdown, detonation, disarming, the detonate
 order and credit to the planter), suicide weapons, demolition charges planted on buildings, and
-the air-strike designation: a shot that calls a group of aircraft onto a building (claims 16 to 21).
+the air-strike designation: a shot that calls a group of aircraft onto a building (claims 16 to 21),
+and how a planted bomb's icon, a charged building's flash and a marked building are drawn
+(claims 24 to 26).
 S-0214 row I18 owns the air-strike cursor and its attack order, S-0308 row 6 the choice of the
 designating weapon, and S-0501 the aircraft's flight and attack runs. Drone and grappling parasites belong to S-0614. Garrisons are S-0508, building capture is S-0509
 and deployable units are S-0517.
@@ -61,7 +63,11 @@ ignores defences*, *quirk switch*. Also used:
   type and recharge delay *R* (integer ticks). Each has a normal and an elite value. The elite
   values apply while the designator's veterancy rank (glossary) is elite.
 - **Marked building.** A building that is the strike target of some strike, which has *marked* it.
-  The mark is presentation only (claim 17).
+  The mark's colour and brightness are presentation. Its phase sequence (claim 26) is game state,
+  because one of its phases takes a scenario-stream draw.
+- **Flash count.** A per-building count of ticks of flashing still to come (claim 25).
+- **Mark clock.** A per-building countdown of 100000 ticks, started whenever a start or a redirect
+  marks the building (claim 26). It only bounds the mark's phase sequence.
 - **Charge countdown.** The building countdown that S-0302 claim 16 calls the delayed-kill
   countdown when a charge starts it. A building has at most one, whichever started it.
 
@@ -196,7 +202,7 @@ ignores defences*, *quirk switch*. Also used:
     when they leave it.
     - The bomb icon is drawn over the carrier only when the bomb is visible and the carrier's
       cell is not under shroud (S-0111 claim 19 gives the shroud test). Its image frame follows
-      Formulas F3.
+      Formulas F3. Claim 24 gives its image, palette, brightness, placement and drawing order.
     - The engineer's disarm cursor (S-0214 row I2, "active planted bomb") requires the bomb to be
       visible. The firing rules of claim 3 do not test visibility, so a disarm shot already
       ordered still works on a bomb that is not visible.
@@ -288,7 +294,7 @@ ignores defences*, *quirk switch*. Also used:
 
 14. **The charge countdown.** Planting a charge does four things:
     - it marks the building as having a pending countdown,
-    - the building flashes for *L* ticks (Formulas F4, presentation only),
+    - the building flashes for *L* ticks (Formulas F4; claim 25 gives what the flash changes),
     - a countdown of *K* ticks starts in the planting tick (Formulas F4),
     - the walker is recorded as the building's charge planter.
 
@@ -365,8 +371,8 @@ ignores defences*, *quirk switch*. Also used:
       (S-0501 claims 11 to 17). Only a redirect (claim 19) aims them at an object.
     - **When at least one aircraft was placed:** the designated object becomes the strike
       target. The game-wide air-strike attack sound plays for every player at the position of the
-      last aircraft placed. A designated building is marked; while marked it is tinted with the
-      game-wide laser-target colour (presentation; S-0104 owns the brightness).
+      last aircraft placed. A designated building is marked. While marked it takes the
+      appearance of claim 26, whose phase sequence makes one later scenario-stream draw.
 
     When no aircraft is placed, `quirks.airstrike_empty_strike_stuck` applies (Edge cases).
     - Backing: `measurable` (scenario T17), including a zero-size elite strike,
@@ -426,17 +432,15 @@ ignores defences*, *quirk switch*. Also used:
     change of target cancels first, this happens after a cancel. When the strike aircraft do not
     all hold the same amount of ammunition, the strike is cancelled again instead, and nothing is
     redirected. Otherwise:
-    - *T* becomes the strike target, and a building *T* is marked with the laser-target colour,
-      as at a start,
+    - *T* becomes the strike target, and a building *T* is marked as at a start. Its phase
+      sequence restarts (claim 26),
     - every strike aircraft that still has ammunition takes *T* itself, the object rather than a
       cell, as its target and queues *attack*,
     - aircraft without ammunition keep retreating.
 
     So once any strike aircraft has spent its last round, changing target leaves all linked
     aircraft without ammunition: a later redirect cannot give any of them an attack order.
-    The original marks a redirected building without setting its tint colour, so
-    the tint shows whatever colour the building last had. That is a display bug; our engine uses
-    the laser-target colour, as stated.
+    A redirected building shows the same laser-target colour as one marked by a start (claim 26).
     - Backing: `measurable` (scenario T19), except removal of a live designator without
       death, which is `unmeasured` for the fixture limitation in claim 20
     - Confidence: high for the cancel triggers and effects; medium for the redirect
@@ -467,9 +471,11 @@ ignores defences*, *quirk switch*. Also used:
 21. **Random draws of a strike start.** On the scenario stream (S-0202 claim 10), in order: the
     arrival cell's draws (S-0522 claim 4), once per strike; then, for each aircraft in creation
     order, its creation draws and any draws of its placement (S-0501). The readiness test, the
-    nearby-cell search, a cancel and a redirect take no draw. The draws of the designation shot's
+    nearby-cell search, a cancel and a redirect take no draw of their own. A start or redirect
+    that marks a building leads to one later draw in that building's turn, about 10 ticks
+    later, from the mark's phase sequence (claim 26). The draws of the designation shot's
     own detonation are S-0303's.
-    - Backing: `measurable` (scenarios T17 and T21 with the random-state recorder)
+    - Backing: `measurable` (scenarios T17, T21 and T27 with the random-state recorder)
     - Confidence: high
 
 22. **Bomb with no bomb warhead.** It ends normally, stops ticking and detaches from its
@@ -495,6 +501,141 @@ ignores defences*, *quirk switch*. Also used:
       fixture safely completes all death paths; scenario T23 proposes the discriminating run.
       The safe completion rule is `design` and tested on our engine by T23
     - Confidence: high for the self-hit and the unsafe infantry death case
+
+### Presentation of bombs, charges and marks
+
+Claims 24 to 26 describe drawing. They are presentation, not simulation, except the mark's phase
+sequence and its draw in claim 26, which are game state.
+
+24. **Bomb icon drawing (presentation; Q-1524 question 1).** When claim 10 lets a bomb icon show,
+    it is drawn as follows.
+    - **Image and palette.** The bomb icon image file (Import mapping), at the image frame of
+      Formulas F3, through the fixed cursor palette (Import mapping). It has no house-colour
+      remapping and no translucency.
+    - **Brightness.** Neutral, 1000 ‰. Cell light, flashes and effect tints do not change it. Only
+      the light-alpha shading of S-0111 claim 2 darkens it.
+    - **Placement.** Centred placement (S-0102 claim 19) on the carrier's own draw point, with no
+      further displacement. For a vehicle, infantry unit or aircraft this is the screen pixel of its
+      position by S-0101's projection, height included, which is also its status anchor (S-0111
+      Terms). For a building it is the projected top corner of its foundation, the image anchor of
+      S-0108 claim 8. So on a building the icon sits at the top corner, not over the building's
+      centre.
+    - **Layer and order.** The icon is one of the carrier's status extras (S-0102 claim 1). It is
+      drawn after all five object layers, above every object and below the effects of S-0102 claim 2,
+      with no depth test. It is the first of its carrier's status extras, so that carrier's own repair
+      wrench, health bar, selection marker, pips and insignia paint over it where they overlap.
+      Status extras are drawn carrier by carrier, layer by layer in the order of S-0102 claim 1, and
+      within a layer in that layer's drawing order (S-0102 claims 6 and 7). A carrier whose extras
+      come later therefore paints its icon over an earlier carrier's icon and extras. The icon is
+      drawn only when the carrier's status extras pass the culling of S-0111 claim 1.
+    - **Houses.** Every viewer who sees the bomb (claim 10) sees the same picture.
+    - Backing: `measurable` (scenario T25(a–g)), except light-alpha darkening when T25(g)
+      cannot expose an eligible icon pixel under a shroud piece: that part is `unmeasured`
+      until such a placement is validated. The missing-asset rule (Import mapping) is
+      importer design, tested on our engine only in T25(h), not an oracle claim
+    - Confidence: high for image, palette, brightness, placement and first place among the carrier's
+      extras; medium for the order between carriers
+
+25. **Charge flash (presentation; Q-1524 question 2).** The flash of claim 14 changes only the
+    charged building's brightness, two ticks on and two ticks off.
+    - **Count.** Planting sets the building's flash count *c* to *L* (Formulas F4). Each turn of the
+      building lowers a positive *c* by 1. A later flash of the same building, from any cause,
+      replaces the count; counts do not add.
+    - **Pattern.** In a drawn frame the flash is *on* when *c* mod 4 is 2 or 3, and off otherwise
+      (Formulas F6). With one building turn per tick it alternates two ticks on and two ticks
+      off, starting from the phase that *L* gives, until *c* reaches 0. For *L* = 13 it is on
+      after the building's 2nd, 3rd, 6th, 7th, 10th and 11th turns following the planting.
+    - **What changes.** While on, the brightness *b* of S-0104 claim 13 is raised by 500 ‰, or
+      lowered by 500 ‰ when *b* exceeds 1500 ‰ (F6). This applies to the body however it is drawn,
+      to the building's parts drawn as voxel models (turret, barrel) and to its own animations that
+      take the building's stored brightness (S-0104 claim 13, row 3). The stored brightness is
+      refreshed at each on/off change. The building's shadow keeps its ordinary darkening. There is
+      no colour change and no other palette. The damage state still picks the image frames
+      (S-0108); the flash brightens whichever frame shows. The normal-light override for animations
+      still wins (S-0104 claim 13).
+    - **Repaint.** Each on/off change repaints the building's area of the persistent picture
+      (S-0102 claim 8), so the body shows every change at once.
+    - **Combination.** The flash adjustment comes first. Protection (S-0513 claim 29) and a mark
+      (claim 26) then act on the flashed value (F7). Curtain protection that cancels the countdown
+      (claim 14) does not stop the flash.
+    - **Houses.** The flash looks the same to every viewer.
+    - Backing: `measurable` (scenario T26; T27(c) for combined brightness and the animation's
+      normal-light override). Negative-input rounding in F7 is `unmeasured`: these scenarios
+      use non-negative brightness and do not isolate the signed division
+    - Confidence: high for the count, the pattern and the 500 ‰ step; medium for the list of parts
+      and for the repaint
+
+26. **Air-strike mark appearance and its phase draw (Q-1524 questions 3 and 4).** A marked
+    building is drawn with a colour mask and a pulsing brightness. The pulse follows a phase
+    sequence that advances during the building's own turns. The sequence is game state, because one
+    phase length takes a scenario-stream draw. The colour and the brightness are presentation.
+    - **Colour.** The entry of the colour-adjustment table (S-0006) that the laser-target colour
+      selects gives a mask by S-0102 F9. While the building is marked, in every drawn frame, the mask
+      is combined by the bitwise union of S-0102 claim 34 with the building's body drawn as a sprite
+      (in either pass), its voxel turret and barrel, and building animations at its cells (S-0102
+      claim 34's animation rule: the building occupying the animation's cell decides). A building
+      that is also force-shielded takes the union of both masks. Curtain protection adds no mask. The
+      mask itself never pulses. It is read from the rules at drawing time, so a building marked by a
+      redirect looks the same as one marked by a start. This covers ordinary opaque drawings.
+      Translucent and special accessory drawings remain outside this claim, as in S-0102 claim 34.
+    - **Restart.** A start or redirect that marks the building (claims 17 and 19) puts its phase
+      sequence back to *before the first marked turn* and starts its mark clock (Terms). A mark that
+      passes to another strike holding the same building (claim 19) restarts neither. At any turn of
+      the building while it is not marked, the sequence returns to *before the first marked turn*,
+      without a draw.
+    - **Phases.** Let *q* be the building's first turn while marked after a restart, and *M* the mark
+      clock's remaining ticks. A phase of length ℓ entered in tick *s* has *r* = max(0, ℓ − (*n* − *s*))
+      in tick *n*. A phase ends at the first turn of the building at which *r* = 0, and the next phase
+      starts in that turn. Phases advance only at the building's turns, one phase per turn. The
+      tests on *M* are made only at the transitions shown.
+
+      | Phase | Length | Factor *m* | Next phase |
+      |---|---|---|---|
+      | Before the first marked turn | until *q* | none (brightness unchanged) | Initial rise |
+      | Initial rise | 6 ticks, from *q* | trunc((12 − *r*) × 256 / 6) | Bright hold |
+      | Bright hold | 4 ticks | 512 | Initial dimming |
+      | Initial dimming | 20 + R(−5, 5) ticks | trunc((*r* + 20) × 256 / 20) | Pulse rise |
+      | Pulse rise | 64 ticks | 4 × (128 − *r*) | Pulse fall |
+      | Pulse fall | 64 ticks | 4 × (*r* + 64) | Low hold if *M* < 158 ticks, otherwise Pulse rise |
+      | Low hold | until a later turn finds *M* < 31 ticks | 256 | Final rise |
+      | Final rise | 6 ticks | trunc((12 − *r*) × 256 / 6) | Final bright hold |
+      | Final bright hold | 4 ticks | 512 | Return |
+      | Return | 20 ticks | trunc((*r* + 20) × 256 / 20) | Ordinary |
+      | Ordinary | until unmarked or restarted | none (brightness unchanged) | none |
+
+      All arithmetic is integer, divisions truncated toward zero. So the brightness doubles over
+      6 ticks, holds 4 ticks, falls back over 15 to 25 ticks (from between 448/256 and 576/256
+      of ordinary), and then pulses as a 128-tick triangle between ordinary and double brightness. Low
+      hold is reachable only about 99842 ticks after the mark, so in practice the pulse lasts as long
+      as the mark.
+    - **Draw.** Each restart that reaches Initial dimming takes exactly one inclusive ranged draw
+      from −5 through 5 on the scenario stream (S-0202 claim 10, ranged-draw rule), in the building's
+      turn that ends Bright hold: turn *q* + 10 with a turn every tick. A mark that ends or restarts
+      before that turn makes no draw for that restart. Within one turn of the building the protection
+      sequence of S-0513 claim 29 steps first, so its draw precedes the mark's when both fall in that
+      turn.
+    - **Brightness.** F7 combines the flash, protection and mark. The mark factor reaches the same
+      parts as the flash (claim 25): the body, its voxel parts and its animations with stored
+      brightness. The stored brightness is refreshed at each building turn. The animation's
+      normal-light override still wins (S-0104 claim 13). Shadows keep their ordinary darkening.
+    - **Every frame (design).** Our engine applies the current factor in each drawn frame,
+      including to the persistent body picture. Whether the original's persistent body picture
+      shows each pulse value or retains the value from its last repaint is unmeasured; T27(b)
+      investigates this distinction. The per-frame rule is a presentation choice, not a confirmed
+      original result, and introduces no quirk switch.
+    - **Houses.** Colour and pulse are the same for every viewer and every owner.
+    - Backing: `measurable` (scenario T27; the draw with the random-state recorder) for the
+      colour, initial phases, repeating pulse, restart and shared-mark behaviour. The original's
+      persistent-body refresh is `unmeasured`: no validated capture isolates pulse changes from
+      unrelated repaints. T27(b) is an investigation, and separately tests our per-frame design.
+      The mark-clock thresholds and phases from Low hold onwards are `unmeasured`: no validated
+      fixture keeps a mark for nearly 100000 ticks without ending or restarting it. Missed-turn
+      phase advancement is likewise `unmeasured`: T27 does not suspend building turns.
+      Negative-input rounding in F7 is `unmeasured` for the fixture limitation in claim 25.
+      Per-frame rendering is a design rule, tested on our engine in T27(b), not an oracle claim
+    - Confidence: high for the colour source, the union with the force-shield mask, the phase lengths,
+      factors and the draw; medium for the list of parts and for the draw's place among other draws
+      in the same building turn
 
 ## Formulas
 
@@ -552,6 +693,32 @@ tick; *R*: the recharge delay for the designator's rank at *t* (integer ticks).
 With `quirks.airstrike_recharge_same_target_only` off, and when the strike has ended at least
 once: ready = (not *P* and *t* ≥ *e* + *R*) or (*P* and *T* ≠ *S*).
 
+**F6. Charge flash** (claim 25). *c*: the building's flash count (integer, ticks, *c* ≥ 0); *b*: its
+brightness of S-0104 claim 13 (integer ‰).
+
+> on = (*c* mod 4 ≥ 2).
+> *b*<sub>F</sub> = *b* + 500 when on and *b* ≤ 1500; *b* − 500 when on and *b* > 1500; *b* when off.
+
+Integer arithmetic, no clamp. Each building turn with *c* > 0 sets *c* to *c* − 1.
+
+**F7. Building brightness with flash, protection and mark** (claims 25 and 26). Let
+*b*<sub>F</sub> be F6's result in integer ‰, *P* the protection-brightness function of S-0513
+claim 29 and F9, and *m* the dimensionless integer mark factor of claim 26. *P* is the identity
+when unprotected or outside its active phases. Define *b*₁ = *b*<sub>F</sub> and *b*₂ = *P*(*b*₁).
+The following mutually exclusive cases define *b*₃ mathematically:
+
+| Building state | *b*₃, integer ‰ |
+|---|---|
+| Marked in a phase with a factor | min(2000, ⌊*m* × *b*₂ / 256⌋) |
+| Marked in a phase without a factor, or unmarked but protected | *b*₂ |
+| Unmarked and unprotected | *b*₁ |
+
+*b*₃ goes to S-0104 claim 15. Integer arithmetic. For *b*₂ ≥ 0 the division truncates; for a
+negative *b*₂ the original rounds toward minus infinity, which S-0104 claim 15 maps to row 0 either
+way. The two phases without a factor are not clamped. The same *b*₃ is the stored brightness of the
+building's animations of S-0104 claim 13 row 3, refreshed as claims 25 and 26 say.
+The normal-light override still forces their drawn brightness to 1000 ‰.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -569,6 +736,16 @@ once: ready = (not *P* and *t* ≥ *e* + *R*) or (*P* and *T* ≠ *S*).
 | Strike aircraft ordered to retreat at a cancel, at most | 101 | aircraft | Claim 19 |
 | Strike target cell divisor | 256 | leptons per cell | Claim 17 |
 | Air-strike team size, absent-key default | 0 | aircraft | Engine default: not a designator |
+| Bomb icon brightness | 1000 | ‰ | Claim 24 |
+| Flash step | 500 | ‰ | F6 |
+| Flash step-down threshold | 1500 | ‰ | F6: above it the flash darkens |
+| Flash pattern period | 4 | ticks (2 on, 2 off) | F6 |
+| Mark clock | 100000 | ticks | Claim 26 |
+| Mark phase lengths | 6, 4, 20, 64, 64, 6, 4, 20 | ticks | Claim 26, in table order |
+| Mark dimming draw range | −5 to 5 | ticks, inclusive | Claim 26 |
+| Mark low-hold and final thresholds | 158, 31 | ticks of the mark clock | Claim 26 |
+| Mark factor scale | 256 | factor units per 1× brightness | Claim 26, F7 |
+| Brightness cap | 2000 | ‰ | F7 |
 | Recharge delay, absent-key default | 0 | ticks | Engine default |
 
 ## State and ordering
@@ -620,11 +797,23 @@ claim 20 and delivery to qualify under claim 16.
 **Ordering.** A suicide firer's hit and its death-weapon detonation both occur in the tick of the shot.
 When a planted bomb's detonation kills its carrier, the bomb does not detonate a second time.
 The ticking sound stops in the same tick as the bomb ends.
+A marked building's phase sequence (claim 26) steps during the building's own turn, right after
+the protection sequence of S-0513 claim 29. Its one draw falls in the turn that ends Bright hold,
+after any protection draw of the same turn. A charged building's flash count drops by 1 at each
+of its turns (claim 25).
 
 **Cross-spec status.** S-0203 claim 1 and its ordering-table rows 2 and 5 distinguish
 planted-bomb maintenance from timed detonation during the carrier's turn, with the removal
 consequences of S-0203 claim 10. S-0506 claim 26 likewise places its shared cycle before object
 turns, rather than after timed bomb detonations. No corresponding correction is needed.
+
+**Presentation cross-spec changes for joint hand-off.** S-0111 claims 1 and 19 must exempt the
+bomb icon from the building status anchor and refer to claim 24 for its image and order.
+S-0102 claim 34 must include the marked-building mask and its union with the force-shield mask
+(claim 26). S-0104 claim 13 must delegate building flash and mark brightness to claims 25 and 26
+and F7, while retaining unresolved non-building flash cases. S-0513 claim 29 must refer to F7
+for combinations and state that a same-turn protection draw precedes the mark draw. These are
+additions to the earlier isolated-protection contracts, not changes to protection alone.
 
 ## Edge cases and quirks
 
@@ -706,15 +895,20 @@ turns, rather than after timed bomb detonations. No corresponding correction is 
 | Object types `EliteAirstrikeRechargeTime` | recharge delay *R*, elite | integer, ticks | the normal value |
 | Rules, audio-visual section, `AirstrikeAttackVoice` | air-strike attack sound (claim 17) | sound name | none |
 | Rules, audio-visual section, `AirstrikeAbortSound` | air-strike abort sound (claim 20) | sound name | none |
-| Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claim 17, presentation): a position in the colour-adjustment table (S-0006) | integer, dimensionless selector | 0 |
+| Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claims 17 and 26, presentation): a position in the colour-adjustment table (S-0006), read at drawing time | integer, dimensionless selector | 0 |
+| Imported bomb-icon image asset | bomb icon image (claim 24), image frames by F3 | sprite asset, resolved by S-0005 | missing: no icon is drawn; the importer warns (design) |
+| Imported cursor-palette asset | fixed palette of the bomb icon (claim 24), the same asset role as S-0111 claim 19's repair wrench | palette asset, resolved by S-0005 | owned by S-0111 |
+
+These asset roles identify imported resources, not additional rules keys.
 
 ## Measurement scenarios
 
-All scenarios use stock data, no engine add-on and no mods (the named test files of a scenario excepted), on a small flat skirmish map at game speed
+All scenarios use stock data, no engine add-on, director off and no mods (the named test files
+of a scenario excepted), on a small flat skirmish map at game speed
 index 2 and 800×600. Use one local player and an enemy bystander computer player kept away
 from the observed area under the glossary's void rule. Run each variant three times. Record
 video, ticks, health, kills and experience with a read-only recorder. Scripted input may time
-orders. Use only the stock executable, with the read-only recorder and scripted input that the measurement setup allows. Named test data below
+orders. Follow the glossary's measurement setup, including its read-only recorder and scripted-input allowances. Named test data below
 means override sections in the temporary map `S-0519-tests.map`, removed after the run,
 only the named fields differ from stock. Any result inconsistent with a variant's expected
 result falsifies that part of its claim.
@@ -737,6 +931,9 @@ result falsifies that part of its claim.
   planter while its projectile is in flight: its later impact must plant nothing. Use a slow projectile
   and move the target before impact: attachment must follow the target despite the separation.
   Plant on a bridge repair hut: detonation must also demolish its bridge (S-0511 claim 16).
+  Launch two slow planting projectiles at a clean carrier before either arrives, with distinct
+  planter houses and staggered impacts. Only the first impact may attach a bomb: its expiry tick
+  and planter credit must survive the second impact unchanged.
 - **T3, legality (claim 3).** Order a second bomb planter to attack an already-bombed carrier,
   and an engineer to disarm a carrier without a bomb (forced attack where input allows). Expected:
   neither fires; the first planter does not fire again after its single shot. Falsified by a
@@ -770,7 +967,10 @@ result falsifies that part of its claim.
   the bomb still goes off on time. (e) Transfer a bombed garrisonable building's owner through
   a named test-map ownership trigger: the bomb must remain and keep its expiry tick.
   (f) Sell a bombed own building or erase a bombed enemy vehicle: removal must not explode
-  the bomb. Record icon, sound and damage as well as timing in each variant.
+  the bomb. (g) Enable the timed-bomb detonate permission in named test data; kill the local
+  planter after planting on an own carrier, with no detector present. The icon must remain
+  visible and the detonate order must remain available to the planter's original house.
+  Record icon, sound and damage as well as timing in each variant.
 - **T10, detonate order (claim 9).** Named test data enables only the timed-bomb permission.
   Order a bombed own unit to detonate. Expected: detonation in the tick the order applies.
   Repeat enabling only the death-bomb permission: no detonate cursor or order is available.
@@ -813,8 +1013,9 @@ result falsifies that part of its claim.
   least the second weapon's burst count: arrival must now use the full-delay calculation with an
   inclusive ranged draw from 0 through 2, without advancing or wrapping *k*. Void any run where
   target clearing reset *k* before arrival. Repeat without a second weapon (1 tick, no delay draw),
-  with a sonic second weapon (bare rate, no delay draw), and with a particle second weapon
-  whose effect is absent (ordinary short/full choice) or already alive (bare rate).
+  with a sonic second weapon (bare rate, no delay draw), and separately with spark-particle,
+  fire-particle and railgun second weapons whose corresponding effect is absent (ordinary
+  short/full choice) or already alive (bare rate).
   Record burst counter and rearm remaining directly as well as subsequent firing ticks.
   Extra delay draws, an arrival counter advance, or use of the fixed rate in the ordinary
   *k* = 0 case falsify claim 13. A variant grants
@@ -884,8 +1085,8 @@ result falsifies that part of its claim.
   ammunition for unequal positive remaining counts; time the new designation while those counts
   differ: no redirect, counts preserved, retreat queued again. (f) Reissue the same object target
   while approaching: no cancellation. (g) Use two designators on one building; cancelling one
-  preserves the mark until the other also cancels. Redirect to a second building: it receives the
-  configured target tint in our engine; the original may retain its prior tint (display bug).
+  preserves the mark until the other also cancels. Redirect to a second building: it shows the
+  laser-target colour and a restarted pulse (claim 26), as at a start.
   (h) Named test data makes a 103-aircraft strike; cancel before firing: only the 101 newest
   linked aircraft lose their targets/destinations and queue retreat, the two oldest keep their
   orders. Repeat with an empty aircraft before cancellation: all 103 lose their ammunition.
@@ -930,7 +1131,7 @@ result falsifies that part of its claim.
   now omitting only the demolition-warhead entry, in a fresh session. A suicide infantry unit
   and, separately, a suicide vehicle attack an isolated enemy target on dry land. Keep each
   death weapon's own warhead valid. Record health immediately around the self-hit, whether
-  play continues, death presentation and target damage. Expected source hypothesis: self-hit
+  play continues, death presentation and target damage. Expected hypothesis: self-hit
   reaches zero health; ordinary infantry death selection may stop play rather than complete
   its death effect. This is an investigation of the unmeasured bad-data outcome, not a promise
   of a surviving original run. A harmless self-hit falsifies the health hypothesis. On our
@@ -959,6 +1160,88 @@ result falsifies that part of its claim.
   strike occurring, or a later effect appearing after an unsuccessful earlier selection,
   falsifies the relevant claim. Remove all named test overrides after the runs.
 
+- **T25, bomb icon drawing (claim 24).** Common setup, lossless captures at 800 × 600 at the highest
+  detail level, no shroud over the observed cells. The local player's bomb planter plants on an
+  own-side test vehicle, an infantry unit, a landed aircraft and a 2 × 2 building, each far from the
+  others. Named test data gives a long timed delay. Record every frame until detonation. (a) Compare
+  the icon pixels with each frame of the bomb icon image under the fixed cursor palette at neutral
+  brightness, and with house-coloured, lit and translucent alternatives. (b) Find the icon canvas
+  centre: on the vehicle, infantry unit and aircraft it must coincide with the projected world
+  position, including height, not necessarily the visible art's centre; on the building, with the
+  projected top corner of the foundation, not with the building's centre. (c) Repeat (a) at night
+  lighting of the test map: the icon stays at neutral brightness.
+  (d) Select and damage the vehicle carrier: its health bar and selection marker paint over the
+  icon. (e) Put two bombed vehicles so that their icons overlap, one in front of the other in the
+  ground layer's order: the later one's icon and health bar cover the earlier one's icon. (f) Repeat
+  (a) with the bomb planted by the opponent and a local bomb detector in range: identical pixels.
+  (g) Overlap the icon with a different object's body, and separately with a beam: the icon covers
+  the body but the beam covers the icon. Show the carrier's repair wrench, pips and insignia where
+  applicable: each covers its own bomb icon on overlapping pixels. Move the carrier across the
+  status-extra culling boundary of S-0111 claim 1: the icon follows that culling. Compare the
+  light-alpha-shaded pixels against S-0104 claim 15; only that shading may darken the neutral icon.
+  If no eligible nontransparent icon pixel can be exposed beneath a shroud piece while the
+  carrier's tested cell is unshrouded, that subtest is inconclusive, not confirmation.
+  Falsified by a remapped, lit or misplaced icon, by the icon covering its carrier's other extras,
+  by a different overlap or culling result, or by incorrect light-alpha shading.
+  (h) On our engine only, omit the imported bomb-icon image asset: the importer must warn and
+  no icon may draw, without changing attachment, timing or damage. A missing warning, a fallback
+  icon or a simulation change fails this design test, not an established original claim.
+- **T26, charge flash (claim 25).** Common setup and captures. Named test data gives a charge delay
+  long enough that *L* is at least 40 ticks, and test-map lighting with two cases: ordinary light
+  (building brightness well below 1500 ‰) and a bright ambient (above 1500 ‰). A charge planter
+  sabotages an enemy test building that has a voxel turret and a slot animation, once at full health
+  and once in its damaged state. Record per tick the flash count implied by F6 and the shade rows of
+  body, turret and animation pixels. Expected: on in exactly the frames where *c* mod 4 is 2 or 3,
+  brightness 500 ‰ up under ordinary light and 500 ‰ down under the bright ambient, the shadow
+  unchanged, no colour change, the damaged frames brightened in the same way. In a separate run
+  start curtain protection during the flash: the countdown is cancelled and the flash continues.
+  While it flashes, cause a separate damage flash and record its starting count: the remaining
+  count must be replaced by that flash's duration, not increased by it. Repeat with the building
+  owned by the local player: after accounting for house-colour remapping the flash pattern and
+  brightness changes must match. Falsified by a different pattern, a different step, a colour change,
+  a changed damage-state frame, an added rather than replaced count, or owner-dependent flashing.
+- **T27, air-strike mark (claims 26 and 21).** Common setup, captures and the random-state recorder.
+  A stock designator designates an enemy test building with a slot animation and a voxel turret.
+  Named test data sets the laser-target colour to two different table positions in two runs, and
+  gives the colour-adjustment table distinguishable entries. For the pulse runs, give the strike
+  aircraft negligible damage and enough approach time to keep the building marked through at
+  least three complete 128-tick pulses; discard a run that ends or restarts the mark earlier.
+  Record per tick the shade rows and
+  colours of body, turret and animation pixels and the stream state. Expected: the mask of the
+  selected entry, united with the shaded pixels, constant over the mark; brightness factors as in
+  claim 26's table, with the dimming length 20 + the drawn value; exactly one ranged draw from −5
+  through 5 in the building's turn *q* + 10 and no other draw caused by the mark; a pulse of
+  128 ticks afterwards. Redirect the strike to a second building: the same colour, a restarted
+  sequence and a fresh draw ten turns after its first marked turn. Mark a force-shielded building:
+  the union of both masks. Cancel one of two strikes holding one building: no restart and no draw.
+  Unmark the building before turn *q* + 10: no draw. These are part (a), falsified by a pulsing
+  colour, a different factor on a freshly drawn part, a missing or extra draw, a restart when
+  sharing the mark, or a redirected building that keeps an older colour.
+  (b) For persistent-body refresh, use a separate building with no running animations, no damage
+  or flashes, fixed lighting and a stationary view. Capture consecutive frames through a pulse,
+  then scroll away and back at a recorded phase. Compare pixels whose predicted shade rows differ,
+  rather than expecting every integer-factor change to cross a shade-row boundary. The unresolved
+  original hypotheses are: body rows follow F7 every frame, or they retain their last-repaint value
+  until the scroll repaints them. Following the changing rows without another repaint falsifies
+  the retained-value hypothesis; a stale row that changes to the current F7 row on repaint
+  falsifies the every-frame hypothesis. Confounded captures are inconclusive. On our engine only
+  the every-frame result is accepted; a stale row falsifies the design rule, not an established
+  original claim.
+  (c) Mark a charged building during its flash; separately start protection so its first protected
+  turn and the first marked turn coincide. Record shade rows and random state. Expected: F7, not
+  a mark followed by protection or a flash added last; when both phase draws occur in one building
+  turn, the protection draw precedes the mark draw. Choose lighting and sampled factors for which
+  those alternative orders give distinct shade rows. Record the shadow too: it remains unchanged.
+  Repeat with a named temporary loose art override (the expansion art file used by
+  S-0007 claim 2), copied from stock with only the test slot animation's normal-light flag
+  enabled, then removed after the run: its brightness remains
+  1000 ‰. A reversed draw order, distinguishably different composition, changed shadow or
+  pulsing normal-light animation falsifies that part.
+  (d) Repeat (a) with the marked building owned by the local player, and with an allied owner.
+  After accounting for the ordinary house-colour ramp, mask and phase factors must be identical.
+  A viewer- or owner-dependent effect falsifies the houses rule. The near-expiry phases and missed
+  building turns are not covered by these runs (claim 26).
+
 ## Open questions
 
 - No separate effect of the imported animal marker has been traced beyond parsing it. Claim 1
@@ -973,3 +1256,7 @@ result falsifies that part of its claim.
   traced.
 - Whether a designator that goes off the map without being removed from play (into a transport
   or a garrison) ends its strike, as claim 20 says of removal from play. Not traced.
+- Whether the original's persistent body picture of a marked building shows every value of the
+  pulse (claim 26), or only the value at its area's last repaint. No repaint tied to the pulse was
+  found, only to the flash's on/off changes. Claim 26 chooses the current value in every frame for
+  our engine only; T27(b) distinguishes that design test from the unresolved original hypotheses.

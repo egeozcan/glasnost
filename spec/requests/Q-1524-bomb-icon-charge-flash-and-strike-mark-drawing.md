@@ -1,9 +1,9 @@
 ---
 id: Q-1524
 title: How a planted bomb's icon, a charged building's flash and an air-strike mark are drawn
-status: open
+status: answered
 related: [S-0519, S-0104, S-0102, S-0103, S-0111]
-answered-by: []
+answered-by: [S-0519]
 ---
 
 ## Need
