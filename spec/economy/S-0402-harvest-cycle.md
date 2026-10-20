@@ -2,7 +2,7 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -1051,9 +1051,19 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     of any initial spawn-slot objects made in the same creation, in slave-place order.
     Nested creation sets complete before the next slot or place, as specified by S-0611
     claim 14 and F5. Keeping a slave inside takes no placement search or placement draw.
-    - Backing: `measurable` (scenario H15; S-0611 scenario MU12 for creation-set ordering)
-    - Confidence: high for creation, count, ownership, hidden state and no payment,
-      medium for the creation-source and draw controls
+
+    **Bad-data type cycles.** S-0611 claim 14 and F5 override the ordinary creation rule
+    when a chain of spawned and slave types leads back to a type already in that same
+    chain. Our engine creates the cycle-closing object with its own creation draw and
+    number, but gives it neither a slave group nor a spawn controller. It has no slave
+    places or slots, not empty ones, so it cannot later replace slaves or regenerate
+    slot objects. The importer warns. This documented departure applies to that object,
+    not to every object of its type; the original has no defined result for such cycles.
+    - Backing: `measurable` (scenario H15; S-0611 scenario MU12 for creation-set ordering).
+      The cycle exception is `unmeasured`, design: the original has no defined outcome
+      to compare; S-0611 scenario MU14 checks our engine's rule
+    - Confidence: high for creation, count, ownership, hidden state, no payment and the
+      cycle design rule; medium for the creation-source and draw controls
 
 19a. **Pack-up creation draws precede old-group release (Q-0441).** A pack-up
     creates the return vehicle and its own initial hidden slaves under claim 19 before
