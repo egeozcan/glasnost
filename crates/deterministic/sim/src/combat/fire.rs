@@ -302,6 +302,7 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     // spec: S-0615 claim 12 (a disc laser shot plays no report at the shot; claim 16: the report comes with the damage)
     if !wr.disk_laser {
         crate::combat::projectile::shot_effect(w, firer, weapon, fp);
+        crate::combat::effects::line(w, firer, weapon, fp, shot_target);
     }
     // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
     if let Some((x, e)) = expected

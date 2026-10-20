@@ -286,7 +286,7 @@ pub fn anim_own_section(import: &Import, idx: usize) -> &[u8] {
 }
 
 /// A rules key of a type, as layered.
-fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
+pub(crate) fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'a [u8]> {
     import
         .outcome
         .registries
@@ -298,7 +298,13 @@ fn rule<'a>(import: &'a Import, kind: Kind, idx: usize, key: &[u8]) -> Option<&'
         .as_deref()
 }
 
-fn rule_bool(import: &Import, kind: Kind, idx: usize, key: &[u8], default: bool) -> bool {
+pub(crate) fn rule_bool(
+    import: &Import,
+    kind: Kind,
+    idx: usize,
+    key: &[u8],
+    default: bool,
+) -> bool {
     rule(import, kind, idx, key)
         .and_then(value::boolean)
         .unwrap_or(default)
@@ -4592,6 +4598,15 @@ impl Painter {
             None => import.outcome.registries.get(&kind)?.get(idx)?.name.clone(),
         };
         self.art.value(&image, key).and_then(value::integer)
+    }
+
+    /// A boolean art key of a type's image, as [`Painter::art_int`].
+    pub fn art_bool(&self, import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<bool> {
+        let image = match import.arts.get(&(kind, idx)) {
+            Some(a) => a.image.clone(),
+            None => import.outcome.registries.get(&kind)?.get(idx)?.name.clone(),
+        };
+        self.art.value(&image, key).and_then(value::boolean)
     }
 
     /// Draws `mobiles` into `scene` (adding the images and palette rows they

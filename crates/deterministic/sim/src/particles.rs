@@ -1201,6 +1201,14 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
         let n = d(l as i64, m).mul(t.per_coord, m).to_i32_common();
         match t.holds {
             Some(held) => {
+                // spec: S-0616 claims 17 and 31 (the line turn makes the laser beam, from the system's position to its target point; with n ≤ 0 nothing is drawn)
+                if n > 0 {
+                    w.effects.push(crate::combat::effects::Effect::RailLine {
+                        system_type: s.type_index,
+                        from: s.pos,
+                        to: s.target,
+                    });
+                }
                 for _ in 0..n.max(0) {
                     // spec: S-0616 claim 17 (per particle: three ranged draws, its creation draws, four more ranged draws; the line's shape is drawing only, so each particle is kept at the system's position)
                     for _ in 0..RAIL_BEFORE {
@@ -1214,6 +1222,7 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
             }
             None => {
                 // spec: S-0616 claim 20 (no held type: no draw and no particle; the system is still marked)
+                // Our interim (Q-1590): no laser beam either; claims 20 and 31 leave it open.
             }
         }
         // spec: S-0616 claim 17 (then the system is marked, also when n ≤ 0)

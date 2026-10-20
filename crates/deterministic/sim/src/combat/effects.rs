@@ -306,6 +306,50 @@ pub enum Effect {
         /// (`crate::disc::house_colours`).
         house: Option<crate::world::HouseId>,
     },
+    /// A shot that is not a disc laser's was fired, with the points the
+    /// drawing's line effects need: a laser weapon's beam (S-0518 claims 18
+    /// and 20) and a radiation-beam weapon's beam flash (S-0514 claims 23
+    /// and 24). The drawing decides from the weapon's flags whether either
+    /// is drawn.
+    Line {
+        /// The firer.
+        firer: ObjectId,
+        /// The weapon fired.
+        weapon: crate::combat::data::WeaponId,
+        /// The fire point of the slot that fired.
+        from: Pos,
+        /// The firer's fire point for its primary weapon slot.
+        primary: Pos,
+        /// The target's target point, or the target cell's centre at its
+        /// height.
+        to: Pos,
+        /// A building firer's position (S-0518 claim 20, building source).
+        building: Option<Pos>,
+        /// For a shot of a prism master, its support count *N* at the shot
+        /// (S-0518 claim 18).
+        prism: Option<i32>,
+    },
+    /// A magnetic wave was made (S-0607 claims 21 and 25), with the shot's
+    /// firing and impact points it was made from.
+    Wave {
+        /// The wave (a key of `World::waves`).
+        id: ObjectId,
+        /// The shot's firing point.
+        from: Pos,
+        /// The shot's impact point.
+        to: Pos,
+    },
+    /// A railgun system emitted its line (S-0616 claims 17 and 31): the
+    /// view draws the type's laser beam, when the type has one. Drawing
+    /// only.
+    RailLine {
+        /// The system type, by registration index.
+        system_type: u32,
+        /// The system's position.
+        from: Pos,
+        /// The system's target point.
+        to: Pos,
+    },
     /// A drain link formed, ended or paid (S-0608 claims 5, 7 and 14).
     /// Presentation and counting only: a payout has no message and no
     /// sound (claim 7).
@@ -526,5 +570,34 @@ pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, revers
         pos,
         delay,
         reverse,
+    });
+}
+
+/// Reports a fired shot's line-effect points ([`Effect::Line`]).
+pub fn line(
+    w: &mut crate::world::World,
+    firer: ObjectId,
+    weapon: crate::combat::data::WeaponId,
+    from: Pos,
+    target: crate::world::Target,
+) {
+    let Some(o) = w.obj(firer) else {
+        return;
+    };
+    let building = (o.kind == crate::rules::Kind::Building).then_some(o.pos);
+    // spec: S-0518 claim 18 (a prism master's shot draws its beam by its support count N)
+    let prism = crate::linked::prism(w, firer).then_some(o.combat.support);
+    // spec: S-0514 claim 24 (S is the firer's fire point for its primary weapon slot with no extra displacement)
+    let primary = crate::combat::position::fire_point(w, firer, 0, 0);
+    // spec: S-0518 claim 20 and S-0514 claim 24 (the target point of an object, else the cell's centre at its height)
+    let to = crate::combat::range::target_point(w, target);
+    w.effects.push(Effect::Line {
+        firer,
+        weapon,
+        from,
+        primary,
+        to,
+        building,
+        prism,
     });
 }

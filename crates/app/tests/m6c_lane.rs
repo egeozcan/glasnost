@@ -1016,6 +1016,8 @@ fn prism_supports(lane: &mut Lane) {
     println!("click on the target: {sent} orders");
     let hp = lane.world().obj(target).map_or(0, |o| o.health);
     let mut shot = false;
+    let mut pending = false;
+    let mut recruited = None;
     let mut peak = 0;
     for t in 0..400 {
         // The lane keeps the house at full power, as a person with enough plants would.
@@ -1026,11 +1028,23 @@ fn prism_supports(lane: &mut Lane) {
         lane.ticks(1);
         let n = lane.world().obj(prisms[0]).map_or(0, |o| o.combat.support);
         peak = peak.max(n);
-        if n > 0 && !shot {
-            shot = true;
-            lane.save("prism-beams");
+        if n > 0 && recruited.is_none() {
+            recruited = Some(t);
             println!("first recruitment at tick {t}");
         }
+        // S-0518 claim 6: a supporter's beam is drawn max(d − 1, 0) ticks after the
+        // recruitment, in the tick its pending beam is taken.
+        let waiting = prisms.iter().any(|&p| {
+            lane.world()
+                .obj(p)
+                .is_some_and(|o| o.combat.support_beam.is_some())
+        });
+        if pending && !waiting && !shot {
+            shot = true;
+            lane.save("prism-beams");
+            println!("first support beam at tick {t}");
+        }
+        pending = waiting;
         if lane.world().obj(target).is_none() {
             break;
         }

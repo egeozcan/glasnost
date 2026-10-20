@@ -26,6 +26,7 @@ pub mod projection;
 pub mod rz;
 pub mod scene;
 pub mod shroud;
+pub mod spots;
 pub mod tilt;
 pub mod voxel;
 
