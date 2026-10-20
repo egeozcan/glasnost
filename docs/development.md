@@ -1884,6 +1884,22 @@ M7b is the last part of M7, the Yuri faction (session of 2026-10-18). Baseline: 
 
 Request numbers for M7b: Q-1400 to Q-1419 (S-0616), Q-1420 (S-0615), Q-1440 (S-0608), Q-1460 (S-0611), Q-1480 (S-0612), Q-1500 to Q-1519 (steps 2 and 4), Q-1520 and up (main session).
 
+## Visual review 2026-10-19
+
+The lead's screenshot review of 2026-10-19 (`local-lane/lead-review-2026-10-19.md`, git-ignored) was worked through item by item: a retake from main (`local-lane/visual-fix-3/retake/`), the cause against the covering specs, the fix with a test per claim, and a final shot per item under `local-lane/visual-fix-3/`. The game client's own placeholders (crosses, rings, boxes and discs drawn where no spec gives a look) are now drawn only by the viewer's debug layer (`Live::debug_markers`, on in the map viewer, off in the game client).
+
+Interim rules, each tied to a request:
+
+| Where | Interim rule | Request |
+|---|---|---|
+| `mapview::build` particle drawing | every particle is drawn with its sprite (S-0007 claim 28) in the air layer, centred on its projected position, with the anim palette at the unscaled ground level of its cell; frame = stage for gas, stage + start frame otherwise; translucency from the type's own value by S-0613 claim 16; a particle without a sprite draws nothing | Q-1520 |
+| `mapview::combat::Beam`, `live::take_effects` | a beam with a spec'd thickness and duration is a straight opaque line of that thickness between the projected end points, drawn after the layers (S-0102 claim 2) for its duration; a prism support beam takes the owner house's display colour (S-0103 claim 15); the disc laser draws its inner colour with its outer colour as a one-pixel edge, darkened by S-0615's fade | Q-1521 |
+| `live::draw_effects` | no temporal beam and no magnetic wave is drawn; a unit being erased is drawn as normal | Q-1522 |
+| `glasnost_sim::combat::fire` | no shot animation is made; the game client draws no muzzle cross | Q-1523 |
+| `live::draw_effects` | nothing is drawn for a planted bomb's icon, a charged building's flash or an air-strike mark in the game client | Q-1524 |
+| `build::infantry_items` | an infantry unit whose height above the surface is not 0 draws no body-sprite shadow (S-0107 claim 19); the generic infantry shadow is not drawn | Q-1525 |
+| rendering | no berserk tint is drawn (S-0610 claim 7 gives the table entry, not how it combines with the pixels) | Q-1526 |
+
 ## Tests
 
 ```sh
