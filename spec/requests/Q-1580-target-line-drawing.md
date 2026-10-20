@@ -1,9 +1,9 @@
 ---
 id: Q-1580
 title: How the target line of a vehicle with the target-laser flag is drawn
-status: open
+status: answered
 related: [S-0301, S-0102, S-0103]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need

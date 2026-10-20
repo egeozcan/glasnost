@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 27
+revision: 28
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
 measurements: []
-requests: [Q-0060, Q-0798, Q-1523]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580]
 supersedes: []
 ---
 
@@ -24,7 +24,8 @@ S-0310; where a shot starts is S-0313; which weapon is used is S-0308; range is 
 Drain attempts replace ordinary shots (S-0608 claim 1; claim 9 here). Disc-laser firing and its
 lasting effect are S-0615 claims 12 to 17. Aircraft carrying a first passenger replace ordinary
 shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below. Which shot animation a shot makes,
-where it is and what it follows are claims 20 to 23.
+where it is and what it follows are claims 20 to 23; the target line that a vehicle with the
+target-laser flag shows its owner is claim 24.
 
 ## Terms
 
@@ -132,6 +133,8 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   claim 29 names it. A weapon has an ordered *animation list* of zero or more animation types,
   numbered from entry 0, and may name one *occupant animation* and one *open-topped animation*
   (Import mapping). It also may name an assault animation, which ordinary shots never use.
+- **Target line, line timer.** The line a vehicle with the imported target-laser flag shows its
+  owner after it fires, and the per-vehicle timer that decides how long it is shown (claim 24).
 - **Shot facing.** The facing of a firer that chooses an entry from an animation list of
   exactly eight entries (claim 21).
 - **Launch point.** The point from which a shot's projectile is launched, height included: the
@@ -820,7 +823,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     Every shot of a burst, a sync shot (claim 13) and an animation-delayed building's shot (claim
     14) makes its own choice at the moment it is fired. A gattling type's shot uses the weapon of its
     current stage (S-0609), so its list and therefore its shot animation change with the stage.
-    - Backing: `measurable` (scenario F19 parts a, b, c, e and h)
+    - Backing: `measurable` (scenario F19 parts a, b, c, e, h and j)
     - Confidence: high (the list rule, the one-step shift of entries and the absence of a draw); medium (the
       garrison replacement and the open-topped fallback)
 
@@ -875,13 +878,78 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     no default or placeholder picture at its launch point. The other things drawn when a weapon
     fires belong to their own specs: its sonic wave, laser, electric bolt or particle emitter
     (claim 5; S-0616 and the combat specs of those effects), and a building's turret and barrel
-    recoil (S-0105 claim 27). One more is local: a vehicle whose type has the imported
-    target-laser flag, owned by the local player's house, shows a line towards its target for
-    15 ticks after each shot. That line is drawing only and changes no game state.
-    - Backing: `measurable` (scenario F19 parts e and h; claim 15's backing for shots made void; S-0522
+    recoil (S-0105 claim 27). One more is local: the target line of claim 24.
+    - Backing: `measurable` (scenario F19 parts e, h and j; claim 15's backing for shots made void; S-0522
       scenario P7 for drop attempts)
-    - Confidence: high (the list of shots without one, and the target line's owner, duration and
-      restriction to vehicles)
+    - Confidence: high
+
+### Target line
+
+24. **The target line (Q-1580).** A vehicle whose type has the imported target-laser flag shows
+    a line from itself to its target for a short time after it fires. It is presentation only: it
+    is started only for the local player who owns the vehicle at the triggering shot, and it
+    changes no game state and takes no random draw. Later ownership changes follow part b.
+    - (a) **What starts it.** The line is started by every shot that reaches the choice of a shot
+      animation (claim 20), whether or not that choice finds a type: every shot of a burst, of
+      either weapon, a sync shot (claim 13) included. It is not started by any of the other
+      exclusions of claim 23: an attempt that the firing check refuses, a shot made void by
+      claim 15, a drain attempt, a drop attempt, a spawner weapon's shot, the firing of a disc
+      laser weapon or of a suicide weapon. The owner test is made at the shot: the firer's house
+      must be the local player's house then. The type flag is read for any firer, but only a
+      vehicle ever draws the line, so the flag on an infantry, aircraft or building type shows
+      nothing.
+    - (b) **How long.** Each vehicle has one line timer. A starting shot in the tick with tick
+      number *t*₀ sets it. Subject to part c's visibility and target conditions, the line is
+      drawn in every drawn frame whose current tick number *t* satisfies 0 ≤ *t* − *t*₀ < 15,
+      that is, for 15 ticks. A new starting shot within those
+      ticks restarts the 15 ticks from its own tick; there is never more than one line per
+      vehicle. A new vehicle shows no line before its first starting shot. A change of owner
+      after the shot does not end the line.
+    - (c) **When it is drawn.** It is drawn in the vehicle's own drawing step, after everything
+      else that step draws. When that step does not run (the vehicle is outside the drawn part
+      of the view, hidden from the viewer, or not on the map), there is no line, even when its
+      target is on screen. It is drawn only while the vehicle has a target at the moment of
+      drawing; without one, nothing is drawn, though the timer keeps running.
+    - (d) **Start point.** The vehicle's turret pivot (S-0313, Terms), recomputed in every drawn
+      frame from the vehicle's current position, body transform and turret facing, height
+      included. The start therefore follows the vehicle and its turret during the 15 ticks.
+    - (e) **End point.** The aim point of S-0306 claim 3 for the vehicle's *current* target,
+      recomputed in every drawn frame: the target's reference point, led ahead along its body
+      facing when it is a moving vehicle, by the lead of that claim with the current distance
+      and speed. It is not the point the shot was aimed at. So the end follows a moving target.
+      If the vehicle changes target within the 15 ticks, without firing again, the line goes to
+      the new target until the timer runs out. If the target is cleared (for example because it
+      was destroyed or removed from the map), the line disappears while there is no target.
+      Restoring a target before expiry shows the line for only the timer's remaining ticks.
+      Whether the target can be seen is not tested.
+    - (f) **Projection and clipping.** Both points are projected to screen pixels as every
+      object's position is (S-0101 claims 1 to 5, including height lift and integer rounding).
+      This includes that spec's fixed drawing-height rule: the original's shared projection
+      can visibly misalign objects with terrain. The line and the two end marks are clipped
+      to the tactical view.
+    - (g) **Look.** The colour is palette index 8 of the general palette (S-0306, Terms; the same
+      file as S-0111's overlay palette), in its neutral shade row 26 of 53, so it is never
+      lit, tinted or house-coloured, and no rules key sets it. The line is one pixel wide
+      and dotted: walking the line one pixel per step along its longer screen axis, every
+      second pixel is drawn, and the drawn and undrawn pixels swap from each tick to the next.
+      Each end point gets a solid 3 × 3 pixel square in the same colour, whose bottom-right
+      pixel is the end point (it covers the end point and the two pixels to its left and above).
+      There is no fading: the line looks the same
+      in each of its 15 ticks apart from the dot swap.
+    - (h) **Draw-order place.** The line is drawn right after its vehicle's picture, in that
+      vehicle's place in the object drawing order of S-0102, with no depth test and no depth
+      write. It covers its own vehicle and what was drawn before it; objects drawn later and the
+      status extras (S-0102 claim 1) cover it.
+    - Backing: `measurable` (scenario F20, with its height-lift departure tested on our engine).
+      The absence of a depth write is `unmeasured`: F20 part i tests visible covering order and depth-test
+      independence, but does not isolate a later depth reader that distinguishes a depth write.
+      Locomotor transforms outside the tested positions are `unmeasured` for the limitation of
+      S-0313 claim 1: their complete reachable conditions are not established.
+    - Confidence: high (the trigger, the 15-tick timer and its restart, the vehicle-only and
+      owner-only rules, the current-target end point, the colour index, the one-pixel dotted line,
+      the 3 × 3 squares); medium (the end's lead for a moving target, the projection of both
+      points, the draw-order place, the frames in which the vehicle is not drawn); low (which
+      pixels are drawn in a given tick, that is, the phase of the dots)
 
 ## Formulas
 
@@ -924,7 +992,10 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 **F5. Charge-turret number** (claim 16; multi-image, non-gattling types only). *c* = min(*N* − 1, max(0, trunc(*N* × *r* / *D*))) when
 *D* > 0 and the countdown runs; else 0. Integer arithmetic.
 
-**F6. Starting ammunition** (claim 10). *a*₀ = *A* when *J* = −1, otherwise *J*.
+**F6. Starting ammunition** (claim 10). Signed integers, rounds; no rounding.
+*a*₀ = *A* when *J* = −1, otherwise *J*. With `quirks.initial_ammo_above_capacity`
+on (the default), an explicit *J* above a nonnegative *A* remains *J*. With the switch off,
+that result is capped at *A*.
 
 **F7. Eight-entry choice** (claims 20 and 21). Integers. With *f* the shot facing (facing units),
 *d* = ⌊*f* / 8192 + ½⌋ mod 8 (S-0204 Formula F4 with *n* = 8) and *e* = (*d* + 1) mod 8. For a
@@ -938,8 +1009,7 @@ y of the building's foundation (the y-coordinate of its map-north edge):
 *z*ₐ = min(0, −trunc((*y*ₗ − *y*₀) / 4)), trunc toward zero.
 The coordinates are signed 32-bit integers in leptons and *z*ₐ is a signed 32-bit integer in
 depth units (S-0102). The formula uses integer division truncated toward zero; the selection
-itself requires no further rounding. With `quirks.initial_ammo_above_capacity` on (the default), an explicit
-*J* above a nonnegative *A* remains *J*. With the switch off, that result is capped at *A*.
+itself requires no further rounding.
 
 ## Constants
 
@@ -962,7 +1032,11 @@ itself requires no further rounding. With `quirks.initial_ammo_above_capacity` o
 | Entry shift of an eight-entry list | 1 | entries | Claim 20, Formula F7 |
 | Occupied building's shot-animation depth adjustment | −200 | depth units (S-0102) | Claim 22, Formula F8 |
 | Divisor of a building's shot-animation depth adjustment | 4 | divisor (leptons) | Claim 22, Formula F8 |
-| Target line duration | 15 | ticks | Claim 23 |
+| Target line duration | 15 | ticks | Claim 24 (b) |
+| Target line colour | 8 | palette index (general palette, row 26) | Claim 24 (g) |
+| Target line width | 1 | pixels | Claim 24 (g) |
+| Target line dot period | 2 | pixels (one drawn, one not) | Claim 24 (g); the phase swaps every tick |
+| Target line end mark | 3 × 3 | pixels, bottom-right pixel on the end point | Claim 24 (g) |
 
 ## State and ordering
 
@@ -974,7 +1048,7 @@ itself requires no further rounding. With `quirks.initial_ammo_above_capacity` o
 | ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ordinary per-shot ammunition use or ordinary-shot draws; target clearing still resets the burst counter; an admitted initial aircraft pass still makes its run round pending (S-0608 claim 16; S-0501 claim 15) |
 | infantry walker, any rearm state | charge arrival under S-0519 claim 13 | countdown replaced by claim 19's non-shot delay; burst counter and ammunition unchanged by the query |
 | carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or shot animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
-| ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
+| ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | countdown, burst counter, ammunition and garrison muzzle position unchanged; projectile draws already taken remain consumed (claim 18) |
 | ready, animation-delayed non-SAM building on the ordinary path | its attack behaviour gets *can fire*, outside an active upgrade gate | the delayed shot becomes pending (claim 14); no shot is made yet |
 | ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate passes | immediate primary and secondary attempts, no delayed shot started; an empty secondary does nothing (claims 9 and 14) |
 | ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate fails with the gate quirk on | no attempt and no delayed shot started (claim 14) |
@@ -1096,14 +1170,15 @@ itself requires no further rounding. With `quirks.initial_ammo_above_capacity` o
 | `OpenToppedAnim` (rules, weapon) | open-topped animation (claim 20 c) | animation type name | none |
 | `AssaultAnim` (rules, weapon) | assault animation; not used by ordinary shots (Terms) | animation type name | none |
 | `Turret` (rules, vehicle type) | the vehicle row of claim 21; S-0310 owns the flag | boolean | no |
-| `TargetLaser` (rules, type; only a vehicle shows the line) | the target line of claim 23 | boolean | no |
+| `TargetLaser` (rules, type; only a vehicle shows the line) | the target line of claim 24 | boolean | no |
+| none | general palette, whose index 8 colours the target line (claim 24 g) | palette selection inherited from S-0306 claim 30 | no independent selector |
 
 The importer warns for a `Burst` below 1, a negative `ROF`, a negative factor, and a burst-delay
 value below −1 (Edge cases).
 
 ## Measurement scenarios
 
-Scenario labels F1 to F18 are separate from the formulas F1 to F6; the text says "scenario" or
+Scenario labels F1 to F20 are separate from the formulas F1 to F8; the text says "scenario" or
 "Formula" each time. All scenarios use stock data unless a named test rules file is listed, under the measurement setup
 (glossary), a small purpose-made skirmish map, one game speed (any; claim 1 says it does not matter),
 and the random-state recorder where draws matter. Unless a scenario states otherwise, each distinct
@@ -1118,9 +1193,11 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   single-shot weapon in slot 1).
 - Observable: shot ticks over 20 shots; the recorder's draw results for R(0, 2).
 - Expected: each interval equals *D*₁ of Formula F1 for that shot's draw *u*; the first shot
-  comes in the first tick in which the vehicle is facing the target; the intervals in ticks are the
-  same at both speeds; the target change and the weapon change do not move the tick of the next shot.
-- Falsified if: any interval differs from that value, the intervals change with game speed, or a
+  comes in the first tick in which the vehicle is facing the target; the intervals in ticks are
+  governed by the same formula at both speeds, using each run's recorded draws rather than
+  requiring independently seeded runs to have identical intervals; the target change and the
+  weapon change do not move the tick of the next shot.
+- Falsified if: any interval differs from that value, the formula's tick delay depends on game speed, or a
   target or weapon change shortens or lengthens the running countdown.
 
 **F2. House and veteran factors.**
@@ -1174,13 +1251,16 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   its delay is the full delay, with an R(0, 2) draw. Falsified if the second shot comes 3 to 5
   ticks after the first, if no R(3, 5) draw follows the third shot of the 3-round run, or if an
   R(0, 2) draw follows it.
-- Falsified if: in-burst intervals use the full delay, the counter is not reset by the stop, a
+- Falsified if: any interval or delay draw differs from the expected case, in-burst intervals
+  use the full delay, the counter is not reset by the stop, a
   change of target resets it, or the carried count does not decide the second weapon's delay.
 
 **F4. Effect weapons.**
 - Setup: a vehicle with a sonic weapon and a vehicle with a railgun weapon; named test rules
   supply either weapon assignment when needed.
-- Observable: shot ticks; draws.
+- Observable: shot ticks; draws; a read-only recorder's firing-check answers before the
+  attack behaviour responds. Where this scenario names an answer, a different recorded
+  answer falsifies that label independently of whether a shot follows.
 - Expected (sonic weapon): no delay draw is taken; intervals are max(*R*, wave lifetime).
 - Falsified if: a draw is taken for the delay, or an interval differs from
   max(*R*, wave lifetime) when facing, range and all other firing gates remain satisfied.
@@ -1255,6 +1335,10 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Skips (test rules file): an occupy factor of 0 and a negative one, and a bunker factor of 0.
   Expected: each division is skipped, so the delay is the one without it. Falsified if a division by
   zero or a changed delay appears.
+- Invalid-text controls: named test rules separately give each factor a nonnumeric value,
+  with no earlier layer supplying it. Expected on our engine: the absent default 1.0 and
+  S-0003 claim 8's warning, not a division by an invalid number. A different imported value,
+  missing warning or different delay falsifies that departure; this is not an oracle prediction.
 - Falsified if: the intervals do not scale as Formula F1 says.
 - Death-removal comparison (our engine only): use S-0508 scenario G18's foreign-owned
   garrison and defeat its occupants' house. Record the occupant count in the death update.
@@ -1416,9 +1500,11 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 **F11. Firing frames and sync.**
 - Setup: test art file: a sprite vehicle with 4 firing frames and firing sync frame 3 for
   burst-counter value 0, a weapon with burst count 1 and a long rate-of-fire field.
-- Observable: shot ticks.
+- Observable: shot ticks and the firing-frame counter before each firing attempt, using
+  tick-labelled capture and a read-only recorder.
 - Expected: the first shot starts the counter at 7; the next shot comes in the vehicle's turn in
-  which the counter equals 3 (4 turns later), not at the rearm delay. The long rearm delay for that
+  which the counter equals 3 after four decrements, not at the rearm delay. Record that equality
+  directly rather than presuming whether the first decrement occurs in the shot's turn. The long rearm delay for that
   sync shot outlasts the counter, so the next shot follows that delay under either open
   interpretation of the post-sync gate.
 - Falsified if: the second shot follows the rearm delay rather than the sync opportunity,
@@ -1595,6 +1681,8 @@ is absent (the control).
   draws. Expect one warning naming the weapon and single-shot behaviour with the full
   delay after every shot, as for burst count 1. A missing warning, failure to run or any
   in-burst delay falsifies the safe replacement. Do not run the failing original input.
+- For every engine-only warning check above, a missing required warning or a warning where
+  the stated rule requires none falsifies the corresponding import rule.
 
 **F17. Upgrade pair with an empty secondary and animation delay (Q-0798).**
 - Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
@@ -1687,14 +1775,124 @@ is absent (the control).
     the single-shade house-colour palette (S-0103 row 4), one without it the anim palette.
   - (h) An infantry passenger of an open-topped transport armed with WP, then WP8. Expected:
     T10 at the transport's muzzle, moving with the transport; then entries T0 … T7 by the
-    passenger's own facing, never T10. Separately, a test vehicle with the target-laser flag
-    owned by the local player: a line towards its target for 15 ticks after each shot, absent for
-    the same vehicle owned by the computer player.
+    passenger's own facing, never T10.
   - (i) As (f) with a test building that is not turreted and one with a voxel turret, both
     armed with W8, at targets in each 8-direction from their aiming points and at about 3584.
     Expected: the entry of the target direction's own 8-direction (entry 1 at about 3584).
+  - (j) Repeat the vehicle part with a burst, F11's reachable sync shot and F12's delayed
+    building shot; use distinct lists for two gattling stages. Expect a new choice at each
+    actual shot from the weapon and facing current then. Give W0 an assault animation only:
+    expect no shot animation or placeholder. Repeat the excluded firing cases using the
+    setups of F14's refused/void parts, S-0608 scenario D1, S-0522 scenario P7, S-0506
+    scenario R2, S-0615 scenario DL1 and S-0519 scenario T12, with a named list added to the
+    attempted weapon. Expect no shot animation for those excluded attempts or firings.
+- For every part, a missing expected picture, an extra or different picture, a different
+  attachment/removal result, layer, palette or position falsifies the corresponding rule.
+  The stated expected image must be identifiable in a control; occluded or unreachable
+  cases are inconclusive. Also record creation settings with a read-only recorder: no
+  initial loop delay, repeat factor 1 and no reverse request. A differing setting falsifies
+  claim 22; repeat with the type's reverse flag enabled to check its independent effect.
 - Draws in every part: no raw value is taken between the shot's delay draw and the test
   animation's creation. Falsified by an extra draw that depends on the list length.
+
+**F20. Target line (claim 24; Q-1580).**
+- Setup: a purpose-made test map at speed index 2, director off, no engine add-on and no mods
+  except this scenario's named map overrides and test art. Use flat ground except for part l,
+  neutral test lighting and a hi-colour display path. Test vehicle TV has the target-laser flag,
+  a turret and an ordinary draw-free direct-fire weapon with a rate-of-fire field of 40 ticks
+  and burst count 1. TV2 differs only in its rate-of-fire field of 5 ticks. These are invented
+  test values. Targets are a durable stationary building, a vehicle driving straight and a weak
+  vehicle one shot destroys. A bystander computer player stays outside the observed area under
+  the glossary's void rule, except for the explicitly named firer of part f.
+- Record every drawn frame with its tick number, using tick-labelled screen capture and the
+  random-state recorder. A read-only recorder supplies current targets, ownership, positions,
+  facings and shot ticks. Run each part three times. Compare a flag-off clone: no line and no
+  line-related random draw or change to shot timing, damage or ammunition are expected. Any
+  such draw or gameplay difference, or a line with the flag off, falsifies that rule. Void a
+  run if an unnamed object affects the test or a required state is not reached normally.
+- Procedure and observable, per part:
+  - (a) TV, owned by the local player, fires once at the stationary building. Record the first
+    and last line ticks, its pixels and both end marks. Expect no line before that first shot,
+    then a line in exactly ticks *t*₀ … *t*₀ + 14. Expect a one-pixel-wide dotted line, alternating
+    drawn and undrawn pixels along its longer screen axis, swapping that set each tick. Each end
+    gets a solid 3 × 3 square whose bottom-right pixel is the projected end point. Apart from the
+    dot swap, there is no fade or other change. An early/missing line, a line at *t*₀ + 15,
+    another width or pattern, a missing swap, different square geometry or a fade falsifies
+    the corresponding rule. Do not presume the unresolved absolute dot phase.
+  - (b) As (a), but drive TV or turn its turret during the 15 ticks without another shot,
+    retaining a target. Compute the projected turret pivot from each frame's recorded pose
+    using S-0313 claim 1 with zero muzzle displacement and S-0101 claims 1 to 5.
+    Expect the start mark there in every frame. A start left at the firing position or at any
+    different pixel falsifies the rule. Include a named nonzero turret displacement to separate
+    the pivot from the vehicle's reference point.
+  - (c) Fire at the moving vehicle. Compute its current aim point using S-0306 claim 3 and
+    project it with S-0101 claims 1 to 5. Expect the end there in every frame, including changes
+    of distance or speed. An end fixed at the shot's aim point, attached to the unled reference
+    point when the predicted lead is nonzero, or differing from the predicted pixel falsifies it.
+  - (d) Fire at the weak vehicle and record when its destruction clears TV's target. Expect
+    the line to disappear in the first drawn frame with no target. In a separate run, retarget
+    TV before it can fire again: expect the end to jump to the new current aim point without
+    extending expiry beyond *t*₀ + 14. Clear and restore a target within that interval as a third
+    run: expect no line while targetless and a line only for the remaining ticks after restoration.
+    Persistence without a target, failure to follow the new target, or restarted expiry without
+    a shot falsifies the corresponding rule.
+  - (e) Let TV2 fire repeatedly, then stop further shots while retaining its target (the named
+    test clone may have a finite magazine). Expect one line, never multiple lines, present
+    through *t*last + 14 and absent at *t*last + 15. Duplicate lines, expiry from the first
+    rather than the last shot, or any other expiry tick falsifies the rule.
+  - (f) A named computer-owned TV fires at a local-player building in view. Expect no line.
+    Separately let local-player infantry, aircraft and building test types with the flag fire
+    ordinary shots: expect no line. Any line from these firers falsifies the relevant owner
+    or vehicle-only restriction. Confirm the local-player TV control does show one.
+  - (g) After a shot, scroll until TV is outside the drawn part of the view while its target
+    stays visible. Expect neither line nor target-end square. For the hidden case, first
+    transfer TV to the enemy as in part k, then cloak it without viewer sensor coverage.
+    An own cloaked vehicle is not a hidden-from-owner control. Also test it off-map inside a transport, using
+    named test data to finish those transitions within the timer. Re-show it before expiry:
+    expect only the timer's remaining ticks, not a restart. Any mark while TV is not drawn,
+    or a visibility-driven timer restart, falsifies the corresponding rule.
+  - (h) Read line pixels with S-0103's pixel-reading method. Repeat with different house colours,
+    lighting and coloured light. Expect the general palette's index 8 in neutral row 26 of 53,
+    unchanged across those runs. Any different pixel colour falsifies the prediction. If the
+    installed palette makes candidate rows indistinguishable, use a named loose test palette
+    with a distinguishable index-8 colour and shade results; otherwise report row selection
+    inconclusive rather than inferring it from identical colours.
+  - (i) Drive a test vehicle across the line, once earlier and once later than TV in the
+    ground-layer drawing order. Arrange visible status extras across the line too. Expect
+    line pixels over the earlier vehicle and over TV's own opaque pixels, but under the later
+    vehicle and the status extras. Choose differing scene depths at the earlier-vehicle overlap
+    so a depth-tested line would be hidden. Any contrary covering order or depth-dependent
+    disappearance falsifies the relevant prediction. This tests visible order and absence of
+    a depth test, not the separate unmeasured absence of a depth write.
+  - (j) Trigger controls: give TV a burst, both weapon slots, no chosen shot animation, and
+    F11's reachable sync shot in separate named fixtures. Expect each admitted ordinary shot
+    to start or restart the same 15-tick line. Use F14's refused and void attempts, S-0608
+    scenario D1's drain attempt, S-0506 scenario R2's spawner shot, S-0615 scenario DL1's disc
+    laser and S-0519 scenario T12's surviving-suicide fixture as exclusion controls, each with
+    the flag enabled. Expect none to start or restart the timer; record its deadline directly
+    if no line could otherwise be seen. S-0522 scenario P7 supplies the aircraft drop control.
+    Any contrary timer start, missing restart or changed deadline falsifies the corresponding
+    trigger rule. An excluded attempt with no prior running timer must leave it expired.
+  - (k) Change TV's owner through normal takeover after a local-player shot, retaining a
+    current target and preventing further shots. Expect the original local view's line to
+    continue until its unchanged deadline. Separately take over a computer-owned TV after
+    its shot: expect no line merely because it now belongs to the local player. Early loss
+    or a new timer due only to takeover falsifies the shot-time owner test. Record loss of
+    the target separately and void that comparison if a target cannot be retained or restored
+    before expiry; target loss alone cannot test ownership.
+  - (l) Projection, clipping and hidden targets: repeat a shot with firer and target at
+    differing terrain heights, and on a slope. The exact height-lift result of S-0101 claim 3
+    is an engine-only departure check, not an oracle prediction. On the original, compare
+    the endpoints with that run's shared object-position projection; do not interpret its
+    known terrain misalignment as a target-line-specific error. On our engine compute pixels
+    as in parts b and c. Keep TV drawn while scrolling each end mark and the line partly beyond every
+    tactical-view edge. Expect only their intersection with the tactical view, with unchanged
+    projected endpoints, not clamped endpoints. In a separate run cloak the target after the
+    shot, retaining it as TV's current target without another shot. Expect its line to remain
+    despite the target's invisibility. A height lift differing from the applicable engine's
+    shared projection, drawing outside the view,
+    endpoint clamping, or disappearance caused solely by target invisibility falsifies the
+    corresponding rule. Target clearing makes the invisibility comparison inconclusive.
 
 ## Open questions
 
@@ -1716,9 +1914,10 @@ is absent (the control).
   Scenario F11's main part cannot tell the two apart while the rate-of-fire field is long; its
   beyond-the-start part, with a short field, can for a sync frame that is never reached.
 - Claim 13: does the counter first fall in the turn of the shot that starts it or in the next
-  one? The sync shot of F11 comes at the same tick either way, but the tick at which the counter
-  goes idle differs by one.
+  one? The counter reaches the sync value after the same number of decrements either way,
+  but their tick numbers and the tick at which the counter goes idle can differ by one.
+  F11 records the counter at each firing attempt rather than assuming either decrement boundary.
 - Claim 9, rank 16: which of the answers of claim 9 the locomotor's own refusal gives (S-0310,
   claim 7).
-- Claim 23: how the target line is drawn (its two end points, colour and thickness) is not
-  specified here. It is drawing only and shown only to the owning player.
+- Claim 24 (g): which of the two dot phases a given tick shows, and from which end the dots are
+  counted, is not stated (low confidence); only the period and the swap every tick are.
