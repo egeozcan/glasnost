@@ -11,6 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_convert::Import;
+use glasnost_convert::art::ProjectileColour;
 use glasnost_convert::kinds::Kind;
 use glasnost_convert::theater::{Catalogue, alternate_image_mark, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
@@ -190,8 +191,56 @@ const NEUTRAL_BRIGHTNESS: i32 = 1000; // spec: S-0104 claim 13 (ore and gem over
 const SPRITE_PARTICLE_BRIGHTNESS: i32 = 1000; // spec: S-0616 claim 24 and Constants (sprite particle brightness 1000 per mille)
 /// A sprite particle's depth bias before −*L(z)* (S-0616 claim 27).
 const SPRITE_PARTICLE_BIAS: i32 = -15; // spec: S-0616 claim 27 and Constants (sprite particle depth bias −15 − L(z))
+/// A projectile body's brightness (S-0306 claims 30 and 31), in ‰.
+const PROJECTILE_BRIGHTNESS: i32 = 1000; // spec: S-0306 claims 30 and 31, Constants (projectile body brightness 1000)
+/// A projectile sprite's depth bias before −*L(z)* (S-0102 claim 13).
+const PROJECTILE_BIAS: i32 = -30; // spec: S-0102 claim 13 and Constants (projectile depth bias −30 − L(z))
+/// A projectile shadow's depth bias before −*L* of the ground under it
+/// (S-0102 claim 13).
+const PROJECTILE_SHADOW_BIAS: i32 = -10; // spec: S-0102 claim 13 and Constants (projectile shadow bias −10)
+/// A flat voxel projectile's final depth bias (S-0102 claim 13, S-0306
+/// claim 30): no −*L(z)* term.
+const FLAT_VOXEL_PROJECTILE_BIAS: i32 = -65; // spec: S-0306 claim 30 and S-0102 claim 13 (final bias −65, no height-lift term)
+/// The general palette's index of the target line (S-0301 claim 24 g).
+pub const TARGET_LINE_INDEX: u8 = 8; // spec: S-0301 claim 24 g (palette index 8 of the general palette)
+/// The general palette's shade row of the target line (S-0301 claim 24 g).
+const TARGET_LINE_ROW: usize = 26; // spec: S-0301 claim 24 g (the neutral shade row 26 of 53)
+/// The side of a target line's end square (S-0301 claim 24 g).
+const TARGET_LINE_SQUARE: i32 = 3; // spec: S-0301 claim 24 g (a solid 3 × 3 square whose bottom-right pixel is the end point)
 /// A pixel particle's depth bias before −*L(z)* (S-0616 claim 28).
 const PIXEL_PARTICLE_BIAS: i32 = -50; // spec: S-0616 claim 28 and Constants (pixel particle depth bias −50 − L(z))
+/// The pixels of a dotted line from `a` to `b` (S-0301 claim 24 g): one
+/// step per pixel along the longer screen axis, the other axis rounded to
+/// the nearest pixel, every second step drawn, `phase` choosing whether the
+/// even or the odd steps are. Which steps a given tick draws is our interim
+/// (the phase of the dots is low confidence there).
+pub fn dotted_line(a: (i32, i32), b: (i32, i32), phase: bool) -> Vec<(i32, i32)> {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    // spec: S-0301 claim 24 g (walking the line one pixel per step along its longer screen axis)
+    let n = dx.abs().max(dy.abs());
+    let mut out = Vec::new();
+    for k in 0..=n {
+        // spec: S-0301 claim 24 g (every second pixel drawn; the drawn and undrawn pixels swap each tick)
+        if (k % 2 == 1) != phase {
+            continue;
+        }
+        let step = |d: i32| {
+            if n == 0 {
+                0
+            } else {
+                // Our rounding of the shorter axis: to the nearest pixel, halves away from zero.
+                let t = 2 * d * k;
+                let q = (t.abs() + n) / (2 * n);
+                if t < 0 { -q } else { q }
+            }
+        };
+        out.push((a.0 + step(dx), a.1 + step(dy)));
+    }
+    out
+}
+
+/// The image-cache key of the target line's 1 × 1 image (ours).
+const TARGET_LINE_IMAGE_KEY: &[u8] = b"\0target line pixel";
 /// The image-cache key of the pixel particles' shared 1 × 1 image (ours).
 const PIXEL_IMAGE_KEY: &[u8] = b"\0particle pixel";
 /// The veinhole marker overlay index (S-0009 claim 14).
@@ -217,6 +266,7 @@ pub const COMPANION_FILE: &[u8] = b"BUILDNGZ.SHA"; // spec: S-0102 Import mappin
 /// The notes a scene can carry: gaps in the specs (with their request) and
 /// parts our viewer does not draw yet.
 mod notes {
+    pub const NO_GENERAL_PALETTE: &str = "no general palette (PALETTE.PAL missing or unreadable): projectile sprites in it and target lines are not drawn (S-0306 Terms, S-0301 claim 24 g)";
     /// The warning of S-0105 claim 22 and Import mapping for a model whose
     /// `role` image (a part name or "shadow") has a copy rectangle side
     /// above 4096 pixels, at the pose `pose`.
@@ -806,9 +856,10 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
     let mut out = BTreeSet::new();
     let art = art_document(import);
     for &(kind, idx) in import.arts.keys() {
+        // spec: S-0306 claim 28 and S-0007 claim 27 (a projectile's sprite or voxel body)
         if matches!(
             kind,
-            Kind::Buildings | Kind::Vehicles | Kind::Infantry | Kind::Aircraft
+            Kind::Buildings | Kind::Vehicles | Kind::Infantry | Kind::Aircraft | Kind::Projectiles
         ) {
             art_files(import, kind, idx, &mut out);
         }
@@ -902,6 +953,12 @@ struct Rows {
     /// The single-shade table of the first colour definition (S-0103
     /// claim 8 row 4).
     alt: Option<(usize, usize)>,
+    /// The single-shade tables of colour definitions by colour (S-0103
+    /// claim 5), for voxel projectiles (S-0306 claim 30).
+    single: BTreeMap<[u8; 3], (usize, usize)>,
+    /// The general palette's untinted table (S-0306 Terms); `None` inside
+    /// when its file is missing or unreadable.
+    general: Option<Option<(usize, usize)>>,
 }
 
 /// The shared building companion depth image as read (S-0102 claims 31
@@ -1095,6 +1152,37 @@ pub enum ParticleDraw {
         /// World position in leptons.
         pos: (i32, i32, i32),
     },
+}
+
+/// The palette of a projectile's sprite body (S-0306 claim 31).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProjectilePalette {
+    /// The anim palette (the image's anim-palette flag).
+    Anim,
+    /// The 53-shade house-colour palette of the house of this name (the
+    /// firer's-palette flag).
+    House(Vec<u8>),
+    /// The general palette.
+    General,
+}
+
+/// A projectile in flight to draw (S-0306 claims 28 to 32).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProjectileDraw {
+    /// Its type's import registration index.
+    pub idx: usize,
+    /// World position in leptons.
+    pub pos: (i32, i32, i32),
+    /// The 32-step drawn facing ψ and pitch facing *e* (F14).
+    pub facings: (u8, u8),
+    /// A sprite body's image frame (claim 29).
+    pub frame: i32,
+    /// A sprite body's palette (claim 31).
+    pub palette: ProjectilePalette,
+    /// A sprite body's shadow (claim 32): the shadow height η and the world
+    /// height of the ground the shadow lies on (terrain or deck); `None`
+    /// without one.
+    pub shadow: Option<(i32, i32)>,
 }
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
@@ -2910,6 +2998,271 @@ impl Builder<'_> {
     /// One particle of the live game: a sprite kind's image frame or a
     /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
     /// sprite or for a frame outside the sprite.
+    /// One projectile in flight (S-0306 claims 28 to 32): its sprite body
+    /// with its shadow first, or its voxel body; no items when nothing is
+    /// drawn for it (no art, a frame the sprite does not hold, or no
+    /// general palette for a body that needs it).
+    fn live_projectile(&mut self, d: &ProjectileDraw) -> Vec<Item> {
+        let Some(art) = self.import.arts.get(&(Kind::Projectiles, d.idx)).cloned() else {
+            return Vec::new();
+        };
+        let Some(look) = art.projectile.clone() else {
+            return Vec::new();
+        };
+        // spec: S-0306 claim 28 (an invisible projectile draws nothing at all)
+        if look.inviso {
+            return Vec::new();
+        }
+        // spec: S-0306 claim 28 and S-0101 F1 (the draw point: the screen point of its position, height lift included, no further shift)
+        let point = project_lifted(d.pos.0, d.pos.1, d.pos.2);
+        if look.voxel {
+            return self.voxel_projectile(d, &art, &look, point);
+        }
+        // spec: S-0306 claim 28 (a sprite projectile without a sprite draws nothing)
+        let Some(sprite) = art.sprite.clone() else {
+            return Vec::new();
+        };
+        let n = self.sprite_frames(&sprite).unwrap_or(0);
+        // spec: S-0306 claim 28 (a frame number at or above the frame count draws nothing: neither body nor shadow)
+        let Some(f) = usize::try_from(d.frame).ok().filter(|&f| f < n) else {
+            return Vec::new();
+        };
+        let row = match &d.palette {
+            // spec: S-0306 claim 31 case 1 (the anim palette, at brightness 1000)
+            ProjectilePalette::Anim => self.anim_palette_row(PROJECTILE_BRIGHTNESS),
+            // spec: S-0306 claim 31 case 2 (the 53-shade house-colour palette of that house, at brightness 1000)
+            ProjectilePalette::House(owner) => {
+                let (hsv, _) = self.owner_colour(owner);
+                self.house_row(hsv, PROJECTILE_BRIGHTNESS)
+            }
+            // spec: S-0306 claim 31 case 3 (the general palette, at brightness 1000)
+            ProjectilePalette::General => match self.general_row() {
+                Some((base, rows)) => Shade::new(base, rows, PROJECTILE_BRIGHTNESS),
+                None => {
+                    self.note(notes::NO_GENERAL_PALETTE);
+                    return Vec::new();
+                }
+            },
+        };
+        let mut items = Vec::new();
+        if let Some((eta, ground)) = d.shadow {
+            // spec: S-0306 claim 32 (the body's own frame as a shadow, centred L(η) rows below the draw point, just before the body)
+            let at = (point.0, point.1 + height_lift(eta));
+            items.extend(self.place_sprite(
+                &sprite,
+                f,
+                at,
+                // spec: S-0102 claims 10, 12 and 13 (a flat reader, bias −10 − L of the ground or deck world height under it)
+                DepthTest::Reader,
+                ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: PROJECTILE_SHADOW_BIAS - height_lift(ground),
+                    companion: None,
+                },
+                // spec: S-0102 claim 26 (a plain darkening that ignores palette, brightness and light-alpha values)
+                Paint::Shadow,
+                Group::Shadows,
+                false,
+                None,
+            ));
+        }
+        items.extend(self.place_sprite(
+            &sprite,
+            f,
+            point,
+            // spec: S-0102 claims 10, 12 and 13 (a projectile sprite: a flat reader, bias −30 − L(z))
+            DepthTest::Reader,
+            ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: PROJECTILE_BIAS - height_lift(d.pos.2),
+                companion: None,
+            },
+            // spec: S-0306 claim 31 (through the light-alpha values; never translucent)
+            Paint::Lit(row),
+            Group::Effects,
+            false,
+            None,
+        ));
+        items
+    }
+
+    /// A projectile's voxel body (S-0306 claim 30): the body model of its
+    /// voxel art in motion-file frame 0, posed by its drawn facing and
+    /// pitch, shaded by F16, in the palette of its colour definition; no
+    /// shadow.
+    fn voxel_projectile(
+        &mut self,
+        d: &ProjectileDraw,
+        art: &glasnost_convert::art::TypeArt,
+        look: &glasnost_convert::art::ProjectileLook,
+        point: (i32, i32),
+    ) -> Vec<Item> {
+        let q = VoxelQuirks::default();
+        // spec: S-0306 claims 28 and 30 (only the body model; absent or discarded voxel art draws nothing)
+        let Some(file) = art.voxels.get("body").cloned() else {
+            return Vec::new();
+        };
+        let (psi, e) = d.facings;
+        // Our cache key: a voxel projectile is drawn afresh in every drawn frame (claim 30), and
+        // its image depends only on the model, ψ and e (frame 0, a fixed light, a stateless
+        // shade table), so a kept image equals a fresh draw.
+        let key = voxel::ImageKey::Projectile {
+            heading: psi,
+            pitch: e,
+        };
+        let part = self.cached_part(Kind::Projectiles, d.idx, key, |b| {
+            let model = b.voxel_model(&file)?;
+            let mode = model.sections.first()?.normal_mode;
+            // spec: S-0306 claim 30 (Rz(−(π/16)(ψ − 8)) · Ry(+(π/16)(e − 8)) under the fixed view)
+            let draw = voxel::projectile_body(psi, e, &q);
+            // spec: S-0306 claim 30 and F16 (one diffuse term, the table of the first section's normal mode)
+            let shades = voxel::projectile_shade_table(&draw, mode, &q);
+            let vpl = b.vpl();
+            // spec: S-0306 claim 30 (motion-file frame 0)
+            let img = voxel::draw_model_shaded(&model, 0, &draw, vpl.as_ref(), &shades, &q);
+            b.limit_checked(&file, "projectile", key, img)
+        });
+        let Some(part) = part else {
+            return Vec::new();
+        };
+        let colours = &self.import.outcome.colours;
+        let row = match look.colour {
+            // spec: S-0306 claim 30 (the 53-shade palette of the selected colour definition, at brightness 1000)
+            ProjectileColour::Shades(i) => {
+                let hsv = colours.get(i).map_or([0, 0, 0], |c| c.hsv);
+                self.house_row(hsv, PROJECTILE_BRIGHTNESS)
+            }
+            // spec: S-0306 claim 30 (the single-shade palette of that definition: one shade row)
+            ProjectileColour::Single(i) => {
+                let hsv = colours.get(i).map_or([0, 0, 0], |c| c.hsv);
+                let (base, n) = self.single_row(hsv);
+                Shade::new(base, n, PROJECTILE_BRIGHTNESS)
+            }
+        };
+        let (test, bias) = if look.flat {
+            // spec: S-0306 claim 30 and S-0102 claim 13 (a flat voxel projectile: a flat reader, final bias −65, no −L(z))
+            (DepthTest::Reader, FLAT_VOXEL_PROJECTILE_BIAS)
+        } else {
+            // spec: S-0306 claim 30 and S-0102 claim 10 (a non-flat voxel projectile neither tests nor writes depth)
+            (DepthTest::Ignore, 0)
+        };
+        vec![Item {
+            image: part.0,
+            // spec: S-0306 claim 28 and S-0105 claim 25 (the copy rectangle around the draw point, as a part)
+            x: point.0 + part.1[0],
+            y: point.1 + part.1[1],
+            test,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias,
+                companion: None,
+            },
+            // spec: S-0306 claim 30 (through the light-alpha values)
+            paint: Paint::Lit(row),
+            group: Group::Effects,
+            provisional: false,
+            object: None,
+            stack: None,
+        }]
+    }
+
+    /// The single-shade table of a colour definition (S-0103 claim 5): one
+    /// untinted row (S-0104 claim 3), added to the scene once.
+    fn single_row(&mut self, hsv: [u8; 3]) -> (usize, usize) {
+        if let Some(r) = self.p.rows.single.get(&hsv) {
+            return *r;
+        }
+        let pal = house_palette(&self.palettes.unit, hsv);
+        // spec: S-0103 claim 5 (a single-shade palette has one shade row)
+        let t = light::shade_table(&pal, WHITE, 1, None);
+        let base = self.built.scene.rows.len();
+        for row in &t {
+            self.built.scene.add_row(row565(row));
+        }
+        self.p.rows.single.insert(hsv, (base, t.len()));
+        (base, t.len())
+    }
+
+    /// The general palette's shade table (S-0306 Terms): the overlay
+    /// palette's file, components ×4, a 53-row untinted table; `None` when
+    /// the file is missing or unreadable.
+    fn general_row(&mut self) -> Option<(usize, usize)> {
+        if let Some(r) = self.p.rows.general {
+            return r;
+        }
+        let r = self
+            .assets
+            .get(super::combat::OVERLAY_PALETTE)
+            .and_then(|b| glasnost_fmt::pal::Palette6::parse(b).ok())
+            .map(|p| {
+                // spec: S-0306 Terms and S-0103 claim 1 (the components multiplied by 4)
+                let pal = glasnost_render::palette::palette_from_file(
+                    &p,
+                    &glasnost_render::palette::PaletteQuirks::default(),
+                );
+                // spec: S-0306 Terms and S-0104 claim 6 (a 53-row table built like the anim palette's, never tinted)
+                let t = light::untinted_table(&pal);
+                let base = self.built.scene.rows.len();
+                for row in &t {
+                    self.built.scene.add_row(row565(row));
+                }
+                (base, t.len())
+            });
+        self.p.rows.general = Some(r);
+        r
+    }
+
+    /// A target line's items (S-0301 claim 24 f to h); none without the
+    /// general palette.
+    fn target_line_items(&mut self, a: (i32, i32), b: (i32, i32), phase: bool) -> Vec<Item> {
+        let Some((base, rows)) = self.general_row() else {
+            self.note(notes::NO_GENERAL_PALETTE);
+            return Vec::new();
+        };
+        // spec: S-0301 claim 24 g (shade row 26 of 53: never lit, tinted or house-coloured)
+        let row = base + TARGET_LINE_ROW.min(rows.saturating_sub(1));
+        let key = (TARGET_LINE_IMAGE_KEY.to_vec(), 0, 0);
+        let image = match self.p.images.get(&key).copied().flatten() {
+            Some(i) => i,
+            None => {
+                let img = IndexedImage::new(1, 1, vec![TARGET_LINE_INDEX]).expect("1 × 1");
+                let i = self.built.scene.add_image(img);
+                self.p.images.insert(key, Some(i));
+                i
+            }
+        };
+        let pixel = |x: i32, y: i32| Item {
+            image,
+            x,
+            y,
+            // spec: S-0301 claim 24 h (no depth test and no depth write)
+            test: DepthTest::Ignore,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: 0,
+                companion: None,
+            },
+            paint: Paint::Row(row),
+            group: Group::Effects,
+            provisional: false,
+            object: None,
+            stack: None,
+        };
+        let mut out: Vec<Item> = dotted_line(a, b, phase)
+            .into_iter()
+            .map(|(x, y)| pixel(x, y))
+            .collect();
+        for (ex, ey) in [a, b] {
+            // spec: S-0301 claim 24 g (a solid 3 × 3 square whose bottom-right pixel is the end point)
+            for dy in 0..TARGET_LINE_SQUARE {
+                for dx in 0..TARGET_LINE_SQUARE {
+                    out.push(pixel(ex - dx, ey - dy));
+                }
+            }
+        }
+        out
+    }
+
     fn live_particle(&mut self, d: &ParticleDraw) -> Vec<Item> {
         match *d {
             ParticleDraw::Sprite {
@@ -4761,6 +5114,86 @@ impl Painter {
         *self = b.p;
         *scene = b.built.scene;
         (out, b.built.notes)
+    }
+
+    /// Draws the live game's projectiles in flight into `scene` (adding the
+    /// images and rows they need): for each, its items (shadow, then body),
+    /// none when nothing is drawn for it (S-0306 claim 28).
+    pub fn projectiles(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[ProjectileDraw],
+    ) -> (Vec<Vec<Item>>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+            live_slots: None,
+        };
+        let out = list.iter().map(|d| b.live_projectile(d)).collect();
+        *self = b.p;
+        *scene = b.built.scene;
+        (out, b.built.notes)
+    }
+
+    /// A vehicle's target line from screen pixel `start` to `end` (S-0301
+    /// claim 24 f to h): every second pixel along the longer screen axis,
+    /// `phase` choosing which, then a 3 × 3 square whose bottom-right pixel
+    /// is each end point; palette index 8 of the general palette in its
+    /// shade row 26, with no depth test. Nothing without the general palette.
+    pub fn target_line(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        start: (i32, i32),
+        end: (i32, i32),
+        phase: bool,
+    ) -> Vec<Item> {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+            live_slots: None,
+        };
+        let out = b.target_line_items(start, end, phase);
+        *self = b.p;
+        *scene = b.built.scene;
+        out
     }
 
     /// Building type `idx`'s slot definitions, from the art section its
