@@ -1127,6 +1127,17 @@ fn terror_attacks(lane: &mut Lane) {
                 planted = Some(t);
                 lane.save("terror-bomb");
             }
+            // S-0519 claim 24, F3: the bomb icon a while after planting, with
+            // its frame advanced.
+            if has && planted.is_some_and(|p| t == p + 40) {
+                let missing = {
+                    let s = lane.c.session.as_ref().unwrap();
+                    let live = s.loaded.live.as_ref().expect("a live game");
+                    live.notes.iter().any(|n| n.contains("BOMBCURS"))
+                };
+                println!("bomb icon note present: {missing}");
+                lane.save("terror-bomb-later");
+            }
             if planted.is_some() && !has {
                 gone = Some(t);
                 lane.save("terror-boom");
@@ -1154,12 +1165,30 @@ fn terror_attacks(lane: &mut Lane) {
         let building = lane.spawn(Kind::Building, &b, enemy, at);
         let start = lane.open_land(CellXY::new(at.x - 5, at.y));
         let sabo = lane.spawn(Kind::Infantry, &c, local, start);
+        lane.look_at(at);
         lane.ticks(4);
         let sent = lane.order(local, sabo, ClickOn::Object(building));
         println!("click on the building: {sent} orders");
         let (mut planted, mut gone) = (None, None);
+        let (mut lit, mut unlit) = (false, false);
         for t in 0..1800 {
             lane.ticks(1);
+            // S-0519 claim 25, F6: one shot with the flash on (c mod 4 in
+            // {2, 3}) and one with it off while the count still runs.
+            let flash = lane
+                .world()
+                .obj(building)
+                .map_or(0, |o| o.combat.look.flash);
+            if flash > 0 && glasnost_sim::mark::flash_on(flash) && !lit {
+                lit = true;
+                println!("flash count {flash}: on");
+                lane.save("terror-charge-flash-on");
+            }
+            if flash > 0 && !glasnost_sim::mark::flash_on(flash) && lit && !unlit {
+                unlit = true;
+                println!("flash count {flash}: off");
+                lane.save("terror-charge-flash-off");
+            }
             if t % 300 == 0 {
                 let o = lane.world().obj(sabo);
                 println!(
@@ -1257,8 +1286,39 @@ fn terror_attacks(lane: &mut Lane) {
         let sent = lane.order(local, des, ClickOn::Object(target));
         println!("click with the designator: {sent} orders");
         let mut called = None;
-        for t in 0..900 {
+        let (mut held, mut pulsed, mut fallen) = (false, false, false);
+        for t in 0..1400 {
             lane.ticks(1);
+            // S-0519 claim 26: shots in Bright hold, near the top of a Pulse
+            // rise and near the bottom of a Pulse fall.
+            if let Some(o) = lane.world().obj(target) {
+                use glasnost_sim::mark::Phase;
+                let tick = lane.world().tick;
+                let phase = o.combat.look.phase;
+                let m = glasnost_sim::mark::factor(phase, tick);
+                let shot = match phase {
+                    Phase::BrightHold(_) if !held => {
+                        held = true;
+                        Some("terror-strike-bright-hold")
+                    }
+                    Phase::PulseRise(_) if !pulsed && m.is_some_and(|m| m >= 480) => {
+                        pulsed = true;
+                        Some("terror-strike-pulse-rise")
+                    }
+                    Phase::PulseFall(_) if !fallen && m.is_some_and(|m| m <= 288) => {
+                        fallen = true;
+                        Some("terror-strike-pulse-fall")
+                    }
+                    _ => None,
+                };
+                if let Some(name) = shot {
+                    println!("mark factor {m:?} at tick {tick}");
+                    lane.save(name);
+                }
+            }
+            if pulsed && fallen {
+                break;
+            }
             for pr in lane
                 .world()
                 .projectiles
