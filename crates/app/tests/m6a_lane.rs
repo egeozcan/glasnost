@@ -401,6 +401,29 @@ fn m6a_scenes() {
             }
         }
         println!("rocket seen in flight: {seen}");
+        // Whether the rocket type's data asks for no shadow (S-0105 claim 29), without its name.
+        if let Some(o) = lane.world().objects.values().find(|o| o.rocket.is_some()) {
+            let ty = o.type_index as usize;
+            let s = lane.c.session.as_ref().unwrap();
+            let keys = s
+                .loaded
+                .import
+                .outcome
+                .registries
+                .get(&glasnost_convert::kinds::Kind::Aircraft)
+                .and_then(|r| r.get(ty))
+                .map(|e| &e.keys);
+            let val = |k: &[u8]| {
+                keys.and_then(|m| m.get(k))
+                    .and_then(|v| v.value.as_deref())
+                    .map(|v| String::from_utf8_lossy(v).into_owned())
+            };
+            println!(
+                "rocket type: no-shadow key {:?}, shadow-index key {:?}",
+                val(b"NoShadow"),
+                val(b"ShadowIndex")
+            );
+        }
         // The later scenes share this world: take the launcher and its missiles out, so that no
         // missile flies (lifted high on the screen) through the parasite, aircraft and ship shots.
         let missiles: Vec<ObjectId> = lane

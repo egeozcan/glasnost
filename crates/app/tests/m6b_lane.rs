@@ -1507,6 +1507,36 @@ impl Lane {
              with art {art}, without sprite {none}, drawn now {drawn}",
             self.world().tick
         );
+        // GLASNOST_TRACE_ANIMS=1: the animations playing in this shot, by name and screen point.
+        if std::env::var_os("GLASNOST_TRACE_ANIMS").is_some() {
+            let s = self.c.session.as_ref().unwrap();
+            let live = s.loaded.live.as_ref().expect("a live game");
+            for (n, (x, y, z)) in live.playing_anims() {
+                let (wx, wy) = glasnost_render::projection::project_lifted(x, y, z);
+                println!("  anim {n} at world pixel ({wx}, {wy})");
+            }
+        }
+        // GLASNOST_TRACE="x,y;x,y": the items with a pixel at each screen point of this shot.
+        if let Ok(points) = std::env::var("GLASNOST_TRACE") {
+            for p in points.split(';') {
+                let Some((x, y)) = p.split_once(',') else {
+                    continue;
+                };
+                let (Ok(x), Ok(y)) = (x.trim().parse::<i32>(), y.trim().parse::<i32>()) else {
+                    continue;
+                };
+                let lines = self
+                    .c
+                    .session
+                    .as_mut()
+                    .unwrap()
+                    .trace_at(glasnost_ui::geom::Point::new(x, y));
+                println!("trace {name} at ({x}, {y}): {} items", lines.len());
+                for l in lines {
+                    println!("  {l}");
+                }
+            }
+        }
     }
 
     fn spawn(&mut self, kind: Kind, name: &str, house: HouseId, at: CellXY) -> ObjectId {

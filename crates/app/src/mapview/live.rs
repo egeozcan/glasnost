@@ -953,6 +953,20 @@ impl Live {
         self.scripts.clear();
     }
 
+    /// The animations playing now, by type name and position, in creation
+    /// order: a lane's way to name what an effect pixel shows.
+    pub fn playing_anims(&self) -> Vec<(String, (i32, i32, i32))> {
+        self.anims
+            .iter()
+            .map(|a| {
+                (
+                    String::from_utf8_lossy(&a.player.name).into_owned(),
+                    (a.pos.x, a.pos.y, a.pos.z),
+                )
+            })
+            .collect()
+    }
+
     /// Draws our own debug markers for what has no art (`true`, the
     /// viewer's default) or only art (`false`, the game client).
     pub fn set_debug_markers(&mut self, on: bool) {

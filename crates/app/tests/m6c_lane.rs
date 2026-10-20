@@ -1311,6 +1311,15 @@ fn crate_pickup(lane: &mut Lane) {
     let unit = lane.spawn(Kind::Infantry, &man, local, start);
     lane.look_at(spot);
     for (kind, label) in [(0, "money"), (2, "heal"), (8, "reveal")] {
+        // The previous crate's animation ends first, so that no shot shows another crate's
+        // animation (review 2026-10-19: "dollar signs for heal").
+        for _ in 0..600 {
+            let s = lane.c.session.as_ref().unwrap();
+            if s.loaded.live.as_ref().is_none_or(|l| l.playing_anims().is_empty()) {
+                break;
+            }
+            lane.ticks(1);
+        }
         let at = CellXY::new(spot.x + 2 * (kind / 2), spot.y + 2);
         let placed = glasnost_sim::crates::place_trigger(lane.world_mut(), at, kind);
         let seen = lane
@@ -1324,6 +1333,10 @@ fn crate_pickup(lane: &mut Lane) {
         lane.ticks(3);
         if kind == 0 {
             lane.save("crate-before");
+        } else {
+            // Each crate is shown before it is picked up (review 2026-10-19: "should there have
+            // been a crate here?").
+            lane.save(&format!("crate-{label}-before"));
         }
         let credits = lane.world().houses[usize::from(local.0)].credits;
         let target = lane
@@ -1350,6 +1363,8 @@ fn crate_pickup(lane: &mut Lane) {
             "{label} crate picked up at tick {got:?}, credits {credits} -> {after}, crates left {}",
             lane.world().crates.places.len()
         );
+        // The pickup animation is created in the pickup tick and drawn from the next frame on.
+        lane.ticks(4);
         lane.save(&format!("crate-{label}"));
     }
 }
@@ -1552,6 +1567,15 @@ impl Lane {
              with art {art}, without sprite {none}, drawn now {drawn}",
             self.world().tick
         );
+        // GLASNOST_TRACE_ANIMS=1: the animations playing in this shot, by name and world pixel.
+        if std::env::var_os("GLASNOST_TRACE_ANIMS").is_some() {
+            let s = self.c.session.as_ref().unwrap();
+            let live = s.loaded.live.as_ref().expect("a live game");
+            for (n, (x, y, z)) in live.playing_anims() {
+                let (wx, wy) = glasnost_render::projection::project_lifted(x, y, z);
+                println!("  anim {n} at world pixel ({wx}, {wy})");
+            }
+        }
     }
 
     fn spawn(&mut self, kind: Kind, name: &str, house: HouseId, at: CellXY) -> ObjectId {
