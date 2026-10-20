@@ -138,6 +138,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::acquire::expected_health_turn(w, id);
         // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
         crate::superweapons::protect::tint_turn(w, id);
+        // spec: S-0519 State and ordering (the flash count and the mark sequence step right after the protection sequence)
+        crate::mark::turn(w, id);
         if kind == Kind::Building {
             // spec: S-0312 claim 21 (a building awaiting removal: the general part of its turn, then its removal)
             process::turn(w, id);
@@ -188,6 +190,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
     crate::combat::acquire::expected_health_turn(w, id);
     // spec: S-0513 claim 29 (the protection tint's phases advance in the object's turns; its draw is game state)
     crate::superweapons::protect::tint_turn(w, id);
+    // spec: S-0519 State and ordering (the flash count and the mark sequence step right after the protection sequence)
+    crate::mark::turn(w, id);
     // The berserk countdown (S-0610 claim 5) runs in the behaviour part, after the first per-tick start (`process::head`).
     // spec: S-0601 claim 16 (revision 9: the overload update runs in exactly the updates in which the berserk countdown runs: not in an excluded update, S-0215 claim 2's being erased (a tunnel is not built), nor in a warp-only update, which returned above, S-0513 claim 51 and S-0203 claim 4)
     let early = crate::mind::unlimited(w, id) && !crate::temporal::erased(w, id);

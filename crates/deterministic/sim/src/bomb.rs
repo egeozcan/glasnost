@@ -332,12 +332,15 @@ pub fn charge_arrival(w: &mut World, walker: ObjectId) -> bool {
 /// the walker is recorded as the building's charge planter.
 fn plant_charge(w: &mut World, walker: ObjectId, b: ObjectId) {
     let k = charge_countdown(w);
+    let l = charge_flash(w);
     let now = w.tick;
     if let Some(ob) = w.obj_mut(b) {
-        // spec: S-0519 claim 14 (a pending countdown of K ticks, the planter recorded; the flash is presentation)
+        // spec: S-0519 claim 14 (a pending countdown of K ticks, the planter recorded)
         ob.combat.delay_kill_until = Some(now.wrapping_add(k));
         ob.combat.charge_planter = Some(walker);
     }
+    // spec: S-0519 claims 14 and 25 (the building flashes for L ticks: its flash count becomes L)
+    crate::mark::start_flash(w, b, l);
 }
 
 /// A suicide shot (claim 11): the firer takes one hit of its type's

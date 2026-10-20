@@ -3,10 +3,11 @@
 //! has at most one strike (created with its first designation; the state
 //! before that is the idle strike with no target); the strike links its
 //! aircraft, holds a strike target and the end tick of its last run.
-//! Sounds and the building tint are presentation: the client reads
-//! [`StrikeWorld`] for the mark. The readiness test, a cancel and a redirect
-//! take no random draw; a start takes the arrival cell's and the aircraft's
-//! (claim 21).
+//! Sounds and the mark's colour and brightness are presentation; its phase
+//! sequence, restarted here, is game state (`crate::mark`, claim 26). The
+//! readiness test, a cancel and a redirect take no random draw; a start
+//! takes the arrival cell's and the aircraft's (claim 21); the mark's own
+//! draw comes later, in the building's turn.
 
 use std::collections::BTreeMap;
 
@@ -250,6 +251,8 @@ fn start(w: &mut World, d: ObjectId, x: ObjectId) {
     s.target = Some(x);
     s.progress = true;
     s.active = true;
+    // spec: S-0519 claims 17 and 26 (a designated building is marked: its phase sequence restarts and its mark clock starts)
+    crate::mark::restart(w, x);
 }
 
 /// Cancels the strike (claim 19): ammunition, retreat, forgotten target.
@@ -324,6 +327,8 @@ fn redirect(w: &mut World, d: ObjectId, x: ObjectId) {
             s.active = true;
         }
     }
+    // spec: S-0519 claims 19 and 26 (a building T is marked as at a start: its phase sequence restarts)
+    crate::mark::restart(w, x);
 }
 
 /// An object leaves play (claims 19 and 20): a strike aircraft is unlinked,

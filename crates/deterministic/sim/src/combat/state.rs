@@ -138,6 +138,10 @@ pub struct CombatState {
     /// has left play counts as none.
     #[serde(default)]
     pub natural_smoke: Option<crate::world::ObjectId>,
+    /// A building's flash count and air-strike mark sequence (S-0519
+    /// claims 25 and 26).
+    #[serde(default)]
+    pub look: crate::mark::Look,
 }
 
 /// A held fire emitter (S-0616 claim 1): the system, the slot of the weapon
@@ -201,6 +205,8 @@ impl CombatState {
             spark_emitter: None,
             railgun_emitter: None,
             natural_smoke: None,
+            // spec: S-0519 claims 25 and 26 (no flash, before the first marked turn)
+            look: crate::mark::Look::default(),
         }
     }
 }
