@@ -196,7 +196,8 @@ async fn smoke_async(
                         | Effect::Maker { .. }
                         | Effect::Domination { .. }
                         | Effect::Walker { .. }
-                        | Effect::ShotAnim { .. } => {}
+                        | Effect::ShotAnim { .. }
+                        | Effect::LayerMoment { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());

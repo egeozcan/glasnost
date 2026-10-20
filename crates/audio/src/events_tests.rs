@@ -760,12 +760,14 @@ fn animation_start_sound() {
             pos: Pos::new(0, 0, 0),
             delay: None,
             reverse: false,
+            z_adjust: None,
         },
         Effect::Anim {
             name: "Silent".into(),
             pos: Pos::new(0, 0, 0),
             delay: None,
             reverse: false,
+            z_adjust: None,
         },
     ];
     a.tick(&w, &fx, &mut u);

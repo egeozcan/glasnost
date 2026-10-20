@@ -22,6 +22,10 @@ pub enum Effect {
         /// The animation plays in reverse (S-0517 claim 6: the deploying
         /// presentation of an undeploy); only the drawing reads it.
         reverse: bool,
+        /// The depth adjustment its creator gives in place of its type's
+        /// (S-0102 claim 13): −15 for a rocket detonation's explosion
+        /// (S-0506 claim 19); `None` keeps the type's.
+        z_adjust: Option<i32>,
     },
     /// A shot animation was created (S-0301 claims 20 to 22; its creation
     /// draws were taken in the firer's turn, S-0109 claim 29).
@@ -410,6 +414,50 @@ pub enum Effect {
         /// Where, if positional.
         pos: Option<Pos>,
     },
+    /// A moment of S-0102 claim 4 at which the drawing evaluates an
+    /// object's render layer, in the order the moments happened. `check`
+    /// `None`: a re-file (the object is put at the end of the list of the
+    /// layer it evaluates to after the tick). `Some((before, after))`: a
+    /// check, the heights just before and just after the object's own step;
+    /// the object is re-filed only when the layers they give differ.
+    LayerMoment {
+        /// The object.
+        object: ObjectId,
+        /// The heights of a check.
+        check: Option<(LayerHeights, LayerHeights)>,
+    },
+}
+
+/// The two heights an object's render layer is evaluated from (S-0102
+/// *State and ordering*): its height above the surface *r* and its
+/// bridge-adjusted height *r*′.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct LayerHeights {
+    /// *r*, leptons.
+    pub r: i32,
+    /// *r*′, leptons.
+    pub adjusted: i32,
+}
+
+/// A re-file moment of S-0102 claim 4 for `object`.
+pub fn layer_refile(w: &mut crate::world::World, object: ObjectId) {
+    w.effects.push(Effect::LayerMoment {
+        object,
+        check: None,
+    });
+}
+
+/// A check moment of S-0102 claim 4 for `object`: `before` its step, and
+/// its heights now.
+pub fn layer_check(w: &mut crate::world::World, object: ObjectId, before: LayerHeights) {
+    if w.obj(object).is_none() {
+        return;
+    }
+    let after = crate::jump::layer_heights(w, object);
+    w.effects.push(Effect::LayerMoment {
+        object,
+        check: Some((before, after)),
+    });
 }
 
 /// What a disc laser did (S-0615 claims 12 to 16).
@@ -545,6 +593,22 @@ pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
 /// [`anim`], playing in reverse when `reverse` (S-0517 claim 6: the deploying
 /// presentation of an undeploy).
 pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, reverse: bool) {
+    anim_with(w, name, pos, reverse, None);
+}
+
+/// [`anim`] with the depth adjustment its creator gives in place of its
+/// type's (S-0102 claim 13).
+pub fn anim_adjusted(w: &mut crate::world::World, name: &str, pos: Pos, z_adjust: i32) {
+    anim_with(w, name, pos, false, Some(z_adjust));
+}
+
+fn anim_with(
+    w: &mut crate::world::World,
+    name: &str,
+    pos: Pos,
+    reverse: bool,
+    z_adjust: Option<i32>,
+) {
     let index = w
         .rules()
         .animations
@@ -570,6 +634,7 @@ pub fn anim_reversible(w: &mut crate::world::World, name: &str, pos: Pos, revers
         pos,
         delay,
         reverse,
+        z_adjust,
     });
 }
 

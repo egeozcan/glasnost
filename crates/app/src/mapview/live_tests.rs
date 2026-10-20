@@ -444,6 +444,27 @@ fn mobiles_are_drawn_layer_by_layer() {
     assert_eq!(order[order.len() - 2..], [a, b]);
 }
 
+/// spec: S-0102 claim 4 (the simulation's moments reach the drawing: a
+/// re-file reported in the tick's effects moves the object into its
+/// evaluated layer under the default switch)
+#[test]
+fn layer_moments_from_the_simulation_are_applied() {
+    use super::slots::Layer;
+    use glasnost_sim::combat::effects::Effect;
+    let (mut live, _) = synthetic_live();
+    let a = own_mobile(&live, 0);
+    live.world.obj_mut(a).unwrap().rocket = Some(Default::default());
+    live.after_tick();
+    assert_eq!(live.layer_of(a), Some(Layer::Ground), "no moment yet");
+    live.world.effects.push(Effect::LayerMoment {
+        object: a,
+        check: None,
+    });
+    live.after_tick();
+    assert_eq!(live.layer_of(a), Some(Layer::Air));
+    assert_eq!(live.layer_list(Layer::Air), [Entrant::Object(a)]);
+}
+
 fn own_mobile(live: &Live, h: u8) -> ObjectId {
     testkit::house_objects(&live.world, h)
         .into_iter()
@@ -1243,12 +1264,14 @@ fn animation_events_play_their_art_and_end() {
         pos,
         delay: None,
         reverse: false,
+        z_adjust: None,
     });
     live.world.effects.push(Effect::Anim {
         name: "NOSUCHANIM".into(),
         pos,
         delay: None,
         reverse: false,
+        z_adjust: None,
     });
     live.after_tick();
     assert_eq!(live.counts.anims_with_art, 1);
@@ -1514,6 +1537,7 @@ fn shot_animation_follows_its_firer() {
         pos: fixed,
         delay: None,
         reverse: false,
+        z_adjust: None,
     });
     live.after_tick();
     let shots = live.shot_anims();
@@ -1540,6 +1564,18 @@ fn shot_animation_follows_its_firer() {
     let shots = live.shot_anims();
     assert_eq!(shots.len(), 1);
     assert_eq!(shots[0].0, None);
+    // spec: S-0506 claim 19 and S-0102 claim 13 (a rocket's detonation animation carries its depth adjustment, -15, in place of its type's)
+    live.world.effects.push(Effect::Anim {
+        name: "boomx".into(),
+        pos: fixed,
+        delay: None,
+        reverse: false,
+        z_adjust: Some(-15),
+    });
+    live.after_tick();
+    let shots = live.shot_anims();
+    assert_eq!(shots.len(), 2);
+    assert_eq!(shots[1], (None, fixed, type_layer, Some(-15)));
 }
 
 /// S-0105 claim 40 (Q-0799): a flying aircraft's body is drawn at its lifted point and its shadow at the
@@ -2366,6 +2402,7 @@ fn deploying_presentation_takes_the_owners_palette() {
             pos,
             delay: None,
             reverse: false,
+            z_adjust: None,
         });
     }
     live.after_tick();
@@ -2520,6 +2557,7 @@ fn particles_draw_their_sprites_in_the_air_layer() {
             pos,
             delay: None,
             reverse: false,
+            z_adjust: None,
         });
     }
     live.after_tick();

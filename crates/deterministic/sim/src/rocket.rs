@@ -611,8 +611,8 @@ pub fn detonation(w: &mut World, id: ObjectId) {
         (p.damage, p.warhead)
     };
     if let Some(wh) = warhead {
-        // spec: S-0506 claim 19 (source object: the missile; source house: none; resource reduction allowed; the animation before the hits)
-        crate::combat::projectile::detonate_area(w, wh, damage, at, Some(id), None, true);
+        // spec: S-0506 claim 19 (source object: the missile; source house: none; resource reduction allowed; the animation before the hits; the nose point exactly, with no height correction)
+        crate::combat::projectile::detonate_rocket(w, wh, damage, at, Some(id));
     } else {
         w.note(
             "S-0506 claim 19: a rocket parameter set without a warhead detonates with no damage",

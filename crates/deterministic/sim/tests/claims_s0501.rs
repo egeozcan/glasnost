@@ -1733,6 +1733,61 @@ fn claim_40_stopped_needs_no_unfinished_flight() {
     assert_eq!(w.obj(s).unwrap().dest, None);
 }
 
+/// Whether the effects hold a re-file moment (S-0102 claim 4) of `id`.
+fn refiled(w: &World, id: ObjectId) -> bool {
+    w.effects.iter().any(|e| {
+        matches!(
+            e,
+            glasnost_sim::combat::effects::Effect::LayerMoment { object, check: None } if *object == id
+        )
+    })
+}
+
+// spec: S-0102 claim 4 (a landable aircraft is re-filed at its take-off and at every landing update, not while it cruises; a non-landable aircraft is never re-filed by take-off or landing)
+#[test]
+fn s0102_claim_4_aircraft_layer_moments() {
+    let mut r = rules();
+    let mut hover = flyer(None, 0);
+    hover.econ.landable = Some(false);
+    push(&mut r, "aircraft", "HOVER");
+    r.sim.aircraft.insert("HOVER".into(), hover);
+    let mut w = game(&r);
+    ready(&mut w);
+    let h = put(&mut w, Kind::Aircraft, "HOVER", 0, 0, 0);
+    let s = put(&mut w, Kind::Aircraft, "SCOUT", 0, 0, 3);
+    w.effects.clear();
+    click(&mut w, h, ClickOn::Cell(testkit::mid(SIZE, 5, 0)));
+    click(&mut w, s, ClickOn::Cell(testkit::mid(SIZE, 9, 3)));
+    let (mut take_off, mut cruise_quiet, mut landings) = (false, false, 0);
+    for _ in 0..1500 {
+        let before = st(&w, s);
+        step(&mut w);
+        let after = st(&w, s);
+        assert!(!refiled(&w, h), "non-landable: {}", describe(&w, h));
+        let moment = refiled(&w, s);
+        if before.ground && !after.ground {
+            assert!(moment, "the take-off: {}", describe(&w, s));
+            take_off = true;
+        }
+        if before.landing || after.landing {
+            assert!(moment, "a landing update: {}", describe(&w, s));
+            landings += 1;
+        } else if take_off && !before.taking_off && !after.taking_off && !after.ground {
+            assert!(!moment, "cruising: {}", describe(&w, s));
+            cruise_quiet = true;
+        }
+        w.effects.clear();
+        if take_off && after.ground {
+            break;
+        }
+    }
+    assert!(
+        take_off && cruise_quiet && landings > 1,
+        "{}",
+        describe(&w, s)
+    );
+}
+
 // spec: S-0501 claim 4 (a living descending aircraft with a destination moves 5 more leptons toward its destination cell's centre; with fraction 0 that is its whole displacement)
 #[test]
 fn claim_4_descent_nudge() {

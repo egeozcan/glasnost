@@ -2312,3 +2312,108 @@ fn drawing_reads_the_current_pitch() {
     }
     assert!(seen.len() > 3, "the pitch changes through the flight");
 }
+
+/// The rules with RKW given an explosion list (RKBOOM) and the
+/// conventional flag, and a splash list (RKSPLASH).
+fn detonation_rules() -> Ruleset {
+    let mut r = rules();
+    let h = r.sim.warheads.get_mut("RKW").unwrap();
+    h.anim_list = Some(vec!["RKBOOM".into()]);
+    h.conventional = Some(true);
+    r.sim.general.splash_list = Some(vec!["RKSPLASH".into()]);
+    r
+}
+
+/// A world of [`detonation_rules`] with the cell at the middle made water;
+/// returns the world and that cell.
+fn detonation_world() -> (World, glasnost_map::CellXY) {
+    let mut w = game(&detonation_rules());
+    let c = testkit::mid(SIZE, 0, 0);
+    w.cells.grid.get_mut(c).unwrap().land = glasnost_map::terrain::land::WATER;
+    w.effects.clear();
+    (w, c)
+}
+
+/// The explosion animations of the effects: (name, position, depth
+/// adjustment).
+fn explosion_anims(w: &World) -> Vec<(String, Pos, Option<i32>)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Anim {
+                name,
+                pos,
+                z_adjust,
+                ..
+            } => Some((name.clone(), *pos, *z_adjust)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn detonation_point(w: &World) -> Option<Pos> {
+    w.effects.iter().find_map(|e| match e {
+        Effect::Detonation { pos, .. } => Some(*pos),
+        _ => None,
+    })
+}
+
+// spec: S-0506 claim 19 and Constants (the explosion animation and the area damage take the nose point exactly, with no height correction, and the animation's depth adjustment is -15 in place of its type's)
+#[test]
+fn claim_19_detonation_at_the_nose_point_with_depth_adjustment() {
+    let (mut w, c) = detonation_world();
+    // A dry cell next to the water one; a nose point below the surface.
+    let dry = glasnost_map::CellXY::new(c.x + 1, c.y);
+    let at = Pos::new(dry.x * 256 + 100, dry.y * 256 + 40, -30);
+    let wh = warhead(&w, "RKW");
+    glasnost_sim::combat::projectile::detonate_rocket(&mut w, wh, 30, at, None);
+    assert_eq!(
+        explosion_anims(&w),
+        vec![("RKBOOM".to_string(), at, Some(-15))]
+    );
+    assert_eq!(
+        detonation_point(&w),
+        Some(at),
+        "the area damage at the nose point"
+    );
+}
+
+// spec: S-0506 claim 19 and F9 (the F5 land type is that of the cell containing the nose point, x and y divided by 256 truncated, whatever the height; F5's own splash height test still applies)
+#[test]
+fn claim_19_land_type_from_the_nose_cell() {
+    let detonate = |dx: i32, dy: i32, z: i32| {
+        let (mut w, c) = detonation_world();
+        let at = Pos::new(c.x * 256 + dx, c.y * 256 + dy, z);
+        let wh = warhead(&w, "RKW");
+        glasnost_sim::combat::projectile::detonate_rocket(&mut w, wh, 30, at, None);
+        explosion_anims(&w)[0].0.clone()
+    };
+    // Low over the water cell, at its last lepton: the splash.
+    assert_eq!(detonate(255, 255, 100), "RKSPLASH");
+    // One lepton further east or south: the dry neighbour.
+    assert_eq!(detonate(256, 255, 100), "RKBOOM");
+    assert_eq!(detonate(255, 256, 100), "RKBOOM");
+    // High over the water cell: water, but above F5's splash height.
+    assert_eq!(detonate(128, 128, 600), "RKBOOM");
+}
+
+// spec: S-0506 claim 19 (a missile in flight detonates through the same rule: its explosion animation at the detonation point, with the depth adjustment -15)
+#[test]
+fn claim_19_flight_detonation_carries_the_depth_adjustment() {
+    let r = detonation_rules();
+    let (mut w, _, _, x) = fly_until(&r, Phase::Cruise);
+    let mut seen = None;
+    for _ in 0..600 {
+        w.effects.clear();
+        testkit::run(&mut w, 1);
+        if w.obj(x).is_none() {
+            seen = detonation_point(&w).map(|p| (p, explosion_anims(&w)));
+            break;
+        }
+    }
+    let (at, anims) = seen.expect("the missile detonates");
+    assert!(
+        anims.contains(&("RKBOOM".to_string(), at, Some(-15))),
+        "{anims:?} at {at:?}"
+    );
+}

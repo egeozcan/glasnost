@@ -1403,10 +1403,29 @@ fn impact(w: &mut World, id: ObjectId) {
 /// Moves an aircraft with the flying locomotor in its turn (S-0501 claims
 /// 1 to 10); whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
+    let landing = w
+        .obj(id)
+        .filter(|o| is_aircraft(w, id) && o.on_map && !crate::combat::damage::dead(o))
+        .and_then(|o| o.air.as_ref())
+        .is_some_and(|a| a.landing);
     let moved = tick_flight(w, id);
     // spec: S-0209 claim 13 (taking off removes the listing when the listing height becomes positive, and landing adds it again)
     sync_listing(w, id);
+    let landing = landing || st_opt(w, id).is_some_and(|a| a.landing);
+    // spec: S-0102 claim 4 (every movement update of a landing re-files, from the update that starts it to the one that ends it, while the aircraft has strength left; a type that cannot land is never re-filed by landing)
+    if landing && landable(w, id) && w.obj(id).is_some_and(|o| o.on_map) {
+        crate::combat::effects::layer_refile(w, id);
+    }
     moved
+}
+
+/// Whether the aircraft's type is landable (S-0501 Terms).
+pub fn landable(w: &World, id: ObjectId) -> bool {
+    ty(w, id).is_some_and(|t| t.landable)
+}
+
+fn st_opt(w: &World, id: ObjectId) -> Option<&AirState> {
+    w.obj(id).and_then(|o| o.air.as_ref())
 }
 
 fn tick_flight(w: &mut World, id: ObjectId) -> bool {
@@ -1443,6 +1462,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             ob.pos.z = surface + h1;
             ob.air = Some(a2.clone());
         }
+        // spec: S-0102 claim 4 (every tick of an aircraft's crash fall re-files)
+        crate::combat::effects::layer_refile(w, id);
         // spec: S-0501 claim 9 (a contribution bringing height below 1: impact before ordinary movement)
         if h1 < 1 {
             impact(w, id);
@@ -1504,6 +1525,10 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         }
         if a.ground || a.landing {
             take_off(w, id, t.cruise);
+            if t.landable {
+                // spec: S-0102 claim 4 (the first movement update after a take-off starts re-files, after that update's climb: the drawing evaluates after the tick)
+                crate::combat::effects::layer_refile(w, id);
+            }
         }
         a = st(w, id);
     }
@@ -1658,6 +1683,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
                 // spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts)
                 s.deck = false;
             }
+            // spec: S-0102 claim 4 (a refused landing cell starts a take-off in that update, which re-files it; the landing update re-files it too, in tick)
         }
         return w.obj(id).is_some_and(|ob| ob.pos != start);
     }

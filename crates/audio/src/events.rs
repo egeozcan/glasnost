@@ -769,6 +769,8 @@ impl Audio {
             | Effect::Dropped { .. } => {}
             // spec: S-0518 claim 6 (the support beam is drawing only: no sound)
             Effect::SupportBeam { .. } => {}
+            // A layer moment of the drawing (S-0102 claim 4) sounds nothing.
+            Effect::LayerMoment { .. } => {}
             // spec: S-0615 Terms (a beam is drawing only: no sound)
             Effect::Beam { .. } => {}
             // spec: S-0518 claim 18 and S-0514 claim 25 (beams and beam flashes are drawing only; the shot's report comes with Effect::Shot)

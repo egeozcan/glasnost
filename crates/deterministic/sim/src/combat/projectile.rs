@@ -1722,15 +1722,17 @@ pub(crate) fn explosion_anim(
     q: Pos,
     hit: bool,
 ) -> Option<String> {
-    explosion_anim_with(w, h, d, q, hit, false)
+    explosion_anim_with(w, h, d, q, hit, false, false)
 }
 
 /// [`explosion_anim`] chosen as if the land type were not water, so the
 /// splash case is never selected (S-0520 claim 16).
 pub(crate) fn explosion_anim_dry(w: &mut World, h: WarheadId, d: i32, q: Pos) -> Option<String> {
-    explosion_anim_with(w, h, d, q, false, true)
+    explosion_anim_with(w, h, d, q, false, true, false)
 }
 
+/// `any_height`: the land type is that of Q's cell whatever its height
+/// (a rocket detonation, S-0506 claim 19), with no "air" case.
 fn explosion_anim_with(
     w: &mut World,
     h: WarheadId,
@@ -1738,6 +1740,7 @@ fn explosion_anim_with(
     q: Pos,
     hit: bool,
     dry: bool,
+    any_height: bool,
 ) -> Option<String> {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
@@ -1750,7 +1753,9 @@ fn explosion_anim_with(
     let qc = q.cell();
     let terrain = w.surface_at(q.x, q.y);
     // spec: S-0303 claim 21 (the land type of Q's cell when its height above the terrain is below 208, else air)
-    let mut land = (q.z - terrain < 208).then(|| w.cells.cell(qc).map_or(0, |c| c.land));
+    // spec: S-0506 claim 19 and F9 (a rocket detonation: the land type of the cell containing the nose point, whatever its height; the cell is the nose's x and y divided by 256, truncated toward zero, S-0204 claim 2)
+    let mut land =
+        (any_height || q.z - terrain < 208).then(|| w.cells.cell(qc).map_or(0, |c| c.land));
     // spec: S-0303 claim 21 (the area damage hit something and the first object in the ground layer of Q's cell is a naval vehicle, not underwater: L counts as air)
     let naval_first = w
         .cells
@@ -1888,6 +1893,36 @@ pub fn detonate_area(
             source,
             house,
             resources,
+        },
+    );
+}
+
+/// The detonation of a rocket missile at its nose point `at` (S-0506 claim
+/// 19, F9): the explosion animation chosen by S-0303 F5 with the land type
+/// of the cell containing the nose point whatever the missile's height, at
+/// the nose point exactly, with the depth adjustment −15 in place of its
+/// type's; then the area damage at the same point.
+pub fn detonate_rocket(
+    w: &mut World,
+    warhead: WarheadId,
+    damage: i32,
+    at: Pos,
+    source: Option<ObjectId>,
+) {
+    if let Some(name) = explosion_anim_with(w, warhead, damage, at, false, false, true) {
+        // spec: S-0506 claim 19 and Constants (detonation animation depth adjustment −15 depth units, replacing the type's; S-0102 claim 13)
+        effects::anim_adjusted(w, &name, at, -15);
+    }
+    // spec: S-0506 claim 19 (source object: the missile; source house: none; resource reduction allowed; no height correction of the point)
+    area::detonate(
+        w,
+        Detonation {
+            point: at,
+            damage,
+            warhead: Some(warhead),
+            source,
+            house: None,
+            resources: true,
         },
     );
 }
