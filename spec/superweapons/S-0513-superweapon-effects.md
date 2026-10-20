@@ -2,7 +2,7 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 20
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -668,6 +668,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
     drawing variants are claim 29b and Open questions. S-0104 claim 13 supplies ordinary brightness,
     and its claim 15 maps the adjusted brightness to shade rows.
 
+    When a protected building is also marked by an air strike, brightness combines as
+    S-0519 F7 states, with the protection factor applied before the mark's. Within one
+    building turn, the protection sequence's draw comes before the mark sequence's draw
+    (S-0519 claim 26).
+
     Let *q* be the first turn of the object while this application is still protecting it,
     *P* its remaining protection in integer ticks, and *r* the remaining phase time in ticks.
     A phase of length *L* entered in tick *s* has *r* = max(0, *L* − (*t* − *s*)) in tick *t*.
@@ -709,7 +714,9 @@ presentation and swept-layer rules below also apply where those specs cite them.
     An object absent across the expiry of Initial rise instead enters Bright hold on its
     return, starts a fresh 4-tick hold then, and draws only when that hold expires.
     The draw is game state; the brightness and colour are presentation.
-    - Backing: `measurable` (SW10 parts e and g). Ordinary opaque pixel composition and
+    - Backing: `measurable` (SW10 parts e and g). Combined protection and air-strike-mark
+      brightness and their draw order inherit S-0519 claim 26's backing (T27).
+      Ordinary opaque pixel composition and
       the additional drawing cases inherit S-0102 claim 34's backing (D44).
       Accessory, translucent, shroud-edge and remembered drawings are claim 29b; the
       variants still unresolved in Open questions are not assigned guessed values
@@ -974,8 +981,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
     (`quirks.warp_hold_persists`, default on = original; off:
     the held delay is the teleport delay after a redirected landing and 0 otherwise, for each warp
     separately).
+
+    While phasing in, the member's body has 50% translucency, combined with any translucency from cloaking, as specified by S-0514 claim 27. The 75% translucency that claim specifies for double-thick buildings remains a drawing rule; it does not add buildings to the warp group (claim 34).
     - Backing: `measurable` for clean and redirected warps and persistent redirected holds
-      (SW13 part c). Inheritance from teleport reinforcement is `unmeasured`: no scenario
+      (SW13 part c); body translucency inherits S-0514 claim 27's backing (E17), with
+      arrival-hold coverage in SW13 part c. Inheritance from teleport reinforcement is `unmeasured`: no scenario
       part here follows a reinforced object through a later superweapon warp
     - Confidence: medium
 
@@ -1572,7 +1582,7 @@ can reliably force its effect-creation failure through ordinary input.
 | `[General]` | `ForceShieldDuration` | force-shield duration *D* | integer, ticks | 400 |
 | `[General]` | `ForceShieldBlackoutDuration` | blackout length (claim 30) | integer, ticks | 800 |
 | `[General]` | `ForceShieldPlayFadeSoundTime` | fade-sound lead time *P* | integer, ticks | 50 |
-| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield colour-adjustment selectors, respectively (claim 29) | integer, zero-based position in the colour-adjustment table; not a colour-definition name; a held value below 0 or above 15 gives no mask and an importer warning (claim 29a) | 0 (selector index); absent in a later layer retains the held selector |
+| `[AudioVisual]` | `IronCurtainColor`, `ForceShieldColor` | curtain and force-shield colour-adjustment selectors, respectively (claim 29) | integer, zero-based position in the colour-adjustment table; not a colour-definition name; for a value outside 0 to 15 the original's resulting colour is undefined by the imported table (claim 29a); ours issues an importer warning and applies no colour mask for that selector, as for S-0610 claim 7's berserk selector | 0 (selector index); absent in a later layer retains the held selector |
 | `[ColorAdd]` | each entry, in section order; key spelling does not select a slot | RGB colour-adjustment triples (claim 29); layering owned by S-0006 claim 2 | three byte components, red, green, blue, parsed under S-0003; not palette components multiplied by 4 | table initially has 16 black triples (0, 0, 0); omitted entries and rules-layer clearing follow S-0006 claim 2 |
 | art, building sections | `BibShape`, `UnderDoorAnim`, `UnderRoofDoorAnim`, `DeployingAnim`, `RoofDeployingAnim`, `DoorAnim` | which accessory and replacement images exist, so which claim 29b rows apply; parse and use owned by S-0108 claims 7, 22 and 23 | text image names (S-0108 Import mapping) | none: no such image, and its claim 29b row does not arise |
 | object type sections | `Cloakable` | an object's own cloak, one way a protected object comes to be drawn translucent or rippling (claim 29b); cloak fields and every other cloaking rule are S-0516's | boolean (S-0516 Import mapping) | no |
@@ -1987,6 +1997,7 @@ is not under test.
   cases: expected *t*_A + max(1, *H*) from claim 40. Repeat with named data giving redirected
   holds of 0, 1 and 2 ticks: expected ends at *t*_A + 1, *t*_A + 1 and *t*_A + 2,
   respectively; same-update expiry or any other tick difference falsifies this boundary.
+  Capture the body over a known background during each hold and after it ends. Expected: 50% translucency throughout phasing in, combined with any translucency from cloaking as S-0514 claim 27 states, followed by the ordinary cloak-dependent drawing when phasing in ends. An opaque uncloaked body during the hold, a progressive fade, or continued warp translucency after the hold falsifies this appearance rule.
   (d) A tank warped onto deep water sinks and
   the launcher's kill count rises; a hover vehicle survives; a powered-unit hover vehicle of a
   house with no active control centre sinks. Contrast full house power without a centre against
