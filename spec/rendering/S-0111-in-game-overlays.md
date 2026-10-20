@@ -2,11 +2,11 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 13
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-15
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0471]
 supersedes: []
@@ -55,8 +55,8 @@ S-0108 (Formulas F3).
 
 ## Behaviour
 
-1. **Anchor and culling.** All status extras of an object are placed from its status anchor. They
-   are drawn only when the anchor lies within the battlefield view widened by 360 pixels on the left
+1. **Anchor and culling.** Status extras of an object are placed from its status anchor, except
+   the bomb icon, which uses the carrier's draw point (claim 19). They are drawn only when the anchor lies within the battlefield view widened by 360 pixels on the left
    and the right and by 180 pixels at the top and the bottom. Fog of war does not hide them.
    - Backing: `measurable` (scenario OV1) for anchoring and culling; `unmeasured` for fog
      independence, since fog is always off in skirmish (S-0409 claim 19)
@@ -435,9 +435,15 @@ S-0108 (Formulas F3).
     carrying an attached bomb shows the bomb sprite only when the bomb is visible to the local
     player (S-0519 claim 10) and its cell (the cell of its position) is not under shroud by the
     same test. Its image frames follow S-0519 Formulas F3, not the wrench's animation.
-    - Backing: `measurable` (scenario OV14)
+    The bomb icon is centred on the carrier's draw point, not on the status anchor; for a building
+    that is the top corner of its foundation (S-0108 claim 8). It is the first of the carrier's
+    status extras, so the health bar and selection marker paint over it. S-0519 claim 24 gives its
+    image, palette and brightness. For vehicles, infantry and aircraft the draw point coincides
+    with the status anchor (S-0519 claim 24).
+    - Backing: `measurable` (scenario OV14; S-0519 scenario T25 for bomb placement and overlap)
     - Confidence: high for the period, the image frames, the cell tested and its centre height,
-      medium for the shroud condition as seen on screen and for the case below level 0
+      high for bomb placement and first place among the carrier's extras; medium for the shroud
+      condition as seen on screen and for the case below level 0
     - Coverage limit: the slope-height and below-zero cases are `unmeasured` until OV14's
       conditional placements are demonstrated reachable. Attached-bomb shroud visibility is
       `unmeasured` if OV14 cannot expose a visible bomb sprite and its tested cell's shroud states.
@@ -646,7 +652,13 @@ retains the held value, initially 1 (`Pip`) and 7 (`OccupyPip`), as claim 12 req
 
 Overlay sprites, resolved by S-0005: `PIPS.SHP` (pip sprite), `PIPS2.SHP` (second pip sprite),
 `PIPBRD.SHP` (bracket sprite), `WRENCH.SHP` (wrench sprite). Pips and brackets use the overlay palette
-`PALETTE.PAL`; the wrench and the bomb sprite use `MOUSE.PAL`. A missing sprite draws nothing; the
+`PALETTE.PAL`; the wrench and the bomb sprite use `MOUSE.PAL`.
+
+| Sprite file | Use | Palette file |
+|---|---|---|
+| `BOMBCURS.SHP` | bomb icon (S-0519 claim 24) | `MOUSE.PAL` |
+
+A missing sprite draws nothing; the
 importer warns. This missing-asset rule is `unmeasured`, confidence medium: no scenario here
 removes the overlay assets and checks both the absent drawing and the warning. Other importer
 warnings in this spec are likewise `unmeasured`, confidence medium, unless explicitly checked by
