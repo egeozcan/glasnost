@@ -2,13 +2,13 @@
 id: S-0610
 title: Psychic weapons
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0661, Q-1166, Q-1180]
+requests: [Q-0661, Q-1166, Q-1180, Q-1526]
 supersedes: []
 ---
 
@@ -58,6 +58,8 @@ skirmish only; network games and campaigns are out of scope.
   claim 8).
 - **Berserk-causing warhead.** A warhead whose hits put the target into the berserk state instead
   of damaging it (S-0302 claim 10).
+- **Berserk selector, berserk mask.** The colour-adjustment table position that the rules choose
+  for berserk units, and the packed colour mask made from that position's triple (claim 7).
 - **Berserk-friendly.** A type's flag: a berserk unit may not fire at objects of this type
   (claim 6).
 - **Psychic sensor, psychic-detection radius.** A building whose type has a positive
@@ -287,15 +289,46 @@ skirmish only; network games and campaigns are out of scope.
    - Backing: `measurable` (scenario P4)
    - Confidence: high (berserk-friendly refusal); medium (the exception to the computer-owner rule)
 
-7. **Berserk tint.** A berserk vehicle or infantry is drawn with an extra additive tint, the entry
-   of the colour-adjustment table (S-0006) whose position the rules' berserk-colour field gives
-   (position 0 when absent). It adds to any other tint the object has. Berserk aircraft and
-   buildings get no tint (buildings cannot go berserk). This is presentation.
-   - Backing: `measurable` (P4 c for infantry and vehicle tint).
-     Additivity, the absent-field colour and absence of aircraft tint are `unmeasured` here:
-     the stock-only scenario does not isolate overlapping tints, omit the colour field or
-     establish a susceptible aircraft setup.
-   - Confidence: medium
+7. **Berserk tint (Q-1526).** This is presentation only; no game state depends on it.
+   - **Selected colour.** The *berserk selector* is the rules' berserk-colour field, a zero-based
+     position in the colour-adjustment table (S-0006 claim 2), position 0 when absent. Its RGB
+     triple becomes the *berserk mask* by S-0102 F9, exactly as a protection selector's triple
+     does. The bytes are used as they are, unscaled, packed once in the surface's layout. The original
+     sometimes combines several layouts' masks into one, which adds stray colour bits. That is
+     the drawing defect S-0102 claim 34 corrects without a switch; it is corrected here in the same way.
+   - **Composition.** On each qualifying opaque pixel the berserk mask joins the packed pixel by
+     bitwise union after palette conversion and shade selection, as S-0102 claim 34 and F9
+     specify for protection masks. This is neither a per-channel addition, saturating or not, nor a
+     multiplication. Transparent pixels and pixels rejected by depth stay untouched.
+   - **Drawings that take it.**
+
+     | Berserk object, drawing | Berserk mask |
+     |---|---|
+     | Vehicle drawn as voxels: body and voxel turret/barrel | yes |
+     | Vehicle drawn as a sprite, including a voxel turret on a sprite body | none |
+     | Infantry sprite body | yes, unless the centre of the infantry's cell is shrouded for the viewing player (then none in that frame) |
+     | Aircraft | none |
+     | Shadows of any of these | none: ordinary shadow darkening only |
+     | Animations attached to the object | none; attachment grants no recolouring (S-0102 claim 34, animation rule) |
+
+     Buildings cannot go berserk.
+   - **Other masks and their combination.** A vehicle drawn as voxels can carry two masks: the
+     curtain mask (S-0102 claim 34) and the berserk mask. When both apply, the combined mask is
+     their bitwise union, and that union joins the pixel as above. Neither replaces the other,
+     and their components are not summed. An infantry unit has no other mask: curtain protection
+     kills ordinary infantry (S-0513 claim 23). Air-strike marking applies only to a marked building
+     (S-0519 claims 17 and 26). No other colour mask applies to a vehicle or infantry.
+   - **No pulse.** The berserk mask is the same in every drawn frame while the unit is berserk. It
+     is not scaled by brightness, and the berserk state changes no brightness. The curtain's
+     brightness envelope (S-0513 claim 29) and deactivation darkening (S-0104 claim 13) act on brightness
+     only, so they change which shaded pixel the mask is joined to, never the mask. The first frame
+     drawn after expiry (claim 5) has no berserk mask.
+   - Backing: `measurable` (P4 c). The aircraft case is `unmeasured`: no stock-data setup puts a
+     susceptible aircraft in the berserk state. The absent-field default is `unmeasured` because
+     the scenarios set the field rather than remove it.
+   - Confidence: high for the selector, the union composition, the voxel-vehicle, sprite-vehicle
+     and infantry rows, the union with the curtain mask and the absence of a pulse; medium for
+     the shrouded-cell exception, shadows and the aircraft row
 
 8. **Area berserk weapons (chaos drone).** No rule in this spec or in S-0302 names a particular
    unit. A vehicle type that combines a weapon with a berserk-causing warhead and an area spread,
@@ -425,7 +458,7 @@ skirmish only; network games and campaigns are out of scope.
 | Name (ours) | Value | Unit | Notes |
 |---|---|---|---|
 | Psychic-reveal radius default | 3 | cells | when the rules' field is absent (claim 14) |
-| Berserk tint position default | 0 | table position | colour-adjustment table position (claim 7) |
+| Berserk selector default | 0 | zero-based table position | colour-adjustment table position (claim 7) |
 | Psychic-detection radius default | 0 | cells | no sensor (claim 9) |
 | Sensor reach scale | 256 | leptons per cell | F1 |
 | Intent-line end square | 3 × 3 | pixels | claim 11 |
@@ -470,6 +503,14 @@ skirmish only; network games and campaigns are out of scope.
   the immunity, building and attacking-house exceptions. For other warheads, resolve the hit
   normally under S-0302; berserk-friendly itself supplies no damage immunity.
 
+- **Berserk selector outside the table** (departure). The original does not check the berserk
+  selector against the table's 16 positions, so a value below 0 or above 15 picks up bytes that are
+  not a colour-adjustment entry. Ours: the importer warns, and a berserk unit is drawn with no
+  berserk mask. Stock data never does this, so no switch is offered. Backing: `unmeasured`: the
+  original's result depends on bytes outside the table and gives no stable value to compare; engine
+  fixtures check the warning and the absent mask. Confidence: high that the original does no range
+  check.
+
 ## Import mapping
 
 | Key | Section | Parse | Absent | Feeds |
@@ -481,7 +522,7 @@ skirmish only; network games and campaigns are out of scope.
 | `PsychicDamage` | warhead | boolean | no | psychic-damage warhead (claim 2; S-0302) |
 | `PsychicDetectionRadius` | building type | integer, cells | 0 | psychic-detection radius (claims 9 to 12) |
 | `HasRadialIndicator` | building type | boolean | no | shows a range ring when selected (claim 12) |
-| `BerserkColor` | `[AudioVisual]` | integer, table position | 0 | berserk tint (claim 7) |
+| `BerserkColor` | `[AudioVisual]` | integer, zero-based position in the colour-adjustment table; not a colour-definition name | 0; absent in a later layer retains the held selector | berserk selector (claim 7); a value outside 0 to 15 is the departure under Edge cases |
 | `PsychicRevealActivateSound` | `[AudioVisual]` | sound name | none | activation sound (claim 13) |
 | `PsychicRevealRadius` | `[CombatDamage]` | integer, cells | 3 | reveal radius (claim 14) |
 | `Type` | superweapon section | kind name | (S-0512) | the psychic-reveal kind of S-0512's kind table (claims 13 to 15) |
@@ -538,9 +579,38 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   of house A. Expected: it attacks the infantry, never the drone. (b) A tank of the neutral house
   made berserk next to another neutral-house unit: it attacks that unit and keeps attacking it.
   Also place an enemy chaos drone in the pulse area: it must not go berserk from the hit.
-  (c) Capture before/after frames of a berserk vehicle and infantry: both gain the tint.
-  Falsifiers: a shot aimed at a berserk-friendly drone, losing the allied target solely because
-  it is allied, the immune drone going berserk, or no tint on a susceptible vehicle or infantry.
+  (c) Berserk mask (claim 7). This part uses named test rules. First read the stock curtain,
+  force-shield, air-strike-marking and berserk selectors (copy no value). If another selector shares
+  the berserk selector's position, move the berserk selector to an unused valid position in the test
+  rules. Then change only the triple at the berserk position, to invented (1, 0, 0), (0, 3, 0),
+  (0, 0, 1), then (255, 255, 255), each in a fresh session, and keep every other table position.
+  On flat ground, in full view, make three units berserk: a voxel vehicle with a voxel turret, a
+  sprite-drawn vehicle (choose one by reading the stock rules; if none exists, a named test vehicle
+  type with sprite art) and an infantry unit. A berserk unit hunts and refuses orders, so isolate
+  each unit where its hunt finds nothing reachable, or use named test types with no speed and no
+  weapon. Use no damage flash and lossless captures. Capture each unit before the hit, on at least
+  30 drawn frames while berserk, and on the first frames after expiry. Compare each berserk frame
+  with a non-berserk frame of the same unit at the same facing, image frame and brightness, using
+  S-0102 F9 and claim 34. Include pixels whose shaded channels already hold the mask's bits, and
+  black shade-row pixels. Expected: the voxel body and turret, and the infantry body, show the
+  union. The sprite vehicle, every shadow and any attached animation are unchanged. Berserk frames
+  that share facing, image frame and brightness are identical, and the mask is gone on the first
+  frame after expiry. Original 5-6-5 captures may show the stray extra-layout bits of claim 7 and
+  are not acceptance values for that correction; the engine's rendered pixels must match F9 exactly. A per-channel
+  sum or clamp, scaling of the mask, variation between matching berserk frames, a mask on the
+  sprite vehicle or a shadow, or no mask on the voxel vehicle or infantry falsifies the matching row.
+  Then make the voxel vehicle berserk first and curtain it afterwards (an invulnerable target cannot
+  go berserk, S-0302 claim 10). Record that it is still berserk after the curtain arrives; if it is
+  not, this route cannot measure the combination row. With the curtain and berserk selectors at
+  different positions, use test triples whose bits overlap, then triples whose bits are disjoint.
+  Expected: the union of both masks on each pixel, compared with curtain-only frames of equal
+  brightness. A sum, a carry between channels, or one mask replacing the other falsifies the
+  combination row. Last, map-place an infantry unit in a cell whose centre is shrouded for the
+  viewer and which borders visible cells. Make it berserk, and capture the frames after the hit and
+  any frames in which its hunt carries it across the shroud edge. Expected: no berserk mask in a
+  frame where its cell centre is shrouded, and the mask in a frame where it is not.
+  Falsifiers of parts a and b: a shot aimed at a berserk-friendly drone, losing the allied target
+  solely because it is allied, or the immune drone going berserk.
 - **P5. Equal initial duration over the area.** Several enemy tanks of one type, rank and
   damage modifiers at different distances inside a chaos drone's area, all on the same side
   of the drone in update order.
@@ -704,5 +774,5 @@ psionics-immune subject to keep its owner. A takeover of that subject falsifies 
   and S-0203 claim 5). Scenario P3 measures it (its negative-versus repeat and hit timing on either side
   of the target's update); until that is run, it stays open.
 - Whether a late start falls back to rest (Q-1166, question 1). This spec does not answer it.
-- The aircraft-tint subcase marked unmeasured needs a dedicated setup before it can acquire
-  measurement backing.
+- The aircraft row of claim 7 is marked unmeasured. It needs a dedicated setup before it can
+  acquire measurement backing.

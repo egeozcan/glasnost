@@ -1,9 +1,9 @@
 ---
 id: Q-1526
 title: How the berserk tint is combined with a unit's pixels
-status: open
+status: answered
 related: [S-0610, S-0102, S-0104, S-0006]
-answered-by: []
+answered-by: [S-0610]
 ---
 
 ## Need
