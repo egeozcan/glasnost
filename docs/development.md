@@ -1942,6 +1942,9 @@ What each item's retake from main showed and what was done. Final shots: `local-
 | m6b/paratroopers-* "no shadows" | the body-sprite shadow is not drawn above the surface (S-0107 claim 19); the generic shadow is unspecified | Q-1525 |
 | m7a/berserk-* | no tint spec for how the colour combines | Q-1526 |
 | m6b/sw-iron-curtain, sw-force-shield "no visible effect" | the brightness envelope and the colour masks were not drawn | drawn on the CPU and GPU paths (S-0102 claim 34, F9; S-0513 claim 29); requests Q-1527, Q-1528; building slot-animation rows of claim 34 still to come |
+| m7a/absorber-* "levels do not change" | live buildings drew their slot animations at their first frame only, whatever their state | slot animations play by state (S-0108 claims 11, 12, 15, 17, F9, 20); the level is at half with no infantry and high with one or more (two states only, so first-in and full look alike) |
+| m7a/bunker-occupied, bunker-firing "walls not up" | same cause | the bunker's wall slots start and stop with the sim's special-animation effect (S-0606) |
+| m6b/vehicle-repaired-at-depot "no repair arm" | no spec says what starts the depot's special-1 and production slots | request Q-1550; nothing starts them meanwhile |
 
 ### Particles (Q-1520)
 
