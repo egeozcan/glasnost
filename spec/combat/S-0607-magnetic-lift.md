@@ -2,13 +2,13 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344, Q-1522]
 supersedes: []
 ---
 
@@ -27,6 +27,7 @@ movement and links it to the firer, which pulls it in. This spec owns:
 - the outcomes on water, beach, clear and blocked cells,
 - when the unit gets its own locomotor back,
 - the magnetic wave's lifetime and how it interacts with a second, building-attacking weapon,
+- how the magnetic wave is drawn and where it falls in the draw order (presentation only),
 - what a seizing warhead does when it names a locomotor other than the jumpjet's, or none.
 
 Skirmish only. Network games and campaigns are out of scope.
@@ -104,6 +105,12 @@ New terms:
     *dropper house*.
   - A unit stays *dropped* until it touches down on a clear cell (claim 17) or its fall ends at
     the impact (claim 18).
+- **Wave ends, first end, second end.** The two world points between which a magnetic wave is
+  drawn (claim 25). The *first end* is the one its ripples spread from.
+- **Wave band.** The flat four-cornered area of the battlefield picture that a magnetic wave
+  changes (claim 25).
+- **Shift direction.** One of the four screen directions right, left, up and down, fixed when a
+  magnetic wave is created, along which the wave band displaces the picture (claim 25).
 - **Set down.** A grip that ends while the gripped unit's height above the surface is 0 or less
   *sets it down*. A seized unit is also set down when it touches down at the end of a *descending* flight.
   Being set down is what lets a seized unit get its own locomotor back (claim 20).
@@ -841,6 +848,112 @@ New terms:
     - Confidence: high (the refusal of the four stand-ins and that only the jumpjet's end clears
       the state, the drop-pod stand-in ending itself without clearing it)
 
+### How the magnetic wave is drawn
+
+25. **The picture of a magnetic wave.** This is presentation only: the picture changes no game
+    state, and no game rule reads it.
+    - **Its ends.** Every update of a wave that has not ended (claim 21), including its update at
+      creation, sets the wave's two ends from current positions:
+      - When the wave's target is a vehicle, the first end is the target's centre, and the second
+        end is the firer's fire point (glossary) for its first weapon, raised by 50 leptons.
+      - For any other target, the first end is that fire point and the second end is the target's
+        centre, raised by 50 leptons.
+
+      The fire point is the one of the firer's first weapon even when the magnetic-beam weapon is
+      its second. Against a vehicle, the usual case, the ripples therefore spread from the seized
+      vehicle towards the lifter.
+    - **After the end.** Once the wave has ended, its ends are no longer updated. Through the
+      fade-out (F4) the band stays where it last was, fixed in the world, while its ripples go on
+      moving.
+    - **The band.** The wave band is a flat four-cornered area, 100 leptons wide. Its corners lie
+      50 leptons to either side of each end, measured horizontally at right angles to the
+      horizontal line from the first end to the second. The two corners at an end have that
+      end's height. The band is the quadrilateral between the four corners' screen points
+      (S-0101 F1). F5 gives the geometry.
+    - **No colour of its own.** The band paints no colour and draws no outline. Each band pixel
+      takes the colour of a *source pixel* 0, 1 or 2 pixels away along the shift direction. Its
+      blue and red are then boosted and its green is kept (F5). Source pixels are read from the
+      picture as it stood before the wave drew, so the boosts never compound and a displaced
+      pixel never shows another band pixel's result.
+    - **Ripples.** How strongly a band pixel is displaced and boosted depends on its screen
+      distance from the first end's screen point and on the wave's visual countdown (F4). The
+      result is concentric rings around the first end, about 31 pixels apart, clipped to the band.
+      Most of each ring gets the 2-pixel displacement and the strongest boost; only thin rings
+      near the zero crossings keep the pixel in place.
+    - **Ring motion.** The countdown falls by 1 per tick, so the rings move outward by 1 pixel per
+      tick. The countdown starts at 100. When an update finds it at 19 it restarts at 64 (F4), so
+      the next drawn value is 63. The ring phase therefore jumps back by 44 steps 82 ticks after
+      creation and every 45 ticks after that: the pattern drawn 82 ticks after creation is the one
+      drawn 38 ticks after it, and from then on it repeats every 45 ticks. Because the rings repeat
+      about every 31 pixels, the jump looks like a step of about 13 pixels inward. S-0203's extra update in the creation tick can
+      shift this count by one tick.
+    - **Shift direction.** The shift direction is chosen once, when the wave is created, from the
+      shot's firing and impact points. It is right or left when the band's screen line from the
+      firing point is within 45° of horizontal, and up or down otherwise (F5). It does not follow
+      later movement, not even the change of ends in the first update.
+    - **No fade.** The fade values *a* and *b* of F4 do not affect the picture. A wave is drawn at
+      full strength from its first drawn frame until it is removed, and then vanishes at once.
+      The visual countdown sets only the ring phase.
+    - **Depth.** A band pixel is drawn only where it passes the depth test as a reader (S-0102
+      claim 10), with the flat profile and the depth bias −*L(z)* − 2, where *z* is the world
+      height of the first end (S-0102 F2). The wave writes no depth. Because the profile is flat,
+      each band pixel is compared as a point at the first end's height above the ground under that
+      pixel: the band behaves as a level sheet at that height, hidden where a depth writer
+      (terrain, overlays, trees, buildings) lies in front of it. Against a lifted vehicle the first
+      end is high, so the sheet is high and is hidden less.
+    - **View edge.** The band is not drawn within 3 pixels of the battlefield view's edges. The
+      original used a 2-pixel margin in some frames instead. That is a drawing artefact; we use 3
+      throughout.
+    - **Fog.** With fog of war on, a wave is not drawn when both of its ends lie in cells that are
+      explored but unseen for the local player (glossary *explored, seen*).
+    - **Number domains.** The original computes the band's corners in floating point, with table
+      trigonometry, and truncates them to whole leptons. That can leave a corner 1 lepton short of
+      the exact value. Our engine uses the exact corners of F5, rounded toward zero, because the
+      difference is not visible. The ripple values are integers derived once from table functions
+      (F5). The colour arithmetic is exact integer arithmetic on the 16-bit picture (S-0103
+      claim 9).
+    - **Fixed artefacts.** The original's ripple tables cover only screen distances below 300 pixels
+      on each axis and ring phases below 496; beyond them it reads unrelated memory. Our engine
+      evaluates F5 for every distance. When the two ends coincide horizontally, the original's
+      band direction is undefined; our engine then takes the band's length direction along the
+      world *x* axis.
+    - Backing: `measurable` (scenario L16) for the ends and their swap for a vehicle target, the
+      freeze after the end, the band's width and length, the colour rule, the ring spacing, motion
+      and jump, the shift direction, the absence of fade, the depth test, the view-edge margin and
+      the fog rule. Exact corner rounding, the table-derived ripple values pixel by pixel and the
+      fill rule on the band's edge pixels are `unmeasured`: a capture cannot separate them from
+      the screen projection's own rounding. The fixed artefacts are `unmeasured` because they are
+      design choices.
+    - Confidence: high (the band's shape and width, the colour rule, the ripple formula, the
+      absence of fade, the shift direction rule, the depth bias); medium (the swap of ends for a
+      vehicle target and the first-weapon fire point, read from argument order rather than
+      observed; the fog rule; which pixels on the band's boundary are filled)
+
+26. **Where the magnetic wave falls in the draw order.** This is also presentation only.
+    - A magnetic wave is an object of the air layer (S-0102 claim 3). It enters the air layer's
+      list once, at its creation, as the list's last object (S-0102 claim 7). Moving its ends
+      does not re-enter it, so it keeps its place in the list until it is removed.
+    - Because the wave changes the picture already drawn (claim 25), it displaces and tints:
+      - the terrain picture,
+      - every object of the underground, surface and ground layers,
+      - the air-layer objects that entered the list before it,
+      - ion-cannon blast effects, which are drawn before the layers (S-0102 claim 2).
+    - Everything drawn after it appears unchanged on top of the band:
+      - air-layer objects that entered the list after it,
+      - the top layer,
+      - status extras,
+      - the effects S-0102 claim 2 draws after the layers (light flashes, the laser, electric-bolt
+        and radiation beams, range circles and map beacons).
+
+      The magnetic wave is not one of those post-layer beam effects.
+    - For example, while a seized vehicle is in the ground layer the band tints and displaces it.
+      Once it enters the air layer after the wave was created, it is drawn over the band
+      untouched. When that happens depends on S-0102 claim 4's re-evaluation moments.
+    - Backing: `measurable` (scenario L16 part c)
+    - Confidence: high (air layer, list order, the effect on earlier drawings only); medium (that
+      moving the ends never re-enters the list; the seized-vehicle example, because of S-0102
+      claim 4's open moments)
+
 ## Formulas
 
 **F1 Size test.** The target can be seized only when
@@ -890,8 +1003,56 @@ and *b* catches up to that retained value. There is one update at creation as we
 subsequent per-tick updates.
 
 A visual integer countdown starts at 100 ticks, decreases by 1 each tick and is reset to 64
-when an update finds it at trunc(1 / *q*) = 19 ticks. It never ends a magnetic wave. Its drawing
-belongs to the rendering specs.
+when an update finds it at trunc(1 / *q*) = 19 ticks. It never ends a magnetic wave. It sets
+the ripple phase of the picture (claim 25, F5); *a* and *b* have no effect on the picture.
+
+**F5 Wave picture (claim 25).**
+
+*Geometry.* Let the ends be *E*₁ = (*x*₁, *y*₁, *z*₁) and *E*₂ = (*x*₂, *y*₂, *z*₂), in leptons, with
+*E*₂ already raised by 50 leptons (claim 25). Let *h* = √((*x*₂ − *x*₁)² + (*y*₂ − *y*₁)²). When
+*h* > 0, let *u* = ((*x*₂ − *x*₁) / *h*, (*y*₂ − *y*₁) / *h*); when *h* = 0, let *u* = (1, 0). Let
+*n* = (−*u*ᵧ, *u*ₓ). The four corners are
+
+> *E*₁ − 50*n* and *E*₁ + 50*n*, both at height *z*₁,
+> *E*₂ − 50*n* and *E*₂ + 50*n*, both at height *z*₂,
+
+each component rounded toward zero to whole leptons. The band is the convex quadrilateral whose
+vertices are the corners' screen points (S-0101 F1), in the order *E*₂ − 50*n*, *E*₂ + 50*n*,
+*E*₁ + 50*n*, *E*₁ − 50*n*.
+
+*Shift direction* (once, at creation). Take *E*₁ as the shot's firing point and *E*₂ as its impact
+point raised by 50 leptons, as given to the wave at creation and before any update. Let *S* be the
+screen point of *E*₁ and *P* the screen point of the corner *E*₂ + 50*n*. Let Δ*x* = *P*ₓ − *S*ₓ
+and Δ*y* = *S*ᵧ − *P*ᵧ (positive when *P* is higher on the screen). If Δ*x* ≠ 0 and
+−1 ≤ Δ*y* / Δ*x* < 1, the shift direction is right when Δ*x* > 0 and left when Δ*x* < 0. Otherwise
+it is up when Δ*y* ≥ 1 and down when Δ*y* ≤ 0. The ratio is a floating-point division in the
+original; only its comparison with ±1 matters, and that comparison is exact for integer operands.
+
+*Ripple strength.* For a band pixel at screen point (*x*, *y*), with (*x*₀, *y*₀) the screen
+point of *E*₁ and *c* the visual countdown of F4 at the time of drawing:
+
+> *D* = trunc(*r*((*x* − *x*₀)² + (*y* − *y*₀)²)),
+> *W*(*i*) = trunc(RZ₅₃(RZ₅₃(12 × sinₜ(RZ₅₃(*i* × 0.1))) + 0.49)),
+> *j* = min(|*W*(*D* + *c*)|, 9),
+
+where *r* is the table square root of S-0204 claim 5, sinₜ the table sine of S-0105 F1, 0.1 and
+0.49 the double-precision values nearest to those decimals, RZ₅₃ the rounding of S-0205 claims 4 and
+5, and trunc truncation toward zero. *W* takes the integer values −11 to 12. *D* and *W* are
+integers; the original builds them once into tables.
+
+*Displacement and boost.* The displacement is *s* = 0 pixels for *j* ≤ 1, 1 pixel for 2 ≤ *j* ≤ 6
+and 2 pixels for 7 ≤ *j* ≤ 9, along the shift direction. The boost factor is *k* = 110 + 8*j*. The
+source pixel is the pixel *s* pixels from (*x*, *y*) along the shift direction, with its colour as
+before the wave drew. Widen its 16-bit colour to 8-bit components *R*, *G*, *B* (each with zeros in
+its discarded low bits, S-0103 claim 9). The band pixel becomes
+
+> *R*′ = min(255, *R* + ⌊(*k* / 2) × *R* / 256⌋),
+> *G*′ = *G*,
+> *B*′ = min(255, *B* + ⌊4*k* × *B* / 256⌋),
+
+packed with S-0103 claim 9's 16-bit step. All of this is exact integer arithmetic; *k* is even,
+so *k* / 2 is exact. For a source pixel with *B* = 0 or *R* = 0 that component stays 0: the wave
+brightens blue and red where they exist, and adds no colour to pure black or pure green.
 
 ## Constants
 
@@ -903,7 +1064,16 @@ belongs to the rendering specs.
 | wave fade step | 13421773 / 268435456 | per update, dimensionless | F4; single-precision constant, double-precision accumulator |
 | wave full-strength threshold | 8827055269646172 / 9007199254740992 | dimensionless | F4; approximately 0.98 |
 | wave fade-out margin | half the wave fade step | dimensionless | F4 |
-| wave visual counter start, reset trigger, reset value | 100, 19, 64 | ticks | F4; no game effect |
+| wave visual counter start, reset trigger, reset value | 100, 19, 64 | ticks | F4; no game effect, sets the ring phase (F5) |
+| wave second-end lift | 50 | leptons, vertical | claim 25, F5 |
+| wave band half-width | 50 | leptons, horizontal | claim 25, F5 |
+| ripple phase step | 0.1 | radians per pixel of distance and per countdown step | F5; double precision |
+| ripple amplitude, added constant | 12, 0.49 | dimensionless | F5; double precision |
+| ripple strength cap | 9 | — | F5 |
+| displacement by strength | 0 for 0–1, 1 for 2–6, 2 for 7–9 | pixels | F5 |
+| boost factor base, step | 110, 8 | 1/256 units, per strength step | F5; red uses half the factor, blue four times it |
+| wave view-edge margin | 3 | pixels | claim 25 |
+| wave depth constant | −2 | depth units | claim 25; added to −*L(z)* |
 | falling-damage multiplier absent-key default | 1.0 | — | F2 |
 | current-strength switch absent-key default | on | — | F2 |
 | magnetic-lift crash growth | 1.0 | leptons per tick, per tick | S-0502 claim 18 (owned there) |
@@ -988,6 +1158,10 @@ Life of a seized unit:
   route brought it there. Height above the surface decides the outcome: 1 lepton or more
   hovers; 0 or less stays where it is and becomes *grounded*, even from *ascending*, and is
   eligible for ordinary restoration. Claim 13's lifter-ended safety departure is unchanged.
+- **Wave picture artefacts** (claim 25). The original's ripples read unrelated memory beyond
+  its table range, its view-edge margin varies between 2 and 3 pixels, and its band direction
+  is undefined when the ends coincide horizontally. These are drawing artefacts with no gameplay
+  effect, so they get no switch; claim 25 states the fixed behaviour.
 - **A harvester driving temporarily is immune** (claim 4). This is not a quirk: it is the only way
   a resource gatherer on a temporary locomotor is treated.
 - **An infantry kill credited to the dropped unit** (claim 16) when there is neither a dropper nor a
@@ -997,12 +1171,15 @@ Life of a seized unit:
 ## Import mapping
 
 Claims 9 and 20's switch-off design rules add no imported field or absent-key default.
+No imported key changes how a magnetic wave looks or where it is drawn (claims 25 and 26): its
+shape, colours, ripples and depth are engine constants. Only the magnetic-beam weapon flag below
+decides that a shot makes such a wave.
 Their search uses the type's locomotion class and movement zone through S-0502 claim 17.
 S-0502 owns the corresponding import mapping and the shared self-destruction quirk.
 
 | Source | Key | Feeds | Form | Absent |
 |---|---|---|---|---|
-| rules, weapon | `IsMagBeam` | magnetic-beam weapon (claims 11, 21; S-0301 owns the term) | boolean | no |
+| rules, weapon | `IsMagBeam` | magnetic-beam weapon (claims 11, 21, 25, 26; S-0301 owns the term) | boolean | no |
 | rules, warhead | `IsLocomotor` | seizing warhead (Terms, claim 1) | boolean | no |
 | rules, warhead | `Locomotor` | the stand-in locomotor that the seize installs (Terms, claims 22 to 24) | locomotor identifier, read as S-0207 claim 14 (blanks trimmed; a malformed non-empty value is ignored, and warns on a seizing warhead; an empty value makes no entry, S-0001 claim 8, and reads as absent without a warning) | the locomotor in force from an earlier rules layer, else the teleporting locomotor (claim 22); an unknown identifier warns (claim 22) |
 | rules, infantry or vehicle or aircraft type | `Size` | *s* (F1) | decimal | 1.0 (S-0507) |
@@ -1463,12 +1640,53 @@ establish a qualifying condition; a run lacking the required observations is inc
     loss of registration during clear-cell descent before touchdown, registration surviving
     into blocked-impact effects, or a combat answer inconsistent with the height comparison.
     Run each variant three times. A missing read-only observation is inconclusive.
+- **L16 Wave picture and draw order (claims 25, 26, F5).** Presentation: capture the picture
+  rather than game state.
+  - Setup: the common setup above, at the game's own resolution, unscaled and unfiltered, with the
+    display path recorded as S-0103's palette scenarios require. Use a flat stretch of clear land
+    whose terrain colour is uniform over at least 40 × 40 pixels. Capture one frame per tick from
+    the shot until the wave is gone, with the view still.
+  - (a) Vehicle target. A lifter seizes a parked vehicle whose screen line from the lifter is
+    nearly horizontal; repeat with a nearly vertical line. Expected: a band 100 leptons wide under
+    S-0101 F1, with no outline and no colour of its own. Its rings are centred on the vehicle, about
+    31 pixels apart, and move outward 1 pixel per tick. The pattern 82 ticks after the shot (±1)
+    matches the one 38 ticks after it, and it repeats every 45 ticks from then on. Inside the band the terrain is displaced by 0, 1
+    or 2 pixels: sideways in the horizontal run and up or down in the vertical one. On terrain of
+    known colour, the band pixels match F5 for some strength from 0 to 9, with green unchanged.
+    While the vehicle is pulled and lifted, the band follows it tick by tick.
+  - (b) End and freeze. Retarget the lifter mid-grip and keep capturing. Expected: the band stops
+    following, keeps its last place and full strength while the rings keep moving, then vanishes
+    in one frame, the tick F4's fade-out ends (claim 21). It never fades gradually.
+  - (c) Order and depth. Repeat (a) with a building between the view and the band's far part,
+    with a laser-armed defence firing across the band, and through the victim's lift past the
+    air-layer height of S-0102 claim 3. Expected: the building hides the part of the band behind
+    it. The laser beam and every health bar are drawn untinted over the band. The victim is
+    tinted while in the ground layer and drawn untinted over the band once it is in the air
+    layer.
+  - (d) Fog. With fog of war on, let a computer house's lifter seize a vehicle in an area the
+    human player has explored but cannot see. Then move a human unit until one end is seen.
+    Expected: no band while both ends are unseen; a band from the first frame in which one end
+    is seen.
+  - (e) Another target. If a magnetic-beam weapon can be force-fired at a cell or at a non-vehicle
+    target, repeat (a) that way. Expected: the rings are centred on the lifter's first-weapon fire
+    point. If no such shot is possible, record that the case is unreachable in stock data.
+  - Falsified by: a drawn colour or outline of its own, rings centred on the lifter in (a) or on
+    the target in (e), a gradual fade, ring spacing or motion inconsistent with F5, a band that
+    keeps following after the end, a later air-layer object, a laser or a health bar tinted by
+    the band, or a band drawn while both ends are unseen under fog.
 - **S-0502 carry items.** L2, L3 and L4 together give the held body facing (S-0502 claim 10), the
   hovering, landing and arrival exclusions (claims 12 to 15), the growing crash rate (claim 18),
   the cell-centre detour (claim 15 here), and the sinking-only-after-a-drop case (S-0502 claim 19,
   via L6).
 
 ## Open questions
+
+- Whether stock data lets a magnetic-beam weapon make a wave whose target is not a vehicle
+  (claim 25's second case; scenario L16 part e). The picture for that case is stated either way.
+- Whether a magnetic wave is still drawn when its first end is off the view while its band
+  crosses the view (claim 25). The layer pass's own visibility test for the wave was not read.
+- Which pixels on the boundary of the wave band are filled (claim 25). The band's interior is
+  stated; the edge rule of the original's fill is not pinned down.
 
 - Whether any player order can reach a gripped unit after it is deselected, which would exercise
   claim 9's no-destination exception. Our engine follows claim 9 if one does.
