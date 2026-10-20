@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 26
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0060, Q-0798]
+requests: [Q-0060, Q-0798, Q-1523]
 supersedes: []
 ---
 
@@ -23,7 +23,8 @@ says whether a shot can be fired now and, if not, why. Aiming tolerances and tur
 S-0310; where a shot starts is S-0313; which weapon is used is S-0308; range is S-0307.
 Drain attempts replace ordinary shots (S-0608 claim 1; claim 9 here). Disc-laser firing and its
 lasting effect are S-0615 claims 12 to 17. Aircraft carrying a first passenger replace ordinary
-shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below.
+shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below. Which shot animation a shot makes,
+where it is and what it follows are claims 20 to 23.
 
 ## Terms
 
@@ -127,6 +128,17 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
   animation (claim 14).
 - **Charge turret.** A vehicle type with the imported charge-turret flag; it has several turret
   images (its turret count *N*), and which one is current follows the rearm countdown (claim 16).
+- **Shot animation.** The animation a shot makes at its start (claims 20 to 23), as S-0109
+  claim 29 names it. A weapon has an ordered *animation list* of zero or more animation types,
+  numbered from entry 0, and may name one *occupant animation* and one *open-topped animation*
+  (Import mapping). It also may name an assault animation, which ordinary shots never use.
+- **Shot facing.** The facing of a firer that chooses an entry from an animation list of
+  exactly eight entries (claim 21).
+- **Launch point.** The point from which a shot's projectile is launched, height included: the
+  fire point of S-0313 claims 1 and 5 to 8, or the firer's own position for a dropping
+  projectile (S-0306 claim 5).
+- **Passenger firing out.** An infantry passenger firing from inside an open-topped transport
+  (S-0313 claim 5; glossary, *open-topped transport*).
 
 ## Behaviour
 
@@ -707,7 +719,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     stay as they were. A carrying aircraft's drop attempt is not a void shot merely because
     it launches no projectile: successful release and its ammunition spending remain, and its
     rearm countdown expires; refusal retains the countdown (S-0522 claim 11). Neither outcome
-    produces ordinary-shot effects: no spray draw, weapon report or muzzle animation.
+    produces ordinary-shot effects: no spray draw, weapon report or shot animation (claim 23).
     - Backing: `measurable` (S-0306, scenario P5 run d: an arcing shot for which the launch pitch has
       no solution is removed before it enters play, S-0306 claim 6 a; observed here by scenario F14,
       void-shot part; S-0522 scenario P7 for the drop exception)
@@ -740,7 +752,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     the spray pick of S-0313 (only for the first shot of a burst of a spray-attack type), the
     projectile's own draws (S-0306), then the one delay draw (R(0, 2) of claim 2 or R(3, 5) of claim 4) if
     the delay kind chosen by claim 2's order takes one, and after it the draws of the effects the shot creates last: its
-    muzzle-flash animation, a sonic wave or a laser (S-0202, claim 10, and the specs of those
+    shot animation (claim 20), a sonic wave or a laser (S-0202, claim 10, and the specs of those
     effects). Creating an effect weapon's particle system is not a draw: its draws come in the
     system's own turns (S-0616 claims 10 to 18). A refused attempt takes no draw at all. A delay without a draw (a burst-delay field of claim 4, the bare
     rate of claim 5, the 1-tick delay of claim 10) takes no delay draw. A void shot as in claim 15 takes the projectile's draws but no delay draw.
@@ -773,6 +785,103 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     S-0519 claim 13 owns the arrival conditions and remaining effects.
     - Backing: `measurable` (scenario F18; S-0519 scenario T13)
     - Confidence: high
+
+### Shot animation
+
+20. **Which shot animation a shot makes.** Every shot made in ordinary firing makes at most one
+    shot animation, chosen as follows. No random draw is taken for the choice.
+    - (a) **From the animation list**, of length *n*:
+      - *n* = 0: no type is chosen.
+      - *n* = 8: entry *e* = (*d* + 1) mod 8, where *d* is the 8-direction of the firer's shot
+        facing (claim 21; Formula F7).
+      - any other *n* ≥ 1, including 1 and 16: entry 0, whatever the facing.
+    - (b) **Garrisoned building.** If the firer is a garrisoned building (Terms), the weapon's
+      occupant animation replaces the choice of (a). A weapon without an occupant animation
+      then makes none, even if its animation list is not empty.
+    - (c) **Open-topped fallback.** If (a) and (b) have chosen no type, the firer is a
+      passenger firing out (Terms) and the weapon names an open-topped animation, that type is
+      chosen. A passenger whose weapon has a non-empty list therefore plays the list's entry,
+      chosen by the passenger's own shot facing, and never its open-topped animation.
+
+    So with an eight-entry list, entry 0 is drawn for a firer facing straight up the screen
+    (map north-west, *d* = 7), and the entries then follow the screen clockwise:
+
+    | Entry *e* | 8-direction *d* | Way the firer faces |
+    |---|---|---|
+    | 0 | 7 | map north-west (straight up the screen) |
+    | 1 | 0 | map north (upper right) |
+    | 2 | 1 | map north-east (right) |
+    | 3 | 2 | map east (lower right) |
+    | 4 | 3 | map south-east (straight down) |
+    | 5 | 4 | map south (lower left) |
+    | 6 | 5 | map south-west (left) |
+    | 7 | 6 | map west (upper left) |
+
+    Every shot of a burst, a sync shot (claim 13) and an animation-delayed building's shot (claim
+    14) makes its own choice at the moment it is fired. A gattling type's shot uses the weapon of its
+    current stage (S-0609), so its list and therefore its shot animation change with the stage.
+    - Backing: `measurable` (scenario F19 parts a, b, c, e and h)
+    - Confidence: high (the list rule, the one-step shift of entries and the absence of a draw); medium (the
+      garrison replacement and the open-topped fallback)
+
+21. **Shot facing.** The shot facing is read at the moment of the shot:
+
+    | Firer | Shot facing |
+    |---|---|
+    | vehicle whose own type has the turret flag | its current turret facing |
+    | any other vehicle | its current body facing |
+    | infantry, including a passenger firing out | its current body facing |
+    | aircraft | its current turret facing, the facing that S-0310 claim 5 compares |
+    | building without a target | its turret facing (S-0310 claim 4) rounded to the 256-step facing |
+    | building with a target, turreted with a sprite turret (S-0310 Terms and claim 4) | its turret facing rounded to the 32-step facing |
+    | any other building with a target | the direction of the target from the building's aiming point, as S-0310 claim 4 measures it |
+
+    A rounded building facing is rounded again to 8 steps (Formula F7). The two roundings can
+    give another entry than one rounding would: with the 32-step rounding, turret facings 3072
+    to 4095 give *d* = 1, and with the 256-step rounding, facings 3968 to 4095 do, where a
+    single rounding gives *d* = 0. For a garrisoned building the facing does not matter, because
+    claim 20 (b) replaces the list's choice.
+    - Backing: `measurable` (scenario F19 parts a, b, f and i) for every row except a building
+      without a target, which is `unmeasured`: no normal-input situation is known in which a
+      building fires while it holds no target.
+    - Confidence: high (vehicles and infantry); medium (aircraft and the three building rows)
+
+22. **Where it is and what it follows.** The shot animation is created in the firer's turn, at
+    the shot (S-0109 claim 29), at the shot's launch point (Terms). This includes the muzzle of
+    the shot for a garrisoned building (S-0313 claim 6) and the transport's muzzle for a
+    passenger firing out (S-0313 claim 5). It is created with no initial loop delay, repeat
+    factor 1 and no reverse request; the type's own reverse flag still applies (S-0109 claim 8).
+    - **Firer that is not a building.** The animation is attached to the firer (S-0109 claim 22).
+      It follows the firer as it moves, including a passenger moving with its transport. It is in
+      the ground layer (S-0102 claim 3), even for an aircraft in flight. It disappears when the
+      firer is removed from the game.
+    - **Building.** The animation is not attached. It stays where it was created, in its type's
+      layer (S-0102 claim 3). Its creator replaces its depth adjustment (S-0102 claim 13) with
+      *z*ₐ of Formula F8.
+    - **Palette.** Its creator gives it no palette of its object. It is not an object's own
+      animation drawn with its object, so it takes row 4 or 5 of S-0103 claim 8 by its own art
+      flags, also when attached.
+    - Backing: `measurable` (scenario F19 parts d, e, g and h). The depth adjustment is
+      `unmeasured`: its only effect is which of two overlapping pictures is drawn in front, for a
+      short-lived animation, and no reliable observation of that is proposed.
+    - Confidence: high (place, attachment and its absence for buildings); medium (a passenger's
+      animation following its transport, the depth adjustment and the palette rows)
+
+23. **What makes no shot animation, and what is drawn instead.** None of these makes a shot
+    animation: an attempt that the firing check refuses; any shot made void by claim 15; a drain attempt
+    (claim 9); a drop attempt (S-0522 claim 11); a spawner weapon's shot (Terms); the firing of a
+    disc laser weapon (S-0615 claim 12); the firing of a suicide weapon (glossary; S-0519
+    claim 11); and a shot for which claim 20 chooses no type. A shot without a chosen type gets
+    no default or placeholder picture at its launch point. The other things drawn when a weapon
+    fires belong to their own specs: its sonic wave, laser, electric bolt or particle emitter
+    (claim 5; S-0616 and the combat specs of those effects), and a building's turret and barrel
+    recoil (S-0105 claim 27). One more is local: a vehicle whose type has the imported
+    target-laser flag, owned by the local player's house, shows a line towards its target for
+    15 ticks after each shot. That line is drawing only and changes no game state.
+    - Backing: `measurable` (scenario F19 parts e and h; claim 15's backing for shots made void; S-0522
+      scenario P7 for drop attempts)
+    - Confidence: high (the list of shots without one, and the target line's owner, duration and
+      restriction to vehicles)
 
 ## Formulas
 
@@ -816,8 +925,20 @@ berserk firer that value is then halved and truncated toward zero, as in the las
 *D* > 0 and the countdown runs; else 0. Integer arithmetic.
 
 **F6. Starting ammunition** (claim 10). *a*₀ = *A* when *J* = −1, otherwise *J*.
-All three quantities are signed 32-bit integers in rounds; this is an exact selection,
-with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an explicit
+
+**F7. Eight-entry choice** (claims 20 and 21). Integers. With *f* the shot facing (facing units),
+*d* = ⌊*f* / 8192 + ½⌋ mod 8 (S-0204 Formula F4 with *n* = 8) and *e* = (*d* + 1) mod 8. For a
+building whose row of claim 21 rounds first, *f* is replaced by *f*′ = (65536 / *n*) ×
+(⌊*f* × *n* / 65536 + ½⌋ mod *n*) with *n* = 256 or 32, and *d* is taken from *f*′.
+
+**F8. Depth adjustment of a building's shot animation** (claim 22). Integers, leptons and depth
+units of S-0102. With *y*ₗ the y-coordinate of the launch point and *y*₀ = 256 × the smallest cell
+y of the building's foundation (the y-coordinate of its map-north edge):
+*z*ₐ = −200 when the building has at least one occupant, otherwise
+*z*ₐ = min(0, −trunc((*y*ₗ − *y*₀) / 4)), trunc toward zero.
+The coordinates are signed 32-bit integers in leptons and *z*ₐ is a signed 32-bit integer in
+depth units (S-0102). The formula uses integer division truncated toward zero; the selection
+itself requires no further rounding. With `quirks.initial_ammo_above_capacity` on (the default), an explicit
 *J* above a nonnegative *A* remains *J*. With the switch off, that result is capped at *A*.
 
 ## Constants
@@ -837,6 +958,11 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | Maximum and initial ammunition, absent-key default | −1 | rounds | Maximum −1 disables vehicle reloading; initial −1 selects the maximum (claim 10) |
 | Empty-reload field, absent-key default | −1 | ticks | Import mapping; −1 = not used |
 | Reload, reload increment, pip wrap, absent-key default | 0 | ticks, ticks, rounds | Import mapping |
+| Facing-chosen animation list length | 8 | entries | Claim 20; every other length plays entry 0 |
+| Entry shift of an eight-entry list | 1 | entries | Claim 20, Formula F7 |
+| Occupied building's shot-animation depth adjustment | −200 | depth units (S-0102) | Claim 22, Formula F8 |
+| Divisor of a building's shot-animation depth adjustment | 4 | divisor (leptons) | Claim 22, Formula F8 |
+| Target line duration | 15 | ticks | Claim 23 |
 
 ## State and ordering
 
@@ -847,7 +973,7 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | ready (no countdown running), or countdown running in claim 13's sync tick | an attempt passes the firing check and makes a shot | the shot is the *j*-th of its burst, *j* = *k* + 1; the countdown runs for the shot's delay *D*, of the kind that claim 2's order gives for *j*, with the factors of claims 3, 6 and 7 where that kind takes them and the halving of claim 8 where it applies; the burst counter is *j* mod *B* |
 | ready | an attempt passes the firing check with a draining weapon | a drain attempt replaces the ordinary shot (claim 9; S-0608 claim 1); no countdown start, burst advance, ordinary per-shot ammunition use or ordinary-shot draws; target clearing still resets the burst counter; an admitted initial aircraft pass still makes its run round pending (S-0608 claim 16; S-0501 claim 15) |
 | infantry walker, any rearm state | charge arrival under S-0519 claim 13 | countdown replaced by claim 19's non-shot delay; burst counter and ammunition unchanged by the query |
-| carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or muzzle animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
+| carrying aircraft with a first passenger | firing reaches a drop attempt | no ordinary shot, burst advance, delay draw, spray draw, report or shot animation; refusal retains countdown and ammunition, success expires countdown and spends one round immediately; run spending remains separate (S-0522 claim 11) |
 | ready | an attempt passes the firing check, but its projectile cannot be put on the map (a void shot, claim 15) | nothing changes |
 | ready, animation-delayed non-SAM building on the ordinary path | its attack behaviour gets *can fire*, outside an active upgrade gate | the delayed shot becomes pending (claim 14); no shot is made yet |
 | ready, animation-delayed non-SAM building with active upgrade gate | *can fire*, gate passes | immediate primary and secondary attempts, no delayed shot started; an empty secondary does nothing (claims 9 and 14) |
@@ -859,8 +985,11 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 
 **Ordering consequences.**
 - The delay draw of a shot is taken in the firer's turn, after the draws of the projectile it
-  launches and before those of its muzzle-flash animation (claim 18); two firers that fire in the same tick take their draws in update order
+  launches and before those of its shot animation (claims 18 and 20); two firers that fire in the same tick take their draws in update order
   (S-0203).
+- A shot's animation is created after its projectile is placed and after its delay draw, and
+  before its sonic wave or laser (claims 18 and 22; S-0109 claim 29). Choosing its type takes no
+  draw (claim 20).
 - A shot made in tick *t* with delay *D* ≥ 1 allows the next shot in tick *t* + *D* at the
   earliest (claim 1), unless that next shot is a sync shot (claim 13) or another shot of the
   aircraft's same-tick full burst (claim 4), or an unchecked building secondary attempt
@@ -962,6 +1091,12 @@ with no rounding. With `quirks.initial_ammo_above_capacity` on (the default), an
 | `IsAnimDelayedFire`, `DelayedFireDelay` (art, building image) | claim 14's ordinary delayed shot; a passing upgrade gate bypasses both | boolean; integer, ticks | no; 0 |
 | `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary` (rules, type) | weapon references for slots 0 and 1 and their elite replacements; S-0308 claims 1, 2 and 12 own resolution; claim 9 here covers an empty resolved secondary | weapon type name | held value; engine default no weapon |
 | `IsChargeTurret`, `TurretCount` (rules, vehicle type) | charge turret and *N* (claim 16) | boolean; integer | no; 0 |
+| `Anim` (rules, weapon) | animation list (Terms, claim 20); its length *n* and entry order as written | list of animation type names | empty list |
+| `OccupantAnim` (rules, weapon) | occupant animation (claim 20 b) | animation type name | none |
+| `OpenToppedAnim` (rules, weapon) | open-topped animation (claim 20 c) | animation type name | none |
+| `AssaultAnim` (rules, weapon) | assault animation; not used by ordinary shots (Terms) | animation type name | none |
+| `Turret` (rules, vehicle type) | the vehicle row of claim 21; S-0310 owns the flag | boolean | no |
+| `TargetLaser` (rules, type; only a vehicle shows the line) | the target line of claim 23 | boolean | no |
 
 The importer warns for a `Burst` below 1, a negative `ROF`, a negative factor, and a burst-delay
 value below −1 (Edge cases).
@@ -1343,9 +1478,9 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   alone on the map.
 - Observable: the recorded raw values taken in the firing tick.
 - Expected: the projectile's draws, then one R(0, 2) (or R(3, 5) inside a burst), then the
-  muzzle-flash animation's draws (S-0202, claim 10).
+  shot animation's draws (S-0202, claim 10; S-0109).
 - Falsified if: a second delay draw appears, the delay draw comes before the projectile's,
-  or muzzle-flash draws precede the delay draw.
+  or shot-animation draws precede the delay draw.
 - Spray and particle part: a spray-attack type's first shot of a burst (test data), and a
   fire-particle weapon's first shot. Expected: the spray pick comes before the projectile's draws
   and its delay draw follows them. For the fire-particle weapon, creating the emitter takes no draw
@@ -1512,6 +1647,55 @@ is absent (the control).
 - Falsified by a counter advance or wrap caused by the query, a different delay or delay
   draw, a draw after rather than before scatter, or berserk halving at a reached arrival.
 
+**F19. Shot animations (claims 20 to 23; Q-1523).**
+- Setup: a purpose-made flat test map at speed index 2, no engine add-on and no mods (the named
+  test files of this scenario and the purpose-made test map excepted), a bystander computer player
+  kept outside the observed area. Test art gives sixteen named test animations, T0 to T15, each a
+  distinct digit picture with a long fixed rate, one pass, no random rate and no start effects.
+  Test weapons: W8 with the list T0 … T7, W16 with T0 … T15, W1 with T0 alone, W0 with an empty
+  list, WG with the list T0 … T7 and occupant animation T9, WG0 with the list T0 … T7 and no
+  occupant animation, WP with an empty list and open-topped animation T10, and WP8 with the list
+  T0 … T7 and open-topped animation T10. No test weapon has a report sound or an effect flag
+  (claim 5), and each fires a straight, draw-free test projectile. The random-state recorder
+  runs throughout.
+- Procedure and observable, per part: the shot tick, which test picture appears, its screen
+  position relative to the firer and the target, whether it moves with the firer, and the raw
+  stream values taken in the shot tick.
+  - (a) A turreted test vehicle armed with W8 holds still and fires at targets placed so that its
+    turret faces each of the eight 8-directions in turn, one shot each. Repeat with a vehicle
+    without the turret flag, which turns its body. Expected: claim 20's table, entry
+    (*d* + 1) mod 8. Falsified if entry *d* appears, or any entry other than the table's.
+  - (b) As (a) with an infantry firer armed with W8, and with an aircraft. Expected: the same
+    table by body facing (infantry) and turret facing (aircraft).
+  - (c) As (a) with W16 and W1, at every 8-direction. Expected: T0 every time. Falsified by any
+    other picture.
+  - (d) The W8 vehicle fires once while driving, with a test animation lasting at least 60 ticks.
+    Expected: the picture moves with the vehicle and vanishes at once if the vehicle is destroyed
+    before it ends. Repeat with an aircraft in flight: the picture follows it and is drawn
+    behind objects of the air and top layers (S-0102 claim 3).
+  - (e) A garrisoned test building whose occupants' garrison weapon is WG, then one whose
+    occupants' garrison weapon is WG0. Expected: T9 at each shot's muzzle, then no picture.
+    Falsified by any T0 … T7.
+  - (f) A turreted test building with a sprite turret armed with W8 fires at a stationary target
+    whose direction from the building's aiming point (S-0310 claim 4; S-0204's direction) is
+    about 3584 facing units, the middle of the window of claim 21. Count only shots made after
+    the turret has stopped turning towards that target (S-0206), and record the turret image shown
+    as a cross-check of its facing. Expected: entry 2 (32-step rounding gives *d* = 1). Falsified
+    if entry 1 appears (a single rounding). Repeat at the eight 8-directions for the table.
+  - (g) The building of (f) fires while the screen shows the picture: it stays in place and is
+    not attached. Its palette part: a test animation with the alternative-palette art flag shows
+    the single-shade house-colour palette (S-0103 row 4), one without it the anim palette.
+  - (h) An infantry passenger of an open-topped transport armed with WP, then WP8. Expected:
+    T10 at the transport's muzzle, moving with the transport; then entries T0 … T7 by the
+    passenger's own facing, never T10. Separately, a test vehicle with the target-laser flag
+    owned by the local player: a line towards its target for 15 ticks after each shot, absent for
+    the same vehicle owned by the computer player.
+  - (i) As (f) with a test building that is not turreted and one with a voxel turret, both
+    armed with W8, at targets in each 8-direction from their aiming points and at about 3584.
+    Expected: the entry of the target direction's own 8-direction (entry 1 at about 3584).
+- Draws in every part: no raw value is taken between the shot's delay draw and the test
+  animation's creation. Falsified by an extra draw that depends on the list length.
+
 ## Open questions
 
 - Claim 9 leaves the firing-check answer label and rank during erasure open. Ordinary
@@ -1536,3 +1720,5 @@ is absent (the control).
   goes idle differs by one.
 - Claim 9, rank 16: which of the answers of claim 9 the locomotor's own refusal gives (S-0310,
   claim 7).
+- Claim 23: how the target line is drawn (its two end points, colour and thickness) is not
+  specified here. It is drawing only and shown only to the owning player.

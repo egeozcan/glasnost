@@ -1,9 +1,9 @@
 ---
 id: Q-1523
 title: Which shot animation a weapon plays when it fires, and where
-status: open
+status: answered
 related: [S-0109, S-0301, S-0313, S-0609, S-0102, S-0202]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need
