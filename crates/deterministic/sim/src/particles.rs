@@ -6,9 +6,10 @@
 //! system holds it. Only what changes play is kept in the simulation state:
 //! the speed *S*, the flight direction *u*, a spark's velocity, a fire
 //! particle's step, the emission timer *T*, the spark counter *K*, the target
-//! point and the owner object. Every draw that S-0616 lists is taken, the
-//! drawn-only ones (colour, light, helix, laser, translucency) included, and
-//! their values are discarded.
+//! point and the owner object, and the state the drawing reads: each
+//! particle's translucency, colour state, creation position and target
+//! point (claims 26 and 29, F15, F16). Every draw that S-0616 lists is
+//! taken; the light, helix and laser values are discarded.
 //!
 //! Creators built here: a warhead's system ([`crate::gas::warhead_system`]),
 //! the damage smoke of S-0302 claim 13 ([`damage_smoke`]), the overload
@@ -68,6 +69,12 @@ const SPARK_SNAP: i32 = 100; // spec: S-0616 Constants (spark ground snap depth 
 
 /// The top of a ranged draw over 0 … 2147483646 (claims 1, 15 to 18).
 const DRAW_TOP: i32 = 2147483646; // spec: S-0616 claims 15 to 18 (ranged draws R(0, 2147483646))
+
+/// The smoke translucency step, percentage points (claims 8, 9 and 26).
+const SMOKE_TRANSLUCENCY_STEP: u8 = 25; // spec: S-0616 Constants (smoke translucency step 25)
+
+/// The fire translucency values its stage fields set (claim 26).
+const FIRE_TRANSLUCENCY: (u8, u8) = (25, 50); // spec: S-0616 claim 26 (the translucent-25 stage sets 25, the translucent-50 stage sets 50)
 
 /// Railgun line draws before a particle's creation draws (claim 17).
 const RAIL_BEFORE: usize = 3; // spec: S-0616 claim 17 (three ranged draws, then the creation draws)
@@ -267,7 +274,7 @@ pub fn update_one(w: &mut World, sys: ObjectId, i: usize) {
         Some(Behaviour::Smoke) => smoke_update(w, sys, i),
         Some(Behaviour::Fire) => fire_update(w, sys, i),
         Some(Behaviour::Spark) => spark_update(w, sys, i),
-        Some(Behaviour::Railgun) => railgun_update(w),
+        Some(Behaviour::Railgun) => railgun_update(w, sys, i),
         None => {}
     }
     let Some(mut p) = crate::gas::particle(w, sys, i) else {
@@ -405,7 +412,8 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
                 p.pos.y.wrapping_add(sign * oy),
                 p.pos.z,
             );
-            if crate::gas::add_particle(w, sys, next, at, origin).is_some()
+            let made = crate::gas::add_particle(w, sys, next, at, origin).is_some();
+            if made
                 && let Some(q) = w
                     .gas
                     .systems
@@ -415,8 +423,17 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
                 // spec: S-0616 claim 8 (each successor's speed is the dead particle's; its direction and velocity are its own)
                 q.speed = p.speed;
             }
-            // spec: S-0616 claim 8 (then one raw value for its translucency, drawn only)
-            let _ = w.rng.raw();
+            // spec: S-0616 claim 8 (then one raw value r for its translucency)
+            let r = w.rng.raw() as i32;
+            if made
+                && let Some(q) = w
+                    .gas
+                    .systems
+                    .get_mut(&sys)
+                    .and_then(|s| s.particles.last_mut())
+            {
+                q.translucency = successor_translucency(p.translucency, r);
+            }
         }
     }
     // spec: S-0616 claim 8 (the dead particle is removed after both successors)
@@ -424,6 +441,18 @@ fn split_and_remove(w: &mut World, sys: ObjectId, i: usize) {
         && i < s.particles.len()
     {
         s.particles.remove(i);
+    }
+}
+
+/// The translucency of a successor made in a smoke system (claims 8 and
+/// 26) whose dead particle had `parent`, with its translucency raw value
+/// `r`.
+pub fn successor_translucency(parent: u8, r: i32) -> u8 {
+    // spec: S-0616 claims 8 and 26 (the dead particle's value replaces the type's, plus 25 when r rem 6 ≠ 0, kept modulo 256)
+    if glasnost_num::int::rem(r, 6) != 0 {
+        parent.wrapping_add(SMOKE_TRANSLUCENCY_STEP)
+    } else {
+        parent
     }
 }
 
@@ -545,6 +574,10 @@ fn smoke_emission(w: &mut World, sys: ObjectId) {
                     v = c("2.0").to_f32(m);
                 }
                 p.speed = v;
+                // spec: S-0616 claim 9, F4 and claim 26 (its translucency rises by 25 when T > τ, compared in single precision)
+                if s.timer.to_f64().gt(t.translucency_cutoff.to_f64()) {
+                    p.translucency = p.translucency.wrapping_add(SMOKE_TRANSLUCENCY_STEP);
+                }
             }
         }
     }
@@ -827,6 +860,13 @@ fn fire_update(w: &mut World, sys: ObjectId, i: usize) {
     // spec: S-0616 claim 12 (below the end stage the stage advances by S-0613 F8 with the particle's own value, claim 19)
     if p.stage < t.end_stage && crate::gas::stage_due(t.max_ec, p.advance, &p) {
         p.stage = p.stage.wrapping_add(1);
+        // spec: S-0616 claim 26 (at an advance: the translucent-25 stage field sets 25, the translucent-50 field sets 50, 50 winning when both name the stage; set, not added; fields of 128 or more never match a signed stage)
+        let stage = i32::from(p.stage);
+        if stage == i32::from(t.look.stage50) {
+            p.translucency = FIRE_TRANSLUCENCY.1;
+        } else if stage == i32::from(t.look.stage25) {
+            p.translucency = FIRE_TRANSLUCENCY.0;
+        }
     }
     if p.stage == t.end_stage && t.delete_at_limit {
         // spec: S-0616 claim 12 (at the end stage with the delete flag: the dead mark; the step still applies, no slowing, no damage)
@@ -1110,9 +1150,12 @@ fn spark_update(w: &mut World, sys: ObjectId, i: usize) {
         None => p.pos = b,
     }
     p.fvel[2] = vz2; // nocite: vector and matrix dimensions (three axes)
+    // spec: S-0616 claim 16 (the colour draw after any contact: one ranged draw R(0, 2147483646)); claim 29 and F16 (it moves the colour progress)
+    let r = w.rng.ranged(0, DRAW_TOP, half);
+    if let Some(t) = ptype(w, &p) {
+        p.colour.advance(&t.look, r, m);
+    }
     crate::gas::put(w, sys, i, p);
-    // spec: S-0616 claim 16 (the colour draw after any contact: one ranged draw R(0, 2147483646), drawing only)
-    let _colour = w.rng.ranged(0, DRAW_TOP, half);
 }
 
 /// Whether the cell at `b` stops a spark (F11): it holds a building (every
@@ -1189,11 +1232,19 @@ pub fn railgun_turn(w: &mut World, sys: ObjectId) {
 /// Claim 18: a railgun particle's update: two ranged draws, its speed
 /// variation and its colour. Its motion along its flight direction never
 /// reaches play (claim 2), so its position is not advanced.
-fn railgun_update(w: &mut World) {
+fn railgun_update(w: &mut World, sys: ObjectId, i: usize) {
     let half = w.rules().quirks.ranged_draw_half_span;
-    // spec: S-0616 claim 18 (one ranged draw R(0, 2147483646) that varies its speed, then one for its colour: two per update; drawing only)
+    // spec: S-0616 claim 18 (one ranged draw R(0, 2147483646) that varies its speed, then one for its colour: two per update)
     let _speed = w.rng.ranged(0, DRAW_TOP, half);
-    let _colour = w.rng.ranged(0, DRAW_TOP, half);
+    let r = w.rng.ranged(0, DRAW_TOP, half);
+    let m = mode(w);
+    if let Some(mut p) = crate::gas::particle(w, sys, i)
+        && let Some(t) = ptype(w, &p)
+    {
+        // spec: S-0616 claim 29 and F16 (the update's colour draw moves the colour progress)
+        p.colour.advance(&t.look, r, m);
+        crate::gas::put(w, sys, i, p);
+    }
 }
 
 #[cfg(test)]

@@ -7782,6 +7782,17 @@
               "type": "null"
             }
           ]
+        },
+        "spawn_translucency_cutoff": {
+          "description": "`SpawnTranslucencyCutoff`, the smoke translucency cut-off τ, a\nsingle-precision decimal (S-0616 claim 9, F4; absent 0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -7806,6 +7817,34 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "color_list": {
+          "description": "`ColorList`, the colours in order, each component reduced modulo\n256 (S-0616 claim 29, F16; S-0202 Import mapping; absent empty).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "color_speed": {
+          "description": "`ColorSpeed`, the colour speed *v*, a double (S-0616 F16; absent\n0.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "damage": {
           "description": "`Damage`, health points per hit before damage resolution (S-0613\nImport mapping; absent 0).",
@@ -7976,6 +8015,24 @@
         },
         "translucency": {
           "description": "`Translucency`, percentage points as written (S-0613 Import mapping;\nabsent 0; reduced to a signed byte for drawing, claim 16).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "translucent25_state": {
+          "description": "`Translucent25State`, the fire stage that sets translucency 25\n(S-0616 claim 26; absent 255).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "translucent50_state": {
+          "description": "`Translucent50State`, the fire stage that sets translucency 50\n(S-0616 claim 26; absent 255).",
           "type": [
             "integer",
             "null"

@@ -14,7 +14,7 @@ use glasnost_convert::Import;
 use glasnost_convert::kinds::Kind;
 use glasnost_convert::theater::{Catalogue, alternate_image_mark, variant_image, variant_pattern};
 use glasnost_fmt::hva::Hva;
-use glasnost_fmt::image::{IndexedImage, Palette};
+use glasnost_fmt::image::{IndexedImage, Palette, Rgb8};
 use glasnost_fmt::shp::Shp;
 use glasnost_fmt::tmp::Tmp;
 use glasnost_fmt::vpl::Vpl;
@@ -186,6 +186,14 @@ const HOUSE_ROWS: usize = 53; // spec: S-0103 Constants (shade counts)
 const WHITE: [i32; 3] = [1000, 1000, 1000]; // spec: S-0104 claim 3 (house-colour palettes are shaded with white light)
 /// Ore and gem overlays are drawn at brightness 1000 (S-0104 claim 13).
 const NEUTRAL_BRIGHTNESS: i32 = 1000; // spec: S-0104 claim 13 (ore and gem overlays)
+/// A sprite particle's brightness (S-0616 claim 24), in ‰.
+const SPRITE_PARTICLE_BRIGHTNESS: i32 = 1000; // spec: S-0616 claim 24 and Constants (sprite particle brightness 1000 per mille)
+/// A sprite particle's depth bias before −*L(z)* (S-0616 claim 27).
+const SPRITE_PARTICLE_BIAS: i32 = -15; // spec: S-0616 claim 27 and Constants (sprite particle depth bias −15 − L(z))
+/// A pixel particle's depth bias before −*L(z)* (S-0616 claim 28).
+const PIXEL_PARTICLE_BIAS: i32 = -50; // spec: S-0616 claim 28 and Constants (pixel particle depth bias −50 − L(z))
+/// The image-cache key of the pixel particles' shared 1 × 1 image (ours).
+const PIXEL_IMAGE_KEY: &[u8] = b"\0particle pixel";
 /// The veinhole marker overlay index (S-0009 claim 14).
 /// Rows an ore-spawning terrain object is drawn higher (S-0102 claim 23).
 const ORE_SPAWNER_RAISE: i32 = 16; // spec: S-0102 Constants (ore-spawning terrain object raise)
@@ -1055,18 +1063,28 @@ pub struct AnimDraw {
     pub z_adjust: Option<i32>,
 }
 
-/// A particle of the live game to draw (S-0613, S-0616; the interim rule
-/// of Q-1520).
+/// A particle of the live game to draw (S-0616 claims 23 to 28).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParticleDraw {
-    /// Its type's import registration index.
-    pub idx: usize,
-    /// Its image frame ([`super::particles::frame`]).
-    pub frame: i32,
-    /// Its translucency code ([`super::particles::translucency`]).
-    pub code: u8,
-    /// World position in leptons.
-    pub pos: (i32, i32, i32),
+pub enum ParticleDraw {
+    /// A particle of a sprite kind (gas, smoke, fire, no kind).
+    Sprite {
+        /// Its type's import registration index.
+        idx: usize,
+        /// Its image frame ([`super::particles::frame`]).
+        frame: i32,
+        /// Its translucency code ([`super::particles::translucency`]).
+        code: u8,
+        /// World position in leptons.
+        pos: (i32, i32, i32),
+    },
+    /// A particle of a pixel kind (spark, railgun): one pixel of its
+    /// current colour (S-0616 F16).
+    Pixel {
+        /// Its current colour.
+        rgb: [u8; 3],
+        /// World position in leptons.
+        pos: (i32, i32, i32),
+    },
 }
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
@@ -2854,51 +2872,63 @@ impl Builder<'_> {
         Some((t.layer, key, items))
     }
 
-    /// One particle of the live game (Q-1520 interim rule): its sprite's
-    /// image frame centred on its projected position, with the anim palette
-    /// at its cell's unscaled ground level, as an unowned animation; no
-    /// items without a sprite or for a frame outside the sprite.
+    /// One particle of the live game: a sprite kind's image frame or a
+    /// pixel kind's pixel (S-0616 claims 27 and 28); no items without a
+    /// sprite or for a frame outside the sprite.
     fn live_particle(&mut self, d: &ParticleDraw) -> Vec<Item> {
-        // spec: S-0007 claim 28 (the particle type's sprite); Q-1520 interim rule (no sprite: nothing drawn)
+        match *d {
+            ParticleDraw::Sprite {
+                idx,
+                frame,
+                code,
+                pos,
+            } => self.sprite_particle(idx, frame, code, pos),
+            ParticleDraw::Pixel { rgb, pos } => self.pixel_particle(rgb, pos),
+        }
+    }
+
+    /// A sprite-kind particle (S-0616 claims 24 and 27).
+    fn sprite_particle(
+        &mut self,
+        idx: usize,
+        frame: i32,
+        code: u8,
+        pos: (i32, i32, i32),
+    ) -> Vec<Item> {
+        // spec: S-0616 claim 23 and S-0007 claim 28 (the particle type's sprite; a sprite kind without one draws nothing)
         let Some(sprite) = self
             .import
             .arts
-            .get(&(Kind::Particles, d.idx))
+            .get(&(Kind::Particles, idx))
             .and_then(|a| a.sprite.clone())
         else {
             return Vec::new();
         };
         let n = self.sprite_frames(&sprite).unwrap_or(0);
-        // Q-1520 interim rule: a frame outside the sprite draws nothing.
-        let Some(f) = usize::try_from(d.frame).ok().filter(|&f| f < n) else {
+        // spec: S-0616 claim 25 (our engine draws nothing for a frame number the sprite file does not hold, a negative one included)
+        let Some(f) = usize::try_from(frame).ok().filter(|&f| f < n) else {
             return Vec::new();
         };
-        let cell = CellXY::new(d.pos.0 >> 8, d.pos.1 >> 8);
-        // spec: Q-1520 interim rule, S-0103 claim 8 row 5 and S-0104 claim 13 (the anim palette at the cell's unscaled ground level, as an unowned animation)
-        let b = self
-            .p
-            .lights
-            .get(cell)
-            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
-        let row = self.anim_palette_row(b);
-        // spec: S-0613 claim 16, S-0102 claim 32 and F8 (a nonzero code blends; 0 draws opaque)
-        let paint = match Translucency::from_code(i32::from(d.code)) {
+        // spec: S-0616 claim 24 (the anim palette at brightness 1000 per mille, whatever the cell's light, height or owner; light-alpha still applies)
+        let row = self.anim_palette_row(SPRITE_PARTICLE_BRIGHTNESS);
+        // spec: S-0616 claim 26, S-0102 claim 32 and F8 (a nonzero code blends; 0 draws opaque)
+        let paint = match Translucency::from_code(i32::from(code)) {
             Some(code) => Paint::Translucent(row, code),
             None => Paint::Lit(row),
         };
-        // spec: Q-1520 interim rule, S-0101 F1 and F2 (centred on the projected point of its position with the height lift)
-        let p = project_lifted(d.pos.0, d.pos.1, d.pos.2);
-        let lz = height_lift(d.pos.2);
+        // spec: S-0616 claim 27, S-0101 F1 (the screen pixel of its position with its height lift; centred, S-0102 claim 19)
+        let p = project_lifted(pos.0, pos.1, pos.2);
+        let lz = height_lift(pos.2);
         self.place_sprite(
             &sprite,
             f,
             p,
-            // spec: S-0102 claim 10 (everything drawn in the object pass reads depth)
+            // spec: S-0616 claim 27 (reads depth, never writes it)
             DepthTest::Reader,
-            // spec: S-0102 claim 11 (the bias contains −L(z)); Q-1540 interim rule (upright profile, no further term)
+            // spec: S-0616 claim 27 and Constants (upright profile, bias −15 − L(z), nothing further; no shadow)
             ItemDepth::Profile {
                 profile: Profile::Upright,
-                bias: -lz,
+                bias: SPRITE_PARTICLE_BIAS - lz,
                 companion: None,
             },
             paint,
@@ -2908,6 +2938,49 @@ impl Builder<'_> {
         )
         .into_iter()
         .collect()
+    }
+
+    /// A pixel-kind particle (S-0616 claim 28): one opaque pixel of its
+    /// colour at the screen pixel of its position, a flat depth reader with
+    /// bias −50 − L(z).
+    fn pixel_particle(&mut self, rgb: [u8; 3], pos: (i32, i32, i32)) -> Vec<Item> {
+        let key = (PIXEL_IMAGE_KEY.to_vec(), 0, 0);
+        let image = match self.p.images.get(&key).copied().flatten() {
+            Some(i) => i,
+            None => {
+                // One shared 1 × 1 image whose single pixel is not index 0 (S-0104 claim 6: entry 0 is transparent).
+                let img = IndexedImage::new(1, 1, vec![1]).expect("1 × 1");
+                let i = self.built.scene.add_image(img);
+                self.p.images.insert(key, Some(i));
+                i
+            }
+        };
+        // spec: S-0616 claim 28, S-0101 F1 (the screen pixel of its position with its height lift)
+        let (x, y) = project_lifted(pos.0, pos.1, pos.2);
+        let lz = height_lift(pos.2);
+        vec![Item {
+            image,
+            x,
+            y,
+            // spec: S-0616 claim 28 (drawn only where d − L(z) − 50 is strictly less than the stored depth; never writes depth)
+            test: DepthTest::Reader,
+            // spec: S-0616 claim 28 and Constants (S-0102 F2's flat profile on one row, bias −50 − L(z), no rounding)
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: PIXEL_PARTICLE_BIAS - lz,
+                companion: None,
+            },
+            // spec: S-0616 claim 28 (its colour as it is, no palette, tint or cell light; light-alpha scaling; opaque)
+            paint: Paint::Pixel(Rgb8 {
+                r: rgb[0],
+                g: rgb[1],
+                b: rgb[2],
+            }),
+            group: Group::Effects,
+            provisional: false,
+            object: None,
+            stack: None,
+        }]
     }
 
     /// The lowest copy's draw point and the stack of a tiled animation

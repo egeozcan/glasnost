@@ -42,6 +42,14 @@ pub struct ViewQuirks {
     /// or under-roof-door sprites keeps the body and draws no under-door
     /// image. Off: the ordinary deploying and under-door sprites stand in.
     pub roof_unload_no_fallback: bool,
+    /// `quirks.unsorted_upper_layers` (S-0102 claim 7): the underground,
+    /// surface, air and top layers keep their entering order. Off: they
+    /// are sorted like the ground layer.
+    pub unsorted_upper_layers: bool,
+    /// `quirks.layer_change_on_events_only` (S-0102 claim 4): a mobile
+    /// object's layer is evaluated only at claim 4's moments. Off: every
+    /// tick (it moves when its layer differs).
+    pub layer_change_on_events_only: bool,
 }
 
 impl Default for ViewQuirks {
@@ -52,13 +60,15 @@ impl Default for ViewQuirks {
             occupiable_hurt_rule: true,
             sprite_vehicle_eight_facings_only: true,
             roof_unload_no_fallback: true,
+            unsorted_upper_layers: true,
+            layer_change_on_events_only: true,
         }
     }
 }
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 4] {
+    pub fn named(&self) -> [(&'static str, bool); 6] {
         [
             (
                 "cliff_fudge_far_cliff_weaker",
@@ -70,6 +80,11 @@ impl ViewQuirks {
                 self.sprite_vehicle_eight_facings_only,
             ),
             ("roof_unload_no_fallback", self.roof_unload_no_fallback),
+            ("unsorted_upper_layers", self.unsorted_upper_layers),
+            (
+                "layer_change_on_events_only",
+                self.layer_change_on_events_only,
+            ),
         ]
     }
 }
@@ -168,14 +183,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0101 claim 9: no F6 lepton position is used; the cell under a pixel is F7's pixel formula, the same in both settings",
     ),
     // S-0102
-    (
-        "unsorted_upper_layers",
-        "S-0102 claim 7: every mobile object is drawn in the ground layer; the upper layers are not modelled",
-    ),
-    (
-        "layer_change_on_events_only",
-        "S-0102 claim 4: render layer membership is not modelled (the moments of claim 4 may be simulation state)",
-    ),
     (
         "slot_values_replace_animation_adjustments",
         "S-0102 claim 17: the on state is drawn; the off state (the slot's values added to the type's) is not implemented",
@@ -287,6 +294,8 @@ mod tests {
             occupiable_hurt_rule: false,
             sprite_vehicle_eight_facings_only: false,
             roof_unload_no_fallback: false,
+            unsorted_upper_layers: false,
+            layer_change_on_events_only: false,
         }
     }
 

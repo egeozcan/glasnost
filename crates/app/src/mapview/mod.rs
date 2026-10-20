@@ -9,6 +9,7 @@ pub mod cover;
 pub mod credits;
 pub mod find;
 pub mod harvesting;
+pub mod layers;
 pub mod live;
 #[cfg(test)]
 mod live_tests;

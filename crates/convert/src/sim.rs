@@ -273,25 +273,31 @@ const PARTICLE_BEHAVIOURS: [&str; 5] = ["Gas", "Smoke", "Fire", "Spark", "Railgu
 /// The text limit of a colour list (S-0202 Import mapping).
 const COLOUR_LIST_LIMIT: usize = 511; // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
 
-/// The number of colours of a colour list (S-0202 Import mapping:
-/// comma-separated parenthesised RGB triples): the parenthesised groups it
-/// closes.
-fn colour_list_len(v: &[u8]) -> i32 {
+/// The colours of a colour list (S-0202 Import mapping: comma-separated
+/// parenthesised RGB triples), one per parenthesised group it closes, each
+/// component reduced modulo 256. A component that is missing or not an
+/// integer is 0 (our interim rule, Q-1562).
+fn colour_list(v: &[u8]) -> Vec<[i32; 3]> {
     // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
     let text = value::text(v, COLOUR_LIST_LIMIT);
-    let mut open = false;
-    let mut n = 0i32;
-    for &b in text {
+    let mut open: Option<usize> = None;
+    let mut out = Vec::new();
+    for (i, &b) in text.iter().enumerate() {
         match b {
-            b'(' => open = true,
-            b')' if open => {
-                open = false;
-                n += 1;
+            b'(' => open = Some(i + 1),
+            b')' if open.is_some() => {
+                let inner = &text[open.take().unwrap_or(i)..i];
+                let mut c = [0i32; 3];
+                for (slot, part) in c.iter_mut().zip(inner.split(|&x| x == b',')) {
+                    // spec: S-0202 Import mapping (integer components reduced modulo 256); Q-1562 interim rule (an unreadable component is 0)
+                    *slot = value::integer(part).map_or(0, |x| x.rem_euclid(256));
+                }
+                out.push(c);
             }
             _ => {}
         }
     }
-    n
+    out
 }
 
 /// How a field's stored value is read.
@@ -566,6 +572,10 @@ const PARTICLE_GAS_FIELDS: &[(&str, &str, Form)] = &[
     ("y_velocity", "YVelocity", Int),
     ("min_z_velocity", "MinZVelocity", Int),
     ("z_velocity_range", "ZVelocityRange", Int),
+    // spec: S-0616 Import mapping (ColorSpeed a double; Translucent25State, Translucent50State 8-bit unsigned stages, reduced by the simulation)
+    ("color_speed", "ColorSpeed", Dec),
+    ("translucent25_state", "Translucent25State", Int),
+    ("translucent50_state", "Translucent50State", Int),
 ];
 
 /// Particle-system fields of the smoke, fire, spark and railgun kinds
@@ -575,6 +585,8 @@ const PARTICLE_SYSTEM_FIELDS: &[(&str, &str, Form)] = &[
     ("spawn_frames", "SpawnFrames", Int),
     ("slowdown", "Slowdown", Dec),
     ("spawn_cutoff", "SpawnCutoff", Dec),
+    // spec: S-0616 Import mapping (SpawnTranslucencyCutoff: a single-precision number, absent 0.0)
+    ("spawn_translucency_cutoff", "SpawnTranslucencyCutoff", Dec),
     ("spawn_radius", "SpawnRadius", Int),
     ("particle_cap", "ParticleCap", Int),
     ("spark_spawn_frames", "SparkSpawnFrames", Int),
@@ -2087,9 +2099,31 @@ impl Builder<'_> {
             .reads
             .last()
             .and_then(|&r| given_at(t, "ColorList", r))
-            .map_or(0, colour_list_len);
-        if colours != 0 {
-            rec.put("color_count", int_node(colours));
+            .map_or_else(Vec::new, colour_list);
+        if !colours.is_empty() {
+            rec.put("color_count", int_node(colours.len() as i32));
+            rec.put(
+                "color_list",
+                jsonc::array(
+                    colours
+                        .iter()
+                        .map(|c| jsonc::array(c.iter().map(|&x| int_node(x)).collect()))
+                        .collect(),
+                ),
+            );
+        }
+        let pixel = matches!(behaves.as_deref(), Some("spark" | "railgun"));
+        if pixel && colours.len() < 2 {
+            // spec: S-0616 claim 29 and Import mapping (a spark or railgun type with fewer than two colour-list entries: importer warning)
+            self.warn(
+                t.reads.last().copied().unwrap_or(t.created_in),
+                0,
+                format!(
+                    "particle {}: a spark or railgun type with {} colour-list entries; the original reads past the list's end (one entry) or fails (none); our engine moves towards its own colour (S-0616 claim 29)",
+                    show(&t.name),
+                    colours.len()
+                ),
+            );
         }
         for (field, key) in [
             ("start_color1", "StartColor1"),
