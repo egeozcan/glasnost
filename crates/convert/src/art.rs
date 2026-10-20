@@ -339,7 +339,7 @@ pub(crate) fn text_as_of(t: &TypeRec, key: &str, layer: usize, limit: usize) -> 
 }
 
 /// Kinds whose art this module looks up.
-pub const KINDS: [Kind; 8] = [
+pub const KINDS: [Kind; 9] = [
     Kind::Infantry,
     Kind::Vehicles,
     Kind::Aircraft,
@@ -348,6 +348,7 @@ pub const KINDS: [Kind; 8] = [
     Kind::Overlays,
     Kind::TerrainObjects,
     Kind::Smudges,
+    Kind::Particles,
 ];
 
 /// Looks up the art of every type of the kinds in [`KINDS`]. Returns the
@@ -400,7 +401,9 @@ pub(crate) struct ImageWalk {
     pub(crate) image: Vec<u8>,
     flags: Flags,
     arctic_prev: bool,
-    mobile: bool,
+    /// The kind reads the voxel flag: infantry, vehicles, aircraft and
+    /// particles.
+    reads_voxel: bool,
     snow: bool,
     on_turning_on: bool,
 }
@@ -413,7 +416,10 @@ impl ImageWalk {
             image: t.name.clone(),
             flags: Flags::default(),
             arctic_prev: false,
-            mobile: matches!(kind, Kind::Infantry | Kind::Vehicles | Kind::Aircraft),
+            reads_voxel: matches!(
+                kind,
+                Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Particles
+            ),
             snow,
             on_turning_on: q.arctic_suffix_on_flag_turning_on,
         }
@@ -430,8 +436,8 @@ impl ImageWalk {
         let f = &mut self.flags;
         f.theater = section_bool(pre, "Theater").unwrap_or(f.theater);
         f.new_theater = section_bool(pre, "NewTheater").unwrap_or(f.new_theater);
-        if self.mobile {
-            // spec: S-0007 claim 4 (the voxel flag, for infantry, vehicles and aircraft)
+        if self.reads_voxel {
+            // spec: S-0007 claims 4 and 28 (the voxel flag, for infantry, vehicles, aircraft and particles)
             f.voxel = section_bool(pre, "Voxel").unwrap_or(f.voxel);
         }
         let arctic = bool_as_of(t, "AlternateArcticArt", r, false);
@@ -472,7 +478,8 @@ fn object(ctx: &mut Ctx, kind: Kind, t: &TypeRec) -> TypeArt {
         let sec = ctx.art.section(&a.image);
         let image = a.image.clone();
         match kind {
-            Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Overlays => {
+            // spec: S-0007 claim 28 and Table 2 (a particle's sprite as the infantry sprite; none with the voxel flag)
+            Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Overlays | Kind::Particles => {
                 a.sprite = if flags.voxel {
                     None
                 } else if flags.theater {
@@ -1188,6 +1195,44 @@ mod tests {
             s(&get(&o, &a, Kind::Animations, "Lamp").sprite).as_deref(),
             Some("Lamp.shp")
         );
+    }
+
+    /// spec: S-0007 claim 28 (a particle's image name from its rules
+    /// section, its sprite as the infantry sprite: theater extension, letter
+    /// substitution with the new-theater flag, generic fallback, the arctic
+    /// suffix; no sprite with the voxel flag)
+    #[test]
+    fn particles() {
+        let rules = "[Particles]\n1=Puff\n2=Gtx\n3=Lamp\n4=Vox\n5=Cold\n6=Bare\n\
+                     [Puff]\nImage=Cloud\n[Gtx]\nX=1\n[Lamp]\nX=1\n[Vox]\nX=1\n\
+                     [Cold]\nAlternateArcticArt=yes\n[Bare]\nX=1\n";
+        let art = "[Gtx]\nNewTheater=yes\n[Lamp]\nTheater=yes\n[Vox]\nVoxel=yes\n";
+        let f = files(&[
+            "Cloud.shp",
+            "GDx.shp",
+            "Lamp.sno",
+            "Vox.shp",
+            "ColdA.shp",
+            "BGre.shp",
+        ]);
+        let (o, a) = run(&[(rules, Role::Base)], art, Theater::Desert, &f);
+        let sprite = |o: &Outcome, a: &BTreeMap<(Kind, usize), TypeArt>, n: &str| {
+            s(&get(o, a, Kind::Particles, n).sprite)
+        };
+        // The rules image key names the sprite.
+        assert_eq!(sprite(&o, &a, "Puff").as_deref(), Some("Cloud.shp"));
+        assert_eq!(get(&o, &a, Kind::Particles, "Puff").image, b"Cloud");
+        // New-theater flag: letter substitution.
+        assert_eq!(sprite(&o, &a, "Gtx").as_deref(), Some("GDx.shp"));
+        // Voxel flag: no sprite, even though the file exists.
+        assert_eq!(sprite(&o, &a, "Vox"), None);
+        // Generic fallback: Bare.shp is missing, the second character becomes G.
+        assert_eq!(sprite(&o, &a, "Bare").as_deref(), Some("BGre.shp"));
+        let (o, a) = run(&[(rules, Role::Base)], art, Theater::Snow, &f);
+        // Theater flag: the theater extension.
+        assert_eq!(sprite(&o, &a, "Lamp").as_deref(), Some("Lamp.sno"));
+        // Arctic suffix on snow.
+        assert_eq!(sprite(&o, &a, "Cold").as_deref(), Some("ColdA.shp"));
     }
 
     /// spec: S-0007 claims 16 to 18 (voxel parts)

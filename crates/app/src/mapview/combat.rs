@@ -302,8 +302,9 @@ pub enum Marker {
     /// A crate on the map (S-0520): a yellow box, our placeholder for the
     /// crate overlay's picture, which the view draws only from the map.
     Crate,
-    /// A gas particle (S-0613): a green cloud, our placeholder for the
-    /// particle's picture and translucency, which the view does not draw.
+    /// A gas particle (S-0613) whose type has no sprite: a green cloud, our
+    /// placeholder, drawn only in the debug-markers view (the game view
+    /// draws nothing for it, Q-1520 interim rule).
     Gas,
     /// A particle of a smoke system (S-0616): a small white puff, our
     /// placeholder like [`Marker::Gas`].
@@ -720,6 +721,8 @@ pub struct Counts {
     pub anims_drawn: usize,
     /// Most animations drawn in one redraw.
     pub most_anims_drawn: usize,
+    /// Particles that drew items in the last redraw (S-0613, S-0616).
+    pub particles_drawn: usize,
     /// Objects killed.
     pub kills: u64,
     /// Most projectiles in flight at once.

@@ -805,14 +805,14 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
     out
 }
 
-/// The sprites of every animation type, for the animations a game
-/// creates in play (S-0109; the move-feedback animation of S-0214 claim
-/// 30 among them).
+/// The sprites of every animation and particle type, for the animations
+/// and particles a game creates in play (S-0109, the move-feedback
+/// animation of S-0214 claim 30 among them; S-0007 claim 28).
 pub fn anim_files(import: &Import) -> BTreeSet<Vec<u8>> {
     import
         .arts
         .iter()
-        .filter(|((kind, _), _)| *kind == Kind::Animations)
+        .filter(|((kind, _), _)| matches!(kind, Kind::Animations | Kind::Particles))
         .filter_map(|(_, a)| a.sprite.as_ref().map(|s| upper(s)))
         .collect()
 }
@@ -1045,6 +1045,20 @@ pub struct AnimDraw {
     /// paratrooper's parachute is drawn with its carrier's house-colour unit
     /// palette (S-0522 claim 18, S-0103 claim 8 row 3).
     pub carrier: Option<(Vec<u8>, i32)>,
+}
+
+/// A particle of the live game to draw (S-0613, S-0616; the interim rule
+/// of Q-1520).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParticleDraw {
+    /// Its type's import registration index.
+    pub idx: usize,
+    /// Its image frame ([`super::particles::frame`]).
+    pub frame: i32,
+    /// Its translucency code ([`super::particles::translucency`]).
+    pub code: u8,
+    /// World position in leptons.
+    pub pos: (i32, i32, i32),
 }
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
@@ -2783,6 +2797,62 @@ impl Builder<'_> {
         Some((t.layer, key, items))
     }
 
+    /// One particle of the live game (Q-1520 interim rule): its sprite's
+    /// image frame centred on its projected position, with the anim palette
+    /// at its cell's unscaled ground level, as an unowned animation; no
+    /// items without a sprite or for a frame outside the sprite.
+    fn live_particle(&mut self, d: &ParticleDraw) -> Vec<Item> {
+        // spec: S-0007 claim 28 (the particle type's sprite); Q-1520 interim rule (no sprite: nothing drawn)
+        let Some(sprite) = self
+            .import
+            .arts
+            .get(&(Kind::Particles, d.idx))
+            .and_then(|a| a.sprite.clone())
+        else {
+            return Vec::new();
+        };
+        let n = self.sprite_frames(&sprite).unwrap_or(0);
+        // Q-1520 interim rule: a frame outside the sprite draws nothing.
+        let Some(f) = usize::try_from(d.frame).ok().filter(|&f| f < n) else {
+            return Vec::new();
+        };
+        let cell = CellXY::new(d.pos.0 >> 8, d.pos.1 >> 8);
+        // spec: Q-1520 interim rule, S-0103 claim 8 row 5 and S-0104 claim 13 (the anim palette at the cell's unscaled ground level, as an unowned animation)
+        let b = self
+            .p
+            .lights
+            .get(cell)
+            .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground);
+        let row = self.anim_palette_row(b);
+        // spec: S-0613 claim 16, S-0102 claim 32 and F8 (a nonzero code blends; 0 draws opaque)
+        let paint = match Translucency::from_code(i32::from(d.code)) {
+            Some(code) => Paint::Translucent(row, code),
+            None => Paint::Lit(row),
+        };
+        // spec: Q-1520 interim rule, S-0101 F1 and F2 (centred on the projected point of its position with the height lift)
+        let p = project_lifted(d.pos.0, d.pos.1, d.pos.2);
+        let lz = height_lift(d.pos.2);
+        self.place_sprite(
+            &sprite,
+            f,
+            p,
+            // spec: S-0102 claim 10 (everything drawn in the object pass reads depth)
+            DepthTest::Reader,
+            // spec: S-0102 claim 11 (the bias contains −L(z)); Q-1540 interim rule (upright profile, no further term)
+            ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias: -lz,
+                companion: None,
+            },
+            paint,
+            Group::Effects,
+            false,
+            None,
+        )
+        .into_iter()
+        .collect()
+    }
+
     /// The lowest copy's draw point and the stack of a tiled animation
     /// whose sprite is `sprite`, projected at `p` with vertical draw shift
     /// `v` (S-0109 claim 27). A zero-height first image frame gives one copy
@@ -4442,6 +4512,43 @@ impl Painter {
             live: true,
         };
         let out = list.iter().map(|a| b.live_anim(a)).collect();
+        *self = b.p;
+        *scene = b.built.scene;
+        (out, b.built.notes)
+    }
+
+    /// Draws the live game's particles into `scene` (adding the images and
+    /// rows they need): for each, its items, none when its type has no
+    /// sprite or its frame is not in the sprite.
+    pub fn particles(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[ParticleDraw],
+    ) -> (Vec<Vec<Item>>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+        };
+        let out = list.iter().map(|d| b.live_particle(d)).collect();
         *self = b.p;
         *scene = b.built.scene;
         (out, b.built.notes)

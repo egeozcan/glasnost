@@ -2172,3 +2172,189 @@ fn deploying_presentation_takes_the_owners_palette() {
         "the deploy animation in its owner's colours at 1000, the other one unowned"
     );
 }
+
+/// spec: S-0102 claim 3 (particles in the air layer: after the ground
+/// layer's animation, before the top layer's); S-0007 claim 28 (each with
+/// its type's sprite); S-0613 claims 15 and 16 (a gas particle's frame is
+/// its stage; translucency 50 blends at the highest detail); Q-1520 interim
+/// rule (stage plus start frame for a smoke particle; a particle whose type
+/// has no sprite draws nothing in the game view, a marker in the
+/// debug-markers view)
+#[test]
+fn particles_draw_their_sprites_in_the_air_layer() {
+    use glasnost_num::F32;
+    use glasnost_render::compose::Translucency;
+    use glasnost_render::scene::Group;
+    use glasnost_rules::sim::{ParticleSystemType, ParticleType};
+    use glasnost_sim::combat::effects::Effect;
+    use glasnost_sim::gas::{Particle, ParticleSystem};
+    use glasnost_sim::world::Pos;
+    let rules = format!(
+        "{RULES}[Animations]\n0=GROUNDX\n1=TOPX\n\
+         [Particles]\n0=PUFF\n1=SOOT\n2=BARE\n[PUFF]\nX=1\n[SOOT]\nStartFrame=2\n[BARE]\nX=1\n"
+    );
+    let art = format!(
+        "{}[GROUNDX]\nLayer=ground\nRate=900\n[TOPX]\nLayer=top\nRate=900\n",
+        super::tests::ART
+    );
+    let (mut import, catalogue, mut assets) = super::tests::context_full(&rules, &art);
+    let index = |import: &glasnost_convert::Import, kind: Kind, name: &str| {
+        import.outcome.registries[&kind]
+            .iter()
+            .position(|t| t.name == name.as_bytes())
+            .unwrap()
+    };
+    for (kind, name, file) in [
+        (Kind::Animations, "GROUNDX", "groundx.shp"),
+        (Kind::Animations, "TOPX", "topx.shp"),
+        (Kind::Particles, "PUFF", "puff.shp"),
+        (Kind::Particles, "SOOT", "soot.shp"),
+    ] {
+        let i = index(&import, kind, name);
+        import
+            .arts
+            .insert((kind, i), super::tests::art_of(name, file));
+    }
+    // Frame sizes tell the drawings apart: 7, 9, 3 and 5 pixels wide; a
+    // frame's pixels hold its number plus 1.
+    assets.insert(b"groundx.shp", shp((20, 20), 3, (7, 7), (2, 2)));
+    assets.insert(b"topx.shp", shp((20, 20), 3, (9, 9), (2, 2)));
+    assets.insert(b"puff.shp", shp((20, 20), 4, (3, 3), (2, 2)));
+    assets.insert(b"soot.shp", shp((20, 20), 6, (5, 5), (2, 2)));
+    let map = testkit::map();
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let mut r = testkit::ruleset();
+    let kind = |k: &str, translucency: i32| ParticleType {
+        behaves_like: Some(k.into()),
+        translucency: Some(translucency),
+        ..Default::default()
+    };
+    for (n, p) in [
+        ("PUFF", kind("gas", 50)),
+        ("SOOT", kind("smoke", 0)),
+        ("BARE", kind("gas", 0)),
+    ] {
+        r.registries
+            .entry("particles".into())
+            .or_default()
+            .push(n.into());
+        r.sim.particles.insert(n.into(), p);
+    }
+    r.registries
+        .entry("particle_systems".into())
+        .or_default()
+        .push("CLOUD".into());
+    r.sim.particle_systems.insert(
+        "CLOUD".into(),
+        ParticleSystemType {
+            holds_what: Some("PUFF".into()),
+            ..Default::default()
+        },
+    );
+    let sim_rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic"));
+    let world = glasnost_sim::load::new_game(
+        sim_rules.clone(),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(5),
+    )
+    .unwrap();
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, sim_rules.clone(), testkit::setup(5), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_debug_markers(false);
+    live.step();
+    let pos = Pos {
+        x: 5 * 256 + 128,
+        y: 5 * 256 + 128,
+        z: 0,
+    };
+    for name in ["GROUNDX", "TOPX"] {
+        live.world.effects.push(Effect::Anim {
+            name: name.into(),
+            pos,
+            delay: None,
+            reverse: false,
+        });
+    }
+    live.after_tick();
+    let particle = |type_index: u32, stage: i8, id: u32| Particle {
+        id: ObjectId(id),
+        type_index,
+        pos,
+        vel: [0; 3],
+        defl: [F32(0); 2],
+        life: 100,
+        countdown: 0,
+        stage,
+        dead: false,
+        speed: F32(0),
+        dir: [F32(0); 3],
+        fvel: [F32(0); 3],
+        step: [0; 3],
+        advance: 0,
+    };
+    let cloud = sim_rules.gas.system("CLOUD").unwrap();
+    let mut system = ParticleSystem::new(
+        cloud,
+        &sim_rules.gas.systems[cloud as usize],
+        pos,
+        None,
+        sim_rules.mode,
+    );
+    system.particles = vec![
+        particle(0, 1, 9001),
+        particle(1, 1, 9002),
+        particle(2, 0, 9003),
+    ];
+    live.world.gas.systems.insert(ObjectId(9000), system);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(live.counts.particles_drawn, 2);
+    let drawn: Vec<(usize, u32, u8, Paint)> = scene
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, i)| i.group == Group::Effects && !i.provisional)
+        .map(|(n, i)| {
+            let img = &scene.images[i.image as usize];
+            (n, img.width(), img.pixels()[0], i.paint)
+        })
+        .collect();
+    let at = |w: u32| drawn.iter().find(|d| d.1 == w).copied().unwrap();
+    let (ground, top, puff, soot) = (at(7), at(9), at(3), at(5));
+    assert!(ground.0 < puff.0 && puff.0 < soot.0 && soot.0 < top.0);
+    assert_eq!(
+        drawn.len(),
+        4,
+        "the particle without a sprite draws nothing"
+    );
+    // The gas particle at stage 1 shows frame 1; the smoke particle frame 1 + 2.
+    assert_eq!(puff.2, 2);
+    assert_eq!(soot.2, 4);
+    assert!(matches!(puff.3, Paint::Translucent(_, Translucency::Half)));
+    assert!(matches!(soot.3, Paint::Lit(_)));
+    assert_eq!(
+        effect_items(&scene, true),
+        0,
+        "no marker in the game client"
+    );
+    live.set_debug_markers(true);
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(effect_items(&scene, true), 1, "the debug view marks it");
+}
