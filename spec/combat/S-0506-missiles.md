@@ -2,13 +2,13 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 12
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
 measurements: []
-requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645]
+requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645, Q-1561]
 supersedes: []
 ---
 
@@ -423,9 +423,24 @@ above the terrain*.
       claim 2 does not apply: there is no shot),
     - warhead: the set's warhead, or its elite warhead for an elite launch,
     - source object: the missile; source house: none; resource reduction allowed (S-0303).
-    An explosion animation chosen as S-0303 gives for a detonation of that amount and warhead
-    appears at the nose point. Its animation is selected and created before the area-damage hits,
-    so any animation-creation random draws precede draws caused by those hits. The missile is
+    An explosion animation chosen by S-0303 Formulas F5 for that amount and warhead appears at the
+    nose point. For that choice the land type is that of the cell containing the nose point, whatever
+    the missile's height (a rocket detonation has no "air" case; this gives the same choice as the
+    projectile rule, because F5's splash case has its own height test), and F5's position *Q* is
+    the nose point. Its animation is selected and created before the area-damage hits,
+    so any animation-creation random draws precede draws caused by those hits.
+    **Placement height.** The area damage, the explosion animation and the drawing-only light flash
+    all take the nose point exactly, its height included. Nothing raises it to the terrain under
+    it, to the top of the building hit or to the aim point's height. A steep dive can therefore
+    detonate with the nose point below the surface, for example under a building on raised ground
+    (claim 19's tests compare the next height with the aim point, and F9 adds a negative vertical
+    component when the pitch is negative). The animation then stays at that point for its whole
+    life. Its creator replaces the animation's depth adjustment by the fixed value −15 depth units,
+    instead of its type's (S-0102 claim 13 takes the animation depth adjustment from the creator
+    when the creator replaces it). How much of an animation placed below a building shows is
+    S-0102's depth rule applied to that point and that adjustment; this spec adds no drawing lift.
+    Projectile detonations follow the same placement rule at their own detonation point (S-0303
+    claim 21; where that point can lie is S-0306's). The missile is
     removed after the area damage. A launch is elite when, in the last
     tick of its pause, tilt or raise (the rank is read in each of those ticks), the spawner exists
     and has the elite rank; the missile's own veterancy plays no part. Kill experience follows
@@ -434,7 +449,11 @@ above the terrain*.
       own veterancy: `unmeasured`, because no normal-input setup here independently promotes a
       still-linked missile before the rank-sampling cutoff. The absent source house is also
       `unmeasured`: R11 does not isolate a house-sensitive effect from the missile's owner.
-    - Confidence: high for the amount, warhead and elite choice; medium for the bridge condition
+    - Backing for the placement height, the land type and the −15 depth adjustment: `measurable`
+      (scenario R22).
+    - Confidence: high for the amount, warhead and elite choice, and for the placement at the nose
+      point with no height correction and the −15 depth adjustment; medium for the bridge condition
+      and for the visible result over a building (it depends on S-0102's depth rules)
 
 20. **Interception.** A rocket missile is an aircraft-kind object with health; whether something
     can target it is S-0309's and S-0214's. When a hit destroys it:
@@ -714,7 +733,11 @@ Integer arithmetic, div truncating toward zero and mod the nonnegative remainder
 > nose = (trunc(*x* + *b* × cos θ), trunc(*y* − *b* × sin θ), trunc(*z* + *L* × sin(*p*)))
 
 The horizontal length is truncated before projection; the final world coordinates are truncated
-only after adding the missile's position. The trigonometry is floating point.
+only after adding the missile's position. The trigonometry is floating point. The nose point is
+used as it is, with no clamping of its height to the terrain or to a building: it is the point of
+the area damage, of the explosion animation and of the light flash. The cell whose land type F5
+uses is the one containing the nose point, its cell coordinates being the nose's *x* and *y*
+divided by 256, truncated toward zero.
 
 ## Constants
 
@@ -733,6 +756,7 @@ only after adding the missile's position. The trigonometry is floating point.
 | Rocket trailer interval | 3 | ticks | Claim 21 |
 | Set-C pause and raise animation interval | 24 | ticks | Claim 21 |
 | Ground contact height | 1 | lepton | Claims 19, 20 |
+| Detonation animation depth adjustment | −15 | depth units | Claim 19; replaces the animation type's own adjustment |
 | Rocket heading constant | 16383 | facing units | F1 |
 | Rocket parameter defaults | see Import mapping | varies by parameter; see each field's unit in Import mapping | Absent-key defaults |
 
@@ -1161,6 +1185,26 @@ applies throughout that area. These are data-only tests, not stock-data measurem
   assignment, that priority/boundary test is inconclusive, not established by equal
   end-of-tick values. Startup and empty-group cadence remain unmeasured as claim 26 states.
 
+- **R22. Detonation below the surface (claim 19, F9; Q-1561).** Named map: a flat low area and a
+  plateau several height levels higher, with a construction yard (or another named high-health
+  test building) standing on the plateau and a second copy of it on the low ground as a control.
+  A missile launcher on the low ground, set B (descent) and set A (lazy curve), fires at each
+  building in turn. A named test copy of the art file points the rocket warhead's explosion
+  animation at a named test image (a tall image of one flat colour), with no vertical draw shift, a type depth adjustment
+  of 0 in one run and an invented positive value in a second run, so visible rows can be counted.
+  Record, from tick-labelled frame captures, the missile's last positions, the explosion's screen
+  position and its visible rows over the building in each frame, and the building's health.
+  Expected: the explosion's draw point lies at the screen position of the nose point computed by
+  F9 from the last recorded missile position, in both setups, including when that point is below
+  the plateau's surface; the building's health loss matches area damage taken at that point
+  (S-0303). Its visible rows
+  match S-0102's depth rule evaluated at the nose point with a depth adjustment of −15, and do not
+  change between the two type-adjustment runs. Falsifiers: an explosion drawn at the plateau's
+  surface or at the aim point's height (a height correction); visible rows that match the type's
+  adjustment, or that change between the two runs (no replacement). Repeat with a dive into open
+  water and a conventional test warhead: expected the splash list (F5's splash case, decided at the
+  nose point and its cell).
+
 ## Open questions
 
 - The complete list of events that reset the controller (claim 11) and clear its slots (claim 13),
@@ -1168,5 +1212,12 @@ applies throughout that area. These are data-only tests, not stock-data measurem
 - Whether all building docking classifications in claim 14 are reachable as stock rocket targets.
 
 ## Questions for the project lead
+
+- Q-1561: in the original, the explosion of a missile that dives steeply onto a building on
+  raised ground is placed below the building's surface and is drawn with the depth of that point
+  (claim 19), so the building can hide part of it. The placement also feeds game state (area
+  damage and the animation's own effects), so it is not a drawing-only defect and this spec keeps
+  it. Should a drawing-only remedy (for example a depth lift for detonation animations only) be
+  added to S-0102 as a quirk, or should the original's drawing stand?
 
 - Confirm the proposed quirk names and alternatives, including the map-edge option, before sign-off.

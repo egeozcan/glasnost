@@ -1,9 +1,9 @@
 ---
 id: Q-1561
 title: Is a rocket's explosion animation drawn at a nose point below the surface
-status: open
+status: answered
 related: [S-0506, S-0102, S-0109, S-0303]
-answered-by: []
+answered-by: [S-0506]
 ---
 
 ## Need
