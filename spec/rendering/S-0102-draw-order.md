@@ -2,11 +2,11 @@
 id: S-0102
 title: Draw order, render layers, depth compositing, sprite placement and shadow pixels
 topic: rendering
-revision: 21
+revision: 22
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0011, Q-0015, Q-0021, Q-0023, Q-0050, Q-0051, Q-0213, Q-0415, Q-0418, Q-0490, Q-0520, Q-0580, Q-0742]
 supersedes: []
@@ -109,14 +109,25 @@ screen rows.
    - Backing: `measurable` (scenarios D1, D6, D7)
    - Confidence: high
 2. **Effects around the layers.** Ion-cannon blast effects are drawn before the layers, so objects of
-   every layer can paint over them. Light flashes, beam effects (lasers, electric bolts, radiation
-   beams), range circles and map beacons are drawn after all five layers and after the status extras,
-   so no object paints over them and they paint over status extras. Building information tips are
+   every layer can paint over them. Light flashes, beam effects (lasers, electric bolts, line trails
+   and radiation-beam flashes), range circles and map beacons are drawn after all five layers and
+   after the status extras. Object-pass drawings do not paint over them, and qualifying effect
+   pixels paint over status extras. This order does not bypass depth: laser beams read the cell
+   pass's depth with their own biases (S-0518 claim 20), and radiation-beam flashes, erasing ones
+   included, are depth readers that never write depth (S-0514 claims 23 to 26). Terrain tiles,
+   cliffs, overlays, building images and non-animated terrain objects can therefore hide parts of
+   these beams. Within the beam-effect group the order is lasers, electric bolts, line trails,
+   then beam flashes. A magnetic wave is not a post-layer beam effect: it is drawn from the air-layer
+   list (claim 3), changing only pixels already drawn in that frame (S-0607 claim 26).
+   Building information tips are
    drawn right after the ground layer, so objects of the air and top layers and all status extras can
    paint over them, but no object of the underground, surface or ground layer does.
    - Backing: `measurable` (scenario D13: map beacons and information tips in (a), beam effects in
-     (b), range circles in (c), light flashes in (d)). Ion-cannon blast effects: `unmeasured`, because
-     no stock weapon or game event that produces one is known.
+     (b); S-0514 E16 (f) for beam-group ordering, S-0518 LB4, LB5 and LB7 for laser depth,
+     S-0607 L16 (c) for magnetic-wave ordering). Range circles and light flashes are
+     `unmeasured`: D13 (c) and (d) are exploratory until a reproducible setup identifies and
+     produces each drawing. Ion-cannon blast effects are `unmeasured`, because no
+     reproducible skirmish setup that produces one is established.
    - Confidence: high for the order of the effect groups relative to the layers and the status
      extras; high for map beacons, information tips and the three kinds of beam; medium for light
      flashes; low for range circles (which drawing is the range circle is inferred)
@@ -129,41 +140,44 @@ screen rows.
    using bridge-adjusted height for that comparison. Crashing alone does not suppress the bridge
    adjustment. The exact two-height rule is under *State and ordering*. Projectiles are in the air
    layer unless their image is marked flat (then surface); animations attached to an object are in the
-   ground layer, other animations use their type's layer (default air); particles, voxel animations,
+   ground layer, including shot animations of firers that are not buildings, even aircraft in flight
+   (S-0301 claim 22). Other animations use their type's layer (default air); particles, voxel animations,
    wave effects and building light effects are in the air layer; particle systems in the ground
    layer; units digging through a tunnel evaluate to the underground layer; the veinhole monster is
    in no layer.
    - Backing: `measurable`. Coverage by row of the table:
-     - walking, driving, hovering, ship, mech and teleport movement: D2, D3, D14, D19 (d).
+     - walking, driving, hovering, ship and teleport movement: D2, D3, D14, D19 (d).
      - flying movement, in the air and on the ground: D2, D5, D12, D14.
      - jumpjet movement, all three rows, and the jumpjet cruise height with its minimum and default:
        D2, D12, D18; the exact two-height predicate also uses D12 (b).
      - rocket movement: D19 (a).
      - buildings on the ground: D4.
      - projectiles: D2 (b).
-     - attached animations: D14 (c); unattached animations: D19 (b).
+     - attached animations: D14 (c), shot animations S-0301 F19 (d), (e), (g) and (h).
+       Unattached animations: D19 (b).
      - particles, voxel animations and wave effects: D19 (c).
      - building light effects: D19 (e).
      - terrain objects on the ground, for animated terrain objects: D33 (c).
 
      `unmeasured`:
-     - drop-pod movement: no stock situation that creates a drop-pod unit has been found.
+     - drop-pod movement: no reproducible skirmish setup that creates a drop-pod unit is established.
+     - mech movement: D19 (d) specifies no validated skirmish placement for it; its proposed
+       overlap is exploratory, not confirmation of the layer.
      - tunnel movement, both rows: whether a tunnelling unit is drawn at all while underground is not
        settled (Open questions).
      - terrain objects on the ground that are not animated: they are painted in the cell pass, not
        from their layer list (claim 16), so their place in the ground list has no visible effect.
      - buildings, terrain objects and other objects in the air, the global cruise height and its
-       400-lepton default: no stock situation lifts such an object off the ground.
+       400-lepton default: no reproducible setup lifts such an object off the ground.
      - the bridge rule for units with jumpjet movement (*State and ordering*): the moments at which
        such a unit's layer is
        evaluated in flight are not settled (Open questions), so no setup can make the rule show at a
        known moment.
-     - particle systems: no drawing of a particle system's own, apart from its particles, has been
-       identified, so there is nothing to observe.
-     - the veinhole monster: stock data has a terrain type marked as a veinhole monster, but whether
-       placing it creates a veinhole monster apart from an ordinary terrain object, and which
-       drawing would then belong to which, is not settled (Open questions), so no expected picture
-       can be stated.
+     - particle systems: a system's only own drawing is its spotlight (S-0616 claim 31); its place
+       in the ground layer is not measured.
+     - the veinhole monster: no reproducible setup distinguishes this object from an ordinary
+       terrain object or identifies its own visible drawing (Open questions), so no expected
+       picture can be stated.
    - Confidence: high for the table, except: the tunnel rows (low: tunnelling units may in practice
      stay in the ground list, see Open questions); the jumpjet cruise
      height minimum and the cruise height being also the hover height (medium). The exact
@@ -184,7 +198,7 @@ screen rows.
    is re-evaluated every tick and changed as soon as it differs.
    - Backing: `measurable` (scenarios D5, D12, D14) for placement, attachment, take-off and landing,
      `unmeasured` for the falling rule: vehicles and infantry take their layer from their
-     movement type alone, so falling never changes their layer, and no stock situation drops an
+     movement type alone, so falling never changes their layer, and no reproducible setup drops an
      object whose layer follows its height
    - Confidence: medium for placement, attachment and the falling rule; low for exactly which steps
      of flying and jumpjet movement re-evaluate the layer
@@ -254,48 +268,56 @@ screen rows.
    shape of cliffs and slopes being carried entirely by the tile depth data.
    - Backing: `measurable` (scenario D6)
    - Confidence: high
-10. **Objects read depth; only some write it.** A sprite or voxel image drawn in the object pass is
-    a depth reader: each of its pixels is drawn only if its depth (F2, minus the companion depth image
+10. **Objects read depth; only some write it.** Except for a non-flat voxel projectile (claim 13),
+    a sprite or voxel image drawn in the object pass is a depth reader: each of its pixels is drawn only if its depth (F2, minus the companion depth image
     value if any) is **strictly less** than the stored depth. Readers do not change the depth buffer.
     The cell pass paints mostly writers, which store their pixel depth where they pass: terrain tiles
     (claim 9), overlays (walls, ore and gems, bridge decks, fences and the like), the building
     images (body with its companion depth image, building shadow, bib, under-door sprites, a gate's
     body), the terrain objects that are not animated (trees and the like) with their shadows, and
     the remembered images of fogged buildings (body, shadow and bib). The remembered images of
-    building animations under fog are readers. Everything drawn in the object pass is a reader
-    only: vehicles, infantry, aircraft, voxel models (including building turrets), the building
-    parts drawn there (including the door sprite), animated terrain objects, projectiles and
-    animations. Consequently, units never hide each other through depth; overlap between two units
+    building animations under fog are readers. The depth-tested object-pass drawings are readers
+    only: vehicles, infantry, aircraft, voxel models (including building turrets, but excluding
+    non-flat voxel projectiles), the building parts drawn there (including the door sprite), animated
+    terrain objects, projectile sprites and flat voxel projectiles, animations and particles
+    (sprites and the one-pixel spark and railgun particles; S-0616 claims 27 and 28), so no particle
+    is drawn without a depth test. Non-flat voxel projectiles neither test nor write depth.
+    Consequently, units never hide each other through depth; overlap between two units
     is decided by draw order alone, while terrain, overlays, trees and buildings can hide units.
-    - Backing: `measurable` (scenarios D6, D7, D15, D17)
+    - Backing: `measurable` (D6, D7, D15, D45; particles: S-0616 P28 and P29).
+      Remembered-image roles are `unmeasured` in the original because fog of war is off in
+      skirmish; D17 tests the engine's rendering definition.
     - Confidence: high for tiles, overlays, building bodies, non-animated terrain objects and
       units; medium for the other building images
-11. **Depth is anchored to the ground footprint.** Every object's depth bias contains −*L(z)* of its
-    own position, which cancels its height lift; a projectile's shadow uses −*L* of the world height of
-    the terrain under it instead. Over ordinary terrain, the generic shadow of an infantry unit whose
-    height above the surface *h* is greater than 0 uses −*L*(*z* − *h*) (claim 13). The generic
-    shadow above a high-bridge cell at or above the deck is excluded from this rule: its point and
-    depth depend on the unresolved case in S-0107 claim 19 (claim 20; Open questions).
-    An object's body at any height is therefore depth-compared as if it stood at its
+11. **Depth is anchored to the ground footprint.** Except for voxel projectiles, the object-body
+    biases in claim 13 contain −*L(z)* of their own position, cancelling their height lift. A
+    projectile's shadow uses −*L* of the terrain or deck world height under it (S-0306 claim 32).
+    The generic shadow of an infantry unit uses −*L*(*z* − *h*ₛ), *h*ₛ being its shadow height
+    (S-0107 claim 19 (b); claim 13).
+    An object's body subject to this rule is therefore depth-compared as if it stood at its
     ground reference row: a flying aircraft is hidden only by terrain, overlays or buildings that lie
     in front of the point below it, never by terrain behind that point even though it is drawn over
     that terrain. Overlays and their shadows use exactly 15 pixels per level (claim 13), equal to *L*(104·ℓ) at every whole level. The bridge-deck body's elevation and its shadow's terrain-only level remain distinct.
     - Backing: `measurable` (D7 for aircraft bodies; the sprite, projectile, animation, overlay
-      and ordinary-terrain shadow terms use the scenarios assigned in claim 13). The excluded
-      above-deck shadow is `unmeasured` for the reason in claim 20.
+      and shadow terms use the scenarios assigned in claim 13). Any term marked `unmeasured`
+      in claim 13 remains `unmeasured` here for the same reason.
     - Confidence: high for body anchoring; the per-kind biases retain claim 13's confidence
 12. **Depth profile per drawing.** Ground-lying images (the vehicle harvesting sprite of S-0402 claim 5a, projectile sprites and shadows, the other shadows drawn as sprites,
-    flat animations, ore and gems, overlays whose type is drawn flat, the building bib, under-door
-    sprites and door sprite) use the flat profile; vehicles, infantry, aircraft, voxel models, building
-    bodies, terrain objects, walls, overlays whose type is not drawn flat, and ordinary and stacked
-    animations use the upright profile. The voxel shadows of vehicles and aircraft are the
+    flat animations, spark and railgun particles (one pixel each, S-0616 claim 28), flat voxel
+    projectiles, ore and gems, overlays whose type is drawn flat, the building bib, under-door
+    sprites and door sprite) use the flat profile; vehicles, infantry, aircraft, their voxel models,
+    building voxel turrets and bodies, terrain objects, walls, overlays whose type is not drawn flat,
+    ordinary and stacked animations, and particle sprites (gas, smoke, fire and no-kind particles, S-0616 claim 27) use the
+    upright profile. Non-flat voxel projectiles have no effective depth profile: they do not test
+    depth (claim 13). The voxel shadows of vehicles and aircraft are the
     exception among shadows: they use the upright profile (claim 18). The profiles are defined in F2. Overlay types are drawn flat
     unless their type says otherwise (absent-key default: flat), except walls, which are always
     upright. A vehicle drawn as a sprite whose type is too big to fit under a bridge uses the flat
     profile near a bridge while its column factor is 0 (claim 13). Smudges have no profile: they take no part in the depth test
     (claim 25).
     - Backing: `measurable` (scenarios D8, D11, D15; voxel shadows D23 (c); vehicles drawn as
-      sprites D33 (a); harvesting sprite D43); the too-big vehicle is `unmeasured` (claim 13)
+      sprites D33 (a); harvesting sprite D43; particles S-0616 P28 and P29; voxel projectiles D45).
+      The too-big vehicle is `unmeasured` (claim 13)
     - Confidence: high for the profiles of vehicles, infantry, aircraft, building bodies,
       projectiles, overlays, voxel shadows, animations and terrain objects (trees), and for the flat
       profile of the bib and the under-door sprites (their biases are medium, claim 13); low for
@@ -319,8 +341,7 @@ screen rows.
     | vehicle or aircraft drawn as a voxel model | *U* (no further constant) | upright | no |
     | voxel shadow of a vehicle or aircraft (claim 18) | *U* of the object casting it (no further constant) | upright | no |
     | own shadow image frame of an infantry unit or a vehicle drawn as a sprite (claims 20, 21; only while *h* = 0) | −*L(z)* − 4 (*U* does not apply) | flat | no |
-    | generic shadow of an infantry unit with *h* > 0 over ordinary terrain (claim 20) | −5 − *L*(*z* − *h*) | flat | no |
-    | generic shadow of an infantry unit above a high-bridge cell at or above the deck, not on the deck (S-0107 claim 19) | not specified; see Open questions | flat | no |
+    | generic shadow of an infantry unit with *h*ₛ > 0 (S-0107 claim 19; drop-pod exception in claim 20) | −5 − *L*(*z* − *h*ₛ) | flat | no |
     | shadow of an infantry unit falling in a drop pod | *U* − 2 | flat | no |
     | shadow of a vehicle drawn as a sprite whose type has a turret (claim 22) | *U* − 2 | flat | no |
     | smudge (claim 25) | none: no depth test and no depth write | — | no |
@@ -340,12 +361,19 @@ screen rows.
     | its shadow | −*L(z)* − 3 | flat | yes |
     | animated terrain object (object pass) | −*L(z)* − 12 (its shadow: −*L(z)* − 3, flat) | upright | no |
     | projectile sprite | −30 − *L(z)* | flat | no |
-    | projectile shadow (types with a shadow, while the projectile's height above the terrain is greater than 0) | −10 − *L*(world height of the terrain under it) | flat | no |
+    | projectile shadow (types with a shadow, while the shadow height of S-0306 claim 32 is greater than 0) | −10 − *L*(world height of the terrain under it); over a high-bridge cell at height above the terrain at least 416 leptons, use the deck world height instead (S-0306 claim 32) | flat | no |
+    | projectile drawn as a voxel model, non-flat image | none: no depth test (the supplied zero bias has no effect) | — | no |
+    | projectile drawn as a voxel model, flat image | −65, with no −*L(z)* term | flat | no |
     | animation, ordinary (also slot animations, claim 17) | type vertical draw shift + animation depth adjustment − *L(z)* − 2 | upright | no |
     | animation, flat | type vertical draw shift + animation depth adjustment − *L(z)* − 3 | flat | no |
     | animation, tiled (stacked) | type vertical draw shift + animation depth adjustment − *L(z)* − 50 − *j h* for copy *j* starting at 0, with *h* the stored rectangle height of image frame 0 (S-0109 claim 27) | upright | no |
     | animation shadow (types with a shadow) | −2 − *L(z)* | flat | no |
     | animation drawn entirely as a shadow (a per-animation state) | type vertical draw shift − *L(z)* | flat | no |
+    | particle sprite (gas, smoke, fire or no kind; S-0616 claim 27) | −15 − *L(z)* (no further constant; the same for every sprite kind and unchanged by any type field) | upright | no |
+    | spark or railgun particle, one pixel (S-0616 claim 28) | −50 − *L(z)* | flat (one row, so no rounding Q) | no |
+    | magnetic wave band (S-0607 claim 25) | −*L(z)* − 2, with *z* the world height of the wave's first end | flat | no |
+    | laser beam (S-0518 claim 20) | source: *a* − *L*(*z*₀) − 2; target: −*L*(*z*₁) − 2; the building-source adjustment *a* and interior sampling are S-0518 claim 20's | line depth, S-0518 claim 20 | no |
+    | radiation-beam flash (S-0514 claim 25) | S-0514 F8 | line depth, S-0514 F8 | no |
     | overlay, flat type, ore and gems, wall, rock | −2 − 15 × *ℓ* | see claim 12 | yes |
     | overlay, any other upright type | −17 − 15 × *ℓ* | upright | yes |
     | shadow image frame of an overlay, every kind (ore and gems, walls, crates, bridge decks, rubble, other flat and upright types) | −2 − 15 × *ℓ*<sub>s</sub> | flat | yes |
@@ -382,7 +410,11 @@ screen rows.
 
     The animation depth adjustment is the animation's own value: its type's, unless the creator of
     the animation replaced it. A building's slot animation has its slot's depth adjustment instead
-    (claim 17).
+    (claim 17). For a building's shot animation, its creator instead replaces this adjustment by
+    −200 depth units while the building has at least one occupant; otherwise it is
+    min(0, −trunc((*y*ₗ − *y*₀)/4)), where *y*ₗ is launch y and *y*₀ is the y-coordinate of the
+    foundation's map-north edge, both signed integer leptons. Division truncates toward zero and
+    the result is integer depth units (S-0301 claim 22 and F8).
 
     The animation's vertical draw shift appears in the bias because shifting an image down by *n*
     rows would otherwise make it *n* depth units nearer; the bias keeps its depth tied to its position.
@@ -394,7 +426,10 @@ screen rows.
     - Backing: `measurable`. Coverage by row: vehicle harvesting sprite D43,
       infantry body with *h* = 0 and the own shadow of
       infantry D8, D15, D31; generic shadow of infantry with *h* > 0 D25 (b) (placement only)
-      and D31 (e), on ordinary terrain only; voxel units
+      and D31 (e), on ordinary terrain; bridge-adjusted generic-shadow placement S-0107 M20 (c),
+      particle sprites S-0616 P28, pixel particles S-0616 P29, magnetic waves S-0607 L16,
+      laser depth S-0518 LB4, LB5 and LB7, beam flashes S-0514 E16, voxel projectiles D45,
+      voxel units
       D7, D9, D10 (relative tests only); voxel shadow D23 (profile; its bias only relative to the
       body's); voxel turret D22 (d), including the absent-key default 0 of the turret slot depth
       adjustment; gate body, building shadow, bib,
@@ -407,9 +442,10 @@ screen rows.
       vehicle drawn as a sprite whose type has a turret D29 (c) (its place under the vehicle's
       image, and its bias through a bib); animated terrain object D33 (c) (that it is a reader, and
       its bias against a wall). `unmeasured`:
-      - the generic infantry shadow above a high-bridge cell at or above the deck: S-0107 claim 19
-        leaves the neighbouring-cell condition unresolved, so its point and depth cannot be
-        predicted for a controlled setup here.
+      - the generic infantry shadow's absolute bridge-adjusted bias: S-0107 M20 (c) tests
+        placement, not a separate isolation of that bias.
+      - the building shot-animation adjustment: S-0301 claim 22 proposes no reliable isolation
+        of its depth against other short-lived overlapping pictures.
       - animations drawn entirely as a shadow: the state cannot be set up on purpose.
       - the row of a vehicle drawn as a sprite whose type is too big to fit under a bridge: it
         applies only on cells that count as near a bridge, and which cells those are, in terms of
@@ -419,7 +455,7 @@ screen rows.
       - bodies with *h* not 0 (infantry and vehicles drawn as sprites): in the air the body's
         depth differs from its value on the ground by about one depth unit only (−*L(z)* − 12
         against *U* − 12 with *s* = −1, and likewise with −2), inside the rounding of F2.
-      - the drop-pod shadow: no stock situation that creates a drop-pod unit has been found
+      - the drop-pod shadow: no reproducible setup creates a drop-pod unit
         (claim 3).
       - the two remembered-building rows: a probe unit of the local player standing close enough
         to overlap a fogged building would normally bring it back in sight, so no probe can be
@@ -427,13 +463,16 @@ screen rows.
         isolated by D17, which tests compositing against the finished depth buffer (claim 16),
         not its bias independently of the remembered body depth.
     - Confidence: high for the harvesting sprite's profile, bias, placement and reader-only test,
-      and for projectile sprites, overlays, overlay shadows, animations, building bodies, infantry
+      and for projectile sprites, voxel-projectile depth-test selection, particle-sprite profiles
+      and biases, magnetic-wave bias, overlays, overlay shadows, animations, building bodies, infantry
       bodies, the own shadows of sprite units, the smudge row, non-animated terrain objects and their
       shadows, and the −*L(z)* term; medium for the rows with *h* not 0, the generic infantry shadow,
       vehicles drawn as sprites, voxel units, the voxel shadow, the voxel turret row and its absent-key
       default, building shadow, bib,
       unloading, under-door and gate rows, the choice of unloading image, the remembered building
-      rows, animated terrain objects and projectile shadows; low for building parts drawn as
+      rows, animated terrain objects, projectile shadows, pixel-particle depth, laser end biases
+      and the building shot-animation adjustment,
+      low for building parts drawn as
       sprites, the door sprite, animations drawn entirely as a shadow, the drop-pod shadow, the
       turret shadow and the row of the type too big to fit under a bridge
 14. **Unit depth adjustment.** For vehicles, infantry and aircraft,
@@ -525,9 +564,10 @@ screen rows.
       by the project lead.
     - Apart from ties, the result among cell-pass writers does not depend on the ranking,
       because every writer keeps the nearest depth.
-    - Backing: `measurable` (D17 (a), (b), engine tests of remembered-animation compositing as
-      a departure, not measurements of the original's buggy order; the overlay shadows ranking
-      after every overlay, through the tie with a neighbouring flat overlay, D35 (b)); the
+    - Backing: `measurable` for overlay shadows ranking after every overlay, through the tie
+      with a neighbouring flat overlay (D35 (b)). Remembered-image ranking and compositing are
+      `unmeasured` in the original because fog is off in skirmish; D17 (a), (b) test the
+      defined engine departure, not the original's buggy order. The
       live-body case is `unmeasured` (D17 (c) gives the reason). The other tie rules,
       and with them the order inside a live building's group, are `unmeasured`, because exact depth
       ties between those writers cannot be set up on purpose. That terrain objects, overlays and smudges are never remembered is
@@ -610,7 +650,7 @@ screen rows.
     This is the meaning of "drawn centred" in S-0108 claim 8. It applies to building images (body,
     build-up, bib, shadow, unloading, under-door and door sprites), infantry, vehicles drawn as
     sprites, terrain objects, overlays, smudges, every shadow image frame, and also to projectile and
-    animation sprites, whose draw points their own specs give.
+    animation sprites, whose draw points S-0306 claim 28 and S-0109 claim 10 give, respectively.
     - Backing: `measurable` (scenario D24)
     - Confidence: high
 20. **Infantry.** An infantry unit's draw point is the screen pixel of its position (S-0101 F1,
@@ -618,20 +658,20 @@ screen rows.
     height above the surface is 0 and its type does not suppress shadows, its own shadow image
     frame (S-0107 claim 19) are both placed
     centred on that one draw point; the shadow is drawn right after the body (claim 28). While its
-    height above the surface *h* is greater than 0 it draws no shadow from its own sprite but the
-    generic infantry shadow of S-0107 claim 19. On ordinary terrain, the shadow is centred on the
-    point *L*(*h*) rows below its draw point, about where the ground under it appears. For a unit
-    above a high-bridge cell at or above the deck, and not on the deck, S-0107 claim 19 says the
-    deck can count as the ground under an unresolved neighbouring-cell condition. This claim does
-    not specify the shadow point or depth anywhere in that unresolved case. The ordinary-terrain
-    depth bias is in claim 13.
-    - Backing: `measurable` (scenario D25 (a) for the body and own shadow, (b) for the generic
-      shadow over ordinary terrain). The above-deck case is `unmeasured`: its neighbouring-cell
-      condition is not identified, so no scenario can predict the shadow point there. The ion-blast
-      wobble: `unmeasured`, because no stock weapon or event that makes an ion-cannon blast is known
+    height above the surface *h* is not 0 it draws no shadow from its own sprite. It draws the
+    generic infantry shadow when S-0107 claim 19 (c) says so, centred on the point *L*(*h*ₛ) rows
+    below its draw point, *h*ₛ being the shadow height of S-0107 claim 19 (b) (over ordinary terrain
+    *h*ₛ = *h*, about where the ground under it appears). The generic shadow is drawn right before
+    the unit's body, so the body is drawn over it and it never darkens its own unit. Drop-pod
+    movement is the exception: no generic shadow is drawn, and while *h* > 0 the drop-pod shadow
+    uses claim 13's separate row. The generic-shadow depth bias is in claim 13.
+    - Backing: `measurable` (D25 (a) for body and own shadow, (b) for the ordinary-terrain generic
+      shadow; S-0107 M20 (b) for generic-shadow order and (c) for above-deck placement).
+      Drop-pod shadows are `unmeasured` for claim 13's reason. The ion-blast wobble is
+      `unmeasured`, because no reproducible skirmish setup produces an ion-cannon blast
       (claim 2).
-    - Confidence: high for the body and its own shadow; medium for the generic shadow's
-      ordinary-terrain point; low for the unresolved above-deck case
+    - Confidence: high for the body and its own shadow; medium for generic-shadow placement,
+      including the above-deck case
 21. **Vehicles drawn as sprites; aircraft.** A vehicle drawn as a sprite has the same draw point as
     an infantry unit: the screen pixel of its position, moved up by its ion-blast wobble. Its body
     image frame (claim 22) is placed centred on it. Its own shadow image frame is the body frame
@@ -701,7 +741,7 @@ screen rows.
       - a vehicle that has ended a move shows the same rows.
       - the row *d* needs the state off while the vehicle does not count as moving, that is, a
         vehicle standing still part-way through a movement step with an idle rate of 0, not firing
-        and not dying. No stock situation that produces this has been identified (Open questions).
+        and not dying. No reproducible setup that produces this has been identified (Open questions).
     - When the firing counter runs, and one further case in which the walk counter grows while the
       vehicle is in the air, are not settled (Open questions).
     - A vehicle whose type has a turret and is drawn as a sprite draws its body frame as above and
@@ -717,7 +757,7 @@ screen rows.
       file. `unmeasured` for the firing row: which shots start the firing counter is not settled
       (Open questions), so no setup can make the row show at a known tick. `unmeasured` for the row
       *d* and for the events of the standing-pose state other than creation and movement steps
-      (change of movement type, superweapon move): no stock situation stops a vehicle part-way
+      (change of movement type, superweapon move): no reproducible setup stops a vehicle part-way
       through a step, so the state cannot be seen off while the vehicle is not moving.
     - Confidence: high for the facing part and the image-frame formulas, medium for the walk counter, the
       death counter and the standing-pose state (high that it is on at creation and after a
@@ -775,9 +815,8 @@ screen rows.
       body/shadow ordering during visible destruction independently of that timing (claim 30),
       not the exact transition tick from cell pass to object pass; that transition remains
       `unmeasured` because no scenario here isolates it. Also `unmeasured` for a
-      terrain type whose section no layer holds: the original's type lists name only types that
-      have sections in stock data, and whether a test map can add one without a section is not
-      known.
+      terrain type whose section no layer holds: no test setup establishing registration of
+      such a type without supplying its section has been validated.
     - Confidence: medium for which terrain objects are animated terrain objects (the type's flag:
       high); high for the position, the draw point and image frames 0 and 1, for the stage being 0 at
       placement, for the strength rule and its default and for the image frames of animated objects.
@@ -849,8 +888,8 @@ screen rows.
     projectile and animation shadows, and the shadows of voxel models (S-0105 claim 31).
     - Backing: `measurable` (scenario D30: the pixel rule, the palette index and the light in (a) to
       (c), the house colour in (d), the palette in (e)); the translucency bullet is `unmeasured`,
-      because no stock situation is known in which a sprite unit is drawn translucent while it casts
-      its own shadow.
+      because no reproducible setup makes a sprite unit translucent while it casts its own
+      shadow.
     - Confidence: high
 27. **Overlapping shadows.** Each shadow drawing darkens every pixel where it passes its depth test,
     so a pixel under two shadows is darkened twice (each channel ⌊⌊*v*/2⌋/2⌋) when both pass. Within
@@ -892,8 +931,10 @@ screen rows.
     image frame overlaps its own body frame, the shadow darkens the body's pixels (wherever it passes
     its depth test against the stored depth). A building's body is a writer painted before its
     shadow, so the building's shadow darkens the body only where the shadow's depth is strictly less
-    than the body's stored depth.
-    - Backing: `measurable` (scenario D32) for sprite units; the building part is
+    than the body's stored depth. The generic infantry shadow (claim 20) is the exception:
+    it is drawn before the body and never darkens it.
+    - Backing: `measurable` (D32 for own sprite-unit shadows; S-0107 M20 (b) for the generic
+      infantry shadow); the building part is
       `measurable` (D39, using F5's companion sampling to predict body/shadow acceptance).
     - Confidence: high for sprite units; medium for buildings
 
@@ -1017,18 +1058,20 @@ screen rows.
 
 ### Protection colours
 
-34. **Protection brightness and colour (Q-0742 question 4).** Protection does not load
+34. **Selected brightness and colour masks (Q-0742 question 4).** Protection does not load
     another palette or replace house-colour remapping. S-0513 claim 29 supplies the
     protection phases and random draw; its F9 changes ordinary brightness before the
     shade-row selection of S-0104 claim 15. The colour adjustment below is separate:
     after palette conversion and shade selection, an opaque qualifying pixel becomes
     the bitwise union of its packed hi-colour value and the protection colour mask of
     F9 here. This is neither RGB addition with saturation nor multiplication by a tint.
+    The berserk mask of S-0610 claim 7 joins the pixel by the same union; when a curtain mask
+    and a berserk mask both apply, the pixel is joined to their union.
     Even a black shade-row pixel can acquire the mask's colour. Transparent image
     pixels and pixels rejected by depth remain untouched. Protection does not change
     the depth rules, layer, palette choice or house-colour ramp.
 
-    | Drawing | Protection brightness | Additional protection colour mask |
+    | Drawing | Brightness | Additional colour mask |
     |---|---|---|
     | Curtain-protected vehicle drawn as voxels, body and voxel turret/barrel | S-0513 F9 | curtain selector |
     | Curtain-protected vehicle drawn as a sprite | S-0513 F9 | none |
@@ -1038,16 +1081,33 @@ screen rows.
     | Building voxel turret/barrel, either protection kind | S-0513 F9 | force-shield selector for force shield, none for curtain |
     | Building slot animation drawn with its building's palette and stored brightness | protected building brightness sampled at creation and refreshed on each building turn | see the animation rule below |
     | Other animations, including an animation merely attached to a protected unit | no automatic inheritance of the host's envelope | see the animation rule below |
+    | Berserk vehicle drawn as voxels, body and voxel turret/barrel | ordinary, or S-0513 F9 when curtain-protected; berserk adds no brightness change | berserk selector (S-0610 claim 7), united with the curtain selector's mask when both apply |
+    | Berserk vehicle drawn as a sprite, including a voxel turret on a sprite body | ordinary | none |
+    | Berserk infantry sprite body | ordinary | berserk selector (S-0610 claim 7); none in a frame where the centre of its cell is shrouded for the viewer |
+    | Building bib, under-door and under-roof-door images, and the deploying or roof-deploying image drawn in place of the body | S-0513 F9 | force-shield selector for force shield, none for curtain |
+    | Protected building's door image while unloading | S-0513 F9 | as the bib (S-0513 claim 29b drawing correction) |
+    | Any drawing of a protected object made translucent or rippling by cloaking | S-0513 F9 on the source pixels before F8 | none |
+    | Any drawing of a protected object whose centre cell is shrouded for the local player | S-0513 F9 | none |
+    | Remembered image of a fogged building | no protection adjustment | none |
+    | Opaque body sprite of an air-strike-marked building, cell pass and object pass | marking pulse, S-0519 claim 26 and F7 | laser-target selector (S-0519 claim 26), united with the force-shield mask when both apply |
+    | Opaque voxel turret and barrel of an air-strike-marked building | marking pulse, S-0519 claim 26 and F7 | as the marked body |
+    | Opaque building animation over an air-strike-marked building's cell | its animation brightness rule | laser-target selector by the cell rule below, united with the force-shield mask |
 
     Aircraft without a voxel body remain bodyless under claim 21. Ordinary infantry
     reached by the curtain are killed as S-0513 claim 23 specifies, not given a new
     protection-colour appearance. Shadows retain their ordinary darkening, not the
-    body colour mask.
+    body colour mask. Curtain protection adds no mask to a marked building, and the charge
+    flash of S-0519 claim 25 adds no mask. The marking rows cover ordinary opaque drawings and
+    they make no additional assertion about marked translucent or accessory drawings.
+    The protection-specific translucent and shrouded-cell rows override its opaque rows,
+    as S-0513 claim 29b specifies. The corrected door mask follows the bib; the original
+    omitted that mask on a force-shielded door, a drawing-only defect with no switch.
 
     **Animation rule.** A building slot animation is marked as a building animation.
     For such a marked animation, the building occupying the animation's cell supplies
-    a force-shield colour mask while that building is force-shielded. Curtain protection
-    supplies no mask. An arbitrary attached animation is not marked merely because it
+    a force-shield colour mask while that building is force-shielded, and a laser-target
+    colour mask while it is marked by an air strike (S-0519 claim 26). Both masks combine
+    by union when both apply. Curtain protection supplies no mask. An arbitrary attached animation is not marked merely because it
     is attached, and attachment alone grants neither recolouring nor the host's
     brightness envelope. This colour test uses the building at the animation's cell,
     not a blanket inheritance from an attachment or slot owner. The normal-light
@@ -1060,13 +1120,16 @@ screen rows.
     The mask is not scaled by the protection brightness factor: brightness changes
     which shaded source is combined with it, not the mask itself. Expiry removes both
     the protection brightness adjustment and its mask.
-    - Backing: `measurable` (D44, including engine fixtures for the layout correction).
-      The table covers ordinary opaque drawings. Translucent and special accessory
-      drawings remain explicitly outside this claim (Open questions).
+    - Backing: `measurable` (D44, including engine fixtures for the layout correction,
+      S-0610 P4 (c) for berserk; S-0519 T27 for marking). Accessory, translucent, shroud-edge
+      and remembered drawings follow S-0513 claim 29b: SW10 (i) tests the observable rows, while
+      remembered images remain `unmeasured` because fog of war is off in skirmish.
     - Confidence: high for the three colour-source cases in S-0513 claim 29,
       the opaque sprite union after shading, the layout correction and the animation
       cell test; medium for the remaining unit/voxel-part variants and slot-brightness
-      refresh, pending the discriminating captures in D44
+      refresh, pending the discriminating captures in D44. Berserk and marking retain the
+      confidence of S-0610 claim 7 and S-0519 claim 26; the accessory and hidden-drawing
+      distinctions retain that of S-0513 claim 29b
 
 ## Formulas
 
@@ -1087,12 +1150,12 @@ artefact is confirmed by the project lead. Confidence: high for the defined depa
 The modulo formula applies to every world row; in the ordinary map range *C* − *w* stays inside
 0…65535.
 
-**F2. Row depth of an object drawing** (integers). Let the drawing occupy screen rows *r*₀ (first)
+**F2. Row depth of a depth-tested object drawing** (integers). Let the drawing occupy screen rows *r*₀ (first)
 to *r*₁ (last) of its own drawing rectangle before clipping to the view, with depth bias *β*. The
 drawing rectangle may include transparent rows:
 - for a sprite, it is the rectangle stored for that image frame in its file, placed as the sprite
   specs say.
-- for a voxel model (vehicle, aircraft or building turret), it is the voxel copy rectangle of
+- for a voxel model (vehicle, aircraft, building turret or flat projectile), it is the voxel copy rectangle of
   S-0105 (claim 25, F6): *h* = trunc(*y*<sub>max</sub> − *y*<sub>min</sub>) + 8 rows starting at
   screen row *y*<sub>p</sub> + trunc(*c*<sub>y</sub>) − ⌊*h* / 2⌋, where *y*<sub>p</sub> is the
   draw point's row and *y*<sub>min</sub>, *y*<sub>max</sub>, *c*<sub>y</sub> are the vertical bounds
@@ -1123,8 +1186,8 @@ stores the pixel depth, reduced modulo 65536. *d* is reduced modulo 65536 before
 comparison is between plain integers. In play the values never leave 0…65535, so the reduction on
 storing has no visible effect.
 
-No stock drawing has been confirmed to use the slope profile; it is listed because the original
-supports it.
+The slope profile is a supported rendering definition; no reproducible setup selecting it
+has been established.
 
 Clipping removes pixels only: it never changes *r*₀, *r*₁ or the depth of surviving pixels,
 including companion-image drawings, cell-pass writers and fresh or reused voxel images.
@@ -1132,7 +1195,7 @@ The original anchored upright profiles at the last visible row, making clipped s
 images' depth camera-dependent; fixing this drawing artefact is a departure confirmed by the
 project lead. Backing: `measurable` (D38, engine test of the departure, not a measurement of
 the original's clipping); confidence: high for the defined departure. The slope profile is
-`unmeasured`: no stock drawing using it is identified; confidence: high for the formula.
+`unmeasured`: no reproducible setup selects it; confidence: high for the formula.
 
 **Comparing two drawings** (consequences of F2, used by the measurement scenarios; *b* is the last
 row *r*₁ of a drawing, *β* its bias, all in integers, ±1 for the rounding Q and the floors; valid only
@@ -1250,8 +1313,9 @@ floating-point calculation, cross-channel carry, or final rounding of a weighted
 For *s* = 31, *d* = 15, codes 1, 2 and 3 give 24, 22 and 16, respectively, not 27,
 23 and 19. Pack first: blending 8-bit colours and packing only afterwards need not agree.
 
-**F9. Protection colour mask** (claim 34). Let *R*, *G*, *B* be the selected
-imported triple's byte values, integers from 0 to 255. These are already mask
+**F9. Selected colour mask (protection, berserk or marking)** (claim 34). Let *R*, *G*, *B* be
+the selected imported triple's byte values (a protection or marking selector's of claim 34,
+or the berserk selector's of S-0610 claim 7), integers from 0 to 255. These are already mask
 contributions, not ordinary 8-bit palette colours: do not divide red or blue by 8,
 and do not multiply a component by 4. Let ∨ mean bitwise union of non-negative
 integers. On a 5-6-5 surface the mask is
@@ -1266,7 +1330,8 @@ All operations are integer. The green division rounds down. There is no channel
 saturation or additional normalisation: oversized contributions can set bits in
 another channel, and only the low 16 bits are retained. For a shaded packed source
 pixel *S*, the opaque result is *S* ∨ *K*. No post-union brightness adjustment or
-clamp applies. With no selected adjustment, *K* = 0. This formula defines the
+clamp applies. With no selected adjustment, or a selector below 0 or above 15 (S-0513 claim 29a and
+S-0610 claim 7's selector follows the same invalid-input departure), *K* = 0. This formula defines the
 single-layout correction, not the original's stray bits from combining layouts.
 
 ## Constants
@@ -1278,12 +1343,12 @@ single-layout correction, not the original's stray bits from combining layouts.
 | depth value range | 0…65535 | depth units | Values wrap modulo 65536 |
 | projectile depth bias | −30 | depth units | Plus −*L(z)*; final |
 | animation depth bias | −2 (ordinary), −3 (flat), −50 (tiled) | depth units | Plus type and instance adjustments and −*L(z)*; final |
-| shadow depth bias | −2 | depth units | Animation shadows, plus −*L(z)*. Own shadows of sprite units: −4 − *L(z)*; generic infantry shadow over ordinary terrain: −5 − *L*(*z* − *h*) (claim 13) |
+| shadow depth bias | −2 | depth units | Animation shadows, plus −*L(z)*. Own shadows of sprite units: −4 − *L(z)*; generic infantry shadow: −5 − *L*(*z* − *h*ₛ) (claim 13) |
 | building shadow bias | −4 | depth units | Plus −*L(z)* (−2 for remembered fogged images); final |
 | terrain object bias | −12 (body), −3 (shadow) | depth units | Plus −*L(z)*; final; non-animated and animated terrain objects alike |
 | projectile shadow bias | −10 | depth units | Plus −*L* of the world height of the terrain under the projectile; final (claim 13) |
 | other building image biases | −3 (bib), −2 (under-door sprites), −7 (door sprite), −22 (deploying sprite), −42 (roof-deploying sprite) | depth units | Plus −*L(z)*; final; the deploying and roof-deploying values replace the normal depth adjustment (claim 13) |
-| generic infantry shadow bias | −5 | depth units | Over ordinary terrain only, plus −*L*(*z* − *h*); final (claim 13). Above-deck case unresolved |
+| generic infantry shadow bias | −5 | depth units | plus −*L*(*z* − *h*ₛ); final (claim 13) |
 | own-shadow bias of sprite units | −4 | depth units | Plus −*L(z)*; final (claim 13) |
 | remembered-building ranking weights | 37962 per cell of *x*, 37814 per cell of *y* | dimensionless, per cell | *N* in claim 16 |
 | sprite constant | −2 | depth units | Already contained in the claim 13 rows for vehicles, infantry and buildings drawn as sprites; listed for reference only |
@@ -1380,7 +1445,9 @@ ion-cannon blast effects appear behind objects of every layer. Among the layers,
 surface and ground objects appear below building information tips; air and top objects and the
 status extras of vehicles, infantry, aircraft and buildings appear above those tips. Status extras
 appear above objects of every layer. Light flashes, beam effects, range circles and map beacons
-appear above both objects and status extras. Within each layer, the ordering consequences are those
+appear above both object-pass drawings and status extras wherever their depth tests pass, but
+cell-pass writers can still hide laser beams and beam flashes (claim 2). A magnetic wave belongs
+to the air layer, not this post-layer group. Within each layer, the ordering consequences are those
 stated in claims 1, 6 and 7; where a depth test applies, it can still determine which pixels show.
 
 **Observable consequences.** A building's body is painted in the cell pass with its depth written,
@@ -1473,7 +1540,7 @@ S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103
 | rules, building type | `TurretAnimZAdjust`, `TurretAnimYSort` | the turret slot's depth adjustment (also the voxel turret's, claim 13) and y-sort (claim 17) | integer, depth units; integer, leptons | 0; 0 |
 | rules, building type | `TurretAnim`, `TurretAnimX`, `TurretAnimY` | the turret slot's animation name and displacement (S-0108); used by D22 | animation name; integers, pixels | S-0108 |
 | art, building image | the other slots' `…ZAdjust` and `…YSort` keys (the slot base keys are listed in S-0108), and `PowerUpNLocZZ`, `PowerUpNYSort` for the upgrade slots (digit N in place of the letter) | the slot's depth adjustment and y-sort, replacing the animation type's values (claim 17) | integer, depth units; integer, leptons | 0; 0 |
-| rules, building type | the key for the searchlight flag; no stock type sets it | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
+| rules, building type | the key for the searchlight flag | the building has a building light effect, created when the building is placed (claim 3); used by D19 (e) | boolean | no |
 | art, building image | `NormalZAdjust` | building's normal depth adjustment (body in the cell pass) | integer, depth units | 0 |
 | art, building image | `ZShapePointMove` | sampling displacement (*mₓ*, *mᵧ*) in F5; positive values move coverage left/up; omitted for live construction/selling | two integers, pixels | 0, 0 |
 | game data file | `BUILDNGZ.SHA`, image frame 0 | shared companion for eligible building bodies (claims 31 and 33, F5); neither a per-building image selector nor a palette | shape file; frame rectangle and byte samples, interpreted by F5; a valid readable empty rectangle retains empty coverage; an absent-pixel-data frame with a non-empty rectangle is failed companion input, not empty coverage | missing/unreadable file, zero frames, undecodable frame 0 or absent-pixel-data frame 0 with a non-empty rectangle: warn and use no companion, plain upright F2 with the existing bias and depth writes (claim 33) |
@@ -1498,7 +1565,7 @@ S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103
 | none | none | building-provided translucency level and erasure state are runtime inputs to S-0109 claims 20 and 21, not new blend keys | not applicable | code selection as S-0109; no configurable blend rounding |
 | art, animation | `Shadow` | shadow drawn with −2 bias | boolean | no |
 | art, projectile image | `Flat` | projectile goes to the surface layer | boolean | no |
-| art, projectile image | `Shadow` | projectile shadow drawn while the projectile's height above the terrain is greater than 0 | boolean | yes |
+| rules, projectile | `Shadow` | projectile shadow drawn while the shadow height of S-0306 claim 32 is greater than 0 | boolean | yes |
 | rules, overlay type | `DrawFlat` | overlay drawn with the flat profile and −2 bias; otherwise upright | boolean | yes |
 | rules, overlay type | `IsARock` | an upright overlay keeps the −2 bias instead of −17; rocks next to a sloped cell change the unit term *s* | boolean | no |
 | rules, overlay type | `Wall` | overlay drawn upright with −2 bias regardless of the flat setting; −12 placement shift (claim 24) | boolean | no |
@@ -1510,7 +1577,7 @@ S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103
 | none | none | claim 29 reads no additional key: its switch selects the alternative and the facing count is imported above | not applicable | switch on (original) |
 | none | none | claim 30 reads no ordering key; the animated and ore-spawning flags below select the drawing and its raise, and destruction is an object's state, not an imported ordering setting | not applicable | body before its own shadow |
 | art, vehicle image | `WalkFrames`, `FiringFrames` | walking and firing frame counts *F*<sub>w</sub>, *F*<sub>f</sub> (claim 22) | integer, image frames | 12; 0 |
-| art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death); no stock file sets them (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
+| art, vehicle image | the keys for the standing frame count, the death frame count, the death frame rate and the four start frames (standing, walking, firing, death) (claim 22) | *F*<sub>s</sub>, *F*<sub>d</sub>, *R*<sub>d</sub>, *S*<sub>s</sub>, *S*<sub>w</sub>, *S*<sub>f</sub>, *S*<sub>d</sub> | integer: counts and start frames in image frames, *R*<sub>d</sub> in ticks per image frame | *F*<sub>s</sub>: 0, or 1 when *F*<sub>f</sub> > 0. *F*<sub>d</sub>: 0. *R*<sub>d</sub>: 1, and a value below 1 is raised to 1. With *n* the facing count after reading: *S*<sub>w</sub>: 0. *S*<sub>s</sub>: *F*<sub>w</sub>·*n* if *F*<sub>s</sub> > 0, else *S*<sub>w</sub>. *S*<sub>f</sub>: (*F*<sub>w</sub> + *F*<sub>s</sub>)·*n* if *F*<sub>f</sub> > 0, else *S*<sub>s</sub>. *S*<sub>d</sub>: (*F*<sub>f</sub> + *F*<sub>w</sub> + 1)·*n* if *F*<sub>d</sub> > 0, else −1. Each default is computed only when its own key is absent |
 | rules, vehicle or infantry type | `WalkRate`, `IdleRate` | walk counter of a vehicle drawn as a sprite (claim 22) | integer, ticks | 1; 0 |
 | rules, any unit type | `NoShadow` | suppresses the own shadow of a sprite unit (claims 20, 21), or the voxel shadow (claim 18; S-0105 claim 31) | boolean | no |
 | art, vehicle image | `DisableShadowCache`, `DisableVoxelCache` | reuse controls for D23 (d); full mapping and defaults owned by S-0105 | boolean | S-0105 Import mapping |
@@ -1529,8 +1596,9 @@ S-0007 claim 34's confidence and scenario A25; palette precedence remains S-0103
 ## Measurement scenarios
 
 **Common setup.** The measurement setup of the glossary: an unmodified install with no loose
-override files other than a scenario's named test files and no engine add-ons; stock data only; purpose-made
-test maps. Where a scenario changes a
+override files other than a scenario's named test files and no engine add-ons. Use unmodified
+release data and purpose-made test maps, with only the named test-file exceptions below. Keep the
+optional gameplay director off. Where a scenario changes a
 type's field, it does so through the test map's override section, or, for art data, through a
 named loose copy of the art file (the glossary's named test files; test data, removed afterwards).
 Skirmish only, with no engine add-on and no mods (the named test files of a scenario excepted). Use one bystander computer player at the farthest
@@ -1562,8 +1630,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
 - **D2, layer membership (claim 3).** Setup: a flat map. (a) A jumpjet infantry hovering below
   its cruise height (climbing, or a type whose cruise height is set high through the override
   section) over a vehicle on the ground, and an aircraft flying across both. (b) A projectile whose
-  image is marked flat, and one whose image is not, each passing over a vehicle on the ground (not
-  measurable on stock data if no stock projectile image is marked flat). Observable: which image is
+  image is marked flat, and one whose image is not, each passing over a vehicle on the ground (use a named art fixture setting the flat-image flag for the first and clearing it for the second). Observable: which image is
   visible where they overlap. Expected: (a) the aircraft (top) covers the jumpjet and the vehicle.
   The jumpjet (air) covers the vehicle wherever they overlap, whatever their screen positions.
   (b) The flat projectile (surface) is covered by the vehicle; the other projectile (air) covers the
@@ -1583,7 +1650,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   then on top in the first picture showing that position (claim 6). (b) In both runs, the mover
   goes under every stationary vehicle whose key it has dropped below in the first picture of
   its new position, even after crossing *m* ≥ 2 keys in one tick. Any overlap contrary to current
-  key order falsifies the departure, including one-tick lag or multi-tick settling. If stock
+  key order falsifies the departure, including one-tick lag or multi-tick settling. If the test vehicle's
   movement cannot cross multiple keys in one tick, supplement (b) with an engine rendering test
   presenting a formerly later mover behind several stationary objects in one frame; all must
   cover it immediately. These are tests of the departure, not the original's buggy sorting.
@@ -1603,8 +1670,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   image overlaps the route below, and a vehicle driving straight down the column of cells just west of
   the foundation (cells with x one less than the foundation's first column), from north of the
   building to south of it. A turret drawn as a sprite is not a building part but a slot animation
-  with its own key (claim 17), tested by D22. (a) The building as stock data has it (a type that is
-  not a gate). Observable: the vehicle's key (X + Y, from its position) at the tick from which it is drawn over the building's
+  with its own key (claim 17), tested by D22. (a) Clear the building's gate flag through the map override. Observable: the vehicle's key (X + Y, from its position) at the tick from which it is drawn over the building's
   voxel turret. Expected: the switch happens at the first tick at which the vehicle's key is strictly
   greater than the building's key of F4, i.e. 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) + 32, and
   becomes visible in the first picture showing that key (claim 6's departure).
@@ -1663,8 +1729,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   of a bridge that crosses a valley toward the viewer, and the bank cells (x + 1, y + 1) and
   (x + 2, y + 2) are more than 3 levels higher than the cell under the deck. Runs: map A with fudge 20,
   map B with fudge 20 and 40, map C with fudge 0 and 40, and run A0: map A with the cliff fudge key
-  absent (the stock rules set it for no type; the other three fudges are still set to 0 through the
-  override section). Observable: the rows of the vehicle hidden by the terrain in front, per run.
+  absent from every applicable rules layer (verify this for the selected type; otherwise run
+  A0 is unavailable). The other three fudges remain set to 0 through the override section. Observable: the rows of the vehicle hidden by the terrain in front, per run.
   Expected: map A with 20 pushes the vehicle 40 depth units farther, the same as map B with 40, so
   those two runs hide the same rows, and more than map B with 20. Run A0 uses the default 10, so it
   pushes the vehicle 2 × 10 = 20 depth units farther and hides the same rows as map B with 20. Map C
@@ -1678,8 +1744,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   lowest two rows. Falsified if the lower vehicle shows through the deck, or the upper vehicle loses
   more than its lowest two rows to the deck.
 - **D11, overlay biases (claims 12, 13).** Setup: a flat map with a wall segment, and the same map
-  with an overlay type that is neither drawn flat nor a wall nor a rock (if no stock type qualifies,
-  one set through the override section). An infantry unit walks straight toward the viewer from
+  with an overlay type that is neither drawn flat nor a wall nor a rock (set these flags explicitly
+  through the override section). An infantry unit walks straight toward the viewer from
   behind each overlay to in front of it, one step at a time. Observable: for each overlay, the row
   distance *b*<sub>infantry</sub> − *b*<sub>overlay</sub> at which the infantry stops being hidden by
   the overlay's image. Expected (Comparing two drawings, upright over upright): the switch for the
@@ -1701,13 +1767,13 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   its climb, its layer is evaluated only at lift-off, at height 0, where it evaluates to ground. That
   answers the open question on layer re-evaluation in flight, and claims 3 and 4 then get a new
   revision.
-  **(b) Exact height predicate.** Use the stock-data ascent, descent and crash recorder of
+  **(b) Exact height predicate.** Use the ascent, descent and crash recorder of
   S-0502 claim 4's J3 scenario on flat land and over a high bridge, with no engine add-on and no mods (the named test files of a scenario excepted)
   at game speed index 2. Record surface height, on-deck state, bridge/parachute falling state
   separately from crash state, and the evaluated layer at each actual placement. Expect ground
   exactly when *r* < 208 leptons or *r*′ = 0 leptons. A positive low flat-land height evaluating
   non-ground, bridge height 417 evaluating ground solely because its adjusted height is 1, or
-  crash state alone suppressing the subtraction falsifies claim 3. If stock traces miss a boundary,
+  crash state alone suppressing the subtraction falsifies claim 3. If the captured traces miss a boundary,
   test it with engine scene fixtures: flat-land heights 100, 208 and 250 and bridge heights 100,
   416, 417 and 516 leptons, on-deck state unset, at cruise heights 208 and 500 leptons. Expected
   ground results are respectively yes/no/no and yes/yes/no/no, independent of cruise height.
@@ -1718,7 +1784,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   adds one effect so that it overlaps both the target vehicle's health bar and the aircraft's path.
   Observable: in the shared pixels, which is visible. Common falsifier, for every effect except the
   information tip of (a): the part's effect is covered by the aircraft's image or by the health bar
-  in any shared pixel.
+  in any shared pixel that passes the effect's own depth test.
   - (a) Map beacon and information tip. A map beacon placed so that its marker overlaps the health
     bar; a building showing its information tip, with a vehicle driving past it on the ground and
     the aircraft flying across it. Expected: the beacon marker is drawn over the aircraft and over
@@ -1726,22 +1792,27 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     and under the ground vehicle's status extras. Falsified also if the ground vehicle's image
     covers the information tip, or if the information tip is drawn over the aircraft's image or over
     the ground vehicle's status extras.
-  - (b) Beam effects. In turn, a stock weapon whose shot is drawn as a laser beam, one drawn as an
+  - (b) Beam effects. In turn, a weapon whose shot is drawn as a laser beam, one drawn as an
     electric bolt and one drawn as a radiation beam, each fired by a unit or building of the test
     house at a target placed so that the beam crosses the health bar and the aircraft's path
-    (choose the weapons by reading the stock rules and art; copy no value). Expected: each beam is
-    drawn over the aircraft and over the health bar. Not measurable for a kind of beam that no stock
-    weapon draws.
+    (select by the imported effect flags; copy no field value). Expected: each beam is
+    drawn over the aircraft and over the health bar wherever its depth passes. Repeat the laser
+    and beam-flash cases across a cliff, an overlay, a building and a non-animated tree: expect
+    their nearer writer pixels to hide beam samples according to S-0518 claim 20 and S-0514
+    claim 25, without the aircraft writing depth. Use S-0514 E16 (f) for crossings that isolate
+    lasers, electric bolts, line trails and beam flashes in that order, and S-0607 L16 (c) for
+    the magnetic wave's earlier air-layer draw. A beam bypassing a rejecting writer or the wave
+    altering later top-layer pixels falsifies the respective rule. Not measurable for a kind of
+    beam for which no reproducible firing setup is established.
   - (c) Range circle. A building of a type that shows a circle of its range on the ground while it
-    is selected, if stock data has one, placed so that the circle crosses the health bar (select the
+    is selected, placed so that the circle crosses the health bar (select the
     building and the target vehicle together). Expected: the circle is drawn over the aircraft and
-    over the health bar. Not measurable if no stock building shows such a circle.
-  - (d) Light flashes. Detail level 2 (high). A stock weapon whose warhead makes a light
+    over the health bar. Exploratory until a setup reliably produces the circle.
+  - (d) Light flashes. Detail level 2 (high). A weapon whose warhead makes a light
     flash where it hits, fired at the ground beside the target vehicle so that the flash covers the
     health bar while the aircraft passes. Expected: the flash brightens the aircraft's pixels and
     the health bar's pixels where they overlap it, in the same way as the bare ground. Falsified if
-    the aircraft or the health bar shows unbrightened inside the flash. Not measurable if no stock
-    warhead makes a flash.
+    the aircraft or the health bar shows unbrightened inside the flash. Exploratory until a setup reliably produces a flash.
 
   Ion-cannon blast effects are not tested (claim 2).
 - **D14, layer changes at take-off, landing and attachment (claims 3, 4).** Setup: a flat map.
@@ -1793,9 +1864,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   at the predicted row, or if a flat-over-flat case of the first part goes the other way.
 - **D16, column, bridge and tunnel fudges (claim 14).** Setup: test maps with (a) a vehicle beside
   a bridge support column, on the cells listed for the column factor, (b) a vehicle under a high
-  bridge, (c) a vehicle next to a tunnel entrance (not measurable on stock data if the theater has
-  none). Use a vehicle type for which the stock rules set none of the four fudge keys (check by
-  reading the stock rules; copy no value). Runs per case: the fudge of that case set through the
+  bridge, (c) a vehicle next to a tunnel entrance (omit this case if the theater has
+  none). For absent-key runs, select a vehicle type for which every applicable rules layer
+  omits the tested fudge key; verify eligibility without copying field values. Runs per case: the fudge of that case set through the
   override section to 0, to 40, and to its absent-key default (column 5, bridge 0, tunnel 10), and a
   run with that key left absent; the other three fudges are set to 0 in every run. Observable: the
   number of the vehicle's rows hidden, per run. Expected: more rows hidden with 40 than with 0 in
@@ -1842,8 +1913,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   its climb:
   - run A: a jumpjet type whose cruise height is set to 100 leptons through the override section.
   - run C: the same type, in a separate game, with 300 leptons.
-  - run B: a type that sets no jumpjet cruise height in the stock rules (check by reading the stock
-    rules; copy no value), given jumpjet movement and the jumpjet flag through the override section.
+  - run B: a type for which every applicable rules layer omits the jumpjet cruise height
+    (verify omission without copying field values), given jumpjet movement and the jumpjet flag through the override section.
     If no such type can be made to fly this way, run B is not measurable.
 
   Observable: the hover lift, measured on something that moves with the unit's draw point whatever
@@ -1867,12 +1938,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     Expected: air. Falsified if the vehicle covers it or it covers the flying aircraft.
   - (b) Unattached animations: animations created at a ground point and not attached to an object,
     for example by a trigger of the test map that plays an animation at a waypoint, or a weapon's
-    impact animation. Use one type whose art sets its layer to surface (chosen from the stock art
-    data) and one whose art sets no layer. Expected: the surface type is covered by the vehicle and
+    impact animation. Use a named art fixture with one animation's layer set to surface and another's layer
+    omitted from every applicable art section. Expected: the surface type is covered by the vehicle and
     by the aircraft; the type with no layer set is in the air layer. Falsified if the surface type
-    covers the vehicle, or if the type with no layer set is covered by the vehicle. If no stock
-    animation type sets its layer to surface, test another value the stock art uses, with its own
-    expected order.
+    covers the vehicle, or if the type with no layer set is covered by the vehicle. Remove the named art fixture afterwards.
   - (c) Particles, voxel animations and wave effects: the particles of a particle system created by
     a weapon or warhead (not the smoke or fire animations attached to a damaged object, which are
     attached animations in the ground layer, D14 (c)), debris voxel animations thrown when a vehicle
@@ -1880,11 +1949,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     or it covers the flying aircraft.
   - (d) Ground layer for other movement types: in place of the standing vehicle, in turn, a hovering
     vehicle, a ship on water, a unit with mech movement and a unit with teleport movement after its
-    jump (each only if stock data has a type with that movement). Over each, a projectile whose image
+    jump (each only if a reproducible placement setup exists for that movement). Over each, a projectile whose image
     is not marked flat (air layer, D2). Expected: the projectile covers each of them, and each is
     covered by the flying aircraft. Falsified if any of them covers the projectile.
-  - (e) Building light effects: no stock building type casts a searchlight, so a stock building
-    type is given the searchlight flag through the test map's override section (Import mapping)
+  - (e) Building light effects: a building type is given the searchlight flag through the test map's override section (Import mapping)
     and placed by the map near the vehicle, so that its beam sweeps across the vehicle and the
     aircraft's path. Expected: air: the beam covers the vehicle and is covered by the flying
     aircraft. Falsified if the vehicle covers the beam or the beam covers the flying aircraft. Not
@@ -1904,11 +1972,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   disagreement with this value falsifies the departure, not a claim about the original.
   Restart the same map with a different starting view; *k* must still agree. Transparent
   wall pixels or missing shadow overlap make the run inconclusive; choose another pixel.
-- **D21, animation sort adjustment (claim 5).** Setup: a flat map; a waypoint *W*; two stock
-  animation types that the stock art puts in the ground layer: type 1 with a nonzero sort adjustment
-  *A* whose magnitude is at least 64 and less than 256 leptons, so that the switch below happens
-  while the images overlap, and type 0 with no sort adjustment (read both from the stock art at
-  test time; copy no value). Two runs, one per type: a trigger of the test map plays the animation,
+- **D21, animation sort adjustment (claim 5).** Setup: a flat map; a waypoint *W*; two animation types in a named art fixture, both set to the ground layer: type 1 with a
+  test sort adjustment *A* = 128 leptons and type 0 with adjustment 0. Use image coverage broad
+  enough for the images to overlap at both switch positions. Two runs, one per type: a trigger of the test map plays the animation,
   not attached to any object, at *W*, and plays it again whenever it ends if the type does not
   repeat. In each run a vehicle of the same type drives the same straight route across *W*'s cell
   in the direction of increasing X + Y, its image overlapping the animation's. Observable: per tick,
@@ -1916,16 +1982,13 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   first tick whose displayed position puts the vehicle over the animation. Expected:
   *K*<sub>1</sub> − *K*<sub>0</sub> = *A*, within one tick's movement of the vehicle (claims 5 and
   6; the animation's own position cancels). Falsified if *K*<sub>1</sub> and *K*<sub>0</sub> are equal
-  within one tick's movement, or differ by more than one tick's movement from *A*. Not measurable if
-  no two such stock animation types can be played this way; then the claim falls back to
-  `unmeasured`.
+  within one tick's movement, or differ by more than one tick's movement from *A*. A run without qualifying overlap at both switch positions is inconclusive; use broader
+  named test sprites rather than interpreting absent overlap as a sort result.
 - **D22, building slot animations and turret depth adjustments (claims 13, 17).** Setup: a flat map
-  at level 0. Parts (a) to (c) use a stock building type whose turret is drawn as a sprite and whose
-  turret animation's type the stock art puts in the ground layer (choose both by reading the stock
-  rules and art; copy no value; not measurable if there is none). Part (d) uses a stock building
-  type whose turret is a voxel model (not measurable if there is none). The turret slot's keys are
+  at level 0. Parts (a) to (c) use a building with a sprite turret; a named art fixture puts its turret
+  animation in the ground layer. Part (d) uses a building with a voxel turret. The turret slot's keys are
   rules keys, so every value below is set through the test map's override section. A slot key
-  that a run leaves absent is absent from the override section and from the stock rules of that
+  that a run leaves absent is absent from the override section and from every earlier rules layer for that
   type (check by reading; otherwise that run is not possible).
   - (a) Slot y-sort. A vehicle drives in a straight line in the direction of increasing X + Y so
     that its image passes over the turret animation's image. Runs: the turret slot's y-sort set to
@@ -1934,8 +1997,8 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     whose displayed position puts the vehicle over the turret animation. Expected:
     *K*<sub>*Y*</sub> − *K*<sub>0</sub> = *Y*, within one tick's movement of the vehicle.
     Falsified if the two keys are equal within one tick's movement, or differ from *Y* by more.
-  - (b) Replacement, not addition. Only if the turret animation's type has a nonzero sort
-    adjustment *A* in the stock art (read it; copy no value); otherwise not measurable. The turret
+  - (b) Replacement, not addition. Set the turret animation type's sort adjustment to the test value *A* = 128 leptons
+    through the named art fixture. The turret
     slot's displacement is set to 0, 0 and its y-sort is left absent, so the animation stands at
     the building's image anchor, whose X + Y is 256·(*c<sub>x</sub>* + *c<sub>y</sub>*) for the
     top-left foundation cell (*c<sub>x</sub>*, *c<sub>y</sub>*). The vehicle drives as in (a), on a
@@ -1947,7 +2010,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   - (c) Slot depth adjustment. A wall segment placed so that its image overlaps part of the turret
     animation's image outside the building's body, in a layout where
     |(4/3)·(*b*<sub>animation</sub> − *b*<sub>wall</sub>) − *s*| < 40 rows, *s* being the
-    animation type's vertical draw shift (from the stock art; set the slot displacement through
+    animation type's vertical draw shift (read the imported value; set the slot displacement through
     the override section to reach such a layout). Runs: the turret slot's depth adjustment left
     absent, set to 0, set to −60 and set to +60. Observable: which of the animation's pixels inside
     the wall's image are visible. Expected (Comparing two drawings, upright over upright): with
@@ -1968,7 +2031,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     and +60 do not differ, move the wall one cell and repeat. Falsified if the absent run differs
     from the run with 0, or if −60 and +60 never differ.
 - **D23, voxel shadows (claim 18).** Setup: a flat map at level 0, open ground, voxel vehicles and
-  a voxel aircraft of stock types that cast a shadow. Observable: inside the outline of the shadow,
+  a voxel aircraft, all with shadows enabled. Observable: inside the outline of the shadow,
   which pixels are darkened.
   - (a) Layer of an aircraft's shadow. A ground vehicle stands still; an aircraft flies across it at
     a steady height so that the aircraft's shadow passes over the vehicle's image. Expected: the
@@ -2002,7 +2065,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     inclusion and freshness rules are owned by S-0105 claim 39 and MS-27.
 
   - (e) Own aircraft image. Use the common setup at speed index 2 on unobstructed flat
-    terrain, with one bystander computer player outside the observed area. Capture a stock
+    terrain, with one bystander computer player outside the observed area. Capture a
     voxel aircraft during take-off and landing, selecting poses where the shadow footprint
     placed by S-0105 claim 40 overlaps opaque body pixels and passes the scene-depth test.
     Repeat with the type's shadow disabled through a named map override, matching position,
@@ -2011,9 +2074,9 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     outside the body darken. Any own-body pixel darkened by the aircraft's shadow falsifies
     claim 18. A run with no qualifying overlap is inconclusive, not confirmation.
 
-- **D24, centred placement (claim 19).** Setup: a flat map at level 0 with a stock building, a
-  stock infantry unit standing alone in a cell (its position from the standing-position rules of
-  S-0208) and a stock tree. Prefer sprites whose canvas width or height is odd. For each, read from
+- **D24, centred placement (claim 19).** Setup: a flat map at level 0 with a building, an
+  infantry unit standing alone in a cell (its position from the standing-position rules of
+  S-0208) and a tree. Prefer sprites whose canvas width or height is odd. For each, read from
   its shape file the canvas *W* × *H* and the rectangle of the image frame shown (format data, not
   copied into any spec). Observable: the screen column and row of one chosen non-transparent pixel
   (*u*, *v*) of the image frame. Expected: F6 with the draw point of S-0108 claim 8, claim 20 and
@@ -2028,19 +2091,21 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   unit's health bar compared with a standing unit on the same cell, which gives its lift. Expected:
   the generic shadow image frame 1 placed by F6 on the point *L*(*h*) rows below the unit's draw
   point. Falsified if either part is off by more than one row or one column. No high-bridge cell
-  is used in either part; the unresolved above-deck shadow is not tested.
+  is used in either part; S-0107 M20 (c) separately tests the bridge-adjusted placement.
 - **D26, overlay placement (claim 24).** Setup: test maps with flat cells at level 0 and at level 2,
   carrying a wall, an ore field, a crate, a fence (an overlay of none of the shifted kinds), an
   overlay type whose land type is railroad, the overlay types with indices 126 and 239 (counted from
-  0) in the stock overlay list (whatever types the stock rules put there; read them, copy no value), and a high
+  0) in the imported overlay list (identify by registration order, without copying field values), and a high
   bridge whose deck cells carry overlay data values inside and outside 9 to 17. Observable: the
   screen row and column of a chosen pixel of each overlay's image frame and, where it has one, of
   its shadow frame. Expected: claim 24 with F6. Falsified if any shift differs from the claim by one
   row or more, or if the horizontal displacement differs from claim 24 (0 normally; 15 columns
   left for the specified deck-cell shadow).
-- **D27, terrain objects (claim 23).** Setup: a stock tree type on a flat level-0 cell, the same
-  type on a flat level-2 cell and on a sloped cell, and a stock terrain type that spawns ore on a
-  flat level-0 cell. Observable: (i) the screen position of a chosen pixel of each object's image
+- **D27, terrain objects (claim 23).** Setup: a tree type on a flat level-0 cell, the same
+  type on a flat level-2 cell and on a sloped cell, and a terrain type that spawns ore on a
+  flat level-0 cell. Set both types' test strength to 2 health points through the map override
+  for parts (i) and (ii), so the initial-frame prediction does not assume imported health.
+  Observable: (i) the screen position of a chosen pixel of each object's image
   frame and shadow frame, and which image frame is shown at the start; (ii) an infantry probe (D15)
   walks toward the viewer past the ore-spawning object, one step at a time, recording the switch
   distance *b*<sub>probe</sub> − *b*<sub>image</sub> measured from the drawn image's last row.
@@ -2053,20 +2118,18 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   one and to 2 in the other (pre-placed objects follow the override, S-0009). Observable: the image
   frame shown at the start. Expected: image frame 1 with strength 1, image frame 0 with strength 2.
   Falsified if the two games show the same image frame.
-  (iv) Strength of a terrain type. A stock tree type whose section in the stock rules gives no
-  strength (check the stock rules; copy no value), on a flat level-0 cell, in two games: the test
+  (iv) Strength of a terrain type. A tree type with its strength explicitly reset as described below, on a flat level-0 cell, in two games: the test
   map's override section sets that type's strength to −1 and the game-wide tree strength to 1 in
   one, and to −1 and 2 in the other. Observable: the image frame shown at the start. Expected:
   image frame 1, then image frame 0 (the map's layer sets the unset strength to its own game-wide
   tree strength). Falsified if both games show the same image frame.
   (v) The quirk `quirks.tree_strength_fixed_at_first_section`. The same tree type and cell; the
   test map's override section sets only the game-wide tree strength, to 1, and nothing in the tree
-  type's section. Observable: the image frame shown at the start. Expected: image frame 0 if the
-  stock rules' game-wide tree strength is 2 or more (the type took it in the base rules and keeps
-  it); image frame 1 is the quirk-off result. Not measurable if the stock game-wide tree strength
-  is below 2. When the stock value is 2 or more, any starting image frame other than 0 falsifies
-  the retained-strength rule.
-  (vi) Animated terrain objects. Part 1: a stock terrain type marked animated that has the
+  type's section. Observable: the image frame shown at the start. Use a named base-rules fixture omitting the type's strength and setting the game-wide
+  tree strength to the test value 2. Expected: image frame 0 (the type retains the earlier
+  layer's strength); image frame 1 is the quirk-off result. Any starting frame other than 0
+  falsifies retained strength. Remove the named base-rules fixture afterwards.
+  (vi) Animated terrain objects. Part 1: a terrain type marked animated that has the
   spawns-resources flag (an ore mine), placed by the map on a flat cell, with its animation
   probability set to 1 and its animation rate to 4 ticks through the override section, so that its
   animation starts in its first turn. Observable: per tick, the image frame shown (matched against
@@ -2077,20 +2140,19 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   appears. Part 2: the same type
   with its spawns-resources flag cleared through the override section. Expected: image frame 0 in
   every drawn frame over at least 1000 ticks (and no 16-row raise). Falsified if part 1 shows another
-  sequence, or image frame ⌊*N*/2⌋, or if part 2 ever shows another image frame. Not measurable if no stock
-  animated type can be placed on a test map.
+  sequence, or image frame ⌊*N*/2⌋, or if part 2 ever shows another image frame. A type that cannot be placed makes the run inconclusive; select another eligible type.
 - **D28, smudges (claim 25).** Setup: test maps with flat cells at level 0 and at level 2, a
   one-cell smudge and a smudge several cells wide, placed by the map's smudge list. Observable: the
   screen position of a chosen pixel of each smudge's image frame. Expected: image frame 0 placed by
   F6 on the top corner of the smudge's first cell, lifted 15 rows per level. Falsified if it is
   centred on the cell centre (15 rows lower), on each piece's own cell, or differs from F6 by any
   other pixel displacement.
-- **D29, vehicles drawn as sprites (claims 13, 21, 22).** Setup: a stock land vehicle type drawn as
+- **D29, vehicles drawn as sprites (claims 13, 21, 22).** Setup: a land vehicle type drawn as
   a sprite whose facing count is 8 (its art's facing count, or the absent-key default of 8 for a
   type with firing frames or a turret, Import mapping), with several walking frames and an idle
-  rate of 0 (choose it by reading the stock rules and art; copy no value; if its idle rate is not
-  0, set it to 0 through the test map's override section). Not measurable if stock data has no
-  such type. A flat map at level 0; the vehicle belongs to the test house.
+  rate of 0 (set idle rate to 0 through the test map's override section). A named art fixture may
+  explicitly select sprite drawing and eight facings; use distinguishable frame markers
+  if the imported image cannot expose the tested frame choices. A flat map at level 0; the vehicle belongs to the test house.
   - (a) Order the vehicle to move one cell in each of the eight directions and to stop.
     Observable: per tick, the image frame shown (matched against the image frames of its shape file) and
     its body facing. Expected: the facing part *d* = (*f*<sub>8</sub> + 1) mod 8; while moving, the
@@ -2133,12 +2195,12 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   - (e) Dying row and death counter. A named loose copy of the art file in which the type's death
     frame count is 4, its death start frame is 0 and its death frame rate is 2 (keys by role in the
     Import mapping). The vehicle stands still and is destroyed by the weapon of a second house,
-    and a second game uses the stock art. Observable: per tick, from the tick of destruction until the
+    and a second named-art control explicitly sets the death frame count to 0. Observable: per tick, from the tick of destruction until the
     vehicle is gone, the image frame shown. Expected: image frames 0, 1, 2 and 3 in that order,
     each shown for 2 ticks (the first may show for 1 tick only, depending on where in the tick
     the destruction falls), then 3 until the vehicle is removed, whatever its body facing; in the
-    stock-art game no dying frames are shown (S-0312). Falsified if the image frames depend on the body
-    facing, run in another order or at another rate, or if the stock-art game shows the dying row.
+    zero-death-frame control no dying frames are shown (S-0312). Falsified if the image frames depend on the body
+    facing, run in another order or at another rate, or if the zero-death-frame control shows the dying row.
 
   - (f) Standing-pose state. The vehicle of (a), of a type with firing frames, so that
     *F*<sub>s</sub> > 0 by the absent-key defaults (Import mapping; if the chosen type has none,
@@ -2188,10 +2250,10 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   - (e) Two buildings whose shadows overlap. Expected ⌊*v*/2⌋; and a jumpjet infantry unit hovering
     over ordinary terrain (no high-bridge cell), so that its generic shadow falls inside a
     building's shadow: ⌊*v*/4⌋.
-  - (f) A stock projectile with a shadow passes over a building's shadow, then a tree's shadow,
+  - (f) A projectile with a shadow passes over a building's shadow, then a tree's shadow,
     on level-0 ordinary terrain. Compare only pixels outside the projectile body and other
     effects. Expected ⌊*v*/4⌋ in either overlap. A run with no qualifying overlap is inconclusive.
-  - (g) A stock animation with a shadow, no vertical draw shift and no depth adjustment, created
+  - (g) An animation with a shadow, no vertical draw shift and no depth adjustment, created
     at height 0 as in D15, overlaps in turn a building's shadow, a tree's shadow, a bib, and ore
     or gems. Record pixels inside its shadow but outside its body. Expected: the earlier shadows
     remain ⌊*v*/2⌋, and bib/ore/gem pixels retain their control-game values without the animation
@@ -2200,7 +2262,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   Falsified if any part gives another value. A result of ⌊*v*/4⌋ in (b) or in the two-building part
   of (e) is the alternative of `quirks.cell_pass_shadows_write_depth`.
 - **D32, a sprite unit's shadow over its own body (claim 28).** Setup and reading as in D30. Run 1:
-  a stock infantry type whose shadow frames overlap its body frames (check in its shape file), one
+  an infantry type whose shadow frames overlap its body frames (check in its shape file), one
   unit standing still. Run 2: the same type with its shadow suppressed through the test map's
   override section, the unit at the same place and facing. Observable: the body's pixels inside the
   shadow frame's outline. Expected: in run 1 each channel is ⌊*v*/2⌋ of the run 2 value. Falsified
@@ -2221,8 +2283,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     from any body, and in a second position on a bib. Observable: whether its shadow darkens the
     pixels there (reading of D30). Expected: inside the building's shadow it does not (the pixels
     stay darkened once); on the bib it does. Falsified if either goes the other way.
-  - (c) Animated terrain object. A stock terrain type marked animated (Import mapping; choose it by
-    reading the stock rules; copy no value), placed by the map on a flat cell where the theater
+  - (c) Animated terrain object. A terrain type marked animated (select by the imported flag, without copying field values), placed by the map on a flat cell where the theater
     allows it. Not measurable if no such type can be placed on a test map. An infantry probe (D15)
     walks straight toward the viewer past it, one step at a time, its image overlapping the
     object's; then a wall segment is placed in front of the object, its image overlapping the
@@ -2239,20 +2300,20 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     result of a writer, as for a non-animated tree in D15), or if the wall switch distance differs
     from −6 rows by more than one row.
 - **D34, aircraft without a voxel model (claim 21).** Setup: a flat map at level 0; a named loose
-  copy of the art file in which the voxel flag of one stock aircraft type's art section is cleared
+  copy of the art file in which the voxel flag of one aircraft type's art section is cleared
   (Import mapping), so that its sprite file is looked up instead (S-0007). The aircraft is placed
   on the map, belongs to the test house, takes off and flies across open ground; a second game
-  uses the stock art. Observable: whether any image of the aircraft's body appears at its
+  uses a named control explicitly enabling voxel drawing. Observable: whether any image of the aircraft's body appears at its
   position; its status extras, with the aircraft selected, show where it is. Expected: no body
   image in the first game, while the selected aircraft's status extras move across the map; in the
-  stock-art game the voxel body shows. Falsified if any sprite image of the aircraft appears in the
+  voxel-enabled control the voxel body shows. Falsified if any sprite image of the aircraft appears in the
   first game. (Whether its shadow shows is not part of the claim.) Not measurable if the original does not
   start a game with the changed file.
 
 - **D35, overlay shadows (claims 13, 16, 27).** Setup and reading as in D30, on a flat test map
   at level 0 and on a copy with the same layout at level 2. Each part compares a ground pixel with
   the same pixel in a control game whose map lacks the overlay that casts the shadow (value *v* per
-  channel). Choose the overlays by reading the stock data (copy no value); a part is not measurable
+  channel). Choose the overlays by their imported flags and image coverage (copy no field value); a part is not measurable
   if its overlay's sprite has no shadow image frames or its shadow does not reach the pixels named.
   - (a) An ore overlay whose shadow falls partly on bare ground. Expected ⌊*v*/2⌋ there. Further
     pixels of that shadow are covered in turn by: a tree's shadow (terrain object placed by the
@@ -2284,7 +2345,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   measurement setup, game speed 2, a fixed view, no fog and a flat level-0 test area with no
   overlays or buildings beside the test object. Capture lossless pixels in the 5-6-5 display
   layout as in D30. One run per part; keep the bystander outside this area.
-  - (a) Place a stock terrain type marked animated. Choose the type and a displayed body frame
+  - (a) Place a terrain type marked animated. Choose the type and a displayed body frame
     by reading its shape file: require at least one non-transparent body pixel inside the
     non-transparent outline of its corresponding shadow frame. Record the displayed body frame
     and the pixels in that overlap, excluding pixels covered by another effect. Compare each
@@ -2292,11 +2353,11 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     S-0112 claim 3. Expected: where both depth tests pass, the result is the channel's rounded-down
     half (claim 26), not the undarkened body colour. Ground pixels outside the body but inside
     the shadow provide a control for shadow visibility and darkening.
-  - (b) Repeat with a stock ore mine; capture each distinct displayed body frame while its
+  - (b) Repeat with an ore mine; capture each distinct displayed body frame while its
     animation runs. Match the body and shadow at the common draw point raised by 16 rows.
     Expected: the same rounded-down half in every qualifying overlap, not an undarkened body
     or a shadow left at the unraised draw point.
-  - (c) Place a stock destructible terrain object, and have a human-controlled stock armed unit
+  - (c) Place a destructible terrain object, and have a human-controlled armed unit
     destroy it by firing at its cell. Capture every drawn frame through destruction. Identify
     each displayed body frame from the shape file rather than assuming the still-open sequence
     timing. For each visible destruction frame with qualifying body/shadow overlap, compare
@@ -2334,7 +2395,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   pixel still inside the view and the unclipped rectangle rows in both captures. Expected:
   the reader keeps its own last-row anchor, so the qualifying pixel remains visible.
   Hiding it after clipping falsifies the departure. Inconclusive if no non-transparent shared
-  pixel survives clipping; choose a different stock sprite or placement. Repeat after forcing
+  pixel survives clipping; choose a different test sprite or placement. Repeat after forcing
   a full terrain repaint while the writer is clipped: surviving pixels must match their
   world-aligned unclipped acceptance. Repeat with fresh and reused voxel reader images, and
   a building using a companion depth image, calculating acceptance with F2 in each case.
@@ -2423,7 +2484,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   for each variant so no earlier loaded image can survive. Record whether loading
   reaches the battlefield; if it does, capture one front/behind probe crossing,
   body pixels and the separate building parts. One run per variant plus a restored
-  stock-file control. The control must reach play and draw the building normally.
+  restored-file control. The control must reach play and draw the building normally.
   - Remove the shared file from every loose and archive location the original searches,
     using named test copies of the containing archives with just that member removed.
     Expected: loading fails before play. Reaching play falsifies that claim.
@@ -2461,7 +2522,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
     zero-valued companion anchor. There is no engine add-on and there are no mods (the named test files of a scenario excepted).
 
 - **D43, harvesting sprite depth (claims 12 and 13; Q-0580 question 3).**
-  Common setup, one stock vehicle harvester loading in a resource cell; capture all
+  Common setup, one vehicle harvester loading in a resource cell; capture all
   eight facing groups over at least one 15-tick display cycle apiece. Use the fixed
   sprite's frame rectangle and S-0402 claim 5a's displaced point to predict each
   pixel's screen row. Repeat beside a foreground wall and a cliff edge, then a
@@ -2473,7 +2534,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   writer depth, including row cutoffs against upright writers. An upright profile,
   a vehicle-centred placement or an adjustment recomputed at the displaced point
   must not predict the observed cutoff better. Any accepted equal-depth pixel or
-  different cutoff falsifies the claim. Where stock image coverage is too small
+  different cutoff falsifies the claim. Where the image coverage is too small
   to distinguish profiles, repeat with a named test copy of the fixed sprite having
   a broad opaque patch and unchanged canvas/anchor; remove it afterwards.
   For reader-only behaviour, overlap a second vehicle after the harvester in the
@@ -2490,7 +2551,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   Keep facing, palette index, light-alpha and background fixed. Record each tick's
   ordinary brightness and phase factor with the read-only recorder, and compare the
   captured opaque source pixels with S-0513 F9, S-0104 claim 15 and F9 here.
-  Repeat with a stock sprite vehicle, voxel vehicle, landed aircraft, ordinary building
+  Repeat with a sprite vehicle, voxel vehicle, landed aircraft, ordinary building
   and building with a voxel turret/barrel. Compare the curtain and force shield on
   buildings; repeat on several house colours and under another ambient level.
   Expected: brightness follows the table, but only its named drawings take a mask.
@@ -2498,7 +2559,7 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   or an unlisted replacement palette, falsifies that table.
 
   In named test settings, separately replace the selected colour triple with invented
-  (1, 0, 0), (0, 3, 0), (0, 0, 1), then (255, 255, 255), keeping all other data stock.
+  (1, 0, 0), (0, 3, 0), (0, 0, 1), then (255, 255, 255), keeping all other data unchanged.
   Include pixels whose shaded channels already contain and do not contain the mask's
   set bits. This distinguishes union from saturating addition, an 8-bit-to-hi-colour
   conversion, mask scaling by phase brightness, and channel clamping. Test shade-row
@@ -2517,19 +2578,40 @@ last row of a drawing's rectangle as in F2 (for a sprite, read from the image's 
   Colour following the slot owner outside its cells, or ordinary attachment alone
   conveying protection, falsifies the animation rule. A read-only recorder plus
   lossless per-tick captures is the proposed tool; these are not completed measurements.
-  If stock art cannot expose a distinct source pixel for a row, use a named art fixture
-  and an engine scene fixture rather than claiming stock coverage.
+  If the selected art cannot expose a distinct source pixel for a row, use a named art fixture
+  and an engine scene fixture rather than claiming original-game coverage.
+
+  For the added rows, separately follow S-0513 SW10 (h) and (i) for invalid selectors,
+  accessories, cloak blends and the shroud edge; S-0610 P4 (c) for berserk vehicles and infantry,
+  including simultaneous curtain protection; and S-0519 T27 for marking with and without a
+  force shield. Their named setups, captures and falsifiers apply. Expect union, not summed or
+  replacement masks, only on the qualifying drawings of claim 34; an invalid selector adds no
+  mask. These are additional proposed runs, not results. Remembered-image rules use engine
+  scene fixtures because skirmish has no fog of war.
+
+- **D45 — voxel-projectile depth selection (claims 10 to 13).** In the common measurement setup,
+  use a tiny map with a high bridge, a cliff and a building, with two player houses and a distant
+  bystander computer player, at game speed 2. A named test rules/art fixture gives a slow,
+  visible projectile a voxel image; compare runs with its flat-image flag absent and set,
+  without changing its flight or model. Place its flight behind each writer and capture the
+  same projected model pixels, recording projectile position and tick with a read-only recorder.
+  Use three passes per setting. Expected: the non-flat model paints over the writer without
+  testing depth; the flat model passes exactly F2's flat strict test with bias −65, not a
+  height-cancelled bias. Reproduce both in engine scene fixtures with known stored depths and
+  repeat at two projectile heights. Compare the complete depth buffer with and without the
+  projectile; it must be identical. Also overlap a later depth reader whose depth is farther
+  than the projectile's flat depth but nearer than the terrain's: it must remain accepted. A non-flat model being depth-hidden, any depth writes, or
+  flat acceptance differing from that strict test falsifies the claim. A run with no overlapping
+  non-transparent model pixels is inconclusive. The fixture supplies any
+  altered speed needed to capture the crossing.
 
 ## Open questions
 
-Q-0742 question 4's ordinary opaque protection drawings are covered by claim 34
-and F9 here together with S-0513 claim 29 and F9. Exact mask handling for translucent
-animations and cloaked/translucent units, building bibs/door accessories, remembered
-images and unusual sprite-turret accessory combinations remains unconfirmed.
-Do not infer their mask treatment from the opaque table. In particular, some
-translucent drawings may ignore a colour mask rather than blending a recoloured
-source. This remaining scope is not claimed as a complete answer to every drawing
-variant of question 4.
+Q-0742 question 4's explicitly listed variants are covered by claim 34 and F9 here with
+S-0513 claims 29 and 29b; this is not a complete answer for every drawing variant.
+Still open: protected building slot animations whose own art draws them translucent,
+and unusual sprite-turret accessory combinations. Do not infer their mask treatment
+from the opaque table.
 
 Q-0580 is fully answered between S-0402 claim 5a (questions 1, 2 and 4,
 with its anchor formula) and this spec's claim 13 and D43 (question 3).
@@ -2553,14 +2635,6 @@ companion sampling. Q-0418 questions 1–4 are answered by S-0109 claims 10, 26 
 27; question 5 is claim 32 and F8 here. Both requests require joint hand-off with
 the current owning specs; no requested part owned here remains open.
 
-- **Generic infantry shadow above a high bridge:** S-0107 claim 19 leaves unresolved the
-  neighbouring-cell condition under which the deck counts as ground for a unit above a high-bridge
-  cell at or above the deck and not on it. Claims 11, 13 and 20 here do not specify the shadow
-  point or depth for that whole case. Determine the condition, placement and final depth together.
-  Do not infer a deck-relative formula from the ordinary-terrain formula. Backing: `unmeasured`,
-  because a controlled scenario cannot predict the result until that condition is known.
-  Confidence: low.
-
 - **Building images:** the building shadow's bias (−4 − *L(z)*) has been tied to how building and unit
   images drawn as sprites get their shadow in general, not yet to the live building drawing with
   certainty; the slot animations are separate animation objects (claim 17), but whether a building
@@ -2578,18 +2652,18 @@ the current owning specs; no requested part owned here remains open.
 - **Sprite placement and image frames, leftovers (claims 20 to 22, 25):**
   - which ion-cannon blasts set the ion-blast wobble, and to how many rows.
   - a per-unit state, set and cleared in the course of an aircraft carrying units, in which the own
-    shadow of a sprite unit is drawn 14 rows higher than its draw point; no stock situation that
-    sets it is known.
+    shadow of a sprite unit is drawn 14 rows higher than its draw point; no reproducible setup
+    sets it. Backing: `unmeasured`; confidence: low.
   - which shots start the firing counter of a vehicle drawn as a sprite. A shot of a type with
     *F*<sub>f</sub> > 0 can set it to 2*F*<sub>f</sub> − 1, after which it falls by 1 per tick to
     −1, so the firing image frames would show from the last to the first, each for two ticks; but
     some shots leave it alone, and which ones is not settled. Low confidence.
-  - the standing-pose state of a vehicle drawn as a sprite (claim 22): which stock situation, if
+  - the standing-pose state of a vehicle drawn as a sprite (claim 22): which reproducible setup, if
     any, leaves a vehicle standing still part-way through a movement step, so that the row *d*
     shows, and the one event that turns the state on without being identified; and a case in which
     its walk counter also grows while it is in the air.
-  - the turret path of a vehicle drawn as a sprite (low confidence; no stock type has it, D29 (c)
-    gives the turret flag to one).
+  - the turret path of a vehicle drawn as a sprite (low confidence; D29 (c) gives the turret flag
+    to the test type).
   - which cells count as near a bridge for the row of a vehicle drawn as a sprite whose type is
     too big to fit under a bridge (claim 13). It depends on the bridge state of the vehicle's own
     cell and of its neighbours, which has not been tied to the map's terrain and overlays.
@@ -2617,9 +2691,8 @@ the current owning specs; no requested part owned here remains open.
   pinned down before scenarios can be written (slope, garrison and rock setups).
 - **The veinhole monster:** it is in no render layer and no step of a drawn frame was found to paint
   it. Whether it is visible at all in the original, and through which other drawing, is not
-  settled; stock data has a terrain type marked as a veinhole monster, and whether placing it
-  creates a veinhole monster apart from an ordinary terrain object is not settled either. Medium
-  confidence.
+  settled; no reproducible setup distinguishes it from an ordinary terrain object. Backing:
+  `unmeasured`; confidence: medium.
 - **Layer re-evaluation in flight:** with jumpjet and flying movement, an object's layer is
   re-evaluated and the object put back into a layer list (claim 4) at take-off and landing and
   at least once during flight; whether this happens at every move in flight (which would move it to
