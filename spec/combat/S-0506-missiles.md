@@ -2,11 +2,11 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0610, Q-0611, Q-0612, Q-0613, Q-0615, Q-0616, Q-0645]
 supersedes: []
@@ -101,8 +101,17 @@ above the terrain*.
    ≥ 1 gets a spawn controller with *N* slots when it is created. Each slot at once receives a new
    slot object of the spawned type, owned by the spawner's house, off the map and docked. A spawner
    therefore starts with its full count; no regeneration time is spent on the first fill.
-   - Backing: `measurable` (scenario R1)
-   - Confidence: high
+
+   Each initial slot object takes one raw creation draw from the scenario random stream and
+   one creation number, with its number following its own draw. The spawner's own draw and
+   number precede these. Slot objects take their draws and numbers in increasing slot index,
+   with each object's own initial slot objects and slaves taking theirs before the next
+   slot object takes its draw and number. All initial slot objects and their descendants
+   precede any initial slave group of the spawner made in the same creation (S-0402 claim 19).
+   S-0611 claim 14 and F5 define this recursive draw and number order and our engine's use
+   of its own deterministic creation counter rather than the original's exact global numbers.
+   - Backing: `measurable` (scenario R1; S-0611 claim 14's scenario MU12 for creation-set variants)
+   - Confidence: high for initial fill and each object's draw and number; medium for nested order
 
 2. **Launch passes.** The controller acts only in launch passes. The first pass comes 20 ticks
    after the controller is created; each later pass comes 10 ticks after the previous one. Between
@@ -867,8 +876,21 @@ scenario are allowed for that scenario alone. The observed area is the spawner, 
 flight path, its targets and the interception or damage-test patch; the bystander void rule
 applies throughout that area. These are data-only tests, not stock-data measurements.
 
-- **R1. Initial fill.** Build a spawner; read its spawn pips (S-0111) at once. Expected: full count
-  from the first tick. Falsified by pips filling over time.
+- **R1. Initial fill (claim 1).** Build a spawner; read its spawn pips (S-0111) at once. Expected:
+  full count from the first tick. Falsified by pips filling over time. Also record scenario
+  random state and creation numbers across creation, separating unrelated creations and
+  behaviour draws. A named test-map variant gives the spawner 2 slots; another also gives
+  it 3 initial slaves; a third gives each slot object's type 1 initial slave. These invented
+  counts and spawn/slave type assignments are the additional overrides for this scenario.
+  Expected: one raw draw and one number per created object, the spawner's first, followed
+  by increasing slot index, with each slot object's initial slave before the next slot
+  object, and the spawner's own slaves after all its slot objects and their descendants.
+  Compare S-0611 claim 14 and F5, whose scenario MU12 tests the same creation-set order at
+  animation-end creation. Our engine preserves this relative number order using its own
+  counter, not the original's exact numbers. A missing creation draw or number, reversed
+  slot order, or a spawner slave preceding a slot object's descendants falsifies the
+  corresponding original-order prediction. Use the common five-run count and read-only
+  recorder; sub-tick ordering unresolved by the samples is inconclusive.
 - **R2. Pass timing and targets (claims 2–5, 8).** In range of a static target, record the spawner's
   creation tick, the actual shot tick *t*₀ (not the attack-order tick), missile appearances, aim
   points and first motion. Expected for a fresh idle controller: appearance at the second pass
