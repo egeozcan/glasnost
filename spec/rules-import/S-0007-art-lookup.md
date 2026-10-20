@@ -2,11 +2,11 @@
 id: S-0007
 title: Art lookup (image indirection, sprite or voxel, companion files, theater substitution)
 topic: rules-import
-revision: 14
+revision: 15
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0008, Q-0083, Q-0951]
 supersedes: []
@@ -482,18 +482,22 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
       until rendering scenarios distinguish it.
     - Confidence: high (which files load), low (what the barrel role means on screen, S-0105)
 
-21. **No separate shadow files.** No object kind loads a separate shadow file. A sprite's shadow is
+21. **Shadow files.** Apart from the fixed-name exceptions below, no object kind loads a separate
+    shadow file. The generic infantry shadow uses a fixed-name file shared by all infantry types
+    and named by no type field (S-0107 claim 19 and Import mapping). The drop-pod shadow also uses
+    a fixed-name file (S-0102 claim 13). Otherwise, a sprite's shadow is
     drawn from image frames inside the same sprite file, and
     a voxel shadow is derived from the model (S-0105). Which image frames hold the shadow is
     given for infantry by S-0107 and for buildings by S-0108; for animations it is given by
     S-0109 (animation playback).
     For overlays, terrain objects, smudges, projectiles and particles shadow-frame selection is outside
-    this spec; this claim says only that no separate file is loaded for them. It holds for every kind in
-    this spec.
-    - Backing: `unmeasured` (A15 tests an infantry sprite only. The universal claim that no kind
-      loads a separate shadow file has no observable measurement proposal here: the absence of a
-      separate load does not itself produce a visible result, and the draft gives no established
-      separate-file name or other observable to test for the remaining kinds.)
+    this spec; this claim says only that no separate file is loaded for them. Apart from the fixed-name
+    exceptions it holds for every kind in this spec.
+    - Backing: `measurable` for the generic infantry-shadow exception (S-0107 scenario M20(e)).
+      `unmeasured` for the drop-pod exception (S-0102 claim 13 gives no controlled stock skirmish
+      setup), and for the remaining general absence of separate shadow files (A15 tests an infantry
+      sprite only; the absence of a separate load does not itself produce a visible result, and
+      no separate-file name or other observable is established for the remaining kinds).
     - Confidence: high
 
 ### Other art files of a type
@@ -517,13 +521,16 @@ This spec covers skirmish only. Network games and campaigns are out of scope.
     the rules database, or, for an animation, its own art section (so a rules layer cannot change an
     animation's translucent sprite, S-0006 claim 8). The loaded sprite is the type's light-glow image
     of S-0104 (Terms, claim 15) and S-0110 (claim 6), which changes the light-alpha values under it
-    instead of being painted. A building shows it, and so does an animation, from its creation. This
-    spec makes no claim about which other kinds show it, or when. It is unrelated to an animation's
+    instead of being painted. A building shows it, and so does an animation, from its creation. A
+    projectile shows it as a light glow from the tick it enters play; it is never painted and never
+    makes the body translucent (S-0306 claim 33). This spec makes no claim about which remaining
+    kinds show it, or when. It is unrelated to an animation's
     translucency codes (S-0109), which only make the animation's own sprite see-through. Where the glow is placed and how it writes
     the values is S-0104's and S-0110's.
-    - Backing: `measurable` (A17; part d for an animation's translucent sprite).
+    - Backing: `measurable` (A17; part d for an animation's translucent sprite; S-0306 scenario
+      P42 part h for a projectile's glow on entry and non-translucent body).
       `unmeasured` for missing-name retention across layers and every remaining type kind:
-      the proposed glow tests exercise buildings and animations only.
+      the proposed glow tests exercise buildings, animations and projectiles only.
     - Confidence: medium (high for the section an animation's key comes from; medium that an
       animation's glow shows, since the glow's own drawing is S-0104's)
 
