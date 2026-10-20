@@ -184,6 +184,32 @@ impl Lane {
             self.dir.display(),
             self.world().tick
         );
+        // GLASNOST_TRACE_BOX="x0,y0,x1,y1,step": the distinct items over a grid of screen points.
+        if let Ok(b) = std::env::var("GLASNOST_TRACE_BOX") {
+            let n: Vec<i32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+            if let [x0, y0, x1, y1, step] = n[..] {
+                let mut seen = std::collections::BTreeSet::new();
+                for x in (x0..x1).step_by(step.max(1) as usize) {
+                    for y in (y0..y1).step_by(step.max(1) as usize) {
+                        let s = self.c.session.as_mut().unwrap();
+                        seen.extend(s.trace_at(glasnost_ui::geom::Point::new(x, y)));
+                    }
+                }
+                println!("trace box {name}: {} distinct items", seen.len());
+                for l in seen {
+                    println!("  {l}");
+                }
+            }
+        }
+        // GLASNOST_TRACE_ANIMS=1: the animations playing in this shot, by name and world pixel.
+        if std::env::var_os("GLASNOST_TRACE_ANIMS").is_some() {
+            let s = self.c.session.as_ref().unwrap();
+            let live = s.loaded.live.as_ref().expect("a live game");
+            for (n, (x, y, z)) in live.playing_anims() {
+                let (wx, wy) = glasnost_render::projection::project_lifted(x, y, z);
+                println!("  anim {n} at world pixel ({wx}, {wy})");
+            }
+        }
     }
 
     fn spawn(&mut self, kind: Kind, name: &str, house: HouseId, at: CellXY) -> ObjectId {
@@ -345,12 +371,32 @@ fn anim_scenes() {
                     }
                 }
                 None if seen > 0 => {
+                    let w = lane.world();
+                    let gone: Vec<_> = w
+                        .objects
+                        .values()
+                        .filter(|o| o.rocket.is_some())
+                        .map(|o| (o.pos, o.rocket.as_ref().map(|r| r.phase)))
+                        .collect();
+                    println!("rocket down near {last:?}; rocket objects left: {gone:?}");
+                    if let Some(c) = last {
+                        let (x, y) = glasnost_render::projection::cell_centre(c.x, c.y);
+                        let centre = glasnost_render::projection::project_lifted(x, y, 0);
+                        println!("camera centre world pixel {centre:?}");
+                    }
                     // The rocket has come down: its detonation's animations play.
                     if let Some(c) = last {
                         lane.look_at(c);
                     }
-                    lane.ticks(3);
-                    lane.save("v3-rocket-impact-anims");
+                    // The pictures 1, 4 and 12 ticks after the detonation.
+                    for (wait, name) in [
+                        (1, "v3-rocket-impact-anims-1"),
+                        (3, "v3-rocket-impact-anims"),
+                        (8, "v3-rocket-impact-anims-12"),
+                    ] {
+                        lane.ticks(wait);
+                        lane.save(name);
+                    }
                     break;
                 }
                 None => {}
