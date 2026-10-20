@@ -1,9 +1,9 @@
 ---
 id: Q-1570
 title: How a projectile's body is drawn (sprite frame by direction, voxel orientation, palette)
-status: open
+status: answered
 related: [S-0007, S-0306, S-0102, S-0103, S-0104, S-0105, S-0101]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need

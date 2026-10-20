@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570]
 supersedes: []
 ---
 
@@ -23,7 +23,8 @@ anti-ground eligibility of a weapon; the line-of-fire walk that cliffs and walls
 nuclear warhead, whose detonation waits for an animation. The area damage of a detonation is S-0303,
 the range test is S-0307, where the shot starts is S-0313 and when shots are fired is S-0301.
 Claim 27 also owns the railgun shot's direct hits and cliff-collapse chance, separately from
-its particle trail. This spec covers skirmish; network games and campaigns are out of scope.
+its particle trail. Claims 28 to 33 give how the projectile's body is drawn: its sprite frame or
+voxel orientation, palette and brightness, its shadow and its light glow. This spec covers skirmish; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -154,6 +155,15 @@ has the trigger action that raises one). From S-0307: *airborne*, *elevation lev
   *X*₂.
 - **Table arcsine.** A table of 4097 single-precision values *A*ₛ[*k*] = RZ₂₄(asin(*k* / 2048 − 1)),
   *k* = 0 … 4096 (Constants). acos_t(*x*) = π/2 − *A*ₛ[trunc(2048 × (*x* + 1))].
+- **Drawing fields.** Fields that only change how a projectile looks (claims 28 to 33; Import
+  mapping). From the art section of its image: the *rotating flag*, the *low*, *high* and *rate*
+  animation fields, the *anim-palette flag* and the voxel and flat flags. From the projectile type
+  in the rules: the *shadow flag*, the *firer's-palette flag* and the *colour definition* of a
+  voxel projectile.
+- **General palette.** A palette read once when the program starts, from the same palette file as
+  S-0111's overlay palette (Import mapping), with its components multiplied by 4 as S-0103 claim 1
+  says, and given a 53-row shade table built like the anim palette's (S-0104 claim 6). It is never
+  reloaded and its shade table is never tinted.
 
 Symbols: ρ is the turn-rate field, *σ* the scatter radius (claim 4), *κ* the course lock duration,
 *α* the acceleration, *n*_c the cluster count, *λ* the cluster distance, *ξ* the direction draw,
@@ -880,6 +890,124 @@ S-0501 claim 20.
     - Confidence: high for the gates, candidate kinds, layer choice, unique hits, raw damage,
       arithmetic, degenerate comparisons and draw conditions; medium for observable hit ordering
 
+### Drawing the projectile
+
+Claims 28 to 33 are presentation only: they decide what the screen shows and never change the
+game state. They answer Q-1570.
+
+28. **What is drawn, and where.** In every drawn frame, each projectile in play is drawn in the
+    object pass of S-0102 at its *draw point*: the screen point of its position, height lift
+    included (S-0101 F1), with no further shift. Its body is a sprite image frame (claims 29 and
+    31) or, when the art section of its image has the voxel flag, the body model of its voxel art
+    (claim 30); never both. A sprite body is placed centred on the draw point (S-0102 claim 19).
+    A voxel body's copy rectangle is placed around the draw point as S-0105 claim 25 places a part.
+    The layer (surface for an image marked flat, air otherwise) and the depth are S-0102's (claims
+    3, 12 and 13). Nothing at all is drawn for the projectile (no body, no shadow, no stand-in
+    picture) when any of these holds:
+    - it is invisible (the invisible flag),
+    - it is waiting for its detonation animation (claim 25),
+    - it is drawn as a sprite and has no sprite: its image name is empty (S-0007 claim 26) or no
+      file resolves for it (S-0007 claim 27),
+    - it is drawn as a voxel model and its voxel art is absent or discarded (S-0007 claim 18; the
+      original faults instead, Edge cases).
+
+    A sprite image frame number at or above the image's frame count draws nothing, so the body and
+    its shadow (claim 32) are both missing in that drawn frame.
+    - Backing: `measurable` (scenario P42 parts a, f and g)
+    - Confidence: high (the draw point, the cases that draw nothing); medium (that an image frame
+      number beyond the frame count draws nothing)
+
+29. **Sprite image frame.** The image frame of a sprite body is chosen afresh in every drawn frame
+    from the projectile's state after its latest turn (F14):
+    - **Animated.** When the image's animation range is set (its low or its high animation field is
+      not 0), the image frame is the projectile's animation counter *a* (F15), whatever the
+      rotating flag says. The counter starts at 0 when the projectile is placed, even when the low
+      field is above 0, and advances by one every *R*ₐ turns, where *R*ₐ is the rate field (a rate of
+      0 holds each value for 256 turns). After the high field it returns to the low field.
+    - **Rotating.** Otherwise, when the image has the rotating flag, the image frame shows the
+      horizontal direction of the projectile's velocity, in 32 directions: image frame
+      (28 − *ψ*) mod 32, where *ψ* is the 32-step facing of that direction (F14). Image frame 0
+      points straight up the screen, and the numbers grow as the direction turns anticlockwise on
+      the screen: 8 points left, 16 down and 24 right. The vertical component of the velocity
+      plays no part. A velocity with no horizontal part counts as pointing map east (image frame
+      20).
+    - **Neither.** Otherwise the image frame is 0.
+    - Backing: `measurable` (scenario P42 parts a to c)
+    - Confidence: high (the direction table, its rounding and the animation counter); medium (the
+      single-precision inputs of the direction at sector boundaries)
+
+30. **Model body.** A projectile drawn as a voxel model draws only the body model of its voxel art,
+    never a turret or barrel model (S-0007 claim 27), in motion-file frame 0, freshly in every
+    drawn frame:
+    - **Orientation.** It is drawn with the body transform Rz(−(π/16)(*ψ* − 8)) · Ry(+(π/16)(*e* − 8)),
+      under S-0105's fixed view transform (claim 1) and followed by each section's motion-file
+      transform (S-0105 claims 13 to 15), where *ψ* is
+      the 32-step facing of the horizontal direction of its velocity (as in claim 29) and *e* the
+      32-step facing of its velocity's pitch facing (F14). The heading follows S-0105 claim 3 and
+      the pitch S-0105 claim 6's sign: *e* below 8 raises the nose. The pitch therefore shows in
+      steps of 11.25°, from straight up (*e* = 0) through level (*e* = 8) to straight down
+      (*e* = 16). It does not use the launch facing or the firer's facing.
+    - **Light.** Before the sections are drawn, each normal index of the model's normal table gets
+      the shade of F16: one diffuse term of the fixed light of S-0105 claim 17, scaled to 16 and
+      truncated, with no specular term and no eye vector (unlike S-0105 F4). The table is the one
+      selected by the normal mode of the model's first section. Normal indices 253 to 255 get shade
+      16, and indices at or above the table's size keep the shade an earlier draw gave them
+      (S-0105 claim 20). The pixel is then looked up in the voxel lighting table as S-0105 claim 19
+      says, and claims 21 to 23 of S-0105 rasterise it.
+    - **Palette and brightness.** The voxel image is copied to the screen with the house-colour
+      palette that the projectile type's colour definition selects (Import mapping; S-0103 claim
+      5), at brightness 1000, through the light-alpha values (S-0104 claim 15). That is the
+      53-shade palette of the named definition; with the key missing or empty, the 53-shade
+      palette of the definition already in force, at first the first definition. A name that
+      matches no definition keeps the palette in force; before any read has selected one, that is
+      the first definition's single-shade palette, which has one shade row only. It is never the
+      owner's colour, and the cell's light does not change it. Whether that palette's shade table
+      takes the light's colour is S-0104's (claim 3).
+    - **No shadow.** A voxel projectile never draws a shadow, whatever its shadow flag.
+    - The rotating flag, the animation fields and the palette flags of claim 31 do not affect it.
+    - Backing: `measurable` (scenario P42 parts d and e)
+    - Confidence: high (orientation, steps, frame 0, no shadow, fresh drawing); medium (the shade
+      rule and the palette selection)
+
+31. **Sprite palette and brightness.** A sprite body uses the first of these palettes that applies:
+    1. the anim palette (S-0103 claims 1 and 8), when the image has the anim-palette flag,
+    2. when the projectile type has the firer's-palette flag, the 53-shade house-colour palette of
+       the house that owned the firer when the projectile was created. A projectile created without
+       a firer uses the 53-shade palette of the local player's house instead, taken at each drawing,
+    3. otherwise the general palette (Terms).
+
+    The body is always drawn at brightness 1000, through the light-alpha values (S-0104 claim 15):
+    the light of its cell, its height and lighting effects do not change it, but shroud cover
+    darkens it and a light-glow image brightens it (S-0110 claims 5 and 6). The general palette's
+    shade table is never tinted (Terms), nor is the anim palette's (S-0104 claim 6), so a coloured
+    light leaves the body's colours unchanged; for the house-colour palette of case 2, S-0104
+    (claim 3) says whether the table is tinted. The body is never drawn translucent: no art field of the image
+    makes it see-through (claim 33).
+    - Backing: `measurable` (scenario P42 parts f and h)
+    - Confidence: high (the order of the three palettes, brightness 1000, no translucency); medium
+      (the palette of a projectile created without a firer)
+
+32. **Shadow.** A projectile drawn as a sprite whose type has the shadow flag (rules) also draws a
+    shadow while its shadow height *η* is greater than 0. *η* is its height above the terrain
+    (glossary), except over a high bridge's cell when that height is at least the deck height of 4
+    height levels (416 leptons): there *η* is the height above the deck, its height above the terrain
+    minus 416, and the shadow lies on the deck. (A projectile is never treated as standing on a
+    bridge deck.) The shadow is the body's own image frame of claim 29, drawn as a shadow (S-0102
+    claim 26: a plain darkening that ignores palette, brightness and light-alpha values), centred
+    on the point *L*(*η*) rows below the draw point, where *L* is S-0101's height lift of the
+    height *η*. It is drawn just before the body, so the body covers it where they overlap. Its
+    depth is S-0102's (claim 13). There is no generic shadow image.
+    - Backing: `measurable` (scenario P42 part g)
+    - Confidence: high (same image frame, placement, the height condition); medium (the deck case)
+
+33. **Light-glow image of a projectile.** A projectile whose type has a translucent sprite
+    (S-0007 claim 23) shows it as a light-glow image (S-0104 Terms, S-0110 claim 6) from the tick
+    it enters play: it changes the light-alpha values under it and is never painted. This is the
+    only thing the translucent sprite does for a projectile. Whether the glow follows the
+    projectile while it flies, and when it goes, is not established (Open questions).
+    - Backing: `measurable` (scenario P42 part h)
+    - Confidence: medium
+
 ## Formulas
 
 Every floating-point step is rounded toward zero in the original (S-0205 claim 5,
@@ -1107,6 +1235,46 @@ unit nearer to level than the surrogate gives: +1 for a positive *θ*_c, −1 fo
 correction follows the sign of *θ*_c after the negation, not the sign of the table's argument.
 With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every target.
 
+
+**F14. Drawn direction and pitch** (claims 29 and 30). Let *V* be the projectile's velocity after
+its latest turn. The *drawn facing* φ is S-0204 F3's facing with *X* = *V*ₓ and *Y* = −*V*ᵧ, each
+narrowed to single precision before F3's quotient (F3 with *X* = *Y* = 0 gives θ = 0, so φ = 16383,
+map east). Its 32-step facing is *ψ* = f₃₂(φ) = ⌊(⌊φ / 1024⌋ + 1) / 2⌋ mod 32 (glossary). The
+rotating sprite's image frame is
+
+> image frame = (28 − *ψ*) mod 32 (non-negative remainder).
+
+The *drawn pitch facing* *p* is S-0204 F6's pitch from a signed table angle, with the angle
+*α* = the table angle of F3 taken with the horizontal argument *X* = *r*(*V*ₓ² + *V*ᵧ²) (the table
+square root of the double-precision sum, so *X* ≥ 0) and the vertical argument *Y* = *V*_z, both
+narrowed to single precision. *p* is read as a value from 0 to 65535 (mod 65536), and *e* = f₃₂(*p*).
+For *α* from −π/2 to π/2 this gives *e* from 16 down to 0, with 8 for level flight. A velocity
+with no horizontal part and *V*_z > 0 gives *e* = 0, with *V*_z < 0 gives *e* = 16.
+
+**F15. Animation counter** (claim 29). The low field *a*_lo, the high field *a*_hi and the rate
+*R*ₐ are whole numbers from 0 to 255 (Import mapping). When the projectile is placed, its counter
+*a* = 0 and its countdown *c* = *R*ₐ. In each of its turns, except the waiting turns of claim 25,
+when *a*_lo ≠ 0 or *a*_hi ≠ 0:
+
+> On each such turn, the countdown decreases by one modulo 256. If the resulting countdown is nonzero, the animation counter and countdown are otherwise unchanged. If the resulting countdown is zero, the animation counter increases by one modulo 256 and the countdown is reset to `R`ₐ; when the resulting animation counter is greater than `a`ₕᵢ, it is instead set to `a`ₗₒ. These operations use whole-number values from 0 to 255, and the comparison is unsigned.
+
+All arithmetic is on whole numbers from 0 to 255 and the comparison is unsigned. Consequences:
+with 1 ≤ *R*ₐ ≤ 255, *a* advances on the *R*ₐ-th turn, the 2*R*ₐ-th turn and so on; with *R*ₐ = 0 the
+countdown wraps to 255 and *a* advances every 256 turns. The values shown are 0, 1, …, *a*_hi, then
+*a*_lo, …, *a*_hi repeatedly when *a*_lo ≤ *a*_hi. With *a*_lo > *a*_hi the counter stays at *a*_lo
+once it gets there. With *a*_hi = 255 the step after 255 gives 0, not *a*_lo, since 0 is not above
+255.
+
+**F16. Shade of a voxel projectile** (claim 30). Let *L*ᵥ be the light vector of S-0105 claim 17 and
+*M* the projectile's draw transform of claim 30 (the view included, no motion-file transform). Its
+light in the model frame is *L*ᵥ′ = *R*ₘᵀ*L*ᵥ, with *R*ₘ the rotation part of *M*, in single precision.
+For each normal *n* of the selected table (single-precision components):
+
+> *d* = *n*ₓ*L*ᵥ′ₓ + *n*ᵧ*L*ᵥ′ᵧ + *n*_z*L*ᵥ′_z; shade = 0 if *d* < 0, otherwise trunc(16 × *d*).
+
+The products and the sum are formed in at least double precision before the comparison and the
+scaling. Since the vectors have unit length, the shade lies from 0 to 16.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -1144,6 +1312,13 @@ With `quirks.building_pitch_term` off, *Z* = Δ*z* and *τ* = 20 for every targe
 | Arrival distance (steering or ranged projectile) | 64 | leptons (half-distance below 32) | T1 |
 | Pass-by window | 512 | leptons (half-distance below 256) | T1 |
 | Closing average | 60 turns, factor *f*₆₀ = the double nearest 59/60 (8857079267161975 / 2⁵³, 0.98333…), threshold 60, start value 0 | unlocked turns, factor, leptons, leptons | T1 |
+| Drawn directions of a rotating sprite | 32, image frame (28 − *ψ*) mod 32 | directions, image frame | Claim 29, F14 |
+| Drawn steps of a voxel projectile | 32-step heading, 32-step pitch (11.25° each) | facing steps | Claim 30, F14 |
+| Animation counter at placement; rate 0 period | 0; 256 | image frame; turns | F15 |
+| Shade scale of a projectile drawn as a voxel model; shade of normal indices 253 to 255 | 16; 16 | shade index | F16 |
+| Projectile body brightness | 1000 | per-mille | Claims 30 and 31 |
+| High-bridge deck height for the shadow | 4 height levels (416) | leptons | Claim 32 |
+| Motion-file frame of a projectile drawn as a voxel model | 0 | frame | Claim 30 |
 | Degeneration | 1 per turn, floor 5 | damage points | Claim 18 |
 | Proximity to a unit in the cell | 128 | leptons | T1 |
 | Anti-air proximity | 128 | leptons | T1 |
@@ -1411,6 +1586,25 @@ that no fix would change.
   surface by claim 20 (a)). The projectile type's elasticity field has no observable effect on it,
   so it is not imported. No switch.
 
+- **A voxel-flagged projectile without voxel art (departure, a fault of the original).** When a
+  projectile type's voxel art is absent or discarded (S-0007 claim 18), the original keeps the
+  type's voxel flag and faults when it next draws such a projectile on screen. Our engine draws
+  nothing for it (claim 28). No switch.
+- **Animation counter starts at 0.** An animated projectile shows image frames 0 to the low field
+  minus 1 once, before its loop from the low field to the high field starts (F15). A low field
+  above the high field leaves the counter at the low field once reached; a rate of 0 holds each
+  image frame for 256 turns. Reproduced, no switch: a mod that wants no lead-in uses image frames
+  from 0 or sets the low field to 0.
+- **Animation fields outside 0 to 255 (bad data).** The low, high and rate fields keep only their
+  value modulo 256 (Import mapping), so 256 acts as 0 and −1 as 255. Reproduced, the importer
+  warns, no switch.
+- **Too few image frames.** A rotating or animated sprite whose image has fewer image frames than
+  the number chosen draws neither body nor shadow in the drawn frames that choose a missing image
+  frame (claim 28): a rotating projectile with a one-frame image is seen only while it flies in
+  the direction of image frame 0. Reproduced, no switch; the data decides.
+- **Fog of war.** With fog of war in force, the original does not draw a projectile whose position
+  is fogged. Fog of war is not reachable in skirmish (S-0110), so this spec does not specify it.
+
 ## Import mapping
 
 | File, section | Key | Concept | Form | Absent |
@@ -1431,10 +1625,17 @@ that no fix would change.
 | rules, projectile | `DetonationAltitude` | detonation altitude (claim 11) | integer, leptons of world height | 0 |
 | rules, projectile | `Cluster` | cluster count *n*_c (claim 21) | integer | 1 |
 | rules, projectile | `AirburstWeapon` | the weapon of the airburst children (claim 21) | weapon name | none |
-| rules, projectile | `Image` | names the art section that supplies `Trailer` and `SpawnDelay` (claim 16; S-0007 claim 33, S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
+| rules, projectile | `Image` | names the art section that supplies `Trailer`, `SpawnDelay` and the art drawing fields below (claims 16 and 28 to 32; S-0007 claims 26, 27 and 33, S-0004 claim 14) | text, cut to 24 bytes, taken afresh in each layer | empty: those two fields are not read in that layer |
 | art, section named by the projectile's current non-empty rules `Image` (no arctic suffix) | `Trailer` | trailer animation (claim 16); the rules key has no effect | creating animation reference, cut to 127 bytes (S-0004); reserved no-type name clears | missing or empty keeps the reference in force; initially none; skipped when the current rules image is empty |
 | art, same selected section | `SpawnDelay` | trailer period and source of the zero-delay warning (claim 16, Edge cases); the rules key has no effect | integer ticks (S-0003) | missing or empty keeps the delay in force; initially 3 ticks; skipped when the current rules image is empty |
 | rules, projectile | `Scalable` | scalable flag (claim 16) | boolean | no |
+| art, section selected as for `Trailer` | `Rotates` | rotating flag (claim 29) | boolean | missing or empty keeps the value in force; initially no; skipped when the current rules image is empty |
+| art, section selected as for `Trailer` | `AnimLow`, `AnimHigh`, `AnimRate` | low field *a*_lo, high field *a*_hi and rate *R*ₐ of the animation counter (claim 29, F15) | integer (S-0003), kept as its value modulo 256 (0 to 255) | missing or empty keeps the value in force; initially 0 each; nothing is read when the current rules image is empty |
+| art, section selected as for `Trailer` | `AnimPalette` | anim-palette flag (claim 31) | boolean | missing or empty keeps the value in force; initially no; nothing is read when the current rules image is empty |
+| rules, projectile | `FirersPalette` | firer's-palette flag (claim 31) | boolean | no |
+| rules, projectile | `Shadow` | shadow flag (claim 32) | boolean | yes |
+| rules, projectile | `Color` | colour definition of a voxel projectile (claim 30) | colour definition name (S-0103 claim 5), compared without regard to case; selects that definition's 53-shade palette; a name with no 53-shade palette keeps the palette in force | missing or empty re-selects the 53-shade palette of the definition in force; before any read the palette in force is the first definition's single-shade palette (claim 30) |
+| none (file name fixed by the original) | `PALETTE.PAL` | the general palette's file (Terms), the same file as S-0111's overlay palette | palette file, read once at program start | — |
 | art, projectile image | `Voxel` | drawn as a voxel model (claim 6 b) | boolean | no |
 | rules, infantry, vehicle, aircraft or building type | `RadialFireSegments` | *n* (claims 2, 7) | integer | 0 |
 | art, building | `TargetCoordOffset` | aim shift (Terms) | integer triple, leptons | 0, 0, 0 |
@@ -1453,8 +1654,9 @@ that no fix would change.
 Except for the projectile image, which is taken afresh as its row specifies, each field keeps
 its value in force when a layer omits its key or skips the field's read (S-0006). The combat-damage section is
 written by role. The original also reads a projectile
-elasticity, a shrapnel weapon and count and a few draw-only fields; none of them has an effect this
-spec specifies (Edge cases, Open questions), so they are not imported here.
+elasticity and a shrapnel weapon and count; none of them has an effect this spec specifies (Edge
+cases, Open questions), so they are not imported here. The image's flat flag is S-0102's and its
+translucent sprite S-0007's (claim 23).
 
 ## Measurement scenarios
 
@@ -2567,6 +2769,81 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   fixture permits that coincidence, a separately authorised fixture is needed; no successful
   stock setup or measurement is claimed here.
 
+**P42. Drawing a projectile (claims 28 to 33, F14 to F16; Q-1570).**
+- Setup: a tiny flat skirmish map of height level 0 with ordinary terrain, evenly lit, plus a
+  high-bridge crossing and one cell lit by a coloured building light (an ordinary stock lit
+  building is enough). Named test files: a loose art file that gives a test projectile image
+  section the fields each part names; a purpose-made test sprite of 32 image frames, each frame
+  showing its own number in large digits; a purpose-made asymmetric test voxel model (a long
+  body with a fin on one side and a coloured nose) with a one-frame motion file; a loose rules
+  file whose test weapon uses a test projectile type with that image and otherwise copies a
+  stock straight projectile type. Director and mods off, game speed index 2, 800×600, scripted
+  input, a recorder of projectile positions and velocities with the tick, and tick-labelled
+  lossless screen capture with at least one drawn frame per tick. The firer is a stock turreted
+  vehicle in the middle of the map; targets are unarmed enemy vehicles of a computer player.
+- **Part a, rotating sprite.** Rotating flag on, animation fields 0. Fire at targets placed in
+  32 directions around the firer (one per run), and in eight extra runs at targets placed just
+  either side of four sector boundaries. Observable: the number in the drawn image frame in every
+  drawn frame, against the recorded velocity. Expected: image frame (28 − ψ) mod 32 with ψ from
+  F14; image frame 0 when flying straight up the screen, 8 left, 16 down, 24 right; a target
+  straight above or below changes nothing. In one more run, give the test image to a
+  vertical projectile (claim 11) launched straight up, so that its velocity has no horizontal
+  part, and record the image frame while it climbs: expected image frame 20 (a velocity with no horizontal part counts as
+  map east). Falsified by any other number, by a frame that follows the pitch, or by a
+  mirror-image numbering.
+- **Part b, control.** Rotating flag off, animation fields 0: every drawn frame shows image frame
+  0 in all 32 directions. Any other image frame falsifies claim 29's last case.
+- **Part c, animated sprite.** Rotating flag on and low, high and rate set in turn to (2, 5, 3),
+  (0, 3, 1), (5, 2, 1) and (1, 4, 0), with a slow test weapon whose flight lasts at least 300
+  ticks (use a far target and a low speed). Observable: the image frame number per tick from the
+  projectile's first drawn frame. Expected by F15: (2, 5, 3) shows 0 for its first turns, then
+  1, 2, 3, 4, 5, 2, 3, 4, 5, …, each held 3 turns; (0, 3, 1) cycles 0 to 3 each turn; (5, 2, 1)
+  shows 0, 1, 2 and then 5 for good; (1, 4, 0) changes only every 256 turns. The rotating flag
+  makes no difference. Falsified by a first image frame equal to the low field, by a different
+  hold time, or by a direction-dependent image frame.
+- **Part d, voxel orientation.** The image's voxel flag on. Fire a straight test projectile at the
+  32 targets of part a, then a steering test projectile copied from a stock missile at a far
+  target so that it climbs, levels and dives; record per tick. Expected: the body's heading takes
+  32 steps (ψ of F14) and its pitch 11.25° steps (e of F14), nose up while climbing, no shadow,
+  no turret or barrel model even when files named for them exist; the same picture at every tick
+  with the same ψ and e. Falsified by smooth pitch, pitch on a sprite, a shadow or a drawn
+  turret model.
+- **Part e, voxel light and palette.** With the projectile of part d flying level east (ψ = 8,
+  e = 8), capture its pixels; repeat with the colour definition key absent, set to a known
+  definition name in a different letter case, and set to an unknown name; then repeat over the
+  coloured-light cell. Compute the expected pixels from F16, the voxel lighting table and the
+  named definition's 53-shade palette at brightness 1000 (row 26 at light-alpha 127). Expected:
+  absent gives the first definition's 53-shade palette and an unknown name (set in the base rules
+  section of the test projectile type, so that no earlier read selected a palette) its single-shade palette, which shows no shade-row
+  change over the coloured light or at night; the named definition
+  changes the colours; the coloured light does not change them (or changes them only as S-0104
+  claim 3 says for house-colour tables). Falsified by the specular shading of S-0105 F4 or by the
+  owner's colour.
+- **Part f, sprite palette and brightness; nothing drawn.** Sprite projectile with the 32-frame
+  image: fire with no palette flag, with the anim-palette flag, with the firer's-palette flag (the
+  firer's house in a colour other than the local player's), and with both flags. Repeat each over
+  the coloured-light cell and at night-time ambient (a map lighting section of its own), and once
+  across the edge of shroud. Then fire with an empty image name and with an image name for which
+  no file exists, and with the invisible flag. Expected: general palette, anim palette, the firer's
+  house colours, and the anim palette when both flags are set; identical pixels at every light
+  except where shroud cover darkens them; nothing at all drawn in the last three runs. Falsified by
+  any light-dependent colour, a translucent body or any drawn stand-in.
+- **Part g, shadow.** The 32-frame sprite with a falling test projectile (arcing, copied from a
+  stock artillery type), shadow flag on, then off; then fire it across the high bridge so that it
+  passes the deck at heights above and below the deck height. Observable: the darkened shape, its
+  screen position against the body and the projectile's recorded height. Expected: a darkened copy
+  of the body's own image frame, its centre *L*(η) rows below the body's centre, drawn under the
+  body; none at height 0 or with the flag off; over the bridge cell above deck height it sits on the
+  deck, below deck height on the ground. Image frame numbers above the image's frame count (use a
+  copy of the test sprite cut to 8 frames) show neither body nor shadow. Falsified by a generic
+  shadow shape, a shadow of a voxel projectile, or a shadow at the ground under the deck while the
+  projectile is above the deck.
+- **Part h, light-glow image.** Give the test projectile type a translucent sprite (S-0007 claim
+  23) of a plain bright square and fire over dark ground. Expected: the light-alpha values brighten
+  under the glow from the tick the projectile enters play; the body itself is never see-through.
+  Record where the glow is in later ticks (Open questions). Falsified by a translucent body or by
+  no glow at the projectile's entry point.
+
 ## Open questions
 
 - Whether a detonation can remove the projectile that causes it, which would end a cluster early
@@ -2593,6 +2870,8 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Whether a steering projectile whose new position lies outside the legal map is removed by
   some other part of the game: T1 and T2 say it is not removed by the rows of this spec, which was
   not checked beyond them.
+- Whether the light-glow image of a projectile (claim 33) follows the projectile while it flies,
+  and when it is removed, is not established; scenario P42 part h records it.
 
 ## Questions for the project lead
 
