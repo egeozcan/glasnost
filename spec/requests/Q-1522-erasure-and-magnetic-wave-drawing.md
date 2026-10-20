@@ -1,9 +1,9 @@
 ---
 id: Q-1522
 title: What a temporal beam, a unit being erased and a magnetic wave look like
-status: open
+status: answered
 related: [S-0514, S-0607, S-0109, S-0102]
-answered-by: []
+answered-by: [S-0514]
 ---
 
 ## Need

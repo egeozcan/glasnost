@@ -2,13 +2,13 @@
 id: S-0514
 title: Chrono weapons (temporal erasure)
 topic: combat
-revision: 9
+revision: 10
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-0984]
+requests: [Q-0984, Q-1522]
 supersedes: []
 ---
 
@@ -17,7 +17,9 @@ supersedes: []
 ## Summary
 
 Temporal weapons attach to targets and erase them over time rather than reducing health.
-This spec covers attachment, progress, interruptions, completion and its extra experience gain.
+This spec covers attachment, progress, interruptions, completion and its extra experience gain,
+and how an erasing weapon's beam flash and an object being erased are drawn (claims 23 to 27).
+Drawing is client-side presentation; it never affects the simulation.
 Skirmish only; network games and campaigns are out of scope.
 
 Attacker teleport movement belongs to S-0207 claim 20; superweapon teleportation, including
@@ -34,7 +36,12 @@ before joint hand-off.
   detonation effect selected by claim 20.
 - **Temporal beam:** an attacker's persistent erasing capability, initially supplied when its
   primary weapon's warhead has the temporal flag. Gunner transfer follows S-0308 claim 6.
-  One beam attaches to at most one target. It need not be visibly drawn.
+  One beam attaches to at most one target. Nothing is drawn for it while it is attached; the
+  only drawn picture is the beam flash.
+- **Beam flash:** the short-lived wave picture made when a weapon with the radiation-beam flag
+  fires (claims 23 to 26). It is not tied to a lock and does not follow either end.
+- **Line trail:** the trailing line some objects draw behind them as they move. Only its place
+  in the draw order is used here (claim 26).
 - **Lock, let go:** attach a beam to a target, or detach it.
 - **Leading attacker:** the first attached attacker, or its replacement under claim 9.
   Others are **joined attackers**.
@@ -331,6 +338,80 @@ before joint hand-off.
     - Confidence: high (boarding alone does not release), medium (isolating retained
       attachment from the preceding arrival and fall-back events).
 
+### Presentation
+
+These claims are presentation only. Our engine draws them in the client; nothing in them feeds
+back into the simulation, and skipping a drawn frame changes nothing simulated.
+
+23. **When a beam flash is made.** Each time a weapon with the radiation-beam flag fires a shot,
+    one beam flash is made at that moment, from the firer to what the shot is aimed at. It is made
+    whatever happens to the shot afterwards: a refused lock, a ground force-fire shot and a shot
+    whose firer or target is gone at impact all have their flash. A temporal warhead does not make
+    a flash by itself: an erasing weapon without the radiation-beam flag draws none. Of the
+    weapon's line-effect flags, the laser flag wins first, then the electric-bolt flag, then the
+    radiation-beam flag, so a weapon that also has either of the first two draws that effect and
+    no beam flash. The flash's colour is the game-wide chrono beam colour when the weapon's
+    warhead has the temporal flag, and the radiation colour otherwise. Because a stationary
+    attacker holding its target does not fire again (claim 19), an erasure normally shows one
+    flash at its start and nothing afterwards while the lock lasts.
+    - Backing: `measurable` (E16 parts a and b).
+    - Confidence: high.
+
+24. **Beam flash shape and life.** The flash runs from point *S* to point *T*, both fixed when
+    it is made: *S* is the firer's fire point for its primary weapon slot with no extra displacement,
+    whichever weapon fired; *T* is the target point of an object target, or the cell's position
+    for a cell target. Neither end follows later movement. The flash is drawn in 15 consecutive
+    drawn frames, *k* = 0 to 14, and is gone from the 16th; in skirmish this is 15 cycles. In
+    frame *k* it is a chain of straight segments whose points oscillate in height only, with an
+    amplitude growing linearly from 0 (frame 0 is a straight line) towards 40 leptons (F6). A
+    flash with zero length is never drawn.
+    - Backing: `measurable` (E16 parts c and d).
+    - Confidence: high (life, growth, height-only wave); medium (the primary-slot fire point
+      for a flash fired from another weapon slot).
+
+25. **Beam flash pixels.** Each segment is a solid line one pixel wide between the screen
+    positions of its two points (S-0101 claim 5, each with its own height lift). Its colour is
+    the flash colour scaled by a factor between 0.5 and 1 that grows with the height displacement of
+    the segment's far point (F7), so the crests are brightest and the axis crossings darkest.
+    The colour is used directly, with no palette, tint or cell light, and is packed to the
+    display's 16-bit pixel format (S-0103 claim 9). Per pixel, with *a* the light-alpha value
+    (S-0104 claim 15) and depth as in F8:
+    - it is not drawn when *a* = 0 (fully shrouded).
+    - it is drawn only where its depth is strictly less than the stored depth, and it never
+      writes depth. The depth writers of S-0102 claims 9 and 10 (terrain tiles, overlays,
+      building images and non-animated terrain objects) can therefore hide parts of it, while
+      vehicles, infantry, aircraft and other object-pass drawings never do.
+    - with *a* = 127 its colour is unchanged; with any other *a* each 8-bit channel is
+      multiplied by *a*, divided by 128 and truncated, then capped at 255. Unlike a spark
+      particle (S-0616 claim 28), a light-alpha value above 127 brightens it. The original
+      lets a channel above 255 spill into its neighbouring colour field; the cap is the fixed
+      behaviour of that display glitch.
+    - Backing: `measurable` (E16 parts c, e and f).
+    - Confidence: high (colour factor, depth test without depth write); medium (which pixels
+      a segment covers between its ends, see Open questions).
+
+26. **Draw order of beam flashes.** Beam flashes are drawn in the effects group after all five
+    layers (S-0102 claim 2). Within that group lasers come first, then electric bolts, then line
+    trails, then beam flashes, all of them in each drawn frame. A beam flash therefore appears
+    over lasers, bolts, trails and every object drawn in the object pass, except where the
+    depth writers of claim 25 hide it.
+    - Backing: `measurable` (E16 part f; S-0102 scenario D13 part b for the effect group).
+    - Confidence: high.
+
+27. **An object being erased is drawn half see-through.** While an object is being erased,
+    including the leaving stage, or is phasing in (S-0513 claim 40), its body is drawn with translucency
+    code 2 (50 %), combined with any code its cloak state gives (S-0109 Terms). A building whose
+    art has the double-thick flag uses code 3 (75 %) instead. The level is fixed from the first
+    drawn frame of the state to its end: it does not follow the erasure amount, there is no
+    tint, and it applies at every detail level. It covers infantry, vehicles drawn as sprites or
+    voxels, aircraft (a landed aircraft can be locked, claim 1) and building bodies. A voxel
+    vehicle's body, turret and barrel are combined first and the translucency is applied once to
+    the combined image, so the parts do not show through each other. Shadows are drawn as
+    normal. An object its cloak state hides stays hidden. A building's slot animations follow
+    S-0109 claim 21; the sparkles follow claim 18.
+    - Backing: `measurable` (E17).
+    - Confidence: high (body code, double-thick case, fixed level); medium (shadows unchanged).
+
 ## Formulas
 
 *S*, weapon damage *d* and remaining *R* are signed 32-bit integers. Multiplication, addition
@@ -384,6 +465,50 @@ that gain's own cap and single-precision narrowing. The two gains are not combin
 uncapped increment. For F4 and F5, `quirks.chop_rounding` off selects S-0205 claim 5's
 round-to-nearest alternative; F4's table-root narrowing follows S-0204 claim 5.
 
+**F6, beam flash points** (claim 24). *D* = *T* − *S* in integer leptons, components
+(*Dx*, *Dy*, *Dz*). The length is ℓ = *r*(*Dx*² + *Dy*² + *Dz*²), with the squares and sum in
+signed 32-bit integer arithmetic with wrap (S-0205 claim 1) and *r* S-0204 claim 5's table
+root, kept unrounded in double precision. No flash is drawn when ℓ ≤ 0. In drawn frame *k*:
+
+> amplitude *A* = (*k* / 15) × 40, double precision
+>
+> segment length *s* = min(100, max(10, trunc(10 / *p*))) leptons
+>
+> *n* = trunc(ℓ / *s*), step *e* = (trunc(*Dx* / *n*), trunc(*Dy* / *n*), trunc(*Dz* / *n*))
+>
+> *M* = max(ℓ, 360), θⱼ = *c* × (2*M* × (*j* / *n*)), *h*ⱼ = sin*(θⱼ) × *A*
+>
+> point *P*ⱼ = *S* + *j* × *e*, with its height raised by trunc(*h*ⱼ)
+
+*p* = (achieved frame rate / requested frame rate)³, so at full frame rate *s* = 10 leptons.
+*s* is re-evaluated in every drawn frame. The divisions by *n* truncate toward zero. *c* is the
+double nearest π/180 and sin* is the table sine of S-0105 F1. All products are double precision, and
+every conversion to integer truncates toward zero (S-0205 claim 5). The flash consists of the consecutive segments from *P*ᵢ to *P*ᵢ₊₁ for each non-negative integer *i* satisfying *i* × *s* < ℓ. Their number is ⌈ℓ / *s*⌉, and the last segment can end up to one step beyond *T*. When *n* = 0 (ℓ < *s*) the flash is one straight
+segment from *S* to *T*; in the original that case divides by zero and its wave is undefined,
+a display bug fixed without a switch.
+
+**F7, segment colour** (claim 25). For flash colour channels (*R*, *G*, *B*), 8 bits each, and
+segment *i*:
+
+> *f*ᵢ = 0.5 + (|trunc(*h*ᵢ₊₁)| × 0.5) / 40, double precision
+>
+> channel′ = trunc(channel × *f*ᵢ)
+
+The 8-bit channel used by the light-alpha rule is the packed 16-bit field restored to 8 bits
+with its dropped low bits zero.
+
+**F8, beam flash depth** (claim 25). With *L*(*z*) the height lift of S-0101 F2 and *d*(*r*)
+the screen-row depth of S-0102 F1, a segment's depth bias at its first point is
+*b*₀ = Δ − *L*(*z*₀) − 2 and at its second point *b*₁ = −*L*(*z*₁) − 2, using the raised heights.
+Δ is the screen row of *S* minus the screen row of *T*, both with their height lift. The whole
+segment uses the bias of its leftmost on-screen end. When the view edge clips that end, its bias
+moves towards the other end's bias by |trunc((λ′ / λ) × (*b*_other − *b*_left))|, where λ is the
+segment's screen length and λ′ the clipped-off part, each the table root of a squared pixel
+distance truncated to an integer, and the ratio is taken in double precision. A pixel on row *r*
+passes when (*d*(*r*) + *b*) mod 65536 is less than the stored depth. The original sets Δ to 0
+when *S* and *T* have the same world y coordinate; that drawing artefact is fixed here without a
+switch.
+
 ## Constants
 
 | Name | Value | Unit | Role |
@@ -394,6 +519,13 @@ round-to-nearest alternative; F4's table-root narrowing follows S-0204 claim 5.
 | Mobile sparkle displacement | 120 | leptons per horizontal axis | Infantry and vehicles |
 | Cell conversion | 256 | leptons per cell | F4 |
 | Warp distance default | 5 | cells | Absent-key default |
+| Beam flash life | 15 | drawn frames | Claim 24 |
+| Beam flash full amplitude | 40 | leptons | F6, F7 |
+| Beam flash segment length | 10 to 100 | leptons | F6; 10 at full frame rate |
+| Beam flash wave minimum length | 360 | leptons | F6 |
+| Segment colour floor | 0.5 | factor | F7 |
+| Beam flash depth constant | −2 | depth units | F8 |
+| Erasure body translucency | 2 (50 %), or 3 (75 %) for double-thick buildings | translucency code | Claim 27 |
 
 ## State and ordering
 
@@ -429,6 +561,11 @@ gains are present by target removal.
 - `quirks.erasure_double_experience`, default original: F5 supplements ordinary credit.
   Off: only ordinary S-0311 credit remains.
 - Type strength rather than health is intentional. Zero-step indefinite attachment is retained.
+- Beam flash display bugs, fixed without a switch, per the lead decision of 2026-10-14: the
+  zero-step division of a very short flash in F6, the light-alpha channel spill (claim 25) and the zeroed
+  depth term at equal world y in F8.
+- The last segment's overshoot of up to one step past *T* and the frame-rate dependent segment
+  length are kept as the original look.
 
 ## Import mapping
 
@@ -460,6 +597,11 @@ gains are present by target removal.
 | `UndeploysInto`, building type, and `Foundation`, building art | Packing-building notice exclusion | vehicle name and foundation token | S-0415 claim 9 and S-0108 |
 | `IsGattling`, `RateDown`, numbered `Stage1` and `EliteStage1` keys, object type | Spin-down flag, amount and thresholds | boolean and integers | Held value from earlier layers; initially no for the flag and 0 for the amounts and thresholds |
 | Numbered `DamageFireOffset0` keys, building art | Building sparkle positions | drawing-coordinate pairs | S-0302 claim 13 |
+| `IsRadBeam`, weapon | Makes a beam flash on firing (claim 23) | boolean | no |
+| `IsLaser`, `IsElectricBolt`, weapon | Line effects that outrank the beam flash (claim 23) | booleans | no for each |
+| `ChronoBeamColor`, AudioVisual | Flash colour with a temporal warhead | three integers: red, green, blue | 0, 0, 0 |
+| `RadColor`, Radiation | Flash colour with any other warhead | three integers: red, green, blue | not established here |
+| `DoubleThick`, building art | Code 3 instead of 2 while being erased (claim 27) | boolean | no |
 
 ## Measurement scenarios
 
@@ -651,6 +793,35 @@ is falsified by the opposite result under the same conditions.
   expect only an open-topped leader to face claim 11's distance release. Loss of capability
   at boarding, detachment solely at boarding, failure of otherwise eligible post-boarding
   delivery, or a closed-transport distance release falsifies the respective part.
+- **E16, beam flash (claims 23 to 26, F6 to F8).** Capture every drawn frame at full frame
+  rate from the firing tick, not the lock tick, and record the achieved frame rate; a run below
+  full rate is void for segment counts. (a) A stock temporal weapon fires at a stationary
+  vehicle: record whether a flash appears, in how many frames, and whether anything is drawn
+  between attacker and target later in the lock. Expect one flash for 15 frames and nothing
+  afterwards. Repeat with a refused lock and a ground force-fire shot: expect the flash in both.
+  (b) Named map weapon variants: a temporal warhead without the radiation-beam flag (expect no
+  flash), the radiation-beam flag together with the laser or electric-bolt flag (expect only
+  the laser or bolt), and a non-temporal warhead with the flag (expect the radiation colour).
+  (c) With a named distinctive chrono beam colour, place firer and target on flat open ground
+  at a known separation and read the pixels of each frame: expect a straight line in frame 0,
+  height-only waves whose peak grows by 40/15 leptons per frame, ⌈ℓ/10⌉ segments, and segment
+  colours between half and full of the named colour per F7. (d) Move the target during the
+  flash: expect the flash end to stay put. (e) Run the flash behind a building body and across
+  a raised terrain edge or tree: expect the hidden parts to match F8's depth test, and the
+  flash to show over infantry, vehicles and aircraft wherever no writer hides it. (f) Fire a laser, an electric bolt and a flash across one
+  spot in the same frame: expect the flash on top where they cross. Partial shroud over the
+  flash path checks the light-alpha rule. A flash with another life, a following end, a
+  different segment count at full rate or a different stacking falsifies the respective part.
+- **E17, erased object look (claim 27).** At each detail level, lock a voxel vehicle, a sprite
+  vehicle where stock data has one, an infantry unit, a landed aircraft, an ordinary building
+  and a building with the double-thick art flag. Capture every frame from lock to removal and
+  compare pixels with an unlocked copy over a known background. Expect 50 % translucency (75 %
+  for the double-thick building) from the first locked frame, unchanged until removal, no
+  tint, no see-through of the turret over the body, and unchanged shadows. Repeat with a
+  cloaked or partly cloaked target where the cloak rules allow a lock, and with a unit
+  arriving by chronoshift (phasing in): expect the combined code of S-0109 Terms and the same
+  50 % look. A level that changes with progress, a tint, a detail-level dependency or a
+  per-part blend falsifies the claim.
 
 ## Open questions
 
@@ -659,6 +830,11 @@ is falsified by the opposite result under the same conditions.
 - Exact world placement of building sparkles from their drawing-coordinate positions.
 - Ordinary beam release's possible firing-side rearm restart; release alone does not establish it.
 - Distance arithmetic for squared separations at or above 2⁵³ square leptons.
+- Which pixels a beam flash segment covers between its two ends (any one-pixel-wide,
+  8-connected line with both ends included is assumed), and how out-of-range chrono beam
+  colour values are stored.
+- The exact achieved and requested frame-rate measures behind *p* in F6; only full-rate
+  behaviour (*s* = 10 leptons) is settled.
 
 ## Cross-spec changes required before hand-off
 
@@ -677,3 +853,11 @@ is falsified by the opposite result under the same conditions.
   that it tests possession of an attached temporal beam, not the currently selected weapon.
   Share its common-effects once-per-tick limit and aircraft early exits. Stop-order target
   clearing and processing stop or sleep alone do not count as fall-back (claim 14).
+- S-0102 claim 2: beam flashes, the drawing of radiation-beam weapons including erasing ones
+  (claims 23 to 26), are depth-tested against the stored depth and never write it, so the depth
+  writers of S-0102 claims 9 and 10 can hide parts of them; this qualifies "no object paints
+  over them". Within the effect group the order is lasers, electric bolts, line trails, then
+  beam flashes.
+- S-0109 claim 21 and Terms: the building body's own erasure translucency (code 2, or 3 when
+  double-thick) is claim 27; claim 21 stays limited to slot animations.
+- S-0513 claim 40: a phasing-in object's body is drawn with claim 27's translucency.
