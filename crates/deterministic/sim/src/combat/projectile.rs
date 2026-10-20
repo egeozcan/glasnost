@@ -565,6 +565,42 @@ fn radial_yaw(w: &World, id: ObjectId, n: i32, k: i32) -> i32 {
     i32::from(v as i64 as u16)
 }
 
+/// The aim point of S-0306 claim 3 towards target `t` of `firer`: its
+/// reference point without an aim shift, led by F6 when it is a vehicle its
+/// locomotor is moving. Read-only: the target line's end point (S-0301
+/// claim 24 e), recomputed in every drawn frame.
+pub fn led_aim_point(w: &World, firer: ObjectId, t: Target) -> Pos {
+    // spec: S-0306 claim 3 (the target's reference point, no aim shift)
+    let aim = ref_point(w, t);
+    match t {
+        // spec: S-0306 claim 3 (a moving vehicle target is led, F6)
+        Target::Object(x)
+            if w.obj(x).is_some_and(|o| o.kind == Kind::Vehicle)
+                && crate::occupancy::in_progress(w, x) =>
+        {
+            lead(w, firer, x, aim)
+        }
+        _ => aim,
+    }
+}
+
+/// The 32-step drawn facing ψ and drawn pitch facing *e* of a projectile's
+/// velocity `v` after its latest turn (S-0306 F14): presentation only.
+pub fn drawn_facings(
+    w: &World,
+    v: [F64; 3], // nocite: three components x, y, z
+) -> (u8, u8) {
+    let mode = w.rules().mode;
+    // spec: S-0306 F14 (φ: S-0204 F3 with X = Vₓ and Y = −V_y in single precision; both 0 give 16383)
+    let phi = glasnost_num::geom::direction_real(v[0], v[1].negated(), mode);
+    // spec: S-0306 F14 (p: S-0204 F6's pitch with X = r(Vₓ² + V_y²) and Y = V_z, read modulo 65536)
+    let p = pitch_of(w, v) as u16;
+    // spec: S-0306 F14 and glossary (f₃₂(φ) = ⌊(⌊φ / 1024⌋ + 1) / 2⌋ mod 32)
+    #[allow(clippy::manual_div_ceil)] // written as the glossary's formula
+    let f32_of = |f: u16| (((u32::from(f) / 1024 + 1) / 2) % 32) as u8;
+    (f32_of(phi), f32_of(p))
+}
+
 /// The lead of S-0306 claim 3, F6.
 fn lead(w: &World, firer: ObjectId, target: ObjectId, aim: Pos) -> Pos {
     let r = w.rules();

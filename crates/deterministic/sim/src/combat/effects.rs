@@ -56,6 +56,16 @@ pub enum Effect {
         /// Damage amount D.
         damage: i32,
     },
+    /// A shot that reached the choice of a shot animation started its
+    /// vehicle's target line (S-0301 claim 24 a): the vehicle's type has the
+    /// target-laser flag. Presentation only: the drawing keeps the line's
+    /// timer for the local player who owned the vehicle at the shot.
+    TargetLine {
+        /// The vehicle.
+        firer: ObjectId,
+        /// Its owner at the shot (claim 24 a: the owner test is made then).
+        house: Option<crate::world::HouseId>,
+    },
     /// A shot left a firer (S-0301).
     Shot {
         /// The firer.

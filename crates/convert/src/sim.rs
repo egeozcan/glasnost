@@ -2412,9 +2412,13 @@ impl Builder<'_> {
                 image.clone()
             })
             .collect();
+        // A projectile's art keeps its own image rule (S-0007 claim 26), which this walk does not follow.
         if let (Some(last), Some(a)) = (
             out.last_mut(),
-            self.i.arts.and_then(|a| a.get(&(kind, index))),
+            self.i
+                .arts
+                .filter(|_| kind != Kind::Projectiles)
+                .and_then(|a| a.get(&(kind, index))),
         ) {
             last.clone_from(&a.image);
         }

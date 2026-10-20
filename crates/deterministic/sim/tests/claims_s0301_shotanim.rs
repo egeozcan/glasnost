@@ -1,5 +1,5 @@
 //! Claim tests for shot animations (S-0301 claims 20 to 23, Formulas F7
-//! and F8), on synthetic data: invented test animations T0 … T15 and test
+//! and F8) and the target line's start (claim 24 a), on synthetic data: invented test animations T0 … T15 and test
 //! weapons modelled on scenario F19's (W8, W16, W1, W0, WG, WG0, WP, WP8),
 //! each firing the invisible, draw-free projectile Bullet.
 //!
@@ -543,5 +543,72 @@ mod garrisoned {
                 }
             }
         }
+    }
+}
+
+/// The target-line events of the last shot: firer and house.
+fn target_lines(w: &World) -> Vec<(ObjectId, Option<glasnost_sim::world::HouseId>)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::TargetLine { firer, house } => Some((*firer, *house)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0301 claim 24 a (every shot that reaches the shot-animation choice starts the target line of a vehicle whose type has the target-laser flag, whether or not a type is found; the owner at the shot is reported; only a vehicle draws it)
+#[test]
+fn claim_24_a_every_choosing_shot_starts_the_target_line() {
+    for wpn in ["W1", "W0", "W8"] {
+        let mut r = rules_with(wpn, false);
+        r.sim.vehicles.get_mut("CART").unwrap().target_laser = Some(true);
+        let (mut w, a, b) = duel(&r, Kind::Vehicle, "CART");
+        let owner = w.obj(a).unwrap().owner;
+        let _ = shoot(&mut w, a, Target::Object(b));
+        assert_eq!(target_lines(&w), [(a, owner)], "{wpn}");
+    }
+    // Without the flag: no line.
+    let r = rules_with("W1", false);
+    let (mut w, a, b) = duel(&r, Kind::Vehicle, "CART");
+    let _ = shoot(&mut w, a, Target::Object(b));
+    assert!(target_lines(&w).is_empty());
+    // The flag on an infantry type shows nothing.
+    let mut r = rules_with("W1", false);
+    r.sim.infantry.get_mut("WALKER").unwrap().target_laser = Some(true);
+    let (mut w, a, b) = duel(&r, Kind::Infantry, "WALKER");
+    let _ = shoot(&mut w, a, Target::Object(b));
+    assert!(target_lines(&w).is_empty());
+}
+
+// spec: S-0301 claim 24 a (not started by the other exclusions of claim 23: a spawner weapon's shot, a disc laser's firing, a drain attempt, a suicide weapon's firing, a void shot)
+#[test]
+fn claim_24_a_excluded_shots_start_no_target_line() {
+    for flag in ["spawner", "disc", "drain", "suicide", "void"] {
+        let mut r = rules_with("W1", false);
+        r.sim.vehicles.get_mut("CART").unwrap().target_laser = Some(true);
+        r.sim.projectiles.insert(
+            "SlowArc".into(),
+            glasnost_rules::sim::ProjectileType {
+                arcing: Some(true),
+                rot: Some(1),
+                ..Default::default()
+            },
+        );
+        let wpn = r.sim.weapons.get_mut("W1").unwrap();
+        match flag {
+            "spawner" => wpn.spawner = Some(true),
+            "disc" => wpn.disk_laser = Some(true),
+            "drain" => wpn.drain_weapon = Some(true),
+            "suicide" => wpn.suicide = Some(true),
+            _ => {
+                // An arcing projectile with a turn rate at speed 1 has no launch pitch (S-0306 claim 6 a).
+                wpn.projectile = Some("SlowArc".into());
+                wpn.speed = Some(1);
+            }
+        }
+        let (mut w, a, b) = duel(&r, Kind::Vehicle, "CART");
+        let _ = shoot(&mut w, a, Target::Object(b));
+        assert!(target_lines(&w).is_empty(), "{flag}");
     }
 }

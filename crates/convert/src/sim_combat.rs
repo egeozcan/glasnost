@@ -3174,8 +3174,19 @@ impl Builder<'_> {
     pub(super) fn projectile_combat(&mut self, rec: &mut Rec, index: usize, t: &TypeRec) {
         let kind = Kind::Projectiles;
         self.cfields(rec, t, kind, PROJECTILE_COMBAT);
-        // spec: S-0306 Import mapping (art Voxel of the projectile image: a boolean)
-        if let Some(b) = self.art_bool(kind, index, t, "Voxel") {
+        // spec: S-0306 Terms and Import mapping (art Voxel of the projectile image: a boolean; the
+        // image of S-0007 claims 26 and 27, the same voxel-drawn property the drawing uses)
+        let read = self.art_bool(kind, index, t, "Voxel");
+        let voxel = match self
+            .i
+            .arts
+            .and_then(|a| a.get(&(kind, index)))
+            .and_then(|a| a.projectile.as_ref())
+        {
+            Some(look) => (look.voxel || read.is_some()).then_some(look.voxel),
+            None => read,
+        };
+        if let Some(b) = voxel {
             rec.put("voxel", jsonc::boolean(b));
         }
         let name = format!("projectiles {}", show(&t.name));

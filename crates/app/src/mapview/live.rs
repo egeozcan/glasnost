@@ -72,6 +72,8 @@ pub fn combine_codes(
 /// The fixed seed of the viewer's sandbox games (our own choice: the
 /// viewer has no lobby).
 pub const SANDBOX_SEED: u32 = 1;
+/// The ticks a target line is shown after its starting shot (S-0301 claim 24 b).
+const TARGET_LINE_TICKS: i32 = 15; // spec: S-0301 claim 24 b (drawn while 0 ≤ t − t₀ < 15, for 15 ticks)
 
 // ---------------------------------------------------------------------------
 // Pacing (S-0201 claims 2 to 5)
@@ -175,6 +177,8 @@ pub enum Entrant {
     Layered(usize),
     /// A particle (S-0616 claim 30), by its object number.
     Particle(ObjectId),
+    /// A projectile in flight (S-0306 claim 28), by its object number.
+    Projectile(ObjectId),
 }
 
 /// The object pass's ground layer: a list fully sorted by sort key for
@@ -366,6 +370,15 @@ pub struct Live {
     /// its import entry and whether its art has a sprite (S-0007 claim
     /// 28), `None` for a name the import does not list.
     particle_table: Vec<Option<(super::particles::ParticleEntry, bool)>>,
+    /// Every projectile type of the simulation's rules, by its index: its
+    /// import registration index and drawing fields (S-0306 Terms), `None`
+    /// for a name the import does not list.
+    projectile_table: Vec<Option<(usize, glasnost_convert::art::ProjectileLook)>>,
+    /// The projectiles that drew items in the last redraw.
+    projectiles_drawn: BTreeSet<ObjectId>,
+    /// Each vehicle's target-line timer: the tick number *t*₀ of its latest
+    /// starting shot (S-0301 claim 24 b).
+    target_lines: BTreeMap<ObjectId, i32>,
     /// The drawing's cosmetic stream, for the playback draws the
     /// simulation does not take (a seam: S-0109 claim 28 puts them on the
     /// scenario stream once playback is in the simulation).
@@ -871,6 +884,26 @@ impl Live {
                 })
             })
             .collect();
+        let names: Vec<Vec<u8>> = rules
+            .combat
+            .projectiles
+            .iter()
+            .map(|t| name_bytes(&t.name))
+            .collect();
+        let projectile_table = super::projectiles::entries(inputs.import, &names)
+            .into_iter()
+            .map(|e| {
+                e.and_then(|idx| {
+                    let look = inputs
+                        .import
+                        .arts
+                        .get(&(Kind::Projectiles, idx))?
+                        .projectile
+                        .clone()?;
+                    Some((idx, look))
+                })
+            })
+            .collect();
         // Our own choice: the cosmetic stream takes the game's seed, like the
         // unsynchronised stream of S-0202 claim 8.
         let cosmetic = glasnost_sim::rng::Rng::new(setup.seed);
@@ -942,6 +975,9 @@ impl Live {
             anim_serial: 0,
             anim_table,
             particle_table,
+            projectile_table,
+            projectiles_drawn: BTreeSet::new(),
+            target_lines: BTreeMap::new(),
             cosmetic,
             debug_markers: true,
             move_flash,
@@ -1118,9 +1154,22 @@ impl Live {
             .values()
             .flat_map(|s| s.particles.iter().map(|p| p.id))
             .collect();
+        let projectiles: Vec<(ObjectId, bool)> = self
+            .world
+            .projectiles
+            .values()
+            .map(|p| {
+                (
+                    p.id,
+                    self.projectile_look(p.weapon).is_some_and(|(_, l)| l.flat),
+                )
+            })
+            .collect();
+        let in_play: BTreeSet<ObjectId> = projectiles.iter().map(|(id, _)| *id).collect();
         self.layers.retain(|e| match e {
             Entrant::Anim(s) => anims.get(&s).is_some_and(|l| *l != Layer::Ground),
             Entrant::Particle(id) => particles.contains(&id),
+            Entrant::Projectile(id) => in_play.contains(&id),
             _ => true,
         });
         for (serial, layer) in anims {
@@ -1135,6 +1184,23 @@ impl Live {
                 self.layers.place(Entrant::Particle(id), Layer::Air);
             }
         }
+        for (id, flat) in projectiles {
+            if !self.layers.contains(Entrant::Projectile(id)) {
+                // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
+                let layer = if flat { Layer::Surface } else { Layer::Air };
+                self.layers.place(Entrant::Projectile(id), layer);
+            }
+        }
+    }
+
+    /// A projectile type's import index and drawing fields, by the weapon
+    /// that fired it.
+    fn projectile_look(
+        &self,
+        weapon: glasnost_sim::combat::data::WeaponId,
+    ) -> Option<&(usize, glasnost_convert::art::ProjectileLook)> {
+        let p = self.rules.combat.weapon(weapon).projectile?;
+        self.projectile_table.get(p as usize)?.as_ref()
     }
 
     /// The buildings' slot animations after a tick (S-0108 claims 11, 12,
@@ -1964,6 +2030,13 @@ impl Live {
                     (TransientKind::Burst(combat::burst_half_width(radius)), pos)
                 }
                 Effect::Anim { .. } | Effect::ShotAnim { .. } => continue,
+                Effect::TargetLine { firer, house } => {
+                    // spec: S-0301 claim 24 a and b (started only for the local player who owns the vehicle at the shot; a new start restarts the 15 ticks; our viewer with no local player shows every line)
+                    if self.viewer.is_none_or(|v| house == Some(v)) {
+                        self.target_lines.insert(firer, now);
+                    }
+                    continue;
+                }
                 Effect::Killed { .. } => {
                     self.counts.kills += 1;
                     continue;
@@ -2288,6 +2361,7 @@ impl Live {
                 self.apply_cloak(id, &mut e.items);
             }
         }
+        self.draw_target_lines(inputs, scene, &mut by_code);
         // Buildings the game removed leave the cell pass and the ground
         // layer; so do the map's gates, which are drawn live.
         let mut gone: BTreeSet<u32> = self
@@ -2497,7 +2571,8 @@ impl Live {
         }
         self.counts.anims_drawn = anim_items.len();
         self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
-        let particle_items = self.particle_items(inputs, scene);
+        let mut particle_items = self.particle_items(inputs, scene);
+        particle_items.extend(self.projectile_items(inputs, scene));
         scene.spots.clear();
         let waves = self.lines.wave_spots(shown, self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
@@ -2529,7 +2604,7 @@ impl Live {
                         scene.items.extend(g.items);
                     }
                 }
-                Entrant::Layered(_) | Entrant::Particle(_) => {}
+                Entrant::Layered(_) | Entrant::Particle(_) | Entrant::Projectile(_) => {}
             }
         }
         self.draw_layers(
@@ -2639,6 +2714,136 @@ impl Live {
         ids.into_iter().zip(drawn).collect()
     }
 
+    /// The items of every projectile in flight (S-0306 claims 28 to 32), by
+    /// object number; empty for one that draws nothing.
+    fn projectile_items(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+    ) -> BTreeMap<ObjectId, Vec<Item>> {
+        use super::build::{ProjectileDraw, ProjectilePalette};
+        use super::projectiles as look;
+        let house_name = |w: &World, h: Option<HouseId>| {
+            h.and_then(|h| w.houses.get(usize::from(h.0)))
+                .map(|h| h.name.as_bytes().to_vec())
+                .unwrap_or_default()
+        };
+        let mut list = Vec::new();
+        let mut ids = Vec::new();
+        for p in self.world.projectiles.values() {
+            // spec: S-0306 claim 28 (nothing for a projectile waiting for its detonation animation)
+            if p.nuke_wait.is_some() {
+                continue;
+            }
+            let Some((idx, l)) = self.projectile_look(p.weapon).cloned() else {
+                continue;
+            };
+            // spec: S-0306 claim 28 (nothing at all for an invisible projectile)
+            if l.inviso {
+                continue;
+            }
+            // spec: S-0306 F14 (ψ and e from the velocity after its latest turn)
+            let facings = glasnost_sim::combat::projectile::drawn_facings(&self.world, p.vel);
+            let palette = if l.anim_palette {
+                // spec: S-0306 claim 31 case 1 (the anim-palette flag first)
+                ProjectilePalette::Anim
+            } else if l.firers_palette {
+                // spec: S-0306 claim 31 case 2 (the house that owned the firer at creation; without a
+                // firer the local player's house at each drawing; our viewer with no local player
+                // takes the projectile's attacking house)
+                let house = if p.firer.is_some() {
+                    p.firer_house
+                } else {
+                    self.viewer.or(p.house)
+                };
+                ProjectilePalette::House(house_name(&self.world, house))
+            } else {
+                // spec: S-0306 claim 31 case 3 (the general palette)
+                ProjectilePalette::General
+            };
+            // spec: S-0306 claims 30 and 32 (a sprite projectile with the shadow flag while η > 0; a voxel one never)
+            let shadow = (l.shadow && !l.voxel)
+                .then(|| look::shadow(&self.world, p.pos))
+                .flatten();
+            list.push(ProjectileDraw {
+                idx,
+                pos: (p.pos.x, p.pos.y, p.pos.z),
+                facings,
+                // spec: S-0306 claim 29 (chosen afresh in every drawn frame from the state after its latest turn)
+                frame: look::sprite_frame(&l, facings.0, p.turns),
+                palette,
+                shadow,
+            });
+            ids.push(p.id);
+        }
+        let (drawn, notes) = self.painter.projectiles(inputs, scene, &list);
+        self.notes.extend(notes);
+        self.projectiles_drawn = ids
+            .iter()
+            .zip(&drawn)
+            .filter(|(_, i)| !i.is_empty())
+            .map(|(id, _)| *id)
+            .collect();
+        ids.into_iter().zip(drawn).collect()
+    }
+
+    /// For the lanes: the projectiles that drew a body in the last frame and
+    /// the vehicles whose target-line timer runs.
+    pub fn projectile_counts(&self) -> (usize, usize) {
+        (self.projectiles_drawn.len(), self.target_lines.len())
+    }
+
+    /// Appends each vehicle's target line to its picture (S-0301 claim 24 b
+    /// to h): while 0 ≤ *t* − *t*₀ < 15, the vehicle is drawn and it has a
+    /// target, a dotted line from its turret pivot to the led aim point of
+    /// its current target, after everything else its drawing step draws.
+    fn draw_target_lines(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        by_code: &mut BTreeMap<u32, GroundEntry>,
+    ) {
+        let t = self.shown_tick();
+        let world = &self.world;
+        // A timer past its 15 ticks, or of a vehicle no longer in the game, has nothing more to draw.
+        self.target_lines
+            .retain(|id, t0| t - *t0 < TARGET_LINE_TICKS && world.obj(*id).is_some());
+        let lines: Vec<(ObjectId, i32)> = self.target_lines.iter().map(|(k, v)| (*k, *v)).collect();
+        for (id, t0) in lines {
+            // spec: S-0301 claim 24 b (drawn in every drawn frame with 0 ≤ t − t₀ < 15)
+            if !(0..TARGET_LINE_TICKS).contains(&(t - t0)) {
+                continue;
+            }
+            let Some(o) = self.world.obj(id) else {
+                continue;
+            };
+            // spec: S-0301 claim 24 c (only while the vehicle has a target at the moment of drawing)
+            let Some(target) = o.target else {
+                continue;
+            };
+            // spec: S-0301 claim 24 c (no line when the vehicle's own drawing step does not run)
+            let Some(entry) = by_code
+                .get_mut(&sim_code(id))
+                .filter(|e| !e.items.is_empty())
+            else {
+                continue;
+            };
+            // spec: S-0301 claim 24 d (the turret pivot, recomputed in every drawn frame)
+            let a = glasnost_sim::combat::position::turret_pivot(&self.world, id);
+            // spec: S-0301 claim 24 e (the led aim point of the current target, recomputed in every drawn frame)
+            let b = glasnost_sim::combat::projectile::led_aim_point(&self.world, id, target);
+            // spec: S-0301 claim 24 f (both projected as every object's position, height lift included)
+            let start = project_lifted(a.x, a.y, a.z);
+            let end = project_lifted(b.x, b.y, b.z);
+            // spec: S-0301 claim 24 g (the dots swap from each tick to the next; which phase a tick
+            // draws is low confidence there, ours: the tick number's parity)
+            let phase = t.rem_euclid(2) == 1;
+            let items = self.painter.target_line(inputs, scene, start, end, phase);
+            // spec: S-0301 claim 24 h (right after its vehicle's picture, in its place in the drawing order)
+            entry.items.extend(items);
+        }
+    }
+
     /// The sort keys of the entrants of the layers other than ground
     /// (S-0102 claim 5), for `quirks.unsorted_upper_layers` off.
     fn upper_keys(&self) -> BTreeMap<Entrant, i64> {
@@ -2663,6 +2868,13 @@ impl Live {
                 );
             }
         }
+        for p in self.world.projectiles.values() {
+            // spec: S-0102 claim 5 (X + Y of the position)
+            keys.insert(
+                Entrant::Projectile(p.id),
+                i64::from(p.pos.x) + i64::from(p.pos.y),
+            );
+        }
         for (i, (_, g)) in self.static_layered.iter().enumerate() {
             keys.insert(Entrant::Layered(i), g.key);
         }
@@ -2672,8 +2884,8 @@ impl Live {
     /// Draws the layers other than ground that `which` picks, layer by
     /// layer in drawing order, each in its list's order (S-0102 claims 1,
     /// 3, 4 and 7; S-0616 claim 30): the static entries, the playing
-    /// animations (`anims`, by serial number), the particles (`particles`)
-    /// and the mobile objects (`mobiles`, taken out as drawn); the
+    /// animations (`anims`, by serial number), the particles and projectiles
+    /// (`particles`, by object number) and the mobile objects (`mobiles`, taken out as drawn); the
     /// magnetic waves (`waves`, with the next animation serial at their
     /// creation) in the air layer (S-0607 claim 26).
     fn draw_layers(
@@ -2728,7 +2940,7 @@ impl Live {
                             scene.items.extend_from_slice(items);
                         }
                     }
-                    Entrant::Particle(id) => {
+                    Entrant::Particle(id) | Entrant::Projectile(id) => {
                         if let Some(items) = particles.get(&id) {
                             scene.items.extend_from_slice(items);
                         }
@@ -2753,9 +2965,14 @@ impl Live {
     fn draw_effects(&mut self, scene: &mut Scene) {
         scene.items.truncate(self.objects_end);
         let rules = self.rules.clone();
+        // S-0306 claim 28: the game view draws only the projectile's art; the debug-markers view
+        // marks a projectile that drew nothing (no stand-in picture in the game view).
         for p in self.world.projectiles.values() {
             let kind = rules.combat.projectile_of(p.weapon);
-            if kind.is_some_and(|k| k.inviso) {
+            if kind.is_some_and(|k| k.inviso)
+                || !self.debug_markers
+                || self.projectiles_drawn.contains(&p.id)
+            {
                 continue;
             }
             let m = Marker::Projectile {

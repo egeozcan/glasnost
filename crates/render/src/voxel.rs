@@ -1075,6 +1075,60 @@ pub fn shade_table(rot: &Mat34, mode: u8, quirks: &VoxelQuirks) -> [u8; 256] {
     out
 }
 
+/// The shade index a voxel projectile's draw gives each normal index 0–255
+/// (S-0306 claim 30, F16): one diffuse term of the fixed light brought into
+/// the model frame by the rotation of `draw` (the projectile's transform of
+/// [`projectile_body`], view included, no motion-file transform), with no
+/// specular term and no eye vector: 0 when *d = n · L′* is negative, else
+/// trunc(16 *d*). `mode` is the normal mode of the model's first section.
+/// Indices 253–255 get 16; the other indices the table does not cover keep
+/// an earlier draw's shade, which a stateless draw gives as the
+/// program-start value (16 with `quirks.voxel_stale_normal_shades` off).
+pub fn projectile_shade_table(draw: &Mat34, mode: u8, quirks: &VoxelQuirks) -> [u8; 256] {
+    // spec: S-0306 F16 (L′ = Rₘᵀ L in single precision)
+    let light = light_in_model_frame(draw);
+    let table = normal_table(mode);
+    let mut out = [0u8; 256];
+    for (i, q) in out.iter_mut().enumerate() {
+        *q = if i >= usize::from(FORCED_SHADE_FROM) {
+            // spec: S-0306 claim 30 (normal indices 253 to 255 get shade 16)
+            FORCED_SHADE
+        } else if let Some(&n) = table.get(i) {
+            // spec: S-0306 F16 (d at 53-bit precision; 0 if d < 0, otherwise trunc(16 × d))
+            let d = dot3_rz(n, light);
+            if d < 0.0 {
+                0
+            } else {
+                trunc_i64(mul_rz(SHADE_LEVELS, d)).clamp(0, i64::from(FORCED_SHADE)) as u8
+            }
+        } else if !quirks.voxel_stale_normal_shades {
+            // spec: S-0105 claim 20 (switch off: every out-of-table index → 16)
+            FORCED_SHADE
+        } else {
+            // spec: S-0306 claim 30 and S-0105 claim 20 (stale shade; not modelled, program-start value)
+            PROGRAM_START_SHADE
+        };
+    }
+    out
+}
+
+/// A voxel projectile's body draw transform (S-0306 claim 30): the view of
+/// S-0105 claim 1, then Rz(−(π/16)(ψ − 8)) · Ry(+(π/16)(e − 8)), with `psi`
+/// the 32-step facing of its velocity's horizontal direction and `e` the
+/// 32-step facing of its pitch (S-0306 F14). The motion-file transforms of
+/// the sections follow in [`draw_model_shaded`].
+pub fn projectile_body(psi: u8, e: u8, quirks: &VoxelQuirks) -> Mat34 {
+    view(quirks).then(&projectile_body_local(psi, e, quirks))
+}
+
+/// [`projectile_body`] without the view: Rz(−(π/16)(ψ − 8)) · Ry(+(π/16)(e − 8)).
+pub fn projectile_body_local(psi: u8, e: u8, quirks: &VoxelQuirks) -> Mat34 {
+    // spec: S-0306 claim 30 (heading as S-0105 claim 3, pitch with S-0105 claim 6's sign: e below 8 raises the nose)
+    Mat34::IDENTITY
+        .rotate_z(facing_angle(-(i32::from(psi) - UNROTATED_FACING32)), quirks)
+        .rotate_y(facing_angle(i32::from(e) - UNROTATED_FACING32), quirks)
+}
+
 /// The palette index drawn for voxel colour `colour` at shade `shade`:
 /// *VPL(q, χ)* (S-0105 claim 19). Without a table, or when the table has
 /// no row `shade` (neither case is covered by S-0105), the colour index
@@ -2214,6 +2268,33 @@ pub fn draw_model(
     depth_buffered: bool,
     quirks: &VoxelQuirks,
 ) -> Option<PartImage> {
+    draw_with(model, frame, draw, vpl, depth_buffered, quirks, None)
+}
+
+/// [`draw_model`] with one fixed shade table for every section instead of
+/// S-0105 claim 18's: a voxel projectile's table of
+/// [`projectile_shade_table`] (S-0306 claim 30), whose rasterising is
+/// otherwise S-0105's (claims 19, 21 to 23).
+pub fn draw_model_shaded(
+    model: &VoxelModel,
+    frame: u32,
+    draw: &Mat34,
+    vpl: Option<&Vpl>,
+    shades: &[u8; 256],
+    quirks: &VoxelQuirks,
+) -> Option<PartImage> {
+    draw_with(model, frame, draw, vpl, false, quirks, Some(shades))
+}
+
+fn draw_with(
+    model: &VoxelModel,
+    frame: u32,
+    draw: &Mat34,
+    vpl: Option<&Vpl>,
+    depth_buffered: bool,
+    quirks: &VoxelQuirks,
+    fixed: Option<&[u8; 256]>,
+) -> Option<PartImage> {
     let sections = &model.sections;
     // spec: S-0105 claim 13 (each section drawn with M · H(f, i))
     let transforms: Vec<Mat34> = (0..sections.len())
@@ -2261,7 +2342,10 @@ pub fn draw_model(
         };
         shade_table(rot, mode, quirks)
     };
-    let shades: Vec<[u8; 256]> = if shared {
+    let shared = shared || fixed.is_some();
+    let shades: Vec<[u8; 256]> = if let Some(t) = fixed {
+        vec![*t]
+    } else if shared {
         vec![table_for(0)]
     } else {
         (0..sections.len()).map(table_for).collect()
@@ -2716,6 +2800,15 @@ pub enum ImageKey {
         ramp: RampState,
         /// The 32-step body facing.
         body: u8,
+    },
+    /// A voxel projectile's body (S-0306 claim 30): its 32-step drawn
+    /// facing ψ and pitch facing *e*. Ours: the original draws it afresh in
+    /// every drawn frame, and the image depends on nothing else.
+    Projectile {
+        /// The 32-step drawn facing ψ.
+        heading: u8,
+        /// The 32-step pitch facing *e*.
+        pitch: u8,
     },
 }
 
@@ -3765,6 +3858,61 @@ mod tests {
         assert!(shade_table(&v, 1, &fixed)[16..].iter().all(|&s| s == 16));
         // Mode 0 has no table: every index below 253 is out of it.
         assert!(shade_table(&v, 0, &q())[..253].iter().all(|&s| s == 0));
+    }
+
+    /// spec: S-0306 claim 30, F16 (one diffuse term of the fixed light, scaled to 16 and
+    /// truncated, no specular term; indices 253 to 255 get 16; the other out-of-table indices
+    /// keep the stale shade)
+    #[test]
+    fn projectile_shades_are_diffuse_only() {
+        let m = projectile_body(8, 8, &q());
+        let t = projectile_shade_table(&m, 4, &q());
+        let l = light_in_model_frame(&m);
+        for (i, n) in normal_table(4).iter().enumerate() {
+            let d: f64 = (0..3).map(|k| f64::from(n[k]) * f64::from(l[k])).sum();
+            let want = if d < 0.0 { 0 } else { (16.0 * d) as u8 };
+            assert!(t[i].abs_diff(want) <= 1, "{i}: {} against {want}", t[i]);
+        }
+        assert!(t.iter().all(|&s| s <= 16));
+        assert_eq!(&t[253..], &[16, 16, 16]);
+        assert!(t[245..253].iter().all(|&s| s == PROGRAM_START_SHADE));
+        // The normal nearest the light gets 15 or 16; one facing away gets 0.
+        let best = normal_table(4)
+            .iter()
+            .enumerate()
+            .max_by(|a, b| dot3_rz(*a.1, l).total_cmp(&dot3_rz(*b.1, l)))
+            .map(|(i, _)| i)
+            .unwrap();
+        assert!(t[best] >= 15);
+        // S-0105's F4 table adds a specular term: a different table.
+        assert_ne!(t, shade_table(&m, 4, &q()));
+        let off = VoxelQuirks {
+            voxel_stale_normal_shades: false,
+            ..q()
+        };
+        assert!(
+            projectile_shade_table(&m, 4, &off)[245..]
+                .iter()
+                .all(|&s| s == 16)
+        );
+    }
+
+    /// spec: S-0306 claim 30 (the heading is S-0105 claim 3's body turn; e below 8 raises the
+    /// nose: e = 0 straight up, 8 level, 16 straight down)
+    #[test]
+    fn projectile_body_orientation() {
+        for f in 0..32 {
+            assert_eq!(
+                projectile_body(f as u8, 8, &q()),
+                view(&q()).rotate_z(body_angle(raw32(f)), &q()),
+                "{f}"
+            );
+        }
+        let nose = |e: u8| projectile_body_local(8, e, &q()).apply([1.0, 0.0, 0.0]);
+        assert!(nose(0)[2] > 0.99);
+        assert!(nose(16)[2] < -0.99);
+        assert!(nose(8)[0] > 0.99);
+        assert!(nose(4)[2] > 0.5);
     }
 
     /// spec: S-0105 claim 18 (quirks.voxel_eye_in_model_frame changes the

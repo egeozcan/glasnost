@@ -38,6 +38,13 @@
 //! fire order at a group of enemy human infantry: the launch, the
 //! conversion animations and the new infantry of the local house.
 //!
+//! S-0306 claims 28 to 32 and S-0301 claim 24 (projectiles and the target
+//! line): a vehicle whose weapon fires an arcing sprite projectile, with
+//! the target-laser flag (given in the lane's copy of the rules when the
+//! stock rules lack it), and the same vehicle with its weapon's projectile
+//! replaced in the lane's copy of the rules by one drawn as a voxel model,
+//! each clicked onto an enemy of its type; frames while the projectiles fly.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -83,6 +90,8 @@ const SCENES: &[Scene] = &[
     ("drain-blackout", |l| drain(l, Drained::Blackout)),
     ("mutator", mutator),
     ("dominator", dominator),
+    ("shot-sprite", sprite_shots),
+    ("shot-voxel", voxel_shots),
 ];
 
 #[test]
@@ -1294,6 +1303,172 @@ fn dominator(lane: &mut Lane) {
         light(lane)
     );
     lane.save("dominator-taken");
+}
+
+/// An armed vehicle type (neither a harvester, a transport nor a gunner)
+/// with a slot whose projectile `fits`: its name and that slot.
+fn shooter(
+    w: &World,
+    fits: impl Fn(&glasnost_sim::combat::data::ProjectileRules) -> bool,
+) -> Option<(String, usize)> {
+    let r = w.rules();
+    (0..r.vehicles.len()).find_map(|i| {
+        let u = r.unit(Kind::Vehicle, i as u32)?;
+        if u.harvester || u.strength <= 0 || u.passengers > 0 || u.combat.gunner {
+            return None;
+        }
+        let s = u.combat.slots.iter().position(|x| {
+            x.and_then(|x| r.combat.weapon(x).projectile)
+                .is_some_and(|p| fits(&r.combat.projectiles[p as usize]))
+        })?;
+        Some((r.vehicles[i].name.clone(), s))
+    })
+}
+
+/// The live view's projectile counts: bodies drawn in the last frame and
+/// running target-line timers.
+fn projectile_counts(lane: &Lane) -> (usize, usize) {
+    let s = lane.c.session.as_ref().unwrap();
+    s.loaded
+        .live
+        .as_ref()
+        .expect("a live game")
+        .projectile_counts()
+}
+
+/// The arcing sprite projectile scene: a vehicle type whose weapon fires
+/// one, with the target-laser flag (given in the lane's copy of the rules
+/// when the stock rules lack it).
+fn sprite_shots(lane: &mut Lane) {
+    let found = shooter(lane.world(), |p| !p.voxel && !p.inviso && p.arcing);
+    shots(lane, "shot-sprite", found, true);
+}
+
+/// The voxel projectile scene: the sprite scene's vehicle type, its
+/// weapon's projectile replaced in the lane's copy of the rules by the
+/// first projectile type that is drawn as a voxel model and hits the
+/// ground.
+fn voxel_shots(lane: &mut Lane) {
+    let w = lane.world();
+    let r = w.rules();
+    let pv = r
+        .combat
+        .projectiles
+        .iter()
+        .position(|p| p.voxel && !p.inviso && p.ag);
+    let found = shooter(w, |p| !p.voxel && !p.inviso && p.arcing);
+    println!("shot-voxel: voxel projectile type found: {}", pv.is_some());
+    let (Some(pv), Some((vname, slot))) = (pv, found) else {
+        return;
+    };
+    let ti = r.index_of(Kind::Vehicle, &vname).expect("the type");
+    let Some(wid) = r.unit(Kind::Vehicle, ti).and_then(|u| u.combat.slots[slot]) else {
+        return;
+    };
+    patch_rules(lane, |r| {
+        r.combat.weapons[wid as usize].projectile = Some(pv as u32);
+    });
+    shots(lane, "shot-voxel", Some((vname, slot)), false);
+}
+
+/// S-0306 claims 28 to 32 (projectile drawing) and S-0301 claim 24 (the
+/// target line): the vehicle type `found` (with the slot it fires) is
+/// clicked onto an enemy of its type within its weapon's range; frames are
+/// saved while its projectiles fly. With `laser` the lane's copy of the
+/// rules gives the type the target-laser flag, so that its shots also start
+/// the target line (the local house is the viewer).
+fn shots(lane: &mut Lane, key: &str, found: Option<(String, usize)>, laser: bool) {
+    let w = lane.world();
+    let enemy = lane.enemy();
+    println!("{key}: vehicle type found: {}", found.is_some());
+    let (Some((vname, slot)), Some(enemy)) = (found, enemy) else {
+        return;
+    };
+    let ti = w.rules().index_of(Kind::Vehicle, &vname).expect("the type");
+    let already = w.rules().vehicles[ti as usize].vehicle.target_laser;
+    println!(
+        "{key}: slot {slot}; the type has the target-laser flag in the stock rules: {already}"
+    );
+    if laser && !already {
+        patch_rules(lane, |r| {
+            r.vehicles[ti as usize].vehicle.target_laser = true
+        });
+    }
+    // The enemy within the weapon's range: up to 5 cells east, at least 2.
+    let range = {
+        let r = lane.world().rules();
+        r.unit(Kind::Vehicle, ti)
+            .and_then(|u| u.combat.slots[slot])
+            .map_or(256, |x| r.combat.weapon(x).range)
+    };
+    let dx = (range / 256).clamp(2, 5);
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let a = lane.spawn(Kind::Vehicle, &vname, local, at);
+    let t = lane.spawn(Kind::Vehicle, &vname, enemy, CellXY::new(at.x + dx, at.y));
+    lane.ticks(2);
+    lane.look_at(CellXY::new(at.x + 2, at.y));
+    let n = lane.order(local, a, ClickOn::Object(t));
+    println!("{key}: enemy {dx} cells east; click on it: {n} orders");
+    let mut saved = 0;
+    for _ in 0..400 {
+        lane.ticks(1);
+        let flying = lane
+            .world()
+            .projectiles
+            .values()
+            .filter(|p| p.firer == Some(a))
+            .count();
+        let (drawn, lines) = projectile_counts(lane);
+        if flying > 0 {
+            println!(
+                "{key}: tick {}: projectiles of the firer {flying}, bodies drawn {drawn}, target-line timers {lines}",
+                lane.world().tick
+            );
+            // Where each of the firer's projectiles is drawn, from the firer's draw point.
+            let w = lane.world();
+            let lift = |p: glasnost_sim::world::Pos| {
+                glasnost_render::projection::project_lifted(p.x, p.y, p.z)
+            };
+            if let Some(o) = w.obj(a) {
+                let base = lift(o.pos);
+                for p in w.projectiles.values().filter(|p| p.firer == Some(a)) {
+                    let s = lift(p.pos);
+                    println!(
+                        "{key}: a projectile {} px right, {} px down of the firer, {} leptons up",
+                        s.0 - base.0,
+                        s.1 - base.1,
+                        p.pos.z - o.pos.z
+                    );
+                }
+            }
+            lane.save(&format!("{key}-{saved}"));
+            saved += 1;
+            if saved == 3 {
+                break;
+            }
+            lane.ticks(2);
+        }
+    }
+    if saved == 0 {
+        let w = lane.world();
+        let r = w.rules();
+        let wid = r.unit(Kind::Vehicle, ti).and_then(|u| u.combat.slots[slot]);
+        let wr = wid.map(|x| r.combat.weapon(x));
+        let p = wr
+            .and_then(|x| x.projectile)
+            .map(|p| &r.combat.projectiles[p as usize]);
+        println!(
+            "{key}: no frame with a projectile of the firer in flight; weapon range {:?}, minimum {:?}; projectile against ground {:?}, against air {:?}; firer target {:?}; enemy alive {}",
+            wr.map(|x| x.range),
+            wr.map(|x| x.min_range),
+            p.map(|p| p.ag),
+            p.map(|p| p.aa),
+            w.obj(a).map(|o| o.target.is_some()),
+            w.obj(t).is_some()
+        );
+    }
 }
 
 /// The screenshot key of a drain scene.

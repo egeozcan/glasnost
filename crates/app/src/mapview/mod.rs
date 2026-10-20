@@ -17,6 +17,9 @@ mod live_tests;
 pub mod load;
 pub mod particles;
 pub mod png;
+#[cfg(test)]
+mod projectile_tests;
+pub mod projectiles;
 pub mod protection;
 pub mod quirks;
 pub mod radar;
