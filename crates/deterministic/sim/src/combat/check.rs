@@ -84,7 +84,7 @@ pub fn building_aim_point(w: &World, id: ObjectId) -> Pos {
 }
 
 /// The direction of a target from a point (S-0204 claim 8).
-fn direction_to(w: &World, from: Pos, to: Pos) -> Facing {
+pub(crate) fn direction_to(w: &World, from: Pos, to: Pos) -> Facing {
     direction(
         i64::from(to.x - from.x),
         i64::from(to.y - from.y),

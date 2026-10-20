@@ -232,6 +232,21 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     };
     // spec: S-0301 claim 8 (a berserk firer halves the delay, truncated; a disc laser shot is never halved)
     let d = if berserk && !wr.disk_laser { d / 2 } else { d };
+    // spec: S-0301 claim 23 (a spawner weapon's shot and a disc laser's firing make no shot animation; suicide, drain, drop and void shots returned above)
+    if !wr.spawner && !wr.disk_laser {
+        // spec: S-0301 Terms (the launch point: the fire point, or the firer's own position for a dropping projectile, S-0306 claim 5)
+        let launch = if rules
+            .combat
+            .projectile_of(weapon)
+            .is_some_and(|p| p.dropping)
+        {
+            o.pos
+        } else {
+            fp
+        };
+        // spec: S-0301 claims 18 and 22 and its ordering consequences (after the projectile is placed and after the delay draw, before a sonic wave or laser)
+        crate::combat::shotanim::create(w, firer, weapon, launch);
+    }
     let sync_frames = o.kind == Kind::Vehicle
         && rules
             .unit(o.kind, o.type_index)

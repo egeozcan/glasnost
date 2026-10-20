@@ -674,6 +674,11 @@ impl Audio {
                 let s = self.names.anim_report(name).map(str::to_owned);
                 self.play_in(w, s.as_deref(), Where::Fixed(*pos));
             }
+            // spec: S-0301 claim 22 and S-0109 claim 13 (a shot animation's start sound, at its launch point, as any animation's)
+            Effect::ShotAnim { name, pos, .. } => {
+                let s = self.names.anim_report(name).map(str::to_owned);
+                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+            }
             // spec: S-0609 claim 13 (a gattling-flagged firer never plays the ordinary per-shot report)
             Effect::Shot { gattling: true, .. } => {}
             Effect::Shot {

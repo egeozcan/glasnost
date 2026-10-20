@@ -128,8 +128,13 @@ pub struct WeaponRules {
     pub limbo_launch: bool,
     /// The animation of an assault's occupant removal (S-0508 claim 14).
     pub occupant_anim: Option<String>,
-    /// Animation list: the per-direction delivery animation (S-0614 claim 9).
+    /// Animation list: the per-direction delivery animation (S-0614 claim 9)
+    /// and the shot animation list (S-0301 claim 20 a).
     pub anim: Vec<String>,
+    /// The open-topped animation (S-0301 claim 20 c).
+    pub open_topped_anim: Option<String>,
+    /// The assault animation; ordinary shots never use it (S-0301 Terms).
+    pub assault_anim: Option<String>,
     /// Fake-blink time in ticks (S-0516 claim 39).
     pub disguise_fake_blink: i32,
     /// The unlimited-control flag (S-0601 claim 1).
@@ -705,6 +710,8 @@ pub struct VehicleCombat {
     pub sync_frames: [i32; 2], // spec: S-0301 Constants (two firing sync values)
     /// Seeker type.
     pub hunter_seeker: bool,
+    /// Target-line flag (S-0301 claim 23): drawing only.
+    pub target_laser: bool,
     /// Deploy-to-fire flag.
     pub deploy_to_fire: bool,
     /// Jumpjet-turn flag.
@@ -1357,6 +1364,9 @@ pub fn tables(
                 limbo_launch: b(w.limbo_launch),
                 occupant_anim: w.occupant_anim.clone(),
                 anim: w.anim.clone().unwrap_or_default(),
+                // spec: S-0301 Import mapping (OpenToppedAnim and AssaultAnim absent: none)
+                open_topped_anim: w.open_topped_anim.clone(),
+                assault_anim: w.assault_anim.clone(),
                 // spec: S-0516 Import mapping (DisguiseFakeBlinkTime absent: 0 ticks)
                 disguise_fake_blink: w.disguise_fake_blink_time.unwrap_or(0),
                 // spec: S-0601 Import mapping (InfiniteMindControl absent: no)
@@ -1614,6 +1624,8 @@ pub fn vehicle_combat(u: &rs::UnitType, mode: Rounding) -> VehicleCombat {
         firing_frames: u.firing_frames.unwrap_or(0),
         sync_frames: u.firing_sync_frames.unwrap_or([-1, -1]),
         hunter_seeker: b(u.hunter_seeker),
+        // spec: S-0301 Import mapping (TargetLaser absent: no)
+        target_laser: b(u.target_laser),
         deploy_to_fire: b(u.deploy_to_fire),
         jump_jet_turn: b(u.jump_jet_turn),
         crewed: b(u.crewed),

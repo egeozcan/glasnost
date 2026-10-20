@@ -12798,6 +12798,14 @@
           "format": "int32",
           "default": null
         },
+        "target_laser": {
+          "description": "`TargetLaser`, the target-line flag (S-0301 claim 23; only a vehicle\nshows the line); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "tech_level": {
           "description": "`TechLevel` (S-0009 claim 45).",
           "type": [
@@ -13436,7 +13444,7 @@
           "default": null
         },
         "anim": {
-          "description": "`Anim`, animation names: the per-direction delivery animation\n(S-0614 claim 9); absent: empty.",
+          "description": "`Anim`, animation names: the per-direction delivery animation\n(S-0614 claim 9) and the shot animation list (S-0301 claim 20 a);\nabsent: empty.",
           "type": [
             "array",
             "null"
@@ -13450,6 +13458,14 @@
           "description": "`AreaFire`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "assault_anim": {
+          "description": "`AssaultAnim`, the assault animation, which ordinary shots never use\n(S-0301 Terms); absent: none.",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -13680,7 +13696,7 @@
           "default": null
         },
         "occupant_anim": {
-          "description": "`OccupantAnim`, the animation shown where an assault removes an\noccupant (S-0508 claim 14, Import mapping).",
+          "description": "`OccupantAnim`, the animation shown where an assault removes an\noccupant (S-0508 claim 14, Import mapping), and a garrisoned\nbuilding's shot animation (S-0301 claim 20 b).",
           "type": [
             "string",
             "null"
@@ -13691,6 +13707,14 @@
           "description": "`OmniFire`.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "open_topped_anim": {
+          "description": "`OpenToppedAnim`, the open-topped animation of a passenger firing\nout (S-0301 claim 20 c); absent: none.",
+          "type": [
+            "string",
             "null"
           ],
           "default": null

@@ -192,7 +192,8 @@ async fn smoke_async(
                         | Effect::Drain { .. }
                         | Effect::Maker { .. }
                         | Effect::Domination { .. }
-                        | Effect::Walker { .. } => {}
+                        | Effect::Walker { .. }
+                        | Effect::ShotAnim { .. } => {}
                     }
                 }
                 fight[3] = fight[3].max(w.projectiles.len());
