@@ -2,11 +2,11 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 18
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872]
 supersedes: []
@@ -522,7 +522,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     Refusal retains the rearm countdown and has no net immediate ammunition change. Success
     expires that countdown immediately, spends one round and resets the drop pass counter to 5.
     Neither outcome advances the burst counter, sets an ordinary full or in-burst delay,
-    takes its delay or spray draw, or produces a weapon report, muzzle animation or projectile.
+    takes its delay or spray draw, or produces a weapon report, shot animation (S-0301 claims 20
+    to 23) or projectile.
     Successful drops retain their parachute sound and applicable animation draws. Run-level
     pending ammunition and pass processing delays remain separate (claims 13 to 15).
     This drop path also bypasses the firing reveal and kamikaze removal described below.
