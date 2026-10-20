@@ -558,9 +558,32 @@ fn m6a_scenes() {
     // The building types named by GLASNOST_RADAR_TYPE (type names given on the command line,
     // comma-separated, so that no stock name is kept in the source): one shot each, "yuri-radar"
     // for a single name, else "building-<i>". The lead check of the Yuri radar shot.
-    if let Ok(names) = std::env::var("GLASNOST_RADAR_TYPE") {
+    // GLASNOST_RADAR_TYPE=radar: every building type with the radar flag
+    // (S-0407 claim 6), found in the data, so that no stock name is needed; each shot is
+    // "radar-side<s>-<i>" with the type's base-planning side.
+    let radar_names: Option<String> = std::env::var("GLASNOST_RADAR_TYPE").ok().map(|n| {
+        if n != "radar" {
+            return n;
+        }
+        let r = lane.world().rules();
+        let names: Vec<String> = r
+            .econ
+            .tech
+            .buildings
+            .iter()
+            .zip(&r.buildings)
+            .filter(|(t, _)| t.radar)
+            .map(|(t, b)| format!("{}:{}", b.name, t.side))
+            .collect();
+        println!("building types with the radar flag: {names:?}");
+        names.join(",")
+    });
+    if let Some(names) = radar_names {
         let list: Vec<&str> = names.split(',').collect();
-        for (i, name) in list.iter().enumerate() {
+        for (i, entry) in list.iter().enumerate() {
+            // "name:side" from the radar-flag search: the base-planning side goes into the
+            // shot name (S-0407 claim 6), so the pictures can be told apart without stock names.
+            let (name, side) = entry.split_once(':').unwrap_or((entry, ""));
             let at = lane.open_land(CellXY::new(target.x - 20, target.y + 12));
             let id = lane.spawn(Kind::Building, name, local, at);
             lane.ticks(2);
@@ -568,8 +591,10 @@ fn m6a_scenes() {
             lane.ticks(1);
             let shot = if list.len() == 1 {
                 "yuri-radar".to_string()
-            } else {
+            } else if side.is_empty() {
                 format!("building-{i}")
+            } else {
+                format!("radar-side{side}-{i}")
             };
             lane.save(&shot);
             glasnost_sim::objects::remove(lane.world_mut(), id);
