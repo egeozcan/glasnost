@@ -31,9 +31,14 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 
 **M7a (first part of M7) makes the Yuri side playable.** It adds psychic weapons (units driven berserk), the psychic sensor and the psychic reveal, mind control (taking over enemy units, the controller's limit and overload, release when the controller dies), gattling weapons that spin up and down, gas weapons and their particle clouds, the bio reactor that takes in infantry, the grinder that recycles units for credits, the tank bunker, and the magnetic lift that seizes vehicles and drops them. The opponent plays Yuri and uses each of these the way a person could. In the local lane, Yuri plays Allied and Soviet on maps 0, 2 and 8 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game with a Yuri house, natively and in WebAssembly.
 
-**Not there yet (M7b and beyond):**
-- the floating disc's drain, the genetic mutator, the psychic dominator, the special hit effects and the cloning vats;
-- multiplayer over the network.
+**M7b (last part of M7) completes the Yuri side.** It adds the floating disc's drain (it takes credits from refineries and power from power plants), the genetic mutator (infantry in the blast become the house's new infantry), the psychic dominator (units in the blast change sides, with the map's light dimmed while it charges and fires), the special hit effects, and the rest of the particle systems. The opponent drains enemy refineries and power, builds and fires both new superweapons, aiming each where it pays most, and defends its harvesters and power against raiders and drainers. It saves for a superweapon building when it is safe to, and expands with a second construction yard. In the local lane, Yuri plays a full game against Allied and against Soviet on maps 2, 8 and the naval map 0 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game in which the drain, the mutator and the dominator are each used several times, natively and in WebAssembly. An arena mode (`glasnost-headless arena`) compares our combat with the measurement records using statistical tests.
+
+**M7 is done.** Its exit criteria are met. The one exception: the arena still disagrees with some measured pairings, and those wait on more oracle records.
+
+**Not there yet (M8 and beyond):**
+- the fidelity pass (more claims measured against the original), music, settings and accessibility (M8);
+- multiplayer over the network (M9);
+- the campaign (M10, optional).
 
 ## You need your own copy of the game
 
