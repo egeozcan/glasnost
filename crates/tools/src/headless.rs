@@ -189,6 +189,8 @@ async fn smoke_async(
                         | Effect::Dropped { .. }
                         | Effect::Disc { .. }
                         | Effect::Beam { .. }
+                        | Effect::Line { .. }
+                        | Effect::Wave { .. }
                         | Effect::Drain { .. }
                         | Effect::Maker { .. }
                         | Effect::Domination { .. }

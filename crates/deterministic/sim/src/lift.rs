@@ -1865,6 +1865,12 @@ pub fn shot(w: &mut World, firer: ObjectId, target: Target, fire_point: Pos, imp
             ended: false,
         },
     );
+    // spec: S-0607 claim 25 (the picture's shift direction comes from the shot's firing and impact points)
+    w.effects.push(crate::combat::effects::Effect::Wave {
+        id,
+        from: fire_point,
+        to: impact,
+    });
     // spec: S-0607 claim 21 (the wave joins the update order when it is created, appended after every object already in play, S-0203 claims 2 and 3)
     w.update.enter(id);
     // spec: S-0607 claim 21 and F4 (one update at creation as well as the per-tick updates)
