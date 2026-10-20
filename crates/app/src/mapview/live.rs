@@ -2847,13 +2847,14 @@ impl Live {
                     (None, _, _) => "unattached animation or overlay",
                 };
                 format!(
-                    "item {i} {:?} {paint} {}x{} at ({}, {}) depth {:?}: {what}; path: {path}",
+                    "item {i} {:?} {paint} {}x{} at ({}, {}) depth {:?} test {:?}: {what}; path: {path}",
                     it.group,
                     img.width(),
                     img.height(),
                     it.x,
                     it.y,
-                    it.depth
+                    it.depth,
+                    it.test
                 )
             })
             .collect()
