@@ -22,7 +22,8 @@ use crate::art::{ArtQuirks, IMAGE_MAX, TypeArt, bool_as_of, given_at};
 use crate::emit::type_keys;
 use crate::kinds::Kind;
 use crate::layers::{
-    COMBAT_DAMAGE, Event, KeyState, LayerQuirks, Outcome, TypeRec, Warning, What, is_zero,
+    COLOUR_ADD_LEN, COMBAT_DAMAGE, Event, KeyState, LayerQuirks, Outcome, TypeRec, Warning, What,
+    is_zero,
 };
 use crate::names::{encode, show};
 
@@ -1010,6 +1011,26 @@ fn fold<T>(
     held
 }
 
+/// The two protection colour selectors of `[AudioVisual]`: curtain, then
+/// force shield (S-0513 Import mapping).
+pub const PROTECTION_SELECTORS: [&str; 2] = ["IronCurtainColor", "ForceShieldColor"];
+
+/// The protection selector `key` held after every rules layer, with the
+/// layer and line of the value that set it; `None` when no layer gives a
+/// readable integer (the selector is then 0). A selector is used exactly as
+/// held: no reduction modulo 16, no clamp (S-0513 claim 29a).
+pub fn protection_selector(outcome: &Outcome, key: &str) -> Option<(i32, usize, u32)> {
+    let state = outcome
+        .globals
+        .get(&b"AudioVisual"[..])
+        .and_then(|s| s.get(key.as_bytes()));
+    // spec: S-0513 Import mapping (IronCurtainColor, ForceShieldColor: integer positions; absent
+    // in a later layer retains the held selector), S-0003 claim 3 (an unreadable value keeps it)
+    fold(state, None, |v, e| {
+        value::integer(v).map(|x| (x, e.layer, e.line))
+    })
+}
+
 /// The behaviour kind of a particle or particle-system type, lower-case
 /// (S-0202 and S-0613 Import mapping: Gas, Smoke, Fire, Spark or Railgun,
 /// case-insensitive, at most 31 text bytes; an unrecognised name gives no
@@ -1344,6 +1365,16 @@ impl Builder<'_> {
             });
             if let Some(k) = name.and_then(|n| self.type_key(Kind::Buildings, &n)) {
                 rec.put(field, jsonc::string(k));
+            }
+        }
+        for key in PROTECTION_SELECTORS {
+            if let Some((v, layer, line)) = protection_selector(outcome, key)
+                && !(0..COLOUR_ADD_LEN as i32).contains(&v)
+            {
+                // spec: S-0513 claim 29a (a held selector below 0 or above 15: no mask, and the importer warns once for each such selector, naming the key and its value)
+                self.warn(layer, line, format!(
+                    "[AudioVisual] {key}={v} names no position of the 16-entry colour-adjustment table: its protection drawings take no colour mask (S-0513 claim 29a, a departure)"
+                ));
             }
         }
         self.general_combat(&mut rec);
