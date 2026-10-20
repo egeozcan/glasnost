@@ -3707,6 +3707,7 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     ("sequence_value_length_limit", "importer, S-0107 claim 22"),
     ("case_sensitive_direction", "importer, S-0107 claim 22"),
+    ("projectile_image_afresh", "importer, S-0007 claim 26"),
     (
         "absent_rect_is_zero",
         "importer (convert::map::MapQuirks), S-0009 claim 30",

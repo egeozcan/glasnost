@@ -86,6 +86,10 @@ pub struct ArtQuirks {
     /// `quirks.case_sensitive_direction` (S-0107 claim 22): a declared
     /// direction is recognised only in exact upper case. Off: any case.
     pub case_sensitive_direction: bool,
+    /// `quirks.projectile_image_afresh` (S-0007 claim 26): a projectile's
+    /// image name is its type read's image key or empty. Off: a later type
+    /// read without an image key keeps the earlier read's image name.
+    pub projectile_image_afresh: bool,
 }
 
 impl Default for ArtQuirks {
@@ -105,13 +109,15 @@ impl Default for ArtQuirks {
             // spec: S-0107 claim 22 (both switches default to the original)
             sequence_value_length_limit: true,
             case_sensitive_direction: true,
+            // spec: S-0007 claim 26, Edge cases (quirks.projectile_image_afresh: the original's)
+            projectile_image_afresh: true,
         }
     }
 }
 
 impl ArtQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 12] {
+    pub fn named(&self) -> [(&'static str, bool); 13] {
         [
             (
                 "art_generic_fallback_any_name",
@@ -155,6 +161,7 @@ impl ArtQuirks {
                 self.sequence_value_length_limit,
             ),
             ("case_sensitive_direction", self.case_sensitive_direction),
+            ("projectile_image_afresh", self.projectile_image_afresh),
         ]
     }
 }
@@ -196,8 +203,58 @@ pub struct TypeArt {
     pub sprite_frames: Option<i32>,
     /// The canvas height of [`TypeArt::sprite`]'s header (S-0513 F4).
     pub sprite_height: Option<i32>,
+    /// A projectile type's drawing fields (S-0306 claims 28 to 32); none
+    /// for the other kinds.
+    pub projectile: Option<ProjectileLook>,
     /// Notes on open or unusual cases.
     pub notes: Vec<String>,
+}
+
+/// The palette a voxel projectile's colour definition selects (S-0306
+/// claim 30, Import mapping `Color`), by position in the import's colour
+/// definitions (S-0103 claim 5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProjectileColour {
+    /// The single-shade palette of that definition: before any type read
+    /// has selected one, the first definition's.
+    Single(usize),
+    /// The 53-shade palette of that definition.
+    Shades(usize),
+}
+
+impl Default for ProjectileColour {
+    fn default() -> Self {
+        // spec: S-0306 claim 30 (before any read selects one: the first definition's single-shade palette)
+        ProjectileColour::Single(0)
+    }
+}
+
+/// A projectile type's drawing fields after its type reads (S-0306 Terms
+/// *drawing fields*, Import mapping): presentation only.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProjectileLook {
+    /// The art section's rotating flag (claim 29).
+    pub rotates: bool,
+    /// The low animation field *a*_lo, 0 to 255 (claim 29, F15).
+    pub anim_low: u8,
+    /// The high animation field *a*_hi, 0 to 255 (claim 29, F15).
+    pub anim_high: u8,
+    /// The animation rate *R*ₐ, 0 to 255 (claim 29, F15).
+    pub anim_rate: u8,
+    /// The art section's anim-palette flag (claim 31).
+    pub anim_palette: bool,
+    /// The art section's flat flag: the surface layer (S-0102 claim 3).
+    pub flat: bool,
+    /// The voxel flag: drawn as a voxel model (claims 28 and 30).
+    pub voxel: bool,
+    /// The rules invisible flag: never drawn (claim 28).
+    pub inviso: bool,
+    /// The rules shadow flag (claim 32).
+    pub shadow: bool,
+    /// The rules firer's-palette flag (claim 31).
+    pub firers_palette: bool,
+    /// The palette of a voxel body (claim 30).
+    pub colour: ProjectileColour,
 }
 
 fn with_ext(name: &[u8], ext: &str) -> Vec<u8> {
@@ -377,6 +434,17 @@ pub fn lookup(
             };
             out.insert((kind, i), a);
         }
+    }
+    // spec: S-0007 claims 26 and 27 (projectiles follow their own image rule, not claim 1)
+    for (i, t) in outcome
+        .registries
+        .get(&Kind::Projectiles)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let a = projectile(&mut ctx, t, &outcome.colours);
+        out.insert((Kind::Projectiles, i), a);
     }
     (out, ctx.warnings)
 }
@@ -779,6 +847,176 @@ fn building_voxels(ctx: &Ctx, t: &TypeRec, a: &mut TypeArt, last: usize) {
             a.voxels.insert(role.into(), with_ext(&base, "vxl"));
         }
     }
+}
+
+/// A held art field of a projectile's drawing (S-0306 Import mapping): the
+/// selected section's value replaces it, a missing or empty one keeps it.
+fn held<T>(sec: Option<&Section>, key: &str, read: impl Fn(&[u8]) -> Option<T>, v: &mut T) {
+    if let Some(x) = sec
+        .and_then(|s| s.value(key.as_bytes()))
+        .filter(|x| !x.is_empty())
+        .and_then(read)
+    {
+        *v = x;
+    }
+}
+
+/// A projectile type's art and drawing fields (S-0007 claims 26 and 27,
+/// S-0306 Import mapping).
+fn projectile(ctx: &mut Ctx, t: &TypeRec, colours: &[crate::layers::ColourDef]) -> TypeArt {
+    let mut a = TypeArt::default();
+    let mut look = ProjectileLook {
+        // spec: S-0306 Import mapping (rules Shadow: absent yes)
+        shadow: true,
+        ..ProjectileLook::default()
+    };
+    if t.reads.is_empty() {
+        a.notes
+            .push("no type read: no art is built (S-0007 Terms, type read)".into());
+        a.projectile = Some(look);
+        return a;
+    }
+    let snow = ctx.theater == Theater::Snow;
+    let ext = ctx.ext();
+    let mut flags = Flags::default();
+    let mut arctic_prev = false;
+    let mut arctic_now = false;
+    let mut given_before = false;
+    // The colour definition in force and whether its 53-shade palette is selected.
+    let (mut def, mut shades) = (0usize, false);
+    for &r in &t.reads {
+        let key = given_at(t, "Image", r);
+        if key.is_none() && given_before {
+            // spec: S-0007 claim 26 (the importer warns when a later section drops the image key an earlier layer gave)
+            ctx.warnings.push(format!(
+                "projectile {}: a later type read has no image key while an earlier one gave it; {} (S-0007 claim 26)",
+                show(&t.name),
+                if ctx.q.projectile_image_afresh {
+                    "the projectile has no art from that read on"
+                } else {
+                    "the earlier image name is kept (quirks.projectile_image_afresh off)"
+                }
+            ));
+        }
+        given_before |= key.is_some_and(|k| !text(k, IMAGE_MAX).is_empty());
+        a.image = match key {
+            // spec: S-0007 claim 26 (the read's image key, cut to 24 bytes)
+            Some(k) => text(k, IMAGE_MAX).to_vec(),
+            // spec: S-0007 claim 26 (no image key: empty, nothing carried over; quirk off: kept)
+            None if ctx.q.projectile_image_afresh => Vec::new(),
+            None => a.image.clone(),
+        };
+        // spec: S-0306 Import mapping (Color: missing or empty re-selects the 53-shade palette of
+        // the definition in force; a known name, compared without regard to case, selects that
+        // definition; an unknown name keeps the palette in force)
+        match given_at(t, "Color", r).map(|v| text(v, value::COMMON_TEXT_LIMIT)) {
+            None | Some([]) => shades = true,
+            Some(n) => {
+                if let Some(i) = colours.iter().position(|c| c.name.eq_ignore_ascii_case(n)) {
+                    (def, shades) = (i, true);
+                }
+            }
+        }
+        let arctic = bool_as_of(t, "AlternateArcticArt", r, false);
+        // spec: S-0007 claims 10 and 27 (the A of a voxel model where the flag turns on, until the next read)
+        arctic_now = arctic && !arctic_prev;
+        arctic_prev = arctic;
+        if a.image.is_empty() {
+            // spec: S-0306 Import mapping (nothing is read when the current rules image is empty)
+            continue;
+        }
+        // spec: S-0007 claims 2, 9 and 27 (the flags of the section named by I, before any suffix)
+        let sec = ctx.art.section(&a.image);
+        flags.theater = section_bool(sec, "Theater").unwrap_or(flags.theater);
+        flags.new_theater = section_bool(sec, "NewTheater").unwrap_or(flags.new_theater);
+        flags.voxel = section_bool(sec, "Voxel").unwrap_or(flags.voxel);
+        // spec: S-0306 Import mapping (Rotates, AnimPalette: missing or empty keeps the value in force)
+        held(sec, "Rotates", boolean, &mut look.rotates);
+        held(sec, "AnimPalette", boolean, &mut look.anim_palette);
+        // spec: S-0102 Import mapping (art, projectile image, Flat)
+        held(sec, "Flat", boolean, &mut look.flat);
+        for (k, v) in [
+            ("AnimLow", &mut look.anim_low),
+            ("AnimHigh", &mut look.anim_high),
+            ("AnimRate", &mut look.anim_rate),
+        ] {
+            let mut n: Option<i32> = None;
+            held(sec, k, |x| value::integer(x).map(Some), &mut n);
+            if let Some(n) = n {
+                if !(0..=255).contains(&n) {
+                    // spec: S-0306 Edge cases (fields outside 0 to 255: kept modulo 256, the importer warns)
+                    ctx.warnings.push(format!(
+                        "projectile image {} {k} {n} is outside 0 to 255: it acts as {} (S-0306 Edge cases)",
+                        show(&a.image),
+                        n.rem_euclid(256)
+                    ));
+                }
+                // spec: S-0306 Import mapping (kept as its value modulo 256)
+                *v = n.rem_euclid(256) as u8;
+            }
+        }
+    }
+    let last = *t.reads.last().unwrap_or(&0);
+    look.voxel = flags.voxel;
+    look.colour = if shades {
+        ProjectileColour::Shades(def)
+    } else {
+        ProjectileColour::Single(def)
+    };
+    // spec: S-0306 Import mapping (rules Inviso, Shadow default yes, FirersPalette)
+    look.inviso = bool_as_of(t, "Inviso", last, false);
+    look.shadow = bool_as_of(t, "Shadow", last, true);
+    look.firers_palette = bool_as_of(t, "FirersPalette", last, false);
+    // spec: S-0007 claim 23 (the translucent sprite: no theater handling, no fallback)
+    if let Some(n) = text_as_of(t, "AlphaImage", last, ICON_MAX).filter(|n| !n.is_empty()) {
+        a.translucent = ctx.exists_then(with_ext(&n, "shp"));
+    }
+    if look.inviso {
+        // spec: S-0007 claim 27 (an invisible projectile is never drawn: its art need not be looked up)
+        a.notes
+            .push("invisible projectile: no art looked up (S-0007 claim 27)".into());
+    } else if a.image.is_empty() {
+        // spec: S-0007 claim 26 (an empty image name: no sprite and no model; the empty-base lookups are suppressed)
+        a.notes
+            .push("empty image name: no body art (S-0007 claim 26)".into());
+    } else if flags.voxel {
+        let plain = a.image.clone();
+        let suffix = if ctx.q.arctic_suffix_on_flag_turning_on {
+            // spec: S-0007 claim 27 (on snow the model is named I ‖ A at a read where claim 10 appends one)
+            snow && arctic_now
+        } else {
+            // spec: S-0007 Edge cases (switch off: the final name gets exactly one A on snow)
+            snow && arctic_prev
+        };
+        if suffix {
+            let mut s = plain.clone();
+            s.push(b'A');
+            a.image = s;
+        }
+        // spec: S-0007 claims 16, 18 and 27 (the parts of a type that is not a vehicle; claim 18 discards)
+        voxel_parts(ctx, Kind::Projectiles, t, &mut a, last);
+        a.image = plain;
+    } else {
+        // spec: S-0007 claim 27 (theater extension; else letter substitution with the new-theater
+        // flag; else I.shp; each with the generic fallback once; never an arctic A)
+        a.sprite = if flags.theater {
+            ctx.found(&with_ext(&a.image, &ext), true, false)
+        } else {
+            ctx.subst_found(&with_ext(&a.image, "shp"), flags.new_theater)
+        };
+    }
+    for (name, on) in [
+        ("theater", flags.theater),
+        ("new_theater", flags.new_theater),
+        ("voxel", flags.voxel),
+        ("arctic", arctic_prev),
+    ] {
+        if on {
+            a.flags.push(name);
+        }
+    }
+    a.projectile = Some(look);
+    a
 }
 
 fn animation(ctx: &mut Ctx, t: &TypeRec) -> TypeArt {
@@ -1258,6 +1496,267 @@ mod tests {
         assert!(get(&o, &a, Kind::Vehicles, "Multi").voxels.is_empty());
         // A model without its motion file discards the art.
         assert!(get(&o, &a, Kind::Vehicles, "Broken").voxels.is_empty());
+    }
+
+    fn run_q(
+        rules: &[(&str, Role)],
+        art: &str,
+        theater: Theater,
+        f: &Files,
+        q: &ArtQuirks,
+    ) -> (Outcome, BTreeMap<(Kind, usize), TypeArt>, Vec<String>) {
+        let doc = |t: &str| {
+            glasnost_ini::Document::parse(t.as_bytes(), Quirks::default(), &mut Vec::new())
+        };
+        let layers_: Vec<Layer> = rules
+            .iter()
+            .map(|(t, role)| Layer {
+                role: *role,
+                file: "x".into(),
+                doc: doc(t),
+            })
+            .collect();
+        let art_doc = doc(art);
+        let o = layers::apply(
+            &layers_,
+            &art_doc,
+            "art",
+            GameKind::Skirmish,
+            &LayerQuirks::default(),
+        );
+        let (a, w) = lookup(&o, &art_doc, theater, f, q);
+        (o, a, w)
+    }
+
+    /// A vehicle whose weapon names projectile `p` (S-0004 claim 6: projectiles by reference).
+    const SHOOTER: &str = "[VehicleTypes]\n1=Tank\n[Tank]\nPrimary=Gun\n[Gun]\nProjectile=Shell\nWarhead=Hit\n[Hit]\nVerses=1\n";
+
+    /// spec: S-0007 claims 26 and 27 (scenario A20 a, b: the projectile image afresh, empty without a key, no default of the type name; the sprite from I with the generic fallback)
+    #[test]
+    fn projectile_image_is_taken_afresh() {
+        let base = format!("{SHOOTER}[Shell]\nImage=Ball\n");
+        let art = "[Shell]\nRotates=yes\n[Ball]\nRotates=yes\n[Other]\nX=1\n";
+        let f = files(&["Ball.shp", "Shell.shp", "OGher.shp"]);
+        let (o, a, w) = run_q(
+            &[(&base, Role::Base)],
+            art,
+            Theater::Temperate,
+            &f,
+            &ArtQuirks::default(),
+        );
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        assert_eq!(s(&shell.sprite).as_deref(), Some("Ball.shp"));
+        assert!(shell.projectile.as_ref().unwrap().rotates);
+        assert!(w.is_empty());
+        // A map override section without an image key: no art for the rest of the game, warned.
+        let map = "[Shell]\nArm=1\n";
+        let (o, a, w) = run_q(
+            &[(&base, Role::Base), (map, Role::Map)],
+            art,
+            Theater::Temperate,
+            &f,
+            &ArtQuirks::default(),
+        );
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        assert!(shell.image.is_empty());
+        assert_eq!(shell.sprite, None);
+        assert!(w.iter().any(|m| m.contains("S-0007 claim 26")), "{w:?}");
+        // quirks.projectile_image_afresh off: the earlier image name is kept, still warned.
+        let off = ArtQuirks {
+            projectile_image_afresh: false,
+            ..ArtQuirks::default()
+        };
+        let (o, a, w) = run_q(
+            &[(&base, Role::Base), (map, Role::Map)],
+            art,
+            Theater::Temperate,
+            &f,
+            &off,
+        );
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        assert_eq!(shell.image, b"Ball");
+        assert_eq!(s(&shell.sprite).as_deref(), Some("Ball.shp"));
+        assert!(
+            w.iter()
+                .any(|m| m.contains("quirks.projectile_image_afresh off"))
+        );
+        // No image key at all: no default of the type name, even though Shell.shp exists.
+        let bare = format!("{SHOOTER}[Shell]\nArm=1\n");
+        let (o, a, _) = run_q(&[(&bare, Role::Base)], art, Theater::Temperate, &f, &off);
+        assert_eq!(get(&o, &a, Kind::Projectiles, "Shell").sprite, None);
+        // The generic fallback replaces the second character once.
+        let other = format!("{SHOOTER}[Shell]\nImage=Other\n");
+        let (o, a, _) = run_q(&[(&other, Role::Base)], art, Theater::Temperate, &f, &off);
+        assert_eq!(
+            s(&get(&o, &a, Kind::Projectiles, "Shell").sprite).as_deref(),
+            Some("OGher.shp")
+        );
+    }
+
+    /// spec: S-0007 claim 27 (scenario A20 c to f: a voxel projectile's parts, its discard, the arctic model only at the turning-on read, an invisible one not looked up; a sprite never takes the A)
+    #[test]
+    fn projectile_voxel_and_arctic_art() {
+        let base = format!("{SHOOTER}[Shell]\nImage=Rock\nAlternateArcticArt=yes\n");
+        let art = "[Rock]\nVoxel=yes\n[Ball]\nX=1\n";
+        let f = files(&[
+            "Rock.vxl",
+            "Rock.hva",
+            "RockA.vxl",
+            "RockA.hva",
+            "RockTUR.vxl",
+            "RockTUR.hva",
+            "Ball.shp",
+            "BallA.shp",
+        ]);
+        let q = ArtQuirks::default();
+        let (o, a, _) = run_q(&[(&base, Role::Base)], art, Theater::Snow, &f, &q);
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        // The first read turns the flag on: the arctic model, its parts under I ‖ A.
+        assert_eq!(
+            s(&shell.voxels.get("body").cloned()).as_deref(),
+            Some("RockA.vxl")
+        );
+        assert!(!shell.voxels.contains_key("turret"));
+        // Elsewhere the model is I, and a turret part of a non-vehicle is looked for.
+        let (o, a, _) = run_q(&[(&base, Role::Base)], art, Theater::Temperate, &f, &q);
+        let warm = get(&o, &a, Kind::Projectiles, "Shell");
+        assert_eq!(
+            s(&warm.voxels.get("body").cloned()).as_deref(),
+            Some("Rock.vxl")
+        );
+        assert!(warm.voxels.contains_key("turret"));
+        assert!(shell.projectile.as_ref().unwrap().voxel);
+        assert_eq!(shell.sprite, None);
+        // A later read with the flag still set names the model by I again.
+        let map = "[Shell]\nImage=Rock\n";
+        let (o, a, _) = run_q(
+            &[(&base, Role::Base), (map, Role::Map)],
+            art,
+            Theater::Snow,
+            &f,
+            &q,
+        );
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        assert_eq!(
+            s(&shell.voxels.get("body").cloned()).as_deref(),
+            Some("Rock.vxl")
+        );
+        // An invalid motion file discards the voxel art.
+        let broken = files(&["Rock.vxl"]);
+        let (o, a, _) = run_q(&[(&base, Role::Base)], art, Theater::Temperate, &broken, &q);
+        assert!(get(&o, &a, Kind::Projectiles, "Shell").voxels.is_empty());
+        // A sprite projectile on snow: never I ‖ A.
+        let sprite = format!("{SHOOTER}[Shell]\nImage=Ball\nAlternateArcticArt=yes\n");
+        let (o, a, _) = run_q(&[(&sprite, Role::Base)], art, Theater::Snow, &f, &q);
+        assert_eq!(
+            s(&get(&o, &a, Kind::Projectiles, "Shell").sprite).as_deref(),
+            Some("Ball.shp")
+        );
+        // An invisible projectile: no art looked up.
+        let inviso = format!("{SHOOTER}[Shell]\nImage=Ball\nInviso=yes\n");
+        let (o, a, _) = run_q(&[(&inviso, Role::Base)], art, Theater::Temperate, &f, &q);
+        let shell = get(&o, &a, Kind::Projectiles, "Shell");
+        assert_eq!(shell.sprite, None);
+        assert!(shell.projectile.as_ref().unwrap().inviso);
+    }
+
+    /// spec: S-0306 Import mapping (the drawing fields: held across reads, skipped while the image is empty, animation fields modulo 256 with a warning; Shadow default yes; FirersPalette default no)
+    #[test]
+    fn projectile_drawing_fields() {
+        let base = format!("{SHOOTER}[Shell]\nImage=Ball\n");
+        let art = "[Ball]\nRotates=yes\nAnimLow=2\nAnimHigh=261\nAnimRate=-1\nAnimPalette=yes\nFlat=yes\n[Odd]\nAnimLow=\nRotates=no\n";
+        let f = files(&["Ball.shp", "Odd.shp"]);
+        let q = ArtQuirks::default();
+        let (o, a, w) = run_q(&[(&base, Role::Base)], art, Theater::Temperate, &f, &q);
+        let look = get(&o, &a, Kind::Projectiles, "Shell")
+            .projectile
+            .clone()
+            .unwrap();
+        assert!(look.rotates && look.anim_palette && look.flat && look.shadow);
+        assert!(!look.firers_palette && !look.voxel && !look.inviso);
+        assert_eq!((look.anim_low, look.anim_high, look.anim_rate), (2, 5, 255));
+        assert_eq!(
+            w.iter().filter(|m| m.contains("outside 0 to 255")).count(),
+            2
+        );
+        // A later read naming another section: its given keys replace, an empty value keeps.
+        let map = "[Shell]\nImage=Odd\nShadow=no\nFirersPalette=yes\n";
+        let (o, a, _) = run_q(
+            &[(&base, Role::Base), (map, Role::Map)],
+            art,
+            Theater::Temperate,
+            &f,
+            &q,
+        );
+        let look = get(&o, &a, Kind::Projectiles, "Shell")
+            .projectile
+            .clone()
+            .unwrap();
+        assert!(!look.rotates);
+        assert_eq!(look.anim_low, 2);
+        assert!(!look.shadow && look.firers_palette);
+        // A read with an empty image reads nothing: the fields keep their values.
+        let empty = "[Shell]\nArm=1\n";
+        let (o, a, _) = run_q(
+            &[(&base, Role::Base), (empty, Role::Map)],
+            art,
+            Theater::Temperate,
+            &f,
+            &q,
+        );
+        let look = get(&o, &a, Kind::Projectiles, "Shell")
+            .projectile
+            .clone()
+            .unwrap();
+        assert!(look.rotates);
+        assert_eq!(look.anim_high, 5);
+    }
+
+    /// spec: S-0306 claim 30 and Import mapping (Color: a known name in any case selects its 53-shade palette; missing re-selects the definition in force; an unknown name keeps the palette in force, at first the first definition's single-shade palette)
+    #[test]
+    fn projectile_colour_walk() {
+        let colours = "[Colors]\nRuby=0,200,200\nJade=90,200,200\n";
+        let with = |c: &str| format!("{colours}{SHOOTER}[Shell]\nImage=Rock\n{c}");
+        let colour = |rules: &[(&str, Role)]| {
+            let (o, a, _) = run_q(
+                rules,
+                "",
+                Theater::Temperate,
+                &files(&[]),
+                &ArtQuirks::default(),
+            );
+            get(&o, &a, Kind::Projectiles, "Shell")
+                .projectile
+                .clone()
+                .unwrap()
+                .colour
+        };
+        assert_eq!(
+            colour(&[(&with(""), Role::Base)]),
+            ProjectileColour::Shades(0)
+        );
+        assert_eq!(
+            colour(&[(&with("Color=jade\n"), Role::Base)]),
+            ProjectileColour::Shades(1)
+        );
+        assert_eq!(
+            colour(&[(&with("Color=Nope\n"), Role::Base)]),
+            ProjectileColour::Single(0)
+        );
+        // Jade, then an unknown name keeps it; then a read without the key re-selects Jade's 53 shades.
+        let map = "[Shell]\nColor=Nope\n";
+        assert_eq!(
+            colour(&[(&with("Color=Jade\n"), Role::Base), (map, Role::Map)]),
+            ProjectileColour::Shades(1)
+        );
+        let after_unknown = "[Shell]\nArm=2\n";
+        assert_eq!(
+            colour(&[
+                (&with("Color=Nope\n"), Role::Base),
+                (after_unknown, Role::Map)
+            ]),
+            ProjectileColour::Shades(0)
+        );
     }
 
     /// spec: S-0007 claim 20 (building voxel turrets)
