@@ -2,7 +2,7 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 16
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
@@ -278,7 +278,10 @@ are out of scope.
    *construction* state, so never during build-up or selling. It is also not drawn with the
    special gate image (claim 4), including at rest open while *open* is current. It uses the same image-frame index *f* as the body (so image frame 1 when
    damaged, with default art), without the clamp of claim 3. Its depth bias is in S-0102.
-   - Backing: `measurable` (B4 for ordinary bib visibility and default damaged frame).
+   A protected building's bib, under-door, replacement and door images take the protection
+   appearance of S-0513 claim 29b.
+   - Backing: `measurable` (B4 for ordinary bib visibility and default damaged frame,
+     S-0513 claim 29b and its SW10 part i for protection appearance).
      The unclamped index is `unmeasured`: B4 never requests an index above the body clamp.
      Special-gate-image suppression shares claim 4's limitation.
    - Confidence: high
@@ -503,16 +506,21 @@ are out of scope.
     repair step (S-0314 claim 3), and again at each re-entry after a *cannot pay* return to
     settling. Docking, the waiting check, a settling step that answers *not needed* or *cannot
     pay*, and a working step that answers *more needed* change no slot. The repair cycle never
-    stops *special-1*: once started it runs until it finishes on its own or is replaced, and the
-    rows below then choose *special-2* or *idle*. Only claim 13's power rules, claim 12's condition
-    swaps (which restart a running slot) and removal of the building otherwise affect it.
+    stops *special-1*: leaving the working phase does not by itself end that animation.
+    Natural completion or external removal selects *special-2* or *idle* as the rows below say.
+    Stopping or replacing the slot does not trigger that follow-up. Claim 13's power rules,
+    claim 12's condition swaps (which restart a running slot) and removal of the building can
+    also affect it.
     When the depot sends the vehicle away, the slot changes happen on the tick of that step,
     before the contact is released. When contact ends without a step (the vehicle is destroyed,
     or leaves as S-0314 claims 20 to 22 say), the depot reacts at its next processing: on the
     same or the next tick in the working and settling phases, at the waiting phase's own spacing
-    otherwise. A settling depot with no contact stays in
-    its repair behaviour, checking every tick, until *special-3* is not running, and only then
-    leaves it (S-0314 claim 22 owns that return; Questions for the project lead).
+    otherwise. A settling depot with no contact stays in its repair behaviour, checking every
+    tick, until *special-3* is no longer running, and only then returns to *guard*
+    (S-0314 claim 22 owns that return; the required companion amendment is listed under
+    Changes for other specs). The simulation models the slot animation's duration
+    from the art data as deterministic simulation state; this wait does not depend on drawing
+    frames or whether the building is visible.
 
     *Other repair-depot, recycling and delayed-fire rows.*
 
@@ -537,8 +545,9 @@ are out of scope.
     repair flag.
     - Backing: `measurable` (B18 parts a to e for the repair-cycle rows, the working-entry tick,
       *active-1* and *idle* stopping, the *cannot pay* restart, a destroyed vehicle, the naval
-      yard and *production* never appearing; B18 part f for natural completion during repair,
-      leaving repair and delayed fire; S-0603 claim 12 and scenario G10 for recycling-building
+      yard and *production* never appearing; B18 parts a, c and e for natural completion during
+      repair or after contact loss, and part f for delayed fire; B18 part g for the settling
+      hold and return to *guard*; S-0603 claim 12 and scenario G10 for recycling-building
       natural completion).
       Recycling-building restart after external removal is `unmeasured`: no data-only fixture
       establishes removal without the building itself stopping or replacing the slot animation.
@@ -546,7 +555,12 @@ are out of scope.
       that absence at completion while allowing *active-1* to run at consumption and start
       *special-1* (S-0603 claim 12).
       `unmeasured` for repair-depot non-natural removal of *special-1*: B18 establishes no such
-      event. The exhaustive other-types and other-starters assertions are `unmeasured`: a finite
+      event. Stopping *production* and the every-tick row outside repair are `unmeasured`:
+      B18's pure depots never start *production* or establish a running *special-2* outside
+      repair. The settling contact-loss row with *production* or *special-2* still running is
+      likewise `unmeasured`: part g loses contact after working has already stopped those slots.
+      Excluding occupied variants is `unmeasured`: B18 establishes no garrisoned depot.
+      The exhaustive other-types and other-starters assertions are `unmeasured`: a finite
       set of types cannot establish them.
     - Confidence: high (which slots each repair-cycle event starts and stops, the variants, and
       that the cycle never starts *production* or stops *special-1*); medium (the event timing,
@@ -576,7 +590,10 @@ are out of scope.
     in S-0102. Where it and the body or bib have exactly the same depth, the body or bib pixel stays
     visible: the under-door image loses every depth tie with them, because it is drawn after them
     and S-0102 has the rule that an object pixel does not replace a stored depth equal to its own.
-    - Backing: `measurable` (B10 for sprite selection and under-door damage frames).
+    A protected building's bib, under-door, replacement and door images take the protection
+    appearance of S-0513 claim 29b.
+    - Backing: `measurable` (B10 for sprite selection and under-door damage frames,
+      S-0513 claim 29b and its SW10 part i for protection appearance).
       Exact depth ties and adjustments are `unmeasured` here: B10 supplies no equal-depth probe.
       Depth compositing itself belongs to S-0102.
     - Confidence: medium
@@ -601,7 +618,11 @@ are out of scope.
     undamaged building requests frame 0. With *D* = 0 both request frame 0. The door image is drawn at the image
     anchor of claim 8 with the depth bias of S-0102. Outside unloading, and for a building without
     a door sprite, no door image is drawn.
-    - Backing: `measurable` (B10 for presence throughout unloading and absence outside it).
+    A protected building's bib, under-door, replacement and door images take the protection
+    appearance of S-0513 claim 29b.
+    - Backing: `measurable` (B10 for presence throughout unloading and absence outside it,
+      S-0513 claim 29b and its SW10 part i for protection appearance, including its drawing
+      correction tested against the specified result rather than the original).
       The positive-stage frame rule and damaged-door variant are `measurable` (B10).
       Non-positive stage counts and negative or high out-of-range door frames are `measurable`
       (B20). The door anchor is `unmeasured` here: neither scenario isolates its canvas centre
@@ -1069,9 +1090,9 @@ expected numbers are computed from the type's own fields at measurement time.
     animation holds its image frame. The slot with only the light flag set holds its image frame; its copy with the freeze
     flag off vanishes. Within one tick of the restore, frozen ones resume, light ones reappear,
     *super-low-power* vanishes and *super-3* reappears.
-  - Falsified if: a frozen slot animation keeps advancing, *super-low-power* does not appear, a
-    reaction comes more than one tick after the power change, the *production* slot animation keeps
-    advancing, or the slot with only the light flag set vanishes.
+  - Falsified if: any slot's presence or image-frame advancement differs from the stated
+    loss/return result, a reaction comes more than one tick after the power change, the
+    *production* slot animation keeps advancing, or the slot with only the light flag set vanishes.
 - **B8 (claims 15, 16, empty storage only).**
   - Setup: a refinery and a silo-fill type with named *special-1* art, with positive capacities.
     A read-only recorder verifies that each building's own stored amount is 0.
@@ -1099,22 +1120,31 @@ expected numbers are computed from the type's own fields at measurement time.
     image, named test art gives a stock factory a door sprite with 8 visually distinct image frames,
     a door-stage count of 4, and a copy marked as a damaged-door type. These counts are invented
     test values. Both factories use the same door sprite; only the damaged-door flag differs.
-  - Procedure: build a vehicle at the first, and a jumpjet or balloon-hover unit at the second. If
-    a factory exists whose art has an ordinary deploying sprite but no roof-deploying sprite, build a
-    jumpjet or balloon-hover unit there too. At the door factory and its copy, build a unit
-    undamaged, then damage the factory past the yellow ratio and build another.
+    Named test art also gives one factory copy ordinary deploying and under-door sprites but
+    no roof-deploying or under-roof-door sprites, and another copy no deploying sprite.
+    Choose visible under-door pixels that extend beyond the body's opaque pixels.
+  - Procedure: build a vehicle at the first, and a jumpjet or balloon-hover unit at the second.
+    Build a jumpjet or balloon-hover unit at the no-roof-art copy, and an ordinary vehicle at
+    the no-deploying-art copy. At the door factory and its copy, build a unit as well.
+    Repeat every unload after damaging its factory past the yellow ratio.
   - Observable: the body sprite and under-door image during each unload, and the door image's
     presence and door frame per tick, with the door state and the remaining ticks of its movement.
   - Runs: one per factory and unit.
   - Expected: the deploying sprite replaces the body during the vehicle unload, and the roof variant
-    appears only for the jumpjet or balloon-hover unit. At the third factory the body sprite stays.
-    The under-door image shows image frame 1 when the factory is damaged. The door image is present on
+    appears only for the jumpjet or balloon-hover unit. At both missing-replacement-art copies
+    the body sprite stays. The no-roof-art copy shows no under-door image, despite having the
+    ordinary under-door sprite. An available under-door or under-roof-door image shows frame 0
+    undamaged and frame 1 when the factory is damaged. The door image is present on
     every tick of the unload, including the ticks before the door starts to open and after it has
     closed, and absent outside the unload. Its door frame rises from 0 to *D* − 1 while the door
     opens, stays at *D* − 1 while it is open and falls back while it closes, each door frame
     following F8. Damaged, it is the same plus *D* for the damaged-door type, and unchanged otherwise.
-  - Falsified if: the body sprite stays during a vehicle unload, the ordinary deploying sprite
-    appears for a jumpjet or balloon-hover unit, the door image is missing on a tick of the unload
+  - Falsified if: the body sprite stays during the first factory's vehicle unload despite
+    available deploying art, available roof art is absent for the second factory's roof-unit
+    unload, the ordinary deploying sprite appears for a jumpjet or balloon-hover unit,
+    either missing-replacement-art copy replaces
+    its body, the no-roof-art copy draws the ordinary under-door image, an under-door damage
+    frame differs, the door image is missing on a tick of the unload
     or shown outside it, or its door frames differ from F8 in any recorded door state, including the damaged
     copy's addition of *D* and the unmarked copy's unchanged frames.
 - **B11 (claims 6, 13, 21).**
@@ -1243,9 +1273,13 @@ expected numbers are computed from the type's own fields at measurement time.
     *freeze-unpowered* left on and the owner powered. Damaged vehicles of a house with ample
     credits and of a house with 0 credits. A naval yard with the repair flag and the same test
     art, with a damaged vessel. A delayed-fire type with *special-1* and *active-1* slot
-    animations (test data if no stock type has the mark).
-  - Procedure and parts, each recording the depot's slot animations, its repair phase where a
-    recorder can read it, the vehicle's health and the paying house's credits per tick, from the
+    animations (test data if no stock type has the mark). Use a read-only recorder for the
+    repair phase and processing ticks. Choose enough missing vehicle health and a short enough
+    *special-1* duration to observe its natural end during funded repair. Repeat a and c with
+    longer named *special-1* art so it also survives the departure or contact loss. Repeat a
+    with the depot damaged past the yellow ratio and distinct damaged slot variants.
+  - Procedure and parts, each recording the depot's slot animations, its repair phase,
+    the vehicle's health and the paying house's credits per tick, from the
     order until well after the vehicle has left:
     - a. Order the funded vehicle onto the depot and let it be repaired to full health and sent away.
     - b. As a, but with the 0-credit house; after some *cannot pay* retries, give that house
@@ -1257,9 +1291,15 @@ expected numbers are computed from the type's own fields at measurement time.
       step.
     - e. As a, at the naval yard with the vessel.
     - f. Let the delayed-fire type fire.
+    - g. Let a funded vehicle enter working, then exhaust its owner's credits so the next
+      repair step returns the depot to settling and starts *special-3*. Destroy the vehicle
+      while that animation still runs. Use named test art with a deterministic *special-3*
+      duration long enough to cover the loss and several later ticks. Repeat with the view
+      scrolled away from the depot during the wait, keeping the recorder active.
   - Observable: the tick of each slot start and stop, the tick of the first health gain or credit
-    deduction, and the delayed-fire building's slot animations.
-  - Runs: one per part.
+    deduction, and the delayed-fire building's slot animations. In g, also record contact,
+    the depot's current behaviour and processing ticks, and *special-3*'s lifetime.
+  - Runs: one per part and named art or health variant; g has one visible and one offscreen run.
   - Expected: in a, c and e, *special-1* appears on the tick of the first paid repair step, not
     on docking, and *active-1* and *idle* disappear on that tick; *special-2* follows *special-1*'s
     natural end while the vehicle is in contact. On the step that sends the vehicle away (a, e) or
@@ -1270,13 +1310,26 @@ expected numbers are computed from the type's own fields at measurement time.
     *special-2* stops and *special-3* and *active-1* start on the failing step; on the first paid
     step after the credits return, *special-1* starts again and *active-1* and *idle* stop. In d, the recorded phase is waiting, *special-1* never appears, and
     *special-3* and *active-1* appear when the depot finds no contact. *Production* never appears.
-    In f, the delayed-fire building restarts *active-1* when *special-1* finishes on its own.
+    Every depot start uses the normal variant while undamaged and the damaged variant in
+    the damaged repeat. In f, the delayed-fire building restarts *active-1* when *special-1*
+    finishes on its own.
+    In g, after contact is lost the depot remains in repair, rechecking every tick while
+    *special-3* runs, and returns to *guard* at its first processing with that slot no longer
+    running. The art-derived lifetime and this return are unchanged when scrolled offscreen.
   - Falsified if: *special-1* appears on docking or on any tick other than a working-phase entry,
     *active-1* or *idle* survives the entry, *special-2* does not follow natural *special-1*
     completion during contact, *special-3* and *active-1* do not start on leaving the working
     phase, the naval yard differs from the land depot in these rows, *production* appears, *idle*
     does not follow natural *special-3* completion, or the delayed-fire building fails to
-    restart *active-1*.
+    restart *active-1*. Part b is also falsified by *special-1* starting during unpaid settling,
+    failing to restart on re-entry into working, or *active-1* or *idle* surviving that entry.
+    Part d is falsified if the waiting depot starts *special-1*, fails to start *special-3* and
+    *active-1* at its first no-contact processing, or stays in repair after that processing.
+    Any wrong normal/damaged variant, or premature stopping of the long *special-1* at
+    departure or contact loss, also falsifies the corresponding part.
+    Part g is falsified by a return to *guard* while *special-3* still runs,
+    a recheck interval other than 1 tick during the hold, failure to return at the first
+    processing after the slot is no longer running, or a lifetime or return changed by visibility.
 
 - **B19 (claim 5, theater-flag rule).** Clamped displayed frames are a departure tested
   against this spec on our engine, not against the original; the range and stage delay still
@@ -1358,6 +1411,20 @@ The free-unit effect of claim 11 is measured by S-0402 scenario H13, parts a to 
 scenario's setup, observables and falsification criteria; no separate unit-placement rule is
 specified here.
 
+## Changes for other specs
+
+- **S-0314 claim 22 — required companion amendment.** Its approved no-contact outcome says
+  that the depot plays idle animations and returns to *guard*, without the phase-dependent
+  wait. It must instead distinguish waiting (return at the next repair processing), working
+  (enter settling and recheck after 1 tick), and settling (recheck every tick while *special-3*
+  runs, return at the first processing when it no longer runs), as claim 20 specifies.
+  The art-derived slot lifetime is deterministic simulation state, independent of visibility
+  and drawing cadence. Delegate the slot starts and natural-end follow-ups to claim 20 rather
+  than promising immediate idle art. Update the corresponding state table and measurement
+  expectations, using B18 part g for the settling hold. The current S-0314 draft already
+  carries this correction; hand off that amendment with this spec, not the conflicting
+  approved wording alone.
+
 ## Open questions
 
 - Which behaviours put a building into the *active*, *full*, *aux-1* and *aux-2* states, and when
@@ -1391,13 +1458,6 @@ specified here.
   order, which is not stated (claim 17).
 
 ## Questions for the project lead
-
-- Claim 20: the added rule that a repair depot which loses contact while settling remains in its
-  repair behaviour until its *special-3* slot animation is no longer running conflicts with
-  approved S-0314 claim 22, which says a depot left without contact returns to *guard*. Confirm
-  whether S-0314 claim 22 must be revised to match this rule, or whether S-0108 should instead
-  make an immediate return to *guard* a departure. Slot animations are drawn on the client, so
-  the choice also determines whether the simulation models *special-3*'s duration.
 
 - Confirm the proposed deterministic *full* range in claim 6 at sign-off. Unlike the original's
   unspecified range, its result is completely defined here; it adds no imported key.
