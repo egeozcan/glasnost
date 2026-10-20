@@ -2,8 +2,8 @@
 id: S-0506
 title: Missiles (spawned missiles, launch cycle and rocket flight)
 topic: combat
-revision: 11
-sources-class: [decomp]
+revision: 12
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
@@ -48,7 +48,8 @@ above the terrain*.
   its own locomotor back, including after the grip ends and during a drop. It is distinct from
   the parasite hold of S-0614 claim 8.
 - **Spawn controller.** The part of an object (the *spawner*) whose type names a spawned type and
-  a positive spawn count. It holds a fixed number of *spawn slots*, and is created with the spawner.
+  a positive spawn count. It holds a fixed number of *spawn slots*, and is created with the spawner
+  except for the cycle-closing objects of claim 1.
 - **Spawned type, spawn count.** The aircraft type that the spawner's type names as the type it
   spawns, and the number of slots. Both are imported (Import mapping).
 - **Slot index.** The stable launch-position number, from 0 to *N* − 1, also identifying the
@@ -110,8 +111,19 @@ above the terrain*.
    precede any initial slave group of the spawner made in the same creation (S-0402 claim 19).
    S-0611 claim 14 and F5 define this recursive draw and number order and our engine's use
    of its own deterministic creation counter rather than the original's exact global numbers.
-   - Backing: `measurable` (scenario R1; S-0611 claim 14's scenario MU12 for creation-set variants)
-   - Confidence: high for initial fill and each object's draw and number; medium for nested order
+   **Bad-data cycle exception.** When a chain of spawned and slave types returns to a type
+   already in that same chain, S-0611 claim 14 and F5 override the creation rules above.
+   The cycle-closing object retains its one raw creation draw and one creation number, but
+   gets neither a spawn controller nor a slave group, regardless of its type's settings.
+   It has no slots and no slave places, not empty ones, so no later fill, regeneration or
+   replacement of children occurs for it. The exception applies to that object only, not
+   every object of its type. The original has no defined outcome for this bad data; our
+   engine uses this design rule and the importer warns.
+   - Backing: `measurable` (scenario R1; S-0611 claim 14's scenario MU12 for creation-set variants).
+     The cycle exception is `unmeasured`, design: the original has no defined outcome to
+     compare; S-0611 F5's engine-only scenario MU14 checks it
+   - Confidence: high for initial fill, each object's draw and number and the design exception,
+     medium for nested order
 
 2. **Launch passes.** The controller acts only in launch passes. The first pass comes 20 ticks
    after the controller is created; each later pass comes 10 ticks after the previous one. Between
@@ -849,6 +861,12 @@ Ordering consequences:
 | `V3Warhead`, `V3EliteWarhead` (rules, CombatDamage) | set A warhead, elite warhead | warhead name | none |
 | `DMislWarhead`, `DMislEliteWarhead` (rules, CombatDamage) | set B warheads | warhead name | none |
 | `CMislWarhead`, `CMislEliteWarhead` (rules, CombatDamage) | set C warheads | warhead name | none |
+
+Cycles formed by `Spawns` and `Enslaves` with positive corresponding counts are bad data.
+The importer warns. Claim 1's design exception suppresses both the spawn controller and slave
+group only on each cycle-closing object, retaining its creation draw and number and leaving
+imported type references and counts unchanged. Such an object has neither slots nor slave
+places and cannot fill children later (S-0611 claim 14 and F5).
 
 The rocket parameter keys are in General; the warhead keys are in CombatDamage. The defaults
 above are the values the original program holds at a fresh program start when no layer gives the
