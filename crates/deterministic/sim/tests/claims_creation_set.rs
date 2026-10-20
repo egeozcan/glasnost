@@ -182,7 +182,8 @@ fn s0402_claim_19_infantry_master_gets_its_group() {
     );
 }
 
-// spec: S-0611 F5 (a chain of spawned and slave types leading back to a type already in it: the importer warns, and the type closing the cycle gets no initial fill inside that chain; Q-1530 interim: nor a controller or group)
+// spec: S-0611 claim 14 and F5 (revision 4, Q-1530 answered: a chain of spawned and slave types leading back to a type already in it: the importer warns; the cycle-closing object takes its own draw and number but gets neither a spawn controller nor a slave group)
+// spec: S-0402 claim 19 (revision 34: bad-data type cycles, the same rule from the slave side)
 #[test]
 fn s0611_f5_cycles_end() {
     let r = rules();
@@ -193,7 +194,7 @@ fn s0611_f5_cycles_end() {
     assert_eq!(made.len(), 3, "the spawner and its two slot objects");
     assert!(w.obj(made[0]).unwrap().spawn.is_some());
     for &x in &made[1..] {
-        assert!(w.obj(x).unwrap().spawn.is_none(), "no initial fill");
+        assert!(w.obj(x).unwrap().spawn.is_none(), "no spawn controller");
     }
     let made = create_set(&mut w, Kind::Infantry, "SELF");
     assert_eq!(made.len(), 3, "the master and its two slaves");
@@ -206,4 +207,95 @@ fn s0611_f5_cycles_end() {
     r.sim.infantry.get_mut("SELF").unwrap().econ.enslaves = Some("SLV".into());
     let w = game(&r);
     assert!(w.rules().missiles.warnings.is_empty());
+}
+
+/// [`rules`] plus a mixed cycle (S-0611 scenario MU14): infantry MXI spawns
+/// aircraft MXA ×1 and enslaves SLV ×1; MXA enslaves MXI ×1. All invented.
+fn mixed_rules() -> Ruleset {
+    let mut r = rules();
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("MXA".into());
+    r.registries
+        .entry("infantry".into())
+        .or_default()
+        .push("MXI".into());
+    let mut mxa = aircraft();
+    mxa.econ.enslaves = Some("MXI".into());
+    mxa.econ.slaves_number = Some(1);
+    r.sim.aircraft.insert("MXA".into(), mxa);
+    let mut mxi = r.sim.infantry["SLV"].clone();
+    mxi.combat.spawns = Some("MXA".into());
+    mxi.combat.spawns_number = Some(1);
+    mxi.econ.enslaves = Some("SLV".into());
+    mxi.econ.slaves_number = Some(1);
+    r.sim.infantry.insert("MXI".into(), mxi);
+    r
+}
+
+// spec: S-0611 claim 14 and F5 (revision 4, Q-1530, scenario MU14's mixed cycle: the repeated type has both spawned and slave settings; the cycle-closing object takes its draw and number in F5 order but gets neither a spawn controller nor a slave group, so it has no slots and no places; the exception is that object's, not its type's)
+// spec: S-0402 claim 19 (revision 34: the cycle-closing object cannot later replace slaves or regenerate slot objects)
+#[test]
+fn s0611_f5_mixed_cycle_closer_keeps_no_controller_or_group() {
+    let r = mixed_rules();
+    let mut w = game(&r);
+    assert!(
+        w.rules()
+            .missiles
+            .warnings
+            .iter()
+            .any(|m| m.contains("closes a cycle")),
+        "the importer warns"
+    );
+    let made = create_set(&mut w, Kind::Infantry, "MXI");
+    let mxi = ty(&w, Kind::Infantry, "MXI");
+    let mxa = ty(&w, Kind::Aircraft, "MXA");
+    let slv = ty(&w, Kind::Infantry, "SLV");
+    let kinds: Vec<(Kind, u32)> = made.iter().map(|&id| type_name(&w, id)).collect();
+    assert_eq!(
+        kinds,
+        [mxi, mxa, mxi, slv],
+        "the root, its slot object, that slot object's slave (the closer), then the root's slave"
+    );
+    let slaves = glasnost_sim::econ::slaves::slaves_of;
+    // The root, of the same type as the closer, keeps both.
+    assert!(w.obj(made[0]).unwrap().spawn.is_some());
+    assert_eq!(slaves(&w, made[0]), vec![made[3]]);
+    assert_eq!(slaves(&w, made[1]), vec![made[2]]);
+    let closer = made[2];
+    let check = |w: &World| {
+        assert!(
+            w.obj(closer).unwrap().spawn.is_none(),
+            "no spawn controller"
+        );
+        assert!(
+            glasnost_sim::econ::slaves::group_of(w, closer).is_none(),
+            "no slave group"
+        );
+    };
+    check(&w);
+    // Nothing fills it later.
+    let count = w.objects.len();
+    for _ in 0..300 {
+        glasnost_sim::tick::step(&mut w);
+    }
+    check(&w);
+    assert_eq!(w.objects.len(), count, "no later fill");
+    // From the same seed: the same numbers and draws.
+    let mut replay = game(&r);
+    assert_eq!(create_set(&mut replay, Kind::Infantry, "MXI"), made);
+}
+
+// spec: S-0611 F5 (revision 4, scenario MU14's acyclic control: a type repeated outside its own ancestry is not a cycle; sibling slot objects of one type each keep their own slave group and children)
+#[test]
+fn s0611_f5_shared_descendant_is_not_a_cycle() {
+    let r = rules();
+    let mut w = game(&r);
+    let made = create_set(&mut w, Kind::Vehicle, "NST");
+    let slaves = glasnost_sim::econ::slaves::slaves_of;
+    for (slot, slave) in [(made[1], made[2]), (made[3], made[4])] {
+        assert!(glasnost_sim::econ::slaves::group_of(&w, slot).is_some());
+        assert_eq!(slaves(&w, slot), vec![slave]);
+    }
 }

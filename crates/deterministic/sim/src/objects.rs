@@ -83,8 +83,7 @@ pub(crate) fn fill(w: &mut World, id: ObjectId, chain: &mut Chain) {
         return;
     };
     if chain.contains(&t) {
-        // spec: S-0611 F5 (a chain of spawned and slave types leading back to a type already in it: the type that closes the cycle gets no initial fill when it is created inside that chain; the importer warns)
-        // Q-1530 interim: it gets no spawn controller and no slave group either, so nothing refills it later.
+        // spec: S-0611 claim 14 and F5, S-0402 claim 19 (revision 4 and 34, Q-1530 answered: the object that closes a cycle of spawned and slave types within its own chain keeps its creation draw and number but gets neither a spawn controller nor a slave group, so no slots or places to fill later; only that object, not every object of its type; the importer warns)
         return;
     }
     chain.push(t);
@@ -146,7 +145,7 @@ pub(crate) fn creation_cycles(
     warned
         .into_iter()
         .map(|(kind, i)| {
-            format!("S-0611 F5: the {kind:?} type at index {i} closes a cycle of spawned and slave types; inside that chain it is created with no initial fill")
+            format!("S-0611 F5: the {kind:?} type at index {i} closes a cycle of spawned and slave types; inside that chain it is created with neither a spawn controller nor a slave group")
         })
         .collect()
 }

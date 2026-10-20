@@ -99,6 +99,32 @@ pub fn is_depot(w: &World, k: ObjectId) -> bool {
     })
 }
 
+/// A repair depot's slot animation that S-0314 claims 6 and 22 test
+/// (S-0108 claim 20, Terms: the building's animation slots).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DepotSlot {
+    /// The *production* slot: while it runs, settling takes no step
+    /// (S-0314 claim 6).
+    Production,
+    /// The *special-3* slot: while it runs, a settling depot with no
+    /// contact stays in its repair behaviour (S-0314 claim 22).
+    Special3,
+}
+
+/// Whether depot `k`'s slot animation `slot` is running, as deterministic
+/// simulation state with its duration from the art data (S-0108 claim 20;
+/// S-0314 claims 6 and 22). Naval yards with the repair flag are included
+/// (S-0504 claim 8).
+///
+/// Seam: S-0108 claim 20 sim slot model (intake 14B). Until it is built no
+/// depot slot animation runs in the simulation, so this is always `false`:
+/// settling is never held (claim 6) and a settling depot with no contact
+/// returns to *guard* at its next processing (claim 22).
+pub fn slot_running(_w: &World, _k: ObjectId, _slot: DepotSlot) -> bool {
+    // spec: S-0108 claim 20 (seam: the simulation's slot model is not built; no slot runs)
+    false
+}
+
 /// A vehicle's depot link, when its contact is that depot.
 pub fn link(w: &World, id: ObjectId) -> Option<Link> {
     let o = w.obj(id)?;
@@ -563,7 +589,20 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
         return d;
     }
     let Some(v) = serviced(w, k) else {
-        // spec: S-0314 claim 22 (a depot left without any contact plays its idle animations and returns to guard)
+        // Q-1610 interim: the lost contact is noticed at this scheduled processing (the next working step's due tick or settling retry); no processing is brought forward (S-0108 claim 20 says the same or the next tick).
+        let stage = w.obj(k).map_or(phase::WAITING, |b| b.beh.progress);
+        if stage == phase::WORKING {
+            // spec: S-0314 claim 22 (revision 31: a working depot left without any contact enters settling and rechecks after 1 tick; its serviced vehicle is kept until the return to guard, so a new contact meanwhile restarts the phases at waiting, Edge cases)
+            if let Some(b) = w.obj_mut(k) {
+                b.beh.progress = phase::SETTLING;
+            }
+            return 1;
+        }
+        if stage == phase::SETTLING && slot_running(w, k, DepotSlot::Special3) {
+            // spec: S-0314 claim 22 (revision 31: a settling depot with no contact stays in its repair behaviour, checking every tick, while its special-3 slot animation runs)
+            return 1;
+        }
+        // spec: S-0314 claim 22 (revision 31: in waiting, or settling once special-3 no longer runs, a depot left without any contact returns to guard at that processing, without an animation wait)
         if let Some(b) = w.obj_mut(k) {
             b.depot.serviced = None;
             b.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
@@ -597,6 +636,10 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             }
         }
         phase::SETTLING => {
+            if slot_running(w, k, DepotSlot::Production) {
+                // spec: S-0314 claim 6 (revision 31: while the depot's production slot animation runs, settling takes no repair step and rechecks after 1 tick; checked before claim 21's movement rules, the state table's first settling row)
+                return 1;
+            }
             let near = w
                 .obj(v)
                 .is_some_and(|o| crate::naval::depot_distance(o.pos, dock) < SETTLING_HOLD);

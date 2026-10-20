@@ -2644,6 +2644,7 @@ impl Builder<'_> {
         // starts, at their first image frame.
         let running = self.live_slots.take();
         let still = running.is_none();
+        #[allow(clippy::type_complexity)]
         let entries: Vec<(slots::SlotDef, usize, Option<(i32, i32, i32)>)> =
             if let Some(list) = running {
                 list.into_iter()

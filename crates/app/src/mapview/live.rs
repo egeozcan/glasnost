@@ -1382,7 +1382,10 @@ impl Live {
     /// The translucency of an object being erased or phasing in (S-0514
     /// claim 27): code 2, or 3 for a building whose art has the
     /// double-thick flag; `None` otherwise.
-    fn erased_code(&self, id: ObjectId) -> Option<glasnost_render::compose::Translucency> {
+    pub(super) fn erased_code(
+        &self,
+        id: ObjectId,
+    ) -> Option<glasnost_render::compose::Translucency> {
         use glasnost_render::compose::Translucency;
         let w = &self.world;
         // spec: S-0514 claim 27 (while being erased, the leaving stage included, or phasing in, S-0513 claim 40)

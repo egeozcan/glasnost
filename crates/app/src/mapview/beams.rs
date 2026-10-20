@@ -41,8 +41,8 @@ use std::cmp::Ordering;
 pub const ONE: F32 = F32(0x3F80_0000); // spec: S-0518 claim 18 (S = 1)
 /// Intensity 0 as a single (S-0518 claim 18: E = 0).
 pub const NONE: F32 = F32::ZERO;
-/// Intensity ½ as a single (S-0615 claim 15: the arcs fade to half intensity).
-pub const HALF: F32 = F32(0x3F00_0000); // spec: S-0615 claim 15 (fades from full intensity to half intensity)
+/// Intensity ½ as a single (S-0615 claim 15: the arc beams' fade parameter *E* = 0.5).
+pub const HALF: F32 = F32(0x3F00_0000); // spec: S-0615 claim 15 (revision 4: fade parameters S = 1, E = 0.5, S-0518 claim 19 and F6)
 
 /// The house laser colour *L* of a house display colour (S-0518 claim 17,
 /// F5). The arithmetic is double precision until the final truncation.
@@ -1148,7 +1148,7 @@ impl Settings {
         Self {
             flags,
             chrono: channels(chrono),
-            // spec: S-0525 Import mapping (RadColor: the value in force, (0, 0, 0) at a fresh start)
+            // spec: S-0525 Import mapping and S-0514 Import mapping (revision 11: RadColor, a byte triple; the value in force, (0, 0, 0) at a fresh start)
             rad: channels(rules.combat.general.radiation.colour),
             // spec: S-0518 Import mapping (DetailMinFrameRateNormal: held value 15; DetailBufferZoneWidth: held value 5)
             limits: (
@@ -1261,7 +1261,7 @@ impl Lines {
                     spread,
                     blink: false,
                 };
-                // spec: S-0615 claims 15 and 16 (the arcs fade from full to half intensity, the final beam to none)
+                // spec: S-0615 claims 15 and 16 (revision 4: arc beams S = 1, E = 0.5; the final beam S = 1, E = 0; S-0518 claim 19 and F6 own the lifetime and intensity)
                 let end = if fade_out { NONE } else { HALF };
                 self.beams
                     .push(Beam::new(from, to, 0, now, duration, end, look));

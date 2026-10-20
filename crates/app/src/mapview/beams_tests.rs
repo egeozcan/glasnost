@@ -597,6 +597,72 @@ fn wave_pixels() {
     );
 }
 
+/// spec: S-0615 claims 15 and 16 (revision 4: arc beams D = 8 − k with S = 1, E = 0.5, the last drawn
+/// tick at 0.5 + 0.5/D, not 0.5; the final beam S = 1, E = 0, the last drawn tick at 1/D, no
+/// zero-intensity tick, no beam for D ≤ 0; ordinary drawing, fading on and blinking off, even with
+/// house colours, whose flag changes only the colours)
+/// spec: S-0518 claim 19, F6 (the lifetime and intensity the disc laser's parameters feed)
+#[test]
+fn disc_laser_beam_parameters() {
+    use glasnost_sim::combat::effects::Effect;
+    let w = glasnost_sim::testkit::new_game(5);
+    let mut lines = Lines::new(Settings {
+        house_laser: vec![[240, 0, 0]],
+        ..Settings::default()
+    });
+    let colours = [[200, 100, 40], [100, 50, 20], [7, 8, 9]];
+    let beam = |lines: &mut Lines, duration, fade_out, house| {
+        lines.take(
+            &w,
+            &Effect::Beam {
+                from: pos(0, 0, 0),
+                to: pos(2560, 0, 0),
+                duration,
+                fade_out,
+                colours,
+                house,
+            },
+            0,
+            0,
+        );
+        lines.beams.pop().expect("a beam")
+    };
+    let to_256 = |b: &Beam, p| scaled(1 << 8, intensity(b, p, RZ), RZ);
+    // An arc beam of step k = 5: D = 3; drawn at P = 0, 1, 2.
+    let arc = beam(&mut lines, 3, false, None);
+    assert!(arc.fade);
+    assert_eq!((arc.start, arc.end), (ONE, HALF));
+    assert_eq!(intensity(&arc, 0, RZ), ONE);
+    // 0.5 + 0.5/3 = 0.666…: 256 × I truncates to 170, above 0.5's 128.
+    assert_eq!(to_256(&arc, 2), 170);
+    assert_eq!(arc.age(3), None, "E itself is never drawn");
+    // The final beam: D = 4; its last drawn tick is 1/4.
+    let fin = beam(&mut lines, 4, true, None);
+    assert_eq!((fin.start, fin.end), (ONE, NONE));
+    assert_eq!(to_256(&fin, 3), 64);
+    assert_eq!(fin.age(4), None, "no zero-intensity tick");
+    for d in [0, -2] {
+        assert_eq!(
+            beam(&mut lines, d, true, None).age(0),
+            None,
+            "D = {d}: no beam"
+        );
+    }
+    // House colours: the house laser colour, that colour halved, the spread
+    // kept, drawn ordinarily and not blinking.
+    let house = beam(&mut lines, 3, false, Some(glasnost_sim::world::HouseId(0)));
+    assert_eq!(
+        house.look,
+        Look::Ordinary {
+            inner: [240, 0, 0],
+            outer: [120, 0, 0],
+            spread: [7, 8, 9],
+            blink: false
+        }
+    );
+    assert!(house.fade);
+}
+
 /// spec: S-0616 claim 31 (railgun laser: inner the type's laser colour, outer and spread black, 10 ticks, not blinking, 0.5 to 0)
 /// spec: S-0518 claim 18 (other specs' beams carry their parameters; the Terms defaults leave the house-colour flag off)
 #[test]

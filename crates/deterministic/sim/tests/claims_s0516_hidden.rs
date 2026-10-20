@@ -181,6 +181,12 @@ fn claim_28_how_v_sees_it() {
             assert_eq!(view::look(&w, g, Some(ALPHA)), owner, "{s:?} {k}");
         }
     }
+    // spec: S-0516 claim 28 (revision 12: uncloaked, or fading at stage 0, is drawn normally)
+    for s in [CloakState::Cloaking, CloakState::Uncloaking] {
+        set(&mut w, s, 0);
+        assert_eq!(view::look(&w, g, Some(BETA)), Look::Normal, "{s:?} 0");
+        assert_eq!(view::look(&w, g, Some(ALPHA)), Look::Normal, "{s:?} 0");
+    }
     set(&mut w, CloakState::Uncloaked, 0);
     assert_eq!(view::look(&w, g, Some(BETA)), Look::Normal);
     set(&mut w, CloakState::Cloaked, 0);
