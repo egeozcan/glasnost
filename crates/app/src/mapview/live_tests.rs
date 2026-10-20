@@ -408,6 +408,42 @@ fn mobile_candidates_follow_the_drawing_order() {
     );
 }
 
+/// spec: S-0102 claims 1, 4 and 7 and S-0214 claim 25 (the drawing order,
+/// and so the order of the mobile candidates, runs layer by layer: an
+/// object put into the air layer leaves the ground layer and is drawn after
+/// it; with quirks.layer_change_on_events_only off it is re-evaluated every
+/// tick, S-0102 Edge cases)
+#[test]
+fn mobiles_are_drawn_layer_by_layer() {
+    use super::slots::Layer;
+    let (mut live, _) = synthetic_live();
+    let a = own_mobile(&live, 0);
+    let b = own_mobile(&live, 1);
+    assert_eq!(live.layer_of(a), Some(Layer::Ground));
+    let before = live.mobile_order();
+    // Under the default switch a rocket state appearing is no moment.
+    live.world.obj_mut(a).unwrap().rocket = Some(Default::default());
+    live.after_tick();
+    assert_eq!(live.layer_of(a), Some(Layer::Ground));
+    assert_eq!(live.mobile_order(), before);
+    // Evaluated every tick: a goes to the air layer, then b after it.
+    live.set_view_quirks(super::quirks::ViewQuirks {
+        layer_change_on_events_only: false,
+        ..Default::default()
+    });
+    live.after_tick();
+    live.world.obj_mut(b).unwrap().rocket = Some(Default::default());
+    live.after_tick();
+    assert_eq!(
+        live.layer_list(Layer::Air),
+        [Entrant::Object(a), Entrant::Object(b)]
+    );
+    assert!(live.ground().objects().all(|id| id != a && id != b));
+    let order = live.mobile_order();
+    assert_eq!(order.len(), before.len());
+    assert_eq!(order[order.len() - 2..], [a, b]);
+}
+
 fn own_mobile(live: &Live, h: u8) -> ObjectId {
     testkit::house_objects(&live.world, h)
         .into_iter()

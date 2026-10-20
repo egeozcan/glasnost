@@ -121,6 +121,10 @@ pub enum Entrant {
     Object(ObjectId),
     /// A playing animation of the drawing (by its serial number).
     Anim(u32),
+    /// A static entry of a layer other than ground ([`Built::layered`]).
+    Layered(usize),
+    /// A particle (S-0616 claim 30), by its object number.
+    Particle(ObjectId),
 }
 
 /// The object pass's ground layer: a list fully sorted by sort key for
@@ -141,7 +145,7 @@ impl GroundLayer {
     pub fn objects(&self) -> impl Iterator<Item = ObjectId> + '_ {
         self.order().filter_map(|e| match e {
             Entrant::Object(id) => Some(id),
-            Entrant::Static(_) | Entrant::Anim(_) => None,
+            _ => None,
         })
     }
 
@@ -267,6 +271,11 @@ pub struct Live {
     /// End of the effects in the scene's items; the status extras follow.
     effects_end: usize,
     ground: GroundLayer,
+    /// The mobile objects' layers and the lists of the layers other than
+    /// ground (S-0102 claims 3, 4 and 7; presentation state).
+    layers: super::layers::Layers,
+    /// The drawing's quirk switches (S-0102 Edge cases).
+    view_quirks: super::quirks::ViewQuirks,
     /// Images and rows the combat drawing added.
     cache: Cache,
     /// Shots, detonations and animations still shown.
@@ -847,6 +856,8 @@ impl Live {
             objects_end: built.scene.items.len(),
             effects_end: built.scene.items.len(),
             ground: GroundLayer::default(),
+            layers: super::layers::Layers::default(),
+            view_quirks: super::quirks::ViewQuirks::default(),
             cache: Cache::default(),
             transients: Vec::new(),
             beams: Vec::new(),
@@ -886,6 +897,14 @@ impl Live {
                 }
             }
         }
+        // The static entries of the other layers enter at the start, in
+        // their order (S-0102 claim 7); then every mobile object is placed
+        // in the layer it evaluates to (claim 4).
+        for i in 0..live.static_layered.len() {
+            let layer = live.static_layered[i].0;
+            live.layers.place(Entrant::Layered(i), layer);
+        }
+        live.layers.evaluate_mobiles(&live.world, false, true);
         // Objects enter the ground layer in the order they are put on the
         // map, which is object ID order (S-0203 claim 3, S-0009 claim 43); a
         // static entry enters with its building or animated terrain object,
@@ -899,7 +918,10 @@ impl Live {
             entrants.push((rank, Entrant::Static(i), g.key));
         }
         for o in live.world.objects.values() {
-            if o.kind.is_mobile() && o.on_map {
+            if o.kind.is_mobile()
+                && o.on_map
+                && live.layers.of(o.id) == Some(super::slots::Layer::Ground)
+            {
                 entrants.push((o.id.0, Entrant::Object(o.id), mobile_key(o)));
             }
         }
@@ -977,7 +999,62 @@ impl Live {
     pub fn after_tick(&mut self) {
         self.take_effects();
         self.update_slots();
+        self.sync_layers(true);
         self.sync_ground();
+    }
+
+    /// Sets the drawing's quirk switches (S-0102 Edge cases).
+    pub fn set_view_quirks(&mut self, q: super::quirks::ViewQuirks) {
+        self.view_quirks = q;
+    }
+
+    /// The layer a mobile object was last put into (S-0102 claims 3 and 4).
+    pub fn layer_of(&self, id: ObjectId) -> Option<super::slots::Layer> {
+        self.layers.of(id)
+    }
+
+    /// The list of a layer other than ground, in drawing order (S-0102
+    /// claim 7).
+    pub fn layer_list(&self, layer: super::slots::Layer) -> Vec<Entrant> {
+        self.layers.list(layer).to_vec()
+    }
+
+    /// Brings the layers' membership up to date (S-0102 claims 3, 4 and
+    /// 7): the mobile objects at claim 4's moments (`tick`: after a tick),
+    /// the animations of a layer other than ground and the particles (in
+    /// the air layer, S-0616 claim 30) entering at the end of their list
+    /// when the drawing first sees them and leaving when they are gone.
+    /// Newcomers of one tick enter as mobile objects, then animations by
+    /// creation, then particles by object number (our order within a tick).
+    fn sync_layers(&mut self, tick: bool) {
+        use super::slots::Layer;
+        let events_only = self.view_quirks.layer_change_on_events_only;
+        self.layers.evaluate_mobiles(&self.world, tick, events_only);
+        let anims: BTreeMap<u32, Layer> = self.anims.iter().map(|a| (a.serial, a.layer)).collect();
+        let particles: BTreeSet<ObjectId> = self
+            .world
+            .gas
+            .systems
+            .values()
+            .flat_map(|s| s.particles.iter().map(|p| p.id))
+            .collect();
+        self.layers.retain(|e| match e {
+            Entrant::Anim(s) => anims.get(&s).is_some_and(|l| *l != Layer::Ground),
+            Entrant::Particle(id) => particles.contains(&id),
+            _ => true,
+        });
+        for (serial, layer) in anims {
+            if layer != Layer::Ground && !self.layers.contains(Entrant::Anim(serial)) {
+                // spec: S-0102 claims 4 and 7 (an animation placed in a layer other than ground becomes its last)
+                self.layers.place(Entrant::Anim(serial), layer);
+            }
+        }
+        for id in particles {
+            if !self.layers.contains(Entrant::Particle(id)) {
+                // spec: S-0616 claim 30 and S-0102 claim 3 (a particle enters the air layer when it is made, at its end, and keeps its place until removed)
+                self.layers.place(Entrant::Particle(id), Layer::Air);
+            }
+        }
     }
 
     /// The buildings' slot animations after a tick (S-0108 claims 11, 12,
@@ -1908,7 +1985,11 @@ impl Live {
             self.world
                 .objects
                 .values()
-                .filter(|o| o.kind.is_mobile() && o.on_map)
+                .filter(|o| {
+                    o.kind.is_mobile()
+                        && o.on_map
+                        && self.layers.of(o.id) == Some(super::slots::Layer::Ground)
+                })
                 .map(|o| (Entrant::Object(o.id), mobile_key(o))),
         );
         // spec: S-0102 claims 3 and 5 (a ground-layer animation's key: X + Y plus its sort adjustment)
@@ -1958,14 +2039,35 @@ impl Live {
 
     /// The mobile objects that take part in the object pass's body drawing,
     /// in their current drawing order (S-0102 claims 4 to 7, S-0214 claims
-    /// 24 and 25): the ground layer's simulation objects that are drawn.
-    /// Every mobile object is drawn in the ground layer here; the upper
-    /// layers are not modelled.
+    /// 24 and 25): the simulation objects of the five layers that are
+    /// drawn, layer by layer in drawing order.
     pub fn drawn_mobiles(&self, inputs: &Inputs) -> Vec<ObjectId> {
-        self.ground
-            .objects()
+        self.mobile_order()
+            .into_iter()
             .filter(|&id| self.mobile(inputs, id).is_some())
             .collect()
+    }
+
+    /// The mobile objects in drawing order (S-0102 claims 1, 6 and 7):
+    /// the underground and surface lists, the ground layer, then the air
+    /// and top lists.
+    pub(super) fn mobile_order(&self) -> Vec<ObjectId> {
+        use super::slots::Layer;
+        let upper = |which: &dyn Fn(Layer) -> bool| -> Vec<ObjectId> {
+            self.layers
+                .upper()
+                .filter(|l| which(*l))
+                .flat_map(|l| self.layers.list(l).iter())
+                .filter_map(|e| match e {
+                    Entrant::Object(id) => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mut v = upper(&|l| l < Layer::Ground);
+        v.extend(self.ground.objects());
+        v.extend(upper(&|l| l > Layer::Ground));
+        v
     }
 
     /// What one simulation object looks like now, if it is drawn.
@@ -2054,14 +2156,14 @@ impl Live {
     /// game, all in ground-layer order.
     pub fn redraw(&mut self, inputs: &Inputs, scene: &mut Scene) {
         self.learn_types(inputs);
-        let ids: Vec<ObjectId> = self
-            .ground
-            .order()
-            .filter_map(|e| match e {
-                Entrant::Object(id) => Some(id),
-                Entrant::Static(_) | Entrant::Anim(_) => None,
-            })
-            .collect();
+        self.sync_layers(false);
+        if !self.view_quirks.unsorted_upper_layers {
+            // spec: S-0102 Edge cases (quirks.unsorted_upper_layers off: the other layers are sorted like the ground layer, by the keys of claim 5)
+            let keys = self.upper_keys();
+            self.layers
+                .sort_by_key(|e| keys.get(&e).copied().unwrap_or(i64::MIN));
+        }
+        let ids: Vec<ObjectId> = self.mobile_order();
         let mobiles: Vec<Mobile> = ids
             .iter()
             .filter_map(|&id| self.mobile(inputs, id))
@@ -2284,7 +2386,7 @@ impl Live {
         let particle_items = self.particle_items(inputs, scene);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
         // top after it; each unsorted)
-        self.draw_layers(scene, &anim_items, &particle_items, |l| {
+        self.draw_layers(scene, &anim_items, &particle_items, &mut by_code, |l| {
             l < super::slots::Layer::Ground
         });
         for e in self.ground.order() {
@@ -2306,9 +2408,10 @@ impl Live {
                         scene.items.extend(g.items);
                     }
                 }
+                Entrant::Layered(_) | Entrant::Particle(_) => {}
             }
         }
-        self.draw_layers(scene, &anim_items, &particle_items, |l| {
+        self.draw_layers(scene, &anim_items, &particle_items, &mut by_code, |l| {
             l > super::slots::Layer::Ground
         });
         self.objects_end = scene.items.len();
@@ -2319,9 +2422,14 @@ impl Live {
     /// The items of every particle with a sprite (S-0613, S-0616; the
     /// interim rule of Q-1520), by system and then in each system's
     /// particle order (Q-1520 question 7 is open).
-    fn particle_items(&mut self, inputs: &Inputs, scene: &mut Scene) -> Vec<Item> {
+    fn particle_items(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+    ) -> BTreeMap<ObjectId, Vec<Item>> {
         let detail = inputs.options.detail;
         let mut list = Vec::new();
+        let mut ids = Vec::new();
         for s in self.world.gas.systems.values() {
             for p in &s.particles {
                 let Some(t) = self.rules.gas.particles.get(p.type_index as usize) else {
@@ -2330,6 +2438,7 @@ impl Live {
                 let Some(Some((e, true))) = self.particle_table.get(p.type_index as usize) else {
                     continue;
                 };
+                ids.push(p.id);
                 list.push(super::build::ParticleDraw {
                     idx: e.idx,
                     frame: super::particles::frame(t.kind, p.stage, e.start_frame),
@@ -2342,46 +2451,80 @@ impl Live {
         let (drawn, notes) = self.painter.particles(inputs, scene, &list);
         self.notes.extend(notes);
         self.counts.particles_drawn = drawn.iter().filter(|i| !i.is_empty()).count();
-        drawn.into_iter().flatten().collect()
+        ids.into_iter().zip(drawn).collect()
     }
 
-    /// Draws the static entries, the playing animations (`anims`, by
-    /// serial number) and the particles' items (`particles`, all in the
-    /// air layer) of the layers `which` picks, layer by layer in drawing
-    /// order, each in entering order: the static entries entered at the
-    /// start, the animations as they were created, then the particles
-    /// (S-0102 claims 1, 3, 4 and 7).
+    /// The sort keys of the entrants of the layers other than ground
+    /// (S-0102 claim 5), for `quirks.unsorted_upper_layers` off.
+    fn upper_keys(&self) -> BTreeMap<Entrant, i64> {
+        let mut keys = BTreeMap::new();
+        for o in self.world.objects.values() {
+            if o.kind.is_mobile() {
+                keys.insert(Entrant::Object(o.id), mobile_key(o));
+            }
+        }
+        for a in &self.anims {
+            let adjust = a.entry.as_ref().map_or(0, |e| e.t.y_sort_adjust);
+            keys.insert(
+                Entrant::Anim(a.serial),
+                i64::from(a.pos.x) + i64::from(a.pos.y) + i64::from(adjust),
+            );
+        }
+        for s in self.world.gas.systems.values() {
+            for p in &s.particles {
+                keys.insert(
+                    Entrant::Particle(p.id),
+                    i64::from(p.pos.x) + i64::from(p.pos.y),
+                );
+            }
+        }
+        for (i, (_, g)) in self.static_layered.iter().enumerate() {
+            keys.insert(Entrant::Layered(i), g.key);
+        }
+        keys
+    }
+
+    /// Draws the layers other than ground that `which` picks, layer by
+    /// layer in drawing order, each in its list's order (S-0102 claims 1,
+    /// 3, 4 and 7; S-0616 claim 30): the static entries, the playing
+    /// animations (`anims`, by serial number), the particles (`particles`)
+    /// and the mobile objects (`mobiles`, taken out as drawn).
     fn draw_layers(
         &self,
         scene: &mut Scene,
         anims: &BTreeMap<u32, (super::slots::Layer, Vec<Item>)>,
-        particles: &[Item],
+        particles: &BTreeMap<ObjectId, Vec<Item>>,
+        mobiles: &mut BTreeMap<u32, GroundEntry>,
         which: impl Fn(super::slots::Layer) -> bool,
     ) {
-        // spec: S-0102 claim 3 (particles are in the air layer)
-        let particle_layer = (!particles.is_empty()).then_some(super::slots::Layer::Air);
-        let mut layers: Vec<super::slots::Layer> = self
-            .static_layered
-            .iter()
-            .map(|(l, _)| *l)
-            .chain(anims.values().map(|(l, _)| *l))
-            .chain(particle_layer)
-            .filter(|l| *l != super::slots::Layer::Ground && which(*l))
-            .collect();
-        layers.sort();
-        layers.dedup();
+        let layers: Vec<super::slots::Layer> = self.layers.upper().filter(|l| which(*l)).collect();
         for layer in layers {
-            for (_, g) in self.static_layered.iter().filter(|(l, _)| *l == layer) {
-                if g.object.is_none_or(|o| !self.gone.contains(&o)) {
-                    scene.items.extend_from_slice(&g.items);
+            for e in self.layers.list(layer) {
+                match *e {
+                    Entrant::Layered(i) => {
+                        if let Some((_, g)) = self.static_layered.get(i)
+                            && g.object.is_none_or(|o| !self.gone.contains(&o))
+                        {
+                            scene.items.extend_from_slice(&g.items);
+                        }
+                    }
+                    Entrant::Anim(serial) => {
+                        if let Some((_, items)) = anims.get(&serial) {
+                            scene.items.extend_from_slice(items);
+                        }
+                    }
+                    Entrant::Particle(id) => {
+                        if let Some(items) = particles.get(&id) {
+                            scene.items.extend_from_slice(items);
+                        }
+                    }
+                    Entrant::Object(id) => {
+                        if let Some(g) = mobiles.remove(&sim_code(id)) {
+                            scene.items.extend(g.items);
+                        }
+                    }
+                    Entrant::Static(_) => {}
                 }
-            }
-            // spec: S-0102 claim 4 (an object placed in a layer other than ground becomes its last)
-            for (_, items) in anims.values().filter(|(l, _)| *l == layer) {
-                scene.items.extend_from_slice(items);
-            }
-            if particle_layer == Some(layer) {
-                scene.items.extend_from_slice(particles);
             }
         }
     }
