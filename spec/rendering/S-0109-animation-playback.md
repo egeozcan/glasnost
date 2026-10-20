@@ -2,11 +2,11 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 31
+revision: 32
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
 requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425]
 supersedes: []
@@ -85,7 +85,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 | cloak | To become invisible to other players over a few steps. S-0516 claim 18 owns building transitions and claim 28 owns their appearance to each viewer. |
 | sensors | Coverage of cells by which a house sees cloaked objects in them (S-0516 claim 21). |
 | cloaked from the viewer | For this spec's slot-animation rule, a building at fade level 15 that is not drawn for the local player under S-0516 claim 28. It is instead drawn see-through when the local player owns it, senses its cell, or is mutually allied with its owner. This term selects *t* in claim 20; it changes only drawing, never game state. |
-| being erased | A building is being erased from the moment an erasing weapon locks onto it until the last erasing weapon that locked onto it lets go, or until it is removed. When erasing weapons lock on and let go is the combat specs' business. |
+| being erased | A building is being erased from the moment an erasing weapon locks onto it until the last erasing weapon that locked onto it lets go, or until it is removed. S-0514 claims 4 and 10 own weapon lock-on and release. Claim 21 here covers only slot animations; S-0514 claim 27 owns the building body's erasure translucency. |
 | new-theater type | An animation type with the new-theater flag and without the theater flag. Only such a type gets a sprite again, with letter substitution, at the theater refresh (S-0007, claim 14). |
 
 ## Behaviour
@@ -580,7 +580,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       Building fade timing and viewer presentation have S-0516 claims 18 and 28's backing and
       confidence. Slot-animation visibility at fade levels 11 to 14 remains low-confidence.
 
-21. **Erasure.** While a building is being erased (Terms), every slot animation it has is drawn
+21. **Slot-animation erasure.** The building body's own erasure translucency is governed by
+    S-0514 claim 27: code 2, or 3 when its art has the double-thick flag. This claim covers only
+    slot animations. While a building is being erased (Terms), every slot animation it has is drawn
     with translucency code 2, or 3 if its type has the double-thick flag, combined (Terms) with
     the code of claim 20, at every detail level, and is held (claim 23). A slot animation that
     starts during erasure has that same erasure translucency and hold from its start, without
@@ -795,7 +797,7 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
     | Creator or event | Place of creation relative to the turn pass |
     |---|---|
-    | A weapon's shot animation in ordinary firing | during the firer's turn; the shot's successfully placed projectile enters play before this animation |
+    | A weapon's shot animation in ordinary firing | during the firer's turn; the shot's successfully placed projectile enters play before this animation; created with no initial loop delay, repeat factor 1 and no reverse request; attached to a firer that is not a building (claim 22), not attached for a building firer (S-0301 claims 20 to 23) |
     | A projectile's warhead detonation animation | during that projectile's detonating turn, before the projectile leaves play |
     | Death or destruction animation from damage | at the damage or death event, in the same tick part as that cause, not a later death-animation pass |
     | Projectile trailer | during the projectile's turn, before its movement and any detonation that turn (S-0306 claim 16); its creator gives it an initial loop delay of 1 update, repeat factor 1 and no reverse request |
@@ -832,7 +834,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     `quirks.update_order_removal_skip` removes this loss, as S-0203 claim 10 specifies.
     - Backing: `measurable` (AN26); existing phase contracts also have S-0203 claims 1,
       4, 5 and 8, S-0306 claim 16, S-0312 claim 1 and S-0504 claim 2's backing.
-      Vehicle deploy presentations have S-0517 claim 7's backing (P1 C).
+      Shot-animation creator settings and attachment have S-0301 claim 22's backing and
+      confidence. Vehicle deploy presentations have S-0517 claim 7's backing (P1 C).
     - Confidence: high for creation placement and the conditional rule; medium for the
       minimal explosion/removal fixture before measurement
 
