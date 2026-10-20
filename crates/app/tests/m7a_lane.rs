@@ -1328,16 +1328,28 @@ fn mind_overload(lane: &mut Lane) {
     let home = lane.home();
     let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
     let c = lane.spawn(kind, &cname, local, CellXY::new(spot.x - 4, spot.y));
-    let counts = lane
-        .world()
-        .rules()
-        .combat
-        .general
-        .mind
-        .overload_count
-        .clone();
-    let n = counts.iter().copied().max().unwrap_or(0).max(0) as usize + 2;
-    let n = n.min(12);
+    // The smallest victim count whose overload level hurts the controller
+    // without killing it with one pulse (S-0601 claim 16, F2), so that the
+    // picture shows the pulse's damage, sparks and highlight; else the
+    // smallest count that hurts at all.
+    let (n, lethal) = {
+        let w = lane.world();
+        let m = &w.rules().combat.general.mind;
+        let strength = lane.strength(c);
+        let dmg = |n: usize| {
+            glasnost_sim::mind::overload_level(&m.overload_count, n as i64)
+                .and_then(|i| m.overload_damage.get(i).copied())
+                .unwrap_or(0)
+        };
+        let hurts = (1..=12).filter(|&n| dmg(n) >= 1);
+        hurts
+            .clone()
+            .find(|&n| dmg(n) < strength)
+            .map(|n| (n, false))
+            .or_else(|| hurts.clone().next().map(|n| (n, true)))
+            .unwrap_or((12, false))
+    };
+    println!("victims for a pulse: {n}; one pulse kills: {lethal}");
     let mut held = 0;
     for i in 0..n {
         let at = lane.open_land(CellXY::new(
@@ -1348,22 +1360,15 @@ fn mind_overload(lane: &mut Lane) {
         held += usize::from(glasnost_sim::mind::take(lane.world_mut(), c, v));
     }
     println!("victims taken directly: {held}");
-    let lethal = {
-        let w = lane.world();
-        let m = &w.rules().combat.general.mind;
-        let level = glasnost_sim::mind::overload_level(&m.overload_count, held as i64);
-        let dmg = level
-            .and_then(|i| m.overload_damage.get(i).copied())
-            .unwrap_or(0);
-        dmg >= lane.strength(c)
-    };
-    println!("one pulse at this level is at least the controller's strength: {lethal}");
     lane.c.session.as_mut().unwrap().play.selection = vec![c];
     lane.look_at(spot);
-    let start = lane.permille(c);
     lane.ticks(2);
-    lane.save("mind-overload");
+    let start = lane.permille(c);
+    lane.save("mind-overload-before");
+    // The first pulse check is the 31st overload update (S-0601 claim 16):
+    // wait for the first hit, then a few ticks for its sparks to show.
     let mut low = start;
+    let mut pulsed = false;
     for _ in 0..300 {
         lane.ticks(1);
         if lane.world().obj(c).is_none() {
@@ -1371,9 +1376,18 @@ fn mind_overload(lane: &mut Lane) {
                 "the controller died of overload at tick {}",
                 lane.world().tick
             );
+            if !pulsed {
+                lane.save("mind-overload");
+            }
             break;
         }
         low = low.min(lane.permille(c));
+        if !pulsed && low < start {
+            pulsed = true;
+            println!("first damaging pulse at tick {}", lane.world().tick);
+            lane.ticks(3);
+            lane.save("mind-overload");
+        }
     }
     println!("controller health per mille: start {start}, lowest {low}");
     lane.save("mind-overload-later");
