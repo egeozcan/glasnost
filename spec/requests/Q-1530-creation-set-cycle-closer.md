@@ -1,9 +1,9 @@
 ---
 id: Q-1530
 title: What the object that closes a cycle of spawned and slave types keeps
-status: open
+status: answered
 related: [S-0611, S-0506, S-0402]
-answered-by: []
+answered-by: [S-0611]
 ---
 
 ## Need

@@ -2,13 +2,13 @@
 id: S-0611
 title: Mutation
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-20
 measurements: []
-requests: [Q-1461, Q-1460]
+requests: [Q-1461, Q-1460, Q-1530]
 supersedes: []
 ---
 
@@ -89,7 +89,9 @@ Skirmish only; network games and campaigns are out of scope.
    warhead has the mutating death kind lead to the same test (claim 6) and the same result
    (claims 7 to 13). The amount a mutating hit delivers to infantry above the surface is S-0302
    claim 17's.
-   - Backing: `measurable` (scenarios MU1, MU3 and MU6)
+   - Backing: `measurable` (scenarios MU1, MU3 and MU6). The laser-fence killer substitution
+     is `unmeasured` here: these scenarios do not isolate a fence-attributed mutating hit.
+     It inherits S-0107 claim 17's death-kind rule
    - Confidence: high
 
 ### The superweapon
@@ -149,10 +151,12 @@ Skirmish only; network games and campaigns are out of scope.
    destruction of a carrier or building. A unit still on the map on its way to enter one of them
    is listed and is eligible like any target; a successful conversion ends its entry. Infantry
    is never protected (S-0513 claim 23), so protection
-   never stops a conversion. Infantry in flight is not converted: a jumpjet type takes S-0107's
-   row 2, a parachutist death kind 3, and any infantry above the surface gets S-0302 claim 17's
-   amount.
-   - Backing: `measurable` (scenarios MU2 and MU5)
+   never stops a conversion. A jumpjet type takes S-0107 claim 17's row 2 and a parachutist
+   death kind 3, so neither converts. Height alone is not an absolute conversion ban:
+   S-0302 claim 17 resets a mutating hit's amount above the surface, but a hit that does not
+   ignore defences can still become lethal through the minimum damage. An ordinary human
+   type flying without either exclusion can then convert, including claim 7's crash case.
+   - Backing: `measurable` (scenarios MU2, MU5 and MU13)
    - Confidence: high for garrison, transport and flight; medium for absorber and grinder
      entrants on their way
 
@@ -178,7 +182,9 @@ Skirmish only; network games and campaigns are out of scope.
    ground record is read even for a victim on a high-bridge deck, so infantry or a vehicle beneath
    the bridge can refuse a deck victim's conversion, and the deck's own record plays no part
    (`quirks.mutation_test_ground_record`, Edge cases).
-   - Backing: `measurable` (scenarios MU2 and MU7)
+   - Backing: `measurable` (scenarios MU2 and MU7); the position choice's object-present
+     refusal is `unmeasured`, as in S-0208 claim 3: no practical fixture isolates that flag
+     from the other refusals
    - Confidence: high for the land, building and position rows; medium for the ground record on a
      deck and for the draw retained when a building refuses
 
@@ -269,7 +275,9 @@ Skirmish only; network games and campaigns are out of scope.
     houses, glossary *AI house*, *Player houses only*). A unit of a player house, human or AI,
     gets no behaviour from its creation: an AI house may order *hunt* through the ordinary order
     rules (documented departure, no switch).
-    - Backing: `measurable` (scenarios MU1, MU7, MU8 and MU10). The departure is a design rule
+    - Backing: `measurable` (scenarios MU1, MU7, MU8 and MU10); the position choice's
+      object-present refusal inherits claim 6's `unmeasured` qualification and reason.
+      The departure is a design rule
     - Confidence: high for health, starting experience, facing and the deck; medium for the
       placement rules (from S-0614 claim 20's placement use)
 
@@ -283,8 +291,10 @@ Skirmish only; network games and campaigns are out of scope.
     with any objects that unit's type creates with it (claim 14); our engine builds none of
     them (documented departure, no switch; Open questions), but retains claim 14's
     scenario-stream consumption and creation-number reservations for all of them.
-    - Backing: `measurable` (scenarios MU9 and MU10) for the delay and retry; `unmeasured` for
-      the never-placed object, which has no established observable
+    - Backing: `measurable` (scenarios MU9 and MU10 for delay and retry; MU12 for creation
+      draws and number consumption). Other consequences of retaining never-placed objects
+      are `unmeasured`: no isolating fixture for their possible house-count or build-limit
+      effects is established (Open questions)
     - Confidence: medium
 
 12. **When the new unit appears.** The new unit appears in the update in which the conversion
@@ -346,10 +356,14 @@ Skirmish only; network games and campaigns are out of scope.
     order: the made unit's draw and number come first, then its slot objects in slot order,
     then its slaves in place order, and claim 10's position-choice draw, when it applies,
     comes after the whole set. The observable draw and number order is recursive: each slot object's own slot objects and slaves take their draws and numbers before the next slot object's draws and numbers; after all slot objects and their descendants, each slave's own slot objects and slaves take their draws and numbers before the next slave's draws and numbers. All members are
-    owned by the house resolved for the attempt (claim 9). With no spawned or slave type, or
-    with counts of 0 or less, the set is the made unit alone, so the totals above are
-    unchanged. After a successful attempt the slot objects and slaves stay off the map as
+    owned by the house resolved for the attempt (claim 9). A branch contributes no children
+    when its type reference is absent or its corresponding count is 0 or less. Only when
+    neither branch contributes children is the set the made unit alone. After a successful
+    attempt the slot objects and slaves stay off the map as
     S-0506 claim 1 and S-0402 claim 19 describe.
+    For bad-data type cycles, F5 overrides the ordinary spawn-controller and slave-group
+    creation rules: the cycle-closing object still takes its draw and number but gets neither
+    spawn controller nor slave group, so neither can fill it later (Q-1530, design rule).
     Every other controller that a type's settings give an object at its creation takes no
     draw and no number: the takeover controller of a mind-control primary weapon (S-0601),
     the latching controller of a parasite primary weapon (S-0614), the temporal controller of
@@ -403,9 +417,18 @@ Skirmish only; network games and campaigns are out of scope.
   unit *u*, followed by claim 10's position-choice draw when that choice applies. Its totals
   are |*C*(*u*)| raw values and as many numbers, where |*C*(*o*)| counts the pairs: |*C*(*o*)| = 1 + Σ |*C*(*s*ᵢ)| + Σ |*C*(*v*ⱼ)|.
   Integer counts, exact. A chain of spawned and slave types that leads back to a type already
-  in it has no finite sequence: the original's result is undefined, and our engine's importer
-  warns and gives the type that closes the cycle no initial fill when it is created inside
-  that chain (bad-data design departure; `unmeasured`, design).
+  in that same chain is bad data: the original's result is undefined. Our engine's importer
+  warns. Our rule (Q-1530), not original behaviour, is to create the cycle-closing object with
+  its one raw creation draw and one creation number, but give it neither a spawn controller
+  nor a slave group, regardless of its type's settings. It has no slots and no slave places,
+  not empty ones: nothing regenerates or is replaced for it later. For this object both
+  *S*(*o*) and *V*(*o*) are empty and *C*(*o*) contains only its own draw-number pair.
+  The exception applies to that object, not every object of its type. This makes each creation
+  set finite and deterministic and prevents unbounded growth from later fill of a
+  cycle-closing object; no separate count clamp is needed for this cycle rule.
+  - Backing for the cycle rule: `unmeasured`, design; the original has no defined outcome to
+    compare. Engine-only scenario MU14 checks the rule
+  - Confidence: high for the design rule
 
 ## Constants
 
@@ -424,8 +447,8 @@ Skirmish only; network games and campaigns are out of scope.
 | infantry alive | killed, S-0107 claim 17 reaches row 7, claim 6 test passes | leaves play in the same tick subject to claim 7's crash exception, shared death effects and credit (S-0312 claim 8); conversion animation starts at its position |
 | infantry alive | killed, row 7 reached, claim 6 test refuses | die-2 request of S-0107 claim 17; position shown free (claim 7) |
 | conversion animation playing | each update | its position marked taken, cell's infantry house set to its owner (claim 8) |
-| conversion animation playing | last pass ends, no follow-up type, index valid | owner resolved (claim 9); creation set created (claim 14), unit placed; animation removed |
-| conversion animation playing | same, placement refused | creation set created but never placed (claim 14); no unit; one frame stepped back; retry when the frame is next due (claim 11) |
+| conversion animation playing | last pass ends, no follow-up type, index valid, owner resolved, placement succeeds | creation-set draws and numbers consumed (claim 14), unit placed; animation removed |
+| conversion animation playing | same creation conditions, placement refused | creation-set draws and numbers consumed, but our engine retains none of those objects (claim 14); no unit appears; one frame stepped back; retry when the frame is next due (claim 11) |
 | conversion animation playing | same, no owner and no civilian house, or index invalid | animation removed, nothing created |
 
 **Ordering consequences.**
@@ -495,15 +518,21 @@ Skirmish only; network games and campaigns are out of scope.
   (F4). Claims 11 and 14's retry draws and number reservations use the made type selected by
   the existing animation/list mapping, and the spawn and slave settings of that type (and of
   the types it creates) in the rows above set the size of each attempt's creation set (F5).
+- Cycles formed by `Spawns` and `Enslaves` with positive corresponding counts are bad data.
+  The importer warns; F5 suppresses both the spawn controller and slave group only on each
+  cycle-closing object, without changing the imported type references or counts. The closing
+  object's creation draw and number are retained. This is our design rule, not an absent-key
+  default or original behaviour.
 - The civilian house is found by the side named Civilian, an engine constant (S-0414 Import
   mapping), not stock data.
 - Announcement and radar-event bindings are S-0701's and S-0410's.
 
 ## Measurement scenarios
 
-All scenarios use stock data with mods and director off, normal game speed, a small purpose-made skirmish map,
-and a recorder of health, owner, type, position and occupancy for listed units and of the scenario
-random stream. One bystander computer player is kept outside the observed area under the
+All scenarios use stock data with unrelated mods and autonomous gameplay intervention disabled,
+normal game speed, a small purpose-made skirmish map, and a recorder of health, owner, type,
+position and occupancy for listed units and of the scenario random stream. Scripted measurement
+input and read-only recording are permitted. One bystander computer player is kept outside the observed area under the
 glossary's void rule. Run each deterministic sub-test once with the seed
 and stream recorded; repeat a centre-class test over 16 runs to distinguish draw-dependent choices.
 Named map overrides below are test data, removed after each run; MU10 also names a temporary art
@@ -530,7 +559,8 @@ index names.
   the warhead's versus value for its armour is 0. Kill counts credit A.
   *Falsified if* a corpse appears after a successful conversion, the unit belongs to B or the
   neutral house, appears at a different time, inherits the victim's state, or fails the new
-  owner's starting-experience rules.
+  owner's starting-experience rules. Missing launch feedback, a wrong animation point or
+  colour, wrong health or facing, or missing kill credit also falsifies the corresponding rule.
 - **MU2 (refusals and flight, claims 5 and 6).** Explosion mode. (a) An amphibious infantry unit
   swimming on water: no new unit; the death shown is S-0107 claim 17's (splash or wet die-2). (b) Infantry in a cell where
   a building is listed (an open gate cell): die-2, no new unit. (c) A rocketeer in flight and a
@@ -543,7 +573,9 @@ index names.
   changes. Repeat lethal shots against a prone cyborg, a type with a personal death-animation
   list and a type marked not human, using named map overrides where required to isolate each
   property. None converts, even with the mutating death kind. A conversion in any excluded case
-  falsifies claim 1; compare the shown death with S-0107 claim 17.
+  falsifies claim 1; compare the shown death with S-0107 claim 17. Also kill an aircraft and a
+  building with that warhead, using named test damage sufficient for each: neither creates a
+  conversion animation or made infantry. Either replacement falsifies the non-infantry exclusion.
 - **MU4 (cell mode, claim 4).** Cell mode. Three enemy infantry in the target cell and one in each of
   two neighbouring cells, one infantry two cells away, and one vehicle in the block. All five block
   infantry convert in the launch tick (the three in one cell show the absence of a list cut); the
@@ -639,7 +671,8 @@ index names.
   launch feedback or a launch animation anywhere other than F1 falsifies claim 2.
 
 - **MU12 (attempt draws and numbering, claims 11 and 14).** Use MU9's setup with the
-  director off and the read-only random-state recorder. Record each terminal attempt's
+  autonomous gameplay intervention disabled and the read-only random-state recorder. Record
+  each terminal attempt's
   incoming/outgoing scenario state, made-unit creation number and group, and whether a unit
   enters play. Use MU10's trigger-created infantry-making animation at a centre-class point,
   with a named test art file removing random-rate and start/middle-event effects. Run these variants once each, recording the
@@ -661,22 +694,25 @@ index names.
   Creation-set variants (claim 14, F5): named map overrides give the made type invented
   settings: a spawned type with count *k* = 2; a slave type with count *m* = 3; both
   together; a spawned type whose own type names a slave type with count 1; and, separately,
-  a mind-control or temporal primary weapon only. Block placement with the vehicle and
+  a mind-control, parasite or temporal primary weapon only, and a type with only an
+  airstrike designator. Test each controller-only variant separately. Block placement with
+  the vehicle and
   record at least two refused attempts, then a successful one. Expected per refused attempt:
   1 + *k* + *m* raw values (with nesting, 1 + *k*(1 + 1) for the nested variant) before any
   position-choice draw, and the counter advancing by the same amount; the made unit's
   number is the lowest, then the slot objects' numbers, then the slaves'. In the nested
   variant each slot object's slave number directly follows that slot object's number. The
-  weapon-only variant adds nothing to the ordinary totals. Between attempts no further draw
+  controller-only variants add nothing to the ordinary totals. Between attempts no further draw
   is attributable to the refused sets. A successful attempt gives the same composition,
   followed by the position-choice draw. A different count, any draw of the set after the
   position choice, a slave number before a slot number of the same set, or an extra draw
-  for the weapon-only variant falsifies the creation-set rule.
+  for any controller-only variant falsifies the creation-set rule.
   Engine-only check: refused attempts create no retained object but still consume every
   draw of their creation set and one deterministic creation number per member; none is
   returned for later reuse.
 - **MU13 (crash-flag conversion, claims 7 and 8; Q-1461).** Normal-speed skirmish with
-  director off, house A's mutating weapon and house B's ordinary human infantry type with
+  autonomous gameplay intervention disabled, house A's mutating weapon and house B's ordinary
+  human infantry type with
   no personal death-animation list, no cyborg or jumpjet type flag, and a named map override
   enabling its crash flag. On dry open ground, kill it at a side position. Record death tick,
   animation creation, owner, occupancy marks, victim removal and made-unit appearance.
@@ -696,6 +732,30 @@ index names.
   house, even though the victim crashed. Run once per variant with the seed recorded.
   Missing conversion animation, suppressed creation solely because the victim crashed,
   wrong owner, or a position left unmarked at crash entry falsifies the respective rule.
+
+- **MU14 (cycle termination, claim 14 and F5; Q-1530; engine only).** Use a small normal-speed
+  skirmish with autonomous gameplay intervention and unrelated mods disabled except named
+  test data. Give an infantry-making
+  animation a made type whose spawned/slave descendants contain a repeated type along one
+  chain, using positive invented counts. Test a spawn-only cycle, a slave-only cycle and a
+  mixed cycle. In the mixed case give the repeated type both spawned and slave settings. Trigger one
+  successful creation at a clear side position and record each object's type, creation draw,
+  number, spawn controller, slave group, slots and slave places. Expect an importer warning and a finite
+  creation set in F5 order: each cycle-closing object exists, takes its own draw and number,
+  but has neither spawn controller nor slave group, zero slots and zero slave places. Keep it alive past
+  several configured regeneration/replacement delays, destroying other descendants where
+  necessary to exercise normal replacement. No later fill may be attributed to that closing
+  object. Repeat from the same recorded seed: counts, draws and numbers must match. Any
+  missing closing object, lost draw or number, retained spawn controller or slave group,
+  later fill from that object, nontermination or differing replay falsifies our rule.
+  Also test an acyclic chain whose siblings share a descendant type: each sibling's
+  descendant must retain its ordinary controllers and children, because a repeated type
+  outside its own ancestry is not a cycle. Suppression there falsifies the per-chain rule.
+  Repeat the cyclic variants with a vehicle blocking placement for three attempts, then
+  clear it. Each refusal must reserve the same finite F5 sequence without retaining any
+  attempted objects, and success must consume a fresh sequence. Reused numbers, missing
+  draws or objects retained after refusal falsify claims 11 and 14's engine rule.
+  No original-game comparison is proposed for undefined cyclic data.
 
 ## Open questions
 
