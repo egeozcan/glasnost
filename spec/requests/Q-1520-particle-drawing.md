@@ -1,9 +1,9 @@
 ---
 id: Q-1520
 title: How a particle is drawn (palette, brightness, frame, translucency stages, placement)
-status: open
+status: answered
 related: [S-0613, S-0616, S-0007, S-0102, S-0103, S-0104]
-answered-by: []
+answered-by: [S-0616]
 ---
 
 ## Need

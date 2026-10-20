@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 10
+revision: 11
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-20
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520]
 supersedes: []
 ---
 
@@ -24,6 +24,9 @@ random stream and through how long they stay in play, and a system or particle w
 kind is covered by claims 2, 3, 21 and 22 below, with S-0613 claim 17 for its count-down.
 These claims cover skirmish only; network games and campaigns are out of scope.
 Damage follows the particle's own kind, including gas when kinds are mixed (claim 3).
+Claims 23 to 31 say how every particle is drawn (presentation only): which are drawn, palette and
+brightness, image frame, translucency, placement, the pixel colours of sparks and railgun
+particles, draw order, and the lights and laser of a system.
 
 **What this spec does not restate.**
 - **The gas kind,** the shared gas system, and every system's lifetime count-down and leaving
@@ -32,6 +35,10 @@ Damage follows the particle's own kind, including gas when kinds are mixed (clai
 - **Creating a particle:** S-0613 claim 5 for its list place, terrain floor, lifetime, start stage and damage countdown, and
   S-0202 claim 15 for its creation draws (its per-particle draw table applies to every creator of a particle, not only an animation's middle event).
 - **Particle requests from an animation's middle event:** S-0109 claim 14.
+- **Drawing:** the layer and its order (S-0102 claims 3 and 7), centred placement (S-0102 claim
+  19), depth (S-0102 claim 13), the light-alpha value (S-0104 claim 15), the gas frame and the
+  translucency rule with its performance cutoff (S-0613 claims 15 and 16), and the look of a laser
+  beam (the owner of Q-1521).
 - **Art lookup** of particles and systems: S-0007 claims 28 and 29.
 - **Special-hit effects:** S-0615.
 - **The railgun shot's hits and terrain effects:** S-0306 claim 27. This spec retains the
@@ -114,6 +121,12 @@ stands alone. This spec adds the terms after them.
   zero only until F10 sets it, in the step that makes the spark.
 - **Emission timer** *T*. A single-precision value of a smoke system. It starts at the type's spawn
   interval and grows by the type's slow-down field each turn (claim 9).
+- **Sprite kinds, pixel kinds.** Gas, smoke, fire and no kind are drawn as sprites; spark and
+  railgun as single pixels (claims 23 and 28).
+- **Direction group** *g*. The fire frame group 0 … 3 of F15 (claim 25).
+- **Own colour, colour index, colour progress.** The creation colour *c*₀ of a particle, the list
+  position *i* and the mix fraction *t* of claim 29 and F16. Only drawing reads them.
+- **Light-alpha value.** S-0104's per-screen-pixel value (Terms, claim 15), 127 by default.
 - **Spark counter** *K*. An integer of a spark system. It starts at the type's spark-turns field
   and goes down by 1 in each turn that starts with it positive (claim 15).
 
@@ -319,7 +332,7 @@ stands alone. This spec adds the terms after them.
      only when it is marked and holds no particle. One that holds a particle stays in play for
      ever; one that never held a particle leaves play when its lifetime, claim 4 or the trigger action of claim 1 marks it.
 
-   Drawing (frames, colour, translucency, lights, the railgun's laser and helix) changes nothing
+   Drawing (frames, colour, translucency, lights, the railgun's laser and helix: claims 23 to 31) changes nothing
    else in play. The colour draws of claims 16 and 18 are taken whether or not anything is drawn.
    - Backing: `measurable` (scenario P2)
    - Confidence: high
@@ -685,6 +698,164 @@ stands alone. This spec adds the terms after them.
     - Backing: `measurable` (scenarios P1 and P14)
     - Confidence: high
 
+### Drawing (presentation only)
+
+Claims 23 to 31 answer Q-1520. Drawing is done by the client and is presentation only: drawing
+itself changes no game state, takes no draw from the scenario random stream and feeds nothing
+back into play (claim 2). A draw taken during a particle-system turn may affect only presentation,
+as claim 15 specifies for its light draw. The colour progress of claim 29 is particle state that
+only drawing reads; its update draws are those of claims 16 and 18. Every claim here follows the
+particle's own kind, not its system's, as damage does in claim 3. *Sprite kinds* are gas, smoke,
+fire and no kind; *pixel kinds* are spark and railgun.
+
+23. **Which particles are drawn.** Each drawn frame, every particle in play is drawn once, in the
+    air layer (claim 30), unless one of these holds:
+    - S-0613 claim 16's performance cutoff hides it (a type that deals no damage, while the
+      drawn-frame rate is below the cutoff). This applies to every kind, not only gas.
+    - The player's detail setting is the lowest and the particle is of the smoke or spark kind.
+      Gas, fire, railgun and no-kind particles are still drawn at the lowest setting.
+    - Fog of war is in force and the particle's position is fogged. Fog is not reachable in
+      skirmish (S-0104 claim 15), so this never hides a particle here.
+    - It is of a sprite kind and its type has no sprite (S-0007 claim 28): it draws nothing.
+    A particle of a pixel kind never uses its sprite, its translucency or its stage for drawing,
+    and a particle of a sprite kind never uses its colour fields. A particle with the dead mark is
+    still drawn in any drawn frame that comes before its removal pass.
+    - Backing: `measurable` (scenario P24)
+    - Confidence: high for the detail and kind rules; medium for the fog rule, which skirmish
+      cannot show.
+
+24. **Palette and brightness of a sprite particle.** A particle of a sprite kind is drawn with the
+    anim palette at brightness 1000 ‰ (neutral). Its cell's light level, its height and the map's
+    lighting do not change that brightness, and the anim palette takes no tint (S-0104 claims 3
+    and 6). It is never drawn in a house-colour palette, whatever the system's owner house. The
+    per-pixel light-alpha value of S-0104 claim 15 still applies, as for any sprite drawn at a
+    fixed brightness: shroud and fog pieces darken it and light-glow images change it (S-0110
+    claims 5 and 6). So under the default light-alpha of 127 a particle shows the same shade row
+    on every cell. This replaces the interim rule of the request (unscaled ground level of its
+    cell, S-0103 claim 8 row 5), which does not hold for particles.
+    - Backing: `measurable` (scenario P25)
+    - Confidence: high for the palette and the fixed brightness; medium for the light-alpha
+      step, which is the same drawing path as the other fixed-brightness sprites.
+
+25. **Image frame of a sprite particle.** The drawn image frame number is:
+    - **Gas and smoke:** the particle stage itself (S-0613 claim 15 for gas).
+    - **No kind:** frame 0, always.
+    - **Fire:** *s* + *g* × *E*, with *s* the particle stage, *E* the type's end-stage field (both
+      signed) and *g* (0, 1, 2 or 3) the *direction group* of F15. The group comes from the
+      on-screen direction from the particle's creation position to the target point it was given
+      at creation, so it is fixed for the particle's whole life. Opposite screen directions share
+      one group, and nothing is mirrored. So a fire sprite holds four runs of *E* frames: for
+      flight up or down the screen, up-right or down-left, left or right, and down-right or up-left.
+    The type's start-frame and loop-frame fields are read but never used: no kind adds the start
+    frame. A fire particle that stays at its end stage (no delete-at-end flag) shows frame
+    (*g* + 1) × *E*, the first frame of the next group, or past the last group when *g* = 3.
+    Our engine draws nothing for a frame number that the sprite file does not hold (a negative
+    one included); what the original draws then is open (Open questions).
+    - Backing: `measurable` (scenario P26)
+    - Confidence: high for the formulas and the unused fields; medium for the group boundaries
+      at exact screen slopes (F15).
+
+26. **Translucency of a particle.** Each particle keeps its own translucency value, an 8-bit
+    value, for its whole life. It is drawn by S-0613 claim 16's rule, for every sprite kind: at the
+    highest detail setting a value of exactly 25 or 50 draws at that translucency, a value whose
+    signed reading is 75 … 127 draws at 75, and every other value draws opaque. At the other
+    settings every particle draws opaque. So a value below 75 other than 25 or 50 (30, say) draws
+    opaque, and a value of 128 or more, read as negative, draws opaque. The value changes only as
+    follows, each change kept modulo 256:
+    - **At creation:** the type's translucency field (S-0613 claim 16), then any smoke emission
+      step of claim 9.
+    - **Successor made in a smoke system (claim 8), whatever its kind:** the successor's value replaces its own type's value by the
+      dead particle's, plus 25 when its draw says so. So a chain of successors steps through 0, 25,
+      50, 75, 100, 125, 150 … and draws opaque, 25, 50, 75, 75, 75 and then opaque again, from
+      150, which reads as −106. So a successor of a successor can be more translucent again, up
+      to 75, and is drawn opaque once its value passes 127.
+    - **Fire stage fields:** at an update in which a fire particle's stage advances (claim 12),
+      when the new stage equals the type's translucent-25 stage field the value becomes 25, and
+      when it equals the translucent-50 stage field it becomes 50. The value is set, not added.
+      When both fields name that stage, 50 wins; otherwise the field reached later wins. The test
+      is made only at an advance, so a field equal to the start stage, a field above the end stage
+      and a field of 128 or more (the absent value 255 included) never take effect.
+    No other kind uses the stage fields, and gas, spark and railgun values never change after
+    creation. The pixel kinds never draw translucently (claim 28).
+    - Backing: `measurable` (scenario P27)
+    - Confidence: high
+
+27. **Placement, depth and shadow of a sprite particle.** The draw point is the screen pixel of the
+    particle's position, with its height lift (S-0101 F1). The image frame is placed centred on it
+    (S-0102 claim 19). The drawing reads depth and never writes it, with an upright depth profile
+    and the depth bias −15 − *L*(*z*), *z* the height of the particle's position in leptons
+    (S-0102 claim 13 and F2). No shadow is drawn for any particle.
+    - Backing: `measurable` (scenario P28)
+    - Confidence: high for the centring and the absence of a shadow; medium for the depth bias.
+
+28. **A spark or railgun particle is one pixel.** A particle of a pixel kind is drawn as a single
+    pixel, never as a sprite or a line, at the screen pixel of its position with its height lift
+    (S-0101 F1), and only when that pixel lies inside the battlefield view. With *a* the
+    pixel's light-alpha value (S-0104 claim 15) and *d* the screen-row depth of its row (S-0102
+    F1):
+    - it is not drawn when *a* = 0 (fully shrouded).
+    - it is drawn only when *d* − *L*(*z*) − 50 is strictly less than the stored depth there,
+      with no rounding of that value, and it never writes depth.
+    - its colour is the particle's current colour (F16). Where *a* < 127, each 8-bit channel is
+      multiplied by *a* and divided by 128, truncated. Where *a* ≥ 127 the colour is unchanged,
+      so a light-glow image can darken a spark but never brighten it.
+    - the colour is used as it is, with no palette, no tint and no cell light, and is packed to
+      the display's 16-bit pixel format (S-0103 claim 9).
+    - it is always opaque, at every detail setting.
+    The railgun's helix is just the arrangement of these pixels (claim 17); its laser is a separate
+    drawing (claim 31).
+    - Backing: `measurable` (scenario P29)
+    - Confidence: high for the single pixel, the colour and the light-alpha rule; medium for the
+      depth value.
+
+29. **How a spark or railgun colour moves through the list.** Each particle holds an *own colour*,
+    a *colour index* *i* and a *colour progress* *t*, set at creation and changed only by the
+    particle's updates (claims 16 and 18). Its drawn colour runs from its own colour to list
+    entry 1 while *i* = 0, and then from entry *i* to entry *i* + 1, F16 giving the mix. Each
+    update adds to *t* the type's colour-speed field plus a small random amount, from that
+    update's colour draw (F16). When *t* passes 1.0 the particle moves on to the next pair, with
+    *t* back at 0; the amount above 1.0 is dropped. At the last pair it stays, with *t* held at
+    1.0, so the colour stops at the last list entry. List entry 0 is shown only through the own
+    colour, which is entry 0 itself when both start colours are black, and otherwise a mix of the
+    two start colours drawn at creation (S-0202 claim 15, F16).
+    - **Short lists (departure, no switch).** With one entry the original reads past the end of
+      the list, and with an empty list it fails when such a particle is drawn. Our engine uses the
+      own colour as the colour to move towards when the list has no entry *i* + 1, so a one-entry
+      list draws its own colour, and an empty list draws black. The importer warns for a spark or
+      railgun type with fewer than two entries. Drawing only.
+    - Backing: `measurable` (scenario P29)
+    - Confidence: high
+
+30. **Draw order of particles.** S-0102 claims 3 and 7 give the layer and its order: particles are
+    in the air layer, which is never sorted, and an object entering it goes to the end of the
+    list. A particle enters the air layer when it is made and keeps its place until it is
+    removed; removing others does not move it. So, within the air layer, particles are drawn in
+    the order in which they were made, oldest first, across all systems together, interleaved
+    with the other air-layer objects (projectiles, animations) by the same rule. They are not
+    grouped by system or sorted by position, and a successor or a fire particle inserted
+    inside its system's list (F7) still goes to the end of the layer. The order inside a system's
+    own list (claims 5, 10, 15, 17) does not affect drawing.
+    - Backing: `measurable` (scenario P30)
+    - Confidence: high
+
+31. **System lights and the railgun laser.** A particle system draws nothing of its own except
+    these, all presentation only:
+    - **One-frame light.** A system whose type has the one-frame-light flag and a positive light
+      size, holding at least one particle, shows a spotlight at its own position in every drawn
+      frame, whatever the detail setting. Its size is trunc(λ × *f*), λ the light size and *f* the
+      particle count divided by the system type's particle-cap field, clamped to 0.4 … 1.0, in
+      floating point.
+    - **Spark light.** A spark system whose type has a positive light size and no one-frame-light
+      flag makes one lasting spotlight of that size at its position when its first turn bursts
+      (claim 15), at the highest detail setting only. A later burst makes none.
+    - **Railgun laser.** A railgun system whose type has the laser flag makes one laser beam in
+      its line turn (claim 17), from the system's position to its target point: inner colour the
+      type's laser colour, outer colour and spread black, lasting 10 ticks, not blinking, fading
+      from intensity 0.5 to 0. How a laser beam looks is Q-1521's subject.
+    How a spotlight looks, and how the light draw of claim 15 changes it, is open (Open questions).
+    - Backing: `measurable` (scenario P31)
+    - Confidence: medium
+
 ## Formulas
 
 All positions are integer leptons. "Single precision" and "double precision" are the IEEE formats
@@ -887,6 +1058,44 @@ including its line-distance and degenerate-beam cases (Q-1405 questions 2 and 3)
   No oracle measurement is claimed.
 - Confidence: high
 
+**F15. Fire direction group.** With *P*₁ = (*x*₁, *y*₁) and *P*₂ = (*x*₂, *y*₂) the screen pixels
+(S-0101 F1, height lift included) of the particle's creation position and of the target point it
+was given, let Δ*x* = *x*₂ − *x*₁ and Δ*y* = *y*₁ − *y*₂ (positive up the screen), integers. Let
+τ = sinₜ(π/8) / cosₜ(π/8), about 0.41421, and, when Δ*x* ≠ 0, σ = Δ*y* / Δ*x*, both in floating
+point.
+
+| Condition | Screen direction | Group *g* |
+|---|---|---|
+| Δ*x* = 0, σ ≥ 1/τ, or σ < −1/τ | up or down (a zero vector counts here) | 0 |
+| τ ≤ σ < 1/τ | up-right or down-left | 1 |
+| −τ ≤ σ < τ | right or left | 2 |
+| −1/τ ≤ σ < −τ | down-right or up-left | 3 |
+
+The screen difference does not depend on the view position. Confidence medium for the exact
+boundaries, which depend on the table values; the bands are high.
+
+**F16. Particle colour** (pixel kinds). Own colour *c*₀ at creation, per 8-bit channel, with the
+creation colour draw *r* of S-0202 claim 15 and *f* = *r* × 4.656613 × 10⁻¹⁰ in single precision:
+
+> *c*₀ = trunc(*s*₁ × (1 − *f*) + *s*₂ × *f*), clamped to 0 … 255,
+
+*s*₁ and *s*₂ being the two start colours. With both start colours black, *c*₀ is list entry 0
+and there is no draw. With an empty list, *c*₀ is black. At creation *i* = 0 and *t* = 0.
+
+At each update, with the update's colour draw *r* (claims 16 and 18) and *v* the type's
+colour-speed field, in double precision:
+
+> *t* ← (*r* × 4.656612877414201 × 10⁻¹⁰ × 0.05 + *v*) + *t*, summed in that order.
+> If then *t* > 1.0: when *i* < *n* − 2, *t* ← 0 and *i* ← *i* + 1; otherwise *t* ← 1.0.
+
+*n* is the number of list entries. The drawn colour, per channel, with *A* = *c*₀ when *i* = 0
+and list entry *i* otherwise, and *B* list entry *i* + 1 (*A* when the list has no such entry,
+claim 29):
+
+> *c* = trunc(*A* × (1 − *t*) + *B* × *t*), in floating point.
+
+Then the light-alpha step of claim 28: *c* ← ⌊*c* × *a* / 128⌋ when *a* < 127.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -897,6 +1106,14 @@ including its line-distance and degenerate-beam cases (Q-1405 questions 2 and 3)
 | Smoke emission height | 10 | leptons | F4 |
 | Smoke emission speed loss | 0.35 | leptons per tick per unit of *T* | F4 |
 | Smoke emission minimum speed | 2.0 | leptons per tick | F4 |
+| Sprite particle brightness | 1000 | ‰ | claim 24 |
+| Sprite particle depth bias | −15 − *L*(*z*) | depth units | claim 27 |
+| Pixel particle depth bias | −50 − *L*(*z*) | depth units, on the pixel's own row, no rounding | claim 28 |
+| Pixel full light-alpha | 127 | light-alpha value; below it channels are scaled by *a* / 128 | claim 28 |
+| Colour progress jitter | 0.05 | dimensionless, times the scaled colour draw | F16 |
+| Fire direction ratio τ | sinₜ(π/8) / cosₜ(π/8), about 0.41421 | dimensionless | F15 |
+| One-frame light size range | 0.4 … 1.0 | dimensionless factor on the light size | claim 31 |
+| Railgun laser | 10 ticks, intensity 0.5 to 0 | ticks, dimensionless | claim 31 |
 | Smoke translucency step | 25 | percentage points of translucency (Terms) | claims 8, 9 (drawn only) |
 | Successor radius divisor | 8 | dimensionless (applied to the radius field, in leptons) | F3 |
 | Fire swing amplitude divisor | 3 × *m*, with *m* = 3 when ℓ < 200.0 (near) and 1 otherwise (far) | dimensionless | F6 |
@@ -997,6 +1214,10 @@ velocity draws, then the light draw, then one draw per live spark, oldest first.
 - **Flame sweep facing constants.** The sweep's facing constants are 16383 and 65534 (F5), where the
   nominal values are 16384 and 65536; each flame's aim differs from the nominal form by less than
   0.02 degrees. `quirks.flame_sweep_facing` (default: on, the original). Fixed: 16384 and 65536.
+- **Fire end-stage frame.** A fire particle that stays at its end stage shows a frame of the next
+  direction group (claim 25). This is the original's arithmetic, kept, since stock art may rely on
+  it. A frame the file does not hold draws nothing in our engine (Open questions).
+- **Short colour lists** (claim 29): a departure with an importer warning and no quirk switch, since it affects drawing only.
 - **Bad data** follows claim 20.
 
 ## Import mapping
@@ -1028,13 +1249,13 @@ Rules file, particle system sections:
 | `SpawnCutoff` | smoke spawn cut-off | single-precision number | 0.0 |
 | `SpawnTranslucencyCutoff` | smoke translucency cut-off τ | single-precision number | 0.0 |
 | `SpawnRadius` | smoke spawn radius σ | integer, leptons | 0 |
-| `ParticleCap` | spark particle cap κ | integer | 50 |
+| `ParticleCap` | spark particle cap κ; also the divisor of the one-frame light's size (claim 31) | integer | 50 |
 | `SparkSpawnFrames` | spark counter start *K* | integer, turns | 0. A value of 0 or less, including this absent value on a spark-kind type, is bad data: importer warning, claim 20 |
 | `SpawnSparkPercentage` | spark chance χ | double, as a fraction (1 = always) | 0.0 |
 | `SpawnDirection` | spark spawn direction *s* | three single-precision numbers | 0, 0, 0 |
 | `ParticlesPerCoord` | railgun particles per lepton *p* | double | 0.1 |
 | `SpiralDeltaPerCoord`, `SpiralRadius`, `PositionPerturbationCoefficient`, `MovementPerturbationCoefficient`, `VelocityPerturbationCoefficient` | railgun line shape (drawn only) | double | 0.025, 25.0, 0, 0, 0 |
-| `Laser`, `LaserColor`, `LightSize`, `OneFrameLight` | railgun laser and spark light (drawn only) | boolean, colour, integer, boolean | no, 0,0,0, 0, no |
+| `Laser`, `LaserColor`, `LightSize`, `OneFrameLight` | railgun laser, its inner colour, the light size λ and the one-frame-light flag (claim 31; drawn only) | boolean, colour, integer, boolean | no, 0,0,0, 0, no |
 
 Rules file, particle sections:
 
@@ -1047,7 +1268,7 @@ Rules file, particle sections:
 | `MaxDC` | damage interval | integer, ticks | 0 |
 | `Damage` | damage amount (fire) | integer | 0 |
 | `Warhead` | warhead of fire hits | warhead name | none |
-| `StartStateAI`, `EndStateAI` | start stage, end stage | 8-bit signed integers | 0, 0 |
+| `StartStateAI`, `EndStateAI` | start stage, end stage; the end stage is also the fire frame-group size *E* (claim 25) | 8-bit signed integers | 0, 0 |
 | `StateAIAdvance` | stage-advance field *A* | 8-bit signed integer, ticks | 4 |
 | `FinalDamageState` | last damaging stage δ_F | 8-bit signed integer | the end stage's value as read |
 | `DeleteOnStateLimit` | delete-at-end flag | boolean | no |
@@ -1057,8 +1278,10 @@ Rules file, particle sections:
 | `WindEffect` | wind effect *W* (F2) | integer | 0 |
 | `XVelocity`, `YVelocity` | spark *X*, *Y* (F10) | integers, leptons per tick | 1, 1 |
 | `MinZVelocity`, `ZVelocityRange` | spark *Z*ₘ, *Z*ᵣ (F10) | integers, leptons per tick | 0, 1 |
-| `ColorList`, `StartColor1`, `StartColor2`, `ColorSpeed` | drawn colour; the creation colour draw of S-0202 claim 15 depends on them | colour list, colours, double | empty, black, black, 0.0 |
-| `Translucency`, `Translucent25State`, `Translucent50State` | drawn translucency | integer; 8-bit unsigned stages | 0, 255, 255 |
+| `ColorList`, `StartColor1`, `StartColor2`, `ColorSpeed` | colour list, start colours *s*₁ and *s*₂, colour speed *v* of a pixel-kind particle (claim 29, F16); the creation colour draw of S-0202 claim 15 depends on them; no effect on sprite kinds | colour list of 8-bit RGB triples (S-0202 Import mapping), colours, double | empty, black, black, 0.0. A spark or railgun type with fewer than two entries: importer warning (claim 29) |
+| `Translucency` | starting translucency (claim 26) | integer, kept modulo 256 | 0 |
+| `Translucent25State`, `Translucent50State` | fire stage fields (claim 26); no effect on other kinds | 8-bit unsigned stages | 255, 255 (never reached) |
+| `StartFrame` | read and kept, but no effect on drawing or play (claim 25); the type's loop-frame field is likewise read and unused | integer | 0 |
 
 Rules file, other sections (claim 1's creators):
 
@@ -1317,6 +1540,69 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   Expected: the damage-smoke system is marked in the turn its health ratio passes the yellow ratio,
   stops emitting and leaves play once empty. Repeat with a building and infantry using their own self-healing, then with a non-organic vehicle receiving only house-wide healing. Controls use infantry and an organic vehicle receiving only house-wide healing, with no later hit or own self-healing: their damage smoke keeps emitting across the threshold. Use named test rules with no emission cut-off or finite system lifetime during the observation. Falsified by emission after the marking turn in a positive case, or by threshold marking in either control. Three runs per variant.
 
+- **Frame-rate check (P24, P25, P27).** The recorder confirms that the drawn-frame rate stays above S-0613 claim 16's cutoff throughout; a run in which it does not is inconclusive.
+- **P24. Which particles are drawn (claim 23).** Named test rules: a smoke system, a fire system
+  with a zero damage amount, a spark emitter and a railgun emitter, each fired at flat open ground.
+  Run once at each of the three detail settings, at 800×600 so that the drawn-frame rate stays
+  above the cutoff, with tick-labelled lossless capture. Observable: which particles appear in the
+  capture. Expected: at the lowest setting no smoke and no spark particle is drawn, while the fire
+  sprites and railgun pixels are; at the other two settings all four are. Falsified by a smoke or
+  spark particle drawn at the lowest setting, or a fire or railgun particle missing there.
+- **P25. Palette and brightness (claim 24).** A test map with a dark ambient light and one cell
+  lit by a coloured building light, plus a raised plateau. A smoke particle type with a known sprite
+  (named test rules, a slow rise, no wind) is released on flat dark ground, on the coloured cell and
+  on the plateau, well away from shroud edges and glow images. Observable: the pixels of one image
+  frame in each place. Expected: identical pixels in all three places, equal to the frame drawn with
+  the anim palette at brightness 1000 and no tint.
+  Falsified by pixels that follow the cell's light level, the coloured light or the height, or match
+  the unit, house-colour or tile palette. The interim rule (unscaled ground level of the cell)
+  predicts a darker row on the dark ground; this run separates the two.
+- **P26. Image frames (claim 25).** Part a: a smoke type with a nonzero start-frame field and a
+  loop-frame field other than 1 (named test rules), and a control with both at their absent values.
+  Expected: the same frame sequence in both, frame = stage. Part b: a fire weapon fired by a unit in
+  eight screen directions in turn, its particle type's end-stage field *E* > 1 and a sprite whose
+  frames are numbered visibly. Expected: up and down use frames 0 … *E* − 1, up-right and
+  down-left *E* … 2*E* − 1, left and right 2*E* … 3*E* − 1, down-right and up-left 3*E* … 4*E* − 1.
+  Falsified by mirrored frames, a start-frame shift, or another grouping.
+- **P27. Translucency (claim 26).** Highest detail setting. Part a: a smoke type with translucency
+  0 and a finite chain of seven distinct named types (generations 0 to 6), each naming the next and the last naming none, radius 40 and a short lifetime, so that successors chain,
+  record each generation's translucency value (drawn shade) and the raw values of claim 8. Expected:
+  each successor draws at the parent's value plus 25 when *r* rem 6 ≠ 0, drawn 25, 50, 75, 75, 75,
+  and opaque from 150. Part b: a fire type with translucency 0, end stage 6, translucent-25 stage 2
+  and translucent-50 stage 4. Expected: opaque at stages 0 and 1, 25 % from stage 2, 50 % from
+  stage 4. Part c: the same with both fields 3, and with the 25-field equal to the start stage.
+  Expected: 50 % from stage 3, and no change at the start stage. Part d: a smoke type with
+  translucency 30. Expected: opaque. Repeat part b at the middle setting: opaque throughout.
+- **P28. Placement and shadow (claim 27).** A no-kind particle (named test rules, frame 0 only, an
+  odd-sized sprite canvas) made by a warhead at a known point on flat ground at level 0 and again
+  on a raised cell. Observable: the image frame's top-left pixel and the absence of any shadow
+  pixels. Expected: placement by S-0102 claim 19 on the projected point with its height lift, and
+  no shadow. Part b: the particle behind a building's upright body. Expected: the body covers
+  the particle where the depth bias −15 − *L*(*z*) loses. Falsified by a displaced frame, a shadow, or a
+  depth order that needs another bias.
+- **P29. Spark and railgun pixels (claims 28, 29).** Named test rules: a spark type with a three-entry
+  colour list of distinct pure colours, both start colours black, a colour speed of 0.1, and a
+  railgun type with the same list. Fire each on flat explored ground, then with the sparks crossing
+  a shroud edge. Observable: per tick, each particle's pixel colour and position (lossless capture)
+  with the recorder's colour draws. Expected: one pixel per particle; colour equal to F16 from the
+  logged draws, moving from entry 0 to entry 1 and then to entry 2, where it stays; channels scaled
+  by the light-alpha at the shroud edge, and no pixel inside full shroud. Part b: start colours set
+  (one black, one white). Expected: the first colour is the mix of the creation draw, and entry 0
+  never shows. Falsified by a sprite, a line, translucency, a palette-shifted colour or another colour
+  path.
+- **P30. Draw order (claim 30).** Two smoke systems made at the same point a few ticks apart, then a
+  projectile crossing them. Observable: which drawing covers which where they overlap. Expected:
+  each later-made particle covers every earlier one, whatever its system, and the projectile covers
+  the particles made before it entered the air layer and is covered by those made after. Falsified
+  by grouping by system or by sorting.
+- **P31. System lights and the railgun laser (claim 31).** Named test rules: a spark system with a
+  light size and no one-frame flag, the same with the one-frame flag, and a railgun type with the
+  laser flag and a pure laser colour. Run at the highest and the middle detail setting. Observable:
+  frames with a spotlight, its size against the particle count, and the laser's frames and colour.
+  Expected: the lasting spotlight only at the highest setting and only after a first-turn burst; the
+  one-frame light at both settings while the system holds particles, sized by claim 31; the laser
+  for 10 ticks in the laser colour, fading. Falsified by another count, size or duration.
+
 ## Open questions
 
 - **Owner leaving the map** (claim 4): whether an owner that goes into a transport or a building,
@@ -1333,4 +1619,11 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
 - **Absent game-wide spark type** (claim 1; Import mapping, game-wide spark type row): the original's result when that key is absent is not established. Our engine creates no spark system and takes no draw there, as a departure. S-0601 claim 16 has the same key and case. No measurement is proposed yet; a test rules file with the key absent, and an electric-bolt shot, would show the original's result.
 - **Shared gas system's position** (claim 1, Constants): the second trigger action of claim 1 makes the system's own position observable (S-0613 claim 1 says so). P1 part b decides the position.
 - **Rounding of a negative radius** (claim 20): the original's rounding is not known. Our engine rounds down, as F3 says. No measurement is proposed yet.
+- **Frames a sprite does not hold** (claim 25): what the original draws for a frame number beyond
+  the file's frames, or a negative one, is not established. Our engine draws nothing. Scenario
+  P26 with a fire type held at its end stage and *g* = 3 would show it.
+- **Spotlight look** (claim 31): the shape, colour and brightness of a particle system's
+  spotlight, and how claim 15's light draw changes it (the value it moves lies between 17 and 41),
+  are not analysed. No spec owns spotlights yet.
+- **Laser beam look** (claim 31): owned by the spec that answers Q-1521.
 - **Natural smoke and cloaking** (claim 1): S-0516 claim 18 states the removal at full cloaking and the displacement condition at full uncloaking; both specs agree. Scenario P1 parts b and c decide it.
