@@ -765,6 +765,27 @@ fn gpu_protection_mask_matches_cpu() {
         object: None,
         stack: None,
     });
+    // spec: S-0513 claim 29b (a translucent drawing of a protected object takes no mask: a shade
+    // carrying one blends as its unmasked source on both paths)
+    s.items.push(Item {
+        image: tall,
+        x: 60,
+        y: 20,
+        test: DepthTest::Reader,
+        depth: ItemDepth::Profile {
+            profile: Profile::Upright,
+            bias: 40,
+            companion: None,
+        },
+        paint: Paint::Translucent(
+            Shade::new(0, 3, 2000).with_mask(masks[1]),
+            Translucency::Quarter,
+        ),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    });
     let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
         .expect("scene uploads");
     let size = (128u32, 72u32);

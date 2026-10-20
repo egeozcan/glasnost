@@ -987,6 +987,10 @@ pub struct Painter {
     /// The cell-pass items of terrain tiles (diamonds and extra images)
     /// with their cells, for a relight.
     tile_items: Vec<(usize, CellXY)>,
+    /// The protection look of the building occupying each cell, for the
+    /// live game's building slot animations (S-0102 claim 34, animation
+    /// rule); empty for the static scene.
+    protected_cells: BTreeMap<CellXY, super::protection::Look>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -2362,6 +2366,11 @@ impl Builder<'_> {
             Some(_) => lit(self, protection).with_mask(shield_mask),
             None => row,
         };
+        // spec: S-0513 claim 29b (the bib, under-door and under-roof-door images, the image drawn
+        // in place of the body and the door image take the body's envelope and mask: the
+        // force-shield mask under the force shield, none under the curtain; the door's mask is
+        // the drawing correction)
+        let accessory_row = body_row;
         let Some(body_sprite) = art.sprite.clone() else {
             return items;
         };
@@ -2488,7 +2497,7 @@ impl Builder<'_> {
                     bias: -lz - 3,
                     companion: None,
                 },
-                Paint::Lit(row),
+                Paint::Lit(accessory_row),
                 Group::Bibs,
                 false,
                 Some(object),
@@ -2498,7 +2507,8 @@ impl Builder<'_> {
         }
         // spec: S-0108 claim 22 (the under-door sprite: image frame 1 when damaged, 0 otherwise;
         // none past the sprite, S-0108 claim 3), drawn after the bib (S-0102 claim 16). Its anchor
-        // (claim 8's) and paint (the body's lit row) are our placeholders: no spec gives them
+        // (claim 8's) and paint (the body's lit row) are our placeholders: no spec gives them;
+        // its protection appearance is S-0513 claim 29b's
         if let Some(under) = unload_sprites.and_then(|u| u.under_door) {
             let frame = unload::under_door_frame(damaged);
             if self.sprite_frames(under).is_some_and(|c| frame < c)
@@ -2513,7 +2523,7 @@ impl Builder<'_> {
                         bias: -lz - 2,
                         companion: None,
                     },
-                    Paint::Lit(row),
+                    Paint::Lit(accessory_row),
                     Group::Buildings,
                     false,
                     Some(object),
@@ -2522,7 +2532,10 @@ impl Builder<'_> {
                 items.push(item);
             }
         }
-        self.slot_animations(i, cell, z, u, hsv, damaged, object, ground);
+        // spec: S-0102 claim 34 (a building slot animation drawn with its building's palette and
+        // stored brightness: the protected building's brightness, refreshed on each building turn)
+        let slot_u = super::protection::brightness(protection, u);
+        self.slot_animations(i, cell, z, slot_u, hsv, damaged, object, ground);
         // The building's parts in the object pass: the door image, then its voxel turret or barrel
         // (our placeholder order between the two).
         let mut parts = Vec::new();
@@ -2540,7 +2553,8 @@ impl Builder<'_> {
             let count = self.sprite_frames(door).unwrap_or(0);
             if let Some(frame) = unload::door_image_frame(frame, count)
                 // spec: S-0108 claim 23 (at the image anchor of claim 8); its paint, the body's lit row,
-                // is our placeholder: S-0103 and S-0104 do not name the door image
+                // is our placeholder: S-0103 and S-0104 do not name the door image; its protection
+                // appearance is S-0513 claim 29b's (as the bib, the drawing correction)
                 && let Some(item) = self.place_sprite(
                     door,
                     frame,
@@ -2552,7 +2566,7 @@ impl Builder<'_> {
                         bias: -lz - 7,
                         companion: None,
                     },
-                    Paint::Lit(row),
+                    Paint::Lit(accessory_row),
                     Group::Buildings,
                     false,
                     Some(object),
@@ -2667,7 +2681,8 @@ impl Builder<'_> {
             // world units)
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
-            let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
+            let anim_cell = CellXY::new(pos.0 >> 8, pos.1 >> 8);
+            let row = self.anim_row(&t, hsv, u, anim_cell);
             let detail = self.options.detail.number();
             let (frame, code) = match at {
                 // spec: S-0109 claims 1 and 20 (image frame a + k; the code from stage k and end E,
@@ -2677,6 +2692,19 @@ impl Builder<'_> {
                     slots::first_frame(&t, n),
                     slots::first_translucency(&t, detail, n),
                 ),
+            };
+            // spec: S-0102 claim 34, animation rule (a building slot animation is marked as a
+            // building animation: the building occupying its cell supplies the force-shield mask
+            // while it is force-shielded; curtain protection supplies none). The rule is for
+            // opaque drawings; one whose own art draws it translucent takes no mask (our interim
+            // reading: S-0513 Open questions leave it open, and F8's blend takes no mask). An
+            // occupying building whose centre cell is shrouded supplies no mask (Q-1529 interim:
+            // S-0513 claim 29b's shroud row read as reaching its slot animations)
+            let look = self.p.protected_cells.get(&anim_cell).copied();
+            let row = if code == 0 {
+                row.with_mask(self.protection_masks().building(look))
+            } else {
+                row
             };
             // spec: S-0102 claim 17 (the slot's depth adjustment replaces the type's)
             let items = self.anim_items(
@@ -3397,17 +3425,13 @@ impl Builder<'_> {
         -height_lift(z) + SITUATIONAL + (factor * fudge).max(0)
     }
 
-    /// The rules' extra-light value in ‰ (S-0104 claim 13), 0 when absent.
     /// The protection colour masks of the import's selectors (S-0102 claim
-    /// 34, F9), noting a selector outside the table (Q-1527).
-    fn protection_masks(&mut self) -> super::protection::Masks {
-        let (masks, notes) = super::protection::Masks::read(self.import);
-        for n in notes {
-            self.note(&n);
-        }
-        masks
+    /// 34, F9; S-0513 claim 29a).
+    fn protection_masks(&self) -> super::protection::Masks {
+        super::protection::Masks::read(self.import)
     }
 
+    /// The rules' extra-light value in ‰ (S-0104 claim 13), 0 when absent.
     fn extra_light(&self, key: &[u8]) -> i32 {
         self.import
             .outcome
@@ -4434,7 +4458,15 @@ impl Painter {
             sources: Vec::new(),
             field_sources: Vec::new(),
             tile_items: Vec::new(),
+            protected_cells: BTreeMap::new(),
         }
+    }
+
+    /// Sets the protection look of the building occupying each cell, which
+    /// the next [`Painter::buildings`] draws building slot animations by
+    /// (S-0102 claim 34, animation rule).
+    pub fn set_protected_cells(&mut self, cells: BTreeMap<CellXY, super::protection::Look>) {
+        self.protected_cells = cells;
     }
 
     /// Lights every cell afresh with ambient `ambient` (hundredths) and

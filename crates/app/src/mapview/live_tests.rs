@@ -2696,6 +2696,7 @@ fn protection_curtain_vehicle_rows() {
             let look = Look {
                 kind: ProtectKind::Curtain,
                 factor: Some(512),
+                shrouded: false,
             };
             let (plain, _) = painter.mobiles(inputs, scene, &[car(None)]);
             let (shown, _) = painter.mobiles(inputs, scene, &[car(Some(look))]);
@@ -2767,6 +2768,7 @@ fn protection_building_body_rows() {
         Some(Look {
             kind,
             factor: Some(512),
+            shrouded: false,
         })
     };
     let plain = body(None);
@@ -2780,5 +2782,421 @@ fn protection_building_body_rows() {
         draw(look(ProtectKind::ForceShield)).1,
         draw(None).1,
         "shadow unchanged"
+    );
+}
+
+/// A look of `kind` at phase factor 512 (S-0513 claim 29: the bright hold).
+fn bright(kind: glasnost_sim::superweapons::ProtectKind) -> super::protection::Look {
+    super::protection::Look {
+        kind,
+        factor: Some(512),
+        shrouded: false,
+    }
+}
+
+/// The items the live painter draws for `building` (HUTX) in the
+/// protection test context, with the unloading sprites `roles`, the
+/// animation type SLOTA (art section `slot_art`), the rules `rules_extra`
+/// added and the building look of each cell `cells`.
+fn protected_hut_items(
+    rules_extra: &str,
+    roles: &[&'static str],
+    slot_art: &str,
+    building: LiveBuilding,
+    cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::Look>,
+) -> Vec<glasnost_render::scene::Item> {
+    use super::tests::{ART, art_of, context_full};
+    let rules = format!("{}[Animations]\n0=SLOTA\n{rules_extra}", protection_rules());
+    let art = format!("{ART}[SLOTA]\n{slot_art}");
+    let (mut import, catalogue, mut assets) = context_full(&rules, &art);
+    let hut = import.arts.get_mut(&(Kind::Buildings, 0)).unwrap();
+    for &(role, file) in &[
+        ("deploying", "hutxdep.shp"),
+        ("roof_deploying", "hutxroof.shp"),
+        ("under_door", "hutxud.shp"),
+        ("under_roof_door", "hutxurd.shp"),
+        ("door", "hutxdoor.shp"),
+    ] {
+        if roles.contains(&role) {
+            hut.building_sprites.insert(role, file.as_bytes().to_vec());
+            assets.insert(file.as_bytes(), shp((40, 30), 4, (4, 4), (6, 8)));
+        }
+    }
+    if rules_extra.contains("Gate=yes") {
+        assets.insert(b"hutx.shp", shp((40, 30), 40, (4, 4), (6, 8)));
+    }
+    import
+        .arts
+        .insert((Kind::Animations, 0), art_of("SLOTA", "slota.shp"));
+    assets.insert(b"slota.shp", shp((20, 20), 4, (2, 2), (9, 9)));
+    let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+    let map = decode(
+        &doc,
+        &DecodeContext {
+            catalogue: Some(&catalogue),
+            ..Default::default()
+        },
+    )
+    .map;
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (built, mut painter) = build_parts(&inputs, true);
+    let mut scene = built.scene;
+    painter.set_protected_cells(cells);
+    let (drawn, _) = painter.buildings(&inputs, &mut scene, &[building]);
+    drawn.into_iter().next().unwrap_or_default()
+}
+
+/// HUTX at cell (2, 2) with `protection`, unloading `unloading`.
+fn hut(protection: Option<super::protection::Look>, unloading: Option<Unloading>) -> LiveBuilding {
+    LiveBuilding {
+        idx: 0,
+        cell: glasnost_map::CellXY::new(2, 2),
+        owner: b"Neutral".to_vec(),
+        health: (1, 1),
+        facing: 0,
+        anim: 0,
+        occupied: false,
+        slots: Vec::new(),
+        object: sim_code(ObjectId(5)),
+        unloading,
+        gate_door: None,
+        protection,
+    }
+}
+
+/// The (profile, bias, shade) of each lit item.
+fn lit_parts(
+    items: &[glasnost_render::scene::Item],
+) -> Vec<(Profile, i32, glasnost_render::compose::Shade)> {
+    items
+        .iter()
+        .filter_map(|i| match (i.paint, i.depth) {
+            (Paint::Lit(s), ItemDepth::Profile { profile, bias, .. }) => Some((profile, bias, s)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// HUTX's foundation cells (2 × 2 from cell (2, 2)), each under `look`.
+fn hut_cells(
+    look: Option<super::protection::Look>,
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::Look> {
+    look.map(|l| {
+        [(2, 2), (3, 2), (2, 3), (3, 3)]
+            .map(|(x, y)| (glasnost_map::CellXY::new(x, y), l))
+            .into_iter()
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+/// A running SLOTA slot animation displaced `y` pixels down.
+fn slot_a(y: i32) -> super::build::LiveSlot {
+    super::build::LiveSlot {
+        def: super::slots::SlotDef {
+            normal: b"SLOTA".to_vec(),
+            y,
+            ..Default::default()
+        },
+        idx: 0,
+        frame: 0,
+        stage: 0,
+        end: 0,
+    }
+}
+
+/// spec: S-0513 claim 29b (the bib, the under-door and under-roof-door images, the deploying and
+/// roof-deploying images drawn in place of the body and the door image while unloading take the
+/// envelope and the force-shield mask under the force shield, none under the curtain: as the
+/// body; the door's mask is the drawing correction), S-0102 claim 34 (the same rows), S-0108
+/// claims 7, 22 and 23 (which images are drawn), S-0102 claim 13 (their biases)
+#[test]
+fn protection_claim29b_accessory_rows() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    for roof in [false, true] {
+        let unloading = unloading_with(roof, DoorView::Open);
+        let parts = |look| {
+            lit_parts(&protected_hut_items(
+                "",
+                &UNLOAD_ROLES,
+                "",
+                hut(look, unloading),
+                Default::default(),
+            ))
+        };
+        let plain = parts(None);
+        // Replacement body (−22 or −42, upright), bib (−3), under-door (−2, flat), door (−7).
+        let body_bias = if roof { -42 } else { -22 };
+        let biases: Vec<(Profile, i32)> = plain.iter().map(|p| (p.0, p.1)).collect();
+        assert_eq!(
+            biases,
+            [
+                (Profile::Upright, body_bias),
+                (Profile::Flat, -3),
+                (Profile::Flat, -2),
+                (Profile::Flat, -7),
+            ],
+            "roof {roof}"
+        );
+        assert!(plain.iter().all(|p| p.2.mask == 0));
+        for (kind, mask) in [
+            (ProtectKind::ForceShield, shield),
+            (ProtectKind::Curtain, 0),
+        ] {
+            let shown = parts(Some(bright(kind)));
+            assert_eq!(shown.len(), plain.len());
+            for (s, p) in shown.iter().zip(&plain) {
+                assert_eq!(
+                    s.2, shown[0].2,
+                    "every part as the body: {kind:?} roof {roof}"
+                );
+                assert_eq!(s.2.mask, mask, "{kind:?} bias {}", s.1);
+                assert!(s.2.rho > p.2.rho, "the envelope: {kind:?} bias {}", s.1);
+            }
+        }
+    }
+}
+
+/// spec: S-0513 claim 29b (a special gate image drawn in place of the body: the body's envelope
+/// and mask), S-0108 claim 4 (a moving gate draws its frame from the body sprite and no bib; at
+/// rest the body and the bib)
+#[test]
+fn protection_claim29b_gate_image() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    for (door, count) in [
+        (DoorView::Opening { m: 90, r: 45 }, 1),
+        (DoorView::Closed, 2),
+    ] {
+        let mut b = hut(Some(bright(ProtectKind::ForceShield)), None);
+        b.gate_door = Some(door);
+        let shown = lit_parts(&protected_hut_items(
+            "[HUTX]\nGate=yes\n",
+            &[],
+            "",
+            b,
+            Default::default(),
+        ));
+        assert_eq!(shown.len(), count, "{door:?}");
+        assert!(shown.iter().all(|p| p.2.mask == shield), "{door:?}");
+    }
+}
+
+/// spec: S-0513 claim 29b (an object whose centre cell is shrouded for the local player keeps the
+/// envelope on every part still drawn and takes no mask), S-0102 claim 34
+#[test]
+fn protection_claim29b_shrouded_centre_cell() {
+    use glasnost_sim::superweapons::ProtectKind;
+    let unloading = unloading_with(false, DoorView::Open);
+    let parts = |look| {
+        lit_parts(&protected_hut_items(
+            "",
+            &UNLOAD_ROLES,
+            "",
+            hut(look, unloading),
+            Default::default(),
+        ))
+    };
+    let open = parts(Some(bright(ProtectKind::ForceShield)));
+    let hidden = parts(Some(bright(ProtectKind::ForceShield).shrouded(true)));
+    assert_eq!(open.len(), hidden.len());
+    for (o, h) in open.iter().zip(&hidden) {
+        assert_ne!(o.2.mask, 0);
+        assert_eq!(h.2.mask, 0, "no mask under shroud, bias {}", h.1);
+        assert_eq!(h.2.rho, o.2.rho, "the envelope stays, bias {}", h.1);
+    }
+    // A curtain-protected voxel vehicle likewise (S-0102 claim 34's curtain row).
+    let m = super::protection::Masks {
+        curtain: 0x1234,
+        shield: 0x0841,
+    };
+    let look = Some(bright(ProtectKind::Curtain));
+    assert_eq!(m.mobile(look, true, true), 0x1234);
+    assert_eq!(m.mobile(look.map(|l| l.shrouded(true)), true, true), 0);
+}
+
+/// spec: S-0513 claim 29b (a centre cell: for a unit the cell that holds its position; shrouded
+/// for the local player only), S-0409 Terms (explored)
+#[test]
+fn protection_centre_cell_follows_the_local_players_shroud() {
+    use glasnost_sim::superweapons::{ProtectKind, Protection, Tint};
+    let (mut live, _) = synthetic_live();
+    let unit = own_mobile(&live, 0);
+    let tick = live.world.tick;
+    live.world.obj_mut(unit).unwrap().sw.protection = Some(Protection {
+        start: tick - 1,
+        duration: 1000,
+        kind: ProtectKind::Curtain,
+        tint: Tint::Rise(tick - 1),
+    });
+    let (cell, pos) = {
+        let o = live.world.obj(unit).unwrap();
+        (o.pos.cell(), o.pos)
+    };
+    let shrouded_for = |live: &mut Live, viewer: HouseId| {
+        live.set_viewer(Some(viewer));
+        live.protection_look_of(unit).expect("protected").shrouded
+    };
+    // Nothing is explored yet: shrouded for either house.
+    assert!(!glasnost_sim::econ::shroud::explored(
+        &live.world,
+        HouseId(0),
+        cell
+    ));
+    assert!(shrouded_for(&mut live, HouseId(0)));
+    // House 1 explores the unit's cell: no longer shrouded for it, still for house 0.
+    glasnost_sim::econ::shroud::area_reveal(&mut live.world, HouseId(1), pos, 2);
+    assert!(glasnost_sim::econ::shroud::explored(
+        &live.world,
+        HouseId(1),
+        cell
+    ));
+    assert!(!shrouded_for(&mut live, HouseId(1)));
+    assert!(shrouded_for(&mut live, HouseId(0)));
+    live.set_viewer(None);
+    assert!(
+        !live.protection_look_of(unit).unwrap().shrouded,
+        "no local player"
+    );
+}
+
+/// spec: S-0513 claim 29b (a translucent or rippling drawing of a protected object takes the
+/// envelope on its source pixels before the F8 blend and no mask; opaque again, its mask again;
+/// fully suppressed: nothing drawn), S-0516 claim 28 (25 %, 50 %, rippling drawn 50 %, hidden),
+/// S-0102 F8
+#[test]
+fn protection_claim29b_translucent_drawings() {
+    use super::live::cloak_items;
+    use glasnost_render::compose::{Shade, Translucency};
+    use glasnost_render::scene::{Group, Item};
+    use glasnost_sim::cloak::view::Look;
+    let shade = Shade::new(0, 4, 1400).with_mask(0x0841);
+    let item = Item {
+        image: 0,
+        x: 0,
+        y: 0,
+        test: DepthTest::Writer,
+        depth: ItemDepth::Profile {
+            profile: Profile::Upright,
+            bias: 0,
+            companion: None,
+        },
+        paint: Paint::Lit(shade),
+        group: Group::Buildings,
+        provisional: false,
+        object: None,
+        stack: None,
+    };
+    for (look, t) in [
+        (Look::Translucent25, Translucency::Quarter),
+        (Look::Translucent50, Translucency::Half),
+        (Look::Rippling, Translucency::Half),
+    ] {
+        let mut items = vec![item];
+        cloak_items(look, false, &mut items);
+        assert_eq!(
+            items[0].paint,
+            Paint::Translucent(shade.with_mask(0), t),
+            "{look:?}: the envelope's ρ kept, no mask"
+        );
+    }
+    let mut items = vec![item];
+    cloak_items(Look::Normal, true, &mut items);
+    assert_eq!(items[0].paint, Paint::Lit(shade), "opaque: the mask again");
+    let mut items = vec![item];
+    cloak_items(Look::Hidden, true, &mut items);
+    assert!(items.is_empty(), "nothing is drawn");
+}
+
+/// spec: S-0102 claim 34 (a building slot animation drawn with its building's palette and stored
+/// brightness takes the protected building's brightness; the animation rule: the building
+/// occupying the animation's cell supplies the force-shield mask while force-shielded, curtain
+/// protection none; the normal-light setting still forces 1000 ‰), S-0513 F9
+#[test]
+fn protection_slot_animation_rows() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::superweapons::ProtectKind;
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    // The slot animation's shade: its item comes after the body's and the bib's.
+    let anim = |look: Option<super::protection::Look>, art: &str, y: i32| {
+        let mut b = hut(look, None);
+        b.slots = vec![slot_a(y)];
+        let items = protected_hut_items("", &[], art, b, hut_cells(look));
+        lit_parts(&items)
+            .last()
+            .copied()
+            .expect("the slot animation is drawn")
+    };
+    let plain = anim(None, "", 0);
+    let shielded = anim(Some(bright(ProtectKind::ForceShield)), "", 0);
+    let curtained = anim(Some(bright(ProtectKind::Curtain)), "", 0);
+    assert_eq!(plain.2.mask, 0);
+    assert_eq!(
+        shielded.2.mask, shield,
+        "on its force-shielded building's cell"
+    );
+    assert_eq!(curtained.2.mask, 0, "curtain: no mask");
+    assert!(shielded.2.rho > plain.2.rho && curtained.2.rho == shielded.2.rho);
+    // Displaced far off the foundation: no building occupies its cell, so no mask; the
+    // brightness is still its own building's.
+    let away = anim(Some(bright(ProtectKind::ForceShield)), "", 600);
+    assert_eq!(away.2.mask, 0);
+    assert_eq!(away.2.rho, shielded.2.rho);
+    // The normal-light setting forces 1000 ‰: no envelope, the mask still by the cell rule.
+    let normal = anim(
+        Some(bright(ProtectKind::ForceShield)),
+        "UseNormalLight=yes\n",
+        0,
+    );
+    let normal_plain = anim(None, "UseNormalLight=yes\n", 0);
+    assert_eq!(normal.2.rho, normal_plain.2.rho);
+    assert_eq!(normal.2.mask, shield);
+    // A shrouded occupying building supplies no mask (Q-1529 interim).
+    let shrouded = anim(Some(bright(ProtectKind::ForceShield).shrouded(true)), "", 0);
+    assert_eq!(shrouded.2.mask, 0);
+}
+
+/// S-0513 Open questions (a slot animation whose own art draws it translucent is open): our
+/// interim draws it with the envelope and no mask; spec: S-0109 claim 20 (Translucency=50: code
+/// 2), S-0102 F8
+#[test]
+fn protection_translucent_slot_animation_interim() {
+    use glasnost_render::compose::Translucency;
+    use glasnost_sim::superweapons::ProtectKind;
+    let look = Some(bright(ProtectKind::ForceShield));
+    let mut b = hut(look, None);
+    b.slots = vec![slot_a(0)];
+    let items = protected_hut_items("", &[], "Translucency=50\n", b, hut_cells(look));
+    let blended: Vec<_> = items
+        .iter()
+        .filter_map(|i| match i.paint {
+            Paint::Translucent(s, t) => Some((s, t)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(blended.len(), 1);
+    assert_eq!(blended[0].1, Translucency::Half);
+    assert_eq!(
+        blended[0].0.mask, 0,
+        "no mask on a translucent slot animation"
+    );
+    let body = lit_parts(&items)[0].2;
+    assert_eq!(
+        blended[0].0.rho, body.rho,
+        "the protected building's brightness"
     );
 }
