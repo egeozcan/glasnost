@@ -1,9 +1,9 @@
 ---
 id: Q-1529
 title: Whether the shrouded-centre-cell protection row reaches a building's slot animations
-status: open
+status: answered
 related: [S-0513, S-0102, S-0108]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
