@@ -40,7 +40,10 @@ fn register(r: &mut Ruleset, reg: &str, name: &str) {
 ///   (30, −20, 0)); SOOTX and VAPORX, SOOT and VAPOR without a next type;
 ///   systems MIXEDX (gas, SOOTX), PUFF and PUFFX (smoke, VAPOR and VAPORX),
 ///   BLAZES and BLAZESX (fire, SOOT and SOOTX), SPARKG and SPARKGX (spark,
-///   VAPOR and VAPORX), MIST (gas, VAPOR; VAPOR's speed field 2.0).
+///   VAPOR and VAPORX), MIST (gas, VAPOR; VAPOR's speed field 2.0);
+/// - for the railgun line without a held type or particles (claims 17, 20
+///   and 31): RAILN (railgun, no held type, 0.015625 per lepton), RAILZ
+///   (railgun, BOLT, 0 per lepton) and RAILNZ (railgun, no held type, 0).
 fn rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     let p = |kind: &str| ParticleType {
@@ -165,6 +168,27 @@ fn rules() -> Ruleset {
         ("SPARKG", s("spark", Some("VAPOR"))),
         ("SPARKGX", s("spark", Some("VAPORX"))),
         ("MIST", s("gas", Some("VAPOR"))),
+        (
+            "RAILN",
+            ParticleSystemType {
+                particles_per_coord: dec("0.015625"),
+                ..s("railgun", None)
+            },
+        ),
+        (
+            "RAILZ",
+            ParticleSystemType {
+                particles_per_coord: dec("0"),
+                ..s("railgun", Some("BOLT"))
+            },
+        ),
+        (
+            "RAILNZ",
+            ParticleSystemType {
+                particles_per_coord: dec("0"),
+                ..s("railgun", None)
+            },
+        ),
     ] {
         register(&mut r, "particle_systems", n);
         r.sim.particle_systems.insert(n.into(), t);
@@ -455,6 +479,118 @@ fn claim_17_railgun_line() {
     let n = list(&w, s).len();
     gas::system_turn(&mut w, s);
     assert_eq!(list(&w, s).len(), n, "a marked system emits no more");
+}
+
+/// The effects of one line turn of a fresh railgun system of type `name`
+/// whose target point is 1024 leptons east of it: the particles after the
+/// turn and whether it is marked (`None`: it left play in that turn, S-0616
+/// claim 22: marked and empty), the raw values taken and the line effects
+/// reported (system type, from, to).
+fn rail_turn(name: &str) -> (Option<(usize, bool)>, u64, Vec<(u32, Pos, Pos)>) {
+    let mut w = game(&rules());
+    let p = centre(-3, 0);
+    let s = system(&mut w, name, p, None);
+    {
+        let sys = w.gas.systems.get_mut(&s).unwrap();
+        sys.particles.clear();
+        sys.target = Pos::new(p.x + 1024, p.y, p.z);
+    }
+    w.effects.clear();
+    let taken = w.rng.taken();
+    gas::system_turn(&mut w, s);
+    (
+        w.gas.systems.get(&s).map(|x| (x.particles.len(), x.ending)),
+        w.rng.taken() - taken,
+        rail_lines(&w),
+    )
+}
+
+/// The railgun line effects reported: system type, from, to.
+fn rail_lines(w: &World) -> Vec<(u32, Pos, Pos)> {
+    use glasnost_sim::combat::effects::Effect;
+    w.effects
+        .iter()
+        .filter_map(|e| match *e {
+            Effect::RailLine {
+                system_type,
+                from,
+                to,
+            } => Some((system_type, from, to)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn system_index(name: &str) -> u32 {
+    let w = game(&rules());
+    w.rules()
+        .gas
+        .systems
+        .iter()
+        .position(|t| t.name == name)
+        .unwrap() as u32
+}
+
+/// spec: S-0616 claim 31 (a railgun system makes its laser beam in every line turn, from its position to its target point, whatever n: with a held type at n ≥ 1 and at n ≤ 0, and without one at n ≤ 0; whether it is drawn is the laser flag's, in the view) and claim 17 (n ≤ 0: no particle and no ranged draw, still marked)
+#[test]
+fn claim_31_railgun_beam_in_every_line_turn() {
+    let p = centre(-3, 0);
+    let to = Pos::new(p.x + 1024, p.y, p.z);
+    // Held type, n = 16: sixteen particles, marked, the beam once.
+    let (left, taken, lines) = rail_turn("RAIL");
+    assert_eq!(left, Some((16, true)));
+    assert!(taken > 0);
+    assert_eq!(lines, [(system_index("RAIL"), p, to)]);
+    // Held type, n = 0: no particle and no draw; marked and empty, so it leaves play in that turn;
+    // the beam all the same.
+    let (left, taken, lines) = rail_turn("RAILZ");
+    assert_eq!((left, taken), (None, 0));
+    assert_eq!(lines, [(system_index("RAILZ"), p, to)]);
+    // No held type, n = 0: the same.
+    let (left, taken, lines) = rail_turn("RAILNZ");
+    assert_eq!((left, taken), (None, 0));
+    assert_eq!(lines, [(system_index("RAILNZ"), p, to)]);
+}
+
+/// spec: S-0616 claim 20 (a railgun system with no held type whose line has n ≥ 1: no particle and no ranged draw at all, none of claim 17's per-particle draws; still marked; our engine makes claim 31's beam, a departure: the original stops) and claim 17 (the held type plays no part in n)
+#[test]
+fn claim_20_railgun_without_held_type() {
+    let p = centre(-3, 0);
+    let to = Pos::new(p.x + 1024, p.y, p.z);
+    // n = trunc(1024 × 0.015625) = 16, as for RAIL: no particle, no ranged draw, marked (and,
+    // empty, gone in that turn), and the beam.
+    let (left, taken, lines) = rail_turn("RAILN");
+    assert_eq!((left, taken), (None, 0));
+    assert_eq!(lines, [(system_index("RAILN"), p, to)]);
+}
+
+/// spec: S-0616 claims 22 and 31 (a detonation railgun's target point is its own position: once its first particle is gone its line has no particle and its beam is of zero length; it is marked and leaves in that turn)
+#[test]
+fn claim_31_detonation_railgun_zero_length_beam() {
+    for name in ["RAIL", "RAILN"] {
+        let mut w = game(&rules());
+        let p = centre(2, 2);
+        let s = system(&mut w, name, p, None);
+        // With a held type the detonation makes a first particle (S-0613 claim 4); it is given the
+        // dead mark so that it is gone after the first turn. Without one there is none.
+        let first = w.gas.systems[&s].particles.len();
+        assert_eq!(first, usize::from(name == "RAIL"), "{name}");
+        if let Some(q) = w.gas.systems.get_mut(&s).unwrap().particles.first_mut() {
+            q.dead = true;
+        }
+        // While a particle is held there is no line turn.
+        let mut beams = Vec::new();
+        for _ in 0..64 {
+            if !w.gas.systems.contains_key(&s) {
+                break;
+            }
+            w.effects.clear();
+            gas::system_turn(&mut w, s);
+            beams.extend(rail_lines(&w).into_iter().map(|(_, f, t)| (f, t)));
+        }
+        assert!(!w.gas.systems.contains_key(&s), "{name}: left play");
+        assert_eq!(beams, [(p, p)], "{name}: one beam, of zero length");
+    }
 }
 
 /// spec: S-0616 claim 19 and F13 (without the normalised flag the type's stage-advance field; with it trunc(t / (δ_F + 1) + 1.0), t = |Pₓ − Qₓ| / aₓ; t = 9999.0 with no motion; a divisor of 0 gives 0; no draw)
