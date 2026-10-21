@@ -730,7 +730,6 @@ S-0516 (cloak and stealth) is built in `glasnost_sim::cloak`. The general cloak 
   - cloaking crates (S-0520, built) call `machine::grant_own_flag`;
   - undeploying (S-0517) calls `disguise::clear`;
   - a house leaving (S-0414) calls `disguise::house_left`;
-  - the neutral houses' blink draw (S-0309 claim 25 (g)) is `disguise::neutral_sees_through`;
   - automatic crush choice (S-0210 claim 11) reads `appears_disguised`;
   - seizing (S-0607), paralysis (S-0214), the chrono warp (S-0514), infiltration (S-0510), mind control (S-0515), and bunkers and occupied buildings (S-0508, S-0509).
 - **Quirks.** All fourteen are implemented, each on by default:
@@ -1495,7 +1494,7 @@ Yuri's orders (`special::Uses`), then what the simulation counted:
 
 ### Seams reachable by stock data
 
-A grep of the 22 `Seam:` comments under `crates/deterministic` (no counter in the simulation: that would change it). Reachable by stock data: the hover chase cut (`hover.rs`, likely every game); morphable tilesets in placement (`econ/placement.rs`); the sidebar display-name tie (`econ/tech.rs`); the scenery-disguise terrain-fire pass (`targeting.rs`); tubes (`seams.rs`, `transport.rs`: map tube definitions are not imported); `any_docked` (`econ/sell.rs`, repair depots and pads); `neutral_sees_through` (`cloak/disguise.rs`); `under_pulse` (`econ/power.rs`, no pulse source). Not reachable or not wired: the capture, hijack and retaining-entry trigger notifications (`mp_triggers.rs`, no callers), the trigger cell attempts (`bridges/mod.rs`, trigger actions only), the all-base-units mode (`econ/setup.rs`, refused), the teleport type exclusion (`superweapons/warp.rs`, no type named), the transport `disabled` states (neither built), `house_left` (`cloak/disguise.rs`, no callers), the load map RNG (`load.rs`). Stale comments: `spawn.rs` (`owner_changed` has callers), `cloak/machine.rs` (`grant_own_flag` is called by `crates.rs`), `bridges/hut.rs` (`engineer_entered_hut` is called by `structures/entry.rs`).
+A grep of the 22 `Seam:` comments under `crates/deterministic` (no counter in the simulation: that would change it). Reachable by stock data: the hover chase cut (`hover.rs`, likely every game); morphable tilesets in placement (`econ/placement.rs`); the sidebar display-name tie (`econ/tech.rs`); the scenery-disguise terrain-fire pass (`targeting.rs`); tubes (`seams.rs`, `transport.rs`: map tube definitions are not imported); `any_docked` (`econ/sell.rs`, repair depots and pads); `under_pulse` (`econ/power.rs`, no pulse source). Not reachable or not wired: the capture, hijack and retaining-entry trigger notifications (`mp_triggers.rs`, no callers), the trigger cell attempts (`bridges/mod.rs`, trigger actions only), the all-base-units mode (`econ/setup.rs`, refused), the teleport type exclusion (`superweapons/warp.rs`, no type named), the transport `disabled` states (neither built), `house_left` (`cloak/disguise.rs`, no callers), the load map RNG (`load.rs`). Stale comments: `spawn.rs` (`owner_changed` has callers), `cloak/machine.rs` (`grant_own_flag` is called by `crates.rs`), `bridges/hut.rs` (`engineer_entered_hut` is called by `structures/entry.rs`).
 
 ## Own AI (M8 steps B1 and B2)
 
@@ -1749,7 +1748,8 @@ target/release/glasnost-headless arena --record M-0003 --threads 8   # about 45 
 target/release/glasnost-headless arena --record all --threads 8      # all three, about 8 min
 # Options: --pairing ROW,COL (repeatable; replays only these and merges them into the stored CSV), --out DIR (default local-lane/m7b/arena),
 #          --compare-only (compare the stored ours-<ID>.csv without playing), --groups (list each type's kind, group size and cost),
-#          --ai-houses, --watch ROW,COL,A|B,SEED (play one game and print per-sample counts and every unit's final state).
+#          --ai-houses, --watch ROW,COL,A|B,SEED (play one game and print per-sample counts and every unit's final state),
+#          --spread ROW,COL,A|B (play the side's six seeds and print, per seed, the first tick and the state that differs from seed 0's).
 cargo test --release -p glasnost-tools --test arena arena_matches_the_oracle -- --nocapture   # the same as a test; GLASNOST_ARENA_RECORD=M-0003 picks one record
 ```
 
@@ -1783,6 +1783,14 @@ Before the fixes below (and with human-controlled houses) the counts were 37, 13
 - *CAOS pairings* (ours too strong: it wins or survives more than in the stock games against SREF, BFRT, E1, TTNK and HTNK): not yet explained.
 - The drain of S-0608 (the `draining()` seam in `combat/approach.rs` on this branch) landed on main in step 3.3, not on this branch.
 - MIND against E2: the stock CSV shows `none` before the frame limit, which the procedure does not explain; noted for the lead.
+
+### Spread audit (M8 step A1)
+
+[m8-claims/a1-arena-spread.md](m8-claims/a1-arena-spread.md) holds the audit: where the arena's seed goes (only the scenario stream of S-0202 draws in play, and it is seeded from `Setup::seed`; the map stream is 0 by claim 13, the lobby stream is unused), the table of the 72 draw sites an arena game reaches with their status, the failing pairings ranked by how far our seed-to-seed spread falls short of the stock games', and the requests Q-1710 to Q-1714. `glasnost-headless arena --spread ROW,COL,A|B` (`oracle::spread`) shows, per seed, the first tick at which a game differs from seed 0's: tick 1 or 2 in the ROBO and infantry pairings, tick 30 to 90 in the vehicle pairings. The seed reaches play; the outcomes often do not follow, because in most of the worst pairings one side wins (or the game stalls) so clearly that the draws have nothing to vary.
+
+Built: S-0309 claim 25 (g), the computer-owner houses' draw at a blinking disguise (`acquire::admit`; it was the seam `disguise::neutral_sees_through`). Left as seams: the animation playback of S-0109 (claims 11, 14 with μ > 0, 15, 17, 28, 29; `load::anim_created` now notes when an animation with those parts is created, which happens in nearly every pairing), the death-animation row of S-0107 claim 17 (no death-animation list imported) and the smudges of S-0312 claim 26.
+
+Arena after the build: failing pairings 34 of 96, 16 of 24 and 3 of 35 (were 35, 16 and 4); side-unanimous stock outcomes reproduced 149 of 172, 43 of 47 and 61 of 64 (were 145, 43 and 59). Only MGTK pairings moved (M-0003 MGTK against APOC and M-0001 YTNK against MGTK now pass). The sim-gate goldens and the seed sweeps 1 to 16 are unchanged. The results table above is from before this step.
 
 ### The synthetic arena
 
