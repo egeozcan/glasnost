@@ -190,6 +190,59 @@ fn dist(w: &World, p: Pos, q: Pos) -> i32 {
     root(w, dx * dx + dy * dy + dz * dz)
 }
 
+/// The distance S-0303 claims 7 and 10 give object `id` from a detonation
+/// at `p` (for a building, its nearest foundation cell): an estimate that
+/// changes nothing.
+pub fn object_distance(w: &World, p: Pos, id: ObjectId) -> i32 {
+    object_distances(w, p, id)
+        .into_iter()
+        .min()
+        .unwrap_or(i32::MAX)
+}
+
+/// The distance of each hit a detonation at `p` would give object `id`,
+/// before the spread radius test: one for a unit (S-0303 claims 7 and
+/// 10), one per foundation cell for a building (claims 7 and 8;
+/// `quirks.area_damage_per_foundation_cell` off: one, at the smallest
+/// distance). An estimate that changes nothing.
+pub fn object_distances(w: &World, p: Pos, id: ObjectId) -> Vec<i32> {
+    let Some(o) = w.obj(id) else {
+        return Vec::new();
+    };
+    if o.kind == Kind::Building {
+        let centre = p.cell();
+        let all: Vec<i32> = crate::objects::foundation_cells(o.pos.cell(), o.foundation)
+            .into_iter()
+            .map(|c| building_cell_distance(w, p, c, centre))
+            .collect();
+        if w.rules().quirks.area_damage_per_foundation_cell {
+            return all;
+        }
+        // spec: S-0303 Edge cases (area_damage_per_foundation_cell off: one hit at the smallest distance)
+        return all.into_iter().min().into_iter().collect();
+    }
+    // spec: S-0303 claim 7 (any other object: from P to its position) and claim 10 (an aircraft in the air at half)
+    vec![half_in_air(w, id, dist(w, p, w.reference_point(id)))]
+}
+
+/// The distance S-0303 claim 7 gives a building's foundation cell `c`
+/// from a detonation at `p` whose centre cell is `centre`.
+// spec: S-0303 claim 7 (a building: from P to the centre of this foundation cell at the surface height there; 0 in the centre cell unless P is more than 208 above)
+fn building_cell_distance(w: &World, p: Pos, c: CellXY, centre: CellXY) -> i32 {
+    let cc = Pos::centre(c, 0);
+    let z = w.surface_at(cc.x, cc.y);
+    let cp = Pos::new(cc.x, cc.y, z);
+    if c == centre {
+        if p.z - z > 208 {
+            dist(w, p, cp) - 208
+        } else {
+            0
+        }
+    } else {
+        dist(w, p, cp)
+    }
+}
+
 /// A wall hit (S-0303 claim 16, F4) on the wall of cell `c`.
 pub fn wall_hit(w: &mut World, c: CellXY, amount: i32, absolute: bool) {
     let rules = w.rules_arc();
@@ -406,18 +459,7 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             // The map's harvester-immunity flag is not in our map data yet.
             let d = if o.kind == Kind::Building {
                 // spec: S-0303 claim 7 (a building: from P to the centre of this foundation cell at the surface height there; 0 in the centre cell unless P is more than 208 above)
-                let cc = Pos::centre(c, 0);
-                let z = w.surface_at(cc.x, cc.y);
-                let cp = Pos::new(cc.x, cc.y, z);
-                if c == centre {
-                    if p.z - z > 208 {
-                        dist(w, p, cp) - 208
-                    } else {
-                        0
-                    }
-                } else {
-                    dist(w, p, cp)
-                }
+                building_cell_distance(w, p, c, centre)
             } else {
                 // spec: S-0303 claim 7 (any other object: from P to its position)
                 dist(w, p, w.reference_point(id))

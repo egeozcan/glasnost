@@ -402,6 +402,50 @@ fn spread_radius_and_scanned_cells_are_separate_limits() {
 // ---------------------------------------------------------------------------
 
 // spec: S-0303 claim 7 (an object that is not a building is measured from P to its position, in three dimensions, as ⌊r(n)⌋)
+// spec: S-0303 claims 7, 8 and 10 and S-0302 claims 5 and 6 (the estimate of an area hit, for a player's foresight, is the loss the detonation deals: the distance to the position, a hit per building foundation cell, the object's armour multiplier and the prone factor)
+#[test]
+fn the_hit_estimate_is_the_detonation_loss() {
+    let mut r = testkit::combat_ruleset();
+    vehicle(&mut r, "BOX", |_| {});
+    infantry(&mut r, "MAN", |_| {});
+    building(&mut r, "BARN", |b| b.foundation = Some([2, 2]));
+    warhead(&mut r, "LIN", |h| {
+        h.cell_spread = Some(dec("2"));
+        h.percent_at_max = Some(dec("0"));
+        h.prone_damage = Some(dec("0.5"));
+    });
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let h = wh(&w, "LIN");
+    let tough = put(&mut w, Kind::Vehicle, "BOX", BETA, 0, 0);
+    w.obj_mut(tough).unwrap().combat.armour_mult = F64::from_i64(2, RZ);
+    let lying = put(&mut w, Kind::Infantry, "MAN", BETA, 1, 0);
+    w.obj_mut(lying).unwrap().infantry.as_mut().unwrap().prone = true;
+    let plain = put(&mut w, Kind::Vehicle, "BOX", BETA, 0, 1);
+    let barn = put(&mut w, Kind::Building, "BARN", BETA, -2, -1);
+    let p = Pos::new(centre(0, 0).x + 40, centre(0, 0).y - 20, 0);
+    let ids = [tough, lying, plain, barn];
+    let (r, _) = area::radii(&w, h);
+    let est: Vec<i32> = ids
+        .iter()
+        .map(|&id| {
+            area::object_distances(&w, p, id)
+                .into_iter()
+                .filter(|&d| d <= r)
+                .map(|d| damage::hit_estimate(&w, id, 900, h, d))
+                .sum()
+        })
+        .collect();
+    assert_eq!(
+        area::object_distances(&w, p, barn).len(),
+        4,
+        "a hit per foundation cell"
+    );
+    boom!(w, p, 900, Some(h), None, None);
+    let got: Vec<i32> = ids.iter().map(|&id| lost(&w, id)).collect();
+    assert_eq!(est, got);
+    assert!(got.iter().all(|&x| x > 0), "{got:?}");
+}
+
 #[test]
 fn units_are_measured_to_their_position() {
     let mut r = testkit::combat_ruleset();

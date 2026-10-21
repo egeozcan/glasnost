@@ -252,6 +252,32 @@ fn modified(w: &World, hit: &Hit, d3: i32, r: i32, class: usize) -> i32 {
     falloff_versus(w, h, d3, r, v)
 }
 
+/// The modified amount m₀ (S-0302 claims 5 and 6, F2 and F3) a hit of a
+/// positive `amount` with `warhead` at distance `r` would deal `target`,
+/// before claim 8's stopping tests: an estimate that changes nothing, for
+/// a player's foresight of an area hit.
+pub fn hit_estimate(w: &World, target: ObjectId, amount: i32, warhead: WarheadId, r: i32) -> i32 {
+    let Some(o) = w.obj(target) else { return 0 };
+    if amount <= 0 {
+        return 0;
+    }
+    // spec: S-0302 F2 (the prone factor for a prone infantry target)
+    let prone = o.kind == Kind::Infantry && o.infantry.as_ref().is_some_and(|s| s.prone);
+    let prone_factor = prone.then(|| w.rules().combat.warhead(warhead).prone);
+    let d3 = defended(w, target, target, amount, prone_factor);
+    let class = type_combat(w, target).map_or(0, |tc| tc.armour);
+    let hit = Hit {
+        amount,
+        warhead: Some(warhead),
+        distance: r,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    modified(w, &hit, d3, r, class)
+}
+
 /// The expected damage of a weapon fired by `firer` at `target` (S-0302
 /// claim 18, F8).
 pub fn expected_damage(w: &World, firer: ObjectId, weapon: WeaponId, target: ObjectId) -> i32 {
