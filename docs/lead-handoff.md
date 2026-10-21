@@ -20,7 +20,6 @@ These are filed in spec/requests/ and wait for the spec side (see "Two machines"
 interim rule in docs/development.md, *Visual review 2026-10-19*.
 
 - Q-1529: whether the shrouded-centre-cell protection row reaches a building's slot animations (S-0513).
-- Q-1562: how a particle type's colour list reads malformed triples (S-0202).
 - Q-1590: whether a railgun system without a held particle type makes its laser (S-0616).
 
 A request is answered when its spec's front matter lists it under `requests:` and the request's
