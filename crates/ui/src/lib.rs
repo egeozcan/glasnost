@@ -7,6 +7,7 @@
 //! font). Development tools use egui and live elsewhere, never here. The
 //! interface only reads simulation state and gives orders.
 
+pub mod chat;
 pub mod draw;
 pub mod end;
 pub mod font;
@@ -14,6 +15,7 @@ pub mod geom;
 pub mod hud;
 pub mod menu;
 pub mod modes;
+pub mod netmenu;
 pub mod setup;
 pub mod shell;
 pub mod status;
