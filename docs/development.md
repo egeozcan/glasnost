@@ -2043,6 +2043,14 @@ M8 is fidelity, AI depth and polish ([m8-plan.md](m8-plan.md), session of 2026-1
 
 Request numbers for M8: [m8-plan.md](m8-plan.md), *Request blocks*.
 
+## M9 step ledger
+
+M9 is multiplayer ([m9-plan.md](m9-plan.md), session of 2026-10-21, run alongside the rest of M8). Baseline: main 0e9eae6 (save format 68, AI game format 30). Only the main session edits this table, at merge. The protocol, the lockstep and the lobby are our own design (*Multiplayer (M9)* above); a network-only game rule of the original needs a request (Q-1800 to Q-1819).
+
+| Step | Scope | Status | Notes |
+|---|---|---|---|
+| N1 | Lockstep core | done (merged 7ed8df2) | `glasnost-net`, no I/O (the caller passes time in and moves the bytes): wire version 1 (postcard body behind a 4-byte header), a start check that refuses a mismatched build, rules hash, map hash, setup or slot table and names the field, frames for tick N + delay with empty frames, tick N runs when every live person's frame N is in and applies the orders in slot order, an agreed adaptive delay (each peer proposes; from tick n + 1 the delay is the largest proposal in tick n's frames; integer RFC 6298 round-trip estimate, with a below-estimate sample weighted 1/8 on purpose), checkpoint hashes with `Event::Desync`, a seeded in-memory network (`simnet`). Computer players run on every peer through `glasnost_ai::game::Game`. Lint: `crates/net/clippy.toml` forbids clocks, threads, locks, sockets, files and hash containers; `xtask deps` keeps network crates out of `glasnost-net`. Tests: 12 lockstep tests (2 to 8 peers under loss, duplication and reordering agree every tick with a single-process run; a stalled peer stalls all; the delay rises and falls; hostile bytes never panic) and 4 real-game tests. No requests, no format change; arena and sweeps unchanged. Seam for N2: `Body::Dropped` is accepted from any sender, so the relay must be the only one able to send it. |
+
 ## Visual review 2026-10-19
 
 The lead's screenshot review of 2026-10-19 (`local-lane/lead-review-2026-10-19.md`, git-ignored) was worked through item by item: a retake from main (`local-lane/visual-fix-3/retake/`), the cause against the covering specs, the fix with a test per claim, and a final shot per item under `local-lane/visual-fix-3/`. The game client's own placeholders (crosses, rings, boxes and discs drawn where no spec gives a look) are now drawn only by the viewer's debug layer (`Live::debug_markers`, on in the map viewer, off in the game client).
