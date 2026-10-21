@@ -934,6 +934,11 @@ pub struct SimQuirks {
     /// percentages written into the ruleset as exact doubles round toward
     /// zero; off, to nearest, ties to even. Set it as the ruleset's switch.
     pub chop_rounding: bool,
+    /// `quirks.colour_list_item_triples` (S-0202 claim 17 and Edge cases):
+    /// a particle type's colour list is read as comma-separated items taken
+    /// in threes, parentheses ignored; off, a parenthesis-aware reading of
+    /// our own.
+    pub colour_list_item_triples: bool,
 }
 
 impl Default for SimQuirks {
@@ -946,13 +951,15 @@ impl Default for SimQuirks {
             tree_strength_fixed_at_first_section: true,
             // spec: S-0205 claim 5 (quirks.chop_rounding on by default: the original)
             chop_rounding: true,
+            // spec: S-0202 claim 17 and Edge cases (quirks.colour_list_item_triples on by default: the original)
+            colour_list_item_triples: true,
         }
     }
 }
 
 impl SimQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 4] {
+    pub fn named(&self) -> [(&'static str, bool); 5] {
         [
             (
                 "clear_weapons_any_turret_count",
@@ -964,6 +971,7 @@ impl SimQuirks {
                 self.tree_strength_fixed_at_first_section,
             ),
             ("chop_rounding", self.chop_rounding),
+            ("colour_list_item_triples", self.colour_list_item_triples),
         ]
     }
 }
