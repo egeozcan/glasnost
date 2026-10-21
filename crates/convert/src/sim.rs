@@ -1177,7 +1177,8 @@ pub const BERSERK_SELECTOR: &str = "BerserkColor"; // spec: S-0610 Import mappin
 /// The protection selector `key` held after every rules layer, with the
 /// layer and line of the value that set it; `None` when no layer gives a
 /// readable integer (the selector is then 0). A selector is used exactly as
-/// held: no reduction modulo 16, no clamp (S-0513 claim 29a).
+/// held: no reduction modulo 16, no clamp (S-0513 claim 29a; S-0519 claim
+/// 26 for the laser-target selector).
 pub fn protection_selector(outcome: &Outcome, key: &str) -> Option<(i32, usize, u32)> {
     let state = outcome
         .globals
@@ -1547,9 +1548,9 @@ impl Builder<'_> {
         if let Some((v, layer, line)) = protection_selector(outcome, LASER_TARGET_SELECTOR)
             && !(0..COLOUR_ADD_LEN as i32).contains(&v)
         {
-            // spec: S-0102 F9 (a selector naming no table position: K = 0); the warning is Q-1621's interim, as for the protection selectors
+            // spec: S-0519 claim 26, Edge cases and Import mapping (a held laser-target selector below 0 or above 15 after every layer: no laser-target mask, and the importer warns once, naming the key and its value; a departure); S-0102 F9
             self.warn(layer, line, format!(
-                "[AudioVisual] {LASER_TARGET_SELECTOR}={v} names no position of the 16-entry colour-adjustment table: marked buildings take no laser-target colour mask (Q-1621 interim)"
+                "[AudioVisual] {LASER_TARGET_SELECTOR}={v} names no position of the 16-entry colour-adjustment table: marked buildings take no laser-target colour mask (S-0519 claim 26, a departure)"
             ));
         }
         self.general_combat(&mut rec);

@@ -102,6 +102,22 @@ impl BuildingLook {
     }
 }
 
+/// What an opaque building slot animation drawn over one cell takes its
+/// colour mask from (S-0513 claim 29b, slot animations; S-0102 claim 34,
+/// animation rule): the look of the building occupying that cell, the cell
+/// that holds the animation's own position, and whether that cell is
+/// shrouded for the local player.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SlotCell {
+    /// The occupying building's look. Its centre-cell shroud answer plays
+    /// no part here (S-0513 claim 29b: the building's centre cell plays no
+    /// part for its slot animations).
+    pub look: BuildingLook,
+    /// The animation's cell is shrouded for the local player by S-0110
+    /// claim 8's point test at its centre, at its ground height.
+    pub shrouded: bool,
+}
+
 /// The two protection colour masks, packed for our 5-6-5 frames (S-0102
 /// F9).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -129,13 +145,14 @@ pub fn selected(import: &Import, selector: i32) -> Option<[u8; 3]> {
 /// The mask *K* of an optional selected triple in `layout` (S-0102 F9):
 /// with no selected adjustment *K* = 0.
 pub fn mask_of(triple: Option<[u8; 3]>, layout: PixelLayout) -> u16 {
-    // spec: S-0102 F9, S-0513 claim 29a (no selected adjustment, or a selector below 0 or above 15: K = 0, on 5-6-5 and 5-5-5 alike)
+    // spec: S-0102 F9, S-0513 claim 29a, S-0519 claim 26 (no selected adjustment, or a protection or laser-target selector below 0 or above 15: K = 0, on 5-6-5 and 5-5-5 alike)
     triple.map_or(0, |rgb| protection_mask(rgb, layout))
 }
 
 impl Masks {
     /// The masks the import's selectors name. A selector outside the table
-    /// gives *K* = 0; the importer warns about it (S-0513 claim 29a).
+    /// gives *K* = 0; the importer warns about it (S-0513 claim 29a, S-0519
+    /// claim 26, S-0610 Edge cases).
     pub fn read(import: &Import) -> Self {
         let mask = |key: &str| {
             // spec: S-0513 Import mapping (IronCurtainColor and ForceShieldColor: zero-based
@@ -147,7 +164,7 @@ impl Masks {
             mask_of(selected(import, selector), PixelLayout::Rgb565)
         };
         let [curtain, shield] = PROTECTION_SELECTORS.map(mask);
-        // spec: S-0519 claim 26 (the laser-target colour is read from the rules at drawing time)
+        // spec: S-0519 claim 26 (the laser-target colour is read from the rules at drawing time; a held selector below 0 or above 15 after every layer: no selected adjustment, K = 0, a departure)
         let laser = mask(LASER_TARGET_SELECTOR);
         // spec: S-0610 claim 7 (the berserk selector's triple becomes the berserk mask by S-0102 F9); Edge cases (outside 0 to 15: no mask)
         let berserk = mask(BERSERK_SELECTOR);
@@ -183,6 +200,23 @@ impl Masks {
         // spec: S-0519 claim 26 (marked: the laser-target mask, by bitwise union with the force-shield mask when both apply; curtain protection and the charge flash add none)
         let laser = if look.marked() { self.laser } else { 0 };
         self.building(look.protection) | laser
+    }
+
+    /// The colour mask of an opaque building slot animation over the cell
+    /// `cell` describes (S-0513 claim 29b, slot animations), `None` when no
+    /// protected, marked or flashing building occupies that cell.
+    pub fn slot_animation(&self, cell: Option<SlotCell>) -> u16 {
+        match cell {
+            // spec: S-0513 claim 29b (slot animations: with no building in the animation's cell, no mask)
+            None => 0,
+            // spec: S-0513 claim 29b (the animation's cell shrouded for the local player: no colour mask at all, neither the force-shield nor the laser-target mask); S-0519 claim 26
+            Some(SlotCell { shrouded: true, .. }) => 0,
+            // spec: S-0513 claim 29b (the animation's cell not shrouded: S-0102 claim 34's masks of the occupying building unchanged, the force-shield mask, the laser-target mask and their union; the building's centre cell plays no part)
+            Some(SlotCell { look, .. }) => self.building_look(BuildingLook {
+                protection: look.protection.map(|l| l.shrouded(false)),
+                ..look
+            }),
+        }
     }
 
     /// The mask of a vehicle or aircraft drawing (S-0102 claim 34): only a
@@ -325,6 +359,154 @@ mod tests {
         );
     }
 
+    /// spec: S-0519 claim 26 (selector outside the table, T27 part e's engine fixture: a held
+    /// laser-target selector of 16 or −1 gives K = 0 on 5-6-5 and 5-5-5 alike, so a marked
+    /// building's body, voxel parts and building animations take no laser-target colour; a
+    /// force-shielded marked building keeps the force-shield mask unchanged; one importer warning
+    /// per run naming the key and its value; a position from 0 to 15 behaves as usual, one holding
+    /// (0, 0, 0) also giving K = 0), Edge cases, S-0102 F9
+    #[test]
+    fn claim26_laser_selector_outside_the_table() {
+        use glasnost_convert::{ImportOptions, convert, inputs::InputFile, inputs::Inputs};
+        // Positions 0 and 15 hold distinct non-zero triples, so a wrap or a clamp would show.
+        let rules = |audio: &str| {
+            let text = format!(
+                "[ColorAdd]\nA=9,9,9\nB=7,19,3\nC=1,0,1\nD=0,0,0\nE=5,5,5\nF=6,6,6\nG=7,7,7\nH=8,8,8\n\
+                 I=9,9,9\nJ=10,10,10\nK=11,11,11\nL=12,12,12\nM=13,13,13\nN=14,14,14\nO=15,15,15\nP=16,16,16\n\
+                 [AudioVisual]\nForceShieldColor=2\n{audio}"
+            );
+            convert(
+                &Inputs {
+                    base: Some(InputFile {
+                        name: "rules.ini".into(),
+                        origin: "test".into(),
+                        bytes: text.into_bytes(),
+                    }),
+                    ..Default::default()
+                },
+                &ImportOptions::default(),
+            )
+        };
+        let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+        let marked = BuildingLook {
+            protection: None,
+            adjust: Adjust {
+                mark: Some(Some(512)),
+                ..Adjust::default()
+            },
+        };
+        let shielded = BuildingLook {
+            protection: look(ProtectKind::ForceShield),
+            ..marked
+        };
+        let valid = Masks::read(&rules("LaserTargetColor=1\n"));
+        assert_eq!(
+            valid.laser,
+            protection_mask([7, 19, 3], PixelLayout::Rgb565)
+        );
+        assert_eq!(valid.building_look(shielded), valid.laser | shield);
+        for bad in [16, -1] {
+            let import = rules(&format!("LaserTargetColor={bad}\n"));
+            let m = Masks::read(&import);
+            assert_eq!(m.laser, 0, "{bad}: K = 0");
+            for layout in [PixelLayout::Rgb565, PixelLayout::Rgb555] {
+                assert_eq!(
+                    mask_of(selected(&import, bad), layout),
+                    0,
+                    "{bad} {layout:?}"
+                );
+            }
+            assert_eq!(m.building_look(marked), 0, "{bad}: marked body, no colour");
+            let slot = SlotCell {
+                look: marked,
+                shrouded: false,
+            };
+            assert_eq!(
+                m.slot_animation(Some(slot)),
+                0,
+                "{bad}: animation, no colour"
+            );
+            assert_eq!(
+                m.building_look(shielded),
+                shield,
+                "{bad}: the force-shield mask kept"
+            );
+            // The brightness is the mark's own, whatever the selector.
+            assert_eq!(marked.brightness(1000), 2000);
+            let key = format!("LaserTargetColor={bad}");
+            assert_eq!(
+                import
+                    .warnings
+                    .iter()
+                    .filter(|w| w.message.contains(&key))
+                    .count(),
+                1,
+                "{key}: one warning"
+            );
+        }
+        // Position 3 holds the empty triple: K = 0 as well, with no warning.
+        let import = rules("LaserTargetColor=3\n");
+        assert_eq!(Masks::read(&import).laser, 0);
+        assert!(
+            !import
+                .warnings
+                .iter()
+                .any(|w| w.message.contains("LaserTargetColor"))
+        );
+    }
+
+    /// spec: S-0513 claim 29b (slot animations: the animation's own cell decides; not shrouded,
+    /// S-0102 claim 34's masks of the occupying building, the force-shield mask, the laser-target
+    /// mask and their union, whatever the state of that building's centre cell; shrouded, no colour
+    /// mask at all; no building in the cell, no mask), S-0519 claim 26
+    #[test]
+    fn claim29b_slot_animation_masks_follow_their_own_cell() {
+        let m = Masks {
+            shield: 0x0841,
+            laser: 0x1234,
+            ..Masks::default()
+        };
+        let mark = Adjust {
+            mark: Some(Some(256)),
+            ..Adjust::default()
+        };
+        let cell = |protection: Option<Look>, adjust, shrouded| {
+            Some(SlotCell {
+                look: BuildingLook { protection, adjust },
+                shrouded,
+            })
+        };
+        let shield = look(ProtectKind::ForceShield);
+        let centre_shrouded = shield.map(|l| l.shrouded(true));
+        for centre in [shield, centre_shrouded] {
+            // i1: the animation's cell visible, the centre cell either way.
+            assert_eq!(
+                m.slot_animation(cell(centre, Adjust::default(), false)),
+                0x0841
+            );
+            // i5: marked too, the union.
+            assert_eq!(m.slot_animation(cell(centre, mark, false)), 0x0841 | 0x1234);
+            // i2 and i5: the animation's cell shrouded, nothing.
+            assert_eq!(m.slot_animation(cell(centre, Adjust::default(), true)), 0);
+            assert_eq!(m.slot_animation(cell(centre, mark, true)), 0);
+        }
+        // Only marked: the laser-target mask, removed under shroud.
+        assert_eq!(m.slot_animation(cell(None, mark, false)), 0x1234);
+        assert_eq!(m.slot_animation(cell(None, mark, true)), 0);
+        // The curtain supplies none.
+        let curtain = look(ProtectKind::Curtain);
+        assert_eq!(m.slot_animation(cell(curtain, Adjust::default(), false)), 0);
+        assert_eq!(m.slot_animation(None), 0);
+        // The body keeps the centre-cell rule: shrouded centre, no force-shield mask.
+        assert_eq!(
+            m.building_look(BuildingLook {
+                protection: centre_shrouded,
+                adjust: Adjust::default()
+            }),
+            0
+        );
+    }
+
     /// spec: S-0513 claim 29 and F9 (every row of S-0102 claim 34's table takes the envelope's
     /// brightness; unchanged before the first turn and in Ordinary); F7 (expiry removes it)
     #[test]
@@ -366,7 +548,8 @@ mod tests {
     /// spec: S-0519 claim 26 and Import mapping (LaserTargetColor: a table position, default 0),
     /// S-0610 claim 7 and Import mapping (BerserkColor: zero-based, default 0), Edge cases (a
     /// berserk selector outside 0 to 15: the importer warns and no mask), S-0102 F9 (no selected
-    /// adjustment: K = 0); the laser-target warning is Q-1621's interim
+    /// adjustment: K = 0), S-0519 claim 26 (a laser-target selector outside the table: no mask,
+    /// the importer warns)
     #[test]
     fn laser_and_berserk_selectors() {
         use glasnost_convert::{ImportOptions, convert, inputs::InputFile, inputs::Inputs};
