@@ -3,13 +3,13 @@
 //! switch of one playing animation, advanced update by update with the game
 //! ticks (never the wall clock).
 //!
-//! The simulation plays with it the animations whose playback reaches game
-//! state: infantry-making animations (S-0611 claims 8 to 12,
-//! `crate::mutation`), whose draws come from the scenario stream (S-0109
-//! claim 28). The drawing (`glasnost_app::mapview::anims`) plays every other
-//! animation with the same clock and a cosmetic stream of its own; the
-//! simulation does not play those (S-0109 claim 28 for them is a seam,
-//! docs/development.md).
+//! The simulation plays every animation in play with it, its draws from the
+//! scenario stream (S-0109 claim 28): ordinary animations (`crate::anims`),
+//! infantry-making animations (S-0611 claims 8 to 12, `crate::mutation`),
+//! domination animations and depot slot animations. The drawing
+//! (`glasnost_app::mapview::anims`) shows the simulation's stage for those
+//! and plays with the same clock, and a cosmetic stream of its own, only the
+//! pictures it makes without a simulated animation behind them.
 
 use serde::{Deserialize, Serialize};
 
@@ -221,6 +221,26 @@ pub trait Env {
     fn switched(&mut self, name: &[u8]) {
         let _ = name;
     }
+    /// A loop delay has just ended on this update, with the current type's
+    /// fields `p`: the start event happens (claims 11 and 13). The drawing
+    /// does nothing here; the simulation plays the start event.
+    fn delay_ended(&mut self, p: &Playback) {
+        let _ = p;
+    }
+}
+
+/// What a creator gives a new animation (S-0109 Terms; claims 7, 8, 11 and
+/// 29): an initial loop delay *D* in updates, a repeat factor *m* and a
+/// reverse request. The default is no loop delay, repeat factor 1 and no
+/// reverse request.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Creation {
+    /// The initial loop delay *D* (claim 11; 0 for none).
+    pub loop_delay: i32,
+    /// The repeat factor *m* (claim 7; below 1 counts as 1).
+    pub repeat: i32,
+    /// The creator asks for reverse play (claim 8, Terms).
+    pub reverse: bool,
 }
 
 /// The stage delay chosen for `p` (claims 2 to 4): the random range's draw
@@ -294,6 +314,11 @@ pub struct Player {
     first_pending: bool,
     loop_delay: i32,
     ended: bool,
+    /// The creator asked for reverse play (S-0109 Terms): the reversed test
+    /// is the current type's flag or this request, decided afresh at a
+    /// follow-up switch (claim 15).
+    #[serde(default)]
+    reverse_request: bool,
 }
 
 impl Player {
@@ -309,8 +334,25 @@ impl Player {
         env: &mut dyn Env,
         q: &AnimQuirks,
     ) -> Self {
+        Self::create(name, play, created, drawn, Creation::default(), env, q)
+    }
+
+    /// [`Player::new`] with what the creator gives (`c`): an initial loop
+    /// delay, a repeat factor and a reverse request (S-0109 claims 7, 8, 11
+    /// and 29).
+    pub fn create(
+        name: &[u8],
+        mut play: Playback,
+        created: i32,
+        drawn: Option<i32>,
+        c: Creation,
+        env: &mut dyn Env,
+        q: &AnimQuirks,
+    ) -> Self {
+        // spec: S-0109 Terms (reversed: the type's reverse flag or the creator's request)
+        play.reverse |= c.reverse;
         let delay = choose_delay(&play, drawn, env);
-        let r = remaining_at_creation(play.loop_count, 1, q);
+        let r = remaining_at_creation(play.loop_count, c.repeat, q);
         let (k, step) = initial_stage(&play, q);
         Self {
             play,
@@ -321,9 +363,16 @@ impl Player {
             delay,
             last: created,
             first_pending: true,
-            loop_delay: 0,
+            // spec: S-0109 claim 11 (a loop delay of D updates at creation when the creator asks for one, D > 0)
+            loop_delay: c.loop_delay.max(0),
             ended: false,
+            reverse_request: c.reverse,
         }
+    }
+
+    /// The loop delay still to count down (claim 11); 0 when none.
+    pub fn loop_delay(&self) -> i32 {
+        self.loop_delay
     }
 
     /// The image frame shown, *a* + *k* (claim 1); outside 0 … N − 1 it
@@ -404,6 +453,10 @@ impl Player {
             // spec: S-0109 claim 11 (each update counts D down; the update that brings it to 0
             // makes no advance)
             self.loop_delay -= 1;
+            if self.loop_delay == 0 {
+                // spec: S-0109 claims 11 and 13 (on the update that brings it to 0 the start event happens)
+                env.delay_ended(&self.play);
+            }
             return true;
         }
         // spec: S-0109 claim 5 (an advance when at least d ticks have passed since the last
@@ -501,9 +554,9 @@ impl Player {
 
     /// The follow-up switch to type `next` in tick `tick` (claim 15).
     fn follow_up(&mut self, next: &[u8], tick: i32, env: &mut dyn Env, q: &AnimQuirks) {
-        let p = env.follow_up(next);
-        // spec: S-0109 Terms (reversed is decided afresh from the current type; no creator here
-        // asks for reverse play)
+        let mut p = env.follow_up(next);
+        // spec: S-0109 claim 15 and Terms (reversed is decided afresh from the follow-up type's flag and the creator's request)
+        p.reverse |= self.reverse_request;
         let reversed = p.reverse;
         self.k = if q.anim_followup_start_doubled {
             // spec: S-0109 claim 15 (k = a′, showing 2a′)
