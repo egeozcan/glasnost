@@ -6,6 +6,10 @@
 //!
 //! Normal and build dependencies count, for every target platform; dev
 //! dependencies (tests only) do not.
+//!
+//! The lockstep crate `glasnost-net` (M9) has no I/O either: it may depend on
+//! the simulation crates, but on none of the external crates below (no
+//! runtime, socket, clock or host-randomness crate).
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -36,6 +40,18 @@ pub const FORBIDDEN_EXTERNAL: &[&str] = &[
     "time",
     "web-time",
     "instant",
+    // Sockets and network protocols (M9: networking lives in glasnost-net,
+    // the relay and the client, never in the simulation).
+    "mio",
+    "socket2",
+    "tungstenite",
+    "tokio-tungstenite",
+    "async-tungstenite",
+    "matchbox_socket",
+    "webrtc",
+    "hyper",
+    "reqwest",
+    "ureq",
 ];
 
 /// A dependency graph over package names.
@@ -124,13 +140,25 @@ pub fn check(md: &Metadata) -> Result<Vec<String>, String> {
         ));
     }
     let roots: Vec<String> = det.into_iter().map(|(n, _)| n).collect();
+    let net_present = other.iter().any(|(n, _)| n == NET_CRATE);
     let forbidden: BTreeSet<String> = other
         .into_iter()
         .map(|(n, _)| n)
         .chain(FORBIDDEN_EXTERNAL.iter().map(|s| (*s).to_owned()))
         .collect();
-    Ok(violations(&graph, &roots, &forbidden))
+    let mut out = violations(&graph, &roots, &forbidden);
+    // The lockstep core takes its clock and its bytes from the caller: no
+    // runtime, socket or clock crate either (M9, docs/m9-plan.md).
+    if net_present {
+        let external: BTreeSet<String> =
+            FORBIDDEN_EXTERNAL.iter().map(|s| (*s).to_owned()).collect();
+        out.extend(violations(&graph, &[NET_CRATE.to_owned()], &external));
+    }
+    Ok(out)
 }
+
+/// The lockstep crate, which has no I/O of its own.
+pub const NET_CRATE: &str = "glasnost-net";
 
 /// `cargo xtask deps`.
 pub fn run() -> Result<Vec<String>, String> {

@@ -80,6 +80,10 @@ const SNIPPETS: &[(&str, &str)] = &[
         "pub fn t_udp(_: Option<std::net::UdpSocket>) {}",
     ),
     (
+        "std::net::TcpListener",
+        "pub fn t_tcpl(_: Option<std::net::TcpListener>) {}",
+    ),
+    (
         "std::process::Command",
         "pub fn t_cmd(_: Option<std::process::Command>) {}",
     ),

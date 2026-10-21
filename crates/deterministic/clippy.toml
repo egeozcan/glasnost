@@ -36,6 +36,7 @@ disallowed-types = [
     { path = "std::fs::File", reason = "no I/O in the simulation" },
     { path = "std::net::TcpStream", reason = "no I/O in the simulation" },
     { path = "std::net::UdpSocket", reason = "no I/O in the simulation" },
+    { path = "std::net::TcpListener", reason = "no I/O in the simulation; transports live in the client and the relay" },
     { path = "std::process::Command", reason = "no host calls in the simulation" },
 ]
 
