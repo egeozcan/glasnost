@@ -46,6 +46,7 @@ docs/development.md.
 | A2 | **Ranked scenario list for the oracle.** The `measurable` claims whose measurement would most change play (those the arena games reach, frequent rules, the combat and movement core), with each claim's spec scenario, for the lead's oracle rounds. | `docs/m8-claims/oracle-wishlist.md`, kept current as records land. |
 | A3 | **Intakes (recurring).** Take in new measurement records and spec revisions as they land: claim ledgers, tests citing the M-ids, retired interim rules, and the arena rerun. | One ledger row per intake. |
 | A4 | **Movement and crowding feel.** Starts once the lead's play notes or oracle records name concrete gaps. Each gap becomes a request, or an intake once a spec covers it. | Per gap. |
+| A5 | **Animation playback in the simulation** (proposed by A1). S-0109's random parts (claims 11, 14, 15, 17, 28 and 29) are reached in nearly every arena game but not built; the arena's animation creation only leaves a note today. Also S-0312 claim 18 (survivors). | The S-0109 ledger rows reached by the arena are tested; the arena table is rerun before and after. |
 
 ## Track B: AI depth
 
