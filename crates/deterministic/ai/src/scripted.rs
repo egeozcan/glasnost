@@ -149,6 +149,12 @@ const BROKE_PATIENCE: i32 = 1500; // nocite: tuning of our own opponent
 /// not as income.
 const SALE_WINDOW: i32 = 300; // nocite: tuning of our own opponent
 
+/// The ticks over which the economy watch sums the house's income
+/// ([`Script::income`]): every so many ticks it reads the credits earned
+/// since the last reading, as a person reads his income off the credits
+/// counter over the last few minutes.
+pub const INCOME_WINDOW: i32 = 3000; // nocite: tuning of our own opponent
+
 /// Free cells kept between the house's buildings.
 const GAP: i32 = 2; // nocite: tuning of our own opponent
 
@@ -455,6 +461,21 @@ struct Watch {
     /// as a person remembers having seen a field (M7b AI round 2).
     #[serde(default)]
     knew_field: bool,
+    /// The balance owed and the start price of each item on the house's
+    /// lines at the last think, by the item's object (M8 step B5).
+    #[serde(default)]
+    owed: BTreeMap<ObjectId, (i32, i32)>,
+    /// The credits the house has earned since the watch began
+    /// ([`Script::watch_income`]).
+    #[serde(default)]
+    earned: i64,
+    /// `earned` at the start of the current window, once one has begun.
+    #[serde(default)]
+    mark: Option<i64>,
+    /// The credits earned over the last whole window of
+    /// [`INCOME_WINDOW`] ticks, once one has passed.
+    #[serde(default)]
+    income: Option<i64>,
 }
 
 impl Script {
@@ -748,6 +769,67 @@ impl Script {
             .filter(|&t| self.allowed(w, t, Role::Army) && !tech::buildable(w, self.house, t))
             .filter_map(|t| self.unblocker(w, t, CLIMB_DEPTH))
             .min_by_key(|&b| (production::cost_field(w, b), b.index))
+    }
+
+    /// The credits the house earned over the last whole window of
+    /// [`INCOME_WINDOW`] ticks; none before one has passed since the watch
+    /// began.
+    pub(crate) fn income(&self) -> Option<i64> {
+        self.watch.income
+    }
+
+    /// Adds what the house earned since the last think to the watch, as a
+    /// person reads it off the credits counter and the sidebar: the change
+    /// of its credits plus what its lines paid meanwhile (S-0404 claim 4:
+    /// each step is paid from the credits). A line item's payment is the
+    /// fall of its balance owed since the last think (its start price less
+    /// the balance for an item started since); an item gone from the lines
+    /// paid the rest of its balance when its object is still there (done
+    /// and released or placed), and was cancelled, its payments refunded
+    /// (S-0404 claim 6, at an unchanged price), when not. A fall of the
+    /// credits that no payment explains (a drain, S-0608) is no income.
+    /// Every [`INCOME_WINDOW`] ticks the window's sum becomes
+    /// [`Script::income`]. M8 step B5: a house that kept every harvester it
+    /// wanted bought a yard vehicle on a mined-out map with an income of
+    /// 275 to 600 credits per 1 500 ticks, and it stood on its line to the
+    /// end of the game.
+    fn watch_income(&mut self, w: &World) {
+        let credits = w.houses[usize::from(self.house.0)].credits;
+        let now: BTreeMap<ObjectId, (i32, i32)> = w
+            .econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == self.house)
+            .filter_map(|l| l.item.as_ref())
+            .map(|i| (i.object, (i.owed, i.start_price)))
+            .collect();
+        let mut paid: i64 = now
+            .iter()
+            .map(|(id, &(owed, start))| {
+                let before = self.watch.owed.get(id).map_or(start, |&(b, _)| b);
+                i64::from(before) - i64::from(owed)
+            })
+            .sum();
+        for (id, &(owed, start)) in &self.watch.owed {
+            if now.contains_key(id) {
+                continue;
+            }
+            paid += if w.obj(*id).is_some() {
+                i64::from(owed)
+            } else {
+                -(i64::from(start) - i64::from(owed))
+            };
+        }
+        let gained = i64::from(credits) - i64::from(self.watch.credits) + paid;
+        self.watch.earned += gained.max(0);
+        self.watch.owed = now;
+        if w.tick % INCOME_WINDOW == 0 {
+            if let Some(mark) = self.watch.mark {
+                self.watch.income = Some(self.watch.earned - mark);
+            }
+            self.watch.mark = Some(self.watch.earned);
+        }
     }
 
     /// Updates the economy watch and, when the house is broke (no income:
@@ -1072,6 +1154,7 @@ impl Script {
         if !self.watch.knew_field {
             self.watch.knew_field = self.knows_field(w);
         }
+        self.watch_income(w);
         self.sell_when_broke(w, &mut out);
         let selling = self.watch.selling;
 

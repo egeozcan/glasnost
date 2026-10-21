@@ -14,6 +14,9 @@
 //!   item, without twice its cost in hand (S-0404 claim 4: no money is
 //!   needed to start an item); and while the yard vehicle waits on an
 //!   unmet prerequisite, the house builds what clears it (S-0407 claim 8).
+//! - M8 step B5: that house must also earn the yard vehicle's cost per
+//!   income window and have no superweapon building left to climb to (a
+//!   person climbs to his superweapons first, then expands).
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::{fixture, game::Game};
@@ -188,17 +191,85 @@ fn room_for(w: &World, b: glasnost_sim::econ::TypeRef) -> CellXY {
         .expect("room for the building")
 }
 
-// Tuning of our own opponent (M8 step B1) and S-0404 claim 4 (no money is needed to start an item): a house with less than twice a yard vehicle's cost in hand still builds one when it keeps its harvesters and no superweapon building is short of money.
+/// Spawns `n` for house 0 on a free cell south of its yard.
+fn stand(w: &mut World, n: &str) {
+    let t = building(w, n);
+    let at = room_for(w, t);
+    testkit::spawn(w, Kind::Building, n, 0, at, 0);
+}
+
+/// A brain for house 0 that has watched its income over two whole income
+/// windows, its credits rising by `per_window` in each: the brain thinks
+/// at the start of each window (orders dropped) while the simulation does
+/// not run, so the credits are its only income and nothing pays.
+fn earning(w: &mut World, map: &Map, per_window: i32) -> Brain {
+    let window = glasnost_ai::scripted::INCOME_WINDOW;
+    let mut brain = Brain::with_plan(w, map, H, fixture::plan());
+    w.tick = (w.tick / window + 1) * window;
+    brain.think(w);
+    for _ in 0..2 {
+        w.tick += window;
+        w.houses[0].credits += per_window;
+        brain.think(w);
+    }
+    // The next think tick, inside the window.
+    w.tick += glasnost_ai::scripted::THINK_PERIOD;
+    brain
+}
+
+// Tuning of our own opponent (M8 steps B1 and B5) and S-0404 claim 4 (no money is needed to start an item): a house with less than twice a yard vehicle's cost in hand still builds one when it keeps its harvesters, earns the yard vehicle's cost per income window and has a building of every superweapon kind; earning one credit less, it does not.
 #[test]
-fn a_house_with_its_economy_whole_builds_a_yard_vehicle_step_by_step() {
+fn a_house_earning_a_yard_vehicle_per_window_buys_one_step_by_step() {
     let map = far_field_map();
     let g = built_up(&map);
     let mut w = g.world.clone();
     scout(&mut w);
-    w.houses[0].credits = 2 * glasnost_sim::econ::production::cost_field(&w, mcv(&w)) - 1;
-    let (orders, builds, _) = think(&mut w, &map);
+    stand(&mut w, "LAB");
+    stand(&mut w, "SILO");
+    testkit::run(&mut w, 60);
+    let cost = glasnost_sim::econ::production::cost_field(&w, mcv(&w));
+    for (per_window, buys) in [(cost, true), (cost - 1, false)] {
+        let mut w = w.clone();
+        let mut brain = earning(&mut w, &map, per_window);
+        w.houses[0].credits = 2 * cost - 1;
+        let probe = brain.expansion_probe(&w);
+        assert_eq!(probe.income, Some(i64::from(per_window)), "{probe:?}");
+        assert!(!probe.superweapon_wanted, "{probe:?}");
+        let before = brain.special_uses().expansion_builds;
+        let orders = brain.think(&w);
+        assert_eq!(builds_mcv(&w, &orders), buys, "{per_window}: {orders:?}");
+        assert_eq!(
+            brain.special_uses().expansion_builds - before,
+            u32::from(buys)
+        );
+        if !buys {
+            assert!(probe.blocked_by().contains(&"not rich"), "{probe:?}");
+        }
+    }
+}
+
+// Tuning of our own opponent (M8 step B5): a house earning well with a superweapon building still to climb to (here the building its superweapon building waits for) buys no yard vehicle with less than twice its cost to spare; the house goes for the superweapon first.
+#[test]
+fn a_house_with_a_superweapon_to_climb_to_buys_no_yard_vehicle() {
+    let map = far_field_map();
+    let g = built_up(&map);
+    let mut w = g.world.clone();
+    scout(&mut w);
+    let cost = glasnost_sim::econ::production::cost_field(&w, mcv(&w));
+    let mut brain = earning(&mut w, &map, 10 * cost);
+    w.houses[0].credits = 2 * cost - 1;
+    let probe = brain.expansion_probe(&w);
+    assert!(probe.superweapon_wanted, "{probe:?}");
+    assert!(!probe.superweapon_building, "{probe:?}");
+    assert!(probe.blocked_by().contains(&"not rich"), "{probe:?}");
+    let before = brain.special_uses().expansion_builds;
+    let orders = brain.think(&w);
+    assert!(!builds_mcv(&w, &orders), "{orders:?}");
+    assert_eq!(brain.special_uses().expansion_builds, before);
+    // Twice the cost to spare is enough.
+    w.houses[0].credits = 2 * cost;
+    let orders = brain.think(&w);
     assert!(builds_mcv(&w, &orders), "{orders:?}");
-    assert_eq!(builds, 1);
 }
 
 // Tuning of our own opponent (M8 step B1) and S-0404 claim 4 (a step waits for money it lacks): a poor house saving for a superweapon building that is short of money builds no yard vehicle.
