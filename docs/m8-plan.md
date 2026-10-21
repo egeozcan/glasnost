@@ -32,7 +32,9 @@ gives, it files a request and stops that part.
 | Q-1710 to Q-1719 | Step A1, arena spread |
 | Q-1720 to Q-1729 | Track B, AI depth (only where the AI needs simulation behaviour no spec gives) |
 | Q-1730 to Q-1739 | Track C, polish |
-| Q-1740 onward | Intakes of new spec revisions during M8 |
+| Q-1740 to Q-1749 | Intakes of new spec revisions during M8 |
+| Q-1750 to Q-1769 | Step A4, the lead's play notes ([m8-claims/a4-play-notes.md](m8-claims/a4-play-notes.md)) |
+| Q-1770 onward | Further intakes |
 
 ## Track A: fidelity
 
