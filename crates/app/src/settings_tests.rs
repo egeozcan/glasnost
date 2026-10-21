@@ -179,17 +179,17 @@ fn the_config_folder_follows_the_platform() {
         Some("/h/.config/glasnost/settings.txt".into())
     );
     assert_eq!(
-        tail(config_path(Host::Mac, env(&[("HOME", "/Users/p")]))),
-        Some("/Users/p/Library/Application Support/glasnost/settings.txt".into())
+        tail(config_path(Host::Mac, env(&[("HOME", "/machome")]))),
+        Some("/machome/Library/Application Support/glasnost/settings.txt".into())
     );
     assert_eq!(config_path(Host::Unix, env(&[])), None);
     #[cfg(windows)]
     assert_eq!(
         tail(config_path(
             Host::Windows,
-            env(&[("APPDATA", "C:\\Users\\p\\AppData\\Roaming")])
+            env(&[("APPDATA", "C:\\wuser\\AppData\\Roaming")])
         )),
-        Some("C:/Users/p/AppData/Roaming/glasnost/settings.txt".into())
+        Some("C:/wuser/AppData/Roaming/glasnost/settings.txt".into())
     );
 }
 
