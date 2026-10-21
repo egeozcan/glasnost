@@ -147,6 +147,12 @@ impl Game {
         self.brains.iter().map(Brain::house).collect()
     }
 
+    /// The AI houses' state, in house order (read only: the desync tool's
+    /// field-by-field view, M9 N4).
+    pub fn brains(&self) -> &[Brain] {
+        &self.brains
+    }
+
     /// The replay so far: the setup and the person's orders.
     pub fn replay(&self) -> &Replay {
         &self.replay
