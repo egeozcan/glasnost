@@ -205,6 +205,7 @@ fn arena_matches_the_oracle() {
         compare_only: false,
         watch: None,
         groups: false,
+        spread: None,
         ai_houses: false,
     };
     let report = oracle::run_cli(&cli, Some(Path::new(&dir))).unwrap();

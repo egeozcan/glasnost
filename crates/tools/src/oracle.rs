@@ -956,6 +956,112 @@ pub fn play(
     ))
 }
 
+/// One line per object of the two houses (and per object a side's group
+/// started with): what a seed can change in play.
+fn unit_states(w: &World, houses: [HouseId; 2], units: &[Vec<ObjectId>; 2]) -> Vec<String> {
+    let mut ids: Vec<ObjectId> = units.iter().flatten().copied().collect();
+    ids.extend(
+        w.objects
+            .values()
+            .filter(|o| o.owner.is_some_and(|h| houses.contains(&h)))
+            .map(|o| o.id),
+    );
+    ids.sort_unstable();
+    ids.dedup();
+    ids.iter()
+        .map(|&id| match w.obj(id) {
+            None => format!("#{} gone", id.0),
+            Some(o) => format!(
+                "#{} owner {:?} health {} on map {} pos ({}, {}, {}) body {:?} turret {:?} behaviour {:?} target {:?} destination {:?}",
+                id.0,
+                o.owner.map(|h| h.0),
+                o.health,
+                o.on_map,
+                o.pos.x,
+                o.pos.y,
+                o.pos.z,
+                o.body,
+                o.turret,
+                o.beh.current,
+                o.target,
+                o.dest
+            ),
+        })
+        .collect()
+}
+
+/// The seed-to-seed spread of one pairing and side (an M8 step A1
+/// diagnostic): plays seeds 0 to 5 and reports, for each seed, its result,
+/// the raw values its scenario random stream gave, the first tick at which
+/// a unit of either house differs from the seed-0 game (and the first such
+/// unit in both games), and the notes (provisional rules and seams) its
+/// game met.
+pub fn spread(ground: &Ground, row: &str, col: &str, row_side: Side) -> Result<String, String> {
+    let types = match row_side {
+        Side::A => [row, col],
+        Side::B => [col, row],
+    };
+    let mut out = String::new();
+    let mut base: Vec<Vec<String>> = Vec::new();
+    let mut notes = std::collections::BTreeSet::new();
+    for seed in SEEDS {
+        let (g, _) = play(ground, row, col, row_side, seed, false)?;
+        let Arena {
+            world: mut w,
+            houses,
+            units,
+            ..
+        } = setup(ground, types, seed)?;
+        let mut first: Option<(i32, String, String)> = None;
+        let mut states = vec![unit_states(&w, houses, &units)];
+        let mut t = 0usize;
+        while w.tick < g.end_frame && !w.econ.end.finished {
+            glasnost_sim::tick::step(&mut w);
+            w.effects.clear();
+            t += 1;
+            let s = unit_states(&w, houses, &units);
+            if seed > 0 && first.is_none() {
+                let b = base.get(t).or(base.last());
+                if let Some(b) = b
+                    && *b != s
+                {
+                    let k = b.iter().zip(&s).position(|(x, y)| x != y);
+                    let (x, y) = k.map_or_else(
+                        || (format!("{} lines", b.len()), format!("{} lines", s.len())),
+                        |k| (b[k].clone(), s[k].clone()),
+                    );
+                    first = Some((w.tick, x, y));
+                }
+            }
+            if seed == 0 {
+                states.push(s);
+            }
+        }
+        if seed == 0 {
+            base = states;
+        }
+        let _ = writeln!(
+            out,
+            "seed {seed}: {} ; raw values taken {}; {}",
+            g.line(),
+            w.rng.taken(),
+            match &first {
+                None if seed == 0 => "the reference game".to_owned(),
+                None => "no unit differs from seed 0 at any tick".to_owned(),
+                Some((t, _, _)) => format!("first differs from seed 0 at tick {t}"),
+            }
+        );
+        if let Some((_, x, y)) = first {
+            let _ = writeln!(out, "    seed 0: {x}\n    seed {seed}: {y}");
+        }
+        notes.extend(w.notes.iter().cloned());
+    }
+    for n in notes {
+        let _ = writeln!(out, "  note: {n}");
+    }
+    Ok(out)
+}
+
 /// One game to play: row, column, the row's side, the seed.
 pub type Job = (String, String, Side, u32);
 
@@ -1032,7 +1138,7 @@ pub fn merge(stored: &[Game], fresh: &[Game], order: &[(String, String)]) -> Vec
 // Command line
 
 /// The usage of `arena --record`.
-pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED]";
+pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED] [--spread ROW,COL,A|B]";
 
 /// The `arena --record` command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1053,6 +1159,8 @@ pub struct Cli {
     pub watch: Option<Job>,
     /// List each type's kind, group size and cost, and play nothing.
     pub groups: bool,
+    /// Report the seed-to-seed spread of one pairing and side ([`spread`]).
+    pub spread: Option<(String, String, Side)>,
     /// Play the houses as AI houses of our engine (human-controlled rules)
     /// instead of computer-controlled ones.
     pub ai_houses: bool,
@@ -1072,6 +1180,7 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
         compare_only: false,
         watch: None,
         groups: false,
+        spread: None,
         ai_houses: false,
     };
     let mut it = args.iter();
@@ -1101,6 +1210,16 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
             "--compare-only" => cli.compare_only = true,
             "--groups" => cli.groups = true,
             "--ai-houses" => cli.ai_houses = true,
+            "--spread" => {
+                let v = value(a)?;
+                let f: Vec<&str> = v.split(',').map(str::trim).collect();
+                let side = match f.get(2).copied() {
+                    Some("A" | "a") => Side::A,
+                    Some("B" | "b") => Side::B,
+                    _ => return Err("--spread needs ROW,COL,A|B".into()),
+                };
+                cli.spread = Some((f[0].to_owned(), f[1].to_owned(), side));
+            }
             "--watch" => {
                 let v = value(a)?;
                 let f: Vec<&str> = v.split(',').map(str::trim).collect();
@@ -1207,6 +1326,18 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
                 }
             }
         }
+        return Ok(out);
+    }
+    if let Some((row, col, side)) = &cli.spread {
+        let r = chosen[0];
+        let ground = ground_of(r)?;
+        let _ = writeln!(
+            out,
+            "{} spread: {row} against {col}, row on side {}",
+            r.id,
+            side.text()
+        );
+        out.push_str(&spread(&ground, row, col, *side)?);
         return Ok(out);
     }
     if let Some((row, col, side, seed)) = &cli.watch {
@@ -1729,5 +1860,13 @@ mod tests {
         assert_eq!(m.len(), 24);
         assert!(m[..12].iter().all(|x| x.row_left == 1));
         assert!(m[12..].iter().all(|x| x.winner == Winner::Col));
+    }
+
+    #[test]
+    fn spread_option_names_one_pairing_and_side() {
+        let args = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let c = parse_cli(&args(&["--record", "M-0003", "--spread", "MGTK,APOC,B"])).unwrap();
+        assert_eq!(c.spread, Some(("MGTK".into(), "APOC".into(), Side::B)));
+        assert!(parse_cli(&args(&["--record", "M-0003", "--spread", "MGTK,APOC"])).is_err());
     }
 }
