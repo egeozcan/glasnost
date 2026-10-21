@@ -65,7 +65,7 @@ gives the records in which the site took at least one draw (1 = M-0001, 2 = M-00
 | S-0312 claim 19 | building-death smudge and fire draws | built | `combat/death.rs` | 1, 2 |
 | S-0312 claim 26 | smudges | not modelled (the draws of claim 19 are taken; the smudge itself is not placed) | — | — |
 | S-0107 F4, claim 14 | infantry idle timer, idle row and facing | built | `infantry.rs` | 1, 2, 3 (many) |
-| **S-0107 claim 17, row 3 and the corpse pick** | a type's own death animation; the corpse a completed death sequence leaves (one raw value modulo the list length) | **built at this step** (was the seam `death_anims_row`, and the corpse lists were not imported) | `combat/death.rs` (`infantry_death`, `corpse`) | every infantry death that completes die-1 or die-2 (1, 2, 3); not counted, built after the count |
+| **S-0107 claim 17, row 3 and the corpse pick** | a type's own death animation; the corpse a completed death sequence leaves (one raw value modulo the list length) | **built at this step** (was the seam `death_anims_row`, and the corpse lists were not imported) | `combat/death.rs` (`infantry_death`, `corpse`) | 1, 2 (built after the count: the build changed 37 games of M-0001 and 37 of M-0002, none of M-0003) |
 | S-0208 claim 3 | the standing row of a walking infantry | built | `walk.rs` | 1, 2 |
 | S-0208 claims 12, 13 | the scatter direction | built | `scatter.rs` | 1, 2, 3 |
 | S-0615 claim 6 | the walker's fallback destination | built | `walker.rs` | 2 |
