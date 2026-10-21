@@ -7,7 +7,9 @@
 //! (`render::projection::ProjectionQuirks`, `render::compose::ComposeQuirks`,
 //! `render::light::LightQuirks`, `render::voxel::VoxelQuirks`,
 //! `render::overlay::OverlayQuirks`,
-//! `render::palette::PaletteQuirks`). [`NOT_IMPLEMENTED`] lists the named
+//! `render::palette::PaletteQuirks`); the file lookup's switch that S-0111
+//! claim 19a names for the cursor palette lives with S-0005's other
+//! switches (`vfs::GameQuirks`). [`NOT_IMPLEMENTED`] lists the named
 //! switches of the rendering specs that have no field, with the reason;
 //! the test at the end of this file checks that every switch the rendering
 //! specs name is one or the other.
@@ -488,6 +490,11 @@ mod tests {
         );
         let sim = glasnost_rules::quirks::Quirks::default();
         have.extend(sim.named().iter().map(|(n, _)| *n));
+        // S-0005's switches (the file lookup's), which S-0111 claim 19a names for the cursor
+        // palette; every default is the original.
+        let files = glasnost_vfs::GameQuirks::default().named();
+        assert!(files.iter().all(|(_, v)| *v), "every default is the original");
+        have.extend(files.map(|(n, _)| n));
         // A listed name must not also be a field.
         for (n, _) in NOT_IMPLEMENTED {
             assert!(!have.contains(n), "{n} is a field and also listed");

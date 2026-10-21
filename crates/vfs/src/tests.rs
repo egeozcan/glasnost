@@ -348,6 +348,7 @@ fn unsigned_index_hides_members() {
     let fixed = GameOptions {
         quirks: GameQuirks {
             mix_signed_binary_search: false,
+            ..GameQuirks::default()
         },
         ..GameOptions::default()
     };
