@@ -1911,6 +1911,7 @@ Interim rules, each tied to a request:
 | `build::infantry_items` | **answered by S-0107 revision 19** (M7b step 1j, [step1j-m7b-sprites.md](m7-claims/step1j-m7b-sprites.md)). An infantry unit above the surface draws no body-sprite shadow and draws the generic infantry shadow on the ground below it (claim 19) | Q-1525 (answered) |
 | rendering | **answered by S-0610 revision 11** (M7b step 1j, [step1j-m7b-sprites.md](m7-claims/step1j-m7b-sprites.md)). A berserk unit takes the berserk colour mask as a union on its opaque, depth-passing pixels (claim 7, S-0102 claim 34 and F9) | Q-1526 (answered) |
 | `live::Live::projectile_items`, `build::Painter::projectiles` | **answered by S-0306 revisions 16 and 17** (claims 28 to 33, F14 to F16). Details under *Projectiles and the target line* below. The diamond is drawn only by the debug layer, for a projectile that drew no body. A projectile's light-glow image (claim 33) is not drawn: the client draws no light-glow images yet | Q-1570 (answered); S-0306 Open questions (the glow) |
+| `live::Live::projectile_items` | a firer's-palette projectile created without a firer takes the local player's house palette (S-0306 claim 31, case 2); the map viewer has no local player, so there it takes the projectile's own house's palette. The game client always has a local player, so default play never reaches this | none (our map viewer has no local player) |
 | `build::Painter::slot_animations`, `live::Live::protected_cells` | the building occupying a slot animation's cell supplies no force-shield mask while its own centre cell is shrouded for the local player (the shroud row read as reaching the slot animations through that building); the slot animation keeps its own building's brightness | Q-1529 |
 | `build::Painter::slot_animations` | a building slot animation whose own art draws it translucent takes its building's brightness in the blended source and no mask (S-0513 claim 29b's translucent row read as covering it) | S-0513 Open questions |
 | `live::Live::redraw` | a map-placed building is drawn live (after the overlays, like the map's gates) while it is protected, flashing from a charge or marked by a strike (since M7b step 1j), so its body can show the appearance; it returns to the cell pass when that ends | none (our placeholder order) |
@@ -1918,7 +1919,7 @@ Interim rules, each tied to a request:
 
 ### Item results
 
-What each item's retake from main showed and what was done. Final shots: `local-lane/visual-fix-3/<item>.png`.
+What each item's retake from main showed and what was done. Final shots: `local-lane/visual-fix-3/<item>.png`; items finished in M7b step 1j have their pictures under `local-lane/visual-fix-4/<group>/`, named in their rows.
 
 | Item | Finding | Fix or answer |
 |---|---|---|
