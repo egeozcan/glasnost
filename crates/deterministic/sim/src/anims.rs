@@ -158,7 +158,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
         },
     );
     // spec: S-0109 claim 29 and S-0203 claims 3 and 4 (appended; eligible for its first update later in the same pass)
-    w.update.enter(id);
+    w.update.enter_new(id);
     Spawned {
         id: Some(id),
         delay: drawn,
