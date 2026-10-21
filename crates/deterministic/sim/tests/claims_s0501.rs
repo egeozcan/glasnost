@@ -1888,13 +1888,18 @@ fn claim_24_docking_follows_touchdown() {
     assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Enter));
     assert_eq!(w.obj(a).unwrap().contact, Some(k));
     let t0 = w.tick;
-    let slept = run_until(&mut w, 10, |w| {
+    let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
+    // Docked: at the docking position, enter over (sleep, or the guard that a same-tick start of the queued behaviour makes current before the pad's service step queues sleep again).
+    let docked = run_until(&mut w, 10, |w| {
+        let o = w.obj(a).unwrap();
+        o.pos == p && o.beh.current != Some(Behaviour::Enter)
+    });
+    assert!(docked, "{}", describe(&w, a));
+    assert!((1..=6).contains(&(w.tick - t0)), "{} ticks", w.tick - t0);
+    let slept = run_until(&mut w, 2, |w| {
         w.obj(a).unwrap().beh.current == Some(Behaviour::Sleep)
     });
     assert!(slept, "{}", describe(&w, a));
-    assert!((1..=6).contains(&(w.tick - t0)), "{} ticks", w.tick - t0);
-    let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
-    assert_eq!(w.obj(a).unwrap().pos, p);
 }
 
 // spec: S-0501 claim 36 and S-0506 claims 12 and 13 (a carrier's destruction releases its flying slot aircraft into a crash: health 0, unfinished flight and speed fraction kept, ordinary movement goes on)
@@ -2629,5 +2634,308 @@ fn claim_12_drain_departure() {
             "{name}: the link stays"
         );
         assert_eq!(w.obj(a).unwrap().combat.ammo, 2, "{name}: no second round");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// An attacker that loses its target during the approach (the lead's play
+// note 5 of M8 step A4)
+
+/// The aircraft ruleset with JET1, JET with the one dock type APAD, and
+/// `edit` applied to it.
+fn one_dock(edit: impl FnOnce(&mut UnitType)) -> Ruleset {
+    let mut r = rules();
+    let mut u = flyer(Some("Agm"), 2);
+    u.econ.dock = Some(vec!["APAD".into()]);
+    edit(&mut u);
+    push(&mut r, "aircraft", "JET1");
+    r.sim.aircraft.insert("JET1".into(), u);
+    r
+}
+
+/// How the attacker's target is lost.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Loss {
+    /// Destroyed by a hit from nobody, as by another unit's fire.
+    Kill,
+    /// Removed from the game without a kill.
+    Remove,
+    /// Taken off the map without ending it (inside a transport or a
+    /// building).
+    Inside,
+}
+
+/// Orders aircraft `a` to attack a fresh VICTIM 12 cells east of the map
+/// middle. Once the aircraft is 4 cells further east, before any shot,
+/// `before` runs and the victim is lost as `loss` says.
+fn lose_target_on_approach(
+    w: &mut World,
+    a: ObjectId,
+    loss: Loss,
+    before: impl FnOnce(&mut World),
+) -> ObjectId {
+    let v = put(w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    let full = w.obj(v).unwrap().health;
+    let x0 = w.obj(a).unwrap().pos.x;
+    click(w, a, ClickOn::Object(v));
+    let out = run_until(w, 600, |w| w.obj(a).unwrap().pos.x >= x0 + 4 * 256);
+    assert!(out, "on its approach: {}", describe(w, a));
+    assert_eq!(w.obj(a).unwrap().target, Some(Target::Object(v)));
+    assert_eq!(w.obj(v).unwrap().health, full, "no shot yet");
+    assert!(w.projectiles.is_empty(), "no shot in flight");
+    before(w);
+    match loss {
+        Loss::Kill => {
+            glasnost_sim::combat::damage::apply(w, v, hit(1_000_000));
+            assert!(
+                run_until(w, 200, |w| w.obj(v).is_none()),
+                "the victim is gone"
+            );
+        }
+        Loss::Remove => glasnost_sim::objects::remove(w, v),
+        Loss::Inside => glasnost_sim::objects::take_inside(w, v),
+    }
+    v
+}
+
+// spec: S-0501 F10 and Import mapping (FlightLevel absent: cruise height 500)
+const CRUISE: i32 = 500;
+
+/// After the loss: the aircraft keeps its cruise height and full
+/// ammunition and does not land until its pad `k` grants contact and it
+/// enters; it then lands on the pad at its docking position, contact held.
+fn flies_home_and_docks(w: &mut World, k: ObjectId, a: ObjectId) {
+    let mut entered = false;
+    for _ in 0..3000 {
+        step(w);
+        let o = w.obj(a).expect("alive");
+        assert_eq!(o.combat.ammo, 2, "ammunition full: {}", describe(w, a));
+        let s = st(w, a);
+        if o.contact == Some(k) && o.beh.current == Some(Behaviour::Enter) {
+            entered = true;
+        }
+        if !entered {
+            // spec: S-0501 claim 6 (in ordinary flight the held height is the cruise height; no landing trigger before the pad grants contact)
+            assert!(!s.landing, "no landing before contact: {}", describe(w, a));
+            assert!(!air::on_ground(w, a), "in flight: {}", describe(w, a));
+            assert_eq!(s.held, CRUISE, "held height: {}", describe(w, a));
+        }
+        if air::on_ground(w, a) && o.beh.current != Some(Behaviour::Enter) {
+            break;
+        }
+    }
+    assert!(
+        entered,
+        "the pad grants contact and it enters: {}",
+        describe(w, a)
+    );
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.contact, Some(k), "contact held: {}", describe(w, a));
+    // spec: S-0501 claim 26 (the pad's service step releases an aircraft with no target, full ammunition and full health: it falls back to rest with its guard forced; it may have docked in sleep first, claim 24)
+    assert!(
+        matches!(o.beh.current, Some(Behaviour::Sleep | Behaviour::Guard)),
+        "docked: {}",
+        describe(w, a)
+    );
+    let (p, _) = glasnost_sim::econ::release::pad_position(w, k, a);
+    assert_eq!(o.pos, p, "at its docking position");
+}
+
+// spec: S-0501 claims 6, 17, 18, 21 to 24, 32 and table T2 (a landable armed aircraft with one dock type whose target is destroyed during its approach: the run ends, it falls back to rest, the pad grants contact, it enters the pad at its held cruise height with its ammunition full and docks; the held flight point keeps claim 6's replacement made at acceptance, so it does not start to land at the old firing spot)
+#[test]
+fn lost_target_on_approach_flies_home_and_docks() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Kill, |_| {});
+    flies_home_and_docks(&mut w, k, a);
+}
+
+// spec: S-0501 claim 32 (an aircraft in attack whose target is gone ends its run: a target removed without a kill no longer exists and is cleared before processing) and claims 17 and 18 (it then flies home as for a kill)
+#[test]
+fn removed_target_on_approach_flies_home_and_docks() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    step(&mut w);
+    assert_eq!(w.obj(a).unwrap().target, None, "cleared before processing");
+    flies_home_and_docks(&mut w, k, a);
+}
+
+// spec: S-0501 Terms (visiting aircraft: placement marks a type that is not both selectable and landable, so a non-landable aircraft built at a pad is visiting) and table T2 (in flight, armed, visiting, ammunition left, not in a team: hunt); claim 6 (a type that is not landable holds height and never lands)
+#[test]
+fn lost_target_non_landable_hunts_at_cruise_height() {
+    let r = one_dock(|u| u.econ.landable = Some(false));
+    let (mut w, _k, a) = built_with(&r, "JET1");
+    assert!(st(&w, a).visiting, "placement marks it visiting");
+    lose_target_on_approach(&mut w, a, Loss::Kill, |_| {});
+    let hunts = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Hunt)
+    });
+    assert!(hunts, "hunt: {}", describe(&w, a));
+    for _ in 0..600 {
+        step(&mut w);
+        let s = st(&w, a);
+        assert!(
+            !s.landing && !air::on_ground(&w, a),
+            "never lands: {}",
+            describe(&w, a)
+        );
+        assert_eq!(s.held, CRUISE, "held height: {}", describe(&w, a));
+        assert_eq!(w.obj(a).unwrap().combat.ammo, 2);
+    }
+}
+
+// spec: S-0501 table T2 (in flight, armed, no dock types: guard, the destination kept), claims 29 and 33 (in flight in guard with a destination: move to it) and claim 6 (the held point keeps the replacement made at acceptance with a target, so it is more than 120 leptons above terrain and the aircraft holds height); Q-1756 interim (a move with the destination already held accepts no new point)
+#[test]
+fn lost_target_no_dock_types_moves_to_the_old_spot_and_holds() {
+    let r = one_dock(|u| u.econ.dock = None);
+    let mut w = game(&r);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    lose_target_on_approach(&mut w, a, Loss::Kill, |_| {});
+    let spot = w.obj(a).unwrap().dest;
+    assert!(matches!(spot, Some(Target::Cell(_))), "{}", describe(&w, a));
+    let guard = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Guard)
+    });
+    assert!(guard, "guard: {}", describe(&w, a));
+    assert_eq!(w.obj(a).unwrap().dest, spot, "destination kept");
+    let moves = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
+    });
+    assert!(moves, "move: {}", describe(&w, a));
+    for _ in 0..600 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.dest, spot, "to the old spot: {}", describe(&w, a));
+        assert_eq!(o.contact, None);
+        assert_eq!(o.combat.ammo, 2);
+        let s = st(&w, a);
+        assert!(s.holding, "holds height: {}", describe(&w, a));
+        assert!(
+            !s.landing && !air::on_ground(&w, a),
+            "no landing: {}",
+            describe(&w, a)
+        );
+    }
+}
+
+// spec: S-0501 claims 22 and 23 (a pad whose every contact place is held grants no contact) and table T2 (in flight, armed, no pad, not pad-bound: the landing spot of F8 as destination and move); claim 6 (without a target the new point is not raised: it lands there)
+#[test]
+fn lost_target_every_place_reserved_lands_at_a_landing_spot() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Kill, |w| {
+        assert_eq!(
+            w.obj(a).unwrap().contact,
+            None,
+            "the take-off ended the reservation"
+        );
+        let other = put(w, Kind::Aircraft, "SCOUT", 0, -3, 3);
+        assert!(
+            air::request_contact(w, other, k),
+            "another aircraft holds the place"
+        );
+    });
+    let moves = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
+    });
+    assert!(moves, "move: {}", describe(&w, a));
+    let Some(Target::Cell(spot)) = w.obj(a).unwrap().dest else {
+        panic!("a landing spot: {}", describe(&w, a));
+    };
+    let landed = run_until(&mut w, 600, |w| air::on_ground(w, a));
+    assert!(landed, "lands: {}", describe(&w, a));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.pos.cell(), spot, "at the landing spot");
+    assert_eq!(o.contact, None);
+    assert_eq!(o.combat.ammo, 2);
+}
+
+// Q-1755 interim (a target that goes off the map still exists and is kept; table T1's firing check answers decide the run: with the re-approach flag off the aircraft stays in attack over its firing spot, fires nothing and keeps its rounds)
+#[test]
+fn target_taken_inside_is_kept() {
+    let r = one_dock(|_| {});
+    let (mut w, _k, a) = built_with(&r, "JET1");
+    let v = lose_target_on_approach(&mut w, a, Loss::Inside, |_| {});
+    for _ in 0..600 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.target, Some(Target::Object(v)), "{}", describe(&w, a));
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+        assert_eq!(o.combat.ammo, 2);
+        assert!(w.projectiles.is_empty());
+    }
+}
+
+// spec: S-0501 claim 6 (the replacement is made when the movement point is accepted with a target and ammunition; the held point keeps it after the target goes; a destination that is not the held one reads the state now)
+#[test]
+fn claim_6_held_point_height_fixed_at_acceptance() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    let a = put(&mut w, Kind::Aircraft, "JET", 0, 0, 0);
+    let c = testkit::mid(SIZE, 4, 4);
+    let centre = glasnost_sim::world::Pos::centre(c, 0);
+    let ground = w.surface_at(centre.x, centre.y);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::Behaviour {
+            actor: a,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: Some(Target::Object(v)),
+            dest: Some(Target::Cell(c)),
+        }
+    ));
+    let held = run_until(&mut w, 50, |w| st(w, a).flying_to == Some(Target::Cell(c)));
+    assert!(held, "the point is accepted: {}", describe(&w, a));
+    assert_eq!(air::flight_point(&w, a, Target::Cell(c)).z, ground + CRUISE);
+    w.obj_mut(a).unwrap().target = None;
+    assert_eq!(
+        air::flight_point(&w, a, Target::Cell(c)).z,
+        ground + CRUISE,
+        "the held point keeps its height"
+    );
+    let other = testkit::mid(SIZE, -4, 4);
+    let o = glasnost_sim::world::Pos::centre(other, 0);
+    assert_eq!(
+        air::flight_point(&w, a, Target::Cell(other)).z,
+        w.surface_at(o.x, o.y),
+        "another destination: no target now"
+    );
+}
+
+// spec: S-0501 claim 17 (no ammunition: the run ends), table T2 (in flight, armed, no dock types: guard; after the row, no pad found for an aircraft that is not pad-bound), claims 29 and 33 (in flight in guard with a destination: move to it) and claim 6 (the last firing spot was accepted with a target and ammunition, so the held point stays raised and the aircraft holds height over it); Q-1756 interim (a move with the destination already held accepts no new point). The re-approach flag is on so that each run ends (claim 14).
+#[test]
+fn spent_no_dock_types_holds_over_the_last_firing_spot() {
+    let mut r = one_dock(|u| u.econ.dock = None);
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let mut w = game(&r);
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, -4, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let moves = run_until(&mut w, 200, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
+    });
+    assert!(moves, "move: {}", describe(&w, a));
+    let spot = w.obj(a).unwrap().dest;
+    assert!(matches!(spot, Some(Target::Cell(_))), "{}", describe(&w, a));
+    for _ in 0..1000 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
+        assert_eq!(o.dest, spot);
+        let s = st(&w, a);
+        assert!(s.holding, "holds height: {}", describe(&w, a));
+        assert!(
+            !s.landing && !air::on_ground(&w, a),
+            "no landing: {}",
+            describe(&w, a)
+        );
     }
 }

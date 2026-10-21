@@ -215,6 +215,11 @@ pub struct AirState {
     /// The destination the locomotor was last given (claim 8: a new one
     /// makes an aircraft on the ground take off).
     pub flying_to: Option<Target>,
+    /// The held flight point's world height was replaced by the terrain
+    /// height there plus the cruise height when the point was accepted
+    /// (claim 6: the aircraft then had a target and ammunition). Fixed with
+    /// the point; cleared with it.
+    pub raised: bool,
     /// A pad building's servicing: the tick of its next service step.
     pub service: Option<i32>,
     /// An unfinished flight (claim 40): a movement point accepted and not
@@ -640,6 +645,7 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
         a.tgt = F64::ZERO;
         a.unfinished = false;
         a.flying_to = None;
+        a.raised = false;
         a.deck = false; // spec: S-0501 claim 43 (a pad grants no mark: the mark is clear on a pad)
     }
     set_mark(w, id);
@@ -756,8 +762,28 @@ pub fn crash_step(k: i32, h: i32, dead: bool) -> (i32, i32) {
 /// The flight point of a destination (claim 40): its heading point with
 /// the aircraft as requesting actor (S-0506 claim 14), the docking position
 /// for its own pad contact (S-0404 claim 15), and claim 6's height for an
-/// armed approach.
+/// armed approach. For the held point (the destination the locomotor
+/// accepted) the height replacement is the one fixed at acceptance
+/// ([`AirState::raised`]); any other destination is read as it would be
+/// accepted now.
 pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
+    let held = w.obj(id).and_then(|o| o.air.as_ref());
+    // spec: S-0501 claim 6 (the replacement is made when a movement point is accepted while the aircraft has a target and ammunition; it concerns the flight point held for movement and is not recomputed when the target or ammunition later goes)
+    let raised = match held {
+        Some(a) if a.flying_to == Some(d) => a.raised,
+        _ => raise_now(w, id),
+    };
+    point_with(w, id, d, raised)
+}
+
+/// Whether a movement point accepted now has its height replaced (claim
+/// 6): the aircraft has a target and ammunition.
+fn raise_now(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.target.is_some()) && ammo_left(w, id)
+}
+
+/// [`flight_point`] with the height replacement given.
+fn point_with(w: &World, id: ObjectId, d: Target, raised: bool) -> Pos {
     if let Target::Object(k) = d
         && w.obj(id).is_some_and(|o| o.contact == Some(k))
         && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
@@ -768,7 +794,7 @@ pub fn flight_point(w: &World, id: ObjectId, d: Target) -> Pos {
     // spec: S-0501 claim 40 (the destination's heading point with the aircraft as requesting actor: a cell's centre at its surface, a mobile object's next movement point or position, a building's centre)
     let mut p = heading_point(w, d);
     // spec: S-0501 claim 6 (a movement point accepted while the aircraft has a target and ammunition: its world height becomes the terrain height there plus the cruise height)
-    if w.obj(id).is_some_and(|o| o.target.is_some()) && ammo_left(w, id) {
+    if raised {
         let cruise = ty(w, id).map_or(0, |t| t.cruise);
         p.z = w.surface_at(p.x, p.y) + cruise;
     }
@@ -1238,6 +1264,7 @@ fn touchdown(w: &mut World, id: ObjectId) {
         a.cur = F64::ZERO;
         a.tgt = F64::ZERO;
         a.flying_to = None;
+        a.raised = false;
         // spec: S-0501 claim 40 (landing settled: the completion clears the unfinished flight and the destination)
         a.unfinished = false;
     }
@@ -1518,6 +1545,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             }
         }
         a.flying_to = dest;
+        // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
+        a.raised = raise_now(w, id);
         // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
         a.unfinished = true;
         if let Some(ob) = w.obj_mut(id) {
@@ -1534,6 +1563,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     }
     if alive && dest.is_none() {
         a.flying_to = None;
+        a.raised = false;
     }
     // The held height in ordinary flight (claim 6).
     if alive && !a.landing && !a.ground {
@@ -2642,9 +2672,9 @@ pub fn behaviour_turn(w: &mut World, id: ObjectId) {
     }
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else { return };
-    // spec: S-0501 claim 32 (before processing, a target whose in-the-air answer is yes is cleared)
+    // spec: S-0501 claim 32 (before processing, a target whose in-the-air answer is yes is cleared; an aircraft in attack whose target is gone, removed and no longer existing (glossary, *removed*), ends its run: the target is cleared here too, for a removal that was not a kill)
     if let Some(Target::Object(x)) = o.target
-        && crate::combat::weapon::in_air(w, x)
+        && (w.obj(x).is_none() || crate::combat::weapon::in_air(w, x))
         && let Some(ob) = w.obj_mut(id)
     {
         crate::spawn::clear_own_target(ob);
@@ -3438,6 +3468,7 @@ fn discard_placeholder(w: &mut World, id: ObjectId) {
     {
         // The placeholder given again is a new movement point (claim 40).
         a.flying_to = None;
+        a.raised = false;
     }
     // spec: S-0501 claim 41 (it falls back to rest again, claim 18)
     fall_back(w, id);
