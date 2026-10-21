@@ -717,7 +717,7 @@ fn play_ai(
                     }
                 }
                 println!(
-                    "exprobe tick {} house {}: yards {} units {} (idle {}) lined {} buildable {} cost {} credits {} explored {} worked {} own-half unworked {} field {} harvesters-kept {} intruders {} selling {} paying {} saving {}; blocked by {:?}",
+                    "exprobe tick {} house {}: yards {} units {} (idle {}) lined {} buildable {} (yard vehicle types {}, fewest unmet prerequisites {:?}, unblocking building {:?}) cost {} credits {} explored {} worked {} own-half unworked {} field {} harvesters-kept {} intruders {} selling {} paying {} saving {}; blocked by {:?}",
                     w.tick,
                     h.0,
                     p.yards,
@@ -725,6 +725,9 @@ fn play_ai(
                     p.idle_units,
                     p.lined,
                     p.buildable,
+                    p.yard_types,
+                    p.unmet,
+                    p.unblock,
                     p.cost,
                     p.credits,
                     p.explored,

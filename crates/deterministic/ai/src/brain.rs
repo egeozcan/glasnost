@@ -1781,6 +1781,15 @@ impl Brain {
 /// The vehicle types house `h` can build now that deploy into a
 /// construction yard, cheapest first.
 pub fn yard_units(w: &World, h: HouseId) -> Vec<TypeRef> {
+    yard_types(w)
+        .into_iter()
+        .filter(|&t| tech::buildable(w, h, t))
+        .collect()
+}
+
+/// Every vehicle type that deploys into a construction yard, cheapest
+/// first.
+fn yard_types(w: &World) -> Vec<TypeRef> {
     let r = w.rules();
     let mut v: Vec<TypeRef> = all_types(w)
         .into_iter()
@@ -1792,7 +1801,6 @@ pub fn yard_units(w: &World, h: HouseId) -> Vec<TypeRef> {
                     .is_some_and(|b| b.factory == Some(glasnost_sim::rules::FactoryKind::Building))
             })
         })
-        .filter(|&t| tech::buildable(w, h, t))
         .collect();
     v.sort_by_key(|&t| (production::cost_field(w, t), t.index));
     v
@@ -1821,6 +1829,14 @@ pub struct ExpansionProbe {
     pub lined: bool,
     /// Whether it can build a yard vehicle now.
     pub buildable: bool,
+    /// Vehicle types that deploy into a construction yard, in the rules.
+    pub yard_types: usize,
+    /// The fewest unmet prerequisites of one of them, when no other
+    /// condition refuses it (S-0407 claim 8).
+    pub unmet: Option<usize>,
+    /// The building that would clear a yard vehicle's blocker, that the
+    /// house can build and place now (`Script::unblocker`).
+    pub unblock: Option<u32>,
     /// The cheapest yard vehicle's cost.
     pub cost: i64,
     /// Its credits.
@@ -1859,7 +1875,11 @@ impl ExpansionProbe {
             v.push("paying");
         }
         if !self.buildable {
-            v.push("not buildable");
+            v.push(match (self.unmet, self.unblock) {
+                (_, Some(_)) => "not buildable, unblockable now",
+                (Some(_), None) => "not buildable, prerequisite",
+                (None, None) => "not buildable, refused",
+            });
         }
         if self.yards + self.units + usize::from(self.lined) >= EXPANSION_YARDS {
             v.push("yards enough");
@@ -1895,6 +1915,7 @@ impl Brain {
             })
             .collect();
         let t = self.yard_units(w).first().copied();
+        let types = yard_types(w);
         let fields = self.script.fields(w);
         ExpansionProbe {
             yards: own
@@ -1910,6 +1931,15 @@ impl Brain {
                 })
             }),
             buildable: t.is_some(),
+            yard_types: types.len(),
+            unmet: types
+                .iter()
+                .filter_map(|&x| tech::unmet_prerequisites(w, h, x).map(|v| v.len()))
+                .min(),
+            unblock: types
+                .iter()
+                .find_map(|&x| self.script.unblocker(w, x, CLIMB_DEPTH))
+                .map(|b| b.index),
             cost: t.map_or(0, |t| i64::from(production::cost_field(w, t))),
             credits: i64::from(w.houses[usize::from(h.0)].credits),
             explored: fields.explored,
