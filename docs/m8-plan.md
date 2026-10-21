@@ -80,7 +80,7 @@ These are our own engine and client, except where a step names a request.
 ## Housekeeping (any time)
 
 - **H1.** Rename the synthetic type `BRUTE` in `crates/deterministic/sim/tests/claims_s0611.rs` to an invented name, since it matches a stock unit's ID.
-- **H2.** A repair depot was seen repairing while its link to the vehicle stays untethered (seen during the M7b step 1j sprites intake). Check this against S-0314 and S-0108, and fix it or file a request.
+- **H2.** Closed 2026-10-21, no change: a depot repairing a vehicle whose link stays untethered (seen during the M7b step 1j sprites intake) is what S-0314 claims 6 and 17 say ("paid repair does not require tether"); `depot::process_enter` sets the tether only through the pad exchange.
 - **H3.** `docs/m6-claims/S-0501.md` row 20 still has M6a wording: bring it up to date.
 
 ## Exit
