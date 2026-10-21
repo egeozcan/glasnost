@@ -24,7 +24,7 @@ pub mod mapview;
 pub mod settings;
 mod status;
 pub mod viewer;
-pub use game::{GameOptions, run_game};
+pub use game::{GameOptions, Perturb, run_game};
 pub use status::Status;
 pub use viewer::{ViewerOptions, run_viewer};
 

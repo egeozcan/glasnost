@@ -10,6 +10,7 @@
 //! - [`client`]: the screens, pacing, sound and input without a window.
 //! - [`install`]: the install's rules, maps and samples for the menus.
 //! - [`link`]: the connection to a relay (M9 N3), native or from the web shell.
+//! - [`report`]: where a desync report goes (M9 N4), a file or a download.
 //! - [`status_font`]: the game bitmap font for status text.
 
 pub mod band;
@@ -19,9 +20,11 @@ pub mod install;
 pub mod link;
 pub mod paint;
 pub mod play;
+pub mod report;
 pub mod scroll;
 pub mod session;
 pub mod status_font;
 pub mod window;
 
+pub use glasnost_net::desync::Perturb;
 pub use window::{GameOptions, GpuDraw, run_game};

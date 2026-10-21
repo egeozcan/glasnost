@@ -37,6 +37,7 @@ use super::install::{self, Install};
 use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
 use super::play::Button;
+use super::report::{SaveReport, platform_save};
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
 use crate::mapview::live::Pacer;
 use crate::settings::{Action, Bindings, Settings, Store};
@@ -214,6 +215,11 @@ pub struct Client {
     pub connect: Option<Connect>,
     /// The build this client names in a room ([`BUILD`]).
     pub build: String,
+    /// How the client stores a desync report (`None`: it cannot here).
+    pub save_report: Option<SaveReport>,
+    /// The test-only perturbation a test client makes in a network game
+    /// ([`Client::set_test`]).
+    perturb: Option<glasnost_net::desync::Perturb>,
     /// The multiplayer screen's targets of the last frame.
     pub net_targets: Targets<NetHit>,
     /// The person's settings (M8 step C2): presentation and input only, never
@@ -269,6 +275,8 @@ impl Client {
             netform: NetForm::new(DEFAULT_RELAY),
             connect: platform_connect(),
             build: net::BUILD.into(),
+            save_report: platform_save(),
+            perturb: None,
             net_targets: Targets::new(),
             settings: Settings::default(),
             settings_targets: Targets::new(),
@@ -904,7 +912,7 @@ mod net;
 #[path = "client_settings.rs"]
 mod settings_screen;
 
-pub use net::BUILD;
+pub use net::{BUILD, test_build};
 
 #[cfg(test)]
 #[path = "client_tests.rs"]
