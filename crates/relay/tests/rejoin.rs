@@ -707,6 +707,24 @@ fn two_persons_drop_and_rejoin_with_identical_hashes() {
     });
 }
 
+/// A member whose peer went before the game ran (while its map loaded,
+/// say) comes in late by the same rejoin: its frames count from the
+/// readmission on, and it plays on with the same hashes.
+#[test]
+fn a_member_gone_before_the_game_ran_joins_late() {
+    let played = drop_and_rejoin(&Plan {
+        rows: vec![SlotKind::Human, SlotKind::Human, SlotKind::Ai],
+        limits: limits(),
+        victim: 1,
+        kill_at: 0,
+        back_after: Some(1_500),
+        ticks: 400,
+        cut_back: false,
+    });
+    let host = &played.peers[0];
+    assert_eq!(kept(host, 1), [0], "none of its frames counted");
+}
+
 #[test]
 fn three_persons_and_a_computer_drop_and_rejoin_with_identical_hashes() {
     // The victim is slot 0, so the serving peer is slot 1.
