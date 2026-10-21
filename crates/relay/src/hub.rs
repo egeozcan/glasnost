@@ -29,19 +29,42 @@
 //! the hub forwarded to every other person: each of them holds those
 //! frames, since each connection's messages leave in the order the hub
 //! queued them, so every peer treats the same frames as the slot's last
-//! (N1, `Session::drop_slot`).
+//! (N1, `Session::drop_slot`). Unless the slot rejoins, every peer
+//! surrenders its house on tick `kept + grace_ticks`; the hub works out
+//! `grace_ticks` at the start from [`Limits::grace_ms`] and the room's game
+//! speed (N5).
+//!
+//! **Rejoins (N5).** Every person is sent a secret ticket for its slot in
+//! its [`lobby::Begin`]. A connection that brings a slot's ticket back
+//! ([`ToRelay::Rejoin`]) while the slot is away and its house has not
+//! surrendered becomes that slot's *rejoining* connection (one at a time
+//! per game; a ticket for a slot still live replaces its connection). The
+//! hub picks the live person of the lowest slot to serve it
+//! ([`Body::Serve`]) and from then on also sends the rejoining connection
+//! every lockstep message it forwards and every drop; the serving peer's
+//! snapshot parts ([`ToRelay::Snapshot`]) go to it, and its messages go to
+//! the serving peer only. When it says it has caught up
+//! ([`ToRelay::CaughtUp`]), the hub asks the serving peer to readmit it
+//! ([`Body::Resume`]); that peer's next frame carries the marker. The hub
+//! forwards a marker only from the peer it asked, in one frame, and closes
+//! any other sender of one. Once it has forwarded the marker's frame, of
+//! tick *n*, the slot is live again from frame `max(n + max_delay + 1,
+//! kept)` on, which the hub counts as forwarded, unless *n* is past the
+//! surrender's tick. A rejoining connection that goes before that is
+//! dropped again at that frame.
 //!
 //! The limits and the protocol are our own design (docs/development.md,
-//! *The relay and lobby (N2)*).
+//! *The relay and lobby (N2)*, *Reconnect and surrender (N5)*).
 
 use std::collections::BTreeMap;
 
 use glasnost_net::lobby::{
-    self, CODE_LEN, ChatLine, FromRelay, MemberId, Refusal, Room, Started, ToRelay, Value,
-    normalise_code,
+    self, CODE_LEN, ChatLine, FromRelay, MemberId, Part, Refusal, Room, Started, Ticket, ToRelay,
+    Value, normalise_code,
 };
-use glasnost_net::wire::{self, Body, Envelope, MAGIC as GAME_MAGIC, RELAY, WireError};
+use glasnost_net::wire::{self, Body, Envelope, Frames, MAGIC as GAME_MAGIC, RELAY, WireError};
 use glasnost_net::{Field, Params};
+use glasnost_ui::setup::period_ms;
 
 /// A connection, by the hub's number (also its member id in a room).
 pub type ConnId = MemberId;
@@ -82,8 +105,14 @@ pub struct Limits {
     pub chat_every_ms: u64,
     /// Chat lines a connection may send at once.
     pub chat_burst: u32,
-    /// The lockstep parameters of every game.
+    /// The lockstep parameters of every game (the grace period in ticks
+    /// is worked out from `grace_ms` at each start).
     pub params: Params,
+    /// How long a dropped person has to rejoin before their house
+    /// surrenders, in milliseconds of game time at the room's speed.
+    pub grace_ms: u64,
+    /// The most bytes of game a serving peer may send one rejoin.
+    pub max_snapshot: usize,
 }
 
 impl Default for Limits {
@@ -101,6 +130,8 @@ impl Default for Limits {
             chat_every_ms: 1_000, // nocite: our own netcode (a line a second on average)
             chat_burst: 5, // nocite: our own netcode
             params: Params::default(),
+            grace_ms: 60_000, // nocite: our own netcode
+            max_snapshot: glasnost_net::rejoin::MAX_TRANSFER,
         }
     }
 }
@@ -160,6 +191,15 @@ pub struct Stats {
     pub chats: u64,
     /// Chat lines refused as too fast.
     pub chats_too_fast: u64,
+    /// Rejoins begun.
+    pub rejoins: u64,
+    /// Rejoining peers readmitted.
+    pub readmitted: u64,
+    /// Readmission markers or relay messages from clients nobody asked
+    /// for: the sender is closed (markers) or the message discarded.
+    pub forged_rejoins: u64,
+    /// Bytes of game passed on to rejoining peers.
+    pub snapshot_bytes: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -178,6 +218,32 @@ struct Conn {
     chat_refilled: u64,
 }
 
+/// A rejoin in progress.
+#[derive(Clone, Debug)]
+struct Rejoin {
+    /// The slot.
+    slot: u8,
+    /// The rejoining connection, until it goes.
+    conn: Option<ConnId>,
+    /// The serving peer's slot and connection.
+    donor: u8,
+    donor_conn: ConnId,
+    /// The serving peer was asked to readmit it.
+    asked: bool,
+    /// The frame of the serving peer that carries the marker.
+    marker: Option<u32>,
+    /// Bytes of game passed on.
+    sent: usize,
+}
+
+/// A marker the hub let through: it may come again in resent frames.
+#[derive(Clone, Copy, Debug)]
+struct Marker {
+    from: u8,
+    frame: u32,
+    slot: u8,
+}
+
 /// A room's game: who plays each slot and what was forwarded.
 #[derive(Clone, Debug)]
 struct Game {
@@ -186,9 +252,41 @@ struct Game {
     /// Per slot: its frames forwarded to every other live person, from
     /// frame 0 without a gap.
     kept: Vec<u32>,
+    /// The start values, for a rejoin.
+    started: Started,
+    /// Per slot: its ticket (zero for a computer's slot).
+    tickets: Vec<Ticket>,
+    /// Per slot: its house surrendered after a drop.
+    surrendered: Vec<bool>,
+    /// The most ticks any live person said it had run.
+    max_ran: u32,
+    /// The rejoin in progress.
+    rejoin: Option<Rejoin>,
+    /// Markers let through.
+    markers: Vec<Marker>,
 }
 
 impl Game {
+    fn human(&self, slot: u8) -> bool {
+        self.started.persons.iter().any(|&(_, s)| s == slot)
+    }
+
+    /// The tick a dropped slot's house surrenders on.
+    fn surrender_at(&self, slot: u8) -> u32 {
+        self.kept[usize::from(slot)].saturating_add(self.started.begin.params.grace_ticks)
+    }
+
+    /// Whether a dropped slot's house has surrendered, as far as the hub
+    /// can tell: some live person has run the surrender's tick.
+    fn surrendered(&self, slot: u8) -> bool {
+        self.surrendered[usize::from(slot)]
+            || (self.conns[usize::from(slot)].is_none() && self.max_ran > self.surrender_at(slot))
+    }
+
+    /// The rejoining connection, while there is one.
+    fn catching(&self) -> Option<ConnId> {
+        self.rejoin.as_ref().and_then(|r| r.conn)
+    }
     fn slot_of(&self, conn: ConnId) -> Option<u8> {
         self.conns
             .iter()
@@ -234,6 +332,41 @@ const ONE: u64 = 1000;
 /// shorter, cut at a character boundary.
 // nocite: the WebSocket protocol (RFC 6455, 125-byte control frames)
 pub const MAX_REASON: usize = 123;
+
+/// A lockstep message of the relay's own.
+fn relay_message(body: Body) -> Vec<u8> {
+    wire::encode(&Envelope { from: RELAY, body })
+}
+
+/// Whether every readmission marker in `slot`'s frames is one the hub
+/// asked that peer for, in one frame (N5); a new one is recorded as the
+/// rejoin's.
+fn markers_allowed(g: &mut Game, slot: u8, f: &Frames) -> bool {
+    for (i, fr) in f.frames.iter().enumerate() {
+        let Some(target) = fr.resume else {
+            continue;
+        };
+        let n = f.first.saturating_add(i as u32);
+        if g.markers
+            .iter()
+            .any(|m| m.from == slot && m.frame == n && m.slot == target)
+        {
+            continue;
+        }
+        match g.rejoin.as_mut() {
+            Some(r) if r.asked && r.donor == slot && r.slot == target && r.marker.is_none() => {
+                r.marker = Some(n);
+                g.markers.push(Marker {
+                    from: slot,
+                    frame: n,
+                    slot: target,
+                });
+            }
+            _ => return false,
+        }
+    }
+    true
+}
 
 fn short(reason: &str) -> String {
     let mut end = reason.len().min(MAX_REASON);
@@ -391,26 +524,56 @@ impl Hub {
             return;
         };
         if let Some(g) = e.game.as_mut() {
-            if let Some(slot) = g.slot_of(conn) {
+            let mut sends = Vec::new();
+            let mut closes = Vec::new();
+            if let Some(r) = g.rejoin.as_mut().filter(|r| r.conn == Some(conn)) {
+                // The rejoining connection goes. Once the serving peer was
+                // asked to readmit it, its marker may be on the way: it is
+                // let through, and the slot drops again at its frame.
+                e.room.leave(conn);
+                if r.asked {
+                    r.conn = None;
+                } else {
+                    sends.push((
+                        r.donor_conn,
+                        relay_message(Body::Serve {
+                            slot: r.slot,
+                            on: false,
+                        }),
+                    ));
+                    g.rejoin = None;
+                }
+            } else if let Some(slot) = g.slot_of(conn) {
                 g.conns[usize::from(slot)] = None;
                 let kept = g.kept[usize::from(slot)];
-                let to: Vec<ConnId> = g.live().map(|(_, c)| c).collect();
-                let bytes = wire::encode(&Envelope {
-                    from: RELAY,
-                    body: Body::Dropped { slot, kept },
-                });
+                let bytes = relay_message(Body::Dropped { slot, kept });
                 e.room.leave(conn);
                 self.stats.drops += 1;
-                for t in to {
-                    self.send(now_ms, t, bytes.clone());
+                for t in g.live().map(|(_, c)| c).chain(g.catching()) {
+                    sends.push((t, bytes.clone()));
+                }
+                if g.rejoin.as_ref().is_some_and(|r| r.donor == slot) {
+                    // The serving peer went before the readmission: that
+                    // rejoin cannot finish.
+                    let r = g.rejoin.take().expect("a rejoin");
+                    closes.extend(r.conn.map(|c| {
+                        (
+                            c,
+                            "the player sending you the game left; reconnect to try again",
+                        )
+                    }));
                 }
             }
-            let empty = self.rooms[code]
-                .game
-                .as_ref()
-                .is_none_or(|g| g.live().next().is_none());
+            let empty = g.live().next().is_none();
             if empty {
+                closes.extend(g.catching().map(|c| (c, "everyone else left the game")));
                 self.rooms.remove(code);
+            }
+            for (t, b) in sends {
+                self.send(now_ms, t, b);
+            }
+            for (c, why) in closes {
+                self.close(now_ms, c, why);
             }
             return;
         }
@@ -577,6 +740,22 @@ impl Hub {
             self.stats.outside_game += 1;
             return;
         };
+        if let Some(r) = game.rejoin.as_ref().filter(|r| r.conn == Some(conn)) {
+            // The rejoining peer's acknowledgements, for the serving peer
+            // only; it makes no frame before it is readmitted.
+            if env.from != r.slot {
+                self.stats.forged_senders += 1;
+                return;
+            }
+            if !matches!(env.body, Body::Frames(_)) {
+                self.stats.forged_rejoins += 1;
+                return;
+            }
+            let to = r.donor_conn;
+            self.stats.forwarded += 1;
+            self.send(now_ms, to, bytes.to_vec());
+            return;
+        }
         let Some(slot) = game.slot_of(conn) else {
             self.stats.outside_game += 1;
             return;
@@ -590,11 +769,23 @@ impl Hub {
                 self.stats.forged_drops += 1;
                 return;
             }
+            Body::Serve { .. } | Body::Resume { .. } => {
+                self.stats.forged_rejoins += 1;
+                return;
+            }
             Body::Frames(f) => {
+                if !markers_allowed(game, slot, f) {
+                    self.stats.forged_rejoins += 1;
+                    self.close(now_ms, conn, "a readmission marker nobody asked for");
+                    return;
+                }
+                game.markers
+                    .retain(|m| m.from != slot || m.frame >= f.first);
                 let k = &mut game.kept[usize::from(slot)];
                 if f.first <= *k {
                     *k = (*k).max(f.first.saturating_add(f.frames.len() as u32));
                 }
+                game.max_ran = game.max_ran.max(f.ran);
             }
             Body::Start(_) => {}
         }
@@ -602,10 +793,83 @@ impl Hub {
             .live()
             .filter(|&(s, _)| s != slot)
             .map(|(_, c)| c)
+            .chain(game.catching())
             .collect();
         self.stats.forwarded += 1;
         for t in to {
             self.send(now_ms, t, bytes.to_vec());
+        }
+        if let Some(code) = self.room_of(conn) {
+            self.after_forward(now_ms, &code);
+        }
+    }
+
+    /// After a forward in room `code`'s game: a readmission marker now
+    /// held by everyone takes effect, and a rejoin whose house has
+    /// surrendered meanwhile ends.
+    fn after_forward(&mut self, now_ms: u64, code: &str) {
+        let Some(g) = self.rooms.get_mut(code).and_then(|e| e.game.as_mut()) else {
+            return;
+        };
+        let Some(r) = g.rejoin.clone() else {
+            return;
+        };
+        let s = usize::from(r.slot);
+        let mut sends = Vec::new();
+        let mut close = None;
+        if let Some(n) = r.marker {
+            g.rejoin = None;
+            if n >= g.surrender_at(r.slot) {
+                // Too late: every peer surrenders the house before its tick
+                // and lets the marker go.
+                g.surrendered[s] = true;
+                close = r.conn.map(|c| {
+                    (
+                        c,
+                        "too late: the grace period ran out and your house surrendered",
+                    )
+                });
+            } else {
+                let gap = u32::from(g.started.begin.params.max_delay) + 1; // nocite: our own netcode (as `Session`'s readmission)
+                let from = n.saturating_add(gap).max(g.kept[s]);
+                g.kept[s] = from;
+                match r.conn {
+                    Some(c) => {
+                        g.conns[s] = Some(c);
+                        self.stats.readmitted += 1;
+                    }
+                    None => {
+                        let bytes = relay_message(Body::Dropped {
+                            slot: r.slot,
+                            kept: from,
+                        });
+                        self.stats.drops += 1;
+                        sends.extend(g.live().map(|(_, c)| (c, bytes.clone())));
+                    }
+                }
+            }
+        } else if g.surrendered(r.slot) {
+            g.rejoin = None;
+            g.surrendered[s] = true;
+            sends.push((
+                r.donor_conn,
+                relay_message(Body::Serve {
+                    slot: r.slot,
+                    on: false,
+                }),
+            ));
+            close = r.conn.map(|c| {
+                (
+                    c,
+                    "too late: the grace period ran out and your house surrendered",
+                )
+            });
+        }
+        for (t, b) in sends {
+            self.send(now_ms, t, b);
+        }
+        if let Some((c, why)) = close {
+            self.close(now_ms, c, why);
         }
     }
 
@@ -695,14 +959,162 @@ impl Hub {
                 };
                 let mut seed = [0u8; 4];
                 self.entropy.fill(&mut seed);
-                let params = self.limits.params;
+                let mut params = self.limits.params;
                 let e = self.rooms.get_mut(&code).expect("the room exists");
+                let period = period_ms(e.room.setup().game_speed()).max(1) as u64;
+                params.grace_ticks =
+                    (self.limits.grace_ms / period).min(u64::from(u32::MAX)) as u32;
                 match e.room.start(conn, u32::from_le_bytes(seed), params) {
                     Ok(started) => self.begin(now_ms, &code, started),
                     Err(r) => self.refuse(now_ms, conn, r),
                 }
             }
+            ToRelay::Rejoin {
+                code,
+                slot,
+                ticket,
+                build,
+                rules_hash,
+            } => {
+                if in_room.is_some() {
+                    return self.refuse(now_ms, conn, Refusal::InRoom);
+                }
+                let Some(code) = normalise_code(code).filter(|c| self.rooms.contains_key(c)) else {
+                    return self.refuse(now_ms, conn, Refusal::NoRoom);
+                };
+                self.rejoin(now_ms, conn, &code, *slot, ticket, build, rules_hash);
+            }
+            ToRelay::Snapshot(part) => self.on_snapshot(now_ms, conn, in_room, part),
+            ToRelay::CaughtUp => {
+                let Some(g) = in_room
+                    .and_then(|c| self.rooms.get_mut(&c))
+                    .and_then(|e| e.game.as_mut())
+                else {
+                    return;
+                };
+                let Some(r) = g
+                    .rejoin
+                    .as_mut()
+                    .filter(|r| r.conn == Some(conn) && !r.asked)
+                else {
+                    return;
+                };
+                r.asked = true;
+                let (to, slot) = (r.donor_conn, r.slot);
+                self.send(now_ms, to, relay_message(Body::Resume { slot }));
+            }
         }
+    }
+
+    /// A rejoin of `slot` in room `code` by `conn` with `ticket`.
+    #[allow(clippy::too_many_arguments)]
+    fn rejoin(
+        &mut self,
+        now_ms: u64,
+        conn: ConnId,
+        code: &str,
+        slot: u8,
+        ticket: &Ticket,
+        build: &str,
+        rules_hash: &str,
+    ) {
+        let Some(g) = self.rooms.get(code).and_then(|e| e.game.as_ref()) else {
+            return self.refuse(now_ms, conn, Refusal::NoGame);
+        };
+        if !g.human(slot) || g.tickets[usize::from(slot)] != *ticket {
+            return self.refuse(now_ms, conn, Refusal::Ticket);
+        }
+        if build != g.started.begin.build {
+            return self.refuse(now_ms, conn, Refusal::Mismatch(Field::Build));
+        }
+        if rules_hash != g.started.begin.rules_hash {
+            return self.refuse(now_ms, conn, Refusal::Mismatch(Field::RulesHash));
+        }
+        if g.surrendered(slot) {
+            return self.refuse(now_ms, conn, Refusal::Surrendered);
+        }
+        let mut replaced = Vec::new();
+        match &g.rejoin {
+            Some(r) if r.slot != slot => {
+                return self.send_lobby(now_ms, conn, &FromRelay::Refused(Refusal::Rejoining));
+            }
+            Some(r) => replaced.extend(r.conn),
+            None => {}
+        }
+        replaced.extend(g.conns[usize::from(slot)]);
+        for old in replaced {
+            self.close(now_ms, old, "replaced by a rejoin of the same slot");
+        }
+        // The room may be gone (nobody else was left) or a readmission may
+        // still be on its way for the connection just replaced.
+        let Some(e) = self.rooms.get_mut(code) else {
+            return self.refuse(now_ms, conn, Refusal::NoGame);
+        };
+        let Some(g) = e.game.as_mut() else {
+            return self.refuse(now_ms, conn, Refusal::NoGame);
+        };
+        if g.rejoin.is_some() {
+            return self.send_lobby(now_ms, conn, &FromRelay::Refused(Refusal::Rejoining));
+        }
+        let Some((donor, donor_conn)) = g.live().next() else {
+            return self.refuse(now_ms, conn, Refusal::NoGame);
+        };
+        let s = usize::from(slot);
+        let mut begin = g.started.begin.clone();
+        begin.you = slot;
+        begin.ticket = g.tickets[s];
+        let row = begin.rows.get(s).copied().unwrap_or(0);
+        let name = begin.names.get(s).cloned().unwrap_or_default();
+        g.rejoin = Some(Rejoin {
+            slot,
+            conn: Some(conn),
+            donor,
+            donor_conn,
+            asked: false,
+            marker: None,
+            sent: 0,
+        });
+        let _ = e.room.rejoin(conn, row, &name);
+        self.stats.rejoins += 1;
+        self.enter(conn, code);
+        self.send_lobby(now_ms, conn, &FromRelay::Rejoined(begin));
+        self.send(
+            now_ms,
+            donor_conn,
+            relay_message(Body::Serve { slot, on: true }),
+        );
+    }
+
+    /// A part of the game from the serving peer of its room's rejoin: on to
+    /// the rejoining connection. A part from anyone else, or after the
+    /// rejoin ended, is dropped.
+    fn on_snapshot(&mut self, now_ms: u64, conn: ConnId, code: Option<String>, part: &Part) {
+        let max = self.limits.max_snapshot;
+        let Some(g) = code
+            .and_then(|c| self.rooms.get_mut(&c))
+            .and_then(|e| e.game.as_mut())
+        else {
+            return;
+        };
+        let Some(r) = g.rejoin.as_mut().filter(|r| r.donor_conn == conn) else {
+            return;
+        };
+        let Some(to) = r.conn else {
+            return;
+        };
+        r.sent = r.sent.saturating_add(part.bytes.len());
+        if r.sent > max {
+            let (slot, donor) = (r.slot, r.donor_conn);
+            g.rejoin = None;
+            self.send(
+                now_ms,
+                donor,
+                relay_message(Body::Serve { slot, on: false }),
+            );
+            return self.close(now_ms, to, "the game is too large to send");
+        }
+        self.stats.snapshot_bytes += part.bytes.len() as u64;
+        self.send_lobby(now_ms, to, &FromRelay::Snapshot(part.clone()));
     }
 
     fn enter(&mut self, conn: ConnId, code: &str) {
@@ -714,21 +1126,44 @@ impl Hub {
 
     fn begin(&mut self, now_ms: u64, code: &str, started: Started) {
         let slots = started.begin.slots.len();
+        let mut tickets = vec![[0u8; 16]; slots];
+        for &(_, slot) in &started.persons {
+            self.entropy.fill(&mut tickets[usize::from(slot)]);
+        }
         let mut game = Game {
             conns: vec![None; slots],
             kept: vec![0; slots],
+            started: started.clone(),
+            tickets,
+            surrendered: vec![false; slots],
+            max_ran: 0,
+            rejoin: None,
+            markers: Vec::new(),
         };
         for &(m, slot) in &started.persons {
             game.conns[usize::from(slot)] = Some(m);
         }
+        let begins: Vec<(ConnId, lobby::Begin)> = started
+            .persons
+            .iter()
+            .filter_map(|&(m, slot)| {
+                let mut b = started.begin_for(m)?;
+                b.ticket = game.tickets[usize::from(slot)];
+                Some((m, b))
+            })
+            .collect();
         if let Some(e) = self.rooms.get_mut(code) {
             e.game = Some(game);
         }
-        for &(m, _) in &started.persons {
-            if let Some(b) = started.begin_for(m) {
-                self.send_lobby(now_ms, m, &FromRelay::Begin(b));
-            }
+        for (m, b) in begins {
+            self.send_lobby(now_ms, m, &FromRelay::Begin(b));
         }
+    }
+
+    /// The slot whose rejoin room `code`'s game is serving, if any.
+    pub fn rejoining(&self, code: &str) -> Option<u8> {
+        let g = self.rooms.get(code)?.game.as_ref()?;
+        g.rejoin.as_ref().map(|r| r.slot)
     }
 
     fn fresh_code(&mut self) -> Option<String> {
