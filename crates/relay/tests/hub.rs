@@ -4,7 +4,8 @@
 //! lobby (N2)*); the room's choice rules are tested in glasnost-net.
 
 use glasnost_net::lobby::{
-    self, CODE_ALPHABET, CODE_LEN, FromRelay, MapChoice, Offered, Refusal, ToRelay,
+    self, CHAT_CHARS, CODE_ALPHABET, CODE_LEN, ChatLine, FromRelay, MapChoice, Offered, Refusal,
+    ToRelay, Value,
 };
 use glasnost_net::wire::{self, Body, Envelope, Frame, Frames, RELAY};
 use glasnost_net::{Field, StartInfo};
@@ -510,16 +511,23 @@ fn the_drop_comes_after_everything_forwarded_from_the_slot() {
 #[test]
 fn bytes_that_are_no_message_close_the_connection_with_a_reason() {
     let mut h = hub();
-    let cases: [(&[u8], &str); 5] = [
-        (b"hello", "not a Glasnost message"),
-        (b"", "not a Glasnost message"),
-        (b"GL\x02\xff\xff\xff", "unreadable lobby message"),
-        (b"GN\x02\x00\xff\xff", "unreadable game message"),
-        (b"GN\x09\x00", "another protocol version"),
+    let v = wire::WIRE_VERSION;
+    let cases: [(Vec<u8>, &str); 5] = [
+        (b"hello".to_vec(), "not a Glasnost message"),
+        (Vec::new(), "not a Glasnost message"),
+        (
+            vec![b'G', b'L', v, 0xff, 0xff, 0xff],
+            "unreadable lobby message",
+        ),
+        (
+            vec![b'G', b'N', v, 0, 0xff, 0xff],
+            "unreadable game message",
+        ),
+        (vec![b'G', b'N', v + 6, 0], "another protocol version"),
     ];
     for (bytes, reason) in cases {
         let c = h.connect(0).unwrap();
-        h.receive(0, c, bytes);
+        h.receive(0, c, &bytes);
         let out = h.take_out();
         let lob = lobby_out(&out);
         assert!(
@@ -676,7 +684,14 @@ fn random_bytes_never_panic_the_hub() {
     });
     let (_, c) = game(&mut h, 2);
     let mut rng = Fake(12345);
-    let prefixes: [&[u8]; 5] = [b"", b"GL", b"GL\x02", b"GN\x02", b"GN\x02\x00"];
+    let v = wire::WIRE_VERSION;
+    let prefixes: [&[u8]; 5] = [
+        b"",
+        b"GL",
+        &[b'G', b'L', v],
+        &[b'G', b'N', v],
+        &[b'G', b'N', v, 0],
+    ];
     let mut opened = Vec::new();
     for i in 0..20_000u64 {
         let mut len = [0u8; 1];
@@ -697,4 +712,112 @@ fn random_bytes_never_panic_the_hub() {
         h.tick(i);
         let _ = h.take_out();
     }
+}
+
+fn chat(text: &str) -> Vec<u8> {
+    msg(&ToRelay::Chat { text: text.into() })
+}
+
+/// The chat lines the hub sent, by receiver.
+fn chats(outs: &[Out]) -> Vec<(ConnId, ChatLine)> {
+    lobby_out(outs)
+        .into_iter()
+        .filter_map(|(to, m)| match m {
+            FromRelay::Chat(c) => Some((to, c)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn chat_reaches_every_member_in_the_room_and_in_the_game_cleaned() {
+    let mut h = hub();
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&[SlotKind::Human, SlotKind::Human]));
+    let code = h.codes()[0].clone();
+    let guest = h.connect(0).unwrap();
+    h.receive(0, guest, &join(&code, "Guest", "build-1"));
+    let outsider = h.connect(0).unwrap();
+    h.take_out();
+    h.receive(10, guest, &chat("  hello\u{7} there  "));
+    let got = chats(&h.take_out());
+    let to: Vec<ConnId> = got.iter().map(|(t, _)| *t).collect();
+    assert_eq!(
+        to,
+        [host, guest],
+        "every member, the sender too, no outsider"
+    );
+    for (_, c) in &got {
+        assert_eq!(
+            *c,
+            ChatLine {
+                from: guest,
+                row: 1,
+                name: "Guest".into(),
+                text: "hello there".into(),
+            }
+        );
+    }
+    // A long line is cut, an empty one refused; nobody outside a room chats.
+    h.receive(20, host, &chat(&"x".repeat(CHAT_CHARS + 50)));
+    let got = chats(&h.take_out());
+    assert_eq!(got[0].1.text.chars().count(), CHAT_CHARS);
+    h.receive(30, host, &chat(" \n "));
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(host, FromRelay::Refused(Refusal::Bad(Value::Text)))]
+    );
+    h.receive(40, outsider, &chat("hi"));
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(outsider, FromRelay::Refused(Refusal::NotInRoom))]
+    );
+    assert_eq!(h.stats().chats, 2);
+
+    // During the game, too, to every person still in it.
+    let mut h = hub();
+    let (_, by_slot) = game(&mut h, 3);
+    h.receive(100, by_slot[2], &chat("gg"));
+    let got = chats(&h.take_out());
+    let mut to: Vec<ConnId> = got.iter().map(|(t, _)| *t).collect();
+    to.sort_unstable();
+    let mut all = by_slot.clone();
+    all.sort_unstable();
+    assert_eq!(to, all);
+    h.closed(200, by_slot[0]);
+    h.take_out();
+    h.receive(300, by_slot[1], &chat("one left"));
+    let got = chats(&h.take_out());
+    assert_eq!(got.len(), 2, "the one who left hears nothing");
+    assert!(got.iter().all(|(t, _)| *t != by_slot[0]));
+}
+
+#[test]
+fn chat_too_fast_is_refused_without_closing_the_connection() {
+    let limits = Limits::default();
+    let mut h = hub_with(limits);
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&[SlotKind::Human, SlotKind::Ai]));
+    h.take_out();
+    let burst = limits.chat_burst as usize;
+    // Far more lines than the refusal limit, all at once.
+    let n = burst + limits.max_refusals as usize + 10;
+    for _ in 0..n {
+        h.receive(0, host, &chat("spam"));
+    }
+    let outs = h.take_out();
+    assert_eq!(chats(&outs).len(), burst, "the burst goes through");
+    let refused = lobby_out(&outs)
+        .into_iter()
+        .filter(|(_, m)| *m == FromRelay::Refused(Refusal::ChatTooFast))
+        .count();
+    assert_eq!(refused, n - burst);
+    assert!(closes(&outs).is_empty(), "too fast chat never closes");
+    assert_eq!(h.stats().chats_too_fast, (n - burst) as u64);
+    // The bucket refills: one line per chat_every_ms.
+    let later = limits.chat_every_ms;
+    h.receive(later, host, &chat("again"));
+    assert_eq!(chats(&h.take_out()).len(), 1);
+    h.receive(later, host, &chat("again"));
+    assert!(chats(&h.take_out()).is_empty());
 }

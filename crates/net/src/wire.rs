@@ -36,7 +36,7 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 2;
+pub const WIRE_VERSION: u8 = 3;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.

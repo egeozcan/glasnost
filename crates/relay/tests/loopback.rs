@@ -222,7 +222,15 @@ async fn hostile_bytes_close_the_connection_with_a_reason_and_the_relay_goes_on(
     a.text("hello");
     assert_eq!(a.closed().await, "not a Glasnost message");
     let mut b = Client::connect(r.addr).await;
-    b.send(b"GL\x02\xff\xff\xff\xff".to_vec());
+    b.send(vec![
+        b'G',
+        b'L',
+        glasnost_net::wire::WIRE_VERSION,
+        0xff,
+        0xff,
+        0xff,
+        0xff,
+    ]);
     assert!(b.closed().await.starts_with("unreadable lobby message"));
     let mut c = Client::connect(r.addr).await;
     c.send(vec![b'G'; 4096]);

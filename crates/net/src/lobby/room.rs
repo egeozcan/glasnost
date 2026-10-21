@@ -120,6 +120,22 @@ pub fn clean_name(name: &str) -> Option<String> {
     (!s.is_empty()).then_some(s)
 }
 
+/// The longest chat line, in characters.
+// nocite: our own netcode
+pub const CHAT_CHARS: usize = 200;
+
+/// A chat line made fit to pass on: control characters left out, spaces
+/// trimmed, at most [`CHAT_CHARS`] characters. `None` when nothing is left.
+pub fn clean_chat(text: &str) -> Option<String> {
+    let s: String = text
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(CHAT_CHARS * 4) // nocite: our own netcode (enough to trim spaces from)
+        .collect();
+    let s: String = s.trim().chars().take(CHAT_CHARS).collect();
+    (!s.is_empty()).then_some(s)
+}
+
 fn text_ok(s: &str) -> bool {
     !s.is_empty() && s.len() <= TEXT_BYTES && !s.chars().any(char::is_control)
 }
@@ -237,6 +253,11 @@ impl Room {
     /// The row `id` has taken.
     pub fn row_of(&self, id: MemberId) -> Option<u8> {
         self.members.get(&id).map(|m| m.row)
+    }
+
+    /// The name of member `id`.
+    pub fn name_of(&self, id: MemberId) -> Option<&str> {
+        self.members.get(&id).map(|m| m.name.as_str())
     }
 
     /// Whether `id` is marked ready.
