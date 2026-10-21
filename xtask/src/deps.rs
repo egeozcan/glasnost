@@ -9,7 +9,10 @@
 //!
 //! The lockstep crate `glasnost-net` (M9) has no I/O either: it may depend on
 //! the simulation crates, but on none of the external crates below (no
-//! runtime, socket, clock or host-randomness crate).
+//! runtime, socket, clock or host-randomness crate) and not on the relay.
+//!
+//! The relay (`glasnost-relay`, M9 N2) is a native server: no crate of the
+//! game client (the app and the platform shells) may depend on it.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -35,6 +38,10 @@ pub const FORBIDDEN_EXTERNAL: &[&str] = &[
     "crossbeam",
     "tokio",
     "async-std",
+    "futures",
+    "futures-util",
+    "futures-channel",
+    "futures-executor",
     // Wall-clock time.
     "chrono",
     "time",
@@ -150,15 +157,39 @@ pub fn check(md: &Metadata) -> Result<Vec<String>, String> {
     // The lockstep core takes its clock and its bytes from the caller: no
     // runtime, socket or clock crate either (M9, docs/m9-plan.md).
     if net_present {
-        let external: BTreeSet<String> =
-            FORBIDDEN_EXTERNAL.iter().map(|s| (*s).to_owned()).collect();
+        let external: BTreeSet<String> = FORBIDDEN_EXTERNAL
+            .iter()
+            .map(|s| (*s).to_owned())
+            .chain([RELAY_CRATE.to_owned()])
+            .collect();
         out.extend(violations(&graph, &[NET_CRATE.to_owned()], &external));
     }
+    // The relay is a native server, never part of the game client.
+    let client: Vec<String> = CLIENT_CRATES
+        .iter()
+        .filter(|c| graph.edges.contains_key(**c))
+        .map(|c| (*c).to_owned())
+        .collect();
+    out.extend(violations(
+        &graph,
+        &client,
+        &BTreeSet::from([RELAY_CRATE.to_owned()]),
+    ));
     Ok(out)
 }
 
 /// The lockstep crate, which has no I/O of its own.
 pub const NET_CRATE: &str = "glasnost-net";
+
+/// The relay and lobby server (native only).
+pub const RELAY_CRATE: &str = "glasnost-relay";
+
+/// The crates of the game client, native and web.
+pub const CLIENT_CRATES: &[&str] = &[
+    "glasnost-app",
+    "glasnost-platform-native",
+    "glasnost-platform-web",
+];
 
 /// `cargo xtask deps`.
 pub fn run() -> Result<Vec<String>, String> {
@@ -218,5 +249,31 @@ mod tests {
         }
         let v = check(&md).expect("check runs");
         assert!(v.is_empty(), "dependency rule violated:\n{}", v.join("\n"));
+    }
+
+    /// No simulation crate and not the lockstep crate reaches the relay's
+    /// runtime, socket and randomness crates or the relay itself, while the
+    /// relay does (so the graph seen is the real one).
+    #[test]
+    fn only_the_relay_reaches_the_async_runtime() {
+        let md = workspace::metadata().expect("cargo metadata");
+        let graph = Graph::from_metadata(&md).expect("a graph");
+        let (det, _) = workspace::members(&md);
+        let mut roots: Vec<String> = det.into_iter().map(|(n, _)| n).collect();
+        roots.push(NET_CRATE.to_owned());
+        let runtime = set(&[
+            "tokio",
+            "tokio-tungstenite",
+            "tungstenite",
+            "futures-util",
+            "getrandom",
+            RELAY_CRATE,
+        ]);
+        let v = violations(&graph, &roots, &runtime);
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        let relay = graph.paths_from(RELAY_CRATE);
+        for dep in ["tokio", "tokio-tungstenite", "futures-util", NET_CRATE] {
+            assert!(relay.contains_key(dep), "the relay reaches {dep}");
+        }
     }
 }

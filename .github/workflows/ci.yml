@@ -37,6 +37,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: clippy, whole workspace (simulation crates use crates/deterministic/clippy.toml)
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # An explicit list: glasnost-relay (a native tokio server) and
+      # glasnost-net stay out of the wasm32 lint; `cargo xtask deps` keeps
+      # the relay out of the client's graph.
       - name: clippy, wasm32 (web crates and simulation crates)
         run: >-
           cargo clippy --locked --target wasm32-unknown-unknown
