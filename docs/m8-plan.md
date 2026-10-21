@@ -60,9 +60,10 @@ docs/development.md), before and after.
 | B2 | **Superweapon saving without losing tempo.** Saving is blamed for Yuri's drop against Soviet (8 of 12 wins with it kept, 11 of 12 before). Make the hold narrower: only items that compete for the money, only while it shortens the time to the superweapon, never while the house is losing a fight. | The quick lane wins for the saving side are no fewer than with saving off. The superweapon is ready no later than before. |
 | B3 | **The dominator takes units on stock data.** In the 4d rerun every launch took nothing: the seen enemy units at the best cell were immune by data or in the air. Check the aim's candidates against the takeover rules of S-0612 claims 13 and 14, and aim where takeable units stand. Fire for damage only when no cell offers any. | In the full games where the dominator is launched, most launches take at least one object. |
 | B4 | **Gate margins that do not hang on one seed or quirk.** Each duel gate's ability counters stay above zero over seeds 1 to 32, not only at the chosen seed, and with each quirk switch the duel reaches flipped. Fix by setup, as in M7b steps 2a and 2b, unless the AI itself is at fault. | A sweep table in the ledger: the minimum and median of each counter over 32 seeds. No zeros. |
+| B5 | **Tempo after expansion** (follow-up of B1 and B2, which missed B2's exit narrowly). The Yuri superweapons against round 3's saving (mutator a median +618 ticks), the full game with no winner at 120 000 ticks (Allied, map 2, seed 7), a yard vehicle left on the line while the house is broke, and Yuri's full-game wins (4 of 6 before B1 and B2, 2 of 6 after). | B2's exit against round 3 and against saving off, over seeds 7 to 14; every full game of the six has a winner. |
 
 B1 and B2 both change `Brain::economy_first`, so they share one branch. B3 runs beside them. B4 comes
-after B1 to B3, since their AI changes move the gate counters it sets margins for.
+after B1 to B3 and B5, since their AI changes move the gate counters it sets margins for.
 
 ## Track C: polish
 

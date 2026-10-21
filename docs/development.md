@@ -1953,6 +1953,18 @@ M7b is the last part of M7, the Yuri faction (session of 2026-10-18). Baseline: 
 
 Request numbers for M7b: Q-1400 to Q-1419 (S-0616), Q-1420 (S-0615), Q-1440 (S-0608), Q-1460 (S-0611), Q-1480 (S-0612), Q-1500 to Q-1519 (steps 2 and 4), Q-1520 and up (main session).
 
+## M8 step ledger
+
+M8 is fidelity, AI depth and polish ([m8-plan.md](m8-plan.md), session of 2026-10-21). Baseline: main e675205 (save format 68, AI game format 29); the last spec commit is c638614 (S-0506). Only the main session edits this table, at merge; agents give their row text in their reports. Each row gives the oracle arena (failing pairings of M-0001, M-0002, M-0003) and the seed sweeps 1–16 (M6c, M7a, M7b) at its merge. Agent briefs: `.claude/worktrees/COMMON-BRIEF-M8.md` (untracked).
+
+| Step | Scope | Status | Notes |
+|---|---|---|---|
+| A2 | Ranked scenario list for the oracle | done (3e92a14) | [m8-claims/oracle-wishlist.md](m8-claims/oracle-wishlist.md): top 40 scenarios. Passed to the spec side as request Q-1703 (c51890a). |
+| H2, H3 | Housekeeping | done (526e6e8, e675205) | H2 closed with no change: untethered depot repair is S-0314 claims 6 and 17. H3: S-0501 row 20 names the S-0522 tests. |
+| B1, B2 | Expansion in full games; superweapon saving without losing tempo | B1 done, B2 exit missed narrowly (merged adb19ce) | Own AI, AI game format 30 (`Uses::expansion_unblocks`). Probe `GLASNOST_AI_EXPROBE`: before, no yard vehicle was built in the six full games because the Allied and Soviet houses never cleared its prerequisites (S-0407 claim 8) and Yuri never passed the wealth test; saving was not the cause. B1: `expand` builds the yard vehicle's missing prerequisite (`Script::unblocker`), counts as rich with its economy whole and no superweapon building on its lines (S-0404 claim 4), and waits while outnumbered or losing a fight; yard vehicles bought in 3 of 6 full games (0 before), each other house's blocker named in *Own AI (M8 steps B1 and B2)*. B2: saving keeps round 3's trigger, holds only army items that still owe money (and an expansion yard vehicle), and stops while losing a fight near its army (`Brain::losing`). Exit: the saving side wins 24 of 48 quick games against 25 with saving off (base against nosave already differs by 2 of 24), so the win exit misses by one game; against saving off the force shield is ready a median 2 978 / 3 911 ticks earlier and the mutator 7 107 / 8 052 earlier (seeds 7–10 / 11–14), but against round 3 the mutator is +618 ticks later (11 of 12). Full games seed 7: Yuri wins 4 of 6 → 2 of 6; Allied map 2 has no winner at 120 000 ticks. Followed up as step B5. Arena unchanged (57/96, 8/24, 28/35 rows passing); sweeps M6c, M7a, M7b identical to base. Goldens regenerated (hash lines only). |
+
+Request numbers for M8: [m8-plan.md](m8-plan.md), *Request blocks*.
+
 ## Visual review 2026-10-19
 
 The lead's screenshot review of 2026-10-19 (`local-lane/lead-review-2026-10-19.md`, git-ignored) was worked through item by item: a retake from main (`local-lane/visual-fix-3/retake/`), the cause against the covering specs, the fix with a test per claim, and a final shot per item under `local-lane/visual-fix-3/`. The game client's own placeholders (crosses, rings, boxes and discs drawn where no spec gives a look) are now drawn only by the viewer's debug layer (`Live::debug_markers`, on in the map viewer, off in the game client).
