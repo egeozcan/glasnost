@@ -31,12 +31,12 @@ use std::sync::Arc;
 
 use glasnost_ai::game::Game;
 use glasnost_map::terrain::TileCatalogue;
-use glasnost_net::desync::{Bundle, Perturb, Snapshot, TickRecord};
+use glasnost_net::desync::{Bundle, Snapshot, TickRecord, run_record};
 use glasnost_net::sim::{hash_from_hex, hex};
 use glasnost_net::start::content_hash;
 use glasnost_net::wire::Hash;
 use glasnost_sim::rules::{Kind, SimRules};
-use glasnost_sim::world::{HouseId, World};
+use glasnost_sim::world::World;
 
 use crate::inspect::{self, FieldDiff};
 
@@ -202,21 +202,6 @@ fn short(h: &Hash) -> String {
 fn load(s: &Snapshot, inputs: &Inputs, side: char) -> Result<Game, String> {
     Game::load(&s.bytes, inputs.rules.clone(), inputs.catalogue.clone())
         .map_err(|e| format!("bundle {side}'s snapshot does not load: {e}"))
-}
-
-/// Runs one recorded tick: the recorded perturbation first when it is due
-/// (as the peer made it, before the tick), then the merged orders in their
-/// order, then the step, as `glasnost_net::Session::step` does.
-fn run_tick(g: &mut Game, rec: &TickRecord, perturb: Option<Perturb>) {
-    if let Some(p) = perturb
-        && p.tick() == rec.tick
-    {
-        p.apply(&mut g.world);
-    }
-    for i in &rec.orders {
-        g.issue(HouseId(i.house), i.order.clone());
-    }
-    g.step();
 }
 
 /// Type names by kind and registration index.
@@ -441,6 +426,15 @@ fn describe(out: &mut String, side: char, b: &Bundle) {
             let _ = writeln!(out, "   reports no mismatch (made on demand)");
         }
     }
+    let live = b.ticks.iter().filter(|t| t.live).count();
+    let known = b.ticks.iter().filter(|t| t.hash.is_some()).count();
+    let _ = writeln!(
+        out,
+        "   its state hashes: {live} of {} ticks taken as it played, {} replayed when it wrote the report, {} unknown",
+        b.ticks.len(),
+        known - live.min(known),
+        b.ticks.len() - known
+    );
     if let Some(p) = b.perturb {
         let _ = writeln!(
             out,
@@ -483,7 +477,7 @@ pub fn compare(a: &Bundle, b: &Bundle, inputs: &Inputs) -> Result<Report, String
             let rec = x
                 .tick(t)
                 .ok_or_else(|| format!("bundle {side} lacks tick {t}"))?;
-            run_tick(g, rec, x.perturb);
+            run_record(g, rec, x.perturb);
         }
     }
     if a.base.ran != b.base.ran {
@@ -523,17 +517,17 @@ pub fn compare(a: &Bundle, b: &Bundle, inputs: &Inputs) -> Result<Report, String
         if r.orders_tick.is_none() && orders(ra) != orders(rb) {
             r.orders_tick = Some(t);
         }
-        if r.first_tick.is_none() && ra.hash != rb.hash {
+        if r.first_tick.is_none() && ra.hash.is_some() && rb.hash.is_some() && ra.hash != rb.hash {
             r.first_tick = Some(t);
         }
         if r.replay_tick.is_none() {
-            run_tick(&mut ga, ra, p(Side::A));
-            run_tick(&mut gb, rb, p(Side::B));
+            run_record(&mut ga, ra, p(Side::A));
+            run_record(&mut gb, rb, p(Side::B));
             let (ha, hb) = (hash_of(&ga), hash_of(&gb));
-            if r.unreproduced[0].is_none() && ha != ra.hash {
+            if r.unreproduced[0].is_none() && ra.hash.is_some_and(|h| h != ha) {
                 r.unreproduced[0] = Some(t);
             }
-            if r.unreproduced[1].is_none() && hb != rb.hash {
+            if r.unreproduced[1].is_none() && rb.hash.is_some_and(|h| h != hb) {
                 r.unreproduced[1] = Some(t);
             }
             if ha != hb {

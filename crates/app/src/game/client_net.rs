@@ -422,16 +422,17 @@ impl Client {
 
     /// Makes the desync report once the evidence has the ticks past the
     /// mismatch, stores it, tells the other peers its digest and says where
-    /// it went.
+    /// it went. Making it replays the ticks since the base snapshot for
+    /// their hashes (a moment's work, once).
     fn net_report(&mut self, now_ms: i64) {
         let save = self.save_report;
-        let Some(net) = self.net.as_mut() else {
+        let (Some(net), Some(s)) = (self.net.as_mut(), self.session.as_ref()) else {
             return;
         };
         let (Some(ls), Some(ev)) = (net.lockstep.as_mut(), net.evidence.as_mut()) else {
             return;
         };
-        let Some(b) = ev.take(ls.ran()) else {
+        let Some(b) = ev.take(ls.ran(), &s.play.game) else {
             return;
         };
         let tick = b.mismatch.map_or(0, |m| m.tick);

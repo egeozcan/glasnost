@@ -573,7 +573,7 @@ fn a_desync_is_reported_by_both_with_their_digests() {
         .collect();
     let m = bundles[0].mismatch.expect("a mismatch");
     let every = bundles[0].start.params.sane().hash_every;
-    assert!(m.tick >= 100 && (m.tick + 1) % every == 0, "{m:?}");
+    assert!(m.tick >= 100 && (m.tick + 1).is_multiple_of(every), "{m:?}");
     assert!(
         m.tick < 100 + every,
         "the first checkpoint after the change"

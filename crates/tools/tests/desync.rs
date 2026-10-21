@@ -6,19 +6,29 @@
 //! tool names the first differing tick, the object or house and the field.
 //! With no perturbation there is no desync, and two bundles made on demand
 //! compare as the same, exit code 0. Our own netcode; no spec applies.
+//!
+//! The local lane (`GLASNOST_GAME_DIR` set, never in CI) forces a desync on
+//! a few of the install's maps and prints counts and timings only: the
+//! bundle and snapshot sizes, the evidence's cost per tick, and what the
+//! tool names (how many objects and fields, never their values).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
+use std::time::Instant;
 
 use glasnost_ai::fixture;
 use glasnost_ai::game::Game;
 use glasnost_map::Map;
+use glasnost_map::geometry::CellXY;
+use glasnost_map::terrain::TileCatalogue;
 use glasnost_net::desync::{Bundle, Evidence, Perturb};
 use glasnost_net::simnet::{Link, SimNet, SplitMix};
 use glasnost_net::wire::Hash;
 use glasnost_net::{Config, Event, Params, Phase, Session, SlotKind, StartInfo, pump};
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::orders::Order;
+use glasnost_sim::rules::SimRules;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{GameSetup, HouseId, Target};
 use glasnost_tools::desync::{self, Inputs, Report};
@@ -66,9 +76,51 @@ fn game(map: &Map, setup: &GameSetup) -> Game {
     .expect("the synthetic skirmish loads")
 }
 
+/// What the peers play: the map, its rules and setup, and how long.
+struct Case {
+    map: Map,
+    map_id: String,
+    rules: Arc<SimRules>,
+    catalogue: Arc<TileCatalogue>,
+    setup: GameSetup,
+    /// The cell the scripted moves go around.
+    centre: CellXY,
+    /// The ticks every peer runs.
+    ticks: u32,
+    /// Whether the evidence takes every tick's hash as the game runs.
+    tick_hashes: bool,
+}
+
+impl Case {
+    /// The synthetic skirmish of `persons` persons and a computer.
+    fn synthetic(persons: usize, seed: u32) -> Self {
+        Self {
+            map: map4(),
+            map_id: "synthetic-4".into(),
+            rules: fixture::rules(),
+            catalogue: fixture::catalogue(),
+            setup: setup_of(persons, seed),
+            centre: fixture::at(0, 0),
+            ticks: TICKS,
+            tick_hashes: false,
+        }
+    }
+
+    fn game(&self) -> Game {
+        Game::new(
+            self.rules.clone(),
+            &self.map,
+            &self.map_id,
+            self.catalogue.clone(),
+            self.setup.clone(),
+        )
+        .expect("the case's game loads")
+    }
+}
+
 /// A person's scripted orders: now and then one of its units goes
-/// somewhere.
-fn scripted(g: &Game, house: HouseId, tick: u32, rng: &mut SplitMix) -> Vec<Order> {
+/// somewhere around `centre`.
+fn scripted(g: &Game, house: HouseId, tick: u32, rng: &mut SplitMix, centre: CellXY) -> Vec<Order> {
     if tick % 13 != 5 {
         return Vec::new();
     }
@@ -95,7 +147,10 @@ fn scripted(g: &Game, house: HouseId, tick: u32, rng: &mut SplitMix) -> Vec<Orde
         behaviour: Behaviour::Move,
         attack_move: false,
         target: None,
-        dest: Some(Target::Cell(fixture::at(dx, dy))),
+        dest: Some(Target::Cell(CellXY {
+            x: centre.x + dx,
+            y: centre.y + dy,
+        })),
     }]
 }
 
@@ -113,6 +168,15 @@ struct Peer {
     reports: Vec<(u8, u32, Hash)>,
     most_snapshots: usize,
     most_ticks: usize,
+    most_bytes: usize,
+    /// Ticks run, and the time spent in them and in the evidence after
+    /// them (nanoseconds; the lane's timings).
+    steps: u32,
+    step_ns: u128,
+    evidence_ns: u128,
+    evidence_most_ns: u128,
+    /// How long making the report took (it replays the ticks).
+    take_ns: u128,
 }
 
 struct Played {
@@ -123,14 +187,34 @@ struct Played {
 /// Plays `persons` persons and a computer for [`TICKS`] ticks, `perturb`
 /// made on the peer of its slot, then lets the messages settle.
 fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
-    let map = map4();
-    let setup = setup_of(persons, seed as u32);
-    let rules = fixture::rules();
+    play_with(persons, seed, perturb, false)
+}
+
+/// [`play`], with every tick's hash taken as the game runs or not.
+fn play_with(
+    persons: usize,
+    seed: u64,
+    perturb: Option<(u8, Perturb)>,
+    tick_hashes: bool,
+) -> Played {
+    let case = Case {
+        tick_hashes,
+        ..Case::synthetic(persons, seed as u32)
+    };
+    let played = play_case(&case, seed, perturb);
+    assert_eq!(played.peers.len(), persons);
+    played
+}
+
+/// Plays the case's persons for its ticks, `perturb` made on the peer of
+/// its slot, then lets the messages settle.
+fn play_case(case: &Case, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
+    let ticks = case.ticks;
     let info = StartInfo::new(
         "test-build",
-        &rules.hash,
-        "synthetic-4",
-        &setup,
+        &case.rules.hash,
+        &case.map_id,
+        &case.setup,
         Params::default(),
     );
     let slots: Vec<u8> = info
@@ -140,7 +224,6 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
         .filter(|(_, s)| s.kind == SlotKind::Human)
         .map(|(i, _)| i as u8)
         .collect();
-    assert_eq!(slots.len(), persons);
     let link = Link {
         latency_ms: 25,
         jitter_ms: 15,
@@ -152,14 +235,16 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
     let mut peers: Vec<Peer> = slots
         .iter()
         .map(|&slot| {
-            let g = game(&map, &setup);
+            let g = case.game();
             let p = perturb.filter(|(s, _)| *s == slot).map(|(_, p)| p);
             Peer {
                 slot,
                 house: HouseId(info.slots[usize::from(slot)].house),
                 session: Session::new(Config::new(TICK_MS), info.clone(), slot, 0)
                     .expect("a person's slot"),
-                evidence: Evidence::new("test-build", &info, slot, &g).with_perturb(p),
+                evidence: Evidence::new("test-build", &info, slot, &g)
+                    .with_perturb(p)
+                    .with_tick_hashes(case.tick_hashes),
                 game: g,
                 rng: SplitMix::new(seed * 31 + u64::from(slot)),
                 next_due: 0,
@@ -169,6 +254,12 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
                 reports: Vec::new(),
                 most_snapshots: 0,
                 most_ticks: 0,
+                most_bytes: 0,
+                steps: 0,
+                step_ns: 0,
+                evidence_ns: 0,
+                evidence_most_ns: 0,
+                take_ns: 0,
             }
         })
         .collect();
@@ -179,17 +270,24 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
         assert!(now < 600_000, "the peers stalled");
         for p in peers.iter_mut() {
             pump(&mut p.session, &mut net.endpoint(p.slot), now);
-            if now >= p.next_due && p.session.phase() == Phase::Running && p.session.ran() < TICKS {
+            if now >= p.next_due && p.session.phase() == Phase::Running && p.session.ran() < ticks {
                 let tick = p.session.ran();
                 if p.input_for != Some(tick) {
                     p.input_for = Some(tick);
-                    for o in scripted(&p.game, p.house, tick, &mut p.rng) {
+                    for o in scripted(&p.game, p.house, tick, &mut p.rng, case.centre) {
                         p.session.submit(o);
                     }
                 }
                 p.evidence.before_tick(tick, &mut p.game);
+                let t0 = Instant::now();
                 if let Some(t) = p.session.step(now, &mut p.game) {
+                    let t1 = Instant::now();
                     p.evidence.after_tick(&t, &p.game, p.session.agreed());
+                    let ns = t1.elapsed().as_nanos();
+                    p.steps += 1;
+                    p.step_ns += (t1 - t0).as_nanos();
+                    p.evidence_ns += ns;
+                    p.evidence_most_ns = p.evidence_most_ns.max(ns);
                     p.next_due = now + u64::from(TICK_MS);
                     pump(&mut p.session, &mut net.endpoint(p.slot), now);
                 }
@@ -205,9 +303,11 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
                     _ => {}
                 }
             }
+            let t0 = Instant::now();
             if p.bundle.is_none()
-                && let Some(b) = p.evidence.take(p.session.ran())
+                && let Some(b) = p.evidence.take(p.session.ran(), &p.game)
             {
+                p.take_ns = t0.elapsed().as_nanos();
                 let bytes = b.to_bytes();
                 let tick = b.mismatch.expect("a mismatch").tick;
                 p.session.set_report(tick, Bundle::digest(&bytes));
@@ -215,8 +315,9 @@ fn play(persons: usize, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
             }
             p.most_snapshots = p.most_snapshots.max(p.evidence.snapshots().count());
             p.most_ticks = p.most_ticks.max(p.evidence.ticks_held());
+            p.most_bytes = p.most_bytes.max(p.evidence.bytes_held());
         }
-        if peers.iter().all(|p| p.session.ran() >= TICKS) {
+        if peers.iter().all(|p| p.session.ran() >= ticks) {
             settle += 1;
             if settle > 3_000 {
                 break;
@@ -325,6 +426,18 @@ fn a_perturbed_object_is_named_with_its_field_and_tick() {
     let (a, b) = (bundle_of(&played.peers[0]), bundle_of(&played.peers[1]));
     assert_eq!(a.perturb, Some(perturb));
     assert_eq!(b.perturb, None);
+    for x in [a, b] {
+        assert!(x.ticks.iter().all(|t| t.hash.is_some()));
+        let every = played.start.params.hash_every;
+        for t in &x.ticks {
+            assert_eq!(
+                t.live,
+                (t.tick + 1).is_multiple_of(every),
+                "tick {}",
+                t.tick
+            );
+        }
+    }
     let r: Report = desync::compare(a, b, &inputs()).expect("the bundles compare");
     println!("{}", r.text);
     assert!(r.differs);
@@ -404,7 +517,14 @@ fn a_perturbed_house_is_named_and_the_others_agree() {
         house,
         by: 1,
     };
-    let played = play(3, 5, Some((1, perturb)));
+    // Every tick's hash taken as the games run, not replayed for the report.
+    let played = play_with(3, 5, Some((1, perturb)), true);
+    assert!(
+        played
+            .peers
+            .iter()
+            .all(|p| bundle_of(p).ticks.iter().all(|t| t.live))
+    );
     check_reports(&played, 1);
     let mid = bundle_of(&played.peers[1]);
     let first = bundle_of(&played.peers[0]);
@@ -454,8 +574,14 @@ fn without_a_perturbation_nothing_differs() {
         );
         assert!(p.session.agreed() * every + 2 * every >= TICKS);
     }
-    let a = played.peers[0].evidence.bundle_now().expect("a bundle");
-    let b = played.peers[1].evidence.bundle_now().expect("a bundle");
+    let a = played.peers[0]
+        .evidence
+        .bundle_now(&played.peers[0].game)
+        .expect("a bundle");
+    let b = played.peers[1]
+        .evidence
+        .bundle_now(&played.peers[1].game)
+        .expect("a bundle");
     let r = desync::compare(&a, &b, &inputs()).expect("the bundles compare");
     println!("{}", r.text);
     assert!(!r.differs);
@@ -470,4 +596,241 @@ fn without_a_perturbation_nothing_differs() {
     let (code, _) = headless(&pa, &junk);
     assert_eq!(code, Some(2));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The most of the install's maps the lane plays.
+const LANE_MAPS: usize = 3;
+
+/// The tick the lane's perturbation is made before.
+const LANE_T: u32 = 300;
+
+/// The ticks the lane's peers run.
+const LANE_TICKS: u32 = 400;
+
+/// The lane's output folder: `local-lane/m9/n4/` (git-ignored), or
+/// `GLASNOST_LANE_OUT`.
+fn lane_out() -> PathBuf {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../local-lane");
+    match std::env::var_os("GLASNOST_LANE_OUT") {
+        Some(p) if Path::new(&p).is_absolute() => PathBuf::from(p),
+        Some(p) => root.join(p),
+        None => root.join("m9/n4"),
+    }
+}
+
+/// The first multiplayer maps of the install that load, each with two
+/// persons (the first two players' houses) and computers for the others.
+async fn lane_cases(dir: &Path, most: usize) -> Vec<(usize, Case)> {
+    let mut vfs = glasnost_tools::local_lane::mount(dir)
+        .await
+        .expect("the install mounts");
+    let mut out = Vec::new();
+    let maps = glasnost_convert::find::find_maps(&vfs).await;
+    for (index, listing) in maps.iter().enumerate() {
+        if out.len() >= most {
+            break;
+        }
+        if !listing.multiplayer {
+            continue;
+        }
+        let Ok(bytes) = vfs.read(&listing.file).await else {
+            continue;
+        };
+        let map_id = glasnost_net::start::content_hash(&bytes);
+        let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
+        let (Ok(resolved), Some(tiles)) = (inputs.resolved, inputs.tiles) else {
+            continue;
+        };
+        let rules = Arc::new(SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash));
+        let map = inputs.map;
+        let Some(&(x, y)) = map.waypoints.get(&0) else {
+            continue;
+        };
+        let mut setup = glasnost_tools::headless::skirmish_setup(&map, &rules, 11);
+        let players = glasnost_net::start::slots_of(&setup).len();
+        if players < 3 {
+            continue;
+        }
+        setup.houses[1].ai = false;
+        out.push((
+            index,
+            Case {
+                map,
+                map_id,
+                rules,
+                catalogue: Arc::new(tiles),
+                setup,
+                centre: CellXY {
+                    x: i32::from(x),
+                    y: i32::from(y),
+                },
+                ticks: LANE_TICKS,
+                tick_hashes: false,
+            },
+        ));
+    }
+    out
+}
+
+/// The mean of `n` runs of `f`, in microseconds.
+fn mean_us(n: u32, mut f: impl FnMut()) -> u128 {
+    let t = Instant::now();
+    for _ in 0..n {
+        f();
+    }
+    t.elapsed().as_micros() / u128::from(n.max(1))
+}
+
+/// The local lane (never in CI): on the first few multiplayer maps of the
+/// install, two persons and computers play over the seeded network; slot
+/// 0's game changes before tick 300 (an object's health on the first map,
+/// a house's credits on the others). Both peers write a bundle, hear the
+/// other's digest, and the tool, on the install's rules, names the first
+/// differing tick. Prints and writes counts and timings only, never map
+/// names, type names or values.
+///
+/// Run with `cargo test --release -p glasnost-tools --test desync --
+/// --ignored --nocapture lane`.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn lane_a_desync_on_the_installs_maps_is_reported() {
+    let Some(dir) = std::env::var_os(glasnost_tools::local_lane::GAME_DIR_VAR) else {
+        println!("GLASNOST_GAME_DIR not set; skipped");
+        return;
+    };
+    let dir = PathBuf::from(dir);
+    let t = Instant::now();
+    let cases = pollster::block_on(lane_cases(&dir, LANE_MAPS));
+    let mut out = format!(
+        "{} maps loaded in {} ms\n",
+        cases.len(),
+        t.elapsed().as_millis()
+    );
+    assert!(!cases.is_empty(), "no multiplayer map loads");
+    for (k, (index, case)) in cases.iter().enumerate() {
+        let g = case.game();
+        let perturb = match g
+            .world
+            .objects
+            .iter()
+            .find(|(_, o)| o.owner == Some(HouseId(0)) && o.on_map && o.health > 0)
+        {
+            Some((&id, _)) if k == 0 => Perturb::Health {
+                tick: LANE_T,
+                object: id.0,
+                by: -1,
+            },
+            _ => Perturb::Credits {
+                tick: LANE_T,
+                house: 0,
+                by: 1,
+            },
+        };
+        let kind = match perturb {
+            Perturb::Health { .. } => "health",
+            Perturb::Credits { .. } => "credits",
+        };
+        let objects0 = g.world.objects.len();
+        let save0 = g.save().len();
+        let t = Instant::now();
+        let played = play_case(case, 21 + k as u64, Some((0, perturb)));
+        let play_ms = t.elapsed().as_millis();
+        let every = played.start.params.hash_every;
+        let checkpoint = (LANE_T / every + 1) * every - 1;
+        out += &format!(
+            "map #{index}: {} persons, {} houses, {objects0} objects at the start, a save of {save0} bytes; {kind} changed before tick {LANE_T}; played in {play_ms} ms\n",
+            played.peers.len(),
+            case.setup.houses.len(),
+        );
+        for p in &played.peers {
+            let n = u128::from(p.steps.max(1));
+            out += &format!(
+                "  slot {}: {} ticks, a tick {} us, the evidence after it {} us on average, {} us at most; held at most {} snapshots ({} allowed), {} ticks, {} bytes\n",
+                p.slot,
+                p.steps,
+                p.step_ns / n / 1_000,
+                p.evidence_ns / n / 1_000,
+                p.evidence_most_ns / 1_000,
+                p.most_snapshots,
+                p.evidence.max_snapshots(),
+                p.most_ticks,
+                p.most_bytes,
+            );
+        }
+        let g_end = &played.peers[0].game;
+        let objects1 = g_end.world.objects.len();
+        let save_us = mean_us(10, || {
+            std::hint::black_box(g_end.save());
+        });
+        let hash_us = mean_us(10, || {
+            std::hint::black_box(g_end.state_hash());
+        });
+        out += &format!(
+            "  at the end: {objects1} objects, a save of {} bytes in {save_us} us, a state hash in {hash_us} us\n",
+            g_end.save().len()
+        );
+        for p in &played.peers {
+            assert_eq!(p.desyncs.first(), Some(&checkpoint), "slot {}", p.slot);
+            let (b, bytes) = p.bundle.as_ref().expect("a bundle");
+            assert_eq!(b.mismatch.map(|m| m.tick), Some(checkpoint));
+            assert!(p.most_snapshots <= p.evidence.max_snapshots() + 1);
+            out += &format!(
+                "  slot {}'s bundle: made in {} ms, {} bytes, {} ticks, snapshots of {} and {} bytes; heard {} digest(s)\n",
+                p.slot,
+                p.take_ns / 1_000_000,
+                bytes.len(),
+                b.ticks.len(),
+                b.base.bytes.len(),
+                b.after.as_ref().map_or(0, |s| s.bytes.len()),
+                p.reports.len(),
+            );
+            assert_eq!(p.reports.len(), played.peers.len() - 1);
+        }
+        let (a, b) = (bundle_of(&played.peers[0]), bundle_of(&played.peers[1]));
+        let t = Instant::now();
+        let inputs = Inputs::install(&dir, &a.start.map_hash, &a.start.rules_hash)
+            .expect("the install's inputs for the report");
+        let inputs_ms = t.elapsed().as_millis();
+        let t = Instant::now();
+        let r = desync::compare(a, b, &inputs).expect("the bundles compare");
+        let compare_ms = t.elapsed().as_millis();
+        let fields: usize = r.diff.objects.iter().map(|o| o.fields.len()).sum::<usize>()
+            + r.diff.houses.iter().map(|h| h.fields.len()).sum::<usize>()
+            + r.diff.game.len()
+            + r.diff.ai.iter().map(|h| h.fields.len()).sum::<usize>();
+        out += &format!(
+            "  the tool: inputs in {inputs_ms} ms, compared in {compare_ms} ms; first differing tick {:?}, replays differ at {:?}, diff at {:?}, unreproduced {:?}; {} objects differ, {} houses, {} AI houses, {} game-wide fields, {fields} fields in all\n",
+            r.first_tick,
+            r.replay_tick,
+            r.diff_tick,
+            r.unreproduced,
+            r.diff.objects_differing,
+            r.diff.houses.len(),
+            r.diff.ai.len(),
+            r.diff.game.len(),
+        );
+        assert!(r.differs);
+        assert_eq!(r.first_tick, Some(LANE_T));
+        assert_eq!(r.replay_tick, Some(LANE_T));
+        assert_eq!(r.unreproduced, [None, None]);
+        match perturb {
+            Perturb::Health { object, .. } => assert!(
+                r.diff
+                    .objects
+                    .iter()
+                    .any(|o| o.id == object && o.fields.iter().any(|f| f.path == "health"))
+            ),
+            Perturb::Credits { house, .. } => assert!(
+                r.diff
+                    .houses
+                    .iter()
+                    .any(|h| h.house == house && h.fields.iter().any(|f| f.path == "credits"))
+            ),
+        }
+    }
+    print!("{out}");
+    let dir = lane_out();
+    if std::fs::create_dir_all(&dir).is_ok() {
+        let _ = std::fs::write(dir.join("lane.txt"), &out);
+    }
 }

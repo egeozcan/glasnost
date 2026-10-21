@@ -4,13 +4,14 @@
 //! its game went apart from another's: a snapshot of its game (the game's
 //! own save bytes, which load back to the same state hash) at the latest
 //! checkpoint every peer agreed on, the snapshots of every checkpoint since,
-//! the merged orders of every tick since that snapshot and its own state
-//! hash after each of those ticks ([`Evidence`]).
+//! the merged orders of every tick since that snapshot, and its own state
+//! hash after each checkpoint ([`Evidence`]).
 //!
 //! On a mismatch ([`crate::Event::Desync`]) the peer makes a [`Bundle`]: the
 //! build, the start values, the snapshot before the mismatch, its own
 //! snapshot at the mismatched checkpoint, the ticks from the first snapshot
-//! to a few ticks past the mismatch with their orders and its hashes. The
+//! to a few ticks past the mismatch with their orders and its own state
+//! hash after every one of them. The
 //! caller writes it out (the client: a file natively, a download in the
 //! browser) and tells the other peers its digest
 //! ([`crate::Session::set_report`]). The desync tool (`glasnost-headless
@@ -27,6 +28,17 @@
 //! at most about two largest delays later (the frame window), so the peer
 //! keeps every snapshot from the newest agreed one on, at most
 //! [`Evidence::max_snapshots`] of them.
+//!
+//! **Per-tick hashes.** A state hash serializes the whole world, which on
+//! a large map costs more than the tick itself, so a game takes one only at
+//! its checkpoints. When it makes a report, the peer replays its own ticks
+//! from the base snapshot on its own machine and build and records the
+//! state hash after every tick ([`TickRecord::live`] false); a difference
+//! of platform or build shows in those as it would have live. The hashes
+//! of the checkpoints stay the ones taken live, so a fault the replay does
+//! not repeat (a memory fault, an unrecorded change) still shows at its
+//! checkpoint. [`Evidence::with_tick_hashes`] takes every tick's hash live
+//! instead (tests).
 //!
 //! **A test-only perturbation** ([`Perturb`]) changes one object's health
 //! or one house's credits before a tick, from outside the game's rules, so
@@ -205,8 +217,27 @@ pub struct TickRecord {
     pub tick: u32,
     /// Its orders, in the order issued.
     pub orders: Vec<Issued>,
-    /// The peer's own state hash after it.
-    pub hash: Hash,
+    /// The peer's own state hash after it, if known.
+    pub hash: Option<Hash>,
+    /// Whether the hash was taken while the game ran (a checkpoint's, or
+    /// every tick's with [`Evidence::with_tick_hashes`]); else the peer
+    /// replayed the tick from the base snapshot when it made the report.
+    pub live: bool,
+}
+
+/// Runs one recorded tick on a game: the perturbation first when it is
+/// due (as the peer made it, before the tick), then the merged orders in
+/// their order, then the step, as [`crate::Session::step`] does.
+pub fn run_record(g: &mut Game, rec: &TickRecord, perturb: Option<Perturb>) {
+    if let Some(p) = perturb
+        && p.tick() == rec.tick
+    {
+        p.apply(&mut g.world);
+    }
+    for i in &rec.orders {
+        g.issue(glasnost_sim::world::HouseId(i.house), i.order.clone());
+    }
+    g.step();
 }
 
 /// A checkpoint whose hashes differ.
@@ -363,6 +394,7 @@ pub struct Evidence {
     mismatch: Option<Mismatch>,
     perturb: Option<Perturb>,
     applied: Option<Perturb>,
+    tick_hashes: bool,
     done: bool,
 }
 
@@ -390,8 +422,16 @@ impl Evidence {
             mismatch: None,
             perturb: None,
             applied: None,
+            tick_hashes: false,
             done: false,
         }
+    }
+
+    /// Takes every tick's state hash while the game runs, not only the
+    /// checkpoints' (tests: it costs a serialization of the world a tick).
+    pub fn with_tick_hashes(mut self, on: bool) -> Self {
+        self.tick_hashes = on;
+        self
     }
 
     /// Sets the test-only perturbation this peer makes ([`Evidence::before_tick`]).
@@ -452,7 +492,7 @@ impl Evidence {
         if self.done {
             return;
         }
-        let hash = t.hash.unwrap_or_else(|| hash_of(g));
+        let hash = t.hash.or_else(|| self.tick_hashes.then(|| hash_of(g)));
         self.ticks.push_back(TickRecord {
             tick: t.tick,
             orders: t
@@ -466,10 +506,11 @@ impl Evidence {
                 })
                 .collect(),
             hash,
+            live: hash.is_some(),
         });
         let ran = t.tick + 1;
-        if t.hash.is_some() {
-            self.snaps.push_back(snapshot(ran, hash, g));
+        if let Some(h) = t.hash {
+            self.snaps.push_back(snapshot(ran, h, g));
         }
         if self.mismatch.is_none() {
             self.prune(agreed);
@@ -515,8 +556,9 @@ impl Evidence {
 
     /// The report, once a mismatch is noted and `ran` (the ticks run)
     /// reaches [`PAST_TICKS`] past it; afterwards the evidence keeps
-    /// nothing more.
-    pub fn take(&mut self, ran: u32) -> Option<Bundle> {
+    /// nothing more. `g` is the running game, whose rules and tile
+    /// catalogue replay the ticks for their hashes.
+    pub fn take(&mut self, ran: u32, g: &Game) -> Option<Bundle> {
         let m = self.mismatch?;
         if self.done || ran < m.tick.saturating_add(1 + PAST_TICKS) {
             return None;
@@ -531,7 +573,7 @@ impl Evidence {
             .or(self.snaps.front())?
             .clone();
         let after = self.snaps.iter().find(|s| s.ran == at).cloned();
-        let b = self.bundle(Some(m), base, after);
+        let b = self.bundle(Some(m), base, after, g);
         self.done = true;
         self.snaps.clear();
         self.ticks.clear();
@@ -540,26 +582,55 @@ impl Evidence {
 
     /// A report of what it holds now, with no mismatch (tests; a report on
     /// demand): from the oldest snapshot it holds.
-    pub fn bundle_now(&self) -> Option<Bundle> {
+    pub fn bundle_now(&self, g: &Game) -> Option<Bundle> {
         let base = self.snaps.front()?.clone();
-        Some(self.bundle(self.mismatch, base, None))
+        Some(self.bundle(self.mismatch, base, None, g))
     }
 
-    fn bundle(&self, m: Option<Mismatch>, base: Snapshot, after: Option<Snapshot>) -> Bundle {
+    fn bundle(
+        &self,
+        m: Option<Mismatch>,
+        base: Snapshot,
+        after: Option<Snapshot>,
+        g: &Game,
+    ) -> Bundle {
+        let mut ticks: Vec<TickRecord> = self
+            .ticks
+            .iter()
+            .filter(|t| t.tick >= base.ran)
+            .cloned()
+            .collect();
+        self.replay_hashes(&base, &mut ticks, g);
         Bundle {
             build: self.build.clone(),
             start: self.start.clone(),
             writer: self.me,
             mismatch: m,
             perturb: self.applied,
-            ticks: self
-                .ticks
-                .iter()
-                .filter(|t| t.tick >= base.ran)
-                .cloned()
-                .collect(),
+            ticks,
             base,
             after,
+        }
+    }
+
+    /// Fills the hashes not taken live by replaying the ticks from the
+    /// base snapshot on this machine, with the perturbation it applied.
+    /// A snapshot that does not load leaves them unknown.
+    fn replay_hashes(&self, base: &Snapshot, ticks: &mut [TickRecord], g: &Game) {
+        if ticks.iter().all(|t| t.hash.is_some()) {
+            return;
+        }
+        let Some(catalogue) = g.world.catalogue.clone() else {
+            return;
+        };
+        let Ok(mut r) = Game::load(&base.bytes, g.world.rules_arc(), catalogue) else {
+            return;
+        };
+        for t in ticks.iter_mut() {
+            run_record(&mut r, t, self.applied);
+            if t.hash.is_none() {
+                t.hash = Some(hash_of(&r));
+            }
         }
     }
 }
