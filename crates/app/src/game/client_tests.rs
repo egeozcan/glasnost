@@ -8,7 +8,10 @@ use glasnost_ui::settings::{Row, SettingsHit};
 use glasnost_ui::setup::{MapEntry, SetupRules};
 use glasnost_vfs::ArchiveId;
 
+/// Clicks the middle of a target laid out in the interface's logical
+/// pixels: the middle of its scaled rectangle on the screen.
 fn click(c: &mut Client, r: Rect) {
+    let r = c.ui_scale().rect(r);
     let p = Point::new(r.x + r.w / 2, r.y + r.h / 2);
     c.pointer_down(Button::Left, p);
     c.pointer_up(Button::Left, p, Modifiers::default());
@@ -190,6 +193,7 @@ fn settings_screen_changes_persist_to_the_store() {
         .rect_of(&SettingsHit::Step(Row::Scale, 1))
         .unwrap();
     click(&mut c, r);
+    let _ = c.frame_rgba();
     let kept = store.read().unwrap();
     assert!(kept.contains("sound=80") && kept.contains("scroll=2") && kept.contains("scale=125"));
 
@@ -309,6 +313,8 @@ fn state_hash_is_the_same_under_any_settings() {
                 music: 0,
                 scroll_index: 0,
                 ui_scale: 300,
+                captions: false,
+                colour_blind: true,
                 bindings: b,
                 relay: "ws://elsewhere/".into(),
             };

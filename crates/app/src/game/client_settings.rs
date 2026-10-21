@@ -3,7 +3,7 @@
 //! keeping the relay address last used. Nothing here reaches the simulation.
 
 use super::{Client, Key};
-use crate::settings::{self, ACTIONS, Action, BindError, FIXED_KEYS, Settings};
+use crate::settings::{self, ACTIONS, Action, BindError, FIXED_KEYS, KEYBOARD_KEYS, Settings};
 use glasnost_ui::draw::DrawList;
 use glasnost_ui::geom::Point;
 use glasnost_ui::settings::{Page, Row, SettingsHit};
@@ -39,6 +39,14 @@ impl Client {
                     Row::Music => s.music = settings::step_volume(s.music, d),
                     Row::Scroll => s.step_scroll(d),
                     Row::Scale => s.step_scale(d),
+                    Row::Captions => s.captions = !s.captions,
+                    Row::Colours => {
+                        s.colour_blind = !s.colour_blind;
+                        if self.session.is_some() {
+                            self.settings_note =
+                                "House colours change from the next game on.".into();
+                        }
+                    }
                 }
                 self.settings_changed();
             }
@@ -84,19 +92,35 @@ impl Client {
             }
             (Some(_), _) => {}
             (None, Key::Escape) => self.close_settings(),
-            (None, _) => {}
+            (None, _) => {
+                // Our own keys (M8 step C3): the focus moves through the
+                // values, the bindings and the buttons.
+                if let Some(nav) = self.nav_of(k)
+                    && let Some(hit) = self.settings_focus.nav(&self.settings_targets, nav)
+                {
+                    self.settings_click(hit);
+                }
+            }
         }
     }
 
     pub(super) fn settings_frame(&mut self, hover: Option<Point>) -> DrawList {
         let s = &self.settings;
+        let fits = self.ui_scale().percent;
+        let on = |b: bool| if b { "On" } else { "Off" }.to_owned();
         let page = Page {
             values: [
                 format!("{}%", s.sound),
                 format!("{}%", s.voices),
                 format!("{}%", s.music),
                 s.scroll_label(),
-                format!("{}%", s.ui_scale),
+                if fits == i32::from(s.ui_scale) {
+                    format!("{}%", s.ui_scale)
+                } else {
+                    format!("{}% ({fits}% fits)", s.ui_scale)
+                },
+                on(s.captions),
+                on(s.colour_blind),
             ],
             bindings: ACTIONS
                 .iter()
@@ -110,11 +134,13 @@ impl Client {
             rebinding: self.rebinding,
             fixed: FIXED_KEYS
                 .iter()
+                .chain(&KEYBOARD_KEYS)
                 .map(|(a, k)| ((*a).to_owned(), (*k).to_owned()))
                 .collect(),
             note: &self.settings_note,
         };
-        let (d, t) = glasnost_ui::settings::view(self.size, &page, hover);
+        let (mut d, t) = glasnost_ui::settings::view(self.ui_size(), &page, hover);
+        self.settings_focus.mark(&mut d, &t);
         self.settings_targets = t;
         d
     }

@@ -442,7 +442,7 @@ pub fn view(
     let mut d = DrawList::new();
     let mut t = Targets::new();
     let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
-    t.push(l.map, HudHit::Map);
+    t.push_hit(l.map, HudHit::Map);
     d.fill(l.bar, colour::PANEL);
     d.fill(Rect::new(l.bar.x, 0, 1, l.bar.h), colour::ACCENT);
     widget::button(&mut d, l.options, "Options", hot(l.options), true);
@@ -456,7 +456,7 @@ pub fn view(
     match radar_image {
         Some(id) if m.radar => {
             d.image(id, l.radar);
-            t.push(l.radar, HudHit::Radar);
+            t.push_hit(l.radar, HudHit::Radar);
         }
         _ => d.text_centred(l.radar, "No radar", colour::DIM),
     }
@@ -624,8 +624,7 @@ pub fn pause_view(
         &format!("{} of 7", pos + 1),
         true,
     );
-    t.push(a, PauseHit::Speed(-1));
-    t.push(b, PauseHit::Speed(1));
+    t.push_choice(a, PauseHit::Speed(-1), b, PauseHit::Speed(1));
     let mut y = r.y + 50;
     let mut items = vec![(PauseHit::Resume, "Resume")];
     if settings {

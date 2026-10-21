@@ -1,7 +1,8 @@
 //! The settings screen (our own layout): volumes, scroll speed, display
-//! scale and the key bindings. It only draws the values it is given and
-//! reports what was clicked; what they mean and where they are stored is
-//! the client's (`glasnost-app`, `settings`).
+//! scale, captions, the house colour choice and the key bindings. It only
+//! draws the values it is given and reports what was clicked; what they
+//! mean and where they are stored is the client's (`glasnost-app`,
+//! `settings`).
 
 use crate::draw::{DrawList, colour};
 use crate::geom::{Point, Rect};
@@ -20,10 +21,22 @@ pub enum Row {
     Scroll,
     /// Display scale of the interface.
     Scale,
+    /// Captions for announcements, on or off.
+    Captions,
+    /// House colours for colour-blind players, on or off.
+    Colours,
 }
 
 /// All rows in the order drawn.
-pub const ROWS: [Row; 5] = [Row::Sound, Row::Voices, Row::Music, Row::Scroll, Row::Scale];
+pub const ROWS: [Row; 7] = [
+    Row::Sound,
+    Row::Voices,
+    Row::Music,
+    Row::Scroll,
+    Row::Scale,
+    Row::Captions,
+    Row::Colours,
+];
 
 /// A target of the screen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +54,7 @@ pub enum SettingsHit {
 /// What the screen shows.
 pub struct Page<'a> {
     /// The value text of each row, in [`ROWS`] order.
-    pub values: [String; 5],
+    pub values: [String; 7],
     /// Each rebindable action and the key it has now.
     pub bindings: Vec<(String, String)>,
     /// The binding waiting for a key press.
@@ -59,10 +72,13 @@ fn label(r: Row) -> &'static str {
         Row::Music => "Music",
         Row::Scroll => "Scroll speed",
         Row::Scale => "Display scale",
+        Row::Captions => "Captions",
+        Row::Colours => "Colour-blind houses",
     }
 }
 
-/// Draws the screen and lays out its targets.
+/// Draws the screen and lays out its targets: the values on the left, the
+/// keys on the right, Reset and Back below.
 pub fn view(
     size: (i32, i32),
     page: &Page<'_>,
@@ -73,29 +89,33 @@ pub fn view(
     let mut t = Targets::new();
     d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
     let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
-    let pw = 360;
-    let ph = 40 + 24 * 5 + 22 + 22 * page.bindings.len() as i32 + 14 * page.fixed.len() as i32 + 50;
+    let pw = 620;
+    let cw = 290;
+    let left_h = 24 * ROWS.len() as i32;
+    let right_h = 18 + 22 * page.bindings.len() as i32 + 18 + 14 * page.fixed.len() as i32;
+    let content = left_h.max(right_h);
+    let ph = 26 + content + 98;
     let r = Rect::new((w - pw) / 2, ((h - ph) / 2).max(4), pw, ph);
     widget::panel(&mut d, r, Some("SETTINGS"));
+    let x0 = r.x + 10;
+    let x1 = r.x + 20 + cw;
     let mut y = r.y + 26;
     for (row, value) in ROWS.iter().zip(&page.values) {
-        let (a, b) = widget::choice(
-            &mut d,
-            Rect::new(r.x + 10, y, pw - 20, 18),
-            label(*row),
-            value,
-            true,
+        let (a, b) = widget::choice(&mut d, Rect::new(x0, y, cw, 18), label(*row), value, true);
+        t.push_choice(
+            a,
+            SettingsHit::Step(*row, -1),
+            b,
+            SettingsHit::Step(*row, 1),
         );
-        t.push(a, SettingsHit::Step(*row, -1));
-        t.push(b, SettingsHit::Step(*row, 1));
         y += 24;
     }
-    y += 4;
-    d.text_left(Rect::new(r.x + 10, y, pw - 20, 14), "Keys", colour::ACCENT);
+    let mut y = r.y + 26;
+    d.text_left(Rect::new(x1, y, cw, 14), "Keys", colour::ACCENT);
     y += 18;
     for (i, (action, key)) in page.bindings.iter().enumerate() {
         let waiting = page.rebinding == Some(i);
-        let br = Rect::new(r.x + 10, y, pw - 20, 18);
+        let br = Rect::new(x1, y, cw, 18);
         let text = if waiting {
             format!("{action}: press a key")
         } else {
@@ -105,22 +125,24 @@ pub fn view(
         t.push(br, SettingsHit::Rebind(i));
         y += 22;
     }
+    d.text_left(Rect::new(x1, y + 2, cw, 14), "Fixed keys", colour::ACCENT);
+    y += 18;
     for (action, key) in &page.fixed {
         d.text_left(
-            Rect::new(r.x + 14, y, pw - 28, 12),
-            &format!("{action}: {key} (fixed)"),
+            Rect::new(x1 + 4, y, cw - 4, 12),
+            &format!("{action}: {key}"),
             colour::DIM,
         );
         y += 14;
     }
-    y += 6;
-    let reset = Rect::new(r.x + 10, y, 160, 20);
+    let y = r.y + 26 + content + 12;
+    let reset = Rect::new(x0, y, 160, 20);
     widget::button(&mut d, reset, "Reset to defaults", hot(reset), true);
     t.push(reset, SettingsHit::Reset);
     let back = Rect::new(r.right() - 170, y, 160, 20);
     widget::button(&mut d, back, "Back", hot(back), true);
     t.push(back, SettingsHit::Back);
-    d.text_centred(Rect::new(r.x, y + 26, pw, 14), page.note, colour::TEXT);
+    d.text_centred(Rect::new(r.x, y + 30, pw, 14), page.note, colour::TEXT);
     (d, t)
 }
 
@@ -136,6 +158,8 @@ mod tests {
                 "100".into(),
                 "4 of 7".into(),
                 "100%".into(),
+                "On".into(),
+                "Off".into(),
             ],
             bindings: vec![("Stop".into(), "S".into()), ("Guard".into(), "G".into())],
             rebinding: None,
@@ -146,12 +170,16 @@ mod tests {
 
     #[test]
     fn every_target_is_reachable_at_a_small_window() {
-        let (d, t) = view((640, 480), &page(), None);
+        let mut p = page();
+        p.bindings = (0..5).map(|i| (format!("A{i}"), "K".into())).collect();
+        p.fixed = (0..12).map(|i| (format!("F{i}"), "K".into())).collect();
+        let (d, t) = view((640, 480), &p, None);
         assert!(d.texts().contains(&"SETTINGS"));
         for hit in [
             SettingsHit::Step(Row::Music, 1),
             SettingsHit::Step(Row::Scale, -1),
-            SettingsHit::Rebind(1),
+            SettingsHit::Step(Row::Colours, 1),
+            SettingsHit::Rebind(4),
             SettingsHit::Reset,
             SettingsHit::Back,
         ] {
@@ -159,5 +187,8 @@ mod tests {
             assert_eq!(t.hit(r.centre()), Some(hit));
             assert!(r.y >= 0 && r.bottom() <= 480, "{hit:?} {r:?}");
         }
+        // Every value row is one keyboard stop, then the keys, Reset and Back.
+        assert_eq!(t.stops.len(), ROWS.len() + 5 + 2);
+        assert!(d.texts().contains(&"F11: K"));
     }
 }

@@ -512,8 +512,7 @@ impl Setup {
                       mk: &dyn Fn(i32) -> SetupHit| {
             let (a, b) = widget::choice(d, r, label, value, game_wide);
             if game_wide {
-                t.push(a, mk(-1));
-                t.push(b, mk(1));
+                t.push_choice(a, mk(-1), b, mk(1));
             }
         };
         let x0 = outer.x + 10;
@@ -573,8 +572,7 @@ impl Setup {
                 d.text_left(r, &crate::font::fit(kind, r.w), ink);
             } else {
                 let (a, b) = widget::choice(&mut d, r, "", kind, true);
-                t.push(a, SetupHit::Kind(i, -1));
-                t.push(b, SetupHit::Kind(i, 1));
+                t.push_choice(a, SetupHit::Kind(i, -1), b, SetupHit::Kind(i, 1));
             }
             if let Some(f) = room {
                 let (mark, ink) = if f.host_row == Some(i) {
@@ -613,8 +611,7 @@ impl Setup {
                     let r = Rect::new(x0 + cx, y, cw, 16);
                     let (a, b) = widget::choice(&mut d, r, "", &value, editable);
                     if editable {
-                        t.push(a, mk(i, -1));
-                        t.push(b, mk(i, 1));
+                        t.push_choice(a, mk(i, -1), b, mk(i, 1));
                     }
                 }
                 if let Some(c) = s.colour.and_then(|c| rules.colours.get(c as usize)) {

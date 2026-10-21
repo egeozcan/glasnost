@@ -580,6 +580,7 @@ impl Client {
                 .unwrap_or_default(),
             local: Some(HouseId(slot.house)),
             cursor: install.cursor_palette.clone(),
+            colour_blind: self.settings.colour_blind,
         };
         self.session = None;
         self.status = "Loading the map...".into();
@@ -726,12 +727,18 @@ impl Client {
                 self.netform.backspace();
                 true
             }
-            (Screen::Multiplayer, Key::Enter | Key::Escape) => {
+            // Without a field typing, Enter and Escape are the keyboard's
+            // press and back (the client's menu keys).
+            (Screen::Multiplayer, Key::Enter | Key::Escape) if self.netform.focus.is_some() => {
                 self.netform.focus = match (self.netform.focus, k) {
                     (Some(NetField::Name), Key::Enter) => Some(NetField::Relay),
                     (Some(NetField::Relay), Key::Enter) => Some(NetField::Code),
                     _ => None,
                 };
+                // The keyboard focus follows the field typed into.
+                if let Some(f) = self.netform.focus {
+                    self.net_focus.at = Some(NetHit::Field(f));
+                }
                 true
             }
             (Screen::Room | Screen::Game, _) => {
@@ -783,6 +790,13 @@ impl Client {
         let Some(hit) = self.setup_targets.hit(p) else {
             return;
         };
+        self.setup_focus.at = Some(hit);
+        self.room_press(hit);
+    }
+
+    /// A room control pressed (a click or the keyboard), turned into a
+    /// request to the relay.
+    pub(super) fn room_press(&mut self, hit: SetupHit) {
         if hit == SetupHit::Back {
             self.net_leave();
             self.net_status = ("You left the room.".into(), false);
@@ -871,7 +885,7 @@ impl Client {
     /// The room screen: the room's setup with its members, and the chat
     /// below it.
     pub(super) fn room_frame(&mut self, hover: Option<Point>) -> DrawList {
-        let size = self.size;
+        let size = self.ui_size();
         let (Some(install), Some(net)) = (self.install.as_ref(), self.net.as_ref()) else {
             return DrawList::new();
         };
@@ -921,7 +935,8 @@ impl Client {
                 None
             }
         });
-        let (mut d, t) = setup.view_framed(size, &install.setup, &maps, hover, Some(&frame));
+        let rules = self.shown_setup_rules(&install.setup);
+        let (mut d, t) = setup.view_framed(size, &rules, &maps, hover, Some(&frame));
         self.setup_targets = t;
         let panel = Setup::panel_rect(size);
         let y = panel.bottom() + 6;
@@ -947,7 +962,7 @@ impl Client {
         let Some(net) = self.net.as_ref() else {
             return;
         };
-        let (w, h) = self.size;
+        let (w, h) = self.ui_size();
         let recent: Vec<Line> = net
             .chat
             .iter()
@@ -987,7 +1002,7 @@ impl Client {
         } else {
             self.net_status.clone()
         };
-        let (d, t) = self.netform.view(self.size, &status, bad, busy, hover);
+        let (d, t) = self.netform.view(self.ui_size(), &status, bad, busy, hover);
         self.net_targets = t;
         d
     }

@@ -12,8 +12,10 @@
 //! - [`link`]: the connection to a relay (M9 N3), native or from the web shell.
 //! - [`report`]: where a desync report goes (M9 N4), a file or a download.
 //! - [`status_font`]: the game bitmap font for status text.
+//! - [`captions`]: captions for announcements (M8 step C3).
 
 pub mod band;
+pub mod captions;
 pub mod client;
 pub mod cursor;
 pub mod install;

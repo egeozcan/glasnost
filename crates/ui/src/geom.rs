@@ -90,9 +90,137 @@ impl Rect {
     }
 }
 
+/// The smallest logical interface size a scale may leave: a larger scale is
+/// lowered until the interface still fits.
+// nocite: our own client setting (the smallest scaled interface, the size the screens are laid out for)
+pub const MIN_UI: (i32, i32) = (640, 480);
+
+/// The interface's scale: the screens lay themselves out in logical
+/// pixels, drawn at `percent` / 100 screen pixels each, with the logical
+/// origin at screen pixel `at`. Screen edges are the floors of the scaled
+/// logical edges, so neighbouring rectangles stay adjacent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Scale {
+    /// Screen pixels per 100 logical pixels (100 or more).
+    pub percent: i32,
+    /// The logical origin's screen pixel.
+    pub at: Point,
+    /// The logical size of the screen.
+    pub ui: (i32, i32),
+}
+
+/// ⌈a / b⌉ for b > 0.
+const fn ceil_div(a: i32, b: i32) -> i32 {
+    (a + b - 1).div_euclid(b)
+}
+
+impl Scale {
+    /// No scaling on a screen of `size`.
+    pub const fn one(size: (i32, i32)) -> Self {
+        Self {
+            percent: 100,
+            at: Point::new(0, 0),
+            ui: size,
+        }
+    }
+
+    /// The scale `percent` gives on a screen of `size`, lowered so that the
+    /// logical screen keeps at least [`MIN_UI`] (and never below 100). The
+    /// logical screen covers the whole screen with its right edge on the
+    /// screen's right edge; part of a logical pixel may pass the left and
+    /// bottom edges.
+    pub fn fit(percent: i32, size: (i32, i32)) -> Self {
+        let (w, h) = (size.0.max(1), size.1.max(1));
+        let cap = (w * 100 / MIN_UI.0).min(h * 100 / MIN_UI.1);
+        let p = percent.min(cap).max(100);
+        let ui = (ceil_div(w * 100, p), ceil_div(h * 100, p));
+        Self {
+            percent: p,
+            at: Point::new(w - (ui.0 * p).div_euclid(100), 0),
+            ui,
+        }
+    }
+
+    /// Whether this scale draws logical pixels as they are.
+    pub fn is_one(&self) -> bool {
+        self.percent == 100 && self.at == Point::new(0, 0)
+    }
+
+    fn up(&self, v: i32) -> i32 {
+        (v * self.percent).div_euclid(100)
+    }
+
+    /// The screen column of logical column `x`'s left edge.
+    pub fn x(&self, x: i32) -> i32 {
+        self.at.x + self.up(x)
+    }
+
+    /// The screen row of logical row `y`'s top edge.
+    pub fn y(&self, y: i32) -> i32 {
+        self.at.y + self.up(y)
+    }
+
+    /// The screen rectangle a logical rectangle covers.
+    pub fn rect(&self, r: Rect) -> Rect {
+        let (x0, y0) = (self.x(r.x), self.y(r.y));
+        Rect::new(x0, y0, self.x(r.right()) - x0, self.y(r.bottom()) - y0)
+    }
+
+    /// The logical pixel a screen pixel lies in: the largest logical pixel
+    /// whose screen edge is at or before it. This is the exact inverse of
+    /// [`Scale::rect`]: a screen pixel is inside `rect(r)` exactly when its
+    /// logical pixel is inside `r`.
+    pub fn to_ui(&self, p: Point) -> Point {
+        let down = |v: i32| ceil_div(100 * (v + 1), self.percent) - 1;
+        Point::new(down(p.x - self.at.x), down(p.y - self.at.y))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_scaled_rectangle_holds_exactly_the_pixels_that_map_back_into_it() {
+        for size in [
+            (640, 480),
+            (1024, 768),
+            (1366, 768),
+            (1920, 1080),
+            (2560, 1440),
+        ] {
+            for pct in [100, 125, 150, 200, 300] {
+                let s = Scale::fit(pct, size);
+                assert!(s.ui.0 >= MIN_UI.0 && s.ui.1 >= MIN_UI.1, "{size:?} {pct}");
+                // The logical screen covers the screen, its right edge on the screen's.
+                assert_eq!(s.x(s.ui.0), size.0, "{size:?} {pct}");
+                assert!(s.x(0) <= 0 && s.y(0) == 0 && s.y(s.ui.1) >= size.1);
+                for r in [
+                    Rect::new(3, 5, 7, 2),
+                    Rect::new(0, 0, 1, 1),
+                    Rect::new(97, 41, 33, 18),
+                ] {
+                    let sr = s.rect(r);
+                    for py in sr.y - 3..sr.bottom() + 3 {
+                        for px in sr.x - 3..sr.right() + 3 {
+                            let p = Point::new(px, py);
+                            assert_eq!(sr.contains(p), r.contains(s.to_ui(p)), "{pct} {r:?} {p:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_scale_too_large_for_the_screen_is_lowered() {
+        assert_eq!(Scale::fit(300, (1024, 768)).percent, 160);
+        assert_eq!(Scale::fit(200, (1280, 960)).percent, 200);
+        assert_eq!(Scale::fit(200, (800, 600)).percent, 125);
+        assert_eq!(Scale::fit(150, (320, 200)).percent, 100);
+        assert!(Scale::fit(100, (800, 600)).is_one());
+        assert_eq!(Scale::fit(100, (800, 600)), Scale::one((800, 600)));
+    }
 
     #[test]
     fn contains_is_half_open() {
