@@ -20,7 +20,8 @@
 //! against the sender's slot and never forwards a `Dropped` from a client,
 //! and a session takes a `Dropped` only from [`RELAY`] (N2). Version 2 added
 //! that rule and the lobby's messages ([`crate::lobby::wire`]), which share
-//! this version.
+//! this version; version 3 the lobby's chat (N3); version 4 the desync
+//! report's digest in [`Frames::report`] (N4).
 //!
 //! This is our own protocol (docs/development.md, *Multiplayer (M9)*); it is
 //! not compatible with the original game's clients.
@@ -36,7 +37,7 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 3;
+pub const WIRE_VERSION: u8 = 4;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.
@@ -105,6 +106,21 @@ pub struct Frames {
     pub first_hash: u32,
     /// The sender's state hashes at checkpoints `first_hash`, … in order.
     pub hashes: Vec<Hash>,
+    /// The sender's desync report, once it has written one (N4): sent in
+    /// every later message, so it arrives over a lossy link too.
+    pub report: Option<Report>,
+}
+
+/// A peer's desync report as the others hear of it: the tick of the
+/// mismatch it reports and the SHA-256 of its bundle's bytes
+/// ([`crate::desync::Bundle::digest`]). The bundle itself never crosses the
+/// network: it is far larger than a message may be.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Report {
+    /// The mismatch's tick (the last tick the differing hashes cover).
+    pub tick: u32,
+    /// The digest of the bundle's bytes.
+    pub digest: Hash,
 }
 
 /// A round-trip echo: the stamp of another peer's message, given back.
