@@ -447,6 +447,9 @@ pub struct World {
     /// The repair depots' modelled slot animations (S-0108 claim 20).
     #[serde(default)]
     pub depot_anims: crate::depot_anim::DepotAnimWorld,
+    /// The ordinary animations in play (S-0109, S-0203 claim 2).
+    #[serde(default)]
+    pub anims: crate::anims::AnimWorld,
     /// The game-wide lighting state (S-0104).
     #[serde(default)]
     pub lighting: crate::lighting::LightWorld,

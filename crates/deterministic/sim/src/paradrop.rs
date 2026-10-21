@@ -240,10 +240,20 @@ fn release(w: &mut World, plane: ObjectId, p: ObjectId, c: CellXY, at: Pos) {
     crate::infantry::request(w, p, crate::infantry::Seq::Parachute, true);
     if let Some(name) = chute {
         // spec: S-0522 claims 13 and 16 (the parachute's creation draws, S-0202 claim 10, after the standing-position draw)
-        let delay = crate::load::anim_created_at(w, &name, Some((at.x, at.y, at.z)));
+        // spec: S-0522 claim 13 and S-0109 claim 22 (attached at the paratrooper's position, no creation loop delay, repeat factor 1)
+        let spawn = crate::anims::Spawn {
+            owner: Some((p, crate::world::Pos::new(0, 0, 0))),
+            role: crate::anims::Role::Parachute,
+            ..Default::default()
+        };
+        let made = crate::anims::spawn(w, &name, Some(at), spawn);
         crate::superweapons::event(
             w,
-            crate::superweapons::SwEvent::Parachute { trooper: p, delay },
+            crate::superweapons::SwEvent::Parachute {
+                trooper: p,
+                delay: made.delay,
+                anim: made.id,
+            },
             owner,
             None,
             Some(at),

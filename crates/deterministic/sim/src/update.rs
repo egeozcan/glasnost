@@ -35,6 +35,14 @@ impl UpdateOrder {
         }
     }
 
+    /// An object with a number never used before enters play: as
+    /// [`UpdateOrder::enter`], without the search for an earlier entry.
+    pub fn enter_new(&mut self, id: ObjectId) {
+        debug_assert!(!self.order.contains(&id));
+        // spec: S-0203 claim 3 (appending)
+        self.order.push(id);
+    }
+
     /// An object leaves play. During a turn pass, a removal of the current
     /// object or of one before it is a counting removal: with
     /// `quirks.update_order_removal_skip` it costs the next object its turn
@@ -44,8 +52,16 @@ impl UpdateOrder {
     /// buildings, passengers that get out); the combat code (M4) calls this
     /// at that moment.
     pub fn leave(&mut self, id: ObjectId, removal_skip: bool) {
-        let Some(p) = self.order.iter().position(|o| *o == id) else {
-            return;
+        // The current object leaving in its own turn is the common case
+        // (an ended animation): found without a search.
+        let p = match self.cur {
+            Some(c) if self.order.get(c) == Some(&id) => c,
+            _ => {
+                let Some(p) = self.order.iter().position(|o| *o == id) else {
+                    return;
+                };
+                p
+            }
         };
         self.order.remove(p);
         if !self.in_pass {

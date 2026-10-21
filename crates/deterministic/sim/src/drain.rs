@@ -205,10 +205,16 @@ fn form(w: &mut World, drainer: ObjectId, b: ObjectId) {
         .anim
         .clone()
         .filter(|n| rules.animation(n).is_some());
-    let at = w.obj(drainer).map(|o| (o.pos.x, o.pos.y, o.pos.z));
+    let at = w.obj(drainer).map(|o| o.pos);
+    // spec: S-0608 claim 5 and S-0109 claim 22 (attached to the drainer, at displacement 0, following it while it remains alive)
+    let spawn = crate::anims::Spawn {
+        owner: Some((drainer, crate::world::Pos::new(0, 0, 0))),
+        role: crate::anims::Role::Drain(drainer),
+        ..Default::default()
+    };
     let delay = name
         .as_deref()
-        .and_then(|n| crate::load::anim_created_at(w, n, at));
+        .and_then(|n| crate::anims::spawn(w, n, at, spawn).delay);
     w.effects.push(Effect::Drain {
         drainer,
         building: b,
@@ -224,6 +230,10 @@ pub fn end(w: &mut World, b: ObjectId) {
     // spec: S-0608 claim 14 (the drainer is no longer draining: table P row 8 can choose its draining weapon again and claim 3 a no longer refuses the building; the drain animation is removed)
     if partner(w, drainer) == Some(b) {
         w.drain.partner.remove(&drainer);
+    }
+    for id in crate::anims::with_role(w, crate::anims::Role::Drain(drainer)) {
+        // spec: S-0608 claim 14 (the drain animation is removed when the link ends)
+        crate::anims::remove(w, id);
     }
     // spec: S-0608 claim 14 (the building is no longer being drained, and its house is due to work out its power, S-0405 claim 7)
     if let Some(h) = w.obj(b).and_then(|o| o.owner) {

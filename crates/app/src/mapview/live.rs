@@ -499,6 +499,11 @@ struct LiveAnim {
     /// The depth adjustment its creator gave in place of its type's (a
     /// building's shot animation, S-0301 F8).
     z_adjust: Option<i32>,
+    /// The ordinary animation in play it shows (S-0109 claim 28: the
+    /// simulation plays it with the scenario stream, so its type, stage and
+    /// position are the simulation's); one the simulation has removed
+    /// disappears.
+    sim: Option<ObjectId>,
 }
 
 /// What playback asks of the live game: the follow-up types, the
@@ -1598,6 +1603,7 @@ impl Live {
             frame: None,
             shooter: None,
             z_adjust: None,
+            sim: None,
         });
         self.anim_serial = self.anim_serial.wrapping_add(1);
         sprite
@@ -1865,6 +1871,31 @@ impl Live {
         });
     }
 
+    /// The ordinary animations the simulation plays (S-0109 claims 28 and
+    /// 29): each drawn animation shows its simulated animation's type,
+    /// stage and position; one the simulation has removed disappears.
+    fn follow_sim_anims(&mut self) {
+        let world = &self.world;
+        let table = &self.anim_table;
+        self.anims.retain_mut(|a| {
+            let Some(id) = a.sim else { return true };
+            let Some(s) = world.anims.anims.get(&id) else {
+                // spec: S-0109 claims 16 and 22 (removed in the simulation: no longer drawn)
+                return false;
+            };
+            if a.player.name != s.player.name {
+                // spec: S-0109 claim 15 (the same animation continues as the follow-up type)
+                a.entry = table.get(&s.player.name.to_ascii_uppercase()).cloned();
+            }
+            // spec: S-0109 claim 28 (no viewer-dependent cosmetic stream substitutes for the playback draws: the stage shown is the simulation's)
+            a.player.clone_from(&s.player);
+            if let Some(p) = s.pos {
+                a.pos = p;
+            }
+            true
+        });
+    }
+
     fn update_anims(&mut self, now: i32) {
         let speed = self.world.game_speed;
         let mut env = AnimEnv {
@@ -1880,6 +1911,7 @@ impl Live {
                 || a.walker.is_some()
                 || a.maker.is_some()
                 || a.dominating.is_some()
+                || a.sim.is_some()
             {
                 return true;
             }
@@ -1910,12 +1942,21 @@ impl Live {
                 self.source_marker_event(*event, *pos, now);
             }
             if let Effect::Superweapon {
-                event: glasnost_sim::superweapons::SwEvent::Parachute { trooper, delay },
+                event:
+                    glasnost_sim::superweapons::SwEvent::Parachute {
+                        trooper,
+                        delay,
+                        anim,
+                    },
                 pos: Some(pos),
                 ..
             } = e
             {
+                let serial = self.anim_serial;
                 self.attach_parachute(*trooper, *pos, now, *delay);
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    a.sim = *anim;
+                }
             }
             if let Effect::ShotAnim {
                 name,
@@ -1923,6 +1964,7 @@ impl Live {
                 delay,
                 attached,
                 z_adjust,
+                id,
             } = e
             {
                 self.counts.anims += 1;
@@ -1939,6 +1981,7 @@ impl Live {
                     a.z_adjust = *z_adjust;
                     // spec: S-0301 claim 22 (Palette: no palette of its object; row 4 or 5 of S-0103 claim 8 by its own art flags, also when attached)
                     a.carrier = None;
+                    a.sim = *id;
                 }
                 // spec: S-0301 claim 23 (no default or placeholder picture: a type without art draws nothing; the viewer's debug layer marks it)
                 if !sprite && self.debug_markers {
@@ -1955,6 +1998,7 @@ impl Live {
                 delay,
                 reverse,
                 z_adjust,
+                id,
             } = e
             {
                 self.counts.anims += 1;
@@ -1974,6 +2018,9 @@ impl Live {
                 {
                     // spec: S-0102 claim 13 and S-0506 claim 19 (its creator replaces the animation's depth adjustment: −15 for a rocket detonation's explosion)
                     a.z_adjust = *z_adjust;
+                }
+                if let Some(a) = self.anims.iter_mut().find(|a| a.serial == serial) {
+                    a.sim = *id;
                 }
                 if !sprite && self.debug_markers {
                     self.transients.push(Transient {
@@ -2045,6 +2092,7 @@ impl Live {
         self.follow_makers();
         self.follow_dominations(now);
         self.follow_drainers();
+        self.follow_sim_anims();
         self.update_anims(now);
         let next_anim = self.anim_serial;
         for e in &effects {

@@ -86,7 +86,18 @@ pub fn recalc_cells(w: &mut World, order: &[CellXY]) {
         if let Some(a) = anim {
             let level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
             let at = tile_anim_position(c, level, a.dx, a.dy);
-            anim_created_at(w, &a.name, Some(at));
+            let role = if w.cells.anim_first.is_some() {
+                // spec: S-0010 claim 19 (a tile animation started before the second pass does not survive loading)
+                crate::anims::Role::FirstPassTile
+            } else {
+                crate::anims::Role::Ordinary
+            };
+            let spawn = crate::anims::Spawn {
+                role,
+                ..Default::default()
+            };
+            let pos = crate::world::Pos::new(at.0, at.1, at.2);
+            crate::anims::spawn(w, &a.name, Some(pos), spawn);
         }
     }
 }
@@ -161,7 +172,7 @@ fn tile_anim_due(
 }
 
 /// The creation draws of S-0202 claim 10 before the start event.
-fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Option<i32> {
+pub(crate) fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Option<i32> {
     let q = w.rules().quirks;
     let (d1, d2) = a.random_delay;
     let mut delay = None;
@@ -208,27 +219,22 @@ pub fn anim_created_at(w: &mut World, name: &str, at: Option<(i32, i32, i32)>) -
 
 /// [`anim_created_at`], with `played` set when the caller models the
 /// animation's later playback itself or removes it at once (the virus-death
-/// animation of S-0613 claims 2 and 3), so a later middle event is not
-/// noted as missing.
+/// animation of S-0613 claims 2 and 3, a storm cloud of S-0513 claim 46):
+/// only its creation draws and start event are taken here. Otherwise the
+/// animation is an ordinary one in play (`crate::anims`), appended to the
+/// update order (S-0109 claim 29).
 pub(crate) fn anim_created(
     w: &mut World,
     name: &str,
     at: Option<(i32, i32, i32)>,
     played: bool,
 ) -> Option<i32> {
+    if !played {
+        let pos = at.map(|(x, y, z)| crate::world::Pos::new(x, y, z));
+        return crate::anims::spawn(w, name, pos, crate::anims::Spawn::default()).delay;
+    }
     let rules = w.rules_arc();
     let a = rules.animation(name)?;
-    if !played {
-        // The parts of S-0109 that need the animation's playback in the
-        // simulation (claim 28's seam, docs/development.md *Animation
-        // playback*), noted where an animation that has them is created.
-        if a.damage.gt(glasnost_num::F64::ZERO) && !a.bouncing {
-            w.note("S-0109 claims 17 and 28: an animation with damage over time is not played in the simulation, so its damage is not delivered");
-        }
-        if a.next.is_some() || a.random_loop_delay.0 != a.random_loop_delay.1 {
-            w.note("S-0109 claims 11, 15 and 28: an animation's between-pass loop delay or follow-up switch is not played in the simulation, so its draws (and the follow-up's creation and start-event draws) are not taken");
-        }
-    }
     let delay = creation_draws(w, a);
     start_event(w, a, at, played);
     delay
@@ -484,6 +490,7 @@ pub fn new_game(
         drain: Default::default(),
         domination: Default::default(),
         depot_anims: Default::default(),
+        anims: Default::default(),
         // spec: S-0104 claim 14 and Import mapping (the lighting sets are read once with the map)
         lighting: crate::lighting::start(&map.lighting),
         temporal: Default::default(),
@@ -608,6 +615,8 @@ pub fn new_game(
     // Second recalculation pass (S-0010 claim 12): its tile animations
     // replace those started before it (S-0010 claim 19).
     w.cells.anim_first = None;
+    // spec: S-0010 claim 19 (none of the tile animations the first pass started survives loading)
+    crate::anims::drop_first_pass_tiles(&mut w);
     recalc_cells(&mut w, &order);
 
     // Late phase: list 3 and the late assignments (S-0009 claims 20, 28 and 29).

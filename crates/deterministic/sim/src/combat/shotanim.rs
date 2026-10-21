@@ -141,8 +141,6 @@ pub fn create(w: &mut World, firer: ObjectId, weapon: WeaponId, launch: Pos) {
     let Some(o) = w.obj(firer) else { return };
     let building = o.kind == Kind::Building;
     let at = o.pos;
-    // spec: S-0301 claim 22 (created with no initial loop delay, repeat factor 1 and no reverse request: the creation draws of S-0202 claim 10)
-    let delay = crate::load::anim_created_at(w, &name, Some((launch.x, launch.y, launch.z)));
     let (attached, z_adjust) = if building {
         // spec: S-0301 claim 22 (a building's shot animation is not attached; its creator replaces its depth adjustment with z_a of F8)
         (None, Some(building_depth(w, firer, launch.y)))
@@ -151,11 +149,18 @@ pub fn create(w: &mut World, firer: ObjectId, weapon: WeaponId, launch: Pos) {
         let offset = Pos::new(launch.x - at.x, launch.y - at.y, launch.z - at.z);
         (Some((firer, offset)), None)
     };
+    // spec: S-0301 claim 22 and S-0109 claim 29 (created with no initial loop delay, repeat factor 1 and no reverse request: the creation draws of S-0202 claim 10, then appended to the update order)
+    let spawn = crate::anims::Spawn {
+        owner: attached,
+        ..Default::default()
+    };
+    let made = crate::anims::spawn(w, &name, Some(launch), spawn);
     w.effects.push(Effect::ShotAnim {
         name,
         pos: launch,
-        delay,
+        delay: made.delay,
         attached,
         z_adjust,
+        id: made.id,
     });
 }

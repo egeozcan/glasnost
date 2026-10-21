@@ -1,5 +1,7 @@
 # S-0109 animation playback claim ledger (M6b, presentation)
 
+Superseded for the simulation's side by M8 step A5: the simulation now plays every ordinary animation (claims 5 to 17, 22, 28 and 29), and its rows below that say the simulation has no playback clock are replaced by [docs/m8-claims/S-0109-playback.md](../m8-claims/S-0109-playback.md). The drawing's rows (claims 19 to 21, 24, 26, 27) stand.
+
 Revision 28 (taken in at M6c step 1b, [step1b-m6c.md](../m6-claims/step1b-m6c.md)): the in-place deploy presentation is created in the vehicle's turn with no initial loop delay and a reverse request for an undeploy (`inplace::start_presentation`, `Effect::Anim` with `reverse`; the viewer's `mapview::live::create_anim` and `mapview::anims::Player::new` create it with no loop delay, repeat factor 1, the first update in the creation tick and its first image advance after the playback delay), its playback delay is the viewer's own and the vehicle's completion clock is S-0517 claim 7's base-delay count in the simulation. No code change in the viewer.
 
 S-0109 played in the drawing: the animations the simulation reports (`Effect::Anim`) and the

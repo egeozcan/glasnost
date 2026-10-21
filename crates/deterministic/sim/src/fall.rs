@@ -28,9 +28,8 @@ pub struct FallState {
     /// (S-0511 claim 10).
     pub bomb_mark: bool,
     /// A parachute animation is attached (S-0522 claims 12 and 13): the
-    /// parachute recurrence of S-0511 F3 applies. The simulation keeps no
-    /// playback clock (S-0109 claim 28 seam), so the parachute stays
-    /// attached until the landing.
+    /// parachute recurrence of S-0511 F3 applies. It is cleared when the
+    /// parachute's playback ends (`crate::anims`) or the unit lands.
     #[serde(default)]
     pub chute: bool,
     /// The absent-type transient of S-0522 claim 13: `chute` is set for the
@@ -159,9 +158,11 @@ fn fall_step(w: &mut World, id: ObjectId) -> bool {
         // spec: S-0516 claim 22 (a completed fall landing is a cell-arrival update, also within the same cell, after the height becomes 0 and falling ends and before the parachute is told to end: the sensor disc moves and the adjacent sensor test applies; the descent itself moved nothing)
         crate::cloak::machine::cell_movement_completed(w, id);
         if let Some(ob) = w.obj_mut(id) {
-            // spec: S-0522 claim 13 and State and ordering (a parachute still present on landing makes its current pass the last; the simulation keeps no playback clock, S-0109 claim 28, so it is detached here)
+            // spec: S-0522 claim 12 (the no-parachute recurrence once landed)
             ob.fall.chute = false;
         }
+        // spec: S-0522 claim 13 and State and ordering (a parachute still present on landing makes its current pass the last)
+        crate::anims::parachute_landed(w, id);
         land(w, id);
     }
     v != 0

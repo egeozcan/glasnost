@@ -126,8 +126,16 @@ pub fn pick_source(w: &mut World, h: HouseId, i: u32, cell: CellXY) {
     let mut p = super::cell_point(w, cell, true);
     p.z += super::protect::INVOKE_LIFT;
     // spec: S-0513 claim 33 (the marker is created whichever house is local, taking its ordinary animation creation draws on the scenario stream, S-0202 claim 10 and S-0109 claim 13; hiding it and silencing it for a viewer other than the launching player does not undo them)
+    for old in crate::anims::with_role(w, crate::anims::Role::SourceMarker(h)) {
+        // spec: S-0513 claim 33 (a new pick replaces the source and its marker)
+        crate::anims::remove(w, old);
+    }
     if let Some(name) = w.rules().superweapons.chrono_placement.clone() {
-        let _ = crate::load::anim_created_at(w, &name, Some((p.x, p.y, p.z)));
+        let spawn = crate::anims::Spawn {
+            role: crate::anims::Role::SourceMarker(h),
+            ..Default::default()
+        };
+        crate::anims::spawn(w, &name, Some(p), spawn);
     }
     // spec: S-0513 claim 33 (the source marker over the cell, seen and heard by the launching player only; a new pick replaces it; claim 5: no announcement, no radar event)
     super::event(w, SwEvent::SourceMarker, Some(h), Some(i), Some(p));
@@ -210,6 +218,9 @@ pub fn launch(w: &mut World, h: HouseId, source: CellXY, dest: CellXY) {
     super::protect::invoke_anim(w, blast, source, true);
     super::protect::invoke_anim(w, blast_dest, dest, true);
     // spec: S-0513 claim 34 (the launch ends the source marker)
+    for old in crate::anims::with_role(w, crate::anims::Role::SourceMarker(h)) {
+        crate::anims::remove(w, old);
+    }
     super::event(w, SwEvent::MarkerEnd, Some(h), None, None);
     let targets: Vec<(usize, CellXY)> = super::block(w, dest);
     for (i, c) in super::block(w, source) {

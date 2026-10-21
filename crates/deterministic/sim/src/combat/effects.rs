@@ -26,6 +26,10 @@ pub enum Effect {
         /// (S-0102 claim 13): −15 for a rocket detonation's explosion
         /// (S-0506 claim 19); `None` keeps the type's.
         z_adjust: Option<i32>,
+        /// The animation in play the simulation plays (`crate::anims`),
+        /// whose stage the drawing shows (S-0109 claim 28); `None` for one
+        /// a specialised model plays, or a type the rules do not list.
+        id: Option<ObjectId>,
     },
     /// A shot animation was created (S-0301 claims 20 to 22; its creation
     /// draws were taken in the firer's turn, S-0109 claim 29).
@@ -46,6 +50,9 @@ pub enum Effect {
         /// The depth adjustment that replaces its type's (S-0301 F8), for a
         /// building's.
         z_adjust: Option<i32>,
+        /// The animation in play the simulation plays, as for
+        /// [`Effect::Anim`].
+        id: Option<ObjectId>,
     },
     /// A detonation happened (S-0303).
     Detonation {
@@ -606,9 +613,8 @@ pub enum Sound {
 
 /// Creates an animation with no loop delay: its creation draws and its
 /// start event's draws, as for one created during loading (S-0202 claims
-/// 10 and 15), and a presentation event. Animations are not placed in the update order: where
-/// a shot's or a death's animations stand in it is not established (S-0203
-/// claim 2, `unmeasured`).
+/// 10 and 15), then it is appended to the update order and plays there
+/// (S-0109 claim 29, `crate::anims`); and a presentation event.
 pub fn anim(w: &mut crate::world::World, name: &str, pos: Pos) {
     anim_reversible(w, name, pos, false);
 }
@@ -651,13 +657,54 @@ fn anim_with(
         crate::mutation::start(w, i, pos, layer, None, false);
         return;
     }
-    let delay = crate::load::anim_created_at(w, name, Some((pos.x, pos.y, pos.z)));
+    anim_spawned(
+        w,
+        name,
+        pos,
+        reverse,
+        z_adjust,
+        crate::anims::Spawn::default(),
+    );
+}
+
+/// A projectile's trailer animation at `pos` (S-0109 claim 29): its
+/// creator gives it an initial loop delay of 1 update, repeat factor 1 and
+/// no reverse request, so its start event comes at the end of that delay.
+pub fn trailer(w: &mut crate::world::World, name: &str, pos: Pos) {
+    let spawn = crate::anims::Spawn {
+        creation: crate::anim_clock::Creation {
+            loop_delay: TRAILER_LOOP_DELAY,
+            repeat: 1,
+            reverse: false,
+        },
+        ..Default::default()
+    };
+    anim_spawned(w, name, pos, false, None, spawn);
+}
+
+/// The initial loop delay a projectile gives its trailer, in updates.
+const TRAILER_LOOP_DELAY: i32 = 1; // spec: S-0109 claim 29 (a projectile trailer: an initial loop delay of 1 update)
+
+/// Creates an ordinary animation in play with `spawn` (S-0109 claim 29)
+/// and its presentation event.
+fn anim_spawned(
+    w: &mut crate::world::World,
+    name: &str,
+    pos: Pos,
+    reverse: bool,
+    z_adjust: Option<i32>,
+    mut spawn: crate::anims::Spawn,
+) {
+    // spec: S-0109 claim 29 and Terms (a reverse request: the deploying presentation of an undeploy, S-0517 claim 7)
+    spawn.creation.reverse |= reverse;
+    let made = crate::anims::spawn(w, name, Some(pos), spawn);
     w.effects.push(Effect::Anim {
         name: name.to_owned(),
         pos,
-        delay,
+        delay: made.delay,
         reverse,
         z_adjust,
+        id: made.id,
     });
 }
 
