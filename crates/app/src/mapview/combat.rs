@@ -19,7 +19,7 @@
 //! 17: there are no control groups yet) and the repair wrench (claim 19:
 //! buildings are not repaired yet). The bomb icon of S-0519 claim 24 is
 //! drawn: the first status extra of its carrier, through the cursor
-//! palette ([`Cache::bomb_item`]).
+//! palette ([`Cache::bomb_item`], [`CURSOR_PALETTE`]; S-0111 claim 19a).
 
 use std::collections::BTreeMap;
 
@@ -42,9 +42,21 @@ pub const BRACKET_SPRITE: &[u8] = b"PIPBRD.SHP"; // spec: S-0111 Import mapping 
 pub const OVERLAY_PALETTE: &[u8] = b"PALETTE.PAL"; // spec: S-0111 Import mapping (overlay palette)
 /// The bomb icon sprite (S-0519 claim 24, S-0111 Import mapping).
 pub const BOMB_SPRITE: &[u8] = b"BOMBCURS.SHP"; // spec: S-0111 Import mapping (BOMBCURS.SHP, the bomb icon of S-0519 claim 24)
-/// The cursor palette the bomb icon uses (S-0519 claim 24, S-0111 Import
-/// mapping).
-pub const MOUSE_PALETTE: &[u8] = b"MOUSE.PAL"; // spec: S-0111 Import mapping (the wrench and the bomb sprite use MOUSE.PAL)
+/// The cursor palette: the palette of the wrench, the bomb icon (S-0519
+/// claim 24, S-0111 claim 19a and Import mapping) and the cursor images
+/// (S-0214 Import mapping).
+pub const CURSOR_PALETTE: &[u8] = b"MOUSEPAL.PAL"; // spec: S-0111 Import mapping (the wrench and the bomb sprite use the cursor palette MOUSEPAL.PAL, the same as S-0214's cursor images)
+
+/// The cursor palette loaded from its file (S-0111 claim 19a): each file
+/// component *c* becomes (4·*c*) mod 256 by S-0103 claim 1, following
+/// `quirks.palette_component_wrap` as the palettes of that claim do
+/// (off: a component above 63 becomes 252). `None` when the file does not
+/// parse as a palette.
+pub fn cursor_palette(file: &[u8], q: &PaletteQuirks) -> Option<glasnost_fmt::image::Palette> {
+    let pal = Palette6::parse(file).ok()?;
+    // spec: S-0111 claim 19a, S-0103 claim 1 and Edge cases (the cursor palette's components ×4, wrapping, or 252 above 63 with the switch off)
+    Some(palette_from_file(&pal, q))
+}
 
 /// The image frame of a bomb icon in tick `n` for a bomb planted in tick
 /// `t`, with timed delay `delay` and flicker rate `flicker` (S-0519 F3).
@@ -629,12 +641,12 @@ impl Cache {
     }
 
     /// The cursor palette's row, added on first use; `None` when the
-    /// palette is missing.
+    /// palette is missing (S-0111 claim 19a: then neither the wrench nor
+    /// the bomb icon is drawn).
     fn mouse_row(&mut self, scene: &mut Scene, assets: &Assets) -> Option<usize> {
         *self.mouse_row.get_or_insert_with(|| {
-            let pal = Palette6::parse(assets.get(MOUSE_PALETTE)?).ok()?;
-            // spec: S-0103 claim 1 (a palette file's components are loaded ×4)
-            let pal = palette_from_file(&pal, &PaletteQuirks::default());
+            // spec: S-0111 claim 19a (the wrench and the bomb icon are drawn through the cursor palette)
+            let pal = cursor_palette(assets.get(CURSOR_PALETTE)?, &PaletteQuirks::default())?;
             Some(scene.add_row(row565(&pal.colors)))
         })
     }

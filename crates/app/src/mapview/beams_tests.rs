@@ -716,3 +716,24 @@ fn railgun_laser_beam() {
     assert_eq!(widen(first.color[0]), [0, 0, 0]);
     assert_eq!(widen(first.color[8]), [0, 0, 0]);
 }
+
+/// spec: S-0616 claim 31 (a detonation railgun's beam is of zero length; whether it shows is the beam drawing's), S-0518 F9 (a zero-length triple, H = 0, contributes no sample)
+#[test]
+fn railgun_zero_length_beam_draws_nothing() {
+    let at = pos(1000, 1000, 0);
+    let b = rail_beam(at, at, 0, [0, 200, 0]);
+    assert_eq!(b.from, b.to);
+    let point = Beam {
+        from: (1, 1),
+        to: (1, 1),
+        ..b
+    };
+    let mut d = |_: i32, _: i32| 0;
+    let mut fine = || true;
+    let out = draw(
+        beam_spots(&point, 0, &mut frame_with(1, &mut fine, &mut d)),
+        4,
+        3,
+    );
+    assert!(out.color.iter().all(|&c| widen(c) == [0, 0, 0]), "no pixel");
+}

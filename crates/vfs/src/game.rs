@@ -31,14 +31,36 @@ pub struct GameQuirks {
     /// bisection over the stored index comparing signed ids; off, every
     /// listed member is found whatever the index order.
     pub mix_signed_binary_search: bool,
+    /// `quirks.art_cache_never_invalidated` (S-0005 claim 22, S-0111
+    /// claim 19a): a kept file keeps its first copy for the whole session;
+    /// off, it is resolved and read afresh at the start of every game. In
+    /// this engine it governs only the cursor palette's lifetime, the one
+    /// kept file the game client keeps across games: every other file is
+    /// read at each game's start, as with the switch off.
+    pub art_cache_never_invalidated: bool,
 }
 
 impl Default for GameQuirks {
     fn default() -> Self {
-        // spec: S-0005 Edge cases (signed index order: default is the original's bisection)
         Self {
+            // spec: S-0005 Edge cases (signed index order: default is the original's bisection)
             mix_signed_binary_search: true,
+            // spec: S-0005 Edge cases (session-long kept art: default on, the original), S-0111 claim 19a (the cursor palette follows it)
+            art_cache_never_invalidated: true,
         }
+    }
+}
+
+impl GameQuirks {
+    /// The switches by name.
+    pub fn named(&self) -> [(&'static str, bool); 2] {
+        [
+            ("mix_signed_binary_search", self.mix_signed_binary_search),
+            (
+                "art_cache_never_invalidated",
+                self.art_cache_never_invalidated,
+            ),
+        ]
     }
 }
 
@@ -662,6 +684,7 @@ mod tests {
         assert!(!(below && above));
         let fixed = GameQuirks {
             mix_signed_binary_search: false,
+            ..GameQuirks::default()
         };
         for id in ids {
             assert!(index_search(&unsigned, id, &fixed).is_some());

@@ -41,6 +41,7 @@ use super::play::{Button, Play, Tool, local_house};
 use super::scroll::{self, EdgeScroll};
 use super::status_font;
 use crate::mapview::build::{self, GameMode, Inputs, Options};
+use crate::mapview::combat::CURSOR_PALETTE;
 use crate::mapview::cover;
 use crate::mapview::live::{self, Live};
 use crate::mapview::load::{self, Loaded};
@@ -162,12 +163,14 @@ pub enum SessionEvent {
 impl Session {
     /// Loads the map file `file` of the mounted install and starts the game
     /// `make` sets up from the map's rules, played from house `local` (a
-    /// network game's slot), else from the first person's house.
+    /// network game's slot), else from the first person's house. `cursor`
+    /// is the session's cursor palette keep (S-0111 claim 19a).
     pub async fn start(
         vfs: &mut Vfs,
         file: &FileRef,
         make: live::MakeSetup<'_>,
         local: Option<HouseId>,
+        cursor: &CursorPaletteKeep,
     ) -> Result<Self, String> {
         let bytes = vfs
             .read(file)
@@ -179,7 +182,7 @@ impl Session {
             game: GameMode::Skirmish,
             ..Options::default()
         };
-        let loaded = load::load_with(
+        let mut loaded = load::load_with(
             vfs,
             bytes,
             map_id.clone(),
@@ -189,8 +192,14 @@ impl Session {
             Some(make),
         )
         .await;
+        // spec: S-0111 claim 19a (one cursor palette for the cursor images, the wrench and the bomb icon: the session's kept copy with quirks.art_cache_never_invalidated on, this game's read with it off)
+        let palette = cursor.for_game(vfs).await;
+        loaded.assets.set(CURSOR_PALETTE, palette.clone());
+        if let Some(l) = loaded.live.as_mut() {
+            l.note_cursor_palette(&loaded.assets);
+        }
         let (icons, alt_icons) = read_icons(vfs, &loaded).await;
-        let cursor_art = read_cursor(vfs).await;
+        let cursor_art = read_cursor(vfs, palette.as_deref()).await;
         let status_font = status_font::read(vfs).await;
         Self::assemble(
             loaded,
@@ -1312,22 +1321,63 @@ impl CursorArt {
     }
 }
 
-/// Reads the cursor image and its palette; `None` when either is missing
-/// (no replacement is specified, so the system pointer stays).
-async fn read_cursor(vfs: &Vfs) -> Option<CursorArt> {
+/// The cursor palette's file as the session keeps it (S-0111 claim 19a,
+/// S-0005 claim 22): one copy, shared by the cursor images (S-0214), the
+/// wrench and the bomb icon.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum CursorPaletteKeep {
+    /// `quirks.art_cache_never_invalidated` on: the copy read once when the
+    /// install was mounted, before any game (`None`: not found then), used
+    /// by every game of the session.
+    Session(Option<Vec<u8>>),
+    /// The switch off: resolved and read afresh at the start of each game.
+    #[default]
+    EachGame,
+}
+
+impl CursorPaletteKeep {
+    /// The keep at program start, under the mounted install's switch.
+    pub async fn at_program_start(vfs: &Vfs) -> Self {
+        if vfs.game_options().quirks.art_cache_never_invalidated {
+            // spec: S-0111 claim 19a, S-0005 claim 22 (switch on: read once when the program starts, before any game)
+            Self::Session(read_file(vfs, CURSOR_PALETTE).await)
+        } else {
+            // spec: S-0111 claim 19a (switch off: nothing kept; each game reads it afresh)
+            Self::EachGame
+        }
+    }
+
+    /// The cursor palette file a game starting on `vfs` uses.
+    pub async fn for_game(&self, vfs: &Vfs) -> Option<Vec<u8>> {
+        match self {
+            // spec: S-0111 claim 19a (switch on: the program-start copy, across games, a replaced file not followed)
+            Self::Session(kept) => kept.clone(),
+            // spec: S-0111 claim 19a, S-0005 claim 22 (switch off: resolved and read afresh at the start of each game)
+            Self::EachGame => read_file(vfs, CURSOR_PALETTE).await,
+        }
+    }
+}
+
+/// A file resolved by S-0005 and read; `None` when it is not found or
+/// cannot be read.
+async fn read_file(vfs: &Vfs, name: &[u8]) -> Option<Vec<u8>> {
+    let r = vfs.resolve_bytes(name)?;
+    vfs.read_resolved(&r).await.ok()
+}
+
+/// Reads the cursor image; with the game's cursor palette file `palette`,
+/// the cursor art. `None` when either is missing (no replacement is
+/// specified, so the system pointer stays).
+async fn read_cursor(vfs: &Vfs, palette: Option<&[u8]>) -> Option<CursorArt> {
     // spec: S-0214 Import mapping (cursor image MOUSE.SHA, resolved by S-0005, a sprite image; cursor palette MOUSEPAL.PAL, S-0103)
-    let r = vfs.resolve("MOUSE.SHA")?;
-    let bytes = vfs.read_resolved(&r).await.ok()?;
+    let bytes = read_file(vfs, b"MOUSE.SHA").await?;
     let shp = Shp::parse(&bytes).ok()?;
     let size = (i32::from(shp.width), i32::from(shp.height));
-    let pr = vfs.resolve("MOUSEPAL.PAL")?;
-    let pb = vfs.read_resolved(&pr).await.ok()?;
-    let p = glasnost_fmt::pal::Palette6::parse(&pb).ok()?;
-    // spec: S-0103 claim 2 (a palette file's components through the load rule)
-    let pal = glasnost_render::palette::palette_from_file(
-        &p,
+    // spec: S-0111 claim 19a (the same cursor palette, through S-0103 claim 1's load rule)
+    let pal = crate::mapview::combat::cursor_palette(
+        palette?,
         &glasnost_render::palette::PaletteQuirks::default(),
-    );
+    )?;
     Some(CursorArt {
         bytes,
         size,
@@ -1528,5 +1578,95 @@ mod local_area_tests {
         let wide = Rect::new(0, 0, 2000, 400);
         let bands = outside_local_area(wide, (-1000, 400), local);
         assert!(bands.iter().all(|r| r.h == 400), "{bands:?}");
+    }
+}
+
+#[cfg(test)]
+mod cursor_palette_tests {
+    use std::rc::Rc;
+
+    use glasnost_fmt::mix::{MixWriter, WriteLayout, id_hash};
+    use glasnost_vfs::{GameOptions, GameQuirks, MemSource, PickedFile};
+
+    use super::*;
+
+    /// A mounted install whose main archive holds `palette` as the cursor
+    /// palette (or none), searched under `quirks`. The bytes are invented.
+    fn install(palette: Option<&[u8]>, quirks: GameQuirks) -> Vfs {
+        let mut files = vec![(id_hash("filler.ini"), b"[Filler]\n".to_vec())];
+        if let Some(p) = palette {
+            files.push((id_hash("mousepal.pal"), p.to_vec()));
+        }
+        let main = MixWriter {
+            layout: WriteLayout::Plain,
+            files,
+        }
+        .write();
+        let mut vfs = Vfs::default();
+        pollster::block_on(vfs.mount_install(vec![PickedFile {
+            path: "ra2md.mix".into(),
+            source: Rc::new(MemSource(main)),
+        }]));
+        pollster::block_on(vfs.mount_startup(GameOptions {
+            quirks,
+            ..GameOptions::default()
+        }));
+        vfs
+    }
+
+    fn off() -> GameQuirks {
+        GameQuirks {
+            art_cache_never_invalidated: false,
+            ..GameQuirks::default()
+        }
+    }
+
+    /// spec: S-0111 claim 19a and scenario OV14 palette part c with its engine fixture (switch on:
+    /// read once when the program starts, before any game, so a palette replaced between games is
+    /// not followed; switch off: resolved and read afresh at the start of each game, so the second
+    /// game takes the replacement), S-0005 claim 22
+    #[test]
+    fn cursor_palette_lifetime_follows_the_switch() {
+        let first = vec![1u8; 768];
+        let second = vec![2u8; 768];
+        // Switch on (the default): both games take the program-start copy.
+        let start = install(Some(&first), GameQuirks::default());
+        let keep = pollster::block_on(CursorPaletteKeep::at_program_start(&start));
+        assert_eq!(keep, CursorPaletteKeep::Session(Some(first.clone())));
+        assert_eq!(
+            pollster::block_on(keep.for_game(&start)),
+            Some(first.clone())
+        );
+        let replaced = install(Some(&second), GameQuirks::default());
+        assert_eq!(
+            pollster::block_on(keep.for_game(&replaced)),
+            Some(first.clone())
+        );
+        // Switch off: nothing kept; each game reads the file present at its start.
+        let start = install(Some(&first), off());
+        let keep = pollster::block_on(CursorPaletteKeep::at_program_start(&start));
+        assert_eq!(keep, CursorPaletteKeep::EachGame);
+        assert_eq!(pollster::block_on(keep.for_game(&start)), Some(first));
+        let replaced = install(Some(&second), off());
+        assert_eq!(pollster::block_on(keep.for_game(&replaced)), Some(second));
+    }
+
+    /// spec: S-0111 claim 19a and scenario OV14 palette part d (switch on: the read happens at
+    /// start-up, so a palette that appears after it does not reach the games; with none found
+    /// then, no game has one: the missing-file case), S-0111 Import mapping (MOUSEPAL.PAL,
+    /// resolved by S-0005)
+    #[test]
+    fn cursor_palette_is_read_at_program_start() {
+        let start = install(None, GameQuirks::default());
+        let keep = pollster::block_on(CursorPaletteKeep::at_program_start(&start));
+        assert_eq!(keep, CursorPaletteKeep::Session(None));
+        let later = install(Some(&[7u8; 768]), GameQuirks::default());
+        assert_eq!(pollster::block_on(keep.for_game(&later)), None);
+        // With the switch off the later game finds it.
+        let later = install(Some(&[7u8; 768]), off());
+        assert_eq!(
+            pollster::block_on(CursorPaletteKeep::EachGame.for_game(&later)),
+            Some(vec![7u8; 768])
+        );
     }
 }

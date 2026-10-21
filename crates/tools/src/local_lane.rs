@@ -389,6 +389,10 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
             "importer warnings: colour list not clean (S-0202 claim 17)",
             "ColorList is not a clean list",
         ),
+        (
+            "importer warnings: railgun with no held type (S-0616 claim 20)",
+            "a railgun system with no held type",
+        ),
     ] {
         let n = import
             .warnings

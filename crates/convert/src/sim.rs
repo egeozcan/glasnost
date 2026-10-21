@@ -65,6 +65,15 @@ pub fn decimal_text(stored: &[u8]) -> Option<String> {
     Some(s)
 }
 
+/// Whether decimal text from [`decimal_text`] is above zero: no sign and a
+/// digit other than 0 (a `%` factor keeps the sign).
+fn decimal_text_positive(d: &str) -> bool {
+    !d.starts_with('-')
+        && d.bytes()
+            .take_while(|&b| b != b'e' && b != b'%')
+            .any(|b| (b'1'..=b'9').contains(&b))
+}
+
 /// The land types in S-0211's order, with our names and their sections.
 // spec: S-0211 Terms (land types 0 to 11), Import mapping (the twelve section names)
 pub(crate) const LAND_TYPES: [(&str, &str); 12] = [
@@ -2486,6 +2495,7 @@ impl Builder<'_> {
             None if !t.reads.is_empty() => self.type_key(Kind::Particles, b""),
             None => None,
         };
+        let no_held = holds.is_none();
         if let Some(h) = holds {
             rec.put("holds_what", jsonc::string(h));
         }
@@ -2548,6 +2558,16 @@ impl Builder<'_> {
         // spec: S-0616 claim 20 and Import mapping (SparkSpawnFrames of 0 or less, including the absent value on a spark-kind type, is bad data: the importer warns)
         if kind.as_deref() == Some("spark") && int_of("SparkSpawnFrames").is_none_or(|k| k <= 0) {
             bad.push("a spark-turns field (SparkSpawnFrames) of 0 or less, or absent, never ends the system by its counter; our engine marks it in its first turn");
+        }
+        // spec: S-0616 claim 20 and Import mapping (HoldsWhat: a railgun-kind type with no held type, through a no-type reading such as <none>, and a positive particles-per-lepton field is bad data: the importer warns)
+        if kind.as_deref() == Some("railgun") && no_held && {
+            // spec: S-0616 Import mapping (ParticlesPerCoord: a double, absent 0.1, which is positive)
+            fold(t.keys.get(&b"ParticlesPerCoord"[..]), None, |v, _| {
+                decimal_text(v)
+            })
+            .is_none_or(|d| decimal_text_positive(&d))
+        } {
+            bad.push("a railgun system with no held type (HoldsWhat) and a positive particles-per-lepton field (ParticlesPerCoord) makes no particle and takes no ranged draw in its line turn; our engine makes the laser beam when the type has the laser flag");
         }
         for b in bad {
             self.warn(
