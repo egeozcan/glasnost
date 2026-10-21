@@ -656,8 +656,10 @@ fn play_ai(
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
     let starting: BTreeSet<u32> = game.world.objects.keys().map(|id| id.0).collect();
-    // The house of a sweep seen in this tick's effects.
+    // The house of a sweep seen in this tick's effects, and the objects of
+    // other houses the last launch's preview would take.
     let mut swept_by: Option<HouseId> = None;
+    let mut dom_watch: Vec<glasnost_sim::world::ObjectId> = Vec::new();
     while game.world.tick < max_ticks {
         game.step();
         let w = &game.world;
@@ -675,13 +677,25 @@ fn play_ai(
                 _ => {}
             }
             tally.effect(e);
+            if let Effect::Killed { id, .. } = e
+                && dom_watch.contains(id)
+            {
+                println!(
+                    "  object {} killed at tick {} (sweep seen {})",
+                    id.0,
+                    w.tick,
+                    swept_by.is_some()
+                );
+            }
             if let Effect::Domination {
                 event: glasnost_sim::domination::DomEvent::Started,
                 ..
             } = e
                 && let Some(d) = w.domination.current.as_ref()
             {
-                println!("{}", dominator_launch_line(w, d));
+                let (line, watch) = dominator_launch_line(w, d);
+                println!("{line}");
+                dom_watch = watch;
             }
             if let Effect::Domination {
                 event: glasnost_sim::domination::DomEvent::Sweep,
@@ -692,6 +706,13 @@ fn play_ai(
                 swept_by = *house;
             }
         }
+        dom_watch.retain(|&id| {
+            let gone = w.obj(id).is_none_or(|o| o.health <= 0);
+            if gone && swept_by.is_none() {
+                println!("  object {} gone at tick {} before the sweep", id.0, w.tick);
+            }
+            !gone || swept_by.is_some()
+        });
         if let Some(h) = swept_by.take() {
             println!(
                 "dominator sweep tick {} house {}: owner changes {}",
@@ -699,6 +720,9 @@ fn play_ai(
                 h.0,
                 tally.dominator_sweeps.last().copied().unwrap_or(0)
             );
+            for id in std::mem::take(&mut dom_watch) {
+                println!("  {}", dominator_watch_line(w, id, h));
+            }
         }
         drained = w.effects.len();
         tally.observe(w);
@@ -2934,21 +2958,82 @@ fn report(
 /// (`glasnost_sim::domination::preview`): every object, and those of other
 /// houses (an owner change, S-0612 claim 14). Units can still walk in or
 /// out before the sweep, so the sweep's own line gives what it took.
-fn dominator_launch_line(w: &World, d: &glasnost_sim::domination::Domination) -> String {
+fn dominator_launch_line(
+    w: &World,
+    d: &glasnost_sim::domination::Domination,
+) -> (String, Vec<glasnost_sim::world::ObjectId>) {
     let taken = glasnost_sim::domination::preview(w, d.house, d.cell);
-    let other = taken
+    let other: Vec<glasnost_sim::world::ObjectId> = taken
         .iter()
-        .filter(|&&id| w.obj(id).is_some_and(|o| o.owner != Some(d.house)))
-        .count();
-    format!(
-        "dominator launch tick {} house {} cell ({}, {}): preview takes {}, of other houses {}",
+        .copied()
+        .filter(|&id| w.obj(id).is_some_and(|o| o.owner != Some(d.house)))
+        .collect();
+    let line = format!(
+        "dominator launch tick {} house {} cell ({}, {}): preview takes {}, of other houses {}{}",
         w.tick,
         d.house.0,
         d.cell.x,
         d.cell.y,
         taken.len(),
+        other.len(),
         other
-    )
+            .iter()
+            .map(|&id| format!(
+                "; {} estimate {}",
+                dominator_watch_line(w, id, d.house),
+                dominator_estimate(w, d.cell, id)
+            ))
+            .collect::<String>()
+    );
+    (line, other)
+}
+
+/// The area damage the sweep at `c` is expected to deal object `id`
+/// (`damage::hit_estimate` at each hit's distance), or -1 out of reach.
+fn dominator_estimate(
+    w: &World,
+    c: glasnost_map::CellXY,
+    id: glasnost_sim::world::ObjectId,
+) -> i32 {
+    let d = &w.rules().superweapons.domination;
+    let Some(h) = d.warhead else { return -1 };
+    let p = glasnost_sim::superweapons::cell_point(w, c, false);
+    let r = glasnost_sim::combat::area::radii(w, h).0;
+    let hits: Vec<i32> = glasnost_sim::combat::area::object_distances(w, p, id)
+        .into_iter()
+        .filter(|&x| x <= r)
+        .collect();
+    if hits.is_empty() {
+        return -1;
+    }
+    hits.into_iter()
+        .map(|x| glasnost_sim::combat::damage::hit_estimate(w, id, d.damage, h, x))
+        .sum()
+}
+
+/// One object of a domination's preview, as the lane watches it from the
+/// launch to the sweep: kind, owner, cell, health, whether it has a
+/// movement destination and its behaviour.
+fn dominator_watch_line(w: &World, id: glasnost_sim::world::ObjectId, h: HouseId) -> String {
+    match w.obj(id) {
+        None => format!("object {} gone", id.0),
+        Some(o) => format!(
+            "object {} {:?} owner {:?}{} cell ({}, {}) health {} dest {} beh {:?}",
+            id.0,
+            o.kind,
+            o.owner.map(|x| x.0),
+            if o.owner == Some(h) {
+                " (dominating)"
+            } else {
+                ""
+            },
+            o.pos.cell().x,
+            o.pos.cell().y,
+            o.health,
+            o.dest.is_some(),
+            o.beh.current
+        ),
+    }
 }
 
 /// The lines of `GLASNOST_AI_SWPROBE`: per house and mutator or dominator
@@ -2982,6 +3067,7 @@ fn sw_probe_line(w: &World) -> String {
                         seen,
                         units,
                         dominable,
+                        moving,
                         refused,
                         not_examined,
                         best,
@@ -2990,7 +3076,7 @@ fn sw_probe_line(w: &World) -> String {
                         format!("gain {g} loss {l} units {n}")
                     });
                     s += &format!(
-                        "swprobe tick {} house {h} Dominator ready {} suspended {} power {}/{}: seen objects {seen} units {units} dominable {dominable} not examined {not_examined} best {best} refused {refused:?}\n",
+                        "swprobe tick {} house {h} Dominator ready {} suspended {} power {}/{}: seen objects {seen} units {units} dominable {dominable} moving {moving} not examined {not_examined} best {best} refused {refused:?}\n",
                         w.tick, r.ready, r.suspended, p.output, p.drain
                     );
                 }
