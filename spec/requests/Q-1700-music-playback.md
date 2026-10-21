@@ -20,9 +20,8 @@ of `glasnost-fmt` that the sound effects use). No approved spec says which track
    random, or is it the first eligible entry in the database's order?
 2. **Next track.** When a track ends, which plays next: the database order, a random pick (can the same
    track play twice in a row?), or the same track again? Is there a gap between tracks?
-3. **Eligibility.** Which database entries can play in a skirmish? Which entry fields decide it (for
-   example a side, a campaign-only or menu-only marking, or a "normal play" marking), and what happens
-   to an entry whose field is missing or malformed?
+3. **Eligibility.** Which database entries can play in a skirmish? Which entry fields decide it, and
+   what happens to an entry whose field is missing or malformed?
 4. **Player controls.** Which music choices does the in-game options screen offer (a track list, repeat,
    shuffle, a volume level)? What does each choice do to the order of questions 1 and 2, and do the
    choices last past the end of the game?
