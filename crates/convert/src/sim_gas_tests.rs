@@ -424,6 +424,51 @@ fn spark_turns_of_zero_or_less_warn() {
     assert!(!warned(&w, "a spark-turns field"), "{w:?}");
 }
 
+/// spec: S-0616 claim 20 and Import mapping (HoldsWhat: a railgun-kind type with no held type and
+/// a positive particles-per-lepton field is bad data: the importer warns; `<none>` gives no held
+/// type, an absent key the empty-named type; ParticlesPerCoord absent is 0.1, positive)
+#[test]
+fn railgun_without_held_type_warns() {
+    for (keys, warns) in [
+        ("HoldsWhat=<none>\n", true),
+        ("HoldsWhat=<none>\nParticlesPerCoord=0.5\n", true),
+        ("HoldsWhat=<none>\nParticlesPerCoord=0\n", false),
+        ("HoldsWhat=<none>\nParticlesPerCoord=0.0\n", false),
+        ("HoldsWhat=<none>\nParticlesPerCoord=-0.25\n", false),
+        // An absent held-type key names the empty-named type (claim 21): a held type.
+        ("", false),
+        ("HoldsWhat=Dot\n", false),
+    ] {
+        let text = format!(
+            "[Particles]\n0=Dot\n[ParticleSystems]\n0=Rail\n[Dot]\nBehavesLike=Railgun\n\
+             [Rail]\nBehavesLike=Railgun\n{keys}"
+        );
+        let (s, w) = sim(&text, "", "");
+        // `<none>` gives no held type (P31 part d); an absent key the empty-named type.
+        let held = s.particle_systems["Rail"].holds_what.as_deref();
+        assert_eq!(
+            held.is_none(),
+            keys.starts_with("HoldsWhat=<none>"),
+            "{keys}"
+        );
+        let n = w
+            .iter()
+            .filter(|w| {
+                w.message
+                    .contains("particle system Rail: a railgun system with no held type")
+            })
+            .count();
+        assert_eq!(n, usize::from(warns), "{keys}: {w:?}");
+    }
+    // Another kind with no held type: not this warning.
+    let (_, w) = sim(
+        "[ParticleSystems]\n0=Puff\n[Puff]\nBehavesLike=Smoke\nHoldsWhat=<none>\n",
+        "",
+        "",
+    );
+    assert!(!warned(&w, "a railgun system with no held type"), "{w:?}");
+}
+
 /// spec: S-0601 Import mapping (DefaultSparkSystem absent: no game-wide spark systems and no
 /// overload placement draws; the importer warns) and S-0616 Import mapping
 #[test]
