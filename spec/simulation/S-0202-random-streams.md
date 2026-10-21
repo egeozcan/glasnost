@@ -2,13 +2,13 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 32
+revision: 33
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-21
 measurements: []
-requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711]
+requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711, Q-1562]
 supersedes: []
 ---
 
@@ -1019,6 +1019,67 @@ original's recording modes are retained as deferred context, not implementation 
     - Backing: `measurable` (R15 and S-0414 V18)
     - Confidence: high
 
+17. **Reading a particle type's colour list (Q-1562).** The colour list whose entries gate claim
+    15's colour draw, and which S-0616 claim 29 draws from, is read from its text value as follows.
+    The value is taken as S-0003 claim 1 gives a text value with a 511-byte limit: comment
+    removed, surrounding whitespace trimmed, cut to its first 511 bytes, and any trailing
+    whitespace of the cut text then removed. So a cut that ends in `…,(4,5,6 ` leaves the third
+    item `6`, whose blue component reads 0 once its last byte is removed.
+    - **Items.** The text is split at every comma. Empty items, from two adjacent commas or from a
+      leading or trailing comma, are dropped. No item is trimmed. Parentheses are neither
+      separators nor group marks: they are ordinary bytes of the items they sit in.
+    - **Entries.** The items are taken in consecutive threes from the start. Each complete three
+      gives one entry, in list order, so a list of *k* items has ⌊*k* / 3⌋ entries, and one or two
+      items left over at the end give nothing. No three is skipped, and no component is kept from
+      an earlier entry, from the value in force or from an earlier layer.
+    - **Components.** Of each three, the red component is read from the first item without its
+      first byte, the green component from the second item whole, and the blue component from the
+      third item without its last byte. In a clean list the removed bytes are the opening and the
+      closing parenthesis. Each is read by the decimal form of S-0003 claim 3 (optional
+      whitespace, an optional sign, decimal digits up to the first other byte, 0 when there is no
+      digit), with S-0003 claim 4's wrapping, and the result is reduced modulo 256 to the least
+      non-negative residue: −1 gives 255, 300 gives 44. The `$` and `h` hexadecimal forms of
+      S-0003 claim 3 do not apply: `1Fh` reads as 1.
+    - **Malformed groups.** These follow from the rules above (invented test texts):
+
+      | Text | Entries |
+      |---|---|
+      | `(10,20)` | none: two items |
+      | `(10,20),(30,40,50)` | one, (10, 20, 0): the third item is `(30`, which reads 0 without its last byte; `40` and `50)` are left over |
+      | `(1,2,3,4)` | one, (1, 2, 0): the third item `3` without its last byte has no digit; `4)` is left over |
+      | `(1,2,3,4),(5,6,7)` | two, (1, 2, 0) and (0, 0, 0) |
+      | `(1,x,3)` | one, (1, 0, 3) |
+      | `( ,2,3)` | one, (0, 2, 3) |
+      | `(1,,3)` | none: the empty item is dropped, leaving two |
+      | `(1,2,3),(4,5` | one, (1, 2, 3): the unclosed group has two items |
+      | `(1,2,3),(4,5,67` | two, (1, 2, 3) and (4, 5, 6): an unclosed group with three items is an entry, and its last item loses its last digit |
+      | `( 7,+8,9z)` | one, (7, 8, 9) |
+      | `(1,2,3), (4,5,6)` | two, (1, 2, 3) and (0, 5, 6): the space after the comma is the removed first byte, and `(4` reads 0 |
+      | `junk(1,2,3)` | one, (0, 2, 3) |
+      | `(1,2,3)junk` | one, (1, 2, 3) |
+      | `1,2,3` | one, (0, 2, 0) |
+
+      So a group with a missing, extra or empty component shifts every later group, and a group
+      with too few items at the end of the list is not an entry. A list whose reading has no
+      entry, such as `(10,20)` alone, is an empty list for claim 15: it takes no colour draw.
+    - **Importer warning.** With either setting of `quirks.colour_list_item_triples`, the importer
+      warns when the value is not a clean list, that is when (a) this claim's reading and the
+      parenthesis-aware reading of the quirk's off setting (its groups as that setting defines
+      them) differ, (b) a component read by either reading has no digit, or bytes other than
+      whitespace follow its digits, (c) bytes other than whitespace and the separating commas lie
+      outside groups, an unclosed group included, or (d) that setting finds a malformed group,
+      or a well-formed group whose split at commas gives other than exactly three parts. So
+      `(1,2,00,4)`, which both readings read as (1, 2, 0), warns under (d).
+      It also warns when the 511-byte cut falls inside the list. The warning does not change the
+      result.
+    - Backing: `measurable` (R16) for the original's reading: the items, the entries, the
+      components with their decimal form, wrapping and modulo-256 reduction, the table and the
+      empty-list case. `unmeasured` for the 511-byte cut and the trailing-whitespace removal after
+      it, as for S-0003 claim 20's 511-byte limit, because S-0001's physical-line limit cuts a
+      value from a file sooner. The importer warning is a rule of our own (`design`), not an
+      observation of the original
+    - Confidence: high
+
 ## Formulas
 
 All arithmetic in this section is on integers, exact, unless it says otherwise. "mod 2³²" reduces
@@ -1060,10 +1121,10 @@ two 16-bit halves only for *B* < 2³¹.
 
 | *i* | *P*<sub>*i*</sub> | *Q*<sub>*i*</sub> |
 |---|---|---|
-| 0 | 3131664519 | 1259289432 |
-| 1 | 504877868 | 3899977923 |
-| 2 | 62708796 | 1767228838 |
-| 3 | 255054258 | 1437059654 |
+| 0 | 3 131 664 519 | 1 259 289 432 |
+| 1 | 504 877 868 | 3 899 977 923 |
+| 2 | 62 708 796 | 1 767 228 838 |
+| 3 | 255 054 258 | 1 437 059 654 |
 
 Test values (decimal):
 
@@ -1293,6 +1354,21 @@ overlay type stream and the starting units are not yet predicted draw by draw on
   of a session the two agree as long as the stream has given the same draws before the pattern is
   built; later games can show other ground images. Nothing else changes, since the pattern never
   reaches game state.
+- **`quirks.colour_list_item_triples`** (default: on, the original). Claim 17's reading of a
+  particle type's colour list ignores parentheses and takes comma-separated items in threes, so one
+  group with a missing, extra or empty component shifts every later group. Off: a parenthesis-aware
+  reading. The text is read from left to right. A group starts at an opening parenthesis and ends at
+  the first closing parenthesis after it; reading then continues after that closing parenthesis. A
+  group with no other opening parenthesis inside it is one entry. A group with another opening
+  parenthesis inside it is malformed and gives nothing, so `((1,2,3))` and `(1,(2,3)` give no entry,
+  and in the first the last closing parenthesis lies outside every group. Text outside groups, a
+  closing parenthesis with no opening one and an unclosed final group included, gives nothing.
+  Inside a well-formed group the text is split at every comma, empty parts kept; the first three
+  parts are the red, green and blue components, each read by claim 17's decimal form and reduced
+  modulo 256; a missing part or one without a digit gives 0, and parts after the third are ignored.
+  On a clean list the two readings agree. With either setting the importer warns under claim 17. The
+  off setting is a rule of our own (`design`): the original has no parenthesis-aware reading, so it
+  is not measurable on the original, and our engine's tests check it on its own.
 - **Identical starting states.** Both streams start each game from the same seed. A mod cannot
   change this, and our engine keeps it: it costs nothing and keeps the unsynchronised stream's
   first values the same as the original's for a given seed.
@@ -1317,7 +1393,7 @@ puts there. The placement rules of claim 10 read these keys:
 | `Scorch`, `Crater`, `ForceBigCraters` | an animation type's art section | boolean each | no each | smudge kind request and large-crater selection form in claim 15 at map load and during play; shared terrain-height gate belongs to S-0109 claim 14 |
 | `BehavesLike` | a particle type's rules section | case-insensitive name: Gas, Smoke, Fire, Spark or Railgun; at most 31 text bytes | no recognised behaviour (also for an unrecognised name or omitted key) | Smoke adds the speed raw value; Railgun uses lifetime modulus 10, every other value uses the lifetime field |
 | `MaxEC` | a particle type's rules section | signed integer | 1 at type creation; omitted or empty layered values keep the previous value | lifetime variation modulus for non-railgun particles; zero warns (claim 15) |
-| `ColorList` | a particle type's rules section | comma-separated parenthesised RGB triples, at most 511 text bytes; integer components reduced modulo 256 | empty, also when omitted or empty in a later layer | nonempty list enables the conditional starting-colour draw |
+| `ColorList` | a particle type's rules section | written as comma-separated parenthesised RGB triples, at most 511 text bytes; read as comma-separated items taken in threes, decimal components reduced modulo 256 (claim 17, `quirks.colour_list_item_triples`); malformed text warns | empty, also when omitted or empty in a later layer | a list with at least one entry enables the conditional starting-colour draw |
 | `StartColor1`, `StartColor2` | a particle type's rules section | generic byte triple each (S-0003 claim 11), components reduced modulo 256 | black each at type creation; omitted layered values keep the previous value | nonblack component in either colour enables interpolation when the list is nonempty |
 | `Normalized` | a particle type's rules section | boolean | no at type creation; omitted or empty layered values keep the previous value | normalised particle timing, no extra scenario-stream creation draw |
 | `OreTwinkle` | rules [General] | animation-type name, case-insensitive | no animation at database creation; omitted or empty layered values keep the value in force | resource-glint type for claim 14; its art settings determine applicable creation draws |
@@ -1368,13 +1444,13 @@ The recorder is part of the measurement setup (the project lead has approved it)
   the 250 seed values F(seed, *k*) and advance the recurrence step by step. The recorder gives the
   number of raw values taken only modulo 250 (its position): find the smallest count *N*, congruent
   to the position modulo 250, for which the computed state equals the recorded one.
-  *Expected:* such an *N* exists (well below 100000) in every game; the unsynchronised stream's
+  *Expected:* such an *N* exists (well below 100 000) in every game; the unsynchronised stream's
   state is the same seed's state advanced by some count; for the games of one session, the
   difference of two seeds, modulo 2³², equals the wall-clock time between their first ticks in
   milliseconds, within 10 seconds (the difference in loading time). A seed not taken from a
   millisecond counter lands in that window with chance about 5 in a million.
-  *Falsified if* no *N* up to 100000 matches in some game; the unsynchronised stream's state is not
-  the same seed's state advanced by any count up to 100000; or a seed difference falls outside the
+  *Falsified if* no *N* up to 100 000 matches in some game; the unsynchronised stream's state is not
+  the same seed's state advanced by any count up to 100 000; or a seed difference falls outside the
   window.
   *Secondary expectation* (for the counter's starting point only): each seed equals the host's
   uptime in milliseconds at the first tick, modulo 2³², minus at most 60 seconds of loading time. If
@@ -1658,10 +1734,10 @@ The recorder is part of the measurement setup (the project lead has approved it)
   state at the first tick; (d) in the first run, made as the first game of a fresh launch, the
   unsynchronised stream's state at its first reading equals the state computed from the seed
   that the recorder reads at that moment (the seeding at program start, claim 11), advanced by
-  some count up to 100000.
-  *Falsified if* a seed exceeds 65535 or no *N* up to 100000 matches; the seed matches none of
+  some count up to 100 000.
+  *Falsified if* a seed exceeds 65535 or no *N* up to 100 000 matches; the seed matches none of
   those raw values; the map-generator stream's state changes during play; in the first run, no
-  count up to 100000 matches the unsynchronised stream's first reading; or no game mode's map
+  count up to 100 000 matches the unsynchronised stream's first reading; or no game mode's map
   selection offers a random map. *Inconclusive if* the generator fails to produce a playable map.
   (e) *Setting 0.* 3 further runs, each the first game of a fresh launch, in which the screen is
   never asked to choose its settings at random: generate the map, use it and start the game, and
@@ -1923,6 +1999,69 @@ The recorder is part of the measurement setup (the project lead has approved it)
   S-0414 V12 c supplies the additional final-tick-defeat control: a committed win does not
   override the defeated house's exclusion from the bonus. Void runs with unaccounted
   scenario draws between the sampled end-of-play state and the score requests.
+
+- **R16, colour-list reading (claim 17; Q-1562).** A small purpose-made skirmish map with stock
+  data except named test rules, no engine add-on and no mods, speed 4 and 800 × 600 pixels, and
+  scripted input. Each run takes the seed the game chose (the recorder fixes none), so no part
+  relies on a test run and its control sharing a seed: part (a) uses an observable that does
+  not depend on the draws, and part (b) compares draw counts.
+  - **Part (a), entries.** The test rules give a spark-behaviour particle type both start colours
+    black, so a particle's first colour is entry 0 of its list without a colour draw (S-0616
+    claim 29 and F16), a colour speed of 2.0, and a lifetime long enough that it reaches the last
+    entry of the longest reading and is still shown there for several frames; a particle system
+    at a fixed point emits it. By F16 of S-0616 the random part of each update's colour progress
+    is smaller than 0.05 in size, so with that speed every update passes 1.0: each update moves
+    the particle on by exactly one entry and draws that entry unmixed, and at the last pair it
+    holds the last entry. The particle therefore shows its entries in list order whatever the
+    draws, and only their frame timing depends on the seed. Every test text and every control
+    begins with the same two clean, distinct triples, `(250,0,0),(0,250,0),`. A complete three
+    shifts nothing after it, so each reading has these two entries first. Every test text and
+    every control also ends with the same kind of suffix, so that every entry under test is a
+    middle entry, shown for exactly one update: first *p* filler items `,9)`, where *p* is the
+    number of items (0, 1 or 2) that claim 17's item rule needs to bring the prefix and the test
+    text to a whole number of threes, and then the clean sentinel triple `,(0,0,250)`. Choose
+    the scaled test values so that no predicted entry is (0, 0, 250); where one would be, use
+    another clean sentinel triple that differs from every predicted entry. The filler items join the leftover items of the test
+    text in one predicted entry by claim 17's rules: for `(200,100),(50,150,250)`, *p* = 1, and
+    the leftover `150` and `250)` with the filler give (50, 250, 9). Run the type once with each
+    test text of claim 17's table placed between the prefix and the suffix, with component
+    values scaled so that the nonzero components are clearly visible (for example 200, 100 and
+    50 in place of 10, 20 and 30), and once with its control: the prefix, the predicted entries
+    written cleanly, and the sentinel (for `(200,100),(50,150,250)` the control is
+    `(250,0,0),(0,250,0),(200,100,0),(50,250,9),(0,0,250)`). A shape with no entry of its own,
+    such as `(200,100)`, still gives the entry that its leftover items form with the filler,
+    (200, 100, 9) here; the empty-list case itself is part (b)'s.
+    Capture every frame of the particle's life. Each middle entry is shown for one update only,
+    so the recorder also logs the tick of every drawn and captured frame: a run in which any tick
+    of the particle's life has no drawn and captured frame is inconclusive and is repeated (as in
+    S-0616's frame-rate check). Observable: the colour the particle shows after each update, one
+    value per update, from its creation up to the first update that shows the sentinel. Equal
+    neighbouring entries, such as two (0, 0, 0) entries, are not merged: since each middle entry
+    is shown for exactly one update, the number of consecutive updates on one colour is the
+    number of entries of that colour. Expected: each test run shows the same per-update
+    sequence as its control, and reaches the sentinel after the same number of updates. A test
+    run whose sequence or count differs from its control's falsifies the rule, for example
+    `(200,100),(50,150,250)` showing two entries between the prefix and the filled-out entry, or a
+    reading that adds or drops a (0, 0, 0) entry, which reaches the sentinel one update late or
+    early.
+    Two more test texts, each placed after the prefix, separate the number reading from
+    readings a reimplementation might choose instead: `(1Fh,$20,-1)` gives the entry (1, 0, 255),
+    against (31, 32, 255) for a reader that applies S-0003's hexadecimal forms; and
+    `(300,-56,4294967340)` gives (44, 200, 44), against (44, 200, 255) for a reader that limits a
+    number to the 32-bit range instead of wrapping it, and (255, 0, 44) for one that limits each
+    component to 0 … 255 instead of reducing it modulo 256. Both are complete threes, so *p* = 0,
+    and their controls are the prefix, `(1,0,255)` or `(44,200,44)`, and the sentinel.
+  - **Part (b), the colour draw.** Claim 15's colour-draw gate does not depend on the behaviour
+    kind, so this part uses a smoke-behaviour particle type, which is drawn from its image and not
+    as pixels, with one start colour nonblack and no prefix. It uses R14 part A's setup and
+    recorder: a one-frame test animation whose middle event at map load creates one such
+    particle, with the scenario stream's state compared before and after the particle's creation
+    group. Run it with `(200,100)` alone, with an empty list, and with `(200,100,50)`. Expected:
+    the creation group is two draws (the smoke speed and the lifetime variation) in the first two
+    runs and three in the third. A third draw in either of the first two runs falsifies the
+    rule; no third draw in the third run means the setup does not reach the colour gate, and the part
+    must be repeated another way. The smoke update draws of S-0616 claim 6 come later and are not
+    part of the compared group.
 
 ## Open questions
 
