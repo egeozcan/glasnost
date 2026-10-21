@@ -36,6 +36,9 @@ pub struct Install {
     pub speech: Option<Document>,
     /// The samples found.
     pub bank: SoundBank,
+    /// The cursor palette as the session keeps it (S-0111 claim 19a),
+    /// read here, before any game, when the switch keeps it.
+    pub cursor_palette: super::session::CursorPaletteKeep,
     /// What was found, for the menu's status line.
     pub summary: String,
 }
@@ -186,6 +189,8 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
     let sounds = database(vfs, "soundmd.ini").await;
     let speech = database(vfs, "evamd.ini").await;
     let (bank, report) = bank::discover(vfs).await;
+    // spec: S-0111 claim 19a (with quirks.art_cache_never_invalidated on, the cursor palette is read once when the program starts, before any game)
+    let cursor_palette = super::session::CursorPaletteKeep::at_program_start(vfs).await;
     let summary = format!(
         "{} maps, {} countries, {} samples",
         maps.len(),
@@ -201,6 +206,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         sounds,
         speech,
         bank,
+        cursor_palette,
         summary,
     })
 }

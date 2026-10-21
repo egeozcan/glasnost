@@ -493,7 +493,10 @@ mod tests {
         // S-0005's switches (the file lookup's), which S-0111 claim 19a names for the cursor
         // palette; every default is the original.
         let files = glasnost_vfs::GameQuirks::default().named();
-        assert!(files.iter().all(|(_, v)| *v), "every default is the original");
+        assert!(
+            files.iter().all(|(_, v)| *v),
+            "every default is the original"
+        );
         have.extend(files.map(|(n, _)| n));
         // A listed name must not also be a field.
         for (n, _) in NOT_IMPLEMENTED {

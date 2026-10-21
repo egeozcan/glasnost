@@ -3898,8 +3898,69 @@ fn bomb_assets() -> super::build::Assets {
         super::tests::shp((10, 10), 12, (2, 2), (4, 4)),
     );
     let pal: Vec<u8> = (0..768u32).map(|i| (i * 3 % 64) as u8).collect();
-    assets.insert(super::combat::MOUSE_PALETTE, pal);
+    assets.insert(super::combat::CURSOR_PALETTE, pal);
     assets
+}
+
+/// A bomb on the combat scene's cart, drawn with `assets` in a fresh game
+/// (the drawing caches what it loaded): the cart's status items in
+/// painting order, the first pixel of each, the icon's F3 frame, the
+/// cart's projected position and the notes.
+fn bomb_run(
+    assets: &super::build::Assets,
+) -> (
+    Vec<glasnost_render::scene::Item>,
+    Vec<u8>,
+    usize,
+    (i32, i32),
+    std::collections::BTreeSet<String>,
+) {
+    use glasnost_render::scene::Group;
+    let (mut live, mut scene, map, import, catalogue, cart, _) =
+        combat_live_with(3, assets.clone());
+    let tick = live.world.tick;
+    live.world.obj_mut(cart).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
+        planter: None,
+        house: Some(HouseId(0)),
+        planted: (tick - 1).max(0),
+    });
+    // spec: S-0519 claim 10 (the planter's house sees the bomb)
+    live.set_viewer(Some(HouseId(0)));
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_marks(&[cart], None);
+    live.redraw_status(&inputs, &mut scene);
+    let status: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+        .copied()
+        .collect();
+    let g = &live.rules.combat.general.ivan;
+    let shown = (tick - 1).max(0);
+    let frame = super::combat::bomb_frame(shown, shown, g.delay, g.flicker);
+    let p = live.world.obj(cart).unwrap().pos;
+    let pixels: Vec<u8> = status
+        .iter()
+        .map(|i| scene.images[i.image as usize].pixels()[0])
+        .collect();
+    (
+        status,
+        pixels,
+        frame,
+        project_lifted(p.x, p.y, p.z),
+        live.notes.clone(),
+    )
 }
 
 /// spec: S-0519 claim 24 (the bomb icon: the F3 image frame of the bomb sprite through the cursor
@@ -3908,51 +3969,7 @@ fn bomb_assets() -> super::build::Assets {
 /// (a missing image: no icon is drawn, and a warning)
 #[test]
 fn bomb_icon_claim24() {
-    use glasnost_render::scene::Group;
-    // A fresh game for each asset set: the drawing caches what it loaded.
-    let run = |assets: &super::build::Assets| {
-        let (mut live, mut scene, map, import, catalogue, cart, _) =
-            combat_live_with(3, assets.clone());
-        let tick = live.world.tick;
-        live.world.obj_mut(cart).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
-            planter: None,
-            house: Some(HouseId(0)),
-            planted: (tick - 1).max(0),
-        });
-        // spec: S-0519 claim 10 (the planter's house sees the bomb)
-        live.set_viewer(Some(HouseId(0)));
-        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
-        let options = Options::default();
-        let inputs = Inputs {
-            map: &map,
-            import: &import,
-            catalogue: &catalogue,
-            palettes: &palettes,
-            assets,
-            options: &options,
-            rules: None,
-            cells: None,
-        };
-        live.set_marks(&[cart], None);
-        live.redraw_status(&inputs, &mut scene);
-        let status: Vec<_> = scene
-            .items
-            .iter()
-            .filter(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
-            .copied()
-            .collect();
-        let g = &live.rules.combat.general.ivan;
-        let shown = (tick - 1).max(0);
-        let frame = super::combat::bomb_frame(shown, shown, g.delay, g.flicker);
-        let p = live.world.obj(cart).unwrap().pos;
-        let pixels: Vec<u8> = status
-            .iter()
-            .map(|i| scene.images[i.image as usize].pixels()[0])
-            .collect();
-        let warned = live.notes.contains(super::live::BOMB_ICON_MISSING);
-        (status, pixels, frame, project_lifted(p.x, p.y, p.z), warned)
-    };
-    let (status, pixels, frame, (ax, ay), warned) = run(&bomb_assets());
+    let (status, pixels, frame, (ax, ay), notes) = bomb_run(&bomb_assets());
     let icon = status[0];
     // Frame f is a block of value f + 1.
     assert_eq!(pixels[0], frame as u8 + 1);
@@ -3965,10 +3982,74 @@ fn bomb_icon_claim24() {
         }
         other => panic!("unexpected paints {other:?}"),
     }
-    assert!(!warned);
+    assert!(notes.is_disjoint(&std::collections::BTreeSet::from([
+        super::live::BOMB_ICON_MISSING.to_owned(),
+        super::live::CURSOR_PALETTE_MISSING.to_owned()
+    ])));
     // Without the bomb sprite: no icon, and the importer's warning (at load, whether or not a bomb
     // shows).
-    let (none, _, _, _, warned) = run(&overlay_assets());
+    let mut no_sprite = bomb_assets();
+    no_sprite.set(super::combat::BOMB_SPRITE, None);
+    let (none, _, _, _, notes) = bomb_run(&no_sprite);
     assert_eq!(none.len(), status.len() - 1);
-    assert!(warned);
+    assert!(notes.contains(super::live::BOMB_ICON_MISSING));
+    assert!(!notes.contains(super::live::CURSOR_PALETTE_MISSING));
+}
+
+/// spec: S-0111 claim 19a and Edge cases (missing cursor palette: our engine draws no bomb icon,
+/// and the importer warns once, naming the file), S-0111 Import mapping (the bomb sprite's
+/// palette is the cursor palette MOUSEPAL.PAL)
+#[test]
+fn cursor_palette_missing_claim19a() {
+    assert_eq!(super::combat::CURSOR_PALETTE, b"MOUSEPAL.PAL");
+    assert!(
+        super::live::CURSOR_PALETTE_MISSING.contains("MOUSEPAL.PAL"),
+        "the warning names the file"
+    );
+    let (with, ..) = bomb_run(&bomb_assets());
+    let mut assets = bomb_assets();
+    assets.set(super::combat::CURSOR_PALETTE, None);
+    let (status, _, _, _, notes) = bomb_run(&assets);
+    // The bar and the bracket only: no icon, and one warning, not the sprite's.
+    assert_eq!(status.len(), with.len() - 1);
+    assert!(notes.contains(super::live::CURSOR_PALETTE_MISSING));
+    assert!(!notes.contains(super::live::BOMB_ICON_MISSING));
+    // Given at load, whether or not a bomb shows; the game client's kept copy withdraws it.
+    let (mut live, ..) = combat_live_with(3, assets.clone());
+    assert!(live.notes.contains(super::live::CURSOR_PALETTE_MISSING));
+    live.note_cursor_palette(&bomb_assets());
+    assert!(!live.notes.contains(super::live::CURSOR_PALETTE_MISSING));
+    live.note_cursor_palette(&assets);
+    assert!(live.notes.contains(super::live::CURSOR_PALETTE_MISSING));
+}
+
+/// spec: S-0111 claim 19a, S-0103 claim 1 and Edge cases (the cursor palette's components become
+/// (4·c) mod 256, so 64 to 79 wrap to 0 to 60; with quirks.palette_component_wrap off, a component
+/// above 63 becomes 252: OV14 palette part e's engine fixture)
+#[test]
+fn cursor_palette_component_wrap() {
+    use super::combat::cursor_palette;
+    // Entry n has all three components n mod 80.
+    let file: Vec<u8> = (0..256u32).flat_map(|n| [(n % 80) as u8; 3]).collect();
+    let on = cursor_palette(&file, &PaletteQuirks::default()).unwrap();
+    let off = cursor_palette(
+        &file,
+        &PaletteQuirks {
+            palette_component_wrap: false,
+            ..PaletteQuirks::default()
+        },
+    )
+    .unwrap();
+    for n in 0..256usize {
+        let c = (n % 80) as u8;
+        let (a, b) = (on.colors[n], off.colors[n]);
+        assert_eq!([a.r, a.g, a.b], [c.wrapping_mul(4); 3], "entry {n}");
+        let cut = if c > 63 { 252 } else { 4 * c };
+        assert_eq!([b.r, b.g, b.b], [cut; 3], "entry {n}");
+    }
+    // 64 wraps to 0 and 79 to 60; 63 gives 252 in both settings.
+    assert_eq!((on.colors[64].r, off.colors[64].r), (0, 252));
+    assert_eq!((on.colors[79].r, off.colors[79].r), (60, 252));
+    assert_eq!((on.colors[63].r, off.colors[63].r), (252, 252));
+    assert!(cursor_palette(b"short", &PaletteQuirks::default()).is_none());
 }

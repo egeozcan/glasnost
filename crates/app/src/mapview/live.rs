@@ -1044,12 +1044,11 @@ impl Live {
         for (_, e, key) in entrants {
             live.ground.enter(e, key);
         }
-        // spec: S-0519 Import mapping (a missing bomb-icon image draws no icon, and the importer warns); S-0111 Import mapping (its palette MOUSE.PAL)
-        if inputs.assets.get(combat::BOMB_SPRITE).is_none()
-            || inputs.assets.get(combat::MOUSE_PALETTE).is_none()
-        {
+        // spec: S-0519 Import mapping (a missing bomb-icon image draws no icon, and the importer warns)
+        if inputs.assets.get(combat::BOMB_SPRITE).is_none() {
             live.notes.insert(BOMB_ICON_MISSING.to_owned());
         }
+        live.note_cursor_palette(inputs.assets);
         live.redraw(inputs, &mut built.scene);
         live
     }
@@ -1467,6 +1466,20 @@ impl Live {
     /// viewer's default) or only art (`false`, the game client).
     pub fn set_debug_markers(&mut self, on: bool) {
         self.debug_markers = on;
+    }
+
+    /// Gives or withdraws the missing-cursor-palette note for the game's
+    /// cursor palette in `assets` (S-0111 claim 19a: with no cursor
+    /// palette, neither the wrench nor the bomb icon is drawn, and the
+    /// importer warns once, naming the file). The game client calls it
+    /// again when it puts the session's kept copy in place.
+    pub fn note_cursor_palette(&mut self, assets: &super::build::Assets) {
+        // spec: S-0111 claim 19a and Edge cases (missing cursor palette: a departure; one warning naming the file)
+        if assets.get(combat::CURSOR_PALETTE).is_none() {
+            self.notes.insert(CURSOR_PALETTE_MISSING.to_owned());
+        } else {
+            self.notes.remove(CURSOR_PALETTE_MISSING);
+        }
     }
 
     /// Sets the house whose eyes the cloak drawing uses (S-0516 claims 28
@@ -3264,9 +3277,14 @@ impl Live {
                     .bomb_item(scene, inputs.assets, at, frame, Some(sim_code(o.id)))
                 {
                     Some(item) => items.push(item),
-                    // spec: S-0519 Import mapping (missing bomb-icon image or palette: no icon is drawn; the importer warns)
+                    // spec: S-0519 Import mapping (missing bomb-icon image: no icon is drawn; the importer warns); S-0111 claim 19a (missing cursor palette: likewise, its own warning)
                     None => {
-                        self.notes.insert(BOMB_ICON_MISSING.to_owned());
+                        let note = if inputs.assets.get(combat::CURSOR_PALETTE).is_some() {
+                            BOMB_ICON_MISSING
+                        } else {
+                            CURSOR_PALETTE_MISSING
+                        };
+                        self.notes.insert(note.to_owned());
                     }
                 }
             }
@@ -3528,8 +3546,13 @@ pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
     i64::from(o.pos.x) + i64::from(o.pos.y)
 }
 
-/// The note for a bomb icon that cannot be drawn (S-0519 Import mapping).
-pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP, its image frame or the cursor palette MOUSE.PAL is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+/// The note for a bomb icon whose image cannot be drawn (S-0519 Import
+/// mapping).
+pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP or its image frame is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+
+/// The note for a missing cursor palette, given once (S-0111 claim 19a and
+/// Edge cases: our engine's departure, no switch).
+pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is missing: neither the repair wrench nor the bomb icon is drawn (S-0111 claim 19a)";
 
 /// The shadow height *h*ₛ of infantry unit `o`'s generic shadow, or `None`
 /// when it draws none (S-0107 claim 19 b and c): only off the surface, and

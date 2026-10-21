@@ -64,6 +64,8 @@ pub enum Job {
         /// The house played from here (a network game's slot); `None`: the
         /// first person's house.
         local: Option<HouseId>,
+        /// The session's cursor palette keep (S-0111 claim 19a).
+        cursor: super::session::CursorPaletteKeep,
     },
 }
 
@@ -101,13 +103,14 @@ pub async fn run_job(job: Job) -> Done {
             seed,
             speech,
             local,
+            cursor,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
                 // takes it too (S-0412 claims 6 and 7)
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
-            let r = Session::start(&mut vfs, &file, &make, local).await;
+            let r = Session::start(&mut vfs, &file, &make, local, &cursor).await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
                 let set = local_voice_set(&s.play.game.world, Some(s.play.local));
@@ -386,6 +389,7 @@ impl Client {
                 .map(SpeechCatalog::from_ini)
                 .unwrap_or_default(),
             local: None,
+            cursor: install.cursor_palette.clone(),
         });
     }
 

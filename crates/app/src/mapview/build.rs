@@ -63,6 +63,16 @@ impl Assets {
         self.files.insert(name.to_ascii_uppercase(), bytes);
     }
 
+    /// Puts `bytes` in place of the file `name`, or removes it with `None`.
+    pub fn set(&mut self, name: &[u8], bytes: Option<Vec<u8>>) {
+        match bytes {
+            Some(b) => self.insert(name, b),
+            None => {
+                self.files.remove(&name.to_ascii_uppercase());
+            }
+        }
+    }
+
     /// A file by name, ignoring case.
     pub fn get(&self, name: &[u8]) -> Option<&[u8]> {
         self.files
@@ -828,7 +838,7 @@ pub fn wanted_files(
         super::combat::OVERLAY_PALETTE,
         // spec: S-0519 claim 24 and S-0111 Import mapping (the bomb icon and its cursor palette)
         super::combat::BOMB_SPRITE,
-        super::combat::MOUSE_PALETTE,
+        super::combat::CURSOR_PALETTE,
     ] {
         out.insert(upper(f));
     }

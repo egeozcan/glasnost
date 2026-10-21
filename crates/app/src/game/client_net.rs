@@ -494,6 +494,7 @@ impl Client {
                 .map(glasnost_audio::speech::SpeechCatalog::from_ini)
                 .unwrap_or_default(),
             local: Some(HouseId(slot.house)),
+            cursor: install.cursor_palette.clone(),
         };
         self.session = None;
         self.status = "Loading the map...".into();
