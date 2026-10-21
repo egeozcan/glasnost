@@ -61,7 +61,8 @@ docs/development.md), before and after.
 | B3 | **The dominator takes units on stock data.** In the 4d rerun every launch took nothing: the seen enemy units at the best cell were immune by data or in the air. Check the aim's candidates against the takeover rules of S-0612 claims 13 and 14, and aim where takeable units stand. Fire for damage only when no cell offers any. | In the full games where the dominator is launched, most launches take at least one object. |
 | B4 | **Gate margins that do not hang on one seed or quirk.** Each duel gate's ability counters stay above zero over seeds 1 to 32, not only at the chosen seed, and with each quirk switch the duel reaches flipped. Fix by setup, as in M7b steps 2a and 2b, unless the AI itself is at fault. | A sweep table in the ledger: the minimum and median of each counter over 32 seeds. No zeros. |
 
-B1 and B2 both change `Brain::economy_first`, so they share one branch. B3 and B4 can run beside them.
+B1 and B2 both change `Brain::economy_first`, so they share one branch. B3 runs beside them. B4 comes
+after B1 to B3, since their AI changes move the gate counters it sets margins for.
 
 ## Track C: polish
 
