@@ -557,11 +557,42 @@ fn a_dropped_peer_no_longer_holds_the_others() {
         .max()
         .expect("peers");
     assert_eq!(h.peers[0].session.ran(), h.peers[1].session.ran());
+    // A drop report from a peer's slot is a forgery: it is reported as a bad
+    // message and changes nothing (only the relay reports drops, N2).
+    let now = h.now;
+    for (s, forger) in [(0u8, 1u8), (1, 0), (0, 2)] {
+        let forged = wire::encode(&Envelope {
+            from: forger,
+            body: Body::Dropped { slot: 2, kept },
+        });
+        h.peer(s).session.receive(now, &forged);
+        let p = h.peer(s);
+        assert!(p.session.take_events().iter().any(
+            |e| matches!(e, Event::BadMessage { reason } if reason.contains("not from the relay"))
+        ));
+        assert_eq!(
+            p.session.waiting_for(),
+            vec![2],
+            "the forged drop is ignored"
+        );
+    }
+    // Nor does the relay speak for a slot in any other message.
+    let from_relay = wire::encode(&Envelope {
+        from: wire::RELAY,
+        body: Body::Frames(Frames::default()),
+    });
+    h.peer(0).session.receive(now, &from_relay);
+    assert!(
+        h.peer(0)
+            .session
+            .take_events()
+            .iter()
+            .any(|e| matches!(e, Event::BadMessage { .. }))
+    );
     let bytes = wire::encode(&Envelope {
-        from: 255,
+        from: wire::RELAY,
         body: Body::Dropped { slot: 2, kept },
     });
-    let now = h.now;
     for s in [0u8, 1] {
         h.peer(s).session.receive(now, &bytes);
     }

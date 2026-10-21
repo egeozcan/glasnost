@@ -7,13 +7,20 @@
 //! |---|---|
 //! | 0, 1 | the magic `G`, `N` |
 //! | 2 | [`WIRE_VERSION`] |
-//! | 3 | the sender's slot |
+//! | 3 | the sender's slot, or [`RELAY`] for the relay's own messages |
 //! | 4 … | the [`Body`] in postcard |
 //!
 //! The header is read before the body, so a peer of another wire version is
 //! refused by name ([`WireError::Version`]) even when its body cannot be
 //! read. Every message is sent to every other peer of the session (the
 //! relay of N2 forwards it, a mesh transport copies it to each link).
+//!
+//! Only the relay speaks as [`RELAY`], and only the relay sends
+//! [`Body::Dropped`]: it checks the sender byte of every message it forwards
+//! against the sender's slot and never forwards a `Dropped` from a client,
+//! and a session takes a `Dropped` only from [`RELAY`] (N2). Version 2 added
+//! that rule and the lobby's messages ([`crate::lobby::wire`]), which share
+//! this version.
 //!
 //! This is our own protocol (docs/development.md, *Multiplayer (M9)*); it is
 //! not compatible with the original game's clients.
@@ -29,7 +36,12 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 1;
+pub const WIRE_VERSION: u8 = 2;
+
+/// The sender byte of the relay's own messages. No slot table has this many
+/// slots (a game has at most eight players), so no peer has this slot.
+// nocite: our own netcode
+pub const RELAY: u8 = 255;
 
 /// Length of the header before the body.
 // nocite: our own netcode (magic, version, slot)
@@ -56,8 +68,9 @@ pub enum Body {
     /// Frames, acknowledgements, round-trip echoes and state hashes.
     Frames(Frames),
     /// A slot has left the session: its frames from number `kept` on are
-    /// empty and no longer awaited. The relay (N2) sends it after the last
-    /// frame of that slot it forwarded; N5 adds the surrender order.
+    /// empty and no longer awaited. Only the relay sends it, as [`RELAY`],
+    /// after the last frame of that slot it forwarded to every other peer;
+    /// N5 adds the surrender order.
     Dropped {
         /// The slot that left.
         slot: u8,

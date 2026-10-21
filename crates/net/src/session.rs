@@ -275,8 +275,13 @@ pub struct Session {
 
 impl Session {
     /// A session for the peer of slot `me` (a person's slot of the table),
-    /// starting from `info`, with the caller's clock at `now_ms`.
+    /// starting from `info`, with the caller's clock at `now_ms`. A table
+    /// that reaches the relay's sender id ([`wire::RELAY`]) is refused on
+    /// the field *slot table*.
     pub fn new(cfg: Config, info: StartInfo, me: u8, now_ms: u64) -> Result<Self, Field> {
+        if info.slots.len() > usize::from(wire::RELAY) {
+            return Err(Field::Slots);
+        }
         if !info.is_human(me) {
             return Err(Field::Slot);
         }
@@ -434,12 +439,22 @@ impl Session {
             }
         };
         let from = env.from;
-        if let Body::Dropped { slot, kept } = env.body {
-            self.drop_slot(slot, kept);
-            return;
+        // Only the relay reports a drop, and the relay sends nothing else
+        // of this protocol (N2): a drop from a peer's slot is a forgery, and
+        // is never applied.
+        match (from, env.body) {
+            (wire::RELAY, Body::Dropped { slot, kept }) => self.drop_slot(slot, kept),
+            (wire::RELAY, _) => self.bad("the relay sends only drop reports".into()),
+            (_, Body::Dropped { slot, .. }) => self.bad(format!(
+                "a drop report for slot {slot} from slot {from}, not from the relay"
+            )),
+            (_, body) => self.on_message(now_ms, from, body),
         }
+    }
+
+    fn on_message(&mut self, now_ms: u64, from: u8, body: Body) {
         let Some(r) = self.remotes.get_mut(&from) else {
-            match env.body {
+            match body {
                 Body::Start(_) => self.refuse(from, Field::Slot),
                 _ => self.bad(format!(
                     "a message from slot {from}, not another person's slot"
@@ -452,7 +467,7 @@ impl Session {
             r.silent = false;
             self.events.push_back(Event::Heard { slot: from });
         }
-        match env.body {
+        match body {
             Body::Start(info) => {
                 if matches!(self.phase, Phase::Refused { .. }) || r.started {
                     return;
