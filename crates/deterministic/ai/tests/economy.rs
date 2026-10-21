@@ -13,6 +13,10 @@
 //!   miner); a house that knew a field and knows none any more wants no
 //!   harvester; with money beyond a harvester and the cheapest army unit,
 //!   a house builds its army beside an extra harvester past the plan's.
+//! - M8 step B2: a house saves for a superweapon building (holds its
+//!   army items that still owe money) while the building owes more than
+//!   the money in hand and the house is safe, which now also means not
+//!   losing a fight.
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
@@ -478,4 +482,112 @@ fn keeps_training_while_outnumbered() {
         "{orders:?}"
     );
     assert_eq!(brain.special_uses().superweapon_holds, 0);
+}
+
+/// Runs `w` to the next think tick.
+fn to_think(w: &mut World) {
+    testkit::run(w, 1);
+    while w.tick % glasnost_ai::scripted::THINK_PERIOD != 0 {
+        testkit::run(w, 1);
+    }
+}
+
+/// The item of `t` on house 0's lines.
+fn item_of(w: &World, t: TypeRef) -> glasnost_sim::econ::production::Item {
+    w.econ
+        .lines
+        .lines
+        .iter()
+        .filter(|l| l.house == H)
+        .filter_map(|l| l.item.as_ref())
+        .find(|i| i.t == t)
+        .cloned()
+        .expect("the item on its line")
+}
+
+// S-0404 claim 4 (a step is paid from the money in hand) and PLAN §4.7 (M7b AI round 3, kept in M8 step B2): with the superweapon building's whole balance in hand the house keeps training; with one credit less, every credit the army spends is one the building needs, and it holds the army, but not a held or finished item.
+#[test]
+fn holds_the_army_only_while_the_balance_is_not_in_hand() {
+    let map = fixture::map();
+    let (mut w, silo, soldier) = saving_for_a_silo();
+    to_think(&mut w);
+    let owed = item_of(&w, silo).owed;
+    assert!(owed > 1);
+    let holds = |credits: i32| {
+        let mut w = w.clone();
+        w.houses[0].credits = credits;
+        let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+        let orders = brain.think(&w);
+        orders.contains(&Order::Hold { what: soldier })
+    };
+    assert!(!holds(owed));
+    assert!(holds(owed - 1));
+}
+
+// S-0404 claim 5 (the hold order) and PLAN §4.7 (M8 step B1): while the house saves for the superweapon building, a yard vehicle on its line (bought to expand) is held with the army; with the balance in hand it runs on.
+#[test]
+fn holds_an_expansion_yard_vehicle_while_saving() {
+    let map = fixture::map();
+    let (mut w, silo, _) = saving_for_a_silo();
+    let mcv = TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, "MCV").unwrap(),
+    };
+    assert!(
+        orders::issue(&mut w, H, Order::Build { what: mcv }),
+        "{:?}",
+        tech::answer(&w, H, mcv)
+    );
+    to_think(&mut w);
+    assert_eq!(item_of(&w, mcv).hold, Hold::None);
+    let owed = item_of(&w, silo).owed;
+    let holds = |credits: i32| {
+        let mut w = w.clone();
+        w.houses[0].credits = credits;
+        let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+        brain.think(&w).contains(&Order::Hold { what: mcv })
+    };
+    assert!(holds(owed - 1));
+    assert!(!holds(owed));
+}
+
+// PLAN §4.7 (M8 step B2): a house losing a fight away from its base (seen enemy army units shoot at its objects and are worth at least its own army units there) keeps training while it saves for the superweapon building, though it is not outnumbered overall.
+#[test]
+fn keeps_training_while_losing_a_fight() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    for d in 0..4 {
+        testkit::spawn(
+            &mut w,
+            Kind::Infantry,
+            "WALKER",
+            0,
+            fixture::at(-10, 12 + d),
+            0,
+        );
+    }
+    let mine = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, fixture::at(4, 3), 0);
+    let shooters: Vec<_> = (0..2)
+        .map(|d| testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, fixture::at(4, d), 0))
+        .collect();
+    glasnost_sim::econ::shroud::area_reveal(
+        &mut w,
+        H,
+        glasnost_sim::world::Pos::centre(fixture::at(4, 0), 0),
+        5,
+    );
+    to_think(&mut w);
+    let holds = |w: &World| {
+        let mut brain = Brain::with_plan(w, &map, H, plan(2));
+        brain.think(w).contains(&Order::Hold { what: soldier })
+    };
+    for &s in &shooters {
+        w.obj_mut(s).unwrap().target = None;
+    }
+    // Not shot at: the house saves.
+    assert!(holds(&w));
+    for &s in &shooters {
+        w.obj_mut(s).unwrap().target = Some(glasnost_sim::world::Target::Object(mine));
+    }
+    assert!(!holds(&w));
 }

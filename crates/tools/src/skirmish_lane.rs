@@ -717,7 +717,7 @@ fn play_ai(
                     }
                 }
                 println!(
-                    "exprobe tick {} house {}: yards {} units {} (idle {}) lined {} buildable {} (yard vehicle types {}, fewest unmet prerequisites {:?}, unblocking building {:?}) cost {} credits {} explored {} worked {} own-half unworked {} field {} harvesters-kept {} intruders {} selling {} paying {} saving {}; blocked by {:?}",
+                    "exprobe tick {} house {}: yards {} units {} (idle {}) lined {} buildable {} (yard vehicle types {}, fewest unmet prerequisites {:?}, unblocking building {:?}) cost {} credits {} explored {} worked {} own-half unworked {} field {} harvesters-kept {} intruders {} selling {} paying {} economy-kept {} outnumbered {} losing {} saving {} superweapon building {}; blocked by {:?}",
                     w.tick,
                     h.0,
                     p.yards,
@@ -738,7 +738,11 @@ fn play_ai(
                     p.intruders,
                     p.selling,
                     p.paying,
+                    p.economy_kept,
+                    p.outnumbered,
+                    p.losing,
                     p.saving,
+                    p.superweapon_building,
                     blocked
                 );
             }
@@ -2676,8 +2680,8 @@ fn report(
                 .enumerate()
                 .map(|(h, u)| {
                     format!(
-                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {} plants first {} economy defence {} curtained buildings {} superweapon holds {} expansion builds {} expansion moves {} anti-air builds {}",
-                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads, u.plants_first, u.economy_defence, u.curtained_buildings, u.superweapon_holds, u.expansion_builds, u.expansion_moves, u.anti_air_builds
+                        "house {h} garrison {} capture {} (tech buildings {}) infiltrate {} jumpjets {} deploys {} radiation exits {} erasures {} prisms {} overpowerable buildings {} charges {} bombs {} disarms {} suicides {} sabotages {} strikes {} crates {} berserk attacks {} psychic sensors {} psychic reveals {} mind control {} gattling defences {} spins kept {} absorber entries {} grinder entries {} bunker builds {} bunker entries {} bunker exits {} lifter builds {} lift orders {} lift drop orders {} drainer builds {} drain orders {} mutator launches {} dominator launches {} economy holds {} resumes {} gunner loads {} plants first {} economy defence {} curtained buildings {} superweapon holds {} expansion builds {} expansion moves {} expansion unblocks {} anti-air builds {}",
+                        u.garrisons, u.engineers, u.tech, u.spies, u.jumps, u.deploys, u.radiation, u.erasures, u.prisms, u.overpowerables, u.charges, u.bombs, u.disarms, u.suicides, u.sabotages, u.strikes, u.crates, u.berserks, u.sensors, u.reveals, u.takeovers, u.gattling_defences, u.spins_kept, u.absorbs, u.grinds, u.bunker_builds, u.bunker_entries, u.bunker_exits, u.lifter_builds, u.lift_orders, u.lift_drops, u.drainer_builds, u.drain_orders, u.mutator_launches, u.dominator_launches, u.economy_holds, u.resumes, u.gunner_loads, u.plants_first, u.economy_defence, u.curtained_buildings, u.superweapon_holds, u.expansion_builds, u.expansion_moves, u.expansion_unblocks, u.anti_air_builds
                     )
                 })
                 .collect();

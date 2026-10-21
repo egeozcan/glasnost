@@ -9,12 +9,19 @@
 //!   half of the map, drives it to that field and deploys it there; a
 //!   poor house, or one with no far field, builds none (tuning of our own
 //!   opponent).
+//! - M8 step B1: a house with its economy whole and no superweapon
+//!   building short of money buys the yard vehicle step by step like any
+//!   item, without twice its cost in hand (S-0404 claim 4: no money is
+//!   needed to start an item); and while the yard vehicle waits on an
+//!   unmet prerequisite, the house builds what clears it (S-0407 claim 8).
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::{fixture, game::Game};
 use glasnost_map::{CellXY, Map};
 use glasnost_sim::orders::Order;
-use glasnost_sim::rules::{Behaviour, Kind};
+use std::sync::Arc;
+
+use glasnost_sim::rules::{Behaviour, Kind, SimRules};
 use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, Target, World};
 
@@ -80,8 +87,13 @@ fn free(w: &World, c: CellXY) -> bool {
 /// A skirmish on `map` once house 0's weapons factory and two harvesters
 /// (the plan's) stand.
 fn built_up(map: &Map) -> Game {
+    built_up_with(map, fixture::rules())
+}
+
+/// [`built_up`] under `rules`.
+fn built_up_with(map: &Map, rules: Arc<SimRules>) -> Game {
     let mut g = Game::new(
-        fixture::rules(),
+        rules,
         map,
         "synthetic-expansion",
         fixture::catalogue(),
@@ -144,21 +156,114 @@ fn a_rich_house_with_a_far_field_builds_a_yard_vehicle() {
     assert_eq!(builds, 0);
 }
 
-// Tuning of our own opponent: a house with less than twice a yard vehicle's cost in hand builds none to expand.
+/// The yard vehicle type.
+fn mcv(w: &World) -> glasnost_sim::econ::TypeRef {
+    glasnost_sim::econ::TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, "MCV").unwrap(),
+    }
+}
+
+/// A building type by name.
+fn building(w: &World, n: &str) -> glasnost_sim::econ::TypeRef {
+    glasnost_sim::econ::TypeRef {
+        kind: Kind::Building,
+        index: w.rules().index_of(Kind::Building, n).unwrap(),
+    }
+}
+
+/// A cell south of house 0's yard where building `b` may be placed.
+fn room_for(w: &World, b: glasnost_sim::econ::TypeRef) -> CellXY {
+    let yard = w.obj(of(w, "YARD")[0]).unwrap().pos.cell();
+    (4..24)
+        .flat_map(|d| (-6..=6).map(move |dx| CellXY::new(yard.x + dx, yard.y + d)))
+        .find(|&c| {
+            glasnost_sim::econ::placement::cell_test(
+                w,
+                b.index,
+                c,
+                &glasnost_sim::econ::placement::Test::order(H),
+            )
+        })
+        .expect("room for the building")
+}
+
+// Tuning of our own opponent (M8 step B1) and S-0404 claim 4 (no money is needed to start an item): a house with less than twice a yard vehicle's cost in hand still builds one when it keeps its harvesters and no superweapon building is short of money.
 #[test]
-fn a_poor_house_builds_no_yard_vehicle() {
+fn a_house_with_its_economy_whole_builds_a_yard_vehicle_step_by_step() {
     let map = far_field_map();
     let g = built_up(&map);
     let mut w = g.world.clone();
     scout(&mut w);
-    let mcv = glasnost_sim::econ::TypeRef {
-        kind: Kind::Vehicle,
-        index: w.rules().index_of(Kind::Vehicle, "MCV").unwrap(),
-    };
-    w.houses[0].credits = 2 * glasnost_sim::econ::production::cost_field(&w, mcv) - 1;
+    w.houses[0].credits = 2 * glasnost_sim::econ::production::cost_field(&w, mcv(&w)) - 1;
+    let (orders, builds, _) = think(&mut w, &map);
+    assert!(builds_mcv(&w, &orders), "{orders:?}");
+    assert_eq!(builds, 1);
+}
+
+// Tuning of our own opponent (M8 step B1) and S-0404 claim 4 (a step waits for money it lacks): a poor house saving for a superweapon building that is short of money builds no yard vehicle.
+#[test]
+fn a_poor_house_saving_for_a_superweapon_builds_no_yard_vehicle() {
+    let map = far_field_map();
+    let g = built_up(&map);
+    let mut w = g.world.clone();
+    scout(&mut w);
+    let lab = building(&w, "LAB");
+    let at = room_for(&w, lab);
+    testkit::spawn(&mut w, Kind::Building, "LAB", 0, at, 0);
+    // The sidebar offers SILO once the house has been updated with LAB.
+    testkit::run(&mut w, 60);
+    w.houses[0].credits = 1;
+    let silo = building(&w, "SILO");
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        H,
+        Order::Build { what: silo }
+    ));
     let (orders, builds, _) = think(&mut w, &map);
     assert!(!builds_mcv(&w, &orders), "{orders:?}");
     assert_eq!(builds, 0);
+    let probe = Brain::with_plan(&w, &map, H, fixture::plan()).expansion_probe(&w);
+    assert!(probe.saving, "{probe:?}");
+    assert!(probe.blocked_by().contains(&"not rich"), "{probe:?}");
+}
+
+/// The fixture's rules with DEPOT, a plain building that no army type
+/// needs, as the yard vehicle's prerequisite.
+fn depot_rules() -> Arc<SimRules> {
+    let mut r = fixture::ruleset();
+    r.sim
+        .buildings
+        .insert("DEPOT".into(), fixture::building(2, 2, 500, -10));
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("DEPOT".into());
+    r.sim.vehicles.get_mut("MCV").unwrap().econ.prerequisite = Some(vec!["DEPOT".into()]);
+    Arc::new(SimRules::new(&r, "synthetic-expansion-depot"))
+}
+
+// S-0407 claim 8 (a prerequisite the house lacks keeps a type off its sidebar) and tuning of our own opponent (M8 step B1): a house that would expand while its yard vehicle waits on a prerequisite builds that prerequisite, places it, and then builds the yard vehicle.
+#[test]
+fn builds_what_the_yard_vehicle_waits_for() {
+    let map = far_field_map();
+    let mut g = built_up_with(&map, depot_rules());
+    scout(&mut g.world);
+    let mcv = mcv(&g.world);
+    assert!(!glasnost_sim::econ::tech::buildable(&g.world, H, mcv));
+    let start = g.world.tick;
+    let uses = |g: &Game| g.special_uses()[0].1;
+    while g.world.tick < start + 6000 && uses(&g).expansion_builds == 0 {
+        g.world.houses[0].credits = 100_000;
+        g.step();
+    }
+    assert!(uses(&g).expansion_unblocks >= 1, "{:?}", uses(&g));
+    assert_eq!(of(&g.world, "DEPOT").len(), 1, "DEPOT placed");
+    assert!(
+        uses(&g).expansion_builds >= 1,
+        "a yard vehicle ordered by tick {}",
+        g.world.tick
+    );
 }
 
 // S-0415 claims 1 to 3 (the deploy order and its cell test, no adjacency): a spare yard vehicle is driven to the far field and deployed there; no second one is built.

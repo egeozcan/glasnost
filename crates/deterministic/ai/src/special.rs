@@ -172,6 +172,10 @@ pub struct Uses {
     /// Such vehicles sent to the field to deploy there (`expand`).
     #[serde(default)]
     pub expansion_moves: u32,
+    /// Buildings ordered to clear the yard vehicle's blocker on the tech
+    /// tree for an expansion (S-0407 claim 8, `expand`).
+    #[serde(default)]
+    pub expansion_unblocks: u32,
     /// Units or defences built because nothing of the house could hit a
     /// seen airborne drainer (S-0306 claim 23, `antiair`).
     #[serde(default)]
@@ -265,6 +269,10 @@ impl Special {
     /// Counts one move of a construction-yard vehicle toward a far field.
     pub(crate) fn count_expansion_move(&mut self) {
         self.uses.expansion_moves += 1;
+    }
+
+    pub(crate) fn count_expansion_unblock(&mut self) {
+        self.uses.expansion_unblocks += 1;
     }
 
     /// Counts one anti-air unit or defence ordered against drainers.

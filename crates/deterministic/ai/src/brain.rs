@@ -369,19 +369,37 @@ impl Brain {
         let economy = |t: TypeRef| is_economy(w, t);
         let paying = self.paying(w);
         let low_power = crate::power::short(w, h);
-        // Saving for a superweapon (M7b AI round 3): while a building that
-        // gives a superweapon the house fires waits on its line for money
-        // and no enemy is seen near the base, the army's unit lines are put
-        // on hold, as a person stops training units to finish the
-        // superweapon. In the stock lane the second superweapon building of
-        // the Yuri side stood on its line for 9 000 to more than 28 000
-        // ticks with the house's credits near 0 while every army line drew
-        // on them, and was granted in only 2 of 6 full games. A person saves
-        // only while his army is not outnumbered by the enemy units he sees:
-        // with the army held whatever the field, the Yuri house won 7 of 12
-        // quick games against the Soviet side, against 11 of 12 without.
-        let army =
-            |t: TypeRef| t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army);
+        // Saving for a superweapon (M7b AI round 3, narrowed in M8 step
+        // B2): while a building that gives a superweapon the house fires
+        // runs on its line owing more than the money in hand, and the house
+        // is safe (`Self::safe`), the army's running unit items that still
+        // owe money are put on hold, as a person stops training units to
+        // finish the superweapon. With less than the balance in hand, every
+        // credit the army spends is one the building still needs, so holding
+        // the army shortens the time to the superweapon (S-0404 claim 4: a
+        // step is paid from the money in hand or waits). In the stock lane
+        // the second superweapon building of the Yuri side stood on its line
+        // for 9 000 to more than 28 000 ticks with the house's credits near 0
+        // while every army line drew on them, and was granted in only 2 of 6
+        // full games. M8 step B2 tried a hold only while the money in hand
+        // did not pay the building's next step: the army spent what the
+        // later steps needed, the house held and resumed on most thinks
+        // (up to 442 holds in a quick game, against 60 before) and every
+        // superweapon came later (the first force shield by a median 1 936
+        // ticks). What B2 kept: no hold while the house loses a fight
+        // (`Self::losing`), and only an item that still owes money is held.
+        // A yard vehicle bought to expand (`Self::expand`, M8 step B1) also
+        // draws on that money and is held with the army; one bought while
+        // the house has no yard is its way back and runs on.
+        let has_yard = self
+            .script
+            .own(w)
+            .iter()
+            .any(|&id| w.obj(id).is_some_and(|o| is_yard(w, o)));
+        let army = |t: TypeRef| {
+            (t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army))
+                || (has_yard && deploys_into_yard(w, t.kind, t.index))
+        };
         let saving = !paying && self.saving(w);
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
@@ -395,7 +413,8 @@ impl Brain {
                     self.special.count_economy_hold();
                 }
             } else if saving && army(i.t) {
-                if i.hold == Hold::None {
+                // Only an item that still owes money competes for it.
+                if i.hold == Hold::None && i.owed > 0 {
                     // spec: S-0404 claim 5 (the hold order)
                     out.push(Order::Hold { what: i.t });
                     self.special.count_superweapon_hold();
@@ -408,27 +427,94 @@ impl Brain {
         paying
     }
 
-    /// Whether the house saves for a superweapon building
-    /// ([`Self::economy_first`]): not selling out, no seen enemy near the
-    /// base, not outnumbered, and a building that gives a superweapon it
-    /// fires runs on a line with less money in hand than its balance owed.
-    fn saving(&self, w: &World) -> bool {
-        use glasnost_sim::econ::production::Hold;
-        let h = self.house();
-        let credits = w.houses[usize::from(h.0)].credits;
+    /// Whether the house is safe enough to save for a superweapon
+    /// building: not selling out, no seen enemy near its base, its army not
+    /// outnumbered by the enemy units it sees, and no fight it is losing
+    /// ([`Self::losing`]).
+    fn safe(&self, w: &World) -> bool {
         !self.script.selling()
             && self.intruders(w).is_empty()
             && !self.outnumbered(w)
-            && w.econ.lines.lines.iter().any(|l| {
-                l.house == h
-                    && l.item.as_ref().is_some_and(|i| {
-                        i.t.kind == Kind::Building
-                            && !Self::giving_kinds(w, i.t.index).is_empty()
-                            && i.hold == Hold::None
-                            && !i.done()
-                            && credits < i.owed
-                    })
+            && !self.losing(w)
+    }
+
+    /// The balance owed (S-0404 Terms) of the running item of a building
+    /// that gives a superweapon the house fires, if one is on its lines.
+    fn superweapon_owed(&self, w: &World) -> Option<i32> {
+        use glasnost_sim::econ::production::Hold;
+        let h = self.house();
+        w.econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == h)
+            .filter_map(|l| l.item.as_ref())
+            .find(|i| {
+                i.t.kind == Kind::Building
+                    && !Self::giving_kinds(w, i.t.index).is_empty()
+                    && i.hold == Hold::None
+                    && !i.done()
             })
+            .map(|i| i.owed)
+    }
+
+    /// Whether the house saves for a superweapon building now
+    /// ([`Self::economy_first`]): safe, and such a building runs on its
+    /// line owing more than the money in hand.
+    fn saving(&self, w: &World) -> bool {
+        let credits = w.houses[usize::from(self.house().0)].credits;
+        self.safe(w) && self.superweapon_owed(w).is_some_and(|owed| credits < owed)
+    }
+
+    /// Whether the house is losing a fight, as a person reads it off the
+    /// map: seen enemy army units shoot at its objects, its own army units
+    /// fight them (some stand within [`FIGHT`] cells of the shooters), and
+    /// the seen enemy army units there are worth at least as much (by cost)
+    /// as its own. Shots with no army of the house near them are a raid,
+    /// which the base defence and the economy defence answer; counted as a
+    /// lost fight, they ended the saving in about two of every five lane
+    /// samples.
+    fn losing(&self, w: &World) -> bool {
+        let house = self.house();
+        let army = |o: &glasnost_sim::world::Object| {
+            o.kind != Kind::Building && scripted::role_of(w, tech::type_of(o)) == Some(Role::Army)
+        };
+        let seen: Vec<&glasnost_sim::world::Object> = self
+            .script
+            .seen_enemies(w)
+            .iter()
+            .filter_map(|&(id, _)| w.obj(id))
+            .filter(|o| army(o))
+            .collect();
+        let shooters: Vec<CellXY> = seen
+            .iter()
+            .filter(|o| {
+                matches!(o.target, Some(Target::Object(v))
+                    if w.obj(v).is_some_and(|v| v.owner == Some(house)))
+            })
+            .map(|o| o.pos.cell())
+            .collect();
+        if shooters.is_empty() {
+            return false;
+        }
+        let near = |c: CellXY| shooters.iter().any(|&s| dist2(s, c) <= FIGHT * FIGHT);
+        let worth = |o: &glasnost_sim::world::Object| {
+            i64::from(production::cost_field(w, tech::type_of(o)))
+        };
+        let enemy: i64 = seen
+            .iter()
+            .filter(|o| near(o.pos.cell()))
+            .map(|o| worth(o))
+            .sum();
+        let own: i64 = self
+            .script
+            .own(w)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .filter(|o| army(o) && near(o.pos.cell()))
+            .map(worth)
+            .sum();
+        own > 0 && enemy >= own
     }
 
     /// Whether the house pays for its economy first ([`Self::economy_first`]):
@@ -1192,30 +1278,84 @@ impl Brain {
                 self.special.count_expansion_move();
             }
         }
-        let Some(&t) = self.yard_units(w).first() else {
+        let types = yard_types(w);
+        let Some(&cheapest) = types.first() else {
             return;
         };
+        let t = self.yard_units(w).first().copied();
         let h = self.house();
         let lined = w.econ.lines.lines.iter().any(|l| {
-            l.house == h && (l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+            l.house == h
+                && types
+                    .iter()
+                    .any(|&x| l.item.as_ref().is_some_and(|i| i.t == x) || l.queue.contains(&x))
         });
         let credits = i64::from(w.houses[usize::from(h.0)].credits);
-        let cost = i64::from(production::cost_field(w, t));
+        let cost = i64::from(production::cost_field(w, t.unwrap_or(cheapest)));
         // A person keeps at most one yard beyond the first: a third adds
         // little speed for its price and leaves the army short.
         if yards + units.len() + usize::from(lined) >= EXPANSION_YARDS
-            || credits < EXPANSION_RICH * cost
+            || !self.rich(w, credits, cost)
             || field.is_none()
             || !self.script.harvesters_kept(w)
             || !self.intruders(w).is_empty()
-            || out
-                .iter()
-                .any(|o| matches!(o, Order::Build { what } if *what == t))
+            || self.outnumbered(w)
+            || self.losing(w)
         {
             return;
         }
-        out.push(Order::Build { what: t });
-        self.special.count_expansion_build();
+        if let Some(t) = t {
+            if !out
+                .iter()
+                .any(|o| matches!(o, Order::Build { what } if *what == t))
+            {
+                out.push(Order::Build { what: t });
+                self.special.count_expansion_build();
+            }
+            return;
+        }
+        // M8 step B1: the yard vehicle waits on the tech tree. A person who
+        // wants to expand builds what clears its blocker (S-0407 claim 8),
+        // as the tech climb does for an army type (`Script::unblocker`); in
+        // the stock lane no other step built it, and the yard vehicle stayed
+        // unbuildable for most of each game. Like a superweapon building it
+        // replaces a tech-climb building this think ordered, but no other
+        // building order of this think (the plan's, a superweapon building,
+        // the brain's other extras).
+        let climbing = self.script.climb(w);
+        if out.iter().any(|o| {
+            matches!(o, Order::Place { .. })
+                || matches!(o, Order::Build { what } if what.kind == Kind::Building && Some(*what) != climbing)
+        }) {
+            return;
+        }
+        let Some(b) = types
+            .iter()
+            .find_map(|&x| self.script.unblocker(w, x, CLIMB_DEPTH))
+        else {
+            return;
+        };
+        if self.script.busy(w, b) {
+            return;
+        }
+        out.retain(|o| !matches!(o, Order::Build { what } if Some(*what) == climbing));
+        out.push(Order::Build { what: b });
+        self.special.count_expansion_unblock();
+    }
+
+    /// Whether the house is rich enough to expand (M8 step B1): credits in
+    /// hand of [`EXPANSION_RICH`] times the yard vehicle's cost, or its
+    /// economy whole (every harvester it wants, `Script::economy_kept`) and
+    /// no superweapon building on its lines: a person finishes the
+    /// superweapon first, then expands. The stock lane showed the first test
+    /// alone never passing once the yard vehicle could be built: every line
+    /// drew the credits down as they came in (the probe read them in the
+    /// low hundreds or below in most samples), so a house with nothing more
+    /// urgent to pay for buys the yard vehicle step by step like any item
+    /// (S-0404 claim 4: no money is needed to start one).
+    fn rich(&self, w: &World, credits: i64, cost: i64) -> bool {
+        credits >= EXPANSION_RICH * cost
+            || (self.script.economy_kept(w) && self.superweapon_owed(w).is_none())
     }
 
     /// Whether a unit `id` that deploys into building type `b` could deploy
@@ -1837,7 +1977,7 @@ pub struct ExpansionProbe {
     /// The building that would clear a yard vehicle's blocker, that the
     /// house can build and place now (`Script::unblocker`).
     pub unblock: Option<u32>,
-    /// The cheapest yard vehicle's cost.
+    /// The cheapest yard vehicle's cost (buildable now, or else of any).
     pub cost: i64,
     /// Its credits.
     pub credits: i64,
@@ -1857,8 +1997,17 @@ pub struct ExpansionProbe {
     pub selling: bool,
     /// Whether it pays for its economy first.
     pub paying: bool,
+    /// Whether it keeps every harvester it wants.
+    pub economy_kept: bool,
+    /// Whether its army is outnumbered by the enemy units it sees.
+    pub outnumbered: bool,
+    /// Whether it is losing a fight.
+    pub losing: bool,
     /// Whether it saves for a superweapon building.
     pub saving: bool,
+    /// Whether a building that gives a superweapon it fires runs on its
+    /// lines.
+    pub superweapon_building: bool,
 }
 
 impl ExpansionProbe {
@@ -1884,8 +2033,16 @@ impl ExpansionProbe {
         if self.yards + self.units + usize::from(self.lined) >= EXPANSION_YARDS {
             v.push("yards enough");
         }
-        if self.buildable && self.credits < EXPANSION_RICH * self.cost {
+        if self.credits < EXPANSION_RICH * self.cost
+            && !(self.economy_kept && !self.superweapon_building)
+        {
             v.push("not rich");
+        }
+        if self.outnumbered {
+            v.push("outnumbered");
+        }
+        if self.losing {
+            v.push("losing");
         }
         if !self.field {
             v.push("no field");
@@ -1940,7 +2097,9 @@ impl Brain {
                 .iter()
                 .find_map(|&x| self.script.unblocker(w, x, CLIMB_DEPTH))
                 .map(|b| b.index),
-            cost: t.map_or(0, |t| i64::from(production::cost_field(w, t))),
+            cost: t
+                .or(types.first().copied())
+                .map_or(0, |t| i64::from(production::cost_field(w, t))),
             credits: i64::from(w.houses[usize::from(h.0)].credits),
             explored: fields.explored,
             worked: fields.worked,
@@ -1950,7 +2109,11 @@ impl Brain {
             intruders: self.intruders(w).len(),
             selling: self.script.selling(),
             paying: self.paying(w),
+            economy_kept: self.script.economy_kept(w),
+            outnumbered: self.outnumbered(w),
+            losing: self.losing(w),
             saving: self.saving(w),
+            superweapon_building: self.superweapon_owed(w).is_some(),
         }
     }
 }
