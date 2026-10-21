@@ -27,10 +27,10 @@
 pub mod room;
 pub mod wire;
 
-pub use room::{Room, Started};
+pub use room::{CHAT_CHARS, Room, Started, clean_chat};
 pub use wire::{
-    Begin, Edit, FromRelay, MapChoice, MemberView, Offered, Refusal, RoomInfo, RoomView, ToRelay,
-    Value,
+    Begin, ChatLine, Edit, FromRelay, MapChoice, MemberView, Offered, Refusal, RoomInfo, RoomView,
+    ToRelay, Value,
 };
 
 /// A member of a room: the relay's number for the member's connection.

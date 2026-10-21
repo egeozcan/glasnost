@@ -7,6 +7,10 @@
 //! Work that reads files is asynchronous (the web reads picked files
 //! lazily): the client hands out a [`Job`], the window layer runs it
 //! ([`run_job`]) and gives the result back ([`Client::done`]).
+//!
+//! Network games (M9 N3) live in the `net` part of this module
+//! (`client_net.rs`): the multiplayer screen, a room on a relay through a
+//! [`super::link::Link`], the lockstep-paced game and chat.
 
 use std::collections::BTreeMap;
 
@@ -18,16 +22,19 @@ use glasnost_audio::speech::SpeechCatalog;
 use glasnost_render::batch2d::CpuImage;
 use glasnost_sim::rng::Rng;
 use glasnost_sim::targeting::{KeyCommand, Modifiers};
+use glasnost_sim::world::HouseId;
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::end::End;
 use glasnost_ui::geom::{Point, Rect};
 use glasnost_ui::menu::{self, MenuHit};
+use glasnost_ui::netmenu::{NetForm, NetHit};
 use glasnost_ui::setup::{self as ui_setup, Lobby, SetupHit};
 use glasnost_ui::shell::{Event, Screen, Shell};
 use glasnost_ui::widget::Targets;
 use glasnost_vfs::{FileRef, PickedFile, Vfs};
 
 use super::install::{self, Install};
+use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
 use super::play::Button;
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
@@ -54,6 +61,9 @@ pub enum Job {
         /// The announcement data, for loading the local voice set's files
         /// (S-0701 claim 34).
         speech: SpeechCatalog,
+        /// The house played from here (a network game's slot); `None`: the
+        /// first person's house.
+        local: Option<HouseId>,
     },
 }
 
@@ -90,13 +100,14 @@ pub async fn run_job(job: Job) -> Done {
             offered,
             seed,
             speech,
+            local,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
                 // takes it too (S-0412 claims 6 and 7)
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
-            let r = Session::start(&mut vfs, &file, &make).await;
+            let r = Session::start(&mut vfs, &file, &make, local).await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
                 let set = local_voice_set(&s.play.game.world, Some(s.play.local));
@@ -127,6 +138,10 @@ pub enum Key {
     Up,
     /// An arrow key.
     Down,
+    /// Enter: sends a chat line, opens the game's chat.
+    Enter,
+    /// Backspace in a text field.
+    Backspace,
 }
 
 /// The images a frame shows, by id, when they changed.
@@ -186,6 +201,19 @@ pub struct Client {
     pub end_targets: Targets<()>,
     radar_tick: i32,
     cpu_images: BTreeMap<u32, CpuImage>,
+    /// The multiplayer screen's fields.
+    pub netform: NetForm,
+    /// How the client opens a link to a relay (`None`: no network here).
+    pub connect: Option<Connect>,
+    /// The build this client names in a room ([`BUILD`]).
+    pub build: String,
+    /// The multiplayer screen's targets of the last frame.
+    pub net_targets: Targets<NetHit>,
+    net: Option<net::Net>,
+    net_status: (String, bool),
+    chat_field: Option<Rect>,
+    /// The host time of the last update.
+    clock: i64,
 }
 
 impl Client {
@@ -219,6 +247,14 @@ impl Client {
             end_targets: Targets::new(),
             radar_tick: -1,
             cpu_images: BTreeMap::new(),
+            netform: NetForm::new(DEFAULT_RELAY),
+            connect: platform_connect(),
+            build: net::BUILD.into(),
+            net_targets: Targets::new(),
+            net: None,
+            net_status: (String::new(), false),
+            chat_field: None,
+            clock: 0,
         }
     }
 
@@ -266,13 +302,20 @@ impl Client {
                         self.radar_tick = -1;
                         self.game_serial += 1;
                         self.session = Some(s);
+                        self.net_started();
                         self.start_audio(voices);
                         self.shell.screen = Screen::Game;
                     }
                     Err(e) => {
                         self.status = e.clone();
                         log::warn!("the game did not start: {e}");
-                        self.shell.start_failed();
+                        if self.net.is_some() {
+                            self.net_leave();
+                            self.net_status = (format!("The game did not start: {e}"), true);
+                            self.shell.screen = Screen::Multiplayer;
+                        } else {
+                            self.shell.start_failed();
+                        }
                     }
                 }
             }
@@ -342,6 +385,7 @@ impl Client {
                 .as_ref()
                 .map(SpeechCatalog::from_ini)
                 .unwrap_or_default(),
+            local: None,
         });
     }
 
@@ -415,6 +459,7 @@ impl Client {
                 };
                 if s.pointer_up(b, p, mods) == SessionEvent::Leave {
                     self.session = None;
+                    self.net_leave();
                     self.shell.leave_game();
                 }
             }
@@ -449,9 +494,18 @@ impl Client {
                 let e = self.shell.setup(hit, &rules, &maps);
                 self.event(e);
             }
+            Screen::Multiplayer => {
+                if let Some(hit) = self.net_targets.hit(p) {
+                    self.net_menu(hit);
+                } else {
+                    self.netform.focus = None;
+                }
+            }
+            Screen::Room => self.room_click(p),
             Screen::End(_) => {
                 if self.end_targets.hit(p).is_some() {
                     self.session = None;
+                    self.net_leave();
                     self.shell.end_done();
                 }
             }
@@ -462,6 +516,14 @@ impl Client {
     pub fn key(&mut self, k: Key, down: bool) {
         if down {
             self.gesture();
+        }
+        // Text fields and the chat take their keys first; a letter typed
+        // into one is no command.
+        if down && self.net_key(k) {
+            return;
+        }
+        if matches!(k, Key::Char(_)) && self.typing() {
+            return;
         }
         // spec: S-0213 claim 23 (holding Left, Right, Up or Down scrolls the view that way; releasing an arrow ends its contribution)
         let arrow = match k {
@@ -510,9 +572,12 @@ impl Client {
     /// (claims 8 and 9), with that cycle's scrolling (S-0101 claims 12 to
     /// 15); then sound and the end of the game.
     pub fn update(&mut self, now_ms: i64) {
+        self.clock = now_ms;
+        self.net_pump(now_ms);
         if self.shell.screen != Screen::Game {
             return;
         }
+        let networked = self.net.as_ref().is_some_and(|n| n.lockstep.is_some());
         let Some(s) = self.session.as_mut() else {
             return;
         };
@@ -523,14 +588,26 @@ impl Client {
         for p in s.play.status_problems.drain(..) {
             log::warn!("status text: {p}");
         }
-        // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus)
-        let active = !s.paused && self.focused;
+        // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus); Q-1806 (interim: not in a network game, whose ticks go on)
+        let active = networked || (!s.paused && self.focused);
         s.play.clock(now_ms, active);
-        // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
-        if !s.ticking() || !self.focused {
+        let ticked = if networked {
+            // Q-1806 (interim: in a network game neither the options menu nor lost focus stops the ticks; the lockstep paces them)
+            self.net_tick(now_ms)
+        } else if !s.ticking() || !self.focused {
+            // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)
             self.pacer.reset();
+            false
         } else if self.pacer.due(now_ms, s.speed) {
             s.step();
+            true
+        } else {
+            false
+        };
+        let Some(s) = self.session.as_mut() else {
+            return;
+        };
+        if ticked {
             // spec: S-0101 claims 13 to 15 (scrolling is requested once per unfrozen cycle, not per drawn frame; none while the game stands still)
             s.scroll_cycle(now_ms.max(0) as u64, self.held, self.focused);
             if let Some(a) = self.audio.as_mut() {
@@ -591,6 +668,14 @@ impl Client {
                 self.menu_targets = t;
                 d
             }
+            Screen::Multiplayer => self.net_menu_frame(hover),
+            Screen::Room => {
+                let mut d = self.room_frame(hover);
+                if self.busy {
+                    busy_veil(&mut d, size, &self.status);
+                }
+                d
+            }
             Screen::Setup => match (self.shell.setup.as_ref(), self.install.as_ref()) {
                 (Some(setup), Some(i)) => {
                     let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
@@ -625,7 +710,9 @@ impl Client {
                         .set_image_size(MAP_IMAGE, (v.size.0 as i32, v.size.1 as i32));
                     self.painter
                         .set_image_size(RADAR_IMAGE, glasnost_ui::hud::RADAR);
-                    s.draw()
+                    let mut d = s.draw();
+                    self.net_overlay(&mut d);
+                    d
                 }
                 None => {
                     // Loading the map.
@@ -711,6 +798,15 @@ pub fn bound(k: Key) -> Option<Bound> {
     }
 }
 
+#[path = "client_net.rs"]
+mod net;
+
+pub use net::BUILD;
+
 #[cfg(test)]
 #[path = "client_tests.rs"]
 mod tests;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "client_net_tests.rs"]
+mod net_tests;

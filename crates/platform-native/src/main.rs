@@ -4,12 +4,13 @@
 //! file-system importer and the game itself; the shell lives in `glasnost-app`
 //! and is shared with the web build.
 //!
-//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--backend auto|gl|vulkan] [--frames N]`.
+//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--backend auto|gl|vulkan] [--frames N]`.
 //! With `--game`, the game client (M5b: menu, skirmish setup, a game against
 //! the AI, end screen), reading the install in `DIR`. With `--viewer`, the
 //! asset viewer (optionally mounting `DIR` at start, and opening the map
 //! viewer on the first map whose name contains `NAME`). Without either, the
-//! M0 palette-quad demo.
+//! M0 palette-quad demo. `--relay URL` fills the multiplayer screen's relay
+//! address (default `ws://127.0.0.1:8787/`, the relay binary's own).
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
@@ -26,6 +27,7 @@ fn main() -> std::process::ExitCode {
     let mut game = false;
     let mut game_dir = None;
     let mut open_map = None;
+    let mut relay = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -46,9 +48,10 @@ fn main() -> std::process::ExitCode {
             }
             "--game-dir" => value("--game-dir").map(|v| game_dir = Some(v)),
             "--map" => value("--map").map(|v| open_map = Some(v)),
+            "--relay" => value("--relay").map(|v| relay = Some(v)),
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -69,6 +72,8 @@ fn main() -> std::process::ExitCode {
             backend: options.backend,
             game_dir,
             exit_after_frames: options.exit_after_frames,
+            relay,
+            connect: None,
         })
     } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {

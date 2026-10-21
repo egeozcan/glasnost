@@ -581,3 +581,38 @@ fn begin_checks_the_game_setup_built_from_it() {
     assert_eq!(info.map_hash, "m4");
     assert_eq!(info.slots, begin.slots);
 }
+
+#[test]
+fn chat_lines_are_cleaned_and_round_trip() {
+    assert_eq!(
+        lobby::clean_chat("  hi\tthere\u{0} "),
+        Some("hithere".into())
+    );
+    assert_eq!(lobby::clean_chat(" \n\r "), None);
+    let long = "\u{e9}".repeat(lobby::CHAT_CHARS * 2);
+    assert_eq!(
+        lobby::clean_chat(&long).map(|s| s.chars().count()),
+        Some(lobby::CHAT_CHARS)
+    );
+    let to = ToRelay::Chat {
+        text: "gl hf".into(),
+    };
+    assert_eq!(
+        lobby::wire::decode::<ToRelay>(&lobby::wire::encode(&to)),
+        Ok(to)
+    );
+    let from = FromRelay::Chat(lobby::ChatLine {
+        from: 7,
+        row: 2,
+        name: "P".into(),
+        text: "gl hf".into(),
+    });
+    assert_eq!(
+        lobby::wire::decode::<FromRelay>(&lobby::wire::encode(&from)),
+        Ok(from)
+    );
+    assert_eq!(
+        Refusal::ChatTooFast.to_string(),
+        "chat lines too fast; that one was not sent"
+    );
+}

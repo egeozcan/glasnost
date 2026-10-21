@@ -7,10 +7,15 @@
 //! otherwise. **M1**: `?mode=viewer` starts the asset viewer with its
 //! folder picker. **M5b**: `?mode=game` starts the game client (menu,
 //! skirmish setup, a game against the AI, end screen) with the same folder
-//! picker.
+//! picker. **M9 N3**: the game client's multiplayer screen reaches a relay
+//! through the browser's WebSocket ([`socket`]); `?relay=ws://HOST:PORT/`
+//! fills its relay address.
 //!
 //! On native targets this crate is empty so that the whole workspace builds
 //! and tests with plain `cargo`.
+
+#[cfg(target_arch = "wasm32")]
+pub mod socket;
 
 #[cfg(target_arch = "wasm32")]
 mod web {
@@ -45,6 +50,8 @@ mod web {
                 backend,
                 game_dir: None,
                 exit_after_frames: None,
+                relay: Some(param("relay")).filter(|r| !r.is_empty()),
+                connect: Some(crate::socket::connect),
             })
         } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {

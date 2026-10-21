@@ -37,7 +37,8 @@
 use std::collections::BTreeMap;
 
 use glasnost_net::lobby::{
-    self, CODE_LEN, FromRelay, MemberId, Refusal, Room, Started, ToRelay, normalise_code,
+    self, CODE_LEN, ChatLine, FromRelay, MemberId, Refusal, Room, Started, ToRelay, Value,
+    normalise_code,
 };
 use glasnost_net::wire::{self, Body, Envelope, MAGIC as GAME_MAGIC, RELAY, WireError};
 use glasnost_net::{Field, Params};
@@ -76,6 +77,11 @@ pub struct Limits {
     /// A keepalive goes to a connection nothing was sent to for this long,
     /// in milliseconds.
     pub keepalive_ms: u64,
+    /// A chat line costs this many milliseconds of a connection's chat
+    /// bucket, which refills one millisecond a millisecond.
+    pub chat_every_ms: u64,
+    /// Chat lines a connection may send at once.
+    pub chat_burst: u32,
     /// The lockstep parameters of every game.
     pub params: Params,
 }
@@ -92,6 +98,8 @@ impl Default for Limits {
             idle_ms: 120_000, // nocite: our own netcode
             silent_ms: 15_000, // nocite: our own netcode
             keepalive_ms: 2_000, // nocite: our own netcode
+            chat_every_ms: 1_000, // nocite: our own netcode (a line a second on average)
+            chat_burst: 5, // nocite: our own netcode
             params: Params::default(),
         }
     }
@@ -148,6 +156,10 @@ pub struct Stats {
     pub closed_refusals: u64,
     /// Connections closed for silence or for staying in no room.
     pub closed_silent: u64,
+    /// Chat lines passed on (once per line, not per receiver).
+    pub chats: u64,
+    /// Chat lines refused as too fast.
+    pub chats_too_fast: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -161,6 +173,9 @@ struct Conn {
     refilled: u64,
     room: Option<String>,
     refusals: u32,
+    /// The chat bucket, in milliseconds.
+    chat_tokens: u64,
+    chat_refilled: u64,
 }
 
 /// A room's game: who plays each slot and what was forwarded.
@@ -303,6 +318,8 @@ impl Hub {
                 refilled: now_ms,
                 room: None,
                 refusals: 0,
+                chat_tokens: u64::from(self.limits.chat_burst) * self.limits.chat_every_ms,
+                chat_refilled: now_ms,
             },
         );
         Some(id)
@@ -449,6 +466,55 @@ impl Hub {
         }
         c.tokens -= ONE;
         true
+    }
+
+    /// Takes one chat line's worth from `conn`'s chat bucket; false when it
+    /// is too low.
+    fn spend_chat(&mut self, now_ms: u64, conn: ConnId) -> bool {
+        let cost = self.limits.chat_every_ms;
+        let cap = u64::from(self.limits.chat_burst) * cost;
+        let Some(c) = self.conns.get_mut(&conn) else {
+            return false;
+        };
+        let ms = now_ms.saturating_sub(c.chat_refilled);
+        c.chat_refilled = c.chat_refilled.max(now_ms);
+        c.chat_tokens = c.chat_tokens.saturating_add(ms).min(cap);
+        if c.chat_tokens < cost {
+            return false;
+        }
+        c.chat_tokens -= cost;
+        true
+    }
+
+    /// A chat line from `conn`: to every member of its room, the sender
+    /// too, before or during the game. Lines too fast are refused without
+    /// counting against the refusal limit.
+    fn on_chat(&mut self, now_ms: u64, conn: ConnId, text: &str) {
+        let Some(code) = self.room_of(conn) else {
+            return self.refuse(now_ms, conn, Refusal::NotInRoom);
+        };
+        let Some(text) = lobby::clean_chat(text) else {
+            return self.refuse(now_ms, conn, Refusal::Bad(Value::Text));
+        };
+        if !self.spend_chat(now_ms, conn) {
+            self.stats.chats_too_fast += 1;
+            return self.send_lobby(now_ms, conn, &FromRelay::Refused(Refusal::ChatTooFast));
+        }
+        let Some(e) = self.rooms.get(&code) else {
+            return;
+        };
+        let line = FromRelay::Chat(ChatLine {
+            from: conn,
+            row: e.room.row_of(conn).unwrap_or(0),
+            name: e.room.name_of(conn).unwrap_or_default().to_owned(),
+            text,
+        });
+        let to: Vec<ConnId> = e.room.members().collect();
+        let bytes = lobby::wire::encode(&line);
+        self.stats.chats += 1;
+        for t in to {
+            self.send(now_ms, t, bytes.clone());
+        }
     }
 
     /// Bytes from `conn` at `now_ms`: one WebSocket message.
@@ -622,6 +688,7 @@ impl Hub {
                     Err(r) => self.refuse(now_ms, conn, r),
                 }
             }
+            ToRelay::Chat { text } => self.on_chat(now_ms, conn, text),
             ToRelay::Start => {
                 let Some(code) = in_room else {
                     return self.refuse(now_ms, conn, Refusal::NotInRoom);

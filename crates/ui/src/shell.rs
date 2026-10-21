@@ -1,5 +1,7 @@
 //! The screens and how one leads to the next: main menu → skirmish setup
-//! → game → end screen → main menu.
+//! → game → end screen → main menu; or main menu → multiplayer → a
+//! network room → game → end screen → main menu (the client drives the
+//! network screens, which depend on the relay's answers).
 
 use crate::end::End;
 use crate::menu::MenuHit;
@@ -12,6 +14,10 @@ pub enum Screen {
     Menu,
     /// The skirmish setup.
     Setup,
+    /// The multiplayer screen: name, relay address, room code.
+    Multiplayer,
+    /// A network room: the setup screen of a room on a relay.
+    Room,
     /// A game is running (or paused in its options menu).
     Game,
     /// The end screen of the last game.
@@ -61,6 +67,10 @@ impl Shell {
                     self.setup = Some(Setup::new(rules));
                 }
                 self.screen = Screen::Setup;
+                None
+            }
+            MenuHit::Multiplayer => {
+                self.screen = Screen::Multiplayer;
                 None
             }
             MenuHit::Install => Some(Event::PickInstall),
@@ -161,6 +171,8 @@ mod tests {
         assert_eq!(s.setup.as_ref().unwrap().credits, 1100);
         s.setup(SetupHit::Back, &r, &maps);
         assert_eq!(s.screen, Screen::Menu);
+        assert_eq!(s.menu(MenuHit::Multiplayer, &r), None);
+        assert_eq!(s.screen, Screen::Multiplayer);
         assert_eq!(s.menu(MenuHit::Quit, &r), Some(Event::Quit));
         assert_eq!(s.menu(MenuHit::Install, &r), Some(Event::PickInstall));
     }

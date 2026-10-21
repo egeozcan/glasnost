@@ -3,6 +3,7 @@
 //! rectangle of every target they draw.
 
 use crate::draw::{DrawList, colour};
+use crate::font;
 use crate::geom::{Point, Rect};
 
 /// Widgets laid out by a screen: a rectangle per target, topmost last.
@@ -109,6 +110,52 @@ pub fn choice(d: &mut DrawList, r: Rect, label: &str, value: &str, enabled: bool
     )
 }
 
+/// A one-line text field: a label on the left, the text in a box on the
+/// right, with a caret when `focused`. Returns the box. Text too wide for
+/// the box shows its end.
+pub fn text_field(
+    d: &mut DrawList,
+    r: Rect,
+    label: &str,
+    value: &str,
+    focused: bool,
+    hot: bool,
+) -> Rect {
+    let split = r.w * 2 / 5;
+    let label_r = Rect::new(r.x, r.y, split, r.h);
+    let box_r = Rect::new(r.x + split, r.y, r.w - split, r.h);
+    d.text_left(label_r, label, colour::DIM);
+    d.fill(box_r, if focused { colour::HOT } else { colour::RAISED });
+    d.frame(
+        box_r,
+        if focused || hot {
+            colour::ACCENT
+        } else {
+            colour::EDGE
+        },
+    );
+    let shown = tail_fit(value, box_r.w - 12, focused);
+    d.text_left(
+        Rect::new(box_r.x + 3, box_r.y, box_r.w - 6, box_r.h),
+        &shown,
+        colour::TEXT,
+    );
+    box_r
+}
+
+/// The end of `s` that fits in `width` pixels, with a caret when `caret`.
+pub fn tail_fit(s: &str, width: i32, caret: bool) -> String {
+    let caret = if caret { "_" } else { "" };
+    let chars: Vec<char> = s.chars().collect();
+    for start in 0..=chars.len() {
+        let t: String = chars[start..].iter().collect::<String>() + caret;
+        if font::text_width(&t) <= width {
+            return t;
+        }
+    }
+    caret.to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +179,17 @@ mod tests {
         assert_eq!(b.right(), 200);
         assert_eq!(a.x, 80);
         assert!(d.texts().contains(&"10000"));
+    }
+
+    #[test]
+    fn a_text_field_shows_the_end_of_long_text_and_a_caret() {
+        let mut d = DrawList::new();
+        let b = text_field(&mut d, Rect::new(0, 0, 200, 16), "Name", "abc", true, false);
+        assert_eq!(b, Rect::new(80, 0, 120, 16));
+        assert!(d.texts().contains(&"abc_"));
+        let long = "x".repeat(200);
+        let t = tail_fit(&long, 50, false);
+        assert!(font::text_width(&t) <= 50 && t.len() > 3);
+        assert!(long.ends_with(&t));
     }
 }

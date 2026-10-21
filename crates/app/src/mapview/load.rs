@@ -128,6 +128,76 @@ impl Loaded {
     }
 }
 
+impl Loaded {
+    /// A map loaded without an install: the decoded `map` with its game
+    /// started from `setup` on `rules` and `tiles`, no art, no palettes and
+    /// no files (the synthetic games of the client's tests; nothing is
+    /// drawn, the rest runs as in a loaded game).
+    pub fn bare(
+        map: Map,
+        rules: Arc<SimRules>,
+        tiles: Arc<glasnost_map::terrain::TileCatalogue>,
+        setup: &glasnost_sim::world::GameSetup,
+    ) -> Result<Loaded, String> {
+        let world = live::guarded(|| {
+            glasnost_sim::load::new_game(rules.clone(), &map, tiles, setup)
+                .map_err(|e| e.to_string())
+        })
+        .map_err(|p| format!("the simulation failed while setting up the game: {p}"))??;
+        let import = glasnost_convert::convert(
+            &glasnost_convert::inputs::Inputs::default(),
+            &glasnost_convert::ImportOptions::default(),
+        );
+        let catalogue = Catalogue::default();
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let assets = Assets::default();
+        let options = Options {
+            game: build::GameMode::Skirmish,
+            ..Options::default()
+        };
+        let cells = Some(world.cells.grid.clone());
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: Some(&rules),
+            cells: cells.as_ref(),
+        };
+        let (mut built, painter) = build::build_parts_with(&inputs, true, VoxelCanvas::new());
+        let live = Live::new(
+            &inputs,
+            &mut built,
+            painter,
+            (world, rules.clone(), setup.clone(), Vec::new()),
+        );
+        let tile_colours = build::tile_radar_colours(&built.shown_tiles, &assets);
+        let minimap = build::minimap(&map, &tile_colours);
+        Ok(Loaded {
+            map,
+            map_warnings: Vec::new(),
+            import,
+            catalogue,
+            palettes,
+            assets,
+            options,
+            built,
+            minimap,
+            tile_colours,
+            problems: Vec::new(),
+            live: Some(live),
+            rules: Some(rules),
+            // spec: S-0101 Import mapping (ScrollMultiplier absent: 1.0)
+            scroll_multiplier: glasnost_num::F64::from_i64(1, glasnost_num::Rounding::TowardZero),
+            cells,
+            covers: CoverSprites::default(),
+            canvas: VoxelCanvas::new(),
+        })
+    }
+}
+
 async fn read_named(vfs: &Vfs, name: &str) -> Option<Vec<u8>> {
     let r = vfs.resolve(name)?;
     vfs.read_resolved(&r).await.ok()

@@ -469,27 +469,52 @@ impl Setup {
         maps: &[MapEntry],
         hover: Option<Point>,
     ) -> (DrawList, Targets<SetupHit>) {
-        let mut d = DrawList::new();
-        let mut t = Targets::new();
+        self.view_framed(size, rules, maps, hover, None)
+    }
+
+    /// The panel of the screen in a window of `size` (our own layout).
+    pub fn panel_rect(size: (i32, i32)) -> Rect {
         let (w, h) = size;
-        d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
-        let outer = Rect::new(
+        Rect::new(
             (w - 620).max(0) / 2,
             (h - 440).max(0) / 2,
             620.min(w),
             440.min(h),
-        );
-        widget::panel(&mut d, outer, Some("SKIRMISH SETUP"));
+        )
+    }
+
+    /// Draws the screen as a skirmish (`room` none) or as a network room,
+    /// where the rows carry the members' names and ready marks and only
+    /// what this member may change has targets.
+    pub fn view_framed(
+        &self,
+        size: (i32, i32),
+        rules: &SetupRules,
+        maps: &[MapEntry],
+        hover: Option<Point>,
+        room: Option<&RoomFrame>,
+    ) -> (DrawList, Targets<SetupHit>) {
+        let mut d = DrawList::new();
+        let mut t = Targets::new();
+        let (w, h) = size;
+        d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
+        let outer = Self::panel_rect(size);
+        let title = room.map_or("SKIRMISH SETUP", |r| r.title.as_str());
+        widget::panel(&mut d, outer, Some(title));
         let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
+        // In a room only the host changes the map and the game-wide values.
+        let game_wide = room.is_none_or(|r| r.host);
         let choice = |d: &mut DrawList,
                       t: &mut Targets<SetupHit>,
                       r: Rect,
                       label: &str,
                       value: &str,
                       mk: &dyn Fn(i32) -> SetupHit| {
-            let (a, b) = widget::choice(d, r, label, value, true);
-            t.push(a, mk(-1));
-            t.push(b, mk(1));
+            let (a, b) = widget::choice(d, r, label, value, game_wide);
+            if game_wide {
+                t.push(a, mk(-1));
+                t.push(b, mk(1));
+            }
         };
         let x0 = outer.x + 10;
         let mut y = outer.y + 24;
@@ -528,19 +553,44 @@ impl Setup {
                     colour::RAISED
                 },
             );
+            let name = room.and_then(|r| r.names[i].as_deref());
             let kind = match s.kind {
+                SlotKind::Human if room.is_some() => name.unwrap_or("Open"),
                 SlotKind::Human => "You",
                 SlotKind::Ai => "AI",
                 SlotKind::Closed => "Closed",
             };
             let r = Rect::new(x0, y, 70, 16);
-            if i == 0 {
-                d.text_left(r, kind, colour::ACCENT);
+            // A skirmish's first row is the person's; in a room the host
+            // sets the kind of every row nobody has taken.
+            let kind_editable = match room {
+                None => i > 0,
+                Some(f) => f.host && name.is_none(),
+            };
+            if !kind_editable {
+                let mine = room.is_none_or(|f| f.mine == Some(i));
+                let ink = if mine { colour::ACCENT } else { colour::TEXT };
+                d.text_left(r, &crate::font::fit(kind, r.w), ink);
             } else {
                 let (a, b) = widget::choice(&mut d, r, "", kind, true);
                 t.push(a, SetupHit::Kind(i, -1));
                 t.push(b, SetupHit::Kind(i, 1));
             }
+            if let Some(f) = room {
+                let (mark, ink) = if f.host_row == Some(i) {
+                    ("Host", colour::ACCENT)
+                } else if f.ready[i] {
+                    ("Ready", colour::GOOD)
+                } else if name.is_some() {
+                    ("Not ready", colour::DIM)
+                } else {
+                    ("", colour::DIM)
+                };
+                d.text_left(Rect::new(x0 + 500, y, 98, 16), mark, ink);
+            }
+            // In a room a member sets its own row, the host the computers'.
+            let editable =
+                room.is_none_or(|f| f.mine == Some(i) || (f.host && s.kind == SlotKind::Ai));
             if s.kind != SlotKind::Closed {
                 let country = s
                     .country
@@ -561,9 +611,11 @@ impl Setup {
                 ];
                 for (cx, cw, value, mk) in cells {
                     let r = Rect::new(x0 + cx, y, cw, 16);
-                    let (a, b) = widget::choice(&mut d, r, "", &value, true);
-                    t.push(a, mk(i, -1));
-                    t.push(b, mk(i, 1));
+                    let (a, b) = widget::choice(&mut d, r, "", &value, editable);
+                    if editable {
+                        t.push(a, mk(i, -1));
+                        t.push(b, mk(i, 1));
+                    }
                 }
                 if let Some(c) = s.colour.and_then(|c| rules.colours.get(c as usize)) {
                     d.fill(Rect::new(x0 + 480, y + 3, 10, 10), *c);
@@ -610,24 +662,69 @@ impl Setup {
             if on {
                 d.fill(box_r.inset(3), colour::ACCENT);
             }
-            d.text_left(Rect::new(r.x + 14, r.y, r.w - 14, 16), name, colour::TEXT);
-            t.push(r, SetupHit::Toggle(*f));
+            let ink = if game_wide { colour::TEXT } else { colour::DIM };
+            d.text_left(Rect::new(r.x + 14, r.y, r.w - 14, 16), name, ink);
+            if game_wide {
+                t.push(r, SetupHit::Toggle(*f));
+            }
         }
         let problem = self.problem(rules, maps);
         let by = outer.bottom() - 30;
-        if let Some(p) = &problem {
-            d.text_left(Rect::new(x0, by, 300, 20), &p.to_string(), colour::BAD);
+        let note = match (room.and_then(|f| f.note.as_ref()), &problem) {
+            (Some((text, bad)), _) => Some((text.clone(), *bad)),
+            (None, Some(p)) => Some((p.to_string(), true)),
+            (None, None) => None,
+        };
+        if let Some((text, bad)) = note {
+            let ink = if bad { colour::BAD } else { colour::TEXT };
+            let text = crate::font::fit(&text, 360);
+            d.text_left(Rect::new(x0, by, 360, 20), &text, ink);
         }
         let back = Rect::new(outer.right() - 230, by, 100, 20);
         let go = Rect::new(outer.right() - 120, by, 110, 20);
-        widget::button(&mut d, back, "Back", hot(back), true);
-        widget::button(&mut d, go, "Start game", hot(go), problem.is_none());
+        let (back_label, go_label, go_on) = match room {
+            None => ("Back", "Start game", problem.is_none()),
+            // The host starts a setup without a problem; the others say
+            // ready or not.
+            Some(f) => (
+                "Leave",
+                f.go.as_str(),
+                f.go_enabled && (!f.host || problem.is_none()),
+            ),
+        };
+        widget::button(&mut d, back, back_label, hot(back), true);
+        widget::button(&mut d, go, go_label, hot(go), go_on);
         t.push(back, SetupHit::Back);
-        if problem.is_none() {
+        if go_on {
             t.push(go, SetupHit::Start_);
         }
         (d, t)
     }
+}
+
+/// How the setup screen shows a network room (our own layout): the
+/// client fills it from the relay's view of the room.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RoomFrame {
+    /// The panel's title (the room code).
+    pub title: String,
+    /// The name of the member on each person's row; `None` while open.
+    pub names: [Option<String>; MAX_SLOTS],
+    /// Each row's member's ready mark.
+    pub ready: [bool; MAX_SLOTS],
+    /// The host's row.
+    pub host_row: Option<usize>,
+    /// This member's row.
+    pub mine: Option<usize>,
+    /// Whether this member is the host.
+    pub host: bool,
+    /// The go button's label ("Start game", "Ready", "Not ready").
+    pub go: String,
+    /// Whether the go button may be pressed.
+    pub go_enabled: bool,
+    /// A line in place of the setup's problem: a refusal, a missing map,
+    /// what the room waits for; and whether it is bad.
+    pub note: Option<(String, bool)>,
 }
 
 /// A column of a player row: offset, width, value and target maker.
@@ -973,5 +1070,92 @@ mod tests {
         }
         // A closed slot offers no country.
         assert!(t.rect_of(&SetupHit::Country(3, 1)).is_none());
+    }
+
+    /// A network room: each member's targets are what it may change (our
+    /// own netcode; the room enforces the same rules).
+    #[test]
+    fn a_room_offers_each_member_only_its_own_controls() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        s.map = 1;
+        s.slots[1].kind = SlotKind::Human;
+        s.slots[2].kind = SlotKind::Ai;
+        s.slots[3].kind = SlotKind::Human;
+        let mut f = RoomFrame {
+            title: "ROOM AB12CD34".into(),
+            names: [const { None }; MAX_SLOTS],
+            ready: [false; MAX_SLOTS],
+            host_row: Some(0),
+            mine: Some(1),
+            host: false,
+            go: "Ready".into(),
+            go_enabled: true,
+            note: None,
+        };
+        f.names[0] = Some("Ann".into());
+        f.names[1] = Some("Bob".into());
+        f.ready[1] = true;
+        let (d, t) = s.view_framed((800, 600), &r, &maps(), None, Some(&f));
+        let texts = d.texts();
+        for want in [
+            "ROOM AB12CD34",
+            "Ann",
+            "Bob",
+            "Open",
+            "Host",
+            "Ready",
+            "Leave",
+        ] {
+            assert!(texts.contains(&want), "{want} missing: {texts:?}");
+        }
+        // A guest: its own row's choices, ready, leave; nothing else.
+        for want in [
+            SetupHit::Country(1, 1),
+            SetupHit::Start(1, -1),
+            SetupHit::Back,
+            SetupHit::Start_,
+        ] {
+            assert!(t.rect_of(&want).is_some(), "{want:?} missing");
+        }
+        for not in [
+            SetupHit::Map(1),
+            SetupHit::Kind(3, 1),
+            SetupHit::Kind(2, 1),
+            SetupHit::Country(0, 1),
+            SetupHit::Country(2, 1),
+            SetupHit::Credits(1),
+            SetupHit::Speed(1),
+            SetupHit::Toggle(Flag::Crates),
+        ] {
+            assert!(t.rect_of(&not).is_none(), "{not:?} offered to a guest");
+        }
+        // The host: the map, the game, the untaken and computer rows.
+        f.host = true;
+        f.mine = Some(0);
+        f.go = "Start game".into();
+        let (_, t) = s.view_framed((800, 600), &r, &maps(), None, Some(&f));
+        for want in [
+            SetupHit::Map(1),
+            SetupHit::Kind(3, 1),
+            SetupHit::Kind(2, 1),
+            SetupHit::Country(0, 1),
+            SetupHit::Country(2, 1),
+            SetupHit::Credits(1),
+            SetupHit::Toggle(Flag::Crates),
+            SetupHit::Start_,
+        ] {
+            assert!(t.rect_of(&want).is_some(), "{want:?} missing for the host");
+        }
+        for not in [SetupHit::Kind(1, 1), SetupHit::Country(1, 1)] {
+            assert!(t.rect_of(&not).is_none(), "{not:?} offered to the host");
+        }
+        // A note replaces the problem line; a host's problem blocks the start.
+        f.note = Some(("the map hash differs from the room's".into(), true));
+        s.slots[1].start = Some(0);
+        s.slots[0].start = Some(0);
+        let (d, t) = s.view_framed((800, 600), &r, &maps(), None, Some(&f));
+        assert!(d.texts().contains(&"the map hash differs from the room's"));
+        assert!(t.rect_of(&SetupHit::Start_).is_none());
     }
 }

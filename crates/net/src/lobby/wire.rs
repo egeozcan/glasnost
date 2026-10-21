@@ -150,6 +150,12 @@ pub enum ToRelay {
     },
     /// The host starts the game.
     Start,
+    /// A chat line to everyone in the room, before or during its game. It
+    /// never reaches a simulation.
+    Chat {
+        /// What was typed.
+        text: String,
+    },
 }
 
 /// A value that is out of range or malformed.
@@ -236,6 +242,9 @@ pub enum Refusal {
     Open(u8),
     /// The person on that row is not ready.
     NotReady(u8),
+    /// Chat lines came faster than the relay passes them on; this one was
+    /// not sent.
+    ChatTooFast,
 }
 
 impl std::fmt::Display for Refusal {
@@ -256,6 +265,7 @@ impl std::fmt::Display for Refusal {
             Refusal::Setup(p) => write!(f, "{p}"),
             Refusal::Open(r) => write!(f, "nobody is on row {}", r + 1),
             Refusal::NotReady(r) => write!(f, "the person on row {} is not ready", r + 1),
+            Refusal::ChatTooFast => f.write_str("chat lines too fast; that one was not sent"),
         }
     }
 }
@@ -387,6 +397,21 @@ pub enum FromRelay {
     Begin(Begin),
     /// The relay closes the connection, and why.
     Closing(String),
+    /// A member's chat line (to every member, the sender too).
+    Chat(ChatLine),
+}
+
+/// A chat line as the relay passes it on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatLine {
+    /// Who said it.
+    pub from: MemberId,
+    /// Their row when they said it.
+    pub row: u8,
+    /// Their name.
+    pub name: String,
+    /// The line, cleaned ([`super::room::clean_chat`]).
+    pub text: String,
 }
 
 /// Why bytes are not a lobby message.

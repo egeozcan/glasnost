@@ -9,6 +9,8 @@ use crate::widget::{self, Targets};
 pub enum MenuHit {
     /// Open the skirmish setup.
     Skirmish,
+    /// Open the multiplayer screen (host or join a room on a relay).
+    Multiplayer,
     /// Choose the game folder again.
     Install,
     /// Leave the program.
@@ -60,6 +62,7 @@ pub fn view(
     let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
     let mut buttons = vec![
         (MenuHit::Skirmish, "Skirmish", ready),
+        (MenuHit::Multiplayer, "Multiplayer", ready),
         (MenuHit::Install, "Game folder", true),
     ];
     if can_quit {
@@ -89,12 +92,18 @@ mod tests {
     fn buttons_hit_and_skirmish_waits_for_an_install() {
         let (d, t) = view((640, 480), "ready", true, true, None);
         assert!(d.texts().contains(&DISCLAIMER));
-        for want in [MenuHit::Skirmish, MenuHit::Install, MenuHit::Quit] {
+        for want in [
+            MenuHit::Skirmish,
+            MenuHit::Multiplayer,
+            MenuHit::Install,
+            MenuHit::Quit,
+        ] {
             let r = t.rect_of(&want).unwrap();
             assert_eq!(t.hit(r.centre()), Some(want));
         }
         let (_, t) = view((640, 480), "no install", false, false, None);
         assert!(t.rect_of(&MenuHit::Skirmish).is_none());
+        assert!(t.rect_of(&MenuHit::Multiplayer).is_none());
         assert!(t.rect_of(&MenuHit::Quit).is_none());
         assert!(t.rect_of(&MenuHit::Install).is_some());
     }

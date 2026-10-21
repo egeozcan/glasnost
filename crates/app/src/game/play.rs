@@ -150,6 +150,10 @@ pub struct Play {
     /// duration, and the host time of the active interval's last frame.
     pub clock_units: i64,
     clock_last: Option<i64>,
+    /// In a network game, the person's orders not yet handed to the
+    /// lockstep session; `None` in a skirmish, where orders go straight
+    /// into the game.
+    pub outbox: Option<Vec<Order>>,
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -199,6 +203,7 @@ impl Play {
             flash: [None; hud::TABS],
             clock_units: 0,
             clock_last: None,
+            outbox: None,
         }
     }
 
@@ -301,13 +306,28 @@ impl Play {
     /// Runs one tick: the AI thinks and the simulation steps
     /// ([`Game::step`]); then the interface follows the new state.
     pub fn step(&mut self) {
+        self.step_by(|g| {
+            g.step();
+            true
+        });
+    }
+
+    /// Runs `tick` on the game, which steps it at most once and says
+    /// whether it did (in a network game the lockstep session applies the
+    /// tick's orders and steps); when it did, the interface follows the new
+    /// state. Returns whether a tick ran.
+    pub fn step_by(&mut self, tick: impl FnOnce(&mut Game) -> bool) -> bool {
         if !self.running() {
-            return;
+            return false;
         }
         let game = &mut self.game;
-        if let Err(p) = guarded(|| game.step()) {
-            self.failed = Some(format!("the simulation failed in a tick: {p}"));
-            return;
+        match guarded(|| tick(game)) {
+            Err(p) => {
+                self.failed = Some(format!("the simulation failed in a tick: {p}"));
+                return false;
+            }
+            Ok(false) => return false,
+            Ok(true) => {}
         }
         self.effects = std::mem::take(&mut self.game.world.effects);
         let w = &self.game.world;
@@ -398,6 +418,7 @@ impl Play {
             // spec: S-0414 claims 19 and 23, S-0202 claim 16 (the displayed scores, once, after the simulation has stopped)
             glasnost_sim::econ::stats::finish(&mut self.game.world, &listed);
         }
+        true
     }
 
     /// When the new owner of a changed building is the local player's house
@@ -450,11 +471,21 @@ impl Play {
     /// Issues orders in the local house's name; returns how many the
     /// simulation took.
     pub fn issue(&mut self, orders: Vec<Order>) -> usize {
-        let local = self.local;
-        orders
-            .into_iter()
-            .filter(|o| self.game.issue(local, o.clone()))
-            .count()
+        orders.into_iter().filter(|o| self.give(o.clone())).count()
+    }
+
+    /// Gives one order in the local house's name: straight to the game, or
+    /// in a network game into the outbox, which the client hands to the
+    /// lockstep session; the order then runs on every peer at a later tick,
+    /// and is taken as given here (the simulation judges it when it runs).
+    fn give(&mut self, o: Order) -> bool {
+        match self.outbox.as_mut() {
+            Some(out) => {
+                out.push(o);
+                true
+            }
+            None => self.game.issue(self.local, o),
+        }
     }
 
     /// What a click targets: the selectable object under the pointer, else
@@ -695,10 +726,9 @@ impl Play {
         if self.selection.is_empty() {
             return;
         }
-        let local = self.local;
         for o in list {
             // spec: S-0701 claim 19 (a failed issuance exits the command without its sound, even after earlier orders)
-            if !self.game.issue(local, o) {
+            if !self.give(o) {
                 return;
             }
         }
