@@ -1130,12 +1130,14 @@ fn terror_attacks(lane: &mut Lane) {
             // S-0519 claim 24, F3: the bomb icon a while after planting, with
             // its frame advanced.
             if has && planted.is_some_and(|p| t == p + 40) {
-                let missing = {
+                let (sprite, palette) = {
                     let s = lane.c.session.as_ref().unwrap();
                     let live = s.loaded.live.as_ref().expect("a live game");
-                    live.notes.iter().any(|n| n.contains("BOMBCURS"))
+                    let has = |t: &str| live.notes.iter().any(|n| n.contains(t));
+                    // S-0111 claim 19a: the cursor palette MOUSEPAL.PAL
+                    (has("BOMBCURS"), has("MOUSEPAL"))
                 };
-                println!("bomb icon note present: {missing}");
+                println!("bomb icon note present: sprite {sprite}, cursor palette {palette}");
                 lane.save("terror-bomb-later");
             }
             if planted.is_some() && !has {
