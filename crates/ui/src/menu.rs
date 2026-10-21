@@ -13,6 +13,8 @@ pub enum MenuHit {
     Multiplayer,
     /// Choose the game folder again.
     Install,
+    /// Open the settings screen.
+    Settings,
     /// Leave the program.
     Quit,
 }
@@ -64,6 +66,7 @@ pub fn view(
         (MenuHit::Skirmish, "Skirmish", ready),
         (MenuHit::Multiplayer, "Multiplayer", ready),
         (MenuHit::Install, "Game folder", true),
+        (MenuHit::Settings, "Settings", true),
     ];
     if can_quit {
         buttons.push((MenuHit::Quit, "Quit", true));
@@ -96,6 +99,7 @@ mod tests {
             MenuHit::Skirmish,
             MenuHit::Multiplayer,
             MenuHit::Install,
+            MenuHit::Settings,
             MenuHit::Quit,
         ] {
             let r = t.rect_of(&want).unwrap();
@@ -106,5 +110,6 @@ mod tests {
         assert!(t.rect_of(&MenuHit::Multiplayer).is_none());
         assert!(t.rect_of(&MenuHit::Quit).is_none());
         assert!(t.rect_of(&MenuHit::Install).is_some());
+        assert!(t.rect_of(&MenuHit::Settings).is_some());
     }
 }

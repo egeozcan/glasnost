@@ -4,6 +4,7 @@
 use super::*;
 use glasnost_convert::find::Listing;
 use glasnost_fmt::mix::MixEntry;
+use glasnost_ui::settings::{Row, SettingsHit};
 use glasnost_ui::setup::{MapEntry, SetupRules};
 use glasnost_vfs::ArchiveId;
 
@@ -138,4 +139,204 @@ fn claims_22_23_default_keys() {
     for k in [Key::Left, Key::Right, Key::Up, Key::Down] {
         assert_eq!(bound(k), None);
     }
+}
+
+/// A settings store the test can look into.
+#[derive(Clone, Default)]
+struct Shared(std::rc::Rc<std::cell::RefCell<Option<String>>>);
+
+impl Store for Shared {
+    fn read(&self) -> Option<String> {
+        self.0.borrow().clone()
+    }
+
+    fn write(&self, text: &str) -> Result<(), String> {
+        *self.0.borrow_mut() = Some(text.into());
+        Ok(())
+    }
+}
+
+fn open_settings(c: &mut Client) {
+    let _ = c.frame_rgba();
+    let r = c.menu_targets.rect_of(&MenuHit::Settings).unwrap();
+    click(c, r);
+    assert_eq!(c.shell.screen, Screen::Settings);
+    let _ = c.frame_rgba();
+}
+
+/// Settings open from the main menu without an install, change, persist
+/// and load again in a new client.
+#[test]
+fn settings_screen_changes_persist_to_the_store() {
+    let store = Shared::default();
+    let mut c = Client::new();
+    c.attach_store(Box::new(store.clone()));
+    open_settings(&mut c);
+    let r = c
+        .settings_targets
+        .rect_of(&SettingsHit::Step(Row::Sound, -1))
+        .unwrap();
+    click(&mut c, r);
+    click(&mut c, r);
+    assert_eq!(c.settings.sound, 80);
+    let r = c
+        .settings_targets
+        .rect_of(&SettingsHit::Step(Row::Scroll, 1))
+        .unwrap();
+    click(&mut c, r);
+    assert_eq!(c.settings.scroll_index, 2);
+    let r = c
+        .settings_targets
+        .rect_of(&SettingsHit::Step(Row::Scale, 1))
+        .unwrap();
+    click(&mut c, r);
+    let kept = store.read().unwrap();
+    assert!(kept.contains("sound=80") && kept.contains("scroll=2") && kept.contains("scale=125"));
+
+    // Back to the menu.
+    let r = c.settings_targets.rect_of(&SettingsHit::Back).unwrap();
+    click(&mut c, r);
+    assert_eq!(c.shell.screen, Screen::Menu);
+
+    let mut again = Client::new();
+    again.attach_store(Box::new(store.clone()));
+    assert_eq!(again.settings, c.settings);
+
+    // Reset restores the defaults and keeps them.
+    open_settings(&mut c);
+    let r = c.settings_targets.rect_of(&SettingsHit::Reset).unwrap();
+    click(&mut c, r);
+    assert_eq!(c.settings, Settings::default());
+    assert!(store.read().unwrap().contains("sound=100"));
+}
+
+/// Rebinding refuses a key another action has, accepts a free one, and the
+/// game then takes the new key.
+#[test]
+fn rebinding_checks_conflicts_and_changes_what_a_key_does() {
+    let mut c = Client::new();
+    open_settings(&mut c);
+    let r = c.settings_targets.rect_of(&SettingsHit::Rebind(0)).unwrap();
+    click(&mut c, r);
+    assert_eq!(c.rebinding, Some(0));
+    c.key(Key::Char('x'), true);
+    assert_eq!(c.rebinding, Some(0), "refused, still waiting");
+    assert!(c.settings_note.contains("scatter"), "{}", c.settings_note);
+    assert_eq!(c.settings.bindings.key(Action::Stop), 's');
+    c.key(Key::Char('q'), true);
+    assert_eq!(c.rebinding, None);
+    assert_eq!(c.settings.bindings.key(Action::Stop), 'q');
+    assert_eq!(
+        bound_with(&c.settings.bindings, Key::Char('q')),
+        Some(Bound::Command(KeyCommand::Stop))
+    );
+    assert_eq!(bound_with(&c.settings.bindings, Key::Char('s')), None);
+    assert_eq!(
+        bound_with(&c.settings.bindings, Key::Escape),
+        Some(Bound::Options)
+    );
+    // Escape cancels a rebinding, then leaves the screen.
+    let _ = c.frame_rgba();
+    let r = c.settings_targets.rect_of(&SettingsHit::Rebind(1)).unwrap();
+    click(&mut c, r);
+    c.key(Key::Escape, true);
+    assert_eq!(c.rebinding, None);
+    assert_eq!(c.shell.screen, Screen::Settings);
+    c.key(Key::Escape, true);
+    assert_eq!(c.shell.screen, Screen::Menu);
+}
+
+/// The relay address last tried is kept and comes back.
+#[test]
+fn the_last_relay_is_remembered() {
+    let store = Shared::default();
+    let mut c = Client::new();
+    c.attach_store(Box::new(store.clone()));
+    assert_eq!(c.netform.relay, DEFAULT_RELAY);
+    c.netform.relay = " ws://relay.example:1234/ ".into();
+    c.remember_relay();
+    let mut again = Client::new();
+    again.attach_store(Box::new(store.clone()));
+    assert_eq!(again.netform.relay, "ws://relay.example:1234/");
+    // Reset does not forget the relay.
+    open_settings(&mut again);
+    let r = again.settings_targets.rect_of(&SettingsHit::Reset).unwrap();
+    click(&mut again, r);
+    assert_eq!(again.settings.relay, "ws://relay.example:1234/");
+}
+
+/// A store that refuses writes leaves the screen working and says so.
+#[test]
+fn a_refusing_store_gives_a_note_not_a_failure() {
+    struct Refuses;
+    impl Store for Refuses {
+        fn read(&self) -> Option<String> {
+            None
+        }
+        fn write(&self, _: &str) -> Result<(), String> {
+            Err("blocked".into())
+        }
+    }
+    let mut c = Client::new();
+    c.attach_store(Box::new(Refuses));
+    assert_eq!(c.settings, Settings::default());
+    open_settings(&mut c);
+    let r = c
+        .settings_targets
+        .rect_of(&SettingsHit::Step(Row::Music, -1))
+        .unwrap();
+    click(&mut c, r);
+    assert_eq!(c.settings.music, 90);
+    assert!(c.settings_note.contains("blocked"));
+    let _ = c.frame_rgba();
+}
+
+/// Settings never reach the simulation: the same game played under two very
+/// different settings has the same state hash at every tick.
+#[test]
+fn state_hash_is_the_same_under_any_settings() {
+    use glasnost_ai::fixture;
+    use glasnost_ai::game::Game;
+    use glasnost_sim::econ::setup::{self as econ, Player};
+    let play = |extreme: bool| {
+        let mut c = Client::new();
+        if extreme {
+            let mut b = Bindings::default();
+            b.rebind(Action::Stop, 'q').unwrap();
+            c.settings = Settings {
+                sound: 0,
+                voices: 0,
+                music: 0,
+                scroll_index: 0,
+                ui_scale: 300,
+                bindings: b,
+                relay: "ws://elsewhere/".into(),
+            };
+            c.settings_changed();
+        }
+        let rules = fixture::rules();
+        let players = [
+            Player {
+                name: "Person".into(),
+                country: "Alphaland".into(),
+                ..Default::default()
+            },
+            Player {
+                name: "Machine".into(),
+                country: "Betaland".into(),
+                ai: true,
+                ..Default::default()
+            },
+        ];
+        let s = econ::skirmish(&rules, &players, econ::Settings::default(), 0, 7);
+        let mut g = Game::new(rules, &fixture::map(), "synthetic", fixture::catalogue(), s)
+            .expect("the synthetic skirmish loads");
+        let mut hashes = Vec::new();
+        for _ in 0..120 {
+            g.step();
+            hashes.push(g.state_hash());
+        }
+        hashes
+    };
+    assert_eq!(play(false), play(true));
 }

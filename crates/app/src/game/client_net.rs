@@ -275,6 +275,7 @@ impl Client {
             }
             Intent::Join(code) => ToRelay::Peek { code: code.clone() },
         };
+        self.remember_relay();
         let link = connect(self.netform.relay.trim());
         let mut net = Net::new(link, intent);
         net.send(&first);

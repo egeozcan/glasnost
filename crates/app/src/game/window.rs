@@ -56,6 +56,9 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     let event_loop = EventLoop::<GameEvent>::with_user_event().build()?;
     let proxy = event_loop.create_proxy();
     let mut client = Client::new();
+    if let Some(store) = crate::settings::platform_store() {
+        client.attach_store(store);
+    }
     client.can_quit = !cfg!(target_arch = "wasm32");
     if let Some(r) = options.relay.as_deref().filter(|r| !r.is_empty()) {
         client.netform.relay = r.to_owned();

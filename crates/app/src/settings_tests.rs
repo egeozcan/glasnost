@@ -1,0 +1,242 @@
+//! The settings format, the key bindings and the stores. The settings are
+//! our own client choices (nocite); only the defaults that a spec fixes cite
+//! it.
+
+use super::*;
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
+fn custom() -> Settings {
+    let mut b = Bindings::default();
+    b.rebind(Action::Stop, 'q').unwrap();
+    b.rebind(Action::Cheer, '7').unwrap();
+    Settings {
+        sound: 30,
+        voices: 0,
+        music: 70,
+        scroll_index: 0,
+        ui_scale: 150,
+        bindings: b,
+        relay: "ws://relay.example:9000/".into(),
+    }
+}
+
+/// spec: S-0101 Import mapping (a missing saved scroll setting gives 3), S-0213 claim 22
+/// (fresh-profile keys), S-0701 F3 and claim 35 (volume options at full)
+#[test]
+fn defaults_are_the_specified_ones() {
+    let s = Settings::default();
+    assert_eq!(s.scroll_index, 3);
+    assert_eq!((s.sound, s.voices), (100, 100));
+    for (a, c) in ACTIONS.iter().zip(['s', 'x', 'g', 'd', 'c']) {
+        assert_eq!(s.bindings.key(*a), c);
+    }
+    assert_eq!(Settings::mixer_level(100), 16384);
+    assert_eq!(Settings::mixer_level(0), 0);
+}
+
+#[test]
+fn text_round_trips() {
+    for s in [Settings::default(), custom()] {
+        assert_eq!(Settings::from_text(&s.to_text()), s);
+    }
+    assert!(custom().to_text().starts_with("version=1\n"));
+}
+
+/// An older file lacking fields, a newer one with more, and garbage all load.
+#[test]
+fn missing_unknown_and_wrong_fields_take_defaults() {
+    let s = Settings::from_text("version=1\nsound=40\n");
+    assert_eq!(s.sound, 40);
+    assert_eq!(s.music, 100);
+    assert_eq!(s.bindings, Bindings::default());
+    let s = Settings::from_text("version=9\nsound=41\nfuture=1\nrelay=ws://x/\n");
+    assert_eq!((s.sound, s.relay.as_str()), (41, "ws://x/"));
+    assert_eq!(
+        Settings::from_text("\u{0}garbage\n===\nsound=abc"),
+        Settings::default()
+    );
+    assert_eq!(Settings::from_text(""), Settings::default());
+    // Out-of-range values clamp; an unoffered scale is ignored.
+    let s = Settings::from_text("sound=900\nmusic=-5\nscroll=99\nscale=77\n");
+    assert_eq!(
+        (s.sound, s.music, s.scroll_index, s.ui_scale),
+        (100, 0, 6, 100)
+    );
+}
+
+#[test]
+fn bindings_refuse_conflicts_and_bad_keys() {
+    let mut b = Bindings::default();
+    assert_eq!(
+        b.rebind(Action::Stop, 'x'),
+        Err(BindError::Taken(Action::Scatter))
+    );
+    assert_eq!(b.key(Action::Stop), 's', "a refused key changes nothing");
+    assert_eq!(b.rebind(Action::Stop, ' '), Err(BindError::NotBindable));
+    assert_eq!(
+        b.rebind(Action::Stop, 'S'),
+        Ok(()),
+        "own key again, any case"
+    );
+    assert_eq!(b.rebind(Action::Stop, 'q'), Ok(()));
+    assert_eq!(b.action('q'), Some(Action::Stop));
+    assert_eq!(b.action('s'), None);
+}
+
+#[test]
+fn a_file_with_clashing_keys_falls_back_to_the_default_keys() {
+    let s = Settings::from_text("key.stop=x\nkey.scatter=x\nsound=20\n");
+    assert_eq!(s.bindings, Bindings::default());
+    assert_eq!(s.sound, 20, "the other fields still load");
+    let s = Settings::from_text("key.stop=!\n");
+    assert_eq!(s.bindings, Bindings::default());
+}
+
+#[test]
+fn steps_stay_in_range() {
+    let mut s = Settings::default();
+    s.step_scroll(10);
+    assert_eq!(s.scroll_index, 0);
+    assert_eq!(s.scroll_label(), "7 of 7");
+    s.step_scroll(-10);
+    assert_eq!(s.scroll_label(), "1 of 7");
+    s.step_scale(-1);
+    assert_eq!(s.ui_scale, 100);
+    s.step_scale(1);
+    assert_eq!(s.ui_scale, 125);
+    for _ in 0..9 {
+        s.step_scale(1);
+    }
+    assert_eq!(s.ui_scale, 300);
+    assert_eq!(step_volume(95, 1), 100);
+    assert_eq!(step_volume(5, -1), 0);
+}
+
+fn scratch(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("glasnost-settings-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
+}
+
+/// The native file: written, read back, replaced, with its folder created.
+#[test]
+fn the_native_file_round_trips() {
+    let dir = scratch("file");
+    let store = FileStore(dir.join("glasnost").join("settings.txt"));
+    assert_eq!(store.read(), None, "no file: defaults");
+    store.write(&custom().to_text()).unwrap();
+    assert_eq!(Settings::from_text(&store.read().unwrap()), custom());
+    store.write(&Settings::default().to_text()).unwrap();
+    assert_eq!(
+        Settings::from_text(&store.read().unwrap()),
+        Settings::default()
+    );
+    assert!(!dir.join("glasnost").join("settings.tmp").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unwritable_place_reports_instead_of_panicking() {
+    let dir = scratch("blocked");
+    std::fs::create_dir_all(&dir).unwrap();
+    // A file where the folder should be.
+    std::fs::write(dir.join("glasnost"), "x").unwrap();
+    let store = FileStore(dir.join("glasnost").join("settings.txt"));
+    assert!(store.write("version=1\n").is_err());
+    assert_eq!(store.read(), None);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_config_folder_follows_the_platform() {
+    let env = |pairs: &'static [(&str, &str)]| {
+        move |k: &str| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| (*v).to_owned())
+        }
+    };
+    let tail = |p: Option<PathBuf>| p.map(|p| p.to_string_lossy().replace('\\', "/"));
+    assert_eq!(
+        tail(config_path(
+            Host::Unix,
+            env(&[("XDG_CONFIG_HOME", "/c"), ("HOME", "/h")])
+        )),
+        Some("/c/glasnost/settings.txt".into())
+    );
+    assert_eq!(
+        tail(config_path(Host::Unix, env(&[("HOME", "/h")]))),
+        Some("/h/.config/glasnost/settings.txt".into())
+    );
+    // A relative XDG folder is not used (the spec of the variable says so).
+    assert_eq!(
+        tail(config_path(
+            Host::Unix,
+            env(&[("XDG_CONFIG_HOME", "rel"), ("HOME", "/h")])
+        )),
+        Some("/h/.config/glasnost/settings.txt".into())
+    );
+    assert_eq!(
+        tail(config_path(Host::Mac, env(&[("HOME", "/machome")]))),
+        Some("/machome/Library/Application Support/glasnost/settings.txt".into())
+    );
+    assert_eq!(config_path(Host::Unix, env(&[])), None);
+    #[cfg(windows)]
+    assert_eq!(
+        tail(config_path(
+            Host::Windows,
+            env(&[("APPDATA", "C:\\wuser\\AppData\\Roaming")])
+        )),
+        Some("C:/wuser/AppData/Roaming/glasnost/settings.txt".into())
+    );
+}
+
+/// A browser-like storage that may refuse.
+struct Mem {
+    items: RefCell<BTreeMap<String, String>>,
+    blocked: bool,
+}
+
+impl KeyValue for Mem {
+    fn get(&self, key: &str) -> Result<Option<String>, String> {
+        if self.blocked {
+            return Err("SecurityError".into());
+        }
+        Ok(self.items.borrow().get(key).cloned())
+    }
+
+    fn set(&self, key: &str, value: &str) -> Result<(), String> {
+        if self.blocked {
+            return Err("QuotaExceededError".into());
+        }
+        self.items.borrow_mut().insert(key.into(), value.into());
+        Ok(())
+    }
+}
+
+/// The web layer's logic: round trip under its key, and a blocked storage
+/// reads as empty (defaults) and reports on writing.
+#[test]
+fn the_web_storage_layer_round_trips_and_survives_a_block() {
+    let open = KvStore(Mem {
+        items: RefCell::default(),
+        blocked: false,
+    });
+    assert_eq!(open.read(), None);
+    open.write(&custom().to_text()).unwrap();
+    assert_eq!(Settings::from_text(&open.read().unwrap()), custom());
+    assert!(open.0.items.borrow().contains_key(WEB_KEY));
+
+    let blocked = KvStore(Mem {
+        items: RefCell::default(),
+        blocked: true,
+    });
+    assert_eq!(blocked.read(), None);
+    assert!(blocked.write("x").is_err());
+    assert_eq!(
+        Settings::from_text(&blocked.read().unwrap_or_default()),
+        Settings::default()
+    );
+}
