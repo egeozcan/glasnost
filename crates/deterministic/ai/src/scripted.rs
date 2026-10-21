@@ -126,6 +126,17 @@ pub(crate) const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
 /// ([`Script::far_field`]).
 const FIELD_GAP: i32 = 2; // nocite: tuning of our own opponent
 
+/// What the far-field search of [`Script::far_field`] sees: the explored
+/// resource cells, those of fields the house works, those of unworked
+/// fields on its own half of the map, and the far field's cell.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Fields {
+    pub explored: usize,
+    pub worked: usize,
+    pub own_half: usize,
+    pub far: Option<CellXY>,
+}
+
 /// Spacing of the search grid that waves sweep once every enemy start
 /// position has been visited.
 const SEARCH_STEP: i32 = 8; // nocite: tuning of our own opponent
@@ -877,7 +888,15 @@ impl Script {
     /// yards, refineries or slave miners (the field's edge grows away from
     /// them as the resource spreads).
     pub(crate) fn far_field(&self, w: &World) -> Option<CellXY> {
-        let home = self.home(w)?;
+        self.fields(w).far
+    }
+
+    /// The far-field search of [`Self::far_field`] with its counts (the
+    /// lane's expansion probe reads them).
+    pub(crate) fn fields(&self, w: &World) -> Fields {
+        let Some(home) = self.home(w) else {
+            return Fields::default();
+        };
         let centres = self.field_centres(w);
         let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
         let ore: std::collections::BTreeSet<(i32, i32)> = w
@@ -912,10 +931,19 @@ impl Script {
                 }
             }
         }
-        ore.difference(&worked)
+        let own_half: Vec<CellXY> = ore
+            .difference(&worked)
             .map(|&(y, x)| CellXY::new(x, y))
             .filter(|&c| self.targets.iter().all(|&t| dist2(c, home) < dist2(c, t)))
-            .min_by_key(|&c| (dist2(c, home), c.y, c.x))
+            .collect();
+        Fields {
+            explored: ore.len(),
+            worked: worked.len(),
+            own_half: own_half.len(),
+            far: own_half
+                .into_iter()
+                .min_by_key(|&c| (dist2(c, home), c.y, c.x)),
+        }
     }
 
     /// Whether an explored cell of the map holds a resource for the house.

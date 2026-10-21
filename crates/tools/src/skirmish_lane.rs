@@ -119,6 +119,18 @@ struct Game {
     /// garrisons, capture, infiltration), and the garrison occupants inside
     /// buildings at the end.
     special: [glasnost_ai::special::Uses; PLAYERS],
+    /// Per player house (M8 step B1): the most construction yards it owned
+    /// at once, the first tick it owned two, the first sampled tick it
+    /// could build a yard vehicle, and over the expansion probe's samples
+    /// how often each condition of the yard vehicle's build failed.
+    yards_max: [usize; PLAYERS],
+    two_yards_at: [Option<i32>; PLAYERS],
+    yard_unit_from: [Option<i32>; PLAYERS],
+    expansion_blocks: [BTreeMap<String, usize>; PLAYERS],
+    /// Per player house (M8 step B2): the first tick each superweapon kind
+    /// was granted and stood ready.
+    first_granted: [BTreeMap<String, i32>; PLAYERS],
+    first_ready: [BTreeMap<String, i32>; PLAYERS],
     occupants_inside: usize,
     /// Per player house: the occasions for charges and disarms (S-0518,
     /// S-0519) a person in its seat would have had (M7a step 2c).
@@ -633,6 +645,12 @@ fn play_ai(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // `GLASNOST_AI_EXPROBE=n`: every n ticks, per house, what the AI's
+    // expansion step sees (`glasnost_ai::brain::ExpansionProbe`).
+    let ex_probe: i32 = std::env::var("GLASNOST_AI_EXPROBE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -684,6 +702,42 @@ fn play_ai(
                         w.tick
                     );
                 }
+            }
+        }
+        expansion_and_superweapons(g, w);
+        if ex_probe > 0 && w.tick % ex_probe == 0 {
+            for (h, p) in game.expansion_probes() {
+                let blocked = p.blocked_by();
+                if let Some(m) = g.expansion_blocks.get_mut(usize::from(h.0)) {
+                    for b in &blocked {
+                        *m.entry((*b).to_string()).or_default() += 1;
+                    }
+                    if blocked.is_empty() {
+                        *m.entry("none".to_string()).or_default() += 1;
+                    }
+                }
+                println!(
+                    "exprobe tick {} house {}: yards {} units {} (idle {}) lined {} buildable {} cost {} credits {} explored {} worked {} own-half unworked {} field {} harvesters-kept {} intruders {} selling {} paying {} saving {}; blocked by {:?}",
+                    w.tick,
+                    h.0,
+                    p.yards,
+                    p.units,
+                    p.idle_units,
+                    p.lined,
+                    p.buildable,
+                    p.cost,
+                    p.credits,
+                    p.explored,
+                    p.worked,
+                    p.own_half,
+                    p.field,
+                    p.harvesters_kept,
+                    p.intruders,
+                    p.selling,
+                    p.paying,
+                    p.saving,
+                    blocked
+                );
             }
         }
         if trace > 0 && w.tick % trace == 0 {
@@ -881,6 +935,49 @@ fn play_ai(
     g.save_matches = same_at_save && loaded.state_hash() == end;
     Ok(())
 }
+
+/// Per player house after each tick (M8 steps B1 and B2): its construction
+/// yards, from when it can build a yard vehicle (sampled every
+/// [`YARD_UNIT_SAMPLE`] ticks), and the first tick each superweapon kind
+/// was granted and stood ready (not suspended: what the sidebar shows).
+fn expansion_and_superweapons(g: &mut Game, w: &World) {
+    for h in 0..PLAYERS {
+        let house = Some(HouseId(h as u8));
+        let yards = w
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.health > 0 && o.owner == house)
+            .filter(|o| glasnost_ai::scripted::is_yard(w, o))
+            .count();
+        g.yards_max[h] = g.yards_max[h].max(yards);
+        if yards >= 2 && g.two_yards_at[h].is_none() {
+            g.two_yards_at[h] = Some(w.tick);
+        }
+        if g.yard_unit_from[h].is_none()
+            && w.tick % YARD_UNIT_SAMPLE == 0
+            && !glasnost_ai::brain::yard_units(w, HouseId(h as u8)).is_empty()
+        {
+            g.yard_unit_from[h] = Some(w.tick);
+        }
+        for (i, t) in w.rules().superweapons.types.iter().enumerate() {
+            let Some(r) = glasnost_sim::superweapons::charge::get(w, HouseId(h as u8), i as u32)
+            else {
+                continue;
+            };
+            let kind = t.kind.map_or("no kind".to_string(), |k| format!("{k:?}"));
+            if r.granted {
+                g.first_granted[h].entry(kind.clone()).or_insert(w.tick);
+                if r.ready && !r.suspended {
+                    g.first_ready[h].entry(kind).or_insert(w.tick);
+                }
+            }
+        }
+    }
+}
+
+/// Ticks between the lane's samples of whether a house can build a yard
+/// vehicle.
+const YARD_UNIT_SAMPLE: i32 = 100;
 
 /// What the lane counts of the transports and superweapons while a game
 /// runs (one [`Tally::observe`] after every tick).
@@ -2586,6 +2683,16 @@ fn report(
                 "  special abilities (orders): {}; garrison occupants inside at the end: {}",
                 uses.join("; "),
                 g.occupants_inside
+            );
+            let _ = writeln!(
+                s,
+                "  expansion per house: most construction yards at once {:?}, first tick with two {:?}, yard vehicle buildable from {:?}, expansion probe samples by failed condition {:?}; superweapons per house: first tick granted by kind {:?}, first tick ready by kind {:?}",
+                g.yards_max,
+                g.two_yards_at,
+                g.yard_unit_from,
+                g.expansion_blocks,
+                g.first_granted,
+                g.first_ready
             );
             let occ: Vec<String> = g
                 .occasions

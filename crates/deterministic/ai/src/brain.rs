@@ -366,22 +366,8 @@ impl Brain {
     fn economy_first(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
         use glasnost_sim::econ::production::Hold;
         let h = self.house();
-        let economy = |t: TypeRef| {
-            matches!(
-                scripted::role_of(w, t),
-                Some(Role::Harvester | Role::Refinery)
-            )
-        };
-        let short = !self.script.selling()
-            && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
-        let credits = w.houses[usize::from(h.0)].credits;
-        let paying = short
-            && w.econ.lines.lines.iter().any(|l| {
-                l.house == h
-                    && l.item.as_ref().is_some_and(|i| {
-                        economy(i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
-                    })
-            });
+        let economy = |t: TypeRef| is_economy(w, t);
+        let paying = self.paying(w);
         let low_power = crate::power::short(w, h);
         // Saving for a superweapon (M7b AI round 3): while a building that
         // gives a superweapon the house fires waits on its line for money
@@ -396,20 +382,7 @@ impl Brain {
         // quick games against the Soviet side, against 11 of 12 without.
         let army =
             |t: TypeRef| t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army);
-        let saving = !paying
-            && !self.script.selling()
-            && self.intruders(w).is_empty()
-            && !self.outnumbered(w)
-            && w.econ.lines.lines.iter().any(|l| {
-                l.house == h
-                    && l.item.as_ref().is_some_and(|i| {
-                        i.t.kind == Kind::Building
-                            && !Self::giving_kinds(w, i.t.index).is_empty()
-                            && i.hold == Hold::None
-                            && !i.done()
-                            && credits < i.owed
-                    })
-            });
+        let saving = !paying && self.saving(w);
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
             if i.done() || economy(i.t) {
@@ -433,6 +406,48 @@ impl Brain {
             }
         }
         paying
+    }
+
+    /// Whether the house saves for a superweapon building
+    /// ([`Self::economy_first`]): not selling out, no seen enemy near the
+    /// base, not outnumbered, and a building that gives a superweapon it
+    /// fires runs on a line with less money in hand than its balance owed.
+    fn saving(&self, w: &World) -> bool {
+        use glasnost_sim::econ::production::Hold;
+        let h = self.house();
+        let credits = w.houses[usize::from(h.0)].credits;
+        !self.script.selling()
+            && self.intruders(w).is_empty()
+            && !self.outnumbered(w)
+            && w.econ.lines.lines.iter().any(|l| {
+                l.house == h
+                    && l.item.as_ref().is_some_and(|i| {
+                        i.t.kind == Kind::Building
+                            && !Self::giving_kinds(w, i.t.index).is_empty()
+                            && i.hold == Hold::None
+                            && !i.done()
+                            && credits < i.owed
+                    })
+            })
+    }
+
+    /// Whether the house pays for its economy first ([`Self::economy_first`]):
+    /// it is short of its economy target or of a refinery, and an item of
+    /// the harvester or refinery role runs on a line with less money in hand
+    /// than its balance owed.
+    fn paying(&self, w: &World) -> bool {
+        use glasnost_sim::econ::production::Hold;
+        let h = self.house();
+        let short = !self.script.selling()
+            && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
+        let credits = w.houses[usize::from(h.0)].credits;
+        short
+            && w.econ.lines.lines.iter().any(|l| {
+                l.house == h
+                    && l.item.as_ref().is_some_and(|i| {
+                        is_economy(w, i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
+                    })
+            })
     }
 
     /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
@@ -1069,21 +1084,7 @@ impl Brain {
     /// The vehicle types the house can build now that deploy into a
     /// construction yard, cheapest first.
     fn yard_units(&self, w: &World) -> Vec<TypeRef> {
-        let r = w.rules();
-        let mut v: Vec<TypeRef> = all_types(w)
-            .into_iter()
-            .filter(|t| t.kind == Kind::Vehicle)
-            .filter(|t| {
-                deploy::deploys_into(w, t.kind, t.index).is_some_and(|b| {
-                    r.buildings.get(b as usize).is_some_and(|b| {
-                        b.factory == Some(glasnost_sim::rules::FactoryKind::Building)
-                    })
-                })
-            })
-            .filter(|&t| tech::buildable(w, self.house(), t))
-            .collect();
-        v.sort_by_key(|&t| (production::cost_field(w, t), t.index));
-        v
+        yard_units(w, self.house())
     }
 
     /// Rebuilds a lost construction yard: while the house has neither a
@@ -1773,6 +1774,153 @@ impl Brain {
                 }
                 out.push(order);
             }
+        }
+    }
+}
+
+/// The vehicle types house `h` can build now that deploy into a
+/// construction yard, cheapest first.
+pub fn yard_units(w: &World, h: HouseId) -> Vec<TypeRef> {
+    let r = w.rules();
+    let mut v: Vec<TypeRef> = all_types(w)
+        .into_iter()
+        .filter(|t| t.kind == Kind::Vehicle)
+        .filter(|t| {
+            deploy::deploys_into(w, t.kind, t.index).is_some_and(|b| {
+                r.buildings
+                    .get(b as usize)
+                    .is_some_and(|b| b.factory == Some(glasnost_sim::rules::FactoryKind::Building))
+            })
+        })
+        .filter(|&t| tech::buildable(w, h, t))
+        .collect();
+    v.sort_by_key(|&t| (production::cost_field(w, t), t.index));
+    v
+}
+
+/// Whether type `t` has the harvester or refinery role: what the house pays
+/// for first ([`Brain::economy_first`]).
+fn is_economy(w: &World, t: TypeRef) -> bool {
+    matches!(
+        scripted::role_of(w, t),
+        Some(Role::Harvester | Role::Refinery)
+    )
+}
+
+/// What the expansion step ([`Brain::expand`]) sees for one house, counts
+/// only (the lane's expansion probe, `GLASNOST_AI_EXPROBE`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExpansionProbe {
+    /// Construction yards the house owns.
+    pub yards: usize,
+    /// Its vehicles that deploy into a construction yard.
+    pub units: usize,
+    /// Of those, the idle ones.
+    pub idle_units: usize,
+    /// Whether a yard vehicle runs or waits on one of its lines.
+    pub lined: bool,
+    /// Whether it can build a yard vehicle now.
+    pub buildable: bool,
+    /// The cheapest yard vehicle's cost.
+    pub cost: i64,
+    /// Its credits.
+    pub credits: i64,
+    /// Explored resource cells.
+    pub explored: usize,
+    /// Of those, the cells of fields it works.
+    pub worked: usize,
+    /// The cells of unworked fields on its own half of the map.
+    pub own_half: usize,
+    /// Whether a far field was found.
+    pub field: bool,
+    /// Whether it keeps the plan's harvesters.
+    pub harvesters_kept: bool,
+    /// Seen enemies near its buildings.
+    pub intruders: usize,
+    /// Whether it sells out.
+    pub selling: bool,
+    /// Whether it pays for its economy first.
+    pub paying: bool,
+    /// Whether it saves for a superweapon building.
+    pub saving: bool,
+}
+
+impl ExpansionProbe {
+    /// The conditions of the yard vehicle's build that fail, by name.
+    pub fn blocked_by(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.yards == 0 {
+            v.push("no yard");
+        }
+        if self.selling {
+            v.push("selling");
+        }
+        if self.paying {
+            v.push("paying");
+        }
+        if !self.buildable {
+            v.push("not buildable");
+        }
+        if self.yards + self.units + usize::from(self.lined) >= EXPANSION_YARDS {
+            v.push("yards enough");
+        }
+        if self.buildable && self.credits < EXPANSION_RICH * self.cost {
+            v.push("not rich");
+        }
+        if !self.field {
+            v.push("no field");
+        }
+        if !self.harvesters_kept {
+            v.push("harvesters short");
+        }
+        if self.intruders > 0 {
+            v.push("intruders");
+        }
+        v
+    }
+}
+
+impl Brain {
+    /// What the expansion step sees now ([`ExpansionProbe`]).
+    pub fn expansion_probe(&self, w: &World) -> ExpansionProbe {
+        let h = self.house();
+        let own = self.script.own(w);
+        let units: Vec<ObjectId> = own
+            .iter()
+            .copied()
+            .filter(|&id| {
+                w.obj(id).is_some_and(|o| {
+                    o.kind == Kind::Vehicle && deploys_into_yard(w, o.kind, o.type_index)
+                })
+            })
+            .collect();
+        let t = self.yard_units(w).first().copied();
+        let fields = self.script.fields(w);
+        ExpansionProbe {
+            yards: own
+                .iter()
+                .filter(|&&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
+                .count(),
+            units: units.len(),
+            idle_units: units.iter().filter(|&&id| idle(w, id)).count(),
+            lined: t.is_some_and(|t| {
+                w.econ.lines.lines.iter().any(|l| {
+                    l.house == h
+                        && (l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+                })
+            }),
+            buildable: t.is_some(),
+            cost: t.map_or(0, |t| i64::from(production::cost_field(w, t))),
+            credits: i64::from(w.houses[usize::from(h.0)].credits),
+            explored: fields.explored,
+            worked: fields.worked,
+            own_half: fields.own_half,
+            field: fields.far.is_some(),
+            harvesters_kept: self.script.harvesters_kept(w),
+            intruders: self.intruders(w).len(),
+            selling: self.script.selling(),
+            paying: self.paying(w),
+            saving: self.saving(w),
         }
     }
 }

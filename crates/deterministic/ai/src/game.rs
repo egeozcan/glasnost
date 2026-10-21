@@ -133,6 +133,15 @@ impl Game {
             .collect()
     }
 
+    /// What each brain's expansion step sees now, in the order of the
+    /// brains (local-lane reports).
+    pub fn expansion_probes(&self) -> Vec<(HouseId, crate::brain::ExpansionProbe)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.expansion_probe(&self.world)))
+            .collect()
+    }
+
     /// The AI houses.
     pub fn ai_houses(&self) -> Vec<HouseId> {
         self.brains.iter().map(Brain::house).collect()
