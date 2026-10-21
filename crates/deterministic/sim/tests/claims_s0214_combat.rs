@@ -326,3 +326,87 @@ fn row_i16_charge_ability_by_rank() {
 // Table V row k1 (the crusher ability) needs an armed vehicle that is not
 // able to fire, that is a disabled one; nothing is disabled in our engine
 // yet, so the row is wired but not observable.
+
+/// The combat ruleset with AATOWER (TOWER with the weapon Flak, whose
+/// projectile is anti-air and not anti-ground), PULSE (TOWER as a pulse
+/// cannon) and the flying aircraft BIRD.
+fn b7_rules() -> Ruleset {
+    use glasnost_rules::sim::{Locomotor, ProjectileType, UnitType};
+    let mut r = testkit::combat_ruleset();
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .extend(["AATOWER", "PULSE"].map(String::from));
+    r.registries
+        .entry("aircraft".into())
+        .or_default()
+        .push("BIRD".into());
+    let s = &mut r.sim;
+    s.projectiles.insert(
+        "Flak".into(),
+        ProjectileType {
+            aa: Some(true),
+            ag: Some(false),
+            ..Default::default()
+        },
+    );
+    let mut flak = s.weapons["Cannon"].clone();
+    flak.projectile = Some("Flak".into());
+    s.weapons.insert("FlakGun".into(), flak);
+    let mut aa = s.buildings["TOWER"].clone();
+    aa.primary = Some("FlakGun".into());
+    s.buildings.insert("AATOWER".into(), aa);
+    let mut pulse = s.buildings["TOWER"].clone();
+    pulse.emp_cannon = Some(true);
+    s.buildings.insert("PULSE".into(), pulse);
+    s.aircraft.insert(
+        "BIRD".into(),
+        UnitType {
+            strength: Some(200),
+            speed: Some(30),
+            rot: Some(12),
+            locomotor: Some(Locomotor::Fly),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+// spec: S-0214 table B row B7 (a building with a weapon in its first slot whose projectile cannot hit ground targets: nothing, whatever the target); Q-1761 open (the answer for an airborne target is the interim reading of the row)
+#[test]
+fn row_b7_anti_air_only_building_does_nothing() {
+    let r = b7_rules();
+    let mut w = game(&r);
+    let tower = spawn(&mut w, Kind::Building, "TOWER", 0, mid(SIZE, 0, 0), 0);
+    let aa = spawn(&mut w, Kind::Building, "AATOWER", 0, mid(SIZE, 0, 4), 0);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 2), 0);
+    assert_eq!(act(&w, tower, ClickOn::Object(cart)), Action::Attack);
+    assert_eq!(act(&w, aa, ClickOn::Object(cart)), Action::Nothing);
+    // An aircraft on the ground and one in flight: nothing either way.
+    let bird = spawn(&mut w, Kind::Aircraft, "BIRD", 1, mid(SIZE, 2, 5), 0);
+    assert_eq!(act(&w, aa, ClickOn::Object(bird)), Action::Nothing);
+    let p = w.obj(bird).unwrap().pos;
+    let ground = w.surface_at(p.x, p.y);
+    w.obj_mut(bird).unwrap().pos.z = ground + 400;
+    assert!(!glasnost_sim::air::on_ground(&w, bird));
+    assert_eq!(act(&w, aa, ClickOn::Object(bird)), Action::Nothing);
+}
+
+// spec: S-0214 table B row B7 (a pulse cannon, or a building being sold (S-0407 Terms): nothing)
+#[test]
+fn row_b7_pulse_cannon_and_building_being_sold() {
+    let r = b7_rules();
+    let mut w = game(&r);
+    let pulse = spawn(&mut w, Kind::Building, "PULSE", 0, mid(SIZE, 0, 0), 0);
+    let tower = spawn(&mut w, Kind::Building, "TOWER", 0, mid(SIZE, 0, 4), 0);
+    let cart = spawn(&mut w, Kind::Vehicle, "CART", 1, mid(SIZE, 3, 2), 0);
+    assert_eq!(act(&w, pulse, ClickOn::Object(cart)), Action::Nothing);
+    assert_eq!(act(&w, tower, ClickOn::Object(cart)), Action::Attack);
+    let tick = w.tick;
+    w.obj_mut(tower)
+        .unwrap()
+        .beh
+        .force(Behaviour::Selling, tick, true);
+    assert!(glasnost_sim::econ::tech::being_sold(w.obj(tower).unwrap()));
+    assert_eq!(act(&w, tower, ClickOn::Object(cart)), Action::Nothing);
+}
