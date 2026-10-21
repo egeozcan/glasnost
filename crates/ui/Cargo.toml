@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 glasnost-sim.workspace = true
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 glasnost-ai.workspace = true

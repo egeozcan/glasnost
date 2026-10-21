@@ -1,0 +1,25 @@
+[package]
+name = "glasnost-relay"
+description = "Glasnost relay and lobby server: WebSocket rooms that forward the lockstep frames (native only)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+glasnost-net.workspace = true
+glasnost-ui.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+getrandom = "0.3"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+[dev-dependencies]
+glasnost-ai.workspace = true
+glasnost-map.workspace = true
+glasnost-sim.workspace = true
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
+
+[lints]
+workspace = true

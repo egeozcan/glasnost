@@ -4,10 +4,15 @@
 //! Which values the screen offers and their ranges are interface matters
 //! (S-0412 claim 1); the defaults and slider ranges come from the rules
 //! ([`SetupRules`], S-0412 Import mapping and Constants).
+//!
+//! The network lobby (`glasnost_net::lobby`, M9) holds the same [`Setup`]
+//! for a room, so the model serializes; there a [`SlotKind::Human`] row is a
+//! person's row, taken by one member of the room or open.
 
 use glasnost_sim::econ::setup::{self, HouseValues, LobbyChoice, Player, Settings};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::world::GameSetup;
+use serde::{Deserialize, Serialize};
 
 use crate::draw::{DrawList, Rgba, colour};
 use crate::geom::{Point, Rect};
@@ -54,9 +59,10 @@ pub struct MapEntry {
 }
 
 /// Who plays a slot.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SlotKind {
-    /// The person at this machine.
+    /// A person: in a skirmish the person at this machine, in a network
+    /// room the member who took the row.
     Human,
     /// An AI house (S-0412 claim 12).
     Ai,
@@ -65,7 +71,7 @@ pub enum SlotKind {
 }
 
 /// One row of the player list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slot {
     /// Who plays it.
     pub kind: SlotKind,
@@ -82,7 +88,8 @@ pub struct Slot {
 }
 
 impl Slot {
-    const fn closed() -> Self {
+    /// A closed row, every choice on random or none.
+    pub const fn closed() -> Self {
         Self {
             kind: SlotKind::Closed,
             country: None,
@@ -117,7 +124,7 @@ const FLAGS: [(Flag, &str); 5] = [
 ];
 
 /// The screen's state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Setup {
     /// The chosen map, an index into the maps offered.
     pub map: usize,
@@ -134,7 +141,7 @@ pub struct Setup {
 }
 
 /// Why the setup cannot start yet.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Problem {
     /// No map to play.
     NoMap,
@@ -187,6 +194,16 @@ pub struct Lobby {
 /// likes).
 pub const HUMAN_NAME: &str = "Player";
 
+/// The name of the n-th person's house (0-based) in a game of several
+/// persons: [`HUMAN_NAME`], "Player 2", …
+pub fn person_name(n: usize) -> String {
+    if n == 0 {
+        HUMAN_NAME.into()
+    } else {
+        format!("{HUMAN_NAME} {}", n + 1)
+    }
+}
+
 /// The name of the n-th AI house (0-based): "Computer", "Computer 2", …
 pub fn ai_name(n: usize) -> String {
     if n == 0 {
@@ -209,7 +226,7 @@ fn cycle_opt(v: Option<usize>, d: i32, n: usize) -> Option<usize> {
 /// count (`MapEntry::starts`, S-0009 claim 23), at most [`MAX_SLOTS`].
 /// Listed maps have at least two starts, so the random-map player-count
 /// fallback for a count of zero never applies; with no map, every row.
-fn rows(map: Option<&MapEntry>) -> usize {
+pub fn rows(map: Option<&MapEntry>) -> usize {
     map.map_or(MAX_SLOTS, |m| (m.starts as usize).min(MAX_SLOTS))
 }
 
@@ -247,7 +264,14 @@ impl Setup {
 
     /// Why the setup cannot start, if it cannot.
     pub fn problem(&self, rules: &SetupRules, maps: &[MapEntry]) -> Option<Problem> {
-        let Some(map) = maps.get(self.map) else {
+        self.check(rules.countries.len(), maps.get(self.map))
+    }
+
+    /// Why the setup cannot start on `map` with `countries` countries
+    /// offered, if it cannot ([`Setup::problem`] without the rest of the
+    /// rules, for the network lobby, which knows only these two).
+    pub fn check(&self, countries: usize, map: Option<&MapEntry>) -> Option<Problem> {
+        let Some(map) = map else {
             return Some(Problem::NoMap);
         };
         let n = self.players().count();
@@ -259,7 +283,7 @@ impl Setup {
         }
         let ps: Vec<&Slot> = self.players().map(|(_, s)| s).collect();
         for (i, a) in ps.iter().enumerate() {
-            if a.country.is_some_and(|c| c >= rules.countries.len()) {
+            if a.country.is_some_and(|c| c >= countries) {
                 return Some(Problem::NoCountry);
             }
             for b in &ps[i + 1..] {
@@ -275,7 +299,34 @@ impl Setup {
         None
     }
 
-    /// The lobby values of this setup (S-0412 claim 1).
+    /// The occupied rows in house order (S-0009 claim 19): the persons in
+    /// increasing order of their chosen colour slot, the earlier row first
+    /// on a tie, then the computer rows in row order. A person on a random
+    /// colour has no chosen slot yet; until request Q-1805 is answered such
+    /// persons come after those with a chosen slot, in row order (interim).
+    /// With one person, as in a skirmish, this is the row order.
+    pub fn house_order(&self) -> Vec<usize> {
+        let mut persons: Vec<(Option<u8>, usize)> = self
+            .players()
+            .filter(|(_, s)| s.kind == SlotKind::Human)
+            .map(|(i, s)| (s.colour, i))
+            .collect();
+        // spec: S-0009 claim 19 (persons by increasing chosen colour index, ties to the earlier slot); Q-1805 (interim: random colours last, in row order)
+        persons.sort_by_key(|&(c, i)| (c.is_none(), c, i));
+        persons
+            .into_iter()
+            .map(|(_, i)| i)
+            // spec: S-0009 claim 19 (then the computer players in lobby-slot order)
+            .chain(
+                self.players()
+                    .filter(|(_, s)| s.kind == SlotKind::Ai)
+                    .map(|(i, _)| i),
+            )
+            .collect()
+    }
+
+    /// The lobby values of this setup (S-0412 claim 1), the players in
+    /// house order ([`Setup::house_order`]).
     pub fn lobby(&self, rules: &SetupRules, maps: &[MapEntry]) -> Result<Lobby, Problem> {
         if let Some(p) = self.problem(rules, maps) {
             return Err(p);
@@ -283,13 +334,16 @@ impl Setup {
         let mut players = Vec::new();
         let mut choices = Vec::new();
         let mut ais = 0;
-        for (_, s) in self.players() {
+        let mut persons = 0;
+        for i in self.house_order() {
+            let s = &self.slots[i];
             let ai = s.kind == SlotKind::Ai;
             let name = if ai {
                 ais += 1;
                 ai_name(ais - 1)
             } else {
-                HUMAN_NAME.to_owned()
+                persons += 1;
+                person_name(persons - 1)
             };
             players.push(Player {
                 name,
@@ -801,6 +855,39 @@ mod tests {
         assert_eq!(l.unit_count, 3);
         assert!(l.bases);
         assert_eq!(l.game_speed, 4);
+    }
+
+    // spec: S-0009 claim 19 (persons by increasing chosen colour index, ties to the earlier slot, then computers in slot order); Q-1805 (interim: persons on a random colour after the others, in row order)
+    #[test]
+    fn house_order_puts_persons_by_colour_then_computers() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        // The skirmish: the person, then the computer, in row order.
+        assert_eq!(s.house_order(), vec![0, 1]);
+        s.slots[2].kind = SlotKind::Human;
+        s.slots[3].kind = SlotKind::Ai;
+        s.slots[4].kind = SlotKind::Human;
+        s.slots[0].colour = Some(5);
+        s.slots[2].colour = Some(1);
+        assert_eq!(s.house_order(), vec![2, 0, 4, 1, 3]);
+        s.slots[4].colour = Some(3);
+        assert_eq!(s.house_order(), vec![2, 4, 0, 1, 3]);
+        let maps = [MapEntry {
+            label: "map C".into(),
+            starts: 8,
+        }];
+        let l = s.lobby(&r, &maps).unwrap();
+        let names: Vec<&str> = l.players.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Player", "Player 2", "Player 3", "Computer", "Computer 2"]
+        );
+        let colours: Vec<_> = l.players.iter().map(|p| p.values.colour).collect();
+        assert_eq!(colours, [Some(1), Some(3), Some(5), None, None]);
+        assert_eq!(
+            s.check(r.countries.len(), maps.first()),
+            s.problem(&r, &maps)
+        );
     }
 
     #[test]

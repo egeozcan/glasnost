@@ -1,0 +1,700 @@
+//! The relay's core without sockets: rooms, forwarding, drops, forged
+//! messages and the limits on hostile input. The protocol, the room rules
+//! and the limits are our own netcode (docs/development.md, *The relay and
+//! lobby (N2)*); the room's choice rules are tested in glasnost-net.
+
+use glasnost_net::lobby::{
+    self, CODE_ALPHABET, CODE_LEN, FromRelay, MapChoice, Offered, Refusal, ToRelay,
+};
+use glasnost_net::wire::{self, Body, Envelope, Frame, Frames, RELAY};
+use glasnost_net::{Field, StartInfo};
+use glasnost_relay::{ConnId, Entropy, Hub, Limits, Out};
+use glasnost_ui::setup::{Setup, Slot, SlotKind};
+
+/// A seeded stand-in for the operating system's randomness.
+struct Fake(u64);
+
+impl Entropy for Fake {
+    fn fill(&mut self, buf: &mut [u8]) {
+        for b in buf {
+            // xorshift64
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            *b = (self.0 >> 24) as u8;
+        }
+    }
+}
+
+/// Entropy that always gives the same bytes (every code collides).
+struct Stuck;
+
+impl Entropy for Stuck {
+    fn fill(&mut self, buf: &mut [u8]) {
+        buf.fill(7);
+    }
+}
+
+fn hub_with(limits: Limits) -> Hub {
+    Hub::new(limits, Box::new(Fake(0x9e37_79b9_7f4a_7c15)))
+}
+
+fn hub() -> Hub {
+    hub_with(Limits::default())
+}
+
+fn setup(rows: &[SlotKind]) -> Setup {
+    let mut slots = [Slot::closed(); 8];
+    for (s, &k) in slots.iter_mut().zip(rows) {
+        s.kind = k;
+    }
+    Setup {
+        map: 0,
+        slots,
+        credits: 2000,
+        units: 3,
+        flags: [false, true, true, true, true],
+        speed: 2,
+    }
+}
+
+fn create(rows: &[SlotKind]) -> Vec<u8> {
+    lobby::wire::encode(&ToRelay::Create {
+        name: "Host".into(),
+        build: "build-1".into(),
+        rules_hash: "rules-1".into(),
+        offered: Offered {
+            countries: 2,
+            credits: (1000, 5000),
+            units: (1, 9),
+        },
+        map: MapChoice {
+            hash: "m4".into(),
+            label: "map four".into(),
+            starts: 4,
+        },
+        setup: setup(rows),
+    })
+}
+
+fn join(code: &str, name: &str, build: &str) -> Vec<u8> {
+    lobby::wire::encode(&ToRelay::Join {
+        code: code.into(),
+        name: name.into(),
+        build: build.into(),
+        rules_hash: "rules-1".into(),
+        map_hash: "m4".into(),
+    })
+}
+
+fn msg(m: &ToRelay) -> Vec<u8> {
+    lobby::wire::encode(m)
+}
+
+fn ready() -> Vec<u8> {
+    msg(&ToRelay::Ready {
+        ready: true,
+        map_hash: "m4".into(),
+    })
+}
+
+/// The lobby messages the hub sent, by receiver.
+fn lobby_out(outs: &[Out]) -> Vec<(ConnId, FromRelay)> {
+    outs.iter()
+        .filter_map(|o| match o {
+            Out::Send { to, bytes } if lobby::wire::is_lobby(bytes) => {
+                Some((*to, lobby::wire::decode(bytes).expect("a lobby message")))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// The game messages the hub sent, by receiver.
+fn game_out(outs: &[Out]) -> Vec<(ConnId, Envelope)> {
+    outs.iter()
+        .filter_map(|o| match o {
+            Out::Send { to, bytes } if !lobby::wire::is_lobby(bytes) => {
+                Some((*to, wire::decode(bytes).expect("a game message")))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn closes(outs: &[Out]) -> Vec<(ConnId, String)> {
+    outs.iter()
+        .filter_map(|o| match o {
+            Out::Close { to, reason } => Some((*to, reason.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+fn frames(from: u8, first: u32, n: usize) -> Vec<u8> {
+    wire::encode(&Envelope {
+        from,
+        body: Body::Frames(Frames {
+            first,
+            frames: vec![Frame::default(); n],
+            ..Frames::default()
+        }),
+    })
+}
+
+/// A room of `persons` persons (and a computer) whose game has begun; the
+/// connections by slot.
+fn game(h: &mut Hub, persons: usize) -> (String, Vec<ConnId>) {
+    let mut rows = vec![SlotKind::Human; persons];
+    rows.push(SlotKind::Ai);
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&rows));
+    let code = h.codes()[0].clone();
+    let mut conns = vec![host];
+    for i in 1..persons {
+        let c = h.connect(0).unwrap();
+        h.receive(0, c, &join(&code, &format!("P{i}"), "build-1"));
+        conns.push(c);
+    }
+    // Any join clears readiness: everyone readies once all are in.
+    for &c in &conns[1..] {
+        h.receive(0, c, &ready());
+    }
+    h.receive(0, host, &msg(&ToRelay::Start));
+    let all = h.take_out();
+    let begins: Vec<(ConnId, u8)> = lobby_out(&all)
+        .into_iter()
+        .filter_map(|(to, m)| match m {
+            FromRelay::Begin(b) => Some((to, b.you)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(begins.len(), persons, "{:?}", lobby_out(&all));
+    let mut by_slot = vec![0; persons];
+    for (c, you) in begins {
+        by_slot[usize::from(you)] = c;
+    }
+    (code, by_slot)
+}
+
+#[test]
+fn create_peek_join_ready_and_start() {
+    let mut h = hub();
+    let host = h.connect(0).unwrap();
+    h.receive(
+        0,
+        host,
+        &create(&[SlotKind::Human, SlotKind::Human, SlotKind::Ai]),
+    );
+    let out = lobby_out(&h.take_out());
+    let [(to, FromRelay::Room(v))] = &out[..] else {
+        panic!("a room view: {out:?}");
+    };
+    assert_eq!((*to, v.you, v.host), (host, host, host));
+    let code = v.code.clone();
+    assert_eq!(code.len(), CODE_LEN);
+    assert!(code.bytes().all(|b| CODE_ALPHABET.contains(&b)));
+
+    // A code is typed loosely: lower case, with a dash, I for 1.
+    let b = h.connect(10).unwrap();
+    let typed = format!("{}-{}", &code[..4], &code[4..]).to_lowercase();
+    h.receive(
+        10,
+        b,
+        &msg(&ToRelay::Peek {
+            code: typed.clone(),
+        }),
+    );
+    let out = lobby_out(&h.take_out());
+    let [(_, FromRelay::Info(info))] = &out[..] else {
+        panic!("room info: {out:?}");
+    };
+    assert_eq!((info.persons, info.open, info.playing), (1, 1, false));
+
+    h.receive(20, b, &join(&typed, "Bea", "build-1"));
+    let out = lobby_out(&h.take_out());
+    assert_eq!(out.len(), 2, "both members see the room");
+    for (to, m) in &out {
+        let FromRelay::Room(v) = m else {
+            panic!("a room view: {m:?}");
+        };
+        assert_eq!(v.you, *to);
+        assert_eq!(v.members.len(), 2);
+    }
+
+    h.receive(30, host, &msg(&ToRelay::Start));
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [(_, FromRelay::Refused(Refusal::NotReady(1)))]
+    ));
+    h.receive(40, b, &ready());
+    h.take_out();
+    h.receive(50, b, &msg(&ToRelay::Start));
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [(_, FromRelay::Refused(Refusal::NotHost))]
+    ));
+    h.receive(60, host, &msg(&ToRelay::Start));
+    let out = lobby_out(&h.take_out());
+    let begins: Vec<_> = out
+        .iter()
+        .map(|(to, m)| match m {
+            FromRelay::Begin(b) => (*to, b.you, b.seed, b.slots.len()),
+            m => panic!("a begin: {m:?}"),
+        })
+        .collect();
+    assert_eq!(begins.len(), 2);
+    assert_eq!(begins[0].2, begins[1].2, "one seed for everyone");
+    assert_eq!(
+        begins.iter().map(|b| (b.0, b.1, b.3)).collect::<Vec<_>>(),
+        [(host, 0, 3), (b, 1, 3)]
+    );
+    assert!(h.room(&code).unwrap().playing());
+    // Nobody joins a game.
+    let c = h.connect(70).unwrap();
+    h.receive(70, c, &join(&code, "Cy", "build-1"));
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [(_, FromRelay::Refused(Refusal::Playing))]
+    ));
+}
+
+#[test]
+fn leaving_before_the_start_opens_the_row_and_an_empty_room_goes() {
+    let mut h = hub();
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&[SlotKind::Human, SlotKind::Human]));
+    let code = h.codes()[0].clone();
+    let b = h.connect(0).unwrap();
+    h.receive(0, b, &join(&code, "Bea", "build-1"));
+    h.take_out();
+    h.receive(1, host, &msg(&ToRelay::Leave));
+    let out = lobby_out(&h.take_out());
+    let [(to, FromRelay::Room(v))] = &out[..] else {
+        panic!("the room to the one left: {out:?}");
+    };
+    assert_eq!((*to, v.host), (b, b), "the host's role passes on");
+    assert_eq!(h.room(&code).unwrap().info().open, 1);
+    // The one who left may make a room of its own.
+    h.receive(2, host, &create(&[SlotKind::Human]));
+    assert_eq!(h.rooms(), 2);
+    h.receive(3, b, &msg(&ToRelay::Leave));
+    h.closed(4, host);
+    assert_eq!(h.rooms(), 0);
+    h.receive(5, b, &msg(&ToRelay::Leave));
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [.., (_, FromRelay::Refused(Refusal::NotInRoom))]
+    ));
+}
+
+#[test]
+fn a_join_with_another_build_is_refused_naming_the_field() {
+    let mut h = hub();
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&[SlotKind::Human, SlotKind::Human]));
+    let code = h.codes()[0].clone();
+    h.take_out();
+    let b = h.connect(0).unwrap();
+    h.receive(0, b, &join(&code, "Bea", "build-2"));
+    let out = lobby_out(&h.take_out());
+    assert_eq!(
+        out,
+        [(b, FromRelay::Refused(Refusal::Mismatch(Field::Build)))]
+    );
+    assert!(
+        Refusal::Mismatch(Field::Build)
+            .to_string()
+            .contains("build"),
+        "the reason names the field"
+    );
+    assert_eq!(h.room(&code).unwrap().info().persons, 1);
+}
+
+#[test]
+fn guessing_room_codes_closes_the_connection() {
+    let mut h = hub_with(Limits {
+        max_refusals: 3,
+        ..Limits::default()
+    });
+    let c = h.connect(0).unwrap();
+    for i in 0..3 {
+        h.receive(
+            i,
+            c,
+            &msg(&ToRelay::Peek {
+                code: "ZZZZZZZZ".into(),
+            }),
+        );
+        assert_eq!(
+            lobby_out(&h.take_out()),
+            [(c, FromRelay::Refused(Refusal::NoRoom))]
+        );
+    }
+    h.receive(
+        4,
+        c,
+        &msg(&ToRelay::Peek {
+            code: "not a code at all".into(),
+        }),
+    );
+    let out = h.take_out();
+    assert_eq!(closes(&out), [(c, "too many refused requests".to_owned())]);
+    assert_eq!(h.stats().closed_refusals, 1);
+    assert_eq!(h.connections(), 0);
+}
+
+#[test]
+fn a_colliding_room_code_is_drawn_again_and_never_reused() {
+    let mut h = Hub::new(Limits::default(), Box::new(Stuck));
+    let a = h.connect(0).unwrap();
+    h.receive(0, a, &create(&[SlotKind::Human]));
+    let b = h.connect(0).unwrap();
+    h.receive(0, b, &create(&[SlotKind::Human]));
+    assert_eq!(h.rooms(), 1);
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [_, (_, FromRelay::Refused(Refusal::TooManyRooms))]
+    ));
+}
+
+#[test]
+fn forwarding_reaches_every_other_person_byte_for_byte_and_in_order() {
+    let mut h = hub();
+    let (code, c) = game(&mut h, 3);
+    let m1 = frames(0, 0, 2);
+    let m2 = frames(0, 2, 1);
+    h.receive(100, c[0], &m1);
+    h.receive(101, c[0], &m2);
+    let start = wire::encode(&Envelope {
+        from: 1,
+        body: Body::Start(StartInfo {
+            slots: Vec::new(),
+            seed: 1,
+            params: glasnost_net::Params::default(),
+            build: String::new(),
+            rules_hash: String::new(),
+            map_hash: String::new(),
+            setup_hash: String::new(),
+        }),
+    });
+    h.receive(102, c[1], &start);
+    let sent: Vec<(ConnId, Vec<u8>)> = h
+        .take_out()
+        .into_iter()
+        .filter_map(|o| match o {
+            Out::Send { to, bytes } => Some((to, bytes)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            (c[1], m1.clone()),
+            (c[2], m1),
+            (c[1], m2.clone()),
+            (c[2], m2),
+            (c[0], start.clone()),
+            (c[2], start),
+        ]
+    );
+    assert_eq!(h.stats().forwarded, 3);
+    assert_eq!(h.kept(&code, 0), Some(3));
+}
+
+#[test]
+fn forged_senders_forged_drops_and_early_game_messages_are_never_forwarded() {
+    let mut h = hub();
+    // A game message before any game.
+    let lone = h.connect(0).unwrap();
+    h.receive(0, lone, &frames(0, 0, 1));
+    let (code, c) = game(&mut h, 3);
+    // Slot 0 speaks for slot 1, and for the relay.
+    h.receive(100, c[0], &frames(1, 0, 1));
+    h.receive(100, c[0], &frames(RELAY, 0, 1));
+    // Slot 0 reports slot 2 dropped, as itself and as the relay.
+    for from in [0, RELAY] {
+        let forged = wire::encode(&Envelope {
+            from,
+            body: Body::Dropped { slot: 2, kept: 0 },
+        });
+        h.receive(101, c[0], &forged);
+    }
+    assert_eq!(h.take_out(), []);
+    let s = h.stats();
+    assert_eq!(
+        (
+            s.outside_game,
+            s.forged_senders,
+            s.forged_drops,
+            s.forwarded
+        ),
+        (1, 3, 1, 0)
+    );
+    assert_eq!(h.kept(&code, 1), Some(0), "nothing counted for slot 1");
+    assert_eq!(h.connections(), 4, "forgeries are discarded, not closed");
+}
+
+#[test]
+fn a_lost_person_is_reported_dropped_with_the_frames_everyone_holds() {
+    let mut h = hub();
+    let (code, c) = game(&mut h, 3);
+    h.receive(100, c[0], &frames(0, 0, 3));
+    // A gap: frames 5 and 6 do not count until 3 and 4 have come.
+    h.receive(101, c[0], &frames(0, 5, 2));
+    assert_eq!(h.kept(&code, 0), Some(3));
+    // A resend of frames already counted, then 2..4.
+    h.receive(102, c[0], &frames(0, 0, 2));
+    h.receive(103, c[0], &frames(0, 2, 2));
+    assert_eq!(h.kept(&code, 0), Some(4));
+    h.take_out();
+    h.closed(104, c[0]);
+    let out = game_out(&h.take_out());
+    let drop = Envelope {
+        from: RELAY,
+        body: Body::Dropped { slot: 0, kept: 4 },
+    };
+    assert_eq!(out, [(c[1], drop.clone()), (c[2], drop)]);
+    assert_eq!(h.stats().drops, 1);
+
+    // Slot 1 leaves by the lobby's Leave: a drop too.
+    h.receive(105, c[1], &frames(1, 0, 1));
+    h.receive(106, c[1], &msg(&ToRelay::Leave));
+    let out = game_out(&h.take_out());
+    assert_eq!(
+        out.last(),
+        Some(&(
+            c[2],
+            Envelope {
+                from: RELAY,
+                body: Body::Dropped { slot: 1, kept: 1 },
+            }
+        ))
+    );
+    assert_eq!(h.rooms(), 1);
+    // The last person goes: the room goes.
+    h.closed(107, c[2]);
+    assert_eq!(h.take_out(), []);
+    assert_eq!(h.rooms(), 0);
+}
+
+#[test]
+fn the_drop_comes_after_everything_forwarded_from_the_slot() {
+    let mut h = hub();
+    let (_, c) = game(&mut h, 2);
+    h.take_out();
+    h.receive(100, c[0], &frames(0, 0, 5));
+    h.closed(100, c[0]);
+    let out = game_out(&h.take_out());
+    assert!(matches!(
+        &out[..],
+        [
+            (
+                _,
+                Envelope {
+                    from: 0,
+                    body: Body::Frames(_)
+                }
+            ),
+            (
+                _,
+                Envelope {
+                    from: RELAY,
+                    body: Body::Dropped { slot: 0, kept: 5 }
+                }
+            ),
+        ]
+    ));
+}
+
+#[test]
+fn bytes_that_are_no_message_close_the_connection_with_a_reason() {
+    let mut h = hub();
+    let cases: [(&[u8], &str); 5] = [
+        (b"hello", "not a Glasnost message"),
+        (b"", "not a Glasnost message"),
+        (b"GL\x02\xff\xff\xff", "unreadable lobby message"),
+        (b"GN\x02\x00\xff\xff", "unreadable game message"),
+        (b"GN\x09\x00", "another protocol version"),
+    ];
+    for (bytes, reason) in cases {
+        let c = h.connect(0).unwrap();
+        h.receive(0, c, bytes);
+        let out = h.take_out();
+        let lob = lobby_out(&out);
+        assert!(
+            matches!(&lob[..], [(_, FromRelay::Closing(r))] if r.starts_with(reason)),
+            "{bytes:?}: {lob:?}"
+        );
+        let cl = closes(&out);
+        assert_eq!(cl.len(), 1);
+        assert!(cl[0].1.starts_with(reason), "{bytes:?}: {cl:?}");
+    }
+    assert_eq!(h.stats().closed_unreadable, 5);
+    // Another lobby protocol version is refused naming the protocol.
+    let c = h.connect(0).unwrap();
+    h.receive(0, c, b"GL\x63rest");
+    let lob = lobby_out(&h.take_out());
+    assert_eq!(
+        lob[0],
+        (c, FromRelay::Refused(Refusal::Mismatch(Field::Protocol)))
+    );
+    assert_eq!(h.connections(), 0);
+}
+
+#[test]
+fn the_limits_on_size_rate_rooms_and_connections_hold() {
+    let mut h = hub_with(Limits {
+        max_message: 100,
+        max_connections: 3,
+        max_rooms: 1,
+        rate: 10,
+        burst: 5,
+        ..Limits::default()
+    });
+    // Size.
+    let a = h.connect(0).unwrap();
+    let mut big = b"GL".to_vec();
+    big.resize(101, 0);
+    h.receive(0, a, &big);
+    assert_eq!(closes(&h.take_out()), [(a, "message too large".to_owned())]);
+    // Rooms.
+    let b = h.connect(0).unwrap();
+    h.receive(0, b, &create(&[SlotKind::Human]));
+    let c = h.connect(0).unwrap();
+    h.receive(0, c, &create(&[SlotKind::Human]));
+    assert!(matches!(
+        &lobby_out(&h.take_out())[..],
+        [_, (_, FromRelay::Refused(Refusal::TooManyRooms))]
+    ));
+    // Connections: b and c are open.
+    let d = h.connect(0).unwrap();
+    assert_eq!(h.connect(0), None);
+    assert_eq!(h.stats().refused_connections, 1);
+    // Rate: a burst of 5, then 10 a second.
+    let peek = msg(&ToRelay::Peek {
+        code: h.codes()[0].clone(),
+    });
+    for _ in 0..5 {
+        h.receive(1000, d, &peek);
+    }
+    assert!(closes(&h.take_out()).is_empty());
+    h.receive(1100, d, &peek);
+    assert!(
+        closes(&h.take_out()).is_empty(),
+        "a tenth of a second earns one"
+    );
+    h.receive(1100, d, &peek);
+    assert_eq!(closes(&h.take_out()), [(d, "too many messages".to_owned())]);
+    let s = h.stats();
+    assert_eq!((s.closed_size, s.closed_rate), (1, 1));
+}
+
+#[test]
+fn players_per_room_are_the_rows_of_the_setup() {
+    let mut h = hub();
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&[SlotKind::Human, SlotKind::Human]));
+    let code = h.codes()[0].clone();
+    let b = h.connect(0).unwrap();
+    h.receive(0, b, &join(&code, "B", "build-1"));
+    let c = h.connect(0).unwrap();
+    h.take_out();
+    h.receive(0, c, &join(&code, "C", "build-1"));
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(c, FromRelay::Refused(Refusal::RoomFull))]
+    );
+}
+
+#[test]
+fn silent_and_idle_connections_close_and_keepalives_go_out() {
+    let mut h = hub_with(Limits {
+        idle_ms: 10_000,
+        silent_ms: 3_000,
+        keepalive_ms: 1_000,
+        ..Limits::default()
+    });
+    let (_, c) = game(&mut h, 2);
+    let lone = h.connect(0).unwrap();
+    h.take_out();
+    h.tick(1_000);
+    let out = h.take_out();
+    let mut kept: Vec<ConnId> = out
+        .iter()
+        .filter_map(|o| match o {
+            Out::Keepalive { to } => Some(*to),
+            _ => None,
+        })
+        .collect();
+    kept.sort_unstable();
+    assert_eq!(kept, [c[0], c[1], lone]);
+    // Slot 0 answers; slot 1 and the lone connection stay silent.
+    for t in [2_000, 2_900] {
+        h.heard(t, c[0]);
+        h.heard(t, lone);
+        h.tick(t);
+    }
+    h.take_out();
+    h.tick(3_000);
+    let out = h.take_out();
+    assert_eq!(closes(&out), [(c[1], "silent for too long".to_owned())]);
+    assert_eq!(
+        game_out(&out),
+        [(
+            c[0],
+            Envelope {
+                from: RELAY,
+                body: Body::Dropped { slot: 1, kept: 0 },
+            }
+        )]
+    );
+    // The lone connection is heard but in no room.
+    for t in [5_000, 7_000, 9_000] {
+        h.heard(t, lone);
+        h.heard(t, c[0]);
+        h.tick(t);
+    }
+    h.heard(10_000, c[0]);
+    h.heard(10_000, lone);
+    h.take_out();
+    h.tick(10_000);
+    assert_eq!(
+        closes(&h.take_out()),
+        [(lone, "in no room for too long".to_owned())]
+    );
+    assert_eq!(h.stats().closed_silent, 2);
+}
+
+#[test]
+fn random_bytes_never_panic_the_hub() {
+    let mut h = hub_with(Limits {
+        rate: 1_000_000,
+        burst: 1_000_000,
+        max_refusals: u32::MAX,
+        ..Limits::default()
+    });
+    let (_, c) = game(&mut h, 2);
+    let mut rng = Fake(12345);
+    let prefixes: [&[u8]; 5] = [b"", b"GL", b"GL\x02", b"GN\x02", b"GN\x02\x00"];
+    let mut opened = Vec::new();
+    for i in 0..20_000u64 {
+        let mut len = [0u8; 1];
+        rng.fill(&mut len);
+        let mut body = vec![0u8; usize::from(len[0] % 48)];
+        rng.fill(&mut body);
+        let mut bytes = prefixes[(i % 5) as usize].to_vec();
+        bytes.extend(body);
+        let to = match i % 3 {
+            0 => c[(i % 2) as usize],
+            _ => {
+                let id = h.connect(i).unwrap_or(1);
+                opened.push(id);
+                id
+            }
+        };
+        h.receive(i, to, &bytes);
+        h.tick(i);
+        let _ = h.take_out();
+    }
+}
