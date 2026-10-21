@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 21
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-21
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529]
 supersedes: []
 ---
 
@@ -725,11 +725,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
 
 29a. **A protection selector outside the table (Q-1527).** Each of the two protection
     selectors (curtain and force shield) is a signed integer that names a position in the
-    16-entry colour-adjustment table (S-0006 claim 2). In the original the selector is used
-    exactly as imported: it is not reduced modulo 16, not clamped and not cut to an unsigned
-    byte, so 16 does not select position 0 and −1 does not select position 15. A selector
-    below 0 or above 15 names no table position, and the colour the original then uses is not
-    defined by any imported triple. It is bad data.
+    16-entry colour-adjustment table (S-0006 claim 2). In the original the selector is not
+    reduced modulo 16 and not clamped, so 16 does not select position 0 and −1 does not select
+    position 15. The values part h uses, −1 and 16, name no table position, and the colour
+    the original then shows for them is not defined by any imported triple. What any other
+    selector outside the table shows is open (Open questions). It is bad data.
 
     **Our engine (bad data; a departure).** After every rules layer has been applied, a held
     selector below 0 or above 15 counts as no selected adjustment: every drawing that would take that
@@ -741,12 +741,13 @@ presentation and swept-layer rules below also apply where those specs cite them.
     reads these selectors. A selector from 0 to 15 behaves as in claim 29, including a position
     whose triple is still the empty (0, 0, 0) entry, which also gives *K* = 0. The warning is
     an import event; the mask outcome is presentation, and no game state depends on it.
-    - Backing: `measurable` for the original's lack of wrapping (SW10 part h); the engine rule
-      is design, checked by SW10 part h's engine fixture. The original's colour for an
-      out-of-range selector is not measured: no capture can define it.
+    - Backing: `measurable` for the original's lack of wrapping and clamping (SW10 part h); the
+      engine rule is design, checked by SW10 part h's engine fixture. What the original shows for
+      any other selector outside the table is open (Open questions). The original's colour for an out-of-range selector is not measured: no
+      capture can define it.
     - Confidence: high
 
-29b. **Protection appearance of accessory, translucent and hidden drawings (Q-1528).** The
+29b. **Protection appearance of accessory, translucent and hidden drawings (Q-1528, Q-1529).** The
     rows below extend claim 29 and S-0102 claim 34 to drawings that table does not list.
     "Envelope" means the protection brightness of claim 29 and F9. "Mask" means the
     force-shield or curtain mask of S-0102 F9, joined to the shaded source pixel by bitwise
@@ -760,9 +761,10 @@ presentation and swept-layer rules below also apply where those specs cite them.
     | Special gate image, deploying or roof-deploying image drawn in place of the body (S-0108 claims 4 and 22) | yes | as the body, which is the same as the bib |
     | Door image while unloading (S-0108 claim 23) | yes | as the bib (drawing correction below) |
     | Any drawing made translucent (25 or 50 %) or rippling by cloaking (S-0516 claim 28), including a cloaking force-shielded building and a cloaking curtain-protected voxel vehicle | yes, on the source pixels before the blend of S-0102 F8 | none |
-    | Any drawing of an object whose centre cell is under shroud for the local player | yes | none |
+    | Any drawing of an object whose centre cell is shrouded for the local player, other than a building's slot animations (next row) | yes | no protection mask; whether a building that is also marked by an air strike keeps the marking colour on its body, voxel turret and barrel is open (S-0519 claim 26) |
+    | Opaque building slot animation (S-0102 claim 17) of a protected or air-strike-marked building | the animation's own building protected: yes, that building's protected brightness, sampled and refreshed as S-0102 claim 34 gives, whichever building occupies the animation's cell (resting on S-0102 claim 34: part i tests only an animation over its own building); its own building only marked: no protection envelope; in both cases brightness follows S-0102 claim 34 and S-0519 claim 26 unchanged, and the shroud state of the animation's cell does not change it | while the cell holding the animation's own position is not shrouded for the local player: S-0102 claim 34's animation rule in full, with the masks of the building occupying that cell, the force-shield mask united with the laser-target mask when that building is also marked by an air strike, whatever the state of its centre cell; while that cell is shrouded: no mask at all, neither the force-shield nor the laser-target mask (medium, pending SW10 part i) |
     | Remembered image of a fogged building (S-0102 claim 16) | no | none |
-    | Object whose entire drawing is suppressed because it is fully cloaked for the viewer or wholly under shroud | nothing is drawn | nothing is drawn |
+    | Object whose entire drawing is suppressed because it is fully cloaked for the viewer or wholly shrouded | nothing is drawn | nothing is drawn |
 
     **Translucent drawings.** A translucent or rippling drawing of a protected object
     is never recoloured, so whether the mask comes before or after the F8 blend
@@ -774,8 +776,38 @@ presentation and swept-layer rules below also apply where those specs cite them.
     foundation, with the larger coordinate when the foundation's width or depth is even
     (S-0104 claim 13). For a unit it is the cell that holds its position. While that cell is
     shrouded for the local player, every part of the object that is still drawn keeps the
-    envelope but takes no mask. This also covers parts drawn on visible cells at the edge of
-    the shroud.
+    envelope but takes no protection mask (the marking colour of a marked building's body there
+    is open, S-0519 claim 26). This also covers parts drawn on visible cells at the edge of
+    the shroud. A building's slot animations are not parts of the building for this rule, and
+    neither this rule nor S-0102 claim 34's matching centre-cell row applies to them: the next
+    paragraph gives theirs.
+
+    **Slot animations (Q-1529).** This paragraph covers opaque slot animations only; those whose
+    own art draws them translucent are an open question. A building's slot animations are
+    animation objects of their own (S-0102 claim 17), so the centre-cell rule above does not
+    reach them. Each one tests its own cell instead: the cell holding the animation's world
+    position (S-0108 claim 10), found from its horizontal coordinates divided by 256 and
+    truncated toward zero, with height ignored. The building occupying that cell supplies the
+    masks under S-0102 claim 34's animation rule; it is normally the animation's own building
+    but need not be, and with no building in that cell the animation takes no mask.
+    For slot animations, a cell is *shrouded* when S-0110 claim 8's point test at the centre
+    of the cell, at its ground height, finds it shrouded for the local player. Like every row
+    of the table, the slot-animation row applies only to an animation that is drawn. That
+    test reads the explored state of cells (on raised ground, of a cell displaced as S-0110
+    claim 8 gives). The two shroud cases are:
+    - **The animation's cell is not shrouded** for the local player. The animation takes
+      S-0102 claim 34's masks unchanged: the force-shield mask while that building is
+      force-shielded, the laser-target mask while it is marked by an air strike (S-0519
+      claim 26), and their union when both apply. The building's centre cell plays no part, so
+      this holds also while the centre cell is shrouded.
+    - **The animation's cell is shrouded.** The animation takes no colour mask at all:
+      both halves of that union are removed, whatever the state of the building's centre cell.
+    Brightness follows S-0102 claim 34 and S-0519 claim 26; the shroud state of the
+    animation's cell does not change it. Thus at a shroud edge one building can show
+    an uncoloured body beside a coloured slot animation (centre cell shrouded, animation cell
+    visible) or the reverse (centre cell visible, animation cell shrouded). This is the
+    original's ordinary behaviour, pending SW10 part i (medium), not a quirk, so it has no
+    switch.
 
     **Remembered images.** A remembered image shows the building's type at the remembered
     cell light, with no protection brightness and no mask, whatever protection the building
@@ -786,15 +818,23 @@ presentation and swept-layer rules below also apply where those specs cite them.
     image of a force-shielded building without the mask while its body and bib take it,
     a drawing-only defect.
 
-    The air-strike marking colour shares the same union in the original. Like claim 29 and
-    F9, these rows isolate protection with no simultaneous air-strike marking.
+    The air-strike marking colour shares the same union in the original. Apart from the
+    slot-animation row and its paragraph (with SW10 part i5) and the centre-cell row's open
+    note on a marked body, these rows, like claim 29 and F9,
+    isolate protection with no simultaneous air-strike marking.
     - Backing: `measurable` (SW10 part i) for the bib, under-door, replacement-body, door,
-      translucent, cloaked and shroud-edge rows. The door row's engine behaviour is design,
+      translucent, cloaked, shroud-edge and slot-animation rows (the slot-animation row by parts
+      i1 to i5; for a building that is only marked it rests on part i5's combined run and is
+      `unmeasured`, as S-0519 claim 26 says). That the slot-animation test is made at its
+      cell's ground height, not at the animation's own height, is `unmeasured`: no part of SW10
+      varies the animation's height above that ground. The door row's engine behaviour is design,
       checked by the same captures against the bib. The remembered-image row is
       `unmeasured`: fog of war is off in skirmish, as for S-0102's remembered-image rows.
     - Confidence: high for the bib, under-door, replacement-body and door rows and for
-      translucent sprite drawings; medium for translucent and rippling voxel vehicles and
-      for the shroud-edge rule, pending SW10 part i; medium for remembered images
+      translucent sprite drawings; medium for translucent
+      and rippling voxel vehicles, for the shroud-edge rule and for the opaque slot-animation
+      row, pending SW10 part i; medium for the test's ground height and for
+      remembered images
 
 ### Force shield
 
@@ -1617,7 +1657,9 @@ except for the type-list reordering tests SW1e, SW2g and SW12h. Those require na
 rules-file overrides, recorded as SW1-e.rulesmd.ini, SW2-g.rulesmd.ini and SW12-h.rulesmd.ini,
 respectively, and installed under the normal rules filename only for that part. A map layer
 cannot reorder types already registered by lower layers. Restore the original file situation
-after each part.
+after each part. Named test art means a loose copy of the art file with the part's changes,
+recorded under the scenario and part (for example SW10-i.artmd.ini) and installed under the normal
+art filename only for that part.
 Record ticks, health, kills, cells, animation frames and explored footprints with tick labels.
 A mismatch with any part's expected result falsifies that part's claim, including an unexpected
 draw, changed recipient, changed credit or off-by-one tick. Computer houses' bases are kept
@@ -1880,24 +1922,30 @@ is not under test.
   curtain selector to −1, then to 16, and separately the force-shield selector to −1, then 16.
   Do not use large values: the original may read far outside the table and fail. Capture the
   curtain vehicle and the force-shielded building as in part g at equal phase factor. Expected
-  in the original: the selector −1 does not give position 15's colour, and 16 does not give
-  position 0's; the brightness follows claim 29 unchanged; the other kind's drawings match a
-  run with the other selector valid. A colour matching position 0 or 15 falsifies "not
-  reduced". The original's actual colour is recorded but not asserted. Engine fixture: the
+  in the original: the selector −1 gives neither position 15's nor position 0's colour,
+  and 16 gives neither position 0's nor position 15's; the brightness follows claim 29 unchanged; the other kind's drawings match a
+  run with the other selector valid. A colour matching position 0 or 15 falsifies the claim:
+  −1 showing position 15's colour or 16 showing position 0's falsifies "not reduced", and −1
+  showing position 0's or 16 showing position 15's falsifies "not clamped". The original's actual colour is recorded but not asserted. Engine fixture: the
   same four settings give exactly the unprotected shaded pixels at the protected brightness
   (*K* = 0), one importer warning per offending key, and no change to the other kind; any
   mask colour or a missing warning falsifies the engine rule. The oracle cannot falsify it.
   (i) Accessory, translucent and shroud-edge drawings (claim 29b). Named map SW10-i.map with
-  invented distinct curtain and force-shield triples and three stationary subjects on flat,
+  invented distinct curtain and force-shield triples (and, for part i5, a laser-target selector
+  naming a third table position, given a third invented triple, so that the three triples differ
+  and the union of the force-shield and laser-target masks differs from each mask alone), three stationary subjects on flat,
   neutrally lit ground: a factory with a bib, an under-door image and a door image releasing
   a vehicle; a building inside an own cloak field (S-0516 CS5 and CS10 set-up); a voxel vehicle
   with its own cloak (named map-layer rules giving the type the own-cloak flag, as in S-0516
-  CS1, with a vehicle in place of the infantry type). For each
+  CS1, with a vehicle in place of the infantry type). The slot-animation placements below
+  (i1 to i5) add a fourth subject, a building with a test slot animation. For each
   protection kind capture the bib, under-door, door and replacement-body pixels during the
   unload, the cloaking building and vehicle at each translucency step and in the ripple step
   (viewed by a non-owner) and fully cloaked (viewed by the owner), and the unprotected controls
   at the same phase factor. Then place the factory so its centre cell stays shrouded for the
-  local player while a corner of the image is visible, and capture that corner. The local
+  local player while a corner of the image is visible, and capture that corner. The factory's
+  named test art gives it no slot animation over that corner, so the corner capture judges
+  body-image pixels only (slot animations follow the paragraph below and SW10 part i). The local
   player is a house other than the protection's owner, not allied with it and not sharing
   its exploration. Expected under the
   force shield: bib, under-door and replacement body show the force-shield colour; in the
@@ -1909,6 +1957,67 @@ is not under test.
   or under-door image under the force shield, or a coloured shroud-edge corner falsifies its row.
   Engine fixture: the door image matches the bib's mask; a door without the mask falsifies
   the drawing correction.
+  Slot animations (Q-1529). Named test art gives a 3 × 3-foundation building one opaque
+  idle slot animation with a one-frame test image and a screen displacement chosen so that the
+  animation's world position lies in the middle cell of one foundation edge, cell *E*. *E* then
+  differs from the building's centre cell, from its anchor cell (the cell at the foundation's
+  top corner) and from the three other foundation corner cells. Choose *E* on an edge that
+  does not touch the anchor cell. The test image has two opaque regions: a lower one drawn
+  over *E* itself and an upper one drawn over the building's centre cell, which is *P*. The
+  local player is a house other than the protection's owner, not allied with it and not
+  sharing its exploration. Revealing units of the local player with named-rules sight 1,
+  placed and then removed before the building is placed (a revealing unit cannot stand on a
+  cell of the foundation afterwards), leave the cell states each placement names; the recorder or a
+  screenshot of the shroud establishes each placement's states before the capture (S-0409
+  claims 5 and 6 give the footprint, whose centre moves with height). For example, on flat
+  ground at level 0 one such unit on the cell just outside *E* reveals *E* and the two corner
+  cells of its edge, but not the centre cell, the anchor cell or the remaining corner cell. If a placement's cell states cannot be reached,
+  split it into one placement per named cell: *E* in its state and that one cell in the
+  opposite state, made by a revealing unit whose footprint covers only one of the two; the
+  other named cells' states are recorded, not set, and the placement is judged only when
+  the recorder confirms the states of *E* and of that cell. Under
+  the force shield, capture the animation's pixels, the body pixels beside them, and an
+  unprotected control at the same phase factor, in each placement:
+  - **i1:** *E* visible; the centre cell (*P*) and the anchor cell shrouded. Judge the
+    lower region's pixels, drawn over *E*. Expected: they show the force-shield colour. No
+    colour falsifies the rule and points at the centre or anchor cell. If no pixel of the
+    lower region shows, i1 is inconclusive for the mask rule.
+  - **i2:** *E* shrouded; the centre cell (*P*), the anchor cell and the corner cells
+    visible, so the upper region's pixels, drawn over *P*, show. Judge those pixels. Expected: those pixels show the protected brightness
+    of claim 29b's Envelope column and no colour. A colour falsifies the rule and points at one of the other
+    cells. If no animation pixel shows at all, the animation is not drawn while its cell is
+    shrouded, and i2 is inconclusive for the mask rule.
+  - **i3:** i1 with *E* visible and one foundation corner cell other than the anchor under
+    shroud, then with that corner visible and *E* shrouded. Expected: the colour follows
+    *E* only.
+  - **i4:** i1 and i2 again with the whole building and the cells around it raised four height
+    levels above the rest of the map. i4 tests the displaced-cell reading of the shroud test on
+    raised ground and that height plays no part in finding *E*. The animation stays at its
+    cell's ground, so i4 does not test ground height against the animation's own height, which
+    claim 29b leaves `unmeasured`. The raised area extends at least two cells beyond the foundation
+    on every side. Every state a placement names is the result of S-0110 claim 8's point test
+    at that cell's centre, at its ground height. On this raised ground (*u* = 4) the test for
+    cell (*x*, *y*) reads the explored state of cell (*x* − 2, *y* − 2), its displaced cell. In
+    i4 the named cells are *E*, *P*, the anchor cell and the two foundation corner cells next to
+    the anchor. The corner opposite the anchor is left out, since its displaced cell is the
+    anchor cell; its point-test result, the anchor cell's own explored state, is recorded, not
+    set. For each named cell the run sets its displaced cell to the state the placement names
+    and the cell's own explored state to the opposite state, so that a rule reading a cell's
+    own explored state would see the opposite of every placement. No displaced cell is another
+    named cell. Those states are made as on
+    flat ground, by revealing units placed and removed before the building, each unit's
+    footprint taken from S-0409 claims 5 and 6 at its own height, since its sight centre moves
+    with height too. The recorder confirms, before the capture, each named cell's point-test result and its own
+    explored state. The one-cell split above applies when a placement cannot be reached, with
+    own and displaced states opposite for *E* and for that one cell. Expected: the same results
+    as on flat ground, because height plays no part in finding *E* and the test reads the
+    displaced cell. A result that changes falsifies "height ignored" in finding *E*. A result
+    that follows the named cells' own explored states falsifies the displaced-cell reading of
+    claim 29b.
+  - **i5:** i1 and i2 again with the building also marked by an air strike (S-0519 T27 set-up),
+    using the distinct laser-target triple above, so that the union differs from either mask.
+    Expected: i1 shows the union of the force-shield and the laser-target colours, i2 shows
+    neither. A marking colour in i2 falsifies the removal of the laser-target half.
 - **SW11 — force shield (claims 30 to 32).** (a) Allied buildings with reference points at
   distances just below and at 256 × *R* from the target centre, one on raised ground; an enemy
   building inside; expected: only allied buildings strictly inside F3 protected. (b) Vehicles
@@ -2209,10 +2318,13 @@ for these two kinds.
   claim 34 and F9 settle ordinary opaque composition and the sprite-vehicle, aircraft,
   building-voxel and marked-building-animation cases; claim 29b settles bibs, under-door,
   replacement and door images, cloaked or translucent units and buildings, shroud edges and
-  remembered images (Q-1528). Still open: protected building slot animations whose own art
+  remembered images (Q-1528), and slot animations of a building at a shroud edge
+  (Q-1529). Still open: protected building slot animations whose own art
   draws them translucent, and unusual sprite-turret accessory combinations. Do not infer
   their colour treatment from the opaque cases or from identical brightness timing.
-- Q-1527 is answered by claim 29a (original not reduced; our rule *K* = 0 plus a warning).
+- Q-1527 is answered by claim 29a (original not reduced or clamped; our rule *K* = 0 plus a
+  warning). Not established: what a selector outside the table other than −1 and 16 shows. Part
+  h avoids such values, which may make the original fail.
 - Q-0742 questions 1 to 3 are answered by S-0214 claim 31, table CS; question 5 belongs to
   S-0512 claim 16. They are not answered by the protection changes here.
 - Drone-parasite release by the superweapon warp remains untraced (claim 39).
@@ -2247,3 +2359,23 @@ for these two kinds.
   phases. Q-0734 is claim 22 and Import mapping, Q-0735 is claim 47, Q-0739 is F4,
   Q-0740 is claim 18. No oracle measurements are claimed.
 
+## Changes for other specs
+
+- **S-0102 claim 34.** The row "Any drawing of a protected object whose centre cell is shrouded
+  for the local player" does not apply to a building's slot animations. The animation rule
+  gains: "While the cell holding the animation's own position is shrouded for the local
+  player, the animation takes no colour mask, neither the force-shield nor the laser-target
+  mask. Brightness follows this claim and S-0519 claim 26 unchanged; the shroud state of its
+  cell does not change it. The centre cell of the building that supplies
+  the masks, the building occupying the animation's cell, plays no part. A cell is shrouded
+  when S-0110 claim 8's point test at its centre finds it so (S-0513 claim 29b)." The row "Opaque building animation over an
+  air-strike-marked building's cell" gains the same exception. The row "Any drawing of a
+  protected object whose centre cell is shrouded" withholds only the protection masks: for a
+  protected building that is also air-strike-marked, whether its body, voxel turret and barrel
+  keep the laser-target mask is open (S-0519 claim 26).
+- **S-0519 claim 26.** Carried by S-0519 revision 15, submitted in the same round: the marking
+  colour on a building animation is absent while the cell holding the animation's own
+  position is shrouded for the local player (S-0513 claim 29b), with S-0513 SW10 part i5
+  as its scenario. S-0519 leaves open the marking colour of a marked building's body, voxel
+  turret and barrel while its centre cell is shrouded, and claim 29b's centre-cell row here
+  withholds only the protection masks, so the two agree. No further change to S-0519 is needed.
