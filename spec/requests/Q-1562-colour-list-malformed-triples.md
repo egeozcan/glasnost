@@ -1,9 +1,9 @@
 ---
 id: Q-1562
 title: How a particle type's colour list reads a malformed triple
-status: open
+status: answered
 related: [S-0202, S-0616]
-answered-by: []
+answered-by: [S-0202]
 ---
 
 ## Need
