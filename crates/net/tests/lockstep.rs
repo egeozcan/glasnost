@@ -642,6 +642,54 @@ fn a_desync_is_reported_with_tick_slots_and_hashes() {
     }
 }
 
+/// The agreed checkpoints (M9 N4) grow while the games agree and stop at
+/// the first mismatched one; a desync report's digest reaches every other
+/// peer once, in the frames that follow.
+#[test]
+fn agreed_checkpoints_stop_at_a_desync_and_a_report_reaches_the_others() {
+    let info = start(&[SlotKind::Human; 3], fixed(2));
+    let mut h = Harness::new(&info, Config::new(TICK_MS), 6, Link::latency(10), || {
+        Toy::new(0)
+    });
+    let mut input = |_, _: &Toy, _| Vec::new();
+    h.run_ticks(12, 60_000, &mut input);
+    for p in &h.peers {
+        let a = p.session.agreed();
+        assert!((1..=2).contains(&a), "slot {}: {a}", p.slot);
+    }
+    // Slot 1's game changes before tick 12: checkpoint 2 (ticks 10 to 14)
+    // differs.
+    h.peer(1).sim.issue(HouseId(9), Order::Cheer);
+    h.run_ticks(40, 60_000, &mut input);
+    for p in &h.peers {
+        assert_eq!(p.session.agreed(), 2, "slot {}", p.slot);
+    }
+    let digest = [7u8; 32];
+    h.peer(1).session.set_report(14, digest);
+    h.run_ticks(60, 60_000, &mut input);
+    for p in &h.peers {
+        let reports: Vec<&Event> = p
+            .events
+            .iter()
+            .filter(|e| matches!(e, Event::Report { .. }))
+            .collect();
+        if p.slot == 1 {
+            assert!(reports.is_empty(), "no report of its own");
+        } else {
+            assert_eq!(
+                reports,
+                [&Event::Report {
+                    slot: 1,
+                    tick: 14,
+                    digest
+                }],
+                "slot {}",
+                p.slot
+            );
+        }
+    }
+}
+
 #[test]
 fn the_same_seed_gives_the_same_run() {
     let run = || {
