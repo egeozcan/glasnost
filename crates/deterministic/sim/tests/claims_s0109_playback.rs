@@ -324,7 +324,10 @@ fn claim15_follow_up_restarts_the_accumulator_at_zero() {
     // FIRST: advances in c + 1 … c + 4, the last switching to NEXT.
     let got = deliveries(&mut w, at, 5);
     assert_eq!(got, [0, 0, 0, 0, 0]);
-    assert_eq!(anims::shown(&w, id).map(|s| s.0.to_vec()), Some(b"NEXT".to_vec()));
+    assert_eq!(
+        anims::shown(&w, id).map(|s| s.0.to_vec()),
+        Some(b"NEXT".to_vec())
+    );
     let got = deliveries(&mut w, at, 3);
     assert_eq!(got, [0, 0, 1]);
 }
@@ -403,7 +406,10 @@ fn claim8_15_reverse_request_is_kept_at_a_follow_up() {
     // The switch to NEXT shows 2a′ = 0 and stays reversed: its next advance (k = −1) ends its pass.
     let a = &w.anims.anims[&id];
     assert_eq!(a.player.name, b"NEXT");
-    assert!(a.player.play.reverse, "the creator's request survives the switch");
+    assert!(
+        a.player.play.reverse,
+        "the creator's request survives the switch"
+    );
 }
 
 #[test]

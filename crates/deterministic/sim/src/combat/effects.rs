@@ -657,7 +657,14 @@ fn anim_with(
         crate::mutation::start(w, i, pos, layer, None, false);
         return;
     }
-    anim_spawned(w, name, pos, reverse, z_adjust, crate::anims::Spawn::default());
+    anim_spawned(
+        w,
+        name,
+        pos,
+        reverse,
+        z_adjust,
+        crate::anims::Spawn::default(),
+    );
 }
 
 /// A projectile's trailer animation at `pos` (S-0109 claim 29): its
