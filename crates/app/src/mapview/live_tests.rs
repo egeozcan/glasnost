@@ -3519,6 +3519,72 @@ fn protection_slot_cell_shroud_is_the_point_test() {
     );
 }
 
+/// spec: S-0513 claim 29b and SW10 part i4 (on ground raised four levels, u = 4, the slot
+/// animation's shroud test for cell (x, y) reads the explored state of cell (x − 2, y − 2), not
+/// the cell's own), S-0110 claim 8
+#[test]
+fn protection_slot_cell_shroud_on_ground_raised_four_levels() {
+    use super::live::slot_cell_shrouded;
+    use glasnost_sim::econ::shroud;
+    let mut map = testkit::empty_map(24);
+    let all: Vec<glasnost_map::CellXY> = map.cells.iter().map(|(c, _)| c).collect();
+    for c in all {
+        if let Some(cell) = map.cells.get_mut(c) {
+            cell.level = 4;
+        }
+    }
+    let mut w = glasnost_sim::load::new_game(
+        testkit::rules(),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(3),
+    )
+    .expect("the raised map loads");
+    let viewer = HouseId(1);
+    let e = testkit::mid(24, 0, 0);
+    let displaced = glasnost_map::CellXY::new(e.x - 2, e.y - 2);
+    let centre = glasnost_sim::world::Pos::centre(e, 0);
+    assert_eq!(w.surface_at(centre.x, centre.y), 4 * 104);
+    // A reveal over the cell itself but not its displaced cell, then one over the displaced cell.
+    let idx = |w: &glasnost_sim::world::World, c| w.cells.idx(c).map(|i| i as u32);
+    let find = |w: &glasnost_sim::world::World, yes, no| {
+        let (iy, ino) = (idx(w, yes), idx(w, no));
+        (-3..=3)
+            .flat_map(|dx| (-3..=3).map(move |dy| (dx, dy)))
+            .flat_map(|(dx, dy)| (1..=2).map(move |r| (dx, dy, r)))
+            .find_map(|(dx, dy, r)| {
+                let c = glasnost_map::CellXY::new(yes.x + dx, yes.y + dy);
+                let p = glasnost_sim::world::Pos::centre(c, 0);
+                let p = glasnost_sim::world::Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
+                let cells = shroud::sight_cells(w, p, r);
+                (iy.is_some_and(|i| cells.contains(&i)) && !ino.is_some_and(|i| cells.contains(&i)))
+                    .then_some((p, r))
+            })
+            .expect("a reveal that covers one cell and not the other")
+    };
+    let own = find(&w, e, displaced);
+    shroud::area_reveal(&mut w, viewer, own.0, own.1);
+    assert!(shroud::explored(&w, viewer, e) && !shroud::explored(&w, viewer, displaced));
+    assert!(
+        slot_cell_shrouded(&w, viewer, e),
+        "its own state explored, the displaced cell not: shrouded"
+    );
+    let other = find(&w, displaced, e);
+    let mut w2 = glasnost_sim::load::new_game(
+        testkit::rules(),
+        &map,
+        testkit::catalogue(),
+        &testkit::setup(3),
+    )
+    .expect("the raised map loads");
+    shroud::area_reveal(&mut w2, viewer, other.0, other.1);
+    assert!(!shroud::explored(&w2, viewer, e) && shroud::explored(&w2, viewer, displaced));
+    assert!(
+        !slot_cell_shrouded(&w2, viewer, e),
+        "the displaced cell explored, its own state not: not shrouded"
+    );
+}
+
 /// spec: S-0513 claim 29b (slot animations: each cell of a force-shielded building carries its own
 /// shroud answer for the local player, so an animation over a visible edge cell *E* takes the
 /// mask while the centre cell is shrouded, SW10 part i1; the local player is not the owner;
