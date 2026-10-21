@@ -373,9 +373,11 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
     // It goes: the host shows that it left, and plays on.
     drop(b);
     pump(&clock, &mut [&mut a], "the drop notice", |c| {
-        c[0].chat_lines()
-            .iter()
-            .any(|l| l.notice && l.text == "Bea left the game.")
+        c[0].chat_lines().iter().any(|l| {
+            l.notice
+                && l.text.starts_with("Bea left the game; they have ")
+                && l.text.ends_with(" seconds to reconnect.")
+        })
     });
     let at = a.session.as_ref().unwrap().play.game.world.tick;
     pump(&clock, &mut [&mut a], "ticks after the drop", |c| {
@@ -633,5 +635,218 @@ fn a_desync_is_reported_by_both_with_their_digests() {
         a.evidence()
             .is_some_and(|e| e.done() && e.bytes_held() == 0)
     );
+    relay.stop();
+}
+
+/// A settings store shared by a client and the one that replaces it.
+#[derive(Clone, Default)]
+struct Kept(std::sync::Arc<std::sync::Mutex<Option<String>>>);
+
+impl Store for Kept {
+    fn read(&self) -> Option<String> {
+        self.0.lock().expect("the store").clone()
+    }
+
+    fn write(&self, text: &str) -> Result<(), String> {
+        *self.0.lock().expect("the store") = Some(text.into());
+        Ok(())
+    }
+}
+
+/// Runs the clients' games with orders until each has run `until` ticks,
+/// keeping every tick's state hash an update shows.
+fn play_to(
+    clock: &Clock,
+    cs: &mut [&mut Client],
+    hashes: &mut [BTreeMap<i32, String>],
+    rng: &mut [u64],
+    until: i32,
+) {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        let mut done = true;
+        for (k, c) in cs.iter_mut().enumerate() {
+            c.update(clock.now());
+            run_start(c);
+            let Some(s) = c.session.as_ref() else {
+                done = false;
+                continue;
+            };
+            let w = &s.play.game.world;
+            let t = w.tick;
+            if t > 0 && !hashes[k].contains_key(&t) {
+                hashes[k].insert(t, glasnost_sim::save::state_hash(w));
+                if c.lockstep().is_some_and(|ls| !ls.catching_up()) {
+                    script(c, t, &mut rng[k]);
+                }
+            }
+            done &= t >= until;
+        }
+        if done {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the games stalled at {:?}: {:?}",
+            hashes
+                .iter()
+                .map(|h| h.last_key_value().map(|(t, _)| *t))
+                .collect::<Vec<_>>(),
+            cs.iter().map(|c| c.net_banner()).collect::<Vec<_>>(),
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// Three persons and a computer play; one person's client goes mid-game
+/// and a new one, with the same settings store, offers **Reconnect** (M9
+/// N5): it loads the map, takes the game the host sends, catches up and is
+/// readmitted; all three games then agree tick for tick, with orders from
+/// each. (Dropping a client in the test process closes its link as a
+/// killed process's would, but it is not a process kill: the local lane
+/// does that.)
+#[test]
+fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
+    let (_rt, relay) = relay(41);
+    let clock = Clock(Instant::now());
+    let mut a = client(&relay, "Ann");
+    let store = Kept::default();
+    let mut b = client(&relay, "Bea");
+    b.attach_store(Box::new(store.clone()));
+    b.netform.relay = format!("ws://{}/", relay.addr);
+    let mut c = client(&relay, "Cy");
+
+    press_menu(&mut a, MenuHit::Multiplayer);
+    press_net(&mut a, NetHit::Host);
+    pump(&clock, &mut [&mut a], "the room", |c| {
+        c[0].room_code().is_some()
+    });
+    let code = a.room_code().unwrap().to_owned();
+    // Rows 2 and 3 for persons, row 4 for a computer.
+    for (row, clicks, kind) in [
+        (1, 1, SlotKind::Human),
+        (2, 2, SlotKind::Human),
+        (3, 1, SlotKind::Ai),
+    ] {
+        for _ in 0..clicks {
+            press_room(&mut a, SetupHit::Kind(row, -1));
+            let at = a.room().unwrap().setup.slots[row].kind;
+            pump(&clock, &mut [&mut a], "the row's change", |c| {
+                c[0].room().unwrap().setup.slots[row].kind != at
+            });
+        }
+        assert_eq!(a.room().unwrap().setup.slots[row].kind, kind);
+    }
+    for x in [&mut b, &mut c] {
+        press_menu(x, MenuHit::Multiplayer);
+        x.netform.code = code.clone();
+        press_net(x, NetHit::Join);
+    }
+    pump(&clock, &mut [&mut a, &mut b, &mut c], "the joins", |c| {
+        c.iter()
+            .all(|c| c.room().is_some_and(|v| v.members.len() == 3))
+    });
+    press_room(&mut b, SetupHit::Start_);
+    press_room(&mut c, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b, &mut c], "ready", |c| {
+        c[0].room()
+            .unwrap()
+            .members
+            .iter()
+            .all(|m| m.ready || m.row == 0)
+    });
+    press_room(&mut a, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b, &mut c], "the start", |c| {
+        c.iter()
+            .all(|c| c.lockstep().is_some_and(|ls| ls.phase() == Phase::Running))
+    });
+    let slot = b.lockstep().unwrap().me();
+    let kept = b
+        .settings
+        .rejoin
+        .clone()
+        .expect("the game to rejoin is kept");
+    assert_eq!((kept.code.as_str(), kept.slot), (code.as_str(), slot));
+    assert!(
+        store
+            .read()
+            .is_some_and(|t| t.contains(&format!("rejoin={code} {slot} ")))
+    );
+
+    let mut hashes = vec![BTreeMap::new(); 3];
+    let mut rng = [5u64, 6, 7];
+    play_to(
+        &clock,
+        &mut [&mut a, &mut b, &mut c],
+        &mut hashes,
+        &mut rng,
+        120,
+    );
+
+    // The client goes without a word to the relay.
+    drop(b);
+    pump(&clock, &mut [&mut a, &mut c], "the drop notices", |c| {
+        c.iter()
+            .all(|c| notice(c, |t| t.starts_with("Bea left the game; they have ")))
+    });
+
+    // A new one, on the same settings store, offers to reconnect.
+    let mut b = client(&relay, "Bea");
+    b.attach_store(Box::new(store.clone()));
+    assert_eq!(b.settings.rejoin.as_ref(), Some(&kept));
+    press_menu(&mut b, MenuHit::Multiplayer);
+    let (d, _) = b.frame();
+    assert!(
+        d.texts()
+            .iter()
+            .any(|t| t.contains(&format!("Reconnect to game {code}")))
+    );
+    let started = Instant::now();
+    press_net(&mut b, NetHit::Reconnect);
+    pump(
+        &clock,
+        &mut [&mut a, &mut b, &mut c],
+        "the readmission",
+        |c| notice(c[1], |t| t == "You are back in the game."),
+    );
+    let took = started.elapsed();
+    let serving = |x: &Client| notice(x, |t| t == "Bea is reconnecting; sending them the game.");
+    assert!(serving(&a), "the host sends the game");
+    assert!(!serving(&c), "one peer sends the game");
+    pump(
+        &clock,
+        &mut [&mut a, &mut b, &mut c],
+        "the notices of the return",
+        |c| {
+            [0, 2]
+                .iter()
+                .all(|&k| notice(c[k], |t| t == "Bea reconnected."))
+        },
+    );
+    assert_eq!(b.shell.screen, Screen::Game);
+    assert_eq!(b.lockstep().unwrap().me(), slot);
+    assert_eq!(b.net_banner(), None);
+    assert!(b.session.as_ref().unwrap().network);
+    let back = b.session.as_ref().unwrap().play.game.world.tick;
+    eprintln!("rejoined at tick {back} after {took:?}");
+
+    // All play on with orders; their games agree tick for tick.
+    let mut after = vec![BTreeMap::new(); 3];
+    play_to(
+        &clock,
+        &mut [&mut a, &mut b, &mut c],
+        &mut after,
+        &mut rng,
+        back + 200,
+    );
+    for k in [0, 2] {
+        let both = after[1].keys().filter(|t| after[k].contains_key(t)).count();
+        assert!(both > 150, "{both} ticks seen by both");
+        for (t, h) in &after[1] {
+            if let Some(theirs) = after[k].get(t) {
+                assert_eq!(h, theirs, "tick {t}");
+            }
+        }
+    }
     relay.stop();
 }

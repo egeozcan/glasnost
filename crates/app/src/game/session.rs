@@ -426,6 +426,20 @@ impl Session {
         });
     }
 
+    /// Puts `game` in place of the game (a rejoining peer's game as a live
+    /// peer sent it, M9 N5) and brings the drawing and the radar up to it.
+    pub fn replace_game(&mut self, game: Game) {
+        self.play.game = game;
+        self.with_live(|live, inputs, scene| {
+            live.after_tick();
+            live.redraw(inputs, scene);
+        });
+        let house = self.play.local;
+        if let Some(r) = self.radar.as_mut() {
+            r.observe(&self.play.game.world, house);
+        }
+    }
+
     /// Runs one tick and redraws the live objects.
     pub fn step(&mut self) {
         self.step_by(|g| {

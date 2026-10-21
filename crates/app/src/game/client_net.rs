@@ -18,13 +18,25 @@
 //! [`SaveReport`](super::report::SaveReport) (a file natively, a download
 //! in the browser), tells the other peers its digest and says where it
 //! went.
+//!
+//! A person whose link goes mid-game can come back (M9 N5): the client
+//! keeps the game's relay, room, slot and ticket in the settings store
+//! while the game runs, so that the multiplayer screen offers
+//! **Reconnect**, also after a restart. A rejoin loads the map as at the
+//! start, takes the game a live peer sends ([`glasnost_net::rejoin`]),
+//! puts it in place of the fresh one, runs the ticks it missed as fast as
+//! it can and is readmitted. A peer the relay asks sends the game in
+//! parts, one every 25 ms, while it plays on.
+
+use std::collections::{BTreeSet, VecDeque};
 
 use glasnost_net::desync::{Bundle, Evidence, Perturb};
 use glasnost_net::lobby::wire::{self as lobby_wire};
 use glasnost_net::lobby::{
-    Begin, CHAT_CHARS, Edit, FromRelay, MapChoice, Offered, Refusal, RoomView, ToRelay,
+    Begin, CHAT_CHARS, Edit, FromRelay, MapChoice, Offered, Part, Refusal, RoomView, ToRelay,
     normalise_code,
 };
+use glasnost_net::rejoin::{self, Assembler, Transfer};
 use glasnost_net::{Config, Event as NetEvent, Field, Phase, Session as Lockstep, StartInfo};
 use glasnost_sim::world::HouseId;
 use glasnost_ui::chat::Line;
@@ -37,6 +49,7 @@ use glasnost_ui::shell::Screen;
 use super::{Client, Job};
 use crate::game::link::{Link, LinkState};
 use crate::mapview::live::period_ms;
+use crate::settings::Rejoin;
 
 /// The build a client names in a room and in the lockstep handshake.
 pub const BUILD: &str = concat!("glasnost ", env!("CARGO_PKG_VERSION"));
@@ -64,9 +77,19 @@ const CHAT_KEPT: usize = 100;
 // nocite: our own layout
 const CHAT_SHOWN_MS: i64 = 10_000;
 
-/// The lockstep bytes kept while the map loads.
+/// The lockstep bytes kept while the map loads (and, for a rejoin, until
+/// the game sent has come): a rejoin that needs more fails.
+// nocite: our own netcode (minutes of a full game's frames)
+const EARLY_BYTES: usize = 16 * 1024 * 1024;
+
+/// The most ticks a rejoining peer runs in one update while it catches up.
+// nocite: our own netcode (far faster than any game speed at 60 updates a second)
+const CATCH_UP_TICKS: u32 = 10;
+
+/// How often a serving peer sends the next part of the game, in
+/// milliseconds: some 40 parts a second, well inside the relay's rate.
 // nocite: our own netcode
-const EARLY_KEPT: usize = 4_096;
+const PART_EVERY_MS: u64 = 25;
 
 /// How many ticks ahead of the slowest peer this one may run before its
 /// pacer stretches the tick period by half.
@@ -80,6 +103,8 @@ pub(super) enum Intent {
     Host,
     /// Join the room of this code.
     Join(String),
+    /// Rejoin this game (N5).
+    Rejoin(Rejoin),
 }
 
 /// A connection to a relay and what came of it.
@@ -106,6 +131,28 @@ pub(super) struct Net {
     /// The first desync's tick, once one is noticed.
     desynced: Option<u32>,
     early: Vec<Vec<u8>>,
+    /// The bytes in `early`.
+    early_bytes: usize,
+    /// Lockstep bytes were not kept for want of room.
+    early_lost: bool,
+    /// The game sent for a rejoin, while its parts come (N5).
+    rejoin: Option<Assembler>,
+    /// The game sent for a rejoin, once all of it came and until the
+    /// session starts from it.
+    transfer: Option<Vec<u8>>,
+    /// The rejoining peer has told the relay it caught up.
+    caught_up_sent: bool,
+    /// The parts of the game this peer sends rejoining peers, encoded,
+    /// with their slots.
+    serving: VecDeque<(u8, Vec<u8>)>,
+    /// When the last part went.
+    last_part: Option<u64>,
+    /// The rejoining peers' slots whose game is still to be made.
+    to_serve: BTreeSet<u8>,
+    /// Bytes of game this peer sent rejoining peers, and the bytes of the
+    /// game it was sent (counts for the local lane).
+    sent_bytes: u64,
+    received_bytes: Option<usize>,
     stalled_since: Option<u64>,
     last_tick: Option<u64>,
     /// Whom the game waits for, once it has waited [`STALL_MS`].
@@ -131,6 +178,16 @@ impl Net {
             evidence: None,
             desynced: None,
             early: Vec::new(),
+            early_bytes: 0,
+            early_lost: false,
+            rejoin: None,
+            transfer: None,
+            caught_up_sent: false,
+            serving: VecDeque::new(),
+            last_part: None,
+            to_serve: BTreeSet::new(),
+            sent_bytes: 0,
+            received_bytes: None,
             stalled_since: None,
             last_tick: None,
             waiting: None,
@@ -155,11 +212,54 @@ impl Net {
                 }
             } else if let Some(ls) = self.lockstep.as_mut() {
                 ls.receive(now, &bytes);
-            } else if self.begin.is_some() && self.early.len() < EARLY_KEPT {
-                self.early.push(bytes);
+            } else if self.begin.is_some() {
+                if self.early_bytes + bytes.len() <= EARLY_BYTES {
+                    self.early_bytes += bytes.len();
+                    self.early.push(bytes);
+                } else {
+                    self.early_lost = true;
+                }
             }
         }
         out
+    }
+
+    /// What a rejoin is doing, while this client is not yet readmitted to
+    /// its game (N5).
+    fn rejoin_banner(&self) -> Option<String> {
+        if !matches!(self.intent, Intent::Rejoin(_)) || self.begin.is_none() {
+            return None;
+        }
+        match (&self.lockstep, &self.rejoin) {
+            (Some(ls), _) if ls.catching_up() => {
+                Some(format!("Catching up with the game (tick {})...", ls.ran()))
+            }
+            (Some(_), _) => None,
+            (None, Some(asm)) => Some(match asm.progress() {
+                (k, Some(n)) => format!("Receiving the game ({k} of {n} parts)..."),
+                (_, None) => "Waiting for the game...".into(),
+            }),
+            (None, None) => Some("Loading the game...".into()),
+        }
+    }
+
+    /// Sends the next part of the game to a rejoining peer when one is due.
+    fn send_parts(&mut self, now: u64) {
+        let serving = self.lockstep.as_ref().map(Lockstep::serving);
+        // A rejoin the relay called off: its parts go no more.
+        self.serving
+            .retain(|(s, _)| serving.as_ref().is_some_and(|v| v.contains(s)));
+        if self.serving.is_empty()
+            || self
+                .last_part
+                .is_some_and(|t| now.saturating_sub(t) < PART_EVERY_MS)
+        {
+            return;
+        }
+        if let Some((_, bytes)) = self.serving.pop_front() {
+            self.link.send(bytes);
+            self.last_part = Some(now);
+        }
     }
 
     /// Sends what the lockstep session has to send.
@@ -193,6 +293,15 @@ impl Net {
             .and_then(|b| b.names.get(usize::from(slot)))
             .cloned()
             .unwrap_or_else(|| format!("slot {}", slot + 1))
+    }
+
+    /// The room's code: the room's, or the rejoined game's.
+    fn code(&self) -> Option<String> {
+        match (&self.room, &self.intent) {
+            (Some(v), _) => Some(v.code.clone()),
+            (None, Intent::Rejoin(r)) => Some(r.code.clone()),
+            _ => None,
+        }
     }
 
     /// The member of this client in the room.
@@ -259,7 +368,42 @@ impl Client {
                     );
                 }
             },
+            NetHit::Reconnect => {
+                if let Some(r) = self.settings.rejoin.clone() {
+                    self.net_open(Intent::Rejoin(r));
+                }
+            }
         }
+    }
+
+    /// Keeps the game this client can rejoin (N5), or forgets it.
+    pub(super) fn keep_rejoin(&mut self, r: Option<Rejoin>) {
+        if self.settings.rejoin != r {
+            self.settings.rejoin = r;
+            self.settings_changed();
+        }
+    }
+
+    /// The game this client plays began or was rejoined: it can rejoin it
+    /// from now on, also after a restart.
+    fn begun(&mut self) {
+        let Some(n) = self.net.as_ref() else {
+            return;
+        };
+        let (Some(b), Some(code)) = (n.begin.as_ref(), n.code()) else {
+            return;
+        };
+        let relay = match &n.intent {
+            Intent::Rejoin(r) => r.relay.clone(),
+            _ => self.netform.relay.trim().to_owned(),
+        };
+        let r = Rejoin {
+            relay,
+            code,
+            slot: b.you,
+            ticket: b.ticket,
+        };
+        self.keep_rejoin(Some(r));
     }
 
     /// Connects to the relay and asks for a room (host) or about one (join).
@@ -297,9 +441,22 @@ impl Client {
                 }
             }
             Intent::Join(code) => ToRelay::Peek { code: code.clone() },
+            Intent::Rejoin(r) => ToRelay::Rejoin {
+                code: r.code.clone(),
+                slot: r.slot,
+                ticket: r.ticket,
+                build: self.build.clone(),
+                rules_hash: install.rules_hash.clone(),
+            },
         };
-        self.remember_relay();
-        let link = connect(self.netform.relay.trim());
+        let relay = match &intent {
+            Intent::Rejoin(r) => r.relay.clone(),
+            _ => {
+                self.remember_relay();
+                self.netform.relay.trim().to_owned()
+            }
+        };
+        let link = connect(&relay);
         let mut net = Net::new(link, intent);
         net.send(&first);
         self.net = Some(net);
@@ -310,7 +467,7 @@ impl Client {
     /// Leaves the room or the game and closes the link.
     pub(super) fn net_leave(&mut self) {
         if let Some(mut n) = self.net.take() {
-            if n.room.is_some() && n.closed.is_none() {
+            if (n.room.is_some() || n.begin.is_some()) && n.closed.is_none() {
                 n.send(&ToRelay::Leave);
             }
             n.close();
@@ -329,6 +486,7 @@ impl Client {
         for m in msgs {
             self.net_message(m, now_ms);
         }
+        let lost = self.lost_game();
         let Some(net) = self.net.as_mut() else {
             return;
         };
@@ -343,6 +501,9 @@ impl Client {
                     self.shell.screen = Screen::Multiplayer;
                     return;
                 }
+                _ if lost => {
+                    return self.net_lost(&format!("The connection to the relay closed: {why}"));
+                }
                 _ => net.line(
                     now_ms,
                     "",
@@ -352,9 +513,95 @@ impl Client {
             }
         }
         self.net_events(now_ms);
+        self.net_serve(now_ms);
         if let Some(net) = self.net.as_mut() {
+            net.send_parts(now);
             net.flush(now);
         }
+    }
+
+    /// Sends the game to the rejoining peers the relay asked this peer to
+    /// serve (N5), once its session runs: the session's catch-up and the
+    /// game's save after the same ticks, in parts that go one at a time.
+    fn net_serve(&mut self, now_ms: i64) {
+        let (Some(net), Some(s)) = (self.net.as_mut(), self.session.as_ref()) else {
+            return;
+        };
+        let Some(ls) = net.lockstep.as_ref() else {
+            return;
+        };
+        let asked = ls.serving();
+        net.to_serve.retain(|slot| asked.contains(slot));
+        let Some(slot) = net.to_serve.first().copied() else {
+            return;
+        };
+        let Some(t) = Transfer::of(ls, &s.play.game) else {
+            return;
+        };
+        net.to_serve.remove(&slot);
+        let who = net.slot_name(slot);
+        let bytes = t.to_bytes();
+        log::info!("rejoin: sending {who} the game ({} bytes)", bytes.len());
+        net.sent_bytes += bytes.len() as u64;
+        let ps = rejoin::parts(&bytes);
+        let n = ps.len() as u32;
+        for (i, b) in ps.into_iter().enumerate() {
+            let m = ToRelay::Snapshot(Part {
+                part: i as u32,
+                parts: n,
+                bytes: b,
+            });
+            net.serving.push_back((slot, lobby_wire::encode(&m)));
+        }
+        net.line(
+            now_ms,
+            "",
+            &format!("{who} is reconnecting; sending them the game."),
+            true,
+        );
+    }
+
+    /// Whether the link of a network game that still runs (or is being
+    /// rejoined) went: the person can rejoin it (N5).
+    fn lost_game(&self) -> bool {
+        let in_game = match self.shell.screen {
+            Screen::Game => true,
+            Screen::Settings => self.settings_from_game,
+            _ => false,
+        };
+        in_game
+            && self.settings.rejoin.is_some()
+            && self.net.as_ref().is_some_and(|n| n.begin.is_some())
+            && self.session.as_ref().is_none_or(|s| s.play.end().is_none())
+    }
+
+    /// The network game is lost to this client for now (its link went, or
+    /// a rejoin failed): back to the multiplayer screen, which offers
+    /// **Reconnect** within the grace period (N5).
+    fn net_lost(&mut self, why: &str) {
+        // A failed rejoin has used some of the grace period already.
+        let grace_s = self.net.as_ref().and_then(|n| {
+            if matches!(n.intent, Intent::Rejoin(_)) {
+                return None;
+            }
+            let b = n.begin.as_ref()?;
+            let speed = self.session.as_ref().map(|s| s.speed)?;
+            Some(u64::from(b.params.sane().grace_ticks) * period_ms(speed).max(1) as u64 / 1_000)
+        });
+        let text = match grace_s {
+            Some(s) => format!(
+                "{why}. Reconnect within about {s} seconds to play on, or your house surrenders."
+            ),
+            None => format!("{why}. Reconnect to play on."),
+        };
+        log::warn!("{text}");
+        self.net_leave();
+        self.session = None;
+        self.captions.clear();
+        self.settings_from_game = false;
+        self.rebinding = None;
+        self.net_status = (text, true);
+        self.shell.screen = Screen::Multiplayer;
     }
 
     /// The lockstep session's events as notices.
@@ -362,10 +609,16 @@ impl Client {
         let Some(net) = self.net.as_mut() else {
             return;
         };
-        let Some(ls) = net.lockstep.as_mut() else {
+        let Some(events) = net.lockstep.as_mut().map(Lockstep::take_events) else {
             return;
         };
-        for e in ls.take_events() {
+        let session = self.session.as_ref();
+        let period = session.map_or(1, |s| period_ms(s.speed).max(1) as u64);
+        for e in events {
+            let Some(ls) = net.lockstep.as_ref() else {
+                return;
+            };
+            let me = ls.me();
             match e {
                 NetEvent::Refused { slot, field } => {
                     let who = net.slot_name(slot);
@@ -402,11 +655,44 @@ impl Client {
                         true,
                     );
                 }
-                // N5 seam: surrender and reconnection. Now a notice; the
-                // game goes on without the slot.
+                // The game goes on without the slot; its house surrenders
+                // once the grace period is over, unless it rejoins (N5).
                 NetEvent::Dropped { slot, .. } => {
                     let who = net.slot_name(slot);
-                    net.line(now_ms, "", &format!("{who} left the game."), true);
+                    let left = ls.surrender_at(slot).map(|at| at.saturating_sub(ls.ran()));
+                    let text = match left {
+                        Some(left) => {
+                            let ms = u64::from(left) * period;
+                            format!(
+                                "{who} left the game; they have {} seconds to reconnect.",
+                                ms.div_ceil(1_000)
+                            )
+                        }
+                        None => format!("{who} left the game."),
+                    };
+                    net.line(now_ms, "", &text, true);
+                }
+                // The game goes once this peer's session runs
+                // (`net_serve`); a new ask drops what an earlier one left.
+                NetEvent::Serve { slot } => {
+                    net.serving.retain(|(s, _)| *s != slot);
+                    net.to_serve.insert(slot);
+                }
+                NetEvent::Resumed { slot, .. } if slot == me => {
+                    net.line(now_ms, "", "You are back in the game.", true);
+                }
+                NetEvent::Resumed { slot, .. } => {
+                    let who = net.slot_name(slot);
+                    net.line(now_ms, "", &format!("{who} reconnected."), true);
+                }
+                NetEvent::Surrendered { slot, .. } => {
+                    let who = net.slot_name(slot);
+                    net.line(
+                        now_ms,
+                        "",
+                        &format!("{who} did not come back in time: their house surrendered."),
+                        true,
+                    );
                 }
                 NetEvent::BadMessage { reason } => {
                     log::warn!("a lockstep message was refused: {reason}");
@@ -460,6 +746,7 @@ impl Client {
     }
 
     fn net_message(&mut self, m: FromRelay, now_ms: i64) {
+        let lost = self.lost_game();
         let Some(net) = self.net.as_mut() else {
             return;
         };
@@ -505,7 +792,20 @@ impl Client {
             }
             FromRelay::Refused(r) => {
                 let text = r.to_string();
-                if net.room.is_none() {
+                if net.room.is_none() && net.begin.is_none() {
+                    // A rejoin that can never work forgets its game; one
+                    // that may work in a moment keeps it.
+                    let gone = matches!(
+                        r,
+                        Refusal::Ticket
+                            | Refusal::Surrendered
+                            | Refusal::NoGame
+                            | Refusal::NoRoom
+                            | Refusal::Mismatch(_)
+                    );
+                    if matches!(net.intent, Intent::Rejoin(_)) && gone {
+                        self.keep_rejoin(None);
+                    }
                     self.net_status = (format!("The relay refused: {text}."), true);
                     self.net_leave();
                 } else if self.shell.screen == Screen::Room {
@@ -514,17 +814,24 @@ impl Client {
                     net.line(now_ms, "", &format!("Refused: {text}."), true);
                 }
             }
-            FromRelay::Begin(b) => {
+            FromRelay::Begin(b) | FromRelay::Rejoined(b) => {
+                if matches!(net.intent, Intent::Rejoin(_)) {
+                    net.rejoin = Some(Assembler::default());
+                }
                 net.begin = Some(b);
                 net.typing = false;
+                self.begun();
                 self.net_begin();
             }
+            FromRelay::Snapshot(part) => self.net_part(&part),
             FromRelay::Closing(why) => {
                 net.closed = Some(why.clone());
                 if matches!(self.shell.screen, Screen::Multiplayer | Screen::Room) {
                     self.net_status = (format!("The relay closed the connection: {why}"), true);
                     self.net_leave();
                     self.shell.screen = Screen::Multiplayer;
+                } else if lost {
+                    self.net_lost(&format!("The relay closed the connection: {why}"));
                 } else {
                     net.line(
                         now_ms,
@@ -586,7 +893,31 @@ impl Client {
         self.status = "Loading the map...".into();
         self.busy = true;
         self.job = Some(job);
+        self.net_loading = true;
         self.shell.screen = Screen::Game;
+    }
+
+    /// A part of the game sent for a rejoin (N5): once all of it came, the
+    /// session starts from it (now, or when the map has loaded).
+    fn net_part(&mut self, part: &Part) {
+        let Some(net) = self.net.as_mut() else {
+            return;
+        };
+        let Some(asm) = net.rejoin.as_mut() else {
+            log::warn!("a part of a game this client did not ask for");
+            return;
+        };
+        match asm.add(part.part, part.parts, &part.bytes) {
+            Ok(None) => {}
+            Ok(Some(bytes)) => {
+                log::info!("rejoin: the game came ({} bytes)", bytes.len());
+                net.rejoin = None;
+                net.received_bytes = Some(bytes.len());
+                net.transfer = Some(bytes);
+                self.net_resume();
+            }
+            Err(e) => self.net_lost(&format!("The game sent for the rejoin is not usable: {e}")),
+        }
     }
 
     /// The network game's map has loaded: the lockstep session starts from
@@ -600,6 +931,10 @@ impl Client {
         let Some(b) = net.begin.as_ref() else {
             return;
         };
+        if matches!(net.intent, Intent::Rejoin(_)) {
+            s.network = true;
+            return self.net_resume();
+        }
         let info = StartInfo::new(
             &self.build,
             &s.play.game.world.rules().hash,
@@ -611,6 +946,10 @@ impl Client {
         let evidence = Evidence::new(&self.build, &info, b.you, &s.play.game);
         match Lockstep::new(cfg, info, b.you, now) {
             Ok(mut ls) => {
+                if net.early_lost {
+                    log::warn!("lockstep messages were lost while the map loaded");
+                }
+                net.early_bytes = 0;
                 for bytes in net.early.drain(..) {
                     ls.receive(now, &bytes);
                 }
@@ -628,6 +967,69 @@ impl Client {
         }
     }
 
+    /// A rejoin's game came and its map has loaded (N5): the game sent goes
+    /// in place of the fresh one and the session starts from the sender's,
+    /// with every lockstep message kept since the relay asked for the game.
+    /// It then catches up ([`Client::net_tick`]).
+    fn net_resume(&mut self) {
+        let now = self.clock.max(0) as u64;
+        let (Some(net), Some(s)) = (self.net.as_mut(), self.session.as_mut()) else {
+            return;
+        };
+        if net.lockstep.is_some() || self.net_loading {
+            return;
+        }
+        let (Some(b), Some(bytes)) = (net.begin.as_ref(), net.transfer.take()) else {
+            return;
+        };
+        if net.early_lost {
+            return self.net_lost("Too much of the game went on while it was being sent");
+        }
+        let info = StartInfo::new(
+            &self.build,
+            &s.play.game.world.rules().hash,
+            &s.map_id,
+            &s.play.game.replay().setup,
+            b.params,
+        );
+        let me = b.you;
+        let cfg = Config::new(period_ms(s.speed) as u32);
+        let loaded = Transfer::from_bytes(&bytes).and_then(|t| {
+            let g = t.load(&s.play.game)?;
+            Ok((t, g))
+        });
+        let (t, game) = match loaded {
+            Ok(x) => x,
+            Err(e) => return self.net_lost(&format!("The game sent for the rejoin: {e}")),
+        };
+        let mut ls = match Lockstep::rejoin(cfg, info.clone(), me, &t.catchup, now) {
+            Ok(ls) => ls,
+            Err(f) => {
+                return self.net_lost(&format!(
+                    "The game sent for the rejoin does not fit: its {f} is not the room's"
+                ));
+            }
+        };
+        net.early_bytes = 0;
+        for bytes in net.early.drain(..) {
+            ls.receive(now, &bytes);
+        }
+        let ran = ls.ran();
+        log::info!(
+            "rejoin: the game of tick {ran} loaded ({} bytes); catching up",
+            bytes.len()
+        );
+        s.replace_game(game);
+        net.evidence = Some(
+            Evidence::resume(&self.build, &info, me, &s.play.game, ran).with_perturb(self.perturb),
+        );
+        net.lockstep = Some(ls);
+        net.desynced = None;
+        net.caught_up_sent = false;
+        s.network = true;
+        s.play.outbox = Some(Vec::new());
+    }
+
     /// Runs a network game's tick when one is due and the lockstep session
     /// has every frame for it; returns whether it ran. The person's orders
     /// go to the session first.
@@ -639,6 +1041,45 @@ impl Client {
         let Some(ls) = net.lockstep.as_mut() else {
             return false;
         };
+        if ls.catching_up() {
+            // A rejoining peer runs the ticks it missed unpaced, a few an
+            // update, and once it has run every one it has the frames for,
+            // says so: the relay then has it readmitted (N5). Its person's
+            // orders meanwhile go nowhere, and its ticks make no sound.
+            if let Some(out) = s.play.outbox.as_mut() {
+                out.clear();
+            }
+            let mut blocked = false;
+            for _ in 0..CATCH_UP_TICKS {
+                let ev = &mut net.evidence;
+                let ran = s.step_by(|g| {
+                    if let Some(ev) = ev.as_mut() {
+                        ev.before_tick(ls.ran(), g);
+                    }
+                    let Some(t) = ls.step(now, g) else {
+                        return false;
+                    };
+                    if let Some(ev) = ev.as_mut() {
+                        ev.after_tick(&t, g, ls.agreed());
+                    }
+                    true
+                });
+                if !ran {
+                    blocked = true;
+                    break;
+                }
+            }
+            s.play.cues.clear();
+            s.play.acks.clear();
+            if blocked && !net.caught_up_sent {
+                net.caught_up_sent = true;
+                log::info!("rejoin: caught up to tick {}", ls.ran());
+                net.send(&ToRelay::CaughtUp);
+            }
+            net.flush(now);
+            self.pacer.reset();
+            return false;
+        }
         if let Some(out) = s.play.outbox.as_mut() {
             for o in out.drain(..) {
                 ls.submit(o);
@@ -979,6 +1420,7 @@ impl Client {
                     .as_ref()
                     .map(|names| format!("Waiting for {names}..."))
             })
+            .or_else(|| net.rejoin_banner())
             .or_else(|| {
                 net.lockstep
                     .as_ref()
@@ -994,6 +1436,7 @@ impl Client {
 
     /// The multiplayer screen.
     pub(super) fn net_menu_frame(&mut self, hover: Option<Point>) -> DrawList {
+        self.netform.rejoin = self.settings.rejoin.as_ref().map(|r| r.code.clone());
         let busy = self.net.as_ref().is_some_and(|n| n.room.is_none());
         let (status, bad) = if busy && self.net.as_ref().is_some_and(Net::connecting) {
             ("Connecting to the relay...".to_owned(), false)
@@ -1019,6 +1462,14 @@ impl Client {
     /// The network game's desync evidence, once the game runs.
     pub fn evidence(&self) -> Option<&Evidence> {
         self.net.as_ref()?.evidence.as_ref()
+    }
+
+    /// Bytes of game this client sent rejoining peers, and the bytes of the
+    /// game it was sent for its own rejoin, if any (M9 N5).
+    pub fn transfer_bytes(&self) -> (u64, Option<usize>) {
+        self.net
+            .as_ref()
+            .map_or((0, None), |n| (n.sent_bytes, n.received_bytes))
     }
 
     /// The room code, while in a room.
@@ -1047,6 +1498,7 @@ impl Client {
         n.refused
             .clone()
             .or_else(|| n.waiting.as_ref().map(|w| format!("Waiting for {w}...")))
+            .or_else(|| n.rejoin_banner())
     }
 
     /// Says a chat line in the room or the game.

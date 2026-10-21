@@ -167,6 +167,56 @@ pub struct Settings {
     pub bindings: Bindings,
     /// The relay address last used on the multiplayer screen ("" none).
     pub relay: String,
+    /// The network game this client can rejoin, while one runs (M9 N5).
+    pub rejoin: Option<Rejoin>,
+}
+
+/// A network game a client can rejoin after its link or its process went
+/// (M9 N5): the relay, the room, the slot and the slot's ticket. Not a
+/// choice of the person's, but kept beside the relay address so that a
+/// restarted client can offer **Reconnect**; the ticket only opens that
+/// slot of that room's running game.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rejoin {
+    /// The relay's address.
+    pub relay: String,
+    /// The room code.
+    pub code: String,
+    /// The slot.
+    pub slot: u8,
+    /// The slot's ticket.
+    pub ticket: [u8; 16],
+}
+
+impl Rejoin {
+    /// The kept text: code, slot, ticket in hex and relay, by spaces.
+    fn to_text(&self) -> String {
+        let hex: String = self.ticket.iter().map(|b| format!("{b:02x}")).collect();
+        let relay: String = self.relay.chars().filter(|c| !c.is_control()).collect();
+        format!("{} {} {hex} {relay}", self.code, self.slot)
+    }
+
+    /// From kept text; `None` if any part is wrong.
+    fn from_text(v: &str) -> Option<Self> {
+        let mut it = v.trim().splitn(4, ' ');
+        let code = it.next()?.to_owned();
+        let slot = it.next()?.parse().ok()?;
+        let hex = it.next()?;
+        let relay: String = it.next()?.chars().take(RELAY_CHARS).collect();
+        if code.is_empty() || !code.chars().all(|c| c.is_ascii_alphanumeric()) || hex.len() != 32 {
+            return None;
+        }
+        let mut ticket = [0u8; 16];
+        for (i, b) in ticket.iter_mut().enumerate() {
+            *b = u8::from_str_radix(hex.get(2 * i..2 * i + 2)?, 16).ok()?;
+        }
+        Some(Self {
+            relay,
+            code,
+            slot,
+            ticket,
+        })
+    }
 }
 
 impl Default for Settings {
@@ -188,6 +238,7 @@ impl Default for Settings {
             colour_blind: false,
             bindings: Bindings::default(),
             relay: String::new(),
+            rejoin: None,
         }
     }
 }
@@ -217,6 +268,9 @@ impl Settings {
         }
         let relay: String = self.relay.chars().filter(|c| !c.is_control()).collect();
         s += &format!("relay={relay}\n");
+        if let Some(r) = &self.rejoin {
+            s += &format!("rejoin={}\n", r.to_text());
+        }
         s
     }
 
@@ -259,6 +313,7 @@ impl Settings {
                         .take(RELAY_CHARS)
                         .collect();
                 }
+                "rejoin" => s.rejoin = Rejoin::from_text(v),
                 other => {
                     if let Some(name) = other.strip_prefix("key.")
                         && let Some(a) = ACTIONS.iter().copied().find(|a| a.name() == name)

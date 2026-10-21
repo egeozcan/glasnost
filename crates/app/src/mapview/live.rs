@@ -79,16 +79,10 @@ const TARGET_LINE_TICKS: i32 = 15; // spec: S-0301 claim 24 b (drawn while 0 ≤
 // Pacing (S-0201 claims 2 to 5)
 // ---------------------------------------------------------------------------
 
-/// The paced period of game-speed index `speed` in milliseconds: 16 × s for
-/// s from 1 to 6, 8 at index 0 (S-0201 claims 4 and 5).
-pub fn period_ms(speed: u8) -> i64 {
-    match speed {
-        // spec: S-0201 claim 5 (our engine paces index 0 at a fixed 8 ms)
-        0 => 8,
-        // spec: S-0201 claims 2 and 4 (s pacing units of 16 ms)
-        s => 16 * i64::from(s.min(6)),
-    }
-}
+/// The paced period of game-speed index `speed` in milliseconds (S-0201
+/// claims 4 and 5); kept with the setup so the relay works out the drop
+/// grace period in ticks from it too (M9 N5).
+pub use glasnost_ui::setup::period_ms;
 
 /// The tick pacer: a cycle runs one tick and lasts at least its paced period
 /// measured from its own start, with no catch-up (S-0201 claims 2 to 4).

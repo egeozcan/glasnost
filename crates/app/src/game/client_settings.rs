@@ -52,10 +52,13 @@ impl Client {
             }
             SettingsHit::Rebind(i) => self.rebinding = Some(i),
             SettingsHit::Reset => {
-                // The relay address is not a preference to reset.
+                // The relay address and a game to rejoin are not
+                // preferences to reset.
                 let relay = std::mem::take(&mut self.settings.relay);
+                let rejoin = self.settings.rejoin.take();
                 self.settings = Settings {
                     relay,
+                    rejoin,
                     ..Settings::default()
                 };
                 self.settings_changed();
