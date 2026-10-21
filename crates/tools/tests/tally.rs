@@ -862,4 +862,6 @@ fn counts_dominator_launches_takeovers_and_damage() {
         ),
         (1, 3, 4, 2)
     );
+    // One sweep; with no owners observed before it, no takeover counts as an owner change (S-0612 claim 14).
+    assert_eq!(tally.dominator_sweeps, vec![0]);
 }

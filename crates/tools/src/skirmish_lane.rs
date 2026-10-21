@@ -230,6 +230,7 @@ struct Game {
     dominated: usize,
     dominator_damaged: usize,
     dominator_killed: usize,
+    dominator_sweeps: Vec<usize>,
     /// The distinct objects that showed each M6 feature (see [`features`]).
     features: BTreeMap<&'static str, BTreeSet<u32>>,
     /// Per player house: the unit types (infantry, vehicles, aircraft) it
@@ -655,6 +656,8 @@ fn play_ai(
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
     let starting: BTreeSet<u32> = game.world.objects.keys().map(|id| id.0).collect();
+    // The house of a sweep seen in this tick's effects.
+    let mut swept_by: Option<HouseId> = None;
     while game.world.tick < max_ticks {
         game.step();
         let w = &game.world;
@@ -672,6 +675,30 @@ fn play_ai(
                 _ => {}
             }
             tally.effect(e);
+            if let Effect::Domination {
+                event: glasnost_sim::domination::DomEvent::Started,
+                ..
+            } = e
+                && let Some(d) = w.domination.current.as_ref()
+            {
+                println!("{}", dominator_launch_line(w, d));
+            }
+            if let Effect::Domination {
+                event: glasnost_sim::domination::DomEvent::Sweep,
+                house,
+                ..
+            } = e
+            {
+                swept_by = *house;
+            }
+        }
+        if let Some(h) = swept_by.take() {
+            println!(
+                "dominator sweep tick {} house {}: owner changes {}",
+                w.tick,
+                h.0,
+                tally.dominator_sweeps.last().copied().unwrap_or(0)
+            );
         }
         drained = w.effects.len();
         tally.observe(w);
@@ -857,6 +884,7 @@ fn play_ai(
     g.dominated = tally.dominated;
     g.dominator_damaged = tally.dominator_damaged;
     g.dominator_killed = tally.dominator_killed;
+    g.dominator_sweeps = tally.dominator_sweeps.clone();
     g.ready_ticks = tally.ready_ticks;
     g.granted_ticks = tally.granted_ticks;
     g.suspended_causes = tally.suspended_causes;
@@ -1118,6 +1146,13 @@ pub struct Tally {
     pub dominator_damaged: usize,
     /// Objects a sweep's area damage destroyed (S-0612 claim 9).
     pub dominator_killed: usize,
+    /// Per sweep (S-0612 claim 8), in order: the objects it took over that
+    /// changed owner (S-0612 claim 14: a takeover of the dominating house's
+    /// own object changes no owner and is not counted here).
+    pub dominator_sweeps: Vec<usize>,
+    /// The owner of every object while a domination is before its sweep
+    /// (read at the end of the last tick), to tell an owner change.
+    dom_owners: BTreeMap<u32, Option<HouseId>>,
     /// The burning walkers after the last tick.
     walkers_before: BTreeSet<u32>,
     /// The seized units after the last tick.
@@ -1183,8 +1218,18 @@ impl Tally {
                 event: glasnost_sim::superweapons::SwEvent::DominatorSound,
                 ..
             } => self.dominator_launches += 1,
-            Effect::Domination { event, .. } => match event {
-                glasnost_sim::domination::DomEvent::Taken(_) => self.dominated += 1,
+            Effect::Domination { event, house, .. } => match event {
+                glasnost_sim::domination::DomEvent::Sweep => self.dominator_sweeps.push(0),
+                glasnost_sim::domination::DomEvent::Taken(id) => {
+                    self.dominated += 1;
+                    let before = self.dom_owners.get(&id.0).copied().flatten();
+                    if before.is_some()
+                        && before != *house
+                        && let Some(n) = self.dominator_sweeps.last_mut()
+                    {
+                        *n += 1;
+                    }
+                }
                 glasnost_sim::domination::DomEvent::Damage { damaged, killed } => {
                     self.dominator_damaged += *damaged as usize;
                     self.dominator_killed += *killed as usize;
@@ -1213,6 +1258,14 @@ impl Tally {
     /// Counts what changed in the world's last tick.
     pub fn observe(&mut self, w: &World) {
         self.drained_ticks += w.drain.links.len();
+        self.dom_owners.clear();
+        if w.domination
+            .current
+            .as_ref()
+            .is_some_and(|d| matches!(d.phase, glasnost_sim::domination::Phase::LeadIn { .. }))
+        {
+            self.dom_owners = w.objects.values().map(|o| (o.id.0, o.owner)).collect();
+        }
         let mut masters = [0usize; PLAYERS];
         let mut slaves = [0usize; PLAYERS];
         for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
@@ -2796,8 +2849,14 @@ fn report(
             );
             let _ = writeln!(
                 s,
-                "  psychic domination: dominator launches {}, objects taken over {}, objects damaged {}, killed {}",
-                g.dominator_launches, g.dominated, g.dominator_damaged, g.dominator_killed
+                "  psychic domination: dominator launches {}, objects taken over {}, objects damaged {}, killed {}; sweeps {}, sweeps that changed an owner {}, owner changes {}",
+                g.dominator_launches,
+                g.dominated,
+                g.dominator_damaged,
+                g.dominator_killed,
+                g.dominator_sweeps.len(),
+                g.dominator_sweeps.iter().filter(|&&n| n > 0).count(),
+                g.dominator_sweeps.iter().sum::<usize>()
             );
         }
         let f: Vec<String> = g
@@ -2868,6 +2927,28 @@ fn report(
         }
     }
     s
+}
+
+/// The lane line of a domination launch: its house and cell, and what its
+/// sweep would take over as things stand at the launch
+/// (`glasnost_sim::domination::preview`): every object, and those of other
+/// houses (an owner change, S-0612 claim 14). Units can still walk in or
+/// out before the sweep, so the sweep's own line gives what it took.
+fn dominator_launch_line(w: &World, d: &glasnost_sim::domination::Domination) -> String {
+    let taken = glasnost_sim::domination::preview(w, d.house, d.cell);
+    let other = taken
+        .iter()
+        .filter(|&&id| w.obj(id).is_some_and(|o| o.owner != Some(d.house)))
+        .count();
+    format!(
+        "dominator launch tick {} house {} cell ({}, {}): preview takes {}, of other houses {}",
+        w.tick,
+        d.house.0,
+        d.cell.x,
+        d.cell.y,
+        taken.len(),
+        other
+    )
 }
 
 /// The lines of `GLASNOST_AI_SWPROBE`: per house and mutator or dominator
