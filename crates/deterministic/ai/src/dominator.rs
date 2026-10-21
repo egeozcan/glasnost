@@ -26,8 +26,10 @@
 //!   a person reads the reach off the cursor and sees what stands in it.
 //! - Takeovers first (M8 step B3: in the stock lane every launch went to
 //!   area damage on buildings while takeable units stood in sight
-//!   elsewhere). The aim searches the explored cells from which a sweep
-//!   reaches a seen takeable unit, and fires at the one worth most among
+//!   elsewhere). A takeable unit is one that passes the takeover tests and
+//!   stands still: one on the move has left the reach by the sweep. The
+//!   aim searches the explored cells from which a sweep reaches a seen
+//!   takeable unit, and fires at the one worth most among
 //!   those that take at least one enemy unit and gain more than they lose.
 //!   Only when no cell takes any does it aim for the damage alone, at the
 //!   cells of the seen enemy objects, and only once the record has been
@@ -150,18 +152,22 @@ fn blast_hit(
         return None;
     }
     let (r, _) = glasnost_sim::combat::area::radii(w, h);
-    let (x, y) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0612 claim 9 (the centre of the target cell)
-    let (dx, dy) = (i64::from(o.pos.x) - x, i64::from(o.pos.y) - y);
-    let d2 = dx * dx + dy * dy;
-    if d2 > i64::from(r) * i64::from(r) {
+    // spec: S-0612 claim 9 (the centre of the target cell at its terrain surface)
+    let p = glasnost_sim::superweapons::cell_point(w, c, false);
+    // spec: S-0303 claims 7, 8 and 10 (the distance of each hit) and claim 3 (only within R)
+    let hits: Vec<i32> = glasnost_sim::combat::area::object_distances(w, p, o.id)
+        .into_iter()
+        .filter(|&d| d <= r)
+        .collect();
+    if hits.is_empty() {
         return None;
     }
-    let d = d2.isqrt() as i32;
-    let class = glasnost_sim::combat::veterancy::type_combat(w, o.id).map_or(0, |t| t.armour);
-    let v = w.rules().combat.warhead(h).versus(class);
-    Some(glasnost_sim::combat::damage::falloff_versus(
-        w, h, amount, d, v,
-    ))
+    // spec: S-0302 claims 5 and 6 (the defended and modified amount of each hit)
+    Some(
+        hits.into_iter()
+            .map(|d| glasnost_sim::combat::damage::hit_estimate(w, o.id, amount, h, d))
+            .sum(),
+    )
 }
 
 /// What a launch at `c` is worth to `house`: the value of the seen enemy
@@ -181,10 +187,14 @@ fn worth(
     let taken = glasnost_sim::domination::preview(w, house, c);
     let (mut gain, mut loss, mut n) = (0, 0, 0);
     let mut destroyed: BTreeSet<ObjectId> = BTreeSet::new();
+    let wrecks = wrecks(w, house, c, seen);
     for id in taken {
         let Some(o) = w.obj(id) else { continue };
         if takeable.contains(&id) {
-            if blast_hit(w, c, d.damage, d.warhead, o).is_some_and(|x| x >= o.health) {
+            let hit = blast_hit(w, c, d.damage, d.warhead, o);
+            // spec: S-0303 claim 11 (a death weapon a hit sets off runs in the middle of the detonation's hits)
+            let chained = wrecks && hit.is_some();
+            if chained || hit.is_some_and(|x| x >= o.health) {
                 // spec: S-0612 claim 10 (an object the area damage destroys is not taken over)
                 destroyed.insert(id);
                 continue;
@@ -208,10 +218,40 @@ fn worth(
     (gain, loss, n)
 }
 
+/// Whether the area damage of a launch at `c` is expected to destroy any
+/// object the house sees (its own, its allies' or a seen enemy's). A
+/// destroyed object's death weapon goes off in the middle of the
+/// detonation (S-0303 claim 11), so the aim does not count on taking a
+/// unit inside the blast then: in the stock lane (M8 step B3) units the
+/// estimate spared were destroyed that way.
+fn wrecks(w: &World, house: HouseId, c: CellXY, seen: &BTreeSet<ObjectId>) -> bool {
+    let me = &w.houses[usize::from(house.0)];
+    let d = &w.rules().superweapons.domination;
+    w.objects
+        .values()
+        .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
+        .filter(|o| {
+            seen.contains(&o.id)
+                || o.owner
+                    .is_some_and(|x| x == house || me.allies.contains(&x))
+        })
+        .any(|o| blast_hit(w, c, d.damage, d.warhead, o).is_some_and(|x| x >= o.health))
+}
+
 /// The seen enemy units a launch could take: not buildings (S-0612
-/// claim 13), not `spent`, and passing the takeover tests a person reads
-/// off them (`glasnost_sim::mind::dominable`).
+/// claim 13), not `spent`, passing the takeover tests a person reads off
+/// them (`glasnost_sim::mind::dominable`), and standing still (see
+/// [`standing`]).
 fn takeable(script: &Script, w: &World, spent: &[ObjectId]) -> BTreeSet<ObjectId> {
+    dominable(script, w, spent)
+        .into_iter()
+        .filter(|&id| standing(w, id))
+        .collect()
+}
+
+/// The seen enemy units, not `spent`, that pass the takeover tests: not
+/// buildings (S-0612 claim 13) and `glasnost_sim::mind::dominable`.
+fn dominable(script: &Script, w: &World, spent: &[ObjectId]) -> BTreeSet<ObjectId> {
     script
         .seen_enemies(w)
         .into_iter()
@@ -221,6 +261,14 @@ fn takeable(script: &Script, w: &World, spent: &[ObjectId]) -> BTreeSet<ObjectId
         .filter(|o| glasnost_sim::mind::dominable(w, o.id))
         .map(|o| o.id)
         .collect()
+}
+
+/// Whether a unit stands still, as a person sees it: it has no movement
+/// destination. The sweep comes some time after the launch (S-0612
+/// claim 4), and in the stock lane (M8 step B3) units on the move had
+/// left the reach by then; a person aims at the units that stand.
+fn standing(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.dest.is_none())
 }
 
 /// The best cell for a launch by the house of `script` and what it is
@@ -353,6 +401,9 @@ pub struct Probe {
     pub units: usize,
     /// Seen enemy units that pass the takeover tests.
     pub dominable: usize,
+    /// Of those, the units on the move, which the aim does not count as
+    /// takes.
+    pub moving: usize,
     /// Why the other seen units are refused, one entry per unit: `air`,
     /// `immune`, `protected`, `balloon`.
     pub refused: Vec<&'static str>,
@@ -390,6 +441,7 @@ pub fn probe(w: &World, house: HouseId) -> Probe {
             }
         })
         .collect();
+    let dominable = dominable(&script, w, &[]);
     let takeable = takeable(&script, w, &[]);
     let not_examined = takeable
         .iter()
@@ -402,7 +454,8 @@ pub fn probe(w: &World, house: HouseId) -> Probe {
     Probe {
         seen: seen.len(),
         units: units.len(),
-        dominable: takeable.len(),
+        dominable: dominable.len(),
+        moving: dominable.len() - takeable.len(),
         refused,
         not_examined,
         best: best(&script, w, &[]).map(|(_, g, l, n)| (g, l, n)),

@@ -6,7 +6,8 @@
 //! a group smaller than `dominator::MIN_UNITS` is fired at too (M7b AI
 //! round 3). A cell that takes at least one enemy unit beats every cell
 //! that takes none, refused units and units the damage destroys count no
-//! take, and the aim looks off a unit's own cell for one (M8 step B3); with
+//! take, so does a unit on the move, and the aim looks off a unit's own
+//! cell for one (M8 step B3); with
 //! nothing to take it holds the shot for `dominator::HOLD_PERCENT` of the
 //! charge time and then fires for the damage, at enemy buildings too.
 //! Never while a domination is in force; a launch takes the group over for
@@ -387,6 +388,59 @@ fn aims_where_the_damage_spares_the_unit_it_takes() {
         tick::step(&mut w);
     }
     assert_eq!(w.obj(id).map(|o| o.owner), Some(Some(HouseId(0))));
+}
+
+// S-0612 claim 10 and S-0303 claim 11 (a death weapon a hit sets off runs in the middle of the detonation): a walker inside a blast that destroys something (here a wounded enemy disc in its cell, which no launch takes) counts no take, so the aim takes it from a cell whose blast misses them both.
+#[test]
+fn a_unit_in_a_blast_that_destroys_counts_no_take() {
+    let mut w = armed();
+    let walker = group(&mut w, 1, &[(6, 6)])[0];
+    let disc = scouted(&mut w, Kind::Vehicle, "DISC", 6, 6);
+    w.objects.get_mut(&disc).unwrap().health = 1;
+    let out = brain(&w).think(&w);
+    let cells = fired(&out, &w);
+    assert_eq!(
+        cells.len(),
+        1,
+        "{:?}",
+        glasnost_ai::dominator::probe(&w, HouseId(0))
+    );
+    let c = cells[0];
+    assert!(glasnost_sim::domination::preview(&w, HouseId(0), c).contains(&walker));
+    let h = w.rules().superweapons.domination.warhead.unwrap();
+    let (r, _) = glasnost_sim::combat::area::radii(&w, h);
+    let p = glasnost_sim::superweapons::cell_point(&w, c, false);
+    assert!(
+        glasnost_sim::combat::area::object_distance(&w, p, walker) > r,
+        "the walker is outside the blast"
+    );
+}
+
+// M8 step B3 (S-0612 claim 4: the sweep comes some time after the launch): an enemy walker on the move counts no take, so with nothing else in sight the shot is held; standing still, it is taken.
+#[test]
+fn a_unit_on_the_move_counts_no_take() {
+    let mut w = armed();
+    let id = group(&mut w, 1, &[(6, 6)])[0];
+    let h = home(&w);
+    orders::issue(
+        &mut w,
+        HouseId(1),
+        Order::Behaviour {
+            actor: id,
+            behaviour: glasnost_sim::rules::Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(glasnost_sim::world::Target::Cell(CellXY::new(
+                h.x + 12,
+                h.y + 12,
+            ))),
+        },
+    );
+    settle(&mut w);
+    assert!(w.obj(id).unwrap().dest.is_some(), "on the move");
+    let p = glasnost_ai::dominator::probe(&w, HouseId(0));
+    assert_eq!((p.dominable, p.moving), (1, 1), "{p:?}");
+    assert!(fired(&brain(&w).think(&w), &w).is_empty(), "held");
 }
 
 #[test]
