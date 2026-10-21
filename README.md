@@ -37,15 +37,29 @@ The simulation is deterministic: integers only and one seeded random stream. Nat
 - the psychic dominator, which makes units in the blast change sides and dims the map's light while it charges and fires;
 - the special hit effects and the rest of the particle systems.
 
-The opponent drains enemy refineries and power, defends its harvesters and power against raiders and drainers, and builds and fires both new superweapons. It aims each by the value of what it would take or destroy. In the full games on stock data, though, the dominator has so far only done area damage and has not taken any unit. A wealthy house can also drive a second construction yard to a distant ore field.
+The opponent drains enemy refineries and power, defends its harvesters and power against raiders and drainers, and builds and fires both new superweapons. It aims each by the value of what it would take or destroy. In M7 the dominator only did area damage in the full games on stock data; M8 makes it aim where it can take units. A wealthy house can also drive a second construction yard to a distant ore field.
 
 In the local lane, Yuri plays a full game against Allied and against Soviet on maps 2, 8 and the naval map 0 to a winner, and every game's replay and mid-game save reproduce it. The determinism gate replays an AI-against-AI game in which the drain, the mutator and the dominator are each used several times, natively and in WebAssembly. Every interaction pair has a scenario test on synthetic data and a relation test on the installed data. 37 of the 42 relation tests pass. The other 5 skip because the installed data cannot form their pair. An arena mode (`glasnost-headless arena`) compares our combat with the committed measurement records using statistical tests.
 
-**M7 is not fully done: the arena check still fails.** Many matchups agree with the records on the winner. Still, 55 of 155 measured pairings fail a test, mostly because our games vary much less from seed to seed than the original's. Closing that gap is simulation fidelity work, done per the specs.
+**M7 is done except for its arena check**, which continues in M8. Many matchups agree with the records on the winner, but some measured pairings still fail a statistical test, mostly because our games vary less from seed to seed than the original's.
 
-**Not there yet (M8 and beyond):**
-- the fidelity pass (more claims measured against the original), music, settings and accessibility (M8);
-- multiplayer over the network (M9);
+**M8 (fidelity, AI depth and polish) is about half done.** So far it adds:
+- animations as part of the simulation: their damage over time, their random loop delays and follow-ups, and their removal now play the same on every machine;
+- closer combat randomness: the disguise draw and the corpse and death-animation picks;
+- an opponent that expands with a second construction yard in full games, saves for its superweapon without losing as much tempo, and aims the psychic dominator where it can take units;
+- a settings screen: sound, voice and music volume, scroll speed and key bindings, kept between sessions natively and in the browser.
+
+The arena now fails 49 of 155 measured pairings, down from 55. New spec revisions are taken in as they land. Still to come in M8: a colour-blind option and other accessibility work, music, performance on low-end laptops, and electric bolts.
+
+**M9 (multiplayer over the network) has started.** It adds:
+- a lockstep core: every machine runs the same simulation from the same orders and compares state hashes;
+- a relay server (`glasnost-relay`) with rooms and room codes;
+- a *Multiplayer* entry on the main menu: host or join a room, set the game up together (map, countries, colours, teams, starts, computer players), chat, and play.
+
+Two native clients on one machine play the same game over the relay. The browser client builds but has not been tried yet. Still to come in M9: desync reports, reconnecting, a long soak test, direct WebRTC links and a guide to playing across the internet.
+
+**Not there yet:**
+- the rest of M8 and M9;
 - the campaign (M10, optional).
 
 ## You need your own copy of the game
@@ -58,6 +72,7 @@ Rust is pinned in `rust-toolchain.toml` (rustup installs it on first use).
 
 ```sh
 cargo run --release -p glasnost-platform-native -- --game --game-dir <your install>   # the game (menu, skirmish)
+cargo run --release -p glasnost-relay -- --listen 127.0.0.1:8787   # multiplayer relay (the game's default: --relay ws://127.0.0.1:8787/)
 cargo run -p glasnost-platform-native   # native renderer demo (Vulkan/Metal/DX12/GL)
 cargo run -p glasnost-platform-native -- --viewer --game-dir <your install>   # asset viewer
 cargo xtask web --serve                 # web demo at http://127.0.0.1:8000/ (needs wasm-bindgen-cli, see docs/web.md);

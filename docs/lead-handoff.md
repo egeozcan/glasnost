@@ -1,4 +1,4 @@
-# Lead handoff (2026-10-20)
+# Lead handoff (2026-10-21)
 
 This note is for the project lead's session that takes over, possibly on another computer. It is not
 an implementer brief: implementer sessions work from PLAN.md, docs/development.md and the specs, and
@@ -10,48 +10,88 @@ should not act on this file.
 |---|---|
 | M0 to M6c | Done. |
 | M7a (Yuri part 1) | Done 2026-10-18. |
-| M7b (Yuri part 2, AI rounds 1 to 3) | Done 2026-10-20. Gate passes; the measurement arena (M-0001 to M-0003) still fails 55 of 155 comparisons, mostly because our seed-to-seed spread is too small. |
-| Visual-fix pass "m7v" | Ran on 2026-10-20 to work through the lead's screenshot review of 2026-10-19 (278 of 280 screenshots seen: 213 OK, 37 issues, 28 unsure). Its per-item results are committed under docs/ ("item results" commits); new screenshots went to the git-ignored `local-lane/visual-fix-3/`. If its last helper work is not on main, the session ran out of usage before merging it: check `git worktree list` on the original machine. |
-| M8 | Not started. Plan below. |
+| M7b (Yuri part 2, AI rounds 1 to 3) | Done 2026-10-20 except for M7's arena exit (PLAN.md): the gate passes, and the arena failures are worked on in M8 (A1, A5, the A3 intakes). |
+| Visual-fix pass "m7v" | Done 2026-10-20. Its per-item results are committed under docs/; its closing report is `docs/m7v-report.md`. |
+| M8 (fidelity, AI depth, polish) | Running, about half done. See [m8-plan.md](m8-plan.md) and the *M8 step ledger* in [development.md](development.md). |
+| M9 (multiplayer) | Running alongside M8: N1 to N3 merged. See [m9-plan.md](m9-plan.md) and the *M9 step ledger*. |
+| M10 (campaign, optional) | Not started. |
+
+Figures at main 1c7527e:
+- save format 69 and AI game format 30;
+- the oracle arena fails 49 of 155 pairings (M-0001 33 of 96, M-0002 13 of 24, M-0003 3 of 35);
+- 109 approved specs, 3 measurement records and 18 open requests.
+
+### Step status
+
+| Step | State |
+|---|---|
+| M8 A1, A2, A5, B1, B3, C2 | Merged. A5 missed its performance exit: the AI game is 15 to 20 % slower per tick, over the 10 % limit. C4 follows that up. |
+| M8 B2 | Merged. Its exit was missed narrowly; B5 follows it up. |
+| M8 A3 (spec intakes) | Recurring. Intakes 1 to 3 are merged (S-0202 r33, S-0616 r16, S-0111 r19, S-0513 r30, S-0519 r15). |
+| M8 B5 (tempo after expansion), C3 (accessibility) | Running. |
+| M8 B4, C4, C6 | Planned. B4 starts after B5. C4's exit needs the lead's run on an Intel laptop iGPU. |
+| M8 C1 (music), C5 (electric bolts, voxel animations) | Wait for Q-1700, and for Q-1701 and Q-1702. |
+| M8 A4 (movement feel) | Waits for the lead's play notes or oracle records. |
+| M9 N1, N2, N3 | Merged. The web client builds but has not yet been tried in a browser. |
+| M9 N4 (desync reports) | Running. |
+| M9 N5 to N8 | Planned in order. N8's exit is a 2v2 across networks that the lead plays. |
 
 ## Open spec requests
 
-These are filed in spec/requests/ and wait for the spec side (see "Two machines" below). Each has an
-interim rule in docs/development.md, *Visual review 2026-10-19*.
+Requests are filed in spec/requests/ and wait for the spec side (see "Two machines" below). Each
+request names its interim rule, and docs/development.md lists the interim rules. To list the open ones:
+`grep -l '^status: open' spec/requests/Q-*.md`. On 2026-10-21, 18 were open:
 
-- Q-1529: whether the shrouded-centre-cell protection row reaches a building's slot animations (S-0513). Answered by S-0513 revision 30; taken in by M8 intake 3 (2026-10-21).
-- Q-1562: how a particle type's colour list reads malformed triples (S-0202). Answered by S-0202 revision 33; taken in by M8 intake 1 (2026-10-21).
-- Q-1590: whether a railgun system without a held particle type makes its laser (S-0616). Answered by S-0616 revision 16; taken in by M8 intake 2 (2026-10-21).
+- **Visual review and rendering:**
+  - Q-1600: shot animation against a turreted voxel vehicle's barrel;
+  - Q-1740: the slope height in the slot-animation shroud test.
+- **Repair depot:** Q-1610 and Q-1620.
+- **M8 plan:**
+  - Q-1700: music (blocks C1);
+  - Q-1701 and Q-1702: electric bolts and voxel animations (block C5);
+  - Q-1703: the oracle measurement round.
+- **Arena spread (A1):**
+  - Q-1710 to Q-1712;
+  - Q-1713 and Q-1714: how two arena fights end;
+  - Q-1715: no-type entries in the corpse and death-animation lists.
+- **Animation playback (A5):** Q-1716 and Q-1717.
+- **M9:**
+  - Q-1805: house order with several people and random colours;
+  - Q-1806: the options menu and game speed in a network game.
+
+Q-1529, Q-1562, Q-1590, Q-1621 and Q-1622 were answered and taken in by M8 intakes 1 to 3
+(2026-10-21). Q-1621's file still says `status: open`, although its `answered-by` names S-0519 and
+S-0519 revision 15 answers it. The spec side should correct the file: implementers do not edit
+existing request files.
 
 A request is answered when its spec's front matter lists it under `requests:` and the request's
 status is no longer open. After any spec landing, an implementer catches the code up to the new
-revisions (`git log -- spec/`).
+revisions (`git log -- spec/`). Then run both quirk coverage tests:
+- `glasnost-rules` `every_spec_quirk_has_a_switch`;
+- `glasnost-app` `mapview::quirks::tests::every_rendering_spec_quirk_has_a_switch`.
 
-## M8 plan (proposed, not yet briefed)
+## Waiting on the user
 
-Proposed split, M8a, M8b and M8c:
-
-- **M8a, fidelity:**
-  - arena spread: find the randomness sources the original has and we lack, so the KS comparisons can pass;
-  - the Psychic Dominator should actually take units on stock data;
-  - turn the remaining `unmeasured` and `measurable` claims into measured ones;
-  - movement and crowding feel.
-- **M8b, AI depth:**
-  - expansion via a second MCV should happen in full games;
-  - superweapon saving should not cost tempo (it is blamed for Yuri's drop against Soviet);
-  - gate margins that do not hinge on single seeds or quirks;
-  - D14 holds: never weaken the AI for balance. Balance is an optional rules patch, like a mod.
-- **M8c, polish:**
-  - settings, accessibility, low-end iGPU performance, music;
-  - specs for electric-bolt sparks and voxel-animation particle systems, which have no spec yet.
-
-The user was asked whether to move the optional balance patch earlier and has not answered.
+- C4: a frame-rate run on a typical Intel laptop iGPU in Firefox (WebGL2).
+- N8: the cross-network 2v2.
+- A4: play notes on movement and crowding.
+- The optional balance patch: the user was asked whether to move it earlier and has not answered.
+  D14 holds: the AI is never weakened for balance.
 
 ## Standing rules for the lead
 
-- The user's direction: keep going autonomously through M7 and beyond; Opus for implementers and complex work.
+- The user's direction (2026-10-21):
+  - work autonomously to the end of M9;
+  - Opus for design-heavy steps, Sonnet for well-defined ones, Haiku for trivial ones;
+  - push main after every merge and ledger row;
+  - keep the status dashboard current and notify the user.
+- Only the lead edits the M8 and M9 step ledgers, at merge. Agents give their row text in their
+  reports.
+- Agent briefs live in `.claude/worktrees/` (untracked): `COMMON-BRIEF-M8.md` plus one brief per step.
+- Agents work in their own git worktrees. They never run `cargo clean` and never delete another
+  worktree's `target/`. Watch the disk: a worktree's target takes 15 to 30 GB.
 - No git history rewrite. Commits are signed off (`git commit -s`). The GitHub repo stays private.
-- Never redistribute EA assets. Screenshots and review pages stay local.
+- Never redistribute EA assets. Screenshots and review pages stay local (`local-lane/`, git-ignored).
 - Implementer briefs contain only milestone and spec IDs, the data path and lead notes. Implementers
   never read the spec workspace, disassembly, YRpp/Ares/Phobos/ModEnc, Chrono Divide or decompiled forks
   (PROVENANCE.md).
@@ -76,4 +116,15 @@ never pushed anywhere. To take over on another computer:
 3. Without the archive, a lead session can still brief and review implementer work, run check, test and
    gate, and file requests, but it cannot answer spec requests.
 
-`docs/m7v-report.md` holds the visual-fix session's closing report once it has ended.
+### The spec loops
+
+Since 2026-10-21, two autonomous sessions answer spec requests on the original machine:
+- a speccer drafts the specs;
+- a scrubber reviews them and pushes `spec:` commits straight to origin/main.
+
+Both run in a bubblewrap sandbox, in their own tmux sessions (`speccer`, `scrubber`).
+- **Start:** `~/.local/share/glasnost-loops/start-loops.sh`. The user restarts them after a reboot.
+- **Pause:** `touch PAUSE` in the loop's workspace.
+
+The lead session never messages, attaches to or reads those sessions. It only pulls their commits
+(`git fetch origin`; merge spec commits fast-forward before merging an agent branch).
