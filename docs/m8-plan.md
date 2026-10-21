@@ -21,8 +21,8 @@ gives, it files a request and stops that part.
   M8 step's merge, as in M7b, and each step's ledger row gives the arena table. The oracle arena needs a
   real install, so it stays in the local lane, never in CI. CI keeps the synthetic arena.
 - **Performance target:** 60 fps at 1080p in a late full game, in Firefox on WebGL2, on the
-  integrated GPU of a typical Intel laptop (Iris Xe class). The machine the sessions run on has a
-  discrete GPU only, so step C4 needs such a laptop for its measurement.
+  integrated GPU of a typical Intel laptop (Iris Xe class). Step C4 needs such a laptop
+  for its measurement.
 
 ## Request blocks
 
