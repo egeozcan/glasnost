@@ -42,12 +42,18 @@
 //!   played in our engine with their setup and compared per pairing;
 //!   writes the git-ignored `local-lane/m7b/arena/ours-<ID>.csv` and
 //!   `oracle-<ID>.txt`.
+//! - `glasnost-headless desync <bundle A> <bundle B>`: two peers' desync
+//!   reports (M9 N4, `glasnost_tools::desync`) compared: the first
+//!   differing tick and a field-by-field diff of objects, houses, the
+//!   game-wide state and our AI's state. On the synthetic ruleset, or on
+//!   the install's when `GLASNOST_GAME_DIR` is set. Exit code 0 when the
+//!   two agree, 1 when they differ, 2 when they cannot be compared.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
-use glasnost_tools::{arena, headless, oracle, skirmish_lane, trigger_lane};
+use glasnost_tools::{arena, desync, headless, oracle, skirmish_lane, trigger_lane};
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
     args.get(i).and_then(|a| a.parse().ok()).unwrap_or(default)
@@ -284,9 +290,34 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("desync") => {
+            let (Some(a), Some(b)) = (args.get(1), args.get(2)) else {
+                eprintln!("usage: glasnost-headless desync <bundle A> <bundle B>");
+                return ExitCode::from(2);
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR);
+            match desync::run(
+                std::path::Path::new(a),
+                std::path::Path::new(b),
+                dir.as_deref().map(std::path::Path::new),
+            ) {
+                Ok((text, differs)) => {
+                    print!("{text}");
+                    if differs {
+                        ExitCode::FAILURE
+                    } else {
+                        ExitCode::SUCCESS
+                    }
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless desync: {e}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | {}",
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {}",
                 arena::USAGE
             );
             ExitCode::from(2)
