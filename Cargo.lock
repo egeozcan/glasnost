@@ -1059,6 +1059,7 @@ dependencies = [
  "console_log",
  "glasnost-app",
  "glasnost-render",
+ "js-sys",
  "log",
  "wasm-bindgen",
  "web-sys",
