@@ -26,7 +26,7 @@ use glasnost_render::shroud::ShroudQuirks;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
-use glasnost_sim::world::{GameSetup, ObjectId};
+use glasnost_sim::world::{GameSetup, HouseId, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::geom::{Point, Rect};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
@@ -84,8 +84,13 @@ pub struct Session {
     pub map_id: String,
     /// The paced game-speed index (S-0201 claims 7 and 8).
     pub speed: u8,
-    /// The options menu is open (S-0201 claim 8: no ticks run).
+    /// The options menu is open (S-0201 claim 8: no ticks run; in a network
+    /// game ticks go on, Q-1806's interim rule).
     pub paused: bool,
+    /// A network game: the lockstep session paces the ticks and the
+    /// person's orders go through it (`Play::outbox`); the speed is the
+    /// room's (Q-1806's interim rule).
+    pub network: bool,
     /// The window size.
     pub screen: (i32, i32),
     /// Whether the client has set the starting window size.
@@ -156,12 +161,13 @@ pub enum SessionEvent {
 
 impl Session {
     /// Loads the map file `file` of the mounted install and starts the game
-    /// `make` sets up from the map's rules. `local_slot_names` are not used:
-    /// colours come from the resolved setup.
+    /// `make` sets up from the map's rules, played from house `local` (a
+    /// network game's slot), else from the first person's house.
     pub async fn start(
         vfs: &mut Vfs,
         file: &FileRef,
         make: live::MakeSetup<'_>,
+        local: Option<HouseId>,
     ) -> Result<Self, String> {
         let bytes = vfs
             .read(file)
@@ -173,7 +179,7 @@ impl Session {
             game: GameMode::Skirmish,
             ..Options::default()
         };
-        let mut loaded = load::load_with(
+        let loaded = load::load_with(
             vfs,
             bytes,
             map_id.clone(),
@@ -186,6 +192,37 @@ impl Session {
         let (icons, alt_icons) = read_icons(vfs, &loaded).await;
         let cursor_art = read_cursor(vfs).await;
         let status_font = status_font::read(vfs).await;
+        Self::assemble(
+            loaded,
+            map_id,
+            (icons, alt_icons, cursor_art),
+            status_font,
+            local,
+        )
+    }
+
+    /// A game on `loaded`, a map loaded without art (the synthetic
+    /// scenarios of tests: nothing is drawn, everything else runs), played
+    /// from house `local`, else from the first person's house.
+    pub fn bare(loaded: Loaded, map_id: String, local: Option<HouseId>) -> Result<Self, String> {
+        Self::assemble(
+            loaded,
+            map_id,
+            (BTreeMap::new(), BTreeMap::new(), None),
+            Err("no game font in a bare game".into()),
+            local,
+        )
+    }
+
+    /// The game of a loaded map with its art.
+    fn assemble(
+        mut loaded: Loaded,
+        map_id: String,
+        art: Art,
+        status_font: Result<status_font::StatusFont, String>,
+        local: Option<HouseId>,
+    ) -> Result<Self, String> {
+        let (icons, alt_icons, cursor_art) = art;
         // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
         let icon_file = loaded
             .assets
@@ -232,7 +269,11 @@ impl Session {
             glasnost_sim::save::state_hash(&live.world),
             "the drawn copy and the game start alike"
         );
-        let local = local_house(&setup).ok_or("the setup has no person's house")?;
+        let local = match local {
+            Some(h) if setup.houses.get(usize::from(h.0)).is_some_and(|x| !x.ai) => h,
+            Some(h) => return Err(format!("house {} is no person's house", h.0)),
+            None => local_house(&setup).ok_or("the setup has no person's house")?,
+        };
         if let Some(l) = loaded.live.as_mut() {
             // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
             l.set_viewer(Some(local));
@@ -260,6 +301,7 @@ impl Session {
             map_id,
             speed,
             paused: false,
+            network: false,
             screen: (1024, 768),
             sized: false,
             centre: (0, 0),
@@ -336,12 +378,18 @@ impl Session {
 
     /// Runs one tick and redraws the live objects.
     pub fn step(&mut self) {
-        if !self.play.running() {
-            return;
-        }
-        self.play.step();
-        if self.play.failed.is_some() {
-            return;
+        self.step_by(|g| {
+            g.step();
+            true
+        });
+    }
+
+    /// Runs `tick` on the game, which steps it at most once and says
+    /// whether it did (a network game's lockstep session), and when it did,
+    /// the interface follows and the live objects are redrawn.
+    pub fn step_by(&mut self, tick: impl FnOnce(&mut Game) -> bool) -> bool {
+        if !self.play.step_by(tick) {
+            return false;
         }
         let effects = self.play.effects.clone();
         self.with_live(|live, inputs, scene| {
@@ -353,6 +401,7 @@ impl Session {
         if let Some(r) = self.radar.as_mut() {
             r.observe(&self.play.game.world, house);
         }
+        true
     }
 
     /// The radar map's top-left pixel on the screen (S-0410 F9's origin
@@ -664,6 +713,8 @@ impl Session {
                     self.paused = false;
                     SessionEvent::None
                 }
+                // Q-1806 (interim: a network game keeps the room's speed)
+                Some(PauseHit::Speed(_)) if self.network => SessionEvent::None,
                 Some(PauseHit::Speed(d)) => {
                     // spec: S-0201 claim 8 (the options menu's speed control)
                     self.speed = hud::step_speed(self.speed, d);
@@ -1234,6 +1285,13 @@ fn brackets(d: &mut DrawList, cx: i32, cy: i32, hw: i32, hh: i32) {
         d.line((x, y), (x, y - sy * arm), ink);
     }
 }
+
+/// The sidebar icons, the alternate icons and the cursor art of a game.
+type Art = (
+    BTreeMap<hud::Entry, IndexedImage>,
+    BTreeMap<TypeRef, IndexedImage>,
+    Option<CursorArt>,
+);
 
 /// The imported cursor image and palette (S-0214 claim 22, Import
 /// mapping).

@@ -47,6 +47,8 @@ fn synthetic_install() -> Install {
                 starts: 2,
             },
         )],
+        map_hashes: vec!["map-synthetic-two".into()],
+        rules_hash: "rules-synthetic".into(),
         names: Default::default(),
         sounds: None,
         speech: None,

@@ -20,6 +20,8 @@ glasnost-fmt.workspace = true
 glasnost-render.workspace = true
 glasnost-vfs.workspace = true
 glasnost-ui.workspace = true
+# The lockstep session and the lobby's messages (no I/O of their own).
+glasnost-net.workspace = true
 # Development UI (PLAN.md 4.1). Default features off: egui's bundled fonts
 # carry licences outside our policy, so the viewer ships its own font.
 egui = { version = "0.36.2", default-features = false }
@@ -29,6 +31,9 @@ winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
+# The native client's WebSocket to the relay, on its own thread (M9 N3);
+# plain ws:// only. The browser uses its own WebSocket (glasnost-platform-web).
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
@@ -41,3 +46,8 @@ workspace = true
 
 [dev-dependencies]
 pollster = "0.4"
+
+# The client's network tests run a real relay in the test process.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+glasnost-relay = { path = "../relay" }
+tokio = { version = "1", features = ["rt-multi-thread"] }

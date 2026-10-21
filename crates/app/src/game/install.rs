@@ -21,6 +21,12 @@ pub struct Install {
     pub setup: SetupRules,
     /// The multiplayer maps offered, with their entries.
     pub maps: Vec<(Listing, MapEntry)>,
+    /// Each offered map's content hash (`session::content_hash`), in the
+    /// order of `maps`: a network room names its map by it.
+    pub map_hashes: Vec<String>,
+    /// The base rules' hash (`sim_rules_hash`), which a network room's
+    /// members must share.
+    pub rules_hash: String,
     /// The sound names of the base rules.
     pub names: SoundNames,
     /// The sound database (S-0005 Import mapping), read by S-0701 claims 1
@@ -157,6 +163,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         return Err("the rules offer fewer than two countries".into());
     }
     let mut maps = Vec::new();
+    let mut map_hashes = Vec::new();
     for l in glasnost_convert::find::find_maps(vfs).await {
         if !l.multiplayer {
             continue;
@@ -168,6 +175,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         if starts >= 2 {
             let label = l.name.clone();
             maps.push((l, MapEntry { label, starts }));
+            map_hashes.push(super::session::content_hash(&bytes));
         }
     }
     if maps.is_empty() {
@@ -187,6 +195,8 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
     Ok(Install {
         setup,
         maps,
+        map_hashes,
+        rules_hash: resolved.sim_rules_hash.clone(),
         names,
         sounds,
         speech,

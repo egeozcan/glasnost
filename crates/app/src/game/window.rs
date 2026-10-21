@@ -33,6 +33,12 @@ pub struct GameOptions {
     pub game_dir: Option<String>,
     /// Close after presenting this many frames (smoke tests).
     pub exit_after_frames: Option<u64>,
+    /// The relay address the multiplayer screen starts with (`--relay`,
+    /// `?relay=`); `None`: [`super::link::DEFAULT_RELAY`].
+    pub relay: Option<String>,
+    /// How the client opens a link to a relay, when the platform gives one
+    /// (the web shell's WebSocket); `None`: the built-in native link.
+    pub connect: Option<super::link::Connect>,
 }
 
 /// Events delivered to the game's loop.
@@ -51,6 +57,12 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     let proxy = event_loop.create_proxy();
     let mut client = Client::new();
     client.can_quit = !cfg!(target_arch = "wasm32");
+    if let Some(r) = options.relay.as_deref().filter(|r| !r.is_empty()) {
+        client.netform.relay = r.to_owned();
+    }
+    if let Some(c) = options.connect {
+        client.connect = Some(c);
+    }
     if cfg!(not(target_arch = "wasm32")) && options.game_dir.is_none() {
         client.status = "Start with --game-dir DIR to read an install.".into();
     }
@@ -314,7 +326,10 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 // first pressed during an order block must not become an
                 // accepted press afterwards (S-0213 claim 23).
                 let key = match &event.logical_key {
+                    // Backspace repeats while held, as in any text field.
+                    keyboard::Key::Named(NamedKey::Backspace) => Some(Key::Backspace),
                     _ if event.repeat => None,
+                    keyboard::Key::Named(NamedKey::Enter) => Some(Key::Enter),
                     keyboard::Key::Named(NamedKey::Escape) => Some(Key::Escape),
                     keyboard::Key::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     keyboard::Key::Named(NamedKey::ArrowRight) => Some(Key::Right),
@@ -328,6 +343,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 if let Some(k) = key {
                     self.client.key(k, down);
                     self.after_input();
+                }
+                // The text a press types, for the network screens' fields
+                // and the chat.
+                if down && let Some(text) = event.text.as_ref() {
+                    self.client.typed(text);
                 }
             }
             WindowEvent::RedrawRequested => {
