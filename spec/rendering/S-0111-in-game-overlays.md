@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 14
+revision: 19
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-21
 measurements: []
-requests: [Q-0471]
+requests: [Q-0471, Q-1622]
 supersedes: []
 ---
 
@@ -20,7 +20,8 @@ The status extras that S-0102 paints over every vehicle, infantry unit, aircraft
 the five render layers: where they are anchored, when the health bar shows, how many health segments
 are filled and in which colour, the selection marks, the pip scale (passengers, spawned aircraft,
 occupants, mind control, resource load, ammunition), the self-heal marker, the control-group number,
-the veterancy insignia and the repair wrench. Which objects have status extras and the painting order
+the veterancy insignia and the repair wrench, with the cursor palette that the wrench and the
+bomb icon are drawn through and what happens without it (claim 19a). Which objects have status extras and the painting order
 belong to S-0102. Skirmish only; campaigns and network games are out of scope. Conditional fog
 behaviour is deferred context only, since S-0409 claim 19 forces fog off in skirmish.
 
@@ -439,7 +440,8 @@ S-0108 (Formulas F3).
     that is the top corner of its foundation (S-0108 claim 8). It is the first of the carrier's
     status extras, so the health bar and selection marker paint over it. S-0519 claim 24 gives its
     image, palette and brightness. For vehicles, infantry and aircraft the draw point coincides
-    with the status anchor (S-0519 claim 24).
+    with the status anchor (S-0519 claim 24). The wrench and the bomb icon are drawn through the
+    cursor palette; claim 19a gives it, and what is drawn when it is missing.
     - Backing: `measurable` (scenario OV14; S-0519 scenario T25 for bomb placement and overlap)
     - Confidence: high for the period, the image frames, the cell tested and its centre height,
       high for bomb placement and first place among the carrier's extras; medium for the shroud
@@ -449,6 +451,52 @@ S-0108 (Formulas F3).
       `unmeasured` if OV14 cannot expose a visible bomb sprite and its tested cell's shroud states.
       A skipped placement is not confirmation. The non-default wrench period is an engine
       alternative tested against this spec in OV14-D, not an original-game measurement
+
+19a. **Cursor palette (Q-1622).** The cursor palette is one palette file, resolved by S-0005 like any
+    other file and kept like the other kept files of S-0005 claim 22, so its lifetime follows
+    `quirks.art_cache_never_invalidated`. With the switch on (YR) it is read once when the program
+    starts, before any game, and kept across games for the whole session (across a change of
+    theater or side, see below). With the switch off it is resolved
+    and read afresh at the start of each game, like every kept file. Each file component *c*
+    becomes the palette component (4·*c*) mod 256, the rule S-0103 claim 1 gives for the palettes it
+    lists, so a component above 63 wraps (64 gives 0). The cursor palette follows
+    `quirks.palette_component_wrap` as those palettes do: with the switch off, such a component
+    becomes 252 (S-0103). Drawn pixels then take S-0103 claim 9's
+    output step like any other palette's. With `quirks.art_cache_never_invalidated` on, its colours stay
+    the same across games within one session, also across a change of theater or side (`unmeasured`:
+    S-0005 claim 22 discards the interface palettes whenever the side group is mounted, and no run
+    here replaces the file across such a change, so a re-read only there is not ruled out); with that switch off, they stay the
+    same within one game, whatever its theater and sides, and a file replaced between games is
+    followed. Neither the overlay palette nor the unit palette in force supplies them (OV14
+    palette part a). On a stock install the file is found inside the cache archive nested in the
+    base game's main archive (S-0005 claim 10; medium, pending OV14 palette part 0). If the cursor
+    palette cannot be found when it is read, the original fails, and never draws a wrench or a bomb
+    icon. Our engine (departure, no switch): with no cursor palette, the
+    wrench and the bomb icon are not drawn, and the importer warns once, naming the file.
+    - Backing: `measurable` (scenario OV14, palette part a) for the palette the two sprites are
+      drawn through; `measurable` (OV14 palette parts c and e) for the conversion of S-0103 claim 1,
+      including the wrap above 63, and the switch-off value is our engine's fixed behaviour of
+      S-0103's switch, checked on our engine by part e's engine fixture; `measurable` (OV14 palette part c) for colours that stay those of the
+      file present when the program started, across games, with the switch on; part b replaces no
+      file and backs none of this, and part c does not change theater or side between its games, so
+      that a replaced file is also not followed across a theater or side change is `unmeasured`; and
+      the switch-off lifetime is our engine's fixed behaviour of S-0005 claim 22, checked on our
+      engine by part c's engine fixture; `measurable` (OV14
+      palette part d) for the moment of the read, at start-up; `measurable` (OV14 palette part 0)
+      for the file being found on a stock install; `unmeasured` for the missing file, because
+      removing it would change the stock archives; the
+      importer warning is `unmeasured`, as for this spec's other importer warnings.
+    - Confidence: medium for the palette used and its conversion, because OV14 palette parts a
+      and e identify them through predictions that include claim 2's light-alpha shading (itself
+      medium); high for the switch-off value, a design rule shared with S-0103's palettes; medium for the failure without
+      the file (`unmeasured`, and its moment is that of the read, itself medium below),
+      medium for the colours staying the same across games within one session with the switch on
+      (the original's behaviour), pending OV14 palette part c; medium, `unmeasured`, for the same
+      across a theater or side change; medium for the file being found on a stock install, pending
+      OV14 palette part 0; high for the switch-off lifetime, a design rule shared with every
+      kept file; medium for the read happening at start-up rather than at first use, pending OV14
+      palette part d, which tells the two apart only as far as S-0005 claim 1's test for a loose
+      file at every open holds (itself medium); medium for the importer warning.
 
 ## Formulas
 
@@ -608,6 +656,10 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
   be checked at import.
 - **Self-heal interval of 0 or below** (claim 16): reproduced for negative values, safe result for
   0 (departure, no switch), importer warning for both.
+- **Missing cursor palette** (departure, no switch; claim 19a, Q-1622). The original fails
+  when it reads the cursor palette and finds none (`unmeasured`, medium). Our engine draws neither the wrench nor the
+  bomb icon and the importer warns once, naming the file. A missing overlay sprite likewise
+  draws nothing, with an importer warning (Import mapping).
 - **Round-toward-zero mode** (no switch here). F1 and F2 depend on it; the switch
   `quirks.chop_rounding` belongs to S-0205 (number domains), and F1 and F2 are among the
   results it covers.
@@ -652,14 +704,18 @@ retains the held value, initially 1 (`Pip`) and 7 (`OccupyPip`), as claim 12 req
 
 Overlay sprites, resolved by S-0005: `PIPS.SHP` (pip sprite), `PIPS2.SHP` (second pip sprite),
 `PIPBRD.SHP` (bracket sprite), `WRENCH.SHP` (wrench sprite). Pips and brackets use the overlay palette
-`PALETTE.PAL`; the wrench and the bomb sprite use `MOUSE.PAL`.
+`PALETTE.PAL`; the wrench and the bomb sprite use the cursor palette `MOUSEPAL.PAL`, the same
+palette as the cursor images of S-0214 (Q-1622).
 
 | Sprite file | Use | Palette file |
 |---|---|---|
-| `BOMBCURS.SHP` | bomb icon (S-0519 claim 24) | `MOUSE.PAL` |
+| `BOMBCURS.SHP` | bomb icon (S-0519 claim 24) | `MOUSEPAL.PAL` |
+
+**Cursor palette (Q-1622).** Claim 19a gives the cursor palette's rule: the file, its
+conversion, its lifetime and the missing-file case.
 
 A missing sprite draws nothing; the
-importer warns. This missing-asset rule is `unmeasured`, confidence medium: no scenario here
+importer warns. A missing cursor palette has its own rule (claim 19a). This missing-asset rule is `unmeasured`, confidence medium: no scenario here
 removes the overlay assets and checks both the absent drawing and the warning. Other importer
 warnings in this spec are likewise `unmeasured`, confidence medium, unless explicitly checked by
 a departure-conformance scenario: the original cannot confirm our importer's diagnostics.
@@ -905,6 +961,56 @@ involved.
   or the bomb sprite ignores either the shroud or bomb visibility, or uses different image
   frames. An attached-bomb sub-test that cannot reach both explored and unexplored tested-cell
   states while keeping eligible bomb pixels in view is unmeasured, not passed.
+  Palette (Q-1622). Part 0 (the file present): before the other parts, list the entries of
+  the stock install's archives as S-0005 claims 10 and 12 mount them. Expected: the cursor
+  palette is found in the cache archive nested in the base game's main archive, and no loose
+  copy is in the game folder. If it is not found anywhere, parts a to e are void and the
+  missing-file rule of claim 19a applies to the stock install. Part a: in state (b) on flat ground at level 0, under neutral light and with
+  no shroud piece over the wrench, capture the wrench's pixels and those of a visible attached
+  bomb. For each candidate palette (the cursor palette, the overlay palette and the unit palette
+  in force), predict each pixel by decoding the shown frame through that palette and then
+  applying the conversions that apply to the shown pixel: the multiply by 4 of S-0103 claim 1,
+  the surface's component cut of S-0103 claim 9, and the light-alpha shading of claim 2 at the
+  captured light.
+  Judge only pixel indices at which the cursor-palette prediction, after these conversions,
+  differs from the prediction under each other candidate; if no such index occurs in the shown frames, the run is inconclusive. Expected:
+  each judged pixel matches the cursor-palette prediction. A match only under another candidate
+  falsifies the palette row. A judged pixel that matches no candidate makes the run
+  inconclusive for the palette row: it points at the conversions, not at the palette. Part b: run part a in two games of one session, one on a map of
+  each of two theaters, the local player of a different side in each; expected the same
+  cursor-palette prediction in both. Part c: start the program with a loose test cursor palette
+  file in the game folder (S-0005 precedence; an invented palette whose colours differ from the
+  stock one at the wrench's indices, still distinct after the conversions), play part a, then
+  return to the menu, replace the loose file with a second invented palette whose colours, after
+  the conversions, differ from the first test palette's at every judged index, and play part a
+  again in the same session. Expected: both games match the first test palette. A match with
+  the second palette in the second game falsifies colours that stay those of the file present
+  when the program started. Engine fixture: the same steps on our engine with
+  `quirks.art_cache_never_invalidated` off give the first test palette in the first game and
+  the second in the second; a match with the first palette in the second game falsifies the
+  switch-off lifetime. Part d (whether a loose palette added after the main menu appears
+  affects the first game): start the program with no loose cursor palette file, so that the stock
+  palette from the archive is the one present at start-up; at the menu, before any game, add
+  the first test palette as a loose file (S-0005 claim 1 tests for a loose file at every open),
+  then play part a. Expected: the wrench and bomb pixels match the stock cursor palette's
+  prediction. A match with the test palette falsifies the start-up read. A match with the stock palette supports the
+  start-up read only as far as S-0005 claim 1's test for a loose file at every open holds.
+  Every test palette of parts c and d keeps its components at or below 63. Part e (the wrap):
+  start the program with a loose test cursor palette whose components at the wrench's indices
+  lie from 64 to 79, and play part a under neutral light. For each of these components the
+  wrapped value (4·*c*) mod 256 lies from 0 to 60 and the cut value min(4·*c*, 255) is 255
+  (S-0103's switch-off value 252 gives the same outputs after S-0103 claim 9's cut), so
+  after S-0103 claim 9's cut they differ at both 5- and 6-bit outputs (at most 7 against 31 in
+  5 bits, at most 15 against 63 in 6 bits); a component held at 63 gives 252, which matches
+  the cut value only after S-0103 claim 9's output step.
+  As in part a, judge only the indices whose wrapped and cut predictions still differ after
+  every conversion, the shading included; if no such index occurs in the shown frames, the run
+  is inconclusive. Expected: each judged pixel matches the prediction with each component *c*
+  taken as (4·*c*) mod 256. A match with 4·*c* cut at 255, or with *c* held at 63, falsifies
+  the wrap. A judged pixel that matches neither prediction makes the run inconclusive.
+  Engine fixture: the same steps on our engine with `quirks.palette_component_wrap` off give
+  each judged pixel the cut prediction, with *c* above 63 taken as 252; a match with the
+  wrapped prediction falsifies the switch-off rule for the cursor palette.
 - **OV14-D (claim 19; engine-alternative conformance, not an original-game measurement).** Replay the
   repaired-building timing test in our engine with `quirks.speed_normalised_delays` off, at game
   speeds 0, 3 and 6. Record the tick and wrench image frame for 30 ticks per speed. Expected:
@@ -940,3 +1046,20 @@ involved.
 - Hand off with S-0110 claim 8 owning the point test for both signs of height and
   `quirks.shroud_negative_odd_pair`. Claim 19 supplies the tested centre surface height and wrench
   observable, not an independent negative-height extension; OV14 retains the original expectations.
+- Hand off with S-0214's cursor-palette row aligned to claim 19a (Q-1622): the same file, read once at start-up with
+  `quirks.art_cache_never_invalidated` on and afresh at each game start with it off (S-0005
+  claim 22); without it the original fails
+  when it reads it, and our engine draws neither the wrench nor the bomb icon and warns once.
+- Hand off with S-0103 claim 1's list of palettes loaded from palette files extended by the
+  cursor palette (the same multiply by 4 in 8-bit arithmetic, Q-1622). The edge case
+  `quirks.palette_component_wrap` applies to the cursor palette as to the others: off, a
+  component above 63 becomes 252.
+- Hand off with a row in S-0005 claim 22's table for the cursor palette: a kept file that
+  follows `quirks.art_cache_never_invalidated` like every other kept file. With the switch on
+  (YR) it is read once when the program starts and kept across games for the whole session.
+  That a replaced file is also not followed across a change of theater or side is `unmeasured`
+  (S-0111 claim 19a). With
+  it off, it is resolved afresh at the start of each game. No exception to the switch's row
+  is needed. Confidence: medium for the switch-on row across games (the original's behaviour),
+  medium and `unmeasured` across a change of theater or side, high for the switch-off row (a design
+  rule); scenario S-0111 OV14 palette parts c and d.
