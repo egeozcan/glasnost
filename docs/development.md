@@ -1863,8 +1863,9 @@ What is stored (all fields optional on load):
 | Display scale | `scale` | 100, 125, 150, 200, 300 percent, 100 (our own) | the interface scale of step C3 (see "Accessibility (M8 step C3)") |
 | Command keys | `key.stop`, `key.scatter`, `key.guard`, `key.deploy`, `key.cheer` | a lower-case letter or digit each, S X G D C (S-0213 claim 22) | `client::bound_with` |
 | Relay address | `relay` | text, empty | the multiplayer screen's field, set from it when a connection is tried; the command line's `--relay` still wins for a run |
+| Game to rejoin | `rejoin` | `CODE SLOT TICKET RELAY` (the ticket as 32 hex digits), none | the multiplayer screen's **Reconnect** (M9 N5): written when a network game begins, removed when it ends or the person leaves it; a wrong line is ignored |
 
-Fixed keys, listed on the screen and not rebindable: Escape (options menu) and the arrows (scroll), S-0213 claim 23. Rebinding: click a key button, press the new key; a key another action has is refused with a note and the button keeps waiting (no swapping); Escape cancels; "Reset to defaults" restores everything except the relay address. A file with clashing or non-alphanumeric keys loads the default keys together (the other fields still load). The scroll speed is shown as "n of 7" with 7 fastest. The scroll speed's table and index range follow S-0101 F9; the screen is our own.
+Fixed keys, listed on the screen and not rebindable: Escape (options menu) and the arrows (scroll), S-0213 claim 23. Rebinding: click a key button, press the new key; a key another action has is refused with a note and the button keeps waiting (no swapping); Escape cancels; "Reset to defaults" restores everything except the relay address and the game to rejoin. A file with clashing or non-alphanumeric keys loads the default keys together (the other fields still load). The scroll speed is shown as "n of 7" with 7 fastest. The scroll speed's table and index range follow S-0101 F9; the screen is our own.
 
 Format: UTF-8 text, one `key=value` per line, first line `version=1`. A field that is missing (an older file), unknown (a newer file) or wrong takes its default or is ignored; numbers clamp to their range; control characters are removed from the relay. Version 1 is the first; bump `settings::VERSION` only when a field's meaning changes (adding a field needs no bump).
 
@@ -2037,7 +2038,7 @@ M9 adds multiplayer by lockstep: every peer runs the whole game from the same st
 
 The crate `glasnost-net` holds the protocol and one peer's lockstep session. It does no I/O: it reads no clock, opens no socket and starts no thread. The caller passes its clock in milliseconds into every call and moves the bytes. `crates/net/clippy.toml` forbids clocks, threads, locks, sockets, files and hashed containers in the crate, and `xtask deps` forbids it every socket or async runtime crate (the list `FORBIDDEN_EXTERNAL`, which now also names the WebSocket, WebRTC and HTTP crates). The simulation crates' determinism lint now also forbids `std::net::TcpListener`, with a canary.
 
-**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 4: N2 reserved the sender id 255, `wire::RELAY`, for the relay, N3 added chat lines to the lobby messages that share the version, and N4 added the desync report's digest to the frames message) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
+**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 5: N2 reserved the sender id 255, `wire::RELAY`, for the relay, N3 added chat lines to the lobby messages that share the version, N4 added the desync report's digest to the frames message, and N5 added `Body::Serve`, `Body::Resume`, `Frame.resume`, the grace period in the start values, and the lobby's `Rejoin`, `Snapshot`, `CaughtUp`, `Rejoined`, `Begin.ticket` and new refusals) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
 
 - `Start`: the sender's start values.
 - `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, an echo of every other peer's latest stamp with the time it held that stamp, and, once it has written one, its desync report's tick and digest (N4).
@@ -2112,7 +2113,7 @@ A room code is 8 characters of Crockford's base 32 (`CODE_ALPHABET`, 40 bits) dr
 
 Bytes that are no message of ours (a text message, another magic, a body that does not decode) close the connection with the reason; another lobby protocol version gets `Refused(Mismatch(Protocol))` first. Nothing a client sends panics the relay (`random_bytes_never_panic_the_hub`, `hostile_bytes_close_the_connection_with_a_reason_and_the_relay_goes_on`). The server adds: a 10 s WebSocket handshake; at most `max_connections` + 64 connections and handshakes at once (more are dropped at accept); a queue of 256 messages per connection, beyond which the connection is closed as "too slow"; a 5 s limit on each message leaving, so a client that does not read cannot hold its connection's task; and 1 s for a closed client to answer the close. A close sends `Closing(reason)` then a close frame with the same reason (at most 123 bytes).
 
-**Running it.** `cargo run -p glasnost-relay -- --listen 127.0.0.1:8787` (the default address; `--max-rooms N`, `--max-connections N`, `--help`). Clients connect to `ws://ADDR/`. The relay speaks no TLS: behind the internet it needs a proxy that does (`wss://`).
+**Running it.** `cargo run -p glasnost-relay -- --listen 127.0.0.1:8787` (the default address; `--max-rooms N`, `--max-connections N`, `--grace SECONDS` since N5, `--help`). Clients connect to `ws://ADDR/`. The relay speaks no TLS: behind the internet it needs a proxy that does (`wss://`).
 
 **Tests.** `crates/net/tests/lobby.rs` covers the room state machine and the lobby messages without a relay. `crates/relay/tests/hub.rs` covers the hub with a seeded stand-in for host randomness: create, peek, join, ready and start; leaving and the host's role; refusals naming the field; code guessing; colliding codes; forwarding order; forged senders and drops; `kept` with gaps and resends; the drop after the forwarded frames; every limit; silence, idleness and keepalives; random bytes. `crates/relay/tests/loopback.rs` runs the real server on `127.0.0.1:0` with WebSocket clients: create, peek, join, leave, start and forwarding; a mismatched build or map refused naming the field; a forged drop never delivered and a real one with its `kept`; hostile bytes, rate, rooms and connections; a client that stops reading dropped as silent. `crates/relay/tests/games.rs` plays three persons (two with a chosen colour, one on random) and a computer over the real relay: each client builds its game from `Begin`, runs N1's session on its own `glasnost_ai::game::Game` with scripted orders, and one peer is cut off at tick 120. The survivors run 300 ticks with the same schedule and hashes as each other, as the cut-off peer as far as it ran and as a single-process run of the same orders; both hear one `Dropped` with the same `kept`, no order of the dropped slot runs at or after `kept`, and nobody sees a desync, refusal or bad message.
 
@@ -2154,7 +2155,7 @@ The relay cleans each line: control characters go, the ends are trimmed, and at 
 
 In the game, Enter opens the chat line, Enter sends and closes it, and Escape drops it. The last lines show over the battlefield for ten seconds. Notices (a refusal, a member who left, a desync, a closed connection) are chat lines without a speaker.
 
-**Settings.** No setting is stored. The relay address comes from `--relay URL` (native) or `?relay=` (web) and defaults to `ws://127.0.0.1:8787/`, the relay binary's default. The name and code are typed each time. The build string is `glasnost <crate version>`.
+**Settings.** No setting is stored (since N5 the client does store the game it can rejoin; see *Reconnect and surrender (N5)*). The relay address comes from `--relay URL` (native) or `?relay=` (web) and defaults to `ws://127.0.0.1:8787/`, the relay binary's default. The name and code are typed each time. The build string is `glasnost <crate version>`.
 
 **Dependencies.** `cargo xtask deps` lets the client crates (`glasnost-app` and the platforms) reach the native WebSocket (tungstenite, with its rand and getrandom) and the browser's (web-sys, js-sys). It never lets them reach a server runtime (tokio, tokio-tungstenite) or the relay crate (`the_client_reaches_the_socket_but_no_server_runtime`). Edges built only for emscripten are skipped (`only_emscripten_dependencies_are_never_built`). The relay is a dev-dependency of the app's tests only.
 
@@ -2178,7 +2179,7 @@ Web: run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open 
 **Seams for the later steps.**
 
 - N4 (desync reports): done, see *Desync reports (N4)*.
-- N5 (reconnect, surrender, late join): a dropped peer shows "X left the game.", and the game goes on without it (N2's `Dropped`). A link that closes during the game is a notice, with no rejoin. A reconnect would enter at `Client::net_open` with the old room and slot; a surrender would be a new order through `Play::give`.
+- N5 (reconnect, surrender, late join): done, see *Reconnect and surrender (N5)*.
 - N6 (soak): `m9_lane.rs` takes `GLASNOST_LANE_TICKS`.
 - N7 (WebRTC): a data channel is another `Link`. The relay's WebSocket stays the signalling channel, and the only one whose `Dropped` is honoured.
 
@@ -2204,7 +2205,7 @@ The client feeds it from `net_tick` (`Evidence::before_tick` and `after_tick` ar
 - the writer's own snapshot at the mismatched checkpoint (`after`);
 - the tick records from the base to at least `PAST_TICKS` ticks past the mismatch, each with its state hash (live at the checkpoints, replayed for the others; below).
 
-The file is the magic `GDSY`, the format version (`BUNDLE_VERSION`, 1), then a postcard body. The extension is `.gdsync`. A reader refuses another magic, another version and trailing bytes, and never panics on hostile bytes (`hostile_bundle_bytes_never_panic`). Bump the version whenever the layout changes; a change of the save format changes the snapshots inside, which the save format's own version already names.
+The file is the magic `GDSY`, the format version (`BUNDLE_VERSION`, 2 since N5 added the grace period to the start values it holds), then a postcard body. The extension is `.gdsync`. A reader refuses another magic, another version and trailing bytes, and never panics on hostile bytes (`hostile_bundle_bytes_never_panic`). Bump the version whenever the layout changes; a change of the save format changes the snapshots inside, which the save format's own version already names.
 
 **Size.** A bundle is two snapshots plus about K + `PAST_TICKS` tick records (small: the persons' orders only), so it is about twice the size of a save of the game at that point. On the synthetic fixture it is about 630 KB. On the lane's three maps of the install a save was 1.5 to 4.6 MB and a bundle 3.0 to 9.1 MB. While a game runs the evidence holds at most 5 snapshots with the default parameters, that is about five saves (up to about 23 MB on the largest of those maps); the lane held 2 at most (3 to 9 MB).
 
@@ -2249,9 +2250,71 @@ The local lane `lane_a_desync_on_the_installs_maps_is_reported` in `crates/tools
 
 **Seams for the later steps.**
 
-- N5 (reconnect, late join): a snapshot is a whole game that loads back to the same hash. A late joiner could start from the agreed one (`Evidence::snapshots`) and the tick records after it.
+- N5 (reconnect, late join): done, see *Reconnect and surrender (N5)*. A rejoining peer is sent a save made when it asks, not an evidence snapshot, and its evidence starts from that game (`Evidence::resume`).
 - N6 (soak): `Evidence::bytes_held` and the lane's timings show what the evidence costs a long game.
 - A report on demand (`Evidence::bundle_now`) makes a bundle with no mismatch, for a person who suspects a desync the hashes missed.
+
+### Reconnect and surrender (N5)
+
+A person whose connection or whole client goes during a network game has a grace period to come back. If they come back in time, a live peer sends them the game as it stands, their client runs the ticks they missed and they play on in lockstep. If they do not, their house surrenders on the same tick on every peer. A member who received `Begin` but never ran a tick (a crash while the map loaded) joins late the same way. The rejoin protocol, the transfer, the grace period and its length are our own netcode design (`// nocite: our own netcode`). The only game rule involved is the surrender, which is the existing `Order::Surrender` (S-0414 claim 11), the same order a person gives. No second way for a house to leave is added, and the simulation crates do not change. Code: `crates/net/src/session.rs` (lives, the surrender, `catch_up`, `rejoin`), `crates/net/src/rejoin.rs` (the transfer), `crates/relay/src/hub.rs` (tickets, serving, readmission), `crates/app/src/game/client_net.rs` (the client), `crates/ui/src/netmenu.rs` (the button).
+
+**Tickets.** At the start the relay draws a secret 16-byte ticket for every person's slot from its host randomness, and sends each member only its own, in `Begin.ticket`. A rejoin is `ToRelay::Rejoin { code, slot, ticket, build, rules_hash }`. The relay refuses it with `Refusal::NoGame` when there is no such room, the room has no game or nobody live is left to send it; `Ticket` when the slot is no person's or the ticket is not that slot's; `Mismatch(field)` for another build or rules hash; `Surrendered` when the slot's grace period has run out (the relay knows it from the most ticks any live peer says it has run, `Frames.ran`); and `Rejoining` while another slot is rejoining that game (one at a time per game; this one does not count against the refusal limit). A ticket for a slot that is still live replaces that slot's connection (a client that lost its link before the relay noticed). A connection with the right ticket gets `FromRelay::Rejoined(Begin)`, the start values as at the start.
+
+**Lives and the surrender** (`session::Life`). Each person's slot has the frames of it that count: from `from` (0, or the first frame after a rejoin) to before `until` (set by a drop). The relay's `Dropped { slot, kept }` (N2) sets `until = kept`, the same on every peer. Unless the slot is readmitted first, every peer issues `Order::Surrender` in that house's name on tick `kept + grace_ticks`, at the slot's place in the slot order, so the surrender is part of that tick's orders everywhere. No message asks for it, so no peer can forge or withhold one. `Event::Surrendered { slot, tick }` reports it. `grace_ticks` is a new start value (`Params::grace_ticks`). The relay works it out at the start from its `--grace SECONDS` (default 60 s, `Limits::grace_ms`) and the room's game speed: `grace_ms / period_ms(speed)`, where `glasnost_ui::setup::period_ms` is the paced period of S-0201 claims 2, 4 and 5, which the client's pacer uses too. The grace period is thus game time: a minute of play at the room's speed, whatever the machines' speed.
+
+**Serving.** When a rejoin is accepted, the relay picks the live person of the lowest slot to serve it and sends that peer `Body::Serve { slot, on: true }`. From then on, the relay also sends the rejoining connection every lockstep message it forwards and every drop. The serving peer:
+
+- keeps its frames until the rejoining peer acknowledges them, and sends them even when no other peer is live (a lone peer now sends a frames message every period);
+- makes a `rejoin::Transfer` once its session runs: its session's view of every person's slot (`Session::catch_up`: lives, the frames that count and those it holds but has not run), the game's save (`Game::save`) and its state hash, after the same ticks;
+- sends it as `ToRelay::Snapshot(Part)` parts, one every 25 ms, while it plays on. The relay passes each on as `FromRelay::Snapshot`.
+
+The transfer format is the magic `GRJN`, `TRANSFER_VERSION` 1, then the transfer in postcard. A part holds at most `PART_BYTES` (60 000), so each message stays under the relay's 64 KiB limit. A rejoining peer takes at most `MAX_TRANSFER` (64 MiB), and the relay passes on at most `Limits::max_snapshot` bytes per rejoin (the same 64 MiB by default); beyond that the relay calls the serving off (`Serve { on: false }`) and closes the rejoining connection with "the game is too large to send". `Assembler` takes the parts in order only, refuses a part of another count or past the limit, and never panics on hostile bytes (`hostile_transfer_bytes_never_panic`).
+
+**Catching up.** The rejoining client loads the map from `Rejoined` as at a start, keeps the lockstep messages that come meanwhile (at most 16 MiB), puts the parts together, loads the save, checks the loaded game's state hash against the sender's, and starts its session with `Session::rejoin` from the transfer. It then feeds the kept messages and puts the game in place of the fresh one (`Session::replace_game`). Its desync evidence starts from that game (`Evidence::resume`). It runs the ticks since unpaced, at most 10 per update. Until it is readmitted it makes no frames of its own; it only acknowledges, and the relay sends those acknowledgements to the serving peer only. When it has run every tick it has frames for, it sends `ToRelay::CaughtUp` once.
+
+**Readmission.** On `CaughtUp` the relay asks the serving peer to readmit the slot (`Body::Resume { slot }`). That peer's next frame carries the marker `Frame.resume = Some(slot)`. When the marker's frame is of tick *n*, every peer awaits the slot's frames again from frame `max(n + max_delay + 1, kept)` on, a frame no peer has run when it runs *n*; the surrender is called off if it was not due by tick *n*. The relay counts those frames as forwarded for the slot's next `kept`. A rejoining peer that goes before its readmission is dropped again at that frame, and can rejoin again.
+
+**What the relay refuses.** `Serve`, `Resume` and `Dropped` come only from the relay (`wire::RELAY`); the relay never forwards one from a client, and a session takes them only from `RELAY` (an `Event::BadMessage` "not from the relay" otherwise). The relay forwards a readmission marker only from the peer it asked, only for the slot it asked about, only in one frame and only after `CaughtUp`, and closes any other sender of one. A rejoining connection that sends anything but frames messages, or speaks for another slot, is discarded and counted. If the serving peer goes before the readmission, the relay closes the rejoining connection with "the player sending you the game left; reconnect to try again". New stats: `rejoins`, `readmitted`, `forged_rejoins`, `snapshot_bytes`.
+
+**What a person sees.**
+
+- When a person goes, every other player sees "Bea left the game; they have 60 seconds to reconnect." (the seconds left of the grace period at the room's speed). The game goes on without them; their house stands idle.
+- The person whose link went (closed, or lost in the game) returns to the multiplayer screen. The status line says "Reconnect within about N seconds to play on, or your house surrenders." The screen shows **Reconnect to game CODE** under **Host** and **Join** whenever the client knows a game to rejoin, also after the client restarts, since the room, slot, ticket and relay are kept in the settings store while the game runs (the `rejoin` line; see *Settings (M8 step C2)*). The button is offered while the relay field is not empty.
+- After **Reconnect**, a banner over the loading game says "Loading the game...", then "Waiting for the game...", "Receiving the game (k of n parts)..." and "Catching up with the game (tick N)...". When the client is readmitted it says "You are back in the game."
+- The serving player sees "Bea is reconnecting; sending them the game.". Everyone sees "Bea reconnected." on readmission.
+- When the grace period runs out: "Bea did not come back in time: their house surrendered." A rejoin after that is refused ("too late to rejoin: the grace period ran out and the house surrendered"), and the client forgets the game.
+- **Leave** in the game sends `Leave`, which the relay treats as a drop: the others see the grace-period notice and the house surrenders when it runs out. The leaving client forgets the game, so it does not offer **Reconnect**. The stored game is also forgotten when the game ends, and when the relay refuses a rejoin for its ticket, a surrender, no game or a mismatch.
+
+**Tests.**
+
+- `crates/net/tests/lockstep.rs`: `a_dropped_house_surrenders_after_the_grace_period_everywhere_on_one_tick`, over the seeded network. Forged `Serve` and `Resume` from peers are refused as not from the relay, and the surrender runs on tick `kept + grace_ticks` once on each peer.
+- `crates/net/src/rejoin.rs`: `parts_go_back_together_in_order_only`, `hostile_transfer_bytes_never_panic`.
+- `crates/relay/tests/rejoin.rs`, on the hub with a virtual clock and the synthetic skirmish (`common/skirmish.rs`), each peer on its own `glasnost_ai::game::Game`:
+  - `two_persons_drop_and_rejoin_with_identical_hashes` and `three_persons_and_a_computer_drop_and_rejoin_with_identical_hashes`: the rejoined peer's hashes equal the others' at every tick after its readmission, and every peer's game replays to the same hashes.
+  - `a_member_gone_before_the_game_ran_joins_late`: a member gone at tick 0 joins late (a transfer of about 320 KB on the fixture, readmitted from frame 111).
+  - `past_the_grace_period_the_house_surrenders_on_every_peer_on_one_tick`, `a_rejoin_inside_the_grace_period_cancels_the_surrender`, `a_rejoin_after_the_grace_period_is_too_late`, `a_rejoining_peer_cut_off_before_its_readmission_can_rejoin_again`.
+  - `a_rejoin_into_someone_elses_slot_is_refused`, `forged_relay_messages_and_readmission_markers_are_refused`, `only_the_asked_peer_readmits_and_only_after_the_catch_up`.
+- `crates/app/src/game/client_net_tests.rs`: `a_client_that_went_reconnects_and_plays_on_in_lockstep`. Three persons and a computer play over an in-process WebSocket relay. Bea's client goes; a new client on the same settings store presses **Reconnect**; the host serves it and the third player does not. The hashes agree for more than 150 ticks after the readmission, which took about 0.7 s.
+- `crates/ui/src/netmenu.rs`: `a_game_to_rejoin_shows_a_reconnect_button`. `crates/app/src/settings_tests.rs`: the `rejoin` line's round trip and bad lines.
+
+**The local lane.** `a_killed_client_process_restarts_and_rejoins` in `crates/app/tests/m9_lane.rs` (opt-in, needs `GLASNOST_GAME_DIR`) runs the guest as a child process of the test (`lane_guest_process`, chosen by `GLASNOST_LANE_ROLE`) with its own settings file. It kills that process with SIGKILL at host tick 300, starts it again on the same settings file, and has it press **Reconnect**. On the install's first offered map:
+
+- The host noticed the drop 13 ms after the kill.
+- The restarted guest's rejoin reached the relay about 3 s after the restart (most of it mounting the install). It loaded the game 2.2 s after pressing **Reconnect**: a transfer of 1.6 MB in 27 parts.
+- It caught up in 0.74 s (about 230 ticks a second) and was readmitted 5.9 s after the restart.
+- Both clients then played 300 ticks more with equal hashes at every tick.
+
+It writes counts, timings and both clients' screens to `local-lane/m9/n5/`. Run it with `cargo test --release -p glasnost-app --test m9_lane -- --ignored --nocapture a_killed_client_process_restarts_and_rejoins`.
+
+**Seams and limits.**
+
+- A hostile peer that claims to have run more ticks than it has (`Frames.ran`) can make the relay think a slot's grace period is over, and so refuse that slot's rejoin while its house has not yet surrendered. A hostile client that sends frames far ahead and then leaves can still stall the others (N2's seam).
+- A member who never received `Begin` has no ticket and cannot join late.
+- One rejoin at a time per game (`Refusal::Rejoining`).
+- A lost link takes the person to the multiplayer screen; the client does not reconnect by itself.
+- After the game is put in place on a rejoin, some presentation state of the fresh load stays until it next changes: the "Game started." line, the credits counter's roll, the selection.
+- N6 (soak): rejoins under load and long games, where the transfer and the catch-up are longer.
+- N7 (WebRTC): `Serve`, `Resume`, `Dropped` and the marker checks must stay on the relay's channel; a data channel must never carry them.
 
 ## M6c step ledger
 
