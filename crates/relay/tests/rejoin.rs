@@ -926,7 +926,7 @@ fn a_rejoin_into_someone_elses_slot_is_refused() {
     let refused = |m: &[Incoming]| {
         m.iter()
             .find_map(|i| match i {
-                Incoming::Lobby(FromRelay::Refused(r)) => Some(r.clone()),
+                Incoming::Lobby(FromRelay::Refused(r)) => Some(*r),
                 _ => None,
             })
             .expect("a refusal")
