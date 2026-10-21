@@ -1124,6 +1124,9 @@ pub enum SwEvent {
         trooper: ObjectId,
         /// The stage delay of the creation.
         delay: Option<i32>,
+        /// The parachute animation in play (`crate::anims`), whose stage
+        /// the drawing shows.
+        anim: Option<ObjectId>,
     },
 }
 

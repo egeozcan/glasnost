@@ -1127,6 +1127,7 @@ pub fn virus_death(w: &mut World, pos: Pos, owner: Option<HouseId>, extra: bool)
         delay,
         reverse: false,
         z_adjust: None,
+        id: None,
     });
     // Only a later middle event (μ ≠ 0) with effects needs the playback.
     let effects = a.particles.is_some_and(|(_, n)| n > 0) || a.scorch || a.crater;

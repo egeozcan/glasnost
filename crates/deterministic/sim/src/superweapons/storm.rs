@@ -230,13 +230,15 @@ fn make_cloud(w: &mut World, cell: CellXY) {
     // spec: S-0513 F4 (z = h_level + b₄ + h_c)
     pos.z += h_c;
     // spec: S-0513 claim 17 (its creation then takes the animation's own creation draws, S-0109)
-    let delay = crate::load::anim_created_at(w, &name, Some((pos.x, pos.y, pos.z)));
+    // The cloud's playback is the storm's model (claim 46, `Cloud`), so it is not an ordinary animation in play here.
+    let delay = crate::load::anim_created(w, &name, Some((pos.x, pos.y, pos.z)), true);
     w.effects.push(crate::combat::effects::Effect::Anim {
         name: name.clone(),
         pos,
         delay,
         reverse: false,
         z_adjust: None,
+        id: None,
     });
     let t = w.tick;
     let d = stage_delay(w, anim, delay);

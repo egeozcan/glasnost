@@ -95,6 +95,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::combat::projectile::turn(w, id);
         return;
     }
+    if w.anims.anims.contains_key(&id) {
+        // spec: S-0109 claim 5 and S-0203 claim 2 (an animation updates in its own turn)
+        crate::anims::turn(w, id);
+        return;
+    }
     if w.gas.systems.contains_key(&id) {
         // spec: S-0613 claim 6 and S-0203 claim 2 (a particle system takes one turn per tick)
         crate::gas::system_turn(w, id);

@@ -1287,6 +1287,7 @@ fn animation_events_play_their_art_and_end() {
         delay: None,
         reverse: false,
         z_adjust: None,
+        id: None,
     });
     live.world.effects.push(Effect::Anim {
         name: "NOSUCHANIM".into(),
@@ -1294,6 +1295,7 @@ fn animation_events_play_their_art_and_end() {
         delay: None,
         reverse: false,
         z_adjust: None,
+        id: None,
     });
     live.after_tick();
     assert_eq!(live.counts.anims_with_art, 1);
@@ -1464,6 +1466,7 @@ fn parachute_follows_its_paratrooper() {
         event: SwEvent::Parachute {
             trooper,
             delay: None,
+            anim: None,
         },
         house: Some(HouseId(0)),
         sw: None,
@@ -1543,6 +1546,7 @@ fn shot_animation_follows_its_firer() {
         delay: None,
         attached: Some((firer, d)),
         z_adjust: None,
+        id: None,
     });
     // A building's: not attached, with its depth adjustment.
     let fixed = Pos::new(at.x + 512, at.y, 0);
@@ -1552,6 +1556,7 @@ fn shot_animation_follows_its_firer() {
         delay: None,
         attached: None,
         z_adjust: Some(-37),
+        id: None,
     });
     // The same type made by an ordinary animation event, for its type's layer.
     live.world.effects.push(Effect::Anim {
@@ -1560,6 +1565,7 @@ fn shot_animation_follows_its_firer() {
         delay: None,
         reverse: false,
         z_adjust: None,
+        id: None,
     });
     live.after_tick();
     let shots = live.shot_anims();
@@ -1593,6 +1599,7 @@ fn shot_animation_follows_its_firer() {
         delay: None,
         reverse: false,
         z_adjust: Some(-15),
+        id: None,
     });
     live.after_tick();
     let shots = live.shot_anims();
@@ -2477,6 +2484,7 @@ fn deploying_presentation_takes_the_owners_palette() {
             delay: None,
             reverse: false,
             z_adjust: None,
+            id: None,
         });
     }
     live.after_tick();
@@ -2632,6 +2640,7 @@ fn particles_draw_their_sprites_in_the_air_layer() {
             delay: None,
             reverse: false,
             z_adjust: None,
+            id: None,
         });
     }
     live.after_tick();

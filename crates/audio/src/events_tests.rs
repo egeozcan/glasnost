@@ -761,6 +761,7 @@ fn animation_start_sound() {
             delay: None,
             reverse: false,
             z_adjust: None,
+            id: None,
         },
         Effect::Anim {
             name: "Silent".into(),
@@ -768,6 +769,7 @@ fn animation_start_sound() {
             delay: None,
             reverse: false,
             z_adjust: None,
+            id: None,
         },
     ];
     a.tick(&w, &fx, &mut u);

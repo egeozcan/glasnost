@@ -998,7 +998,8 @@ pub fn turn(w: &mut World, id: ObjectId) {
         && delay != 0
         && tick.rem_euclid(delay) == 0
     {
-        effects::anim(w, &trailer, start);
+        // spec: S-0109 claim 29 (a projectile trailer, created during its turn before its movement, with an initial loop delay of 1 update)
+        effects::trailer(w, &trailer, start);
     }
     let kind = p.kind();
     let mut lift = 0;

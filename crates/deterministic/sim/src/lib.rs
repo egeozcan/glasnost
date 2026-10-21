@@ -15,6 +15,7 @@
 
 pub mod air;
 pub mod anim_clock;
+pub mod anims;
 pub mod approach;
 pub mod base;
 pub mod behaviour;

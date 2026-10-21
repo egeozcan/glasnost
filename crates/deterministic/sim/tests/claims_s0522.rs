@@ -43,6 +43,8 @@ fn rules() -> Ruleset {
         "CHUTE".into(),
         AnimationType {
             random_rate: Some([450, 225]),
+            // spec: S-0109 claim 7 (loop count −1: r₀ = 255, endless), so the parachute is still present on landing
+            loop_count: Some(-1),
             ..Default::default()
         },
     );
@@ -850,19 +852,54 @@ fn quirk_any_animation_slow_fall_both_settings_agree() {
 
 #[test]
 fn claim13_parachute_attached_until_landing() {
-    // spec: S-0522 claim 13 (the parachute follows the unit down; still present on landing it ends, S-0109 claim 28 seam: no playback clock)
+    // spec: S-0522 claim 13 (the parachute follows the unit down; an endless one still present on landing gets remaining passes 0, so its current pass is its last, S-0109 claim 16)
     let mut w = game(&rules());
     let p = launch(&mut w);
     let (x, y) = west_of(at(1, 1));
     hold(&mut w, p, x, y, 0, 3);
     let first = transport::passengers(&w, p)[0];
     assert!(paradrop::attempt(&mut w, p));
+    let chute = glasnost_sim::anims::parachute_of(&w, first).expect("attached");
     for _ in 0..5 {
         step(&mut w);
         assert!(w.obj(first).unwrap().fall.chute);
+        let u = w.obj(first).unwrap().pos;
+        let shown = glasnost_sim::anims::shown(&w, chute).and_then(|s| s.2);
+        assert_eq!(shown, Some(u), "at the paratrooper's position");
     }
     until(&mut w, 2000, |w| !falling(w, first));
     assert!(!w.obj(first).unwrap().fall.chute);
+    assert!(
+        glasnost_sim::anims::shown(&w, chute).is_some(),
+        "the last pass still plays"
+    );
+    until(&mut w, 2000, |w| {
+        glasnost_sim::anims::shown(w, chute).is_none()
+    });
+}
+
+#[test]
+fn claim13_a_short_parachute_ends_before_landing() {
+    // spec: S-0522 claim 13 (the loop count decides the passes, so a short finite parachute ends before landing) and claim 12 (then the no-parachute recurrence applies)
+    let mut r = rules();
+    let a = r.sim.animations.get_mut("CHUTE").unwrap();
+    a.loop_count = Some(1);
+    a.frame_count = Some(4);
+    let mut w = game(&r);
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let first = transport::passengers(&w, p)[0];
+    assert!(paradrop::attempt(&mut w, p));
+    until(&mut w, 200, |w| !w.obj(first).unwrap().fall.chute);
+    assert!(falling(&w, first), "the parachute ended in the air");
+    assert!(glasnost_sim::anims::parachute_of(&w, first).is_none());
+    let before = w.obj(first).unwrap().fall.rate;
+    step(&mut w);
+    assert!(
+        w.obj(first).unwrap().fall.rate < before.min(CHUTE_FLOOR),
+        "past the parachute floor: the no-parachute recurrence"
+    );
 }
 
 // --- Claim 17 ----------------------------------------------------------------
