@@ -19,9 +19,9 @@ should not act on this file.
 These are filed in spec/requests/ and wait for the spec side (see "Two machines" below). Each has an
 interim rule in docs/development.md, *Visual review 2026-10-19*.
 
-- Q-1529: whether the shrouded-centre-cell protection row reaches a building's slot animations (S-0513).
-- Q-1562: how a particle type's colour list reads malformed triples (S-0202).
-- Q-1590: whether a railgun system without a held particle type makes its laser (S-0616).
+- Q-1529: whether the shrouded-centre-cell protection row reaches a building's slot animations (S-0513). Answered by S-0513 revision 30; taken in by M8 intake 3 (2026-10-21).
+- Q-1562: how a particle type's colour list reads malformed triples (S-0202). Answered by S-0202 revision 33; taken in by M8 intake 1 (2026-10-21).
+- Q-1590: whether a railgun system without a held particle type makes its laser (S-0616). Answered by S-0616 revision 16; taken in by M8 intake 2 (2026-10-21).
 
 A request is answered when its spec's front matter lists it under `requests:` and the request's
 status is no longer open. After any spec landing, an implementer catches the code up to the new
