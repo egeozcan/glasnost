@@ -1015,6 +1015,14 @@ fn fold<T>(
 /// force shield (S-0513 Import mapping).
 pub const PROTECTION_SELECTORS: [&str; 2] = ["IronCurtainColor", "ForceShieldColor"];
 
+/// The laser-target colour's selector key (S-0519 claim 26 and Import
+/// mapping), read like the protection selectors.
+pub const LASER_TARGET_SELECTOR: &str = "LaserTargetColor"; // spec: S-0519 Import mapping (rules, audio-visual section, LaserTargetColor)
+
+/// The berserk colour's selector key (S-0610 claim 7 and Import mapping),
+/// read like the protection selectors.
+pub const BERSERK_SELECTOR: &str = "BerserkColor"; // spec: S-0610 Import mapping (BerserkColor in [AudioVisual])
+
 /// The protection selector `key` held after every rules layer, with the
 /// layer and line of the value that set it; `None` when no layer gives a
 /// readable integer (the selector is then 0). A selector is used exactly as
@@ -1376,6 +1384,22 @@ impl Builder<'_> {
                     "[AudioVisual] {key}={v} names no position of the 16-entry colour-adjustment table: its protection drawings take no colour mask (S-0513 claim 29a, a departure)"
                 ));
             }
+        }
+        if let Some((v, layer, line)) = protection_selector(outcome, BERSERK_SELECTOR)
+            && !(0..COLOUR_ADD_LEN as i32).contains(&v)
+        {
+            // spec: S-0610 Edge cases (a berserk selector below 0 or above 15, a departure: the importer warns and a berserk unit is drawn with no berserk mask)
+            self.warn(layer, line, format!(
+                "[AudioVisual] {BERSERK_SELECTOR}={v} names no position of the 16-entry colour-adjustment table: berserk units are drawn with no berserk mask (S-0610 Edge cases, a departure)"
+            ));
+        }
+        if let Some((v, layer, line)) = protection_selector(outcome, LASER_TARGET_SELECTOR)
+            && !(0..COLOUR_ADD_LEN as i32).contains(&v)
+        {
+            // spec: S-0102 F9 (a selector naming no table position: K = 0); the warning is Q-1621's interim, as for the protection selectors
+            self.warn(layer, line, format!(
+                "[AudioVisual] {LASER_TARGET_SELECTOR}={v} names no position of the 16-entry colour-adjustment table: marked buildings take no laser-target colour mask (Q-1621 interim)"
+            ));
         }
         self.general_combat(&mut rec);
         self.general_econ(&mut rec);

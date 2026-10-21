@@ -57,6 +57,7 @@ type Scene = (&'static str, fn(&mut Lane));
 /// The scenes, in the order they are played.
 const SCENES: &[Scene] = &[
     ("berserk", berserk_spreads),
+    ("berserk-mask", berserk_mask),
     ("sensor", sensor_shows_intent),
     ("reveal", psychic_reveal),
     ("mind", mind_control),
@@ -201,6 +202,59 @@ fn berserk_spreads(lane: &mut Lane) {
     }
     lane.ticks(3);
     lane.save("berserk-after");
+}
+
+/// S-0610 claim 7: the berserk colour mask side by side. Two enemy
+/// vehicles and two enemy infantry of one type each are placed in a row;
+/// one of each pair is made berserk directly (S-0610 claim 4's state
+/// start), so the berserk unit and its plain twin are drawn in one shot.
+fn berserk_mask(lane: &mut Lane) {
+    let w = lane.world();
+    let vname = plain_vehicle(w);
+    let iname = human_infantry(w);
+    println!(
+        "vehicle type found: {}, infantry type found: {}",
+        vname.is_some(),
+        iname.is_some()
+    );
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let spot = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    let mut pairs = Vec::new();
+    if let Some(v) = vname {
+        let a = lane.spawn(Kind::Vehicle, &v, enemy, CellXY::new(spot.x, spot.y));
+        let b = lane.spawn(Kind::Vehicle, &v, enemy, CellXY::new(spot.x + 2, spot.y));
+        pairs.push((a, b));
+    }
+    if let Some(i) = iname {
+        let a = lane.spawn(Kind::Infantry, &i, enemy, CellXY::new(spot.x, spot.y + 2));
+        let b = lane.spawn(
+            Kind::Infantry,
+            &i,
+            enemy,
+            CellXY::new(spot.x + 2, spot.y + 2),
+        );
+        pairs.push((a, b));
+    }
+    lane.look_at(CellXY::new(spot.x + 1, spot.y + 1));
+    lane.ticks(2);
+    for &(_, b) in &pairs {
+        let took = glasnost_sim::psychic::enter(lane.world_mut(), b, 900);
+        println!("berserk started: {took}");
+    }
+    lane.ticks(1);
+    let w = lane.world();
+    println!(
+        "berserk now: {:?}",
+        pairs
+            .iter()
+            .map(|&(a, b)| (
+                glasnost_sim::psychic::berserk(w, a),
+                glasnost_sim::psychic::berserk(w, b)
+            ))
+            .collect::<Vec<_>>()
+    );
+    lane.save("berserk-mask");
 }
 
 /// S-0610 claims 9 to 12: a psychic sensor (a building type with a

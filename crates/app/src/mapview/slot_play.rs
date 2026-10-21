@@ -5,12 +5,16 @@
 //! S-0109's playback, which the caller supplies through [`Make`] and drives
 //! with [`Slots::finished`].
 //!
-//! This is presentation state the simulation never reads. Not covered
-//! here: the power rules of claims 13 and 14 (no slot freezes or lights
-//! with power), silo fill (claim 16), the superweapon and turret slots
-//! (claims 11, 18 and 19), the upgrade slots, the recycling building's row
-//! of claim 20, and the trigger that starts a repair depot's *special-1*
-//! or *production* slot, which no spec gives (Q-1550).
+//! This is presentation state the simulation never reads. A repair
+//! depot's *production* and *special-1* to *special-3* slots are the
+//! simulation's (`glasnost_sim::depot_anim`, S-0108 claim 20: their
+//! lifetime is game state); the drawing shows them from there and plays
+//! the depot's *idle* and *active-1* as the simulation's
+//! `Effect::DepotSlot` reports ([`Slots::depot`]). Not covered here: the
+//! power rules of claims 13 and 14 (no slot freezes or lights with power),
+//! silo fill (claim 16), the superweapon and turret slots (claims 11, 18
+//! and 19), the upgrade slots and the recycling building's row of claim
+//! 20.
 
 use std::collections::BTreeMap;
 
@@ -107,10 +111,9 @@ pub struct TypeKind {
     /// Absorbs infantry and gives a positive extra power per held
     /// infantry (claim 17).
     pub absorbs: bool,
-    /// The unit-repair flag: a repair depot (claim 20).
+    /// The unit-repair flag: a repair depot (claim 20), whose special
+    /// slots the simulation plays.
     pub depot: bool,
-    /// The naval flag (claim 20).
-    pub naval: bool,
     /// A delayed-fire type (claim 20).
     pub delayed_fire: bool,
 }
@@ -129,10 +132,6 @@ pub struct State {
     pub occupied: bool,
     /// The held infantry's total size *T* (claim 17, F9).
     pub held_size: i32,
-    /// In its repair behaviour (claim 20).
-    pub in_repair: bool,
-    /// Repairing a docked unit (claim 20).
-    pub repairing: bool,
 }
 
 /// Makes a slot's animation of a type name.
@@ -330,16 +329,26 @@ impl<A> Slots<A> {
                 self.start_occupied(on, defs, st, mk);
             }
         }
-        // spec: S-0108 claim 20 (a repair depot, not naval, not in its repair behaviour, with
-        // production or special-2 running: special-3 starts, production and special-2 stop)
-        if kind.depot
-            && !kind.naval
-            && !st.in_repair
-            && (self.runs(Slot::Production) || self.runs(Slot::Special2))
-        {
-            self.start_variant(Slot::Special3, defs, st.damaged, mk);
-            self.stop(Slot::Production);
-            self.stop(Slot::Special2);
+    }
+
+    /// A repair depot's *idle* or *active-1* start or stop that the
+    /// simulation reported (S-0108 claim 20, `Effect::DepotSlot`), in the
+    /// damaged variant when `damaged`, never the occupied one.
+    pub fn depot(
+        &mut self,
+        active1: bool,
+        start: bool,
+        damaged: bool,
+        defs: &Defs,
+        mk: &mut dyn Make<A>,
+    ) {
+        let slot = if active1 { Slot::Active1 } else { Slot::Idle };
+        if start {
+            // spec: S-0108 claim 20 (idle or active-1 starts, normal or damaged variant)
+            self.start_variant(slot, defs, damaged, mk);
+        } else {
+            // spec: S-0108 claim 20 (active-1 and idle stop at the working entry)
+            self.stop(slot);
         }
     }
 
@@ -377,21 +386,12 @@ impl<A> Slots<A> {
     ) {
         self.running.remove(&slot);
         match slot {
-            // spec: S-0108 claim 20 (a repair depot's special-1 ends: special-2 when repairing a
-            // docked unit, idle when not; normal or damaged variant)
-            Slot::Special1 if kind.depot => {
-                let next = if st.repairing {
-                    Slot::Special2
-                } else {
-                    Slot::Idle
-                };
-                self.start_variant(next, defs, st.damaged, mk);
-            }
             // spec: S-0108 claim 20 (a delayed-fire type that is not a repair depot: special-1
-            // finishes on its own, active-1 starts with occupied variants allowed)
-            Slot::Special1 if kind.delayed_fire => self.start_occupied(Slot::Active1, defs, st, mk),
-            // spec: S-0108 claim 20 (a repair depot's special-3 finishes on its own: idle starts)
-            Slot::Special3 if kind.depot => self.start_variant(Slot::Idle, defs, st.damaged, mk),
+            // finishes on its own, active-1 starts with occupied variants allowed; a depot's
+            // special slots are the simulation's)
+            Slot::Special1 if kind.delayed_fire && !kind.depot => {
+                self.start_occupied(Slot::Active1, defs, st, mk);
+            }
             // spec: S-0108 claim 20 (no other building reacts to special-1 or special-3 ending)
             _ => {}
         }
@@ -611,46 +611,27 @@ mod tests {
         assert_eq!(held_size(&[one, one, one], m), 3);
     }
 
-    /// spec: S-0108 claim 20 (repair depot: out of its repair behaviour with production or
-    /// special-2 running, special-3 starts and they stop; special-1 ending gives special-2 while
-    /// repairing, idle otherwise; special-3 finishing gives idle; a naval depot does not swap)
+    /// spec: S-0108 claim 20 (a repair depot's idle and active-1 follow the simulation's reports:
+    /// a start in the reported variant, a stop)
     #[test]
-    fn repair_depot_rows() {
+    fn repair_depot_reports() {
         let d = defs();
+        let mut s = Slots::default();
+        s.depot(true, true, false, &d, &mut Maker);
+        s.depot(false, true, false, &d, &mut Maker);
+        assert!(s.runs(Slot::Active1) && s.runs(Slot::Idle));
+        s.depot(true, false, false, &d, &mut Maker);
+        s.depot(false, false, false, &d, &mut Maker);
+        assert!(!s.runs(Slot::Active1) && !s.runs(Slot::Idle));
+        // The depot's special slots are the simulation's: the drawing runs no row of its own.
         let depot = TypeKind {
             depot: true,
+            delayed_fire: true,
             ..TypeKind::default()
         };
-        let repairing = State {
-            in_repair: true,
-            repairing: true,
-            ..done()
-        };
-        let mut s = Slots::default();
-        s.update(&depot, &d, &repairing, &mut Maker);
-        s.start_variant(Slot::Special1, &d, false, &mut Maker);
-        s.finished(Slot::Special1, &depot, &d, &repairing, &mut Maker);
-        assert!(!s.runs(Slot::Special1) && s.runs(Slot::Special2));
-        s.update(&depot, &d, &repairing, &mut Maker);
-        assert!(s.runs(Slot::Special2), "still in its repair behaviour");
-        s.update(&depot, &d, &done(), &mut Maker);
-        assert!(!s.runs(Slot::Special2) && s.runs(Slot::Special3));
-        s.stop(Slot::Idle);
-        s.finished(Slot::Special3, &depot, &d, &done(), &mut Maker);
-        assert!(s.runs(Slot::Idle) && !s.runs(Slot::Special3));
-        s.stop(Slot::Idle);
-        s.start_variant(Slot::Special1, &d, false, &mut Maker);
         s.finished(Slot::Special1, &depot, &d, &done(), &mut Maker);
-        assert!(s.runs(Slot::Idle) && !s.runs(Slot::Special2));
-        let naval = TypeKind {
-            naval: true,
-            ..depot
-        };
-        let mut n = Slots::default();
-        n.update(&naval, &d, &done(), &mut Maker);
-        n.start_variant(Slot::Production, &d, false, &mut Maker);
-        n.update(&naval, &d, &done(), &mut Maker);
-        assert!(n.runs(Slot::Production) && !n.runs(Slot::Special3));
+        s.finished(Slot::Special3, &depot, &d, &done(), &mut Maker);
+        assert!(s.running.is_empty());
     }
 
     /// spec: S-0606 claims 6, 12 and 16 (walls up: special-1 and special-2 start in the reported

@@ -227,6 +227,18 @@ const DOCK_ANIMS: &[(&str, &str)] = &[
     ("special_anim_four_damaged", "SpecialAnimFourDamaged"),
 ];
 
+/// The slots whose names the repair depot's slot model reads (S-0108
+/// claim 20), by art base key.
+const SLOT_MODEL_BASES: &[&str] = &[
+    "ProductionAnim",
+    "SpecialAnim",
+    "SpecialAnimTwo",
+    "SpecialAnimThree",
+];
+
+/// A slot name's text limit (S-0108 Import mapping).
+const SLOT_NAME_LIMIT: usize = 15; // spec: S-0108 Import mapping (names are text cut to 15 bytes)
+
 /// The build-up sprite name's text limit (S-0108 Import mapping).
 const BUILDUP_MAX: usize = 15; // spec: S-0108 Import mapping (Buildup, text cut to 15 characters)
 
@@ -1668,6 +1680,52 @@ impl Builder<'_> {
             if let Some(n) = name {
                 econ.put(field, jsonc::string(n));
             }
+        }
+        self.slot_names(kind, index, t, econ);
+    }
+
+    /// The *production* and *special-1* to *special-3* slot names of
+    /// S-0108's Import mapping, for the repair depot's slot model (S-0108
+    /// claim 20): at each read of the image sections, a non-empty value
+    /// replaces the held name and an empty damaged name then takes the
+    /// held normal name.
+    fn slot_names(&mut self, kind: Kind, index: usize, t: &TypeRec, econ: &mut Rec) {
+        let mut entries = Vec::new();
+        for base in SLOT_MODEL_BASES {
+            let normal_key = (*base).to_owned();
+            let damaged_key = format!("{base}Damaged");
+            let mut held: [Vec<u8>; 2] = [Vec::new(), Vec::new()];
+            for image in self.images(kind, index, t) {
+                let Some(section) = self.art_section(&image) else {
+                    continue;
+                };
+                for (i, k) in [&normal_key, &damaged_key].into_iter().enumerate() {
+                    // spec: S-0108 Import mapping (names are text cut to 15 bytes; an empty value keeps the earlier name)
+                    if let Some(e) = section.get(k.as_bytes()) {
+                        let v = value::text(&e.value, SLOT_NAME_LIMIT);
+                        if !v.is_empty() {
+                            held[i] = v.to_vec();
+                        }
+                    }
+                }
+                // spec: S-0108 Import mapping (at each read, a damaged name that is empty once that read's names are taken takes the normal name held at that point)
+                if held[1].is_empty() {
+                    held[1] = held[0].clone();
+                }
+            }
+            if held[0].is_empty() && held[1].is_empty() {
+                continue;
+            }
+            entries.push((
+                normal_key,
+                jsonc::array(vec![
+                    jsonc::string(encode(&held[0])),
+                    jsonc::string(encode(&held[1])),
+                ]),
+            ));
+        }
+        if !entries.is_empty() {
+            econ.put("slot_names", jsonc::object(entries));
         }
     }
 

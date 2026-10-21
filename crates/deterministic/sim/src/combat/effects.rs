@@ -171,6 +171,19 @@ pub enum Effect {
         /// The damaged variant.
         damaged: bool,
     },
+    /// A repair depot's *idle* or *active-1* slot starts or stops (S-0108
+    /// claim 20), in its damaged variant when `damaged` (never the occupied
+    /// one). Only the drawing reads it.
+    DepotSlot {
+        /// The depot.
+        building: ObjectId,
+        /// *active-1* (else *idle*).
+        active1: bool,
+        /// Started (else stopped).
+        start: bool,
+        /// The damaged variant.
+        damaged: bool,
+    },
     /// A vehicle became bunkered (S-0606 claim 7): it leaves any control
     /// group it belonged to and is removed from the selection.
     Bunkered {

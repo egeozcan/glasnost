@@ -19,6 +19,8 @@
 //! point's cell during movement queues *repair* and *sleep*
 //! ([`movement_arrival`]).
 
+use std::collections::BTreeMap;
+
 use glasnost_map::CellXY;
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +59,19 @@ pub struct DepotState {
     /// Terms): the depot that claim 23's order on a depot holding a contact
     /// makes a damaged vehicle remember (S-0314 claim 23).
     pub entering: Option<ObjectId>,
+    /// A depot's running modelled slot animations (S-0108 claim 20), by
+    /// slot: their numbers in the update order (`crate::depot_anim`).
+    #[serde(default)]
+    pub slots: BTreeMap<DepotSlot, ObjectId>,
+    /// A depot's slot condition is *damaged* (S-0108 Terms, claim 12), for
+    /// its modelled slots.
+    #[serde(default)]
+    pub slot_damaged: bool,
+    /// A depot's service ended with a step that sent the vehicle away
+    /// (S-0108 claim 20: the slot changes happened at that step), so its
+    /// next processing without contact makes no second change (Q-1620).
+    #[serde(default)]
+    pub sent_away: bool,
 }
 
 /// The phases of a depot's repair, kept in its *repair* behaviour's
@@ -99,13 +114,17 @@ pub fn is_depot(w: &World, k: ObjectId) -> bool {
     })
 }
 
-/// A repair depot's slot animation that S-0314 claims 6 and 22 test
-/// (S-0108 claim 20, Terms: the building's animation slots).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A repair depot's slot that the simulation models (S-0108 claim 20,
+/// Terms: the building's animation slots; S-0314 claims 6 and 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DepotSlot {
     /// The *production* slot: while it runs, settling takes no step
     /// (S-0314 claim 6).
     Production,
+    /// The *special-1* slot.
+    Special1,
+    /// The *special-2* slot.
+    Special2,
     /// The *special-3* slot: while it runs, a settling depot with no
     /// contact stays in its repair behaviour (S-0314 claim 22).
     Special3,
@@ -115,14 +134,16 @@ pub enum DepotSlot {
 /// simulation state with its duration from the art data (S-0108 claim 20;
 /// S-0314 claims 6 and 22). Naval yards with the repair flag are included
 /// (S-0504 claim 8).
-///
-/// Seam: S-0108 claim 20 sim slot model (intake 14B). Until it is built no
-/// depot slot animation runs in the simulation, so this is always `false`:
-/// settling is never held (claim 6) and a settling depot with no contact
-/// returns to *guard* at its next processing (claim 22).
-pub fn slot_running(_w: &World, _k: ObjectId, _slot: DepotSlot) -> bool {
-    // spec: S-0108 claim 20 (seam: the simulation's slot model is not built; no slot runs)
-    false
+pub fn slot_running(w: &World, k: ObjectId, slot: DepotSlot) -> bool {
+    // spec: S-0108 claim 20 (the simulation models the slot animation's duration from the art data as deterministic simulation state)
+    crate::depot_anim::running(w, k, slot)
+}
+
+/// Whether depot `k` is in contact (S-0108 claim 20): it holds a contact
+/// with a vehicle in any of its contact places (S-0314 claim 17),
+/// tethered or not.
+pub fn in_contact(w: &World, k: ObjectId) -> bool {
+    !contacts(w, k).is_empty()
 }
 
 /// A vehicle's depot link, when its contact is that depot.
@@ -591,6 +612,17 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     let Some(v) = serviced(w, k) else {
         // Q-1610 interim: the lost contact is noticed at this scheduled processing (the next working step's due tick or settling retry); no processing is brought forward (S-0108 claim 20 says the same or the next tick).
         let stage = w.obj(k).map_or(phase::WAITING, |b| b.beh.progress);
+        let sent = w
+            .obj_mut(k)
+            .is_some_and(|b| std::mem::take(&mut b.depot.sent_away));
+        // spec: S-0108 claim 20 (no longer in contact in waiting or working, or in settling with production or special-2 running: production and special-2 stop, special-3 and active-1 start; when the depot sent the vehicle away these changes came at that step, Q-1620 interim: none again here)
+        let ended = match stage {
+            phase::SETTLING => crate::depot_anim::production_or_special2(w, k),
+            _ => !sent,
+        };
+        if ended {
+            crate::depot_anim::service_ended(w, k);
+        }
         if stage == phase::WORKING {
             // spec: S-0314 claim 22 (revision 31: a working depot left without any contact enters settling and rechecks after 1 tick; its serviced vehicle is kept until the return to guard, so a new contact meanwhile restarts the phases at waiting, Edge cases)
             if let Some(b) = w.obj_mut(k) {
@@ -602,13 +634,17 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             // spec: S-0314 claim 22 (revision 31: a settling depot with no contact stays in its repair behaviour, checking every tick, while its special-3 slot animation runs)
             return 1;
         }
-        // spec: S-0314 claim 22 (revision 31: in waiting, or settling once special-3 no longer runs, a depot left without any contact returns to guard at that processing, without an animation wait)
+        // spec: S-0314 claim 22 (revision 31: in waiting, or settling once special-3 no longer runs, a depot left without any contact returns to guard at that processing, without an animation wait); S-0108 claim 20 (in waiting the depot leaves its repair behaviour)
         if let Some(b) = w.obj_mut(k) {
             b.depot.serviced = None;
             b.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
         }
         return 1;
     };
+    if let Some(b) = w.obj_mut(k) {
+        // A contact again: a send-away's slot changes no longer stand for a contact loss (Q-1620 interim).
+        b.depot.sent_away = false;
+    }
     if w.obj(k).is_some_and(|b| b.depot.serviced != Some(v))
         && let Some(b) = w.obj_mut(k)
     {
@@ -678,6 +714,8 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                 // spec: S-0314 claim 6 (settling, more needed or done: working; the second step falls due D + K_u − 1 ticks later)
                 Some(StepOutcome::MoreNeeded | StepOutcome::Done) => {
                     set(w, phase::WORKING);
+                    // spec: S-0108 claim 20 (entering the working phase: special-1 starts, active-1 and idle stop)
+                    crate::depot_anim::working_entered(w, k);
                     d.wrapping_add(ku).wrapping_sub(1)
                 }
             }
@@ -694,7 +732,13 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                 // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, attempted even when the departure then fails; the vehicle is sent away)
                 Some(StepOutcome::Done | StepOutcome::NotNeeded) | None => {
                     announce(w, k, v, crate::combat::effects::Sound::UnitRepaired);
-                    if !send_away(w, k, v) {
+                    // spec: S-0108 claim 20 (a working step answers done or not needed: the slot changes come on the tick of that step, before the contact is released)
+                    crate::depot_anim::service_ended(w, k);
+                    if send_away(w, k, v) {
+                        if let Some(b) = w.obj_mut(k) {
+                            b.depot.sent_away = true;
+                        }
+                    } else {
                         // spec: S-0314 claim 6 (a failed departure from working leaves the vehicle in settling with a 1-tick retry)
                         set(w, phase::SETTLING);
                     }
@@ -706,6 +750,8 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
                     if owner.is_some_and(|h| crate::seams::available_credits(w, h) == 0) {
                         announce(w, k, v, crate::combat::effects::Sound::LowFunds);
                     }
+                    // spec: S-0108 claim 20 (a working step answers cannot pay: production and special-2 stop, special-3 and active-1 start)
+                    crate::depot_anim::service_ended(w, k);
                     // spec: S-0314 claim 6 (cannot pay: contact kept, back to settling, first retry on the next tick)
                     set(w, phase::SETTLING);
                     1

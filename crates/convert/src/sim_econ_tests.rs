@@ -821,3 +821,20 @@ fn bunker_wall_anims_are_converted() {
     assert_eq!(p.special_anim_two, None);
     assert_eq!(p.special_anim_four_damaged, None);
 }
+
+// spec: S-0108 Import mapping and claim 20 (the depot slot model's names: production and special-1 to special-3, cut to 15 bytes, an empty damaged name taking the normal name; a slot with no name left out)
+#[test]
+fn slot_model_names_are_converted() {
+    let art = "[MILLART]\nProductionAnim=ABCDEFGHIJKLMNOPQ\nSpecialAnim=S1\nSpecialAnimDamaged=S1D\nSpecialAnimThree=S3\nSpecialAnimThreeDamaged=\n";
+    let (s, _) = import(BASE, art);
+    let names = s.buildings["MILL"].econ.slot_names.clone().unwrap();
+    let pair = |a: &str, b: &str| [a.to_owned(), b.to_owned()];
+    assert_eq!(
+        names.get("ProductionAnim"),
+        Some(&pair("ABCDEFGHIJKLMNO", "ABCDEFGHIJKLMNO"))
+    );
+    assert_eq!(names.get("SpecialAnim"), Some(&pair("S1", "S1D")));
+    assert_eq!(names.get("SpecialAnimThree"), Some(&pair("S3", "S3")));
+    assert_eq!(names.get("SpecialAnimTwo"), None);
+    assert_eq!(s.buildings["PLANT"].econ.slot_names, None);
+}

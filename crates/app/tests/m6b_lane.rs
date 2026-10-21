@@ -420,7 +420,9 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
     let mut docked = None;
     let mut first_rise = None;
     let mut saved = false;
-    let mut start = 0;
+    // The health at the order; a repair step is any later rise (the depot
+    // link may stay untethered while it repairs, S-0314).
+    let mut start = lane.permille(unit);
     for _ in 0..6000 {
         lane.ticks(1);
         let w = lane.world();
@@ -444,7 +446,7 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
             );
         }
         let pm = lane.permille(unit);
-        if docked.is_some() && pm > start && first_rise.is_none() {
+        if pm > start && first_rise.is_none() {
             first_rise = Some(t);
             println!("first repair step at tick {t}; health {pm} per mille");
         }
@@ -470,6 +472,11 @@ fn repair_scene(lane: &mut Lane, depot: ObjectId, unit: ObjectId, at: CellXY, sh
         lane.look_at(at);
         lane.ticks(1);
         lane.save(shot);
+        lane.print_slots(depot);
+    } else {
+        // The depot after the service ended (S-0108 claim 20: special-3, then idle).
+        lane.ticks(30);
+        lane.save(&format!("{shot}-after"));
         lane.print_slots(depot);
     }
 }
@@ -1507,6 +1514,12 @@ impl Lane {
         let s = self.c.session.as_ref().unwrap();
         let live = s.loaded.live.as_ref().expect("a live game");
         println!("  slot animations: {:?}", live.slot_names(id));
+        // A repair depot's slots are simulation state (S-0108 claim 20).
+        let depot: Vec<String> = glasnost_sim::depot_anim::draws(self.world(), id)
+            .into_iter()
+            .map(|d| format!("{:?} frame {} stage {}", d.slot, d.frame, d.stage))
+            .collect();
+        println!("  depot slot animations: {depot:?}");
     }
 
     fn save(&mut self, name: &str) {

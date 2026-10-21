@@ -872,7 +872,7 @@ fn trace_to_guard(w: &mut World, d: ObjectId, n: i32) -> Vec<(Option<Behaviour>,
     out
 }
 
-// spec: S-0314 claim 22 (revision 31: a depot left without any contact reacts at its next repair processing: in waiting it returns to guard without an animation wait; in working it enters settling and rechecks after 1 tick; in settling it returns to guard once special-3 no longer runs, at once while the S-0108 claim 20 slot seam reports none)
+// spec: S-0314 claim 22 (revision 31: a depot left without any contact reacts at its next repair processing: in waiting it returns to guard without an animation wait; in working it enters settling and rechecks after 1 tick; in settling it returns to guard once special-3 no longer runs, at once for a depot type with no slot names, whose special-3 never runs, S-0108 claim 20)
 // spec: S-0314 state table (waiting, working and settling with no contact)
 #[test]
 fn claim_22_contact_loss_by_phase() {
@@ -923,9 +923,9 @@ fn claim_22_contact_loss_by_phase() {
     }
 }
 
-// spec: S-0314 claims 6 and 22 (the slot seam: no depot slot animation runs in the simulation until S-0108 claim 20's slot model is built, so neither hold applies)
+// spec: S-0314 claims 6 and 22 and S-0108 claim 20 (a depot type whose art names no slot animation runs none of the modelled slots, so neither hold applies)
 #[test]
-fn slot_seam_reports_no_running_slot() {
+fn no_slot_names_no_running_slot() {
     let (w, d, _) = docked_scene(300);
     for s in [depot::DepotSlot::Production, depot::DepotSlot::Special3] {
         assert!(!depot::slot_running(&w, d, s));

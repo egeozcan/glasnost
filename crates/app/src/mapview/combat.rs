@@ -17,7 +17,9 @@
 //! which corners are drawn is not established), the pip scale (claims 9 to
 //! 15), the self-heal marker (claim 16), the control-group number (claim
 //! 17: there are no control groups yet) and the repair wrench (claim 19:
-//! buildings are not repaired yet).
+//! buildings are not repaired yet). The bomb icon of S-0519 claim 24 is
+//! drawn: the first status extra of its carrier, through the cursor
+//! palette ([`Cache::bomb_item`]).
 
 use std::collections::BTreeMap;
 
@@ -38,6 +40,27 @@ pub const PIP_SPRITE: &[u8] = b"PIPS.SHP"; // spec: S-0111 Import mapping (overl
 pub const BRACKET_SPRITE: &[u8] = b"PIPBRD.SHP"; // spec: S-0111 Import mapping (overlay sprites)
 /// The overlay palette the pips and brackets use (S-0111 Import mapping).
 pub const OVERLAY_PALETTE: &[u8] = b"PALETTE.PAL"; // spec: S-0111 Import mapping (overlay palette)
+/// The bomb icon sprite (S-0519 claim 24, S-0111 Import mapping).
+pub const BOMB_SPRITE: &[u8] = b"BOMBCURS.SHP"; // spec: S-0111 Import mapping (BOMBCURS.SHP, the bomb icon of S-0519 claim 24)
+/// The cursor palette the bomb icon uses (S-0519 claim 24, S-0111 Import
+/// mapping).
+pub const MOUSE_PALETTE: &[u8] = b"MOUSE.PAL"; // spec: S-0111 Import mapping (the wrench and the bomb sprite use MOUSE.PAL)
+
+/// The image frame of a bomb icon in tick `n` for a bomb planted in tick
+/// `t`, with timed delay `delay` and flicker rate `flicker` (S-0519 F3).
+pub fn bomb_frame(n: i32, t: i32, delay: i32, flicker: i32) -> usize {
+    // spec: S-0519 F3 (q = ⌊D / 6⌋; when q = 0 our engine substitutes q = 1)
+    let q = (delay / 6).max(1);
+    // spec: S-0519 F3 (b = 1 when (n mod 2F) ≥ F, else 0; when F = 0 our engine uses b = 0)
+    let b = if flicker > 0 {
+        i32::from((n % (2 * flicker)) >= flicker)
+    } else {
+        0
+    };
+    // spec: S-0519 F3 (frame = min(11, 2⌊(n − t) / q⌋ + b), divisions truncated toward zero, frames from 0)
+    let frame = (2 * ((n - t) / q) + b).min(11);
+    usize::try_from(frame).unwrap_or(0)
+}
 
 /// Health segments of a vehicle or aircraft bar (S-0111 claim 6).
 pub const UNIT_SEGMENTS: i32 = 17; // spec: S-0111 Constants (health segments, vehicle or aircraft)
@@ -120,6 +143,8 @@ pub enum Sprite {
     Pips,
     /// The bracket sprite.
     Bracket,
+    /// The bomb icon sprite (S-0519 claim 24).
+    Bomb,
 }
 
 impl Sprite {
@@ -128,6 +153,7 @@ impl Sprite {
         match self {
             Sprite::Pips => PIP_SPRITE,
             Sprite::Bracket => BRACKET_SPRITE,
+            Sprite::Bomb => BOMB_SPRITE,
         }
     }
 }
@@ -288,17 +314,6 @@ pub enum Marker {
         /// Half-width, pixels.
         half: i32,
     },
-    /// A planted bomb the viewer sees (S-0519 claim 10), flickering red and
-    /// white with the stage; our placeholder for the bomb icon.
-    Bomb {
-        /// The icon frame of S-0519 F3, 0 to 11.
-        frame: i32,
-    },
-    /// A demolition charge counting down on a building (S-0519 claim 14,
-    /// the flash): an orange diamond.
-    Charge,
-    /// A building marked by an air strike (S-0519 claim 17): a cyan ring.
-    Marked,
     /// A crate on the map (S-0520): a yellow box, our placeholder for the
     /// crate overlay's picture, which the view draws only from the map.
     Crate,
@@ -462,39 +477,6 @@ fn marker_image(m: Marker) -> IndexedImage {
             let r = half.max(4);
             disc(r, (r / 2).max(1), Some(880), ink::GREEN, ink::GREEN)
         }
-        Marker::Bomb { frame } => {
-            // An 11 × 11 disc, red on even frames and white on odd ones, its
-            // centre growing with the frame (the icon's progress).
-            let ink = if frame % 2 == 0 { ink::RED } else { ink::WHITE };
-            let mut px = vec![0u8; 121];
-            for y in 0..11i32 {
-                for x in 0..11i32 {
-                    let (dx, dy) = (x - 5, y - 5);
-                    let r2 = dx * dx + dy * dy;
-                    if r2 <= 25 {
-                        px[(y * 11 + x) as usize] = if r2 <= frame * 25 / 11 {
-                            ink::YELLOW
-                        } else {
-                            ink
-                        };
-                    }
-                }
-            }
-            IndexedImage::new(11, 11, px).expect("sized")
-        }
-        Marker::Charge => {
-            // A 13 × 13 diamond.
-            let mut px = vec![0u8; 169];
-            for y in 0..13i32 {
-                for x in 0..13i32 {
-                    if (x - 6).abs() + (y - 6).abs() <= 6 {
-                        px[(y * 13 + x) as usize] = ink::ORANGE;
-                    }
-                }
-            }
-            IndexedImage::new(13, 13, px).expect("sized")
-        }
-        Marker::Marked => disc(20, 10, Some(880), ink::CYAN, ink::CYAN),
         // A cloud twice as wide as high (S-0101 F1's ground projection).
         Marker::Gas => disc(14, 7, None, ink::GREEN, ink::OUTLINE),
         Marker::Smoke => disc(8, 4, None, ink::WHITE, ink::OUTLINE),
@@ -621,6 +603,7 @@ type Frame = (u32, (i32, i32), (i32, i32));
 pub struct Cache {
     placeholder_row: Option<usize>,
     overlay_row: Option<Option<usize>>,
+    mouse_row: Option<Option<usize>>,
     markers: BTreeMap<Marker, u32>,
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
 }
@@ -642,6 +625,47 @@ impl Cache {
             // spec: S-0103 claim 1 (a palette file's components are loaded ×4)
             let pal = palette_from_file(&pal, &PaletteQuirks::default());
             Some(scene.add_row(row565(&pal.colors)))
+        })
+    }
+
+    /// The cursor palette's row, added on first use; `None` when the
+    /// palette is missing.
+    fn mouse_row(&mut self, scene: &mut Scene, assets: &Assets) -> Option<usize> {
+        *self.mouse_row.get_or_insert_with(|| {
+            let pal = Palette6::parse(assets.get(MOUSE_PALETTE)?).ok()?;
+            // spec: S-0103 claim 1 (a palette file's components are loaded ×4)
+            let pal = palette_from_file(&pal, &PaletteQuirks::default());
+            Some(scene.add_row(row565(&pal.colors)))
+        })
+    }
+
+    /// The bomb icon's item at image frame `frame`, centred on the
+    /// carrier's draw point `at` (S-0519 claim 24); `None` when the sprite,
+    /// its frame or the cursor palette is missing.
+    pub fn bomb_item(
+        &mut self,
+        scene: &mut Scene,
+        assets: &Assets,
+        at: (i32, i32),
+        frame: usize,
+        object: Option<u32>,
+    ) -> Option<Item> {
+        // spec: S-0519 claim 24 (the fixed cursor palette, no house-colour remapping, neutral brightness, no translucency)
+        let row = self.mouse_row(scene, assets)?;
+        let (image, (fx, fy), (cw, ch)) = self.frame(scene, assets, Sprite::Bomb, frame)?;
+        Some(Item {
+            image,
+            // spec: S-0519 claim 24, S-0102 claim 19 (centred placement on the draw point, no further displacement)
+            x: at.0 - cw / 2 + fx,
+            y: at.1 - ch / 2 + fy,
+            // spec: S-0519 claim 24 (a status extra: after the object layers, with no depth test)
+            test: DepthTest::Ignore,
+            depth: flat(),
+            paint: Paint::Row(row),
+            group: Group::Status,
+            provisional: false,
+            object,
+            stack: None,
         })
     }
 

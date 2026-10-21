@@ -361,6 +361,16 @@ pub struct EconFields {
     /// Buildings: the art `ProductionAnimDamaged`, an animation type name as written (S-0402 Terms, claim 11); absent: none.
     #[serde(default)]
     pub production_anim_damaged: Option<String>,
+    /// Buildings: the slot names of the *production*, *special-1*,
+    /// *special-2* and *special-3* slots as S-0108's Import mapping reads
+    /// them (each cut to 15 bytes, an empty value keeping the earlier name,
+    /// an empty damaged name taking the normal name), keyed by the slot's
+    /// art base key, each `[normal, damaged]`; a slot with both names empty
+    /// is left out. The repair depot's slot model reads them (S-0108 claim
+    /// 20); absent: none.
+    // nocite: a map of name pairs, our format's shape
+    #[serde(default)]
+    pub slot_names: Option<std::collections::BTreeMap<String, [String; 2]>>,
     /// Buildings: whether the type has a build-up sprite, from the art
     /// `Buildup` name (S-0108 claims 1 and 5, Import mapping; S-0408 claims
     /// 3 and 4); absent: no build-up sprite.

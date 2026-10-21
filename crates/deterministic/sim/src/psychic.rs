@@ -37,8 +37,8 @@ pub const REACH_SCALE: i64 = 256; // spec: S-0610 Constants (sensor reach scale 
 /// The berserk tint of an object (claim 7, presentation): the position in
 /// the colour-adjustment table (S-0006) of the extra additive tint a
 /// berserk vehicle or infantry is drawn with; `None` for objects that are
-/// not berserk and for aircraft and buildings. The view does not draw
-/// per-object tints yet, so this is the query its drawing will read.
+/// not berserk and for aircraft and buildings. The view's drawing reads
+/// [`berserk`] and the selector from the import (`mapview::protection`).
 pub fn tint(w: &World, id: ObjectId) -> Option<i32> {
     let o = w.obj(id)?;
     // spec: S-0610 claim 7 (vehicles and infantry only; berserk aircraft and buildings get no tint)
