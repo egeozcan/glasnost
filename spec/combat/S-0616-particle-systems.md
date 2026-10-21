@@ -2,13 +2,13 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 12
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-21
 measurements: []
-requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540]
+requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540, Q-1590]
 supersedes: []
 ---
 
@@ -591,8 +591,10 @@ stands alone. This spec adds the terms after them.
     particle, it emits its whole line at once and is then marked. The line has
     *n* = trunc(*L* × *p*) particles (F12), where *L* is the integer distance from the system to its
     target point and *p* is the type's particles-per-lepton field. Particles are made one after another. For each, the system takes three ranged draws R(0, 2147483646), then the particle's creation draws (S-0202 claim 15), then four more ranged draws R(0, 2147483646), all of this before the next particle's first draw. That is seven ranged draws per particle besides its creation draws. The values that place the particles along a helix and the
-    laser line are used only for drawing; the draws themselves still advance the stream (claim 2). When *n* ≤ 0 nothing is made and nothing is drawn, but the system is still
-    marked.
+    laser line are used only for drawing; the draws themselves still advance the stream (claim 2). When *n* ≤ 0 no particle is made and no ranged draw is taken, but the system is still
+    marked; whether it makes a laser beam is claim 31's. Whether the
+    system has a held type plays no part in the count *n*. A system without one is claim 20's
+    case: the original's behaviour and our engine's departure are stated there only.
 
     In that turn and every later one, after the emission step, each particle updates, oldest first
     (claims 3 and 18). Then the particles with the dead mark are removed. This
@@ -643,7 +645,17 @@ stands alone. This spec adds the terms after them.
     - **Spark or railgun system with no held type** that bursts or emits a line with *n* ≥ 1 (not a
       division: the original uses a missing particle): our engine takes the decision draw, if any,
       and nothing else, and makes no particle. The railgun system is still marked, and the spark
-      counter still counts down.
+      counter still counts down. A railgun system therefore takes no ranged draw at all in its line
+      turn: none of claim 17's per-particle draws, for any particle of the line. This case arises
+      through a no-type reading of the held-type key, such as `<none>` (Import mapping). In the original,
+      when the line count *n* of claim 17 is at least 1, such a railgun system stops the game
+      with an error. Our engine
+      instead makes claim 31's laser beam when the type has the laser flag, exactly as for a
+      system with a held type: in every line turn the original completes, the beam depends only
+      on the laser flag (it is made without a held type when *n* ≤ 0, claim 31). The importer
+      warns for a railgun system type with no held type and a positive particles-per-lepton
+      field. This is a bad-data departure (glossary, *departure*): the safe result, the beam, is
+      this spec's choice. (Q-1590 question 1.)
     - **Spark-turns field of 0 or less** (claim 15; also the absent-key value, Import mapping):
       the original does not stop here, but such a system is never marked by its counter. It ends
       only by its owner's removal (claim 4), a positive lifetime or the trigger action of claim 1.
@@ -659,8 +671,9 @@ stands alone. This spec adds the terms after them.
       turn, where the original takes no further damage-sparks draw once the place is held: an
       expected draw-count difference, not a mismatch. The importer warns for a nonpositive value, including the absent-key default.
 
-    - Backing: `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions). The spark-turns case is the exception: the original's behaviour is known and `measurable` (scenario P22, part c), and the fix departs from it by decision.
-    - Confidence: high that the original stops; the replacement behaviour is a design choice. High for the original's spark-turns behaviour.
+    - Backing (the original): `unmeasured`: the original stops or faults in these cases, so there is no behaviour to compare; the negative-radius case is not known (Open questions). One case is an exception: for the spark-turns case the original's behaviour is `measurable` (scenario P22, part c). The railgun line with *n* ≥ 1 and no held type is a second exception: that the original stops is `measurable` (scenario P31 part c, with part d establishing, through the missing first particle at a detonation, that the `<none>` reading gives no held type).
+    - Confidence (the original): high that the original stops or faults in the cases other than the railgun line; high for the original's spark-turns behaviour; medium for the railgun stop, until P31 parts c and d have run.
+    - Our engine's behaviour in every case of this claim, the railgun beam with *n* ≥ 1 and no held type included, is a departure by decision. Backing: `unmeasured` (a design decision; no measurement of the original decides it). Confidence: high (fixed by this claim).
 
 21. **Absent held-type key.** A particle system type section that is read without a held-type key
     names, as its held type, a particle type with the empty name. That type is registered by
@@ -732,8 +745,8 @@ fire and no kind; *pixel kinds* are spark and railgun.
     per-pixel light-alpha value of S-0104 claim 15 still applies, as for any sprite drawn at a
     fixed brightness: shroud and fog pieces darken it and light-glow images change it (S-0110
     claims 5 and 6). So under the default light-alpha of 127 a particle shows the same shade row
-    on every cell. This replaces the interim rule of the request (unscaled ground level of its
-    cell, S-0103 claim 8 row 5), which does not hold for particles.
+    on every cell. The unscaled ground level of the cell (S-0103 claim 8 row 5) does not hold
+    for particles.
     - Backing: `measurable` (scenario P25)
     - Confidence: high for the palette and the fixed brightness; medium for the light-alpha
       step, which is the same drawing path as the other fixed-brightness sprites.
@@ -867,10 +880,24 @@ fire and no kind; *pixel kinds* are spark and railgun.
     - **Railgun laser.** A railgun system whose type has the laser flag makes one laser beam in
       its line turn (claim 17), from the system's position to its target point: inner colour the
       type's laser colour, outer colour and spread black, lasting 10 ticks, not blinking, fading
-      from intensity 0.5 to 0. How a laser beam looks is Q-1521's subject.
+      from intensity 0.5 to 0. The beam is made whatever the line
+      count *n* in every line turn the original completes: when *n* ≤ 0 (no particle), with or
+      without a held type, and when *n* ≥ 1 with a held type. The case of *n* ≥ 1 without a held
+      type is claim 20's, for the original and for our engine. A system whose target point is its own position
+      (claim 22, a detonation railgun) makes a beam of zero length; whether it shows is the
+      beam drawing's (S-0518). (Q-1590.) How a laser beam
+      looks is Q-1521's subject.
     How a spotlight looks, and how the light draw of claim 15 changes it, is open (Open questions).
-    - Backing: `measurable` (scenario P31)
-    - Confidence: medium
+    - Backing: `measurable` (scenario P31: the main part for the beam with a held type and
+      *n* ≥ 1; part b for the beam with *n* = 0, with and without a held type, part d
+      establishing that the run written `<none>` has none). The beam with *n* < 0, from a
+      negative particles-per-lepton field, is `unmeasured`: P31 samples only *n* = 0, and a
+      negative field is bad data no stock type uses. The zero-length beam of a detonation
+      railgun is `unmeasured`: whether it shows is the beam drawing's (S-0518). The case of
+      *n* ≥ 1 without a held type has its backing in claim 20.
+    - Confidence: medium for the lights; medium that the beam is made in every line turn the
+      original completes, with or without a held type, at *n* = 0 and *n* ≥ 1 (P31's main part and
+      parts b and d sample it); low for *n* < 0; low for the zero-length beam.
 
 ## Formulas
 
@@ -1038,7 +1065,7 @@ divisions). With δ_F < −1 the divisor is negative and the formula applies unc
 **F14. Railgun beam end point.** Computed once, at the shot that makes a railgun emitter (claim
 1). *P* is the emitter's position (the fire point, integers) and *Q* the target's position at the
 shot (integers; the target's own position, with no further raise). Let δ be the fixed
-single-precision value nearest 1/49, exactly 10956549 / 536870912 (about 0.020408163).
+single-precision value nearest 1/49, exactly 10 956 549 / 536 870 912 (about 0.020408163).
 This constant is unchanged by the rounding mode; it is not a fresh division in that mode.
 For *i* = 0 … 49:
 
@@ -1091,7 +1118,7 @@ The screen difference does not depend on the view position. Confidence medium fo
 boundaries, which depend on the table values; the bands are high.
 
 **F16. Particle colour** (pixel kinds). Own colour *c*₀ at creation, per 8-bit channel, with the
-creation colour draw *r* of S-0202 claim 15 and *f* = *r* × 4.656613 × 10⁻¹⁰ in single precision:
+creation colour draw *r* of S-0202 claim 15 and *f* = *r* × 4.656 613 × 10⁻¹⁰ in single precision:
 
 > *c*₀ = trunc(*s*₁ × (1 − *f*) + *s*₂ × *f*), clamped to 0 … 255,
 
@@ -1167,7 +1194,7 @@ Then the light-alpha step of claim 28: *c* ← ⌊*c* × *a* / 128⌋ when *a* <
 | Deactivated-vehicle cadence divisor | 10 | leptons per unit of the position term (division truncated toward zero) | claim 1 |
 | Deactivated-vehicle cadence weight | 65536 | dimensionless (weight of the *y* term) | claim 1 |
 | Railgun end-point samples | 50 (*i* = 0 … 49) | sample points along the beam | F14 |
-| Railgun end-point step | 10956549 / 536870912, the fixed single-precision value nearest 1/49 | dimensionless fraction of the beam per sample | F14 |
+| Railgun end-point step | 10 956 549 / 536 870 912, the fixed single-precision value nearest 1/49 | dimensionless fraction of the beam per sample | F14 |
 | Destruction-smoke depth limit | 10 | leptons below the surface | claim 1 |
 | Damage-smoke healing-mark depth | 10 | leptons below the surface (the mark applies below −10) | claim 1 |
 | Shared gas system position (hypothesis) | (2688, 2688, 0) | leptons | Not given by S-0613; decided by P1 part b. Its position is observable through the second trigger action of claim 1 (Open questions). |
@@ -1248,7 +1275,7 @@ Beam sampling (claim 1, F14):
 
 | Key | Feeds | Form | Absent |
 |---|---|---|---|
-| none (engine constants, not imported) | beam sample count and fraction δ | 50 samples, indices 0 … 49; fixed single-precision fraction 10956549 / 536870912 | always these constants; neither a weapon nor a particle-system field changes them |
+| none (engine constants, not imported) | beam sample count and fraction δ | 50 samples, indices 0 … 49; fixed single-precision fraction 10 956 549 / 536 870 912 | always these constants; neither a weapon nor a particle-system field changes them |
 
 The game-wide railgun hit distance is imported by S-0306 claim 27's Import mapping; it does not
 set the sample spacing. Rounding follows S-0205 claim 5, not an INI field.
@@ -1258,7 +1285,7 @@ Rules file, particle system sections:
 | Key | Feeds | Form | Absent |
 |---|---|---|---|
 | `BehavesLike` | behaviour kind | word: `Smoke`, `Gas`, `Fire`, `Spark`, `Railgun`, letter case ignored | no kind; also when the word is unknown. Absent in a read section resets the kind to none. |
-| `HoldsWhat` | held type | particle type name; `<none>` gives no held type | a type with an empty name (claim 21) |
+| `HoldsWhat` | held type | particle type name; `<none>` gives no held type. A railgun-kind type with no held type and a positive particles-per-lepton field is bad data: importer warning, claim 20 | a type with an empty name (claim 21) |
 | `Lifetime` | system lifetime (S-0613) | integer, ticks | −1 |
 | `SpawnFrames` | spawn interval *T*₀ (smoke), emission interval (fire) | integer, ticks | 1 |
 | `Slowdown` | smoke emission timer growth | single-precision number | 0.0 |
@@ -1272,6 +1299,11 @@ Rules file, particle system sections:
 | `ParticlesPerCoord` | railgun particles per lepton *p* | double | 0.1 |
 | `SpiralDeltaPerCoord`, `SpiralRadius`, `PositionPerturbationCoefficient`, `MovementPerturbationCoefficient`, `VelocityPerturbationCoefficient` | railgun line shape (drawn only) | double | 0.025, 25.0, 0, 0, 0 |
 | `Laser`, `LaserColor`, `LightSize`, `OneFrameLight` | railgun laser, its inner colour, the light size λ and the one-frame-light flag (claim 31; drawn only) | boolean, colour, integer, boolean | no, 0,0,0, 0, no |
+
+The `<none>` reading of the held-type key (no held type, unlike an absent key) is S-0004
+claim 2's for this field. It is observable apart from the stop of claim 20: a system with no
+held type gets no first particle at a detonation (S-0613 claim 4). Backing: `measurable` (P31
+part d); confidence high.
 
 Rules file, particle sections:
 
@@ -1434,8 +1466,9 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   system leaves play. Falsified by no particle, or by more than one.
 - **P14. Detonation railgun.** A test warhead naming a railgun system. Observable: the number of
   particle systems in play and the draws over 1000 ticks. Expected: the system leaves play in the
-  first turn after its first particle ends, with no line and no draw of its own. Falsified by the
-  system staying in play or by a line of particles.
+  first turn after its first particle ends, with no line of particles and no draw of its own.
+  Falsified by the system staying in play or by a line of particles. (Its laser beam, if the type
+  has the laser flag, has zero length and is not judged here: claim 31.)
 - **P15. Natural smoke turning yellow.** A building whose type names a natural particle system, with
   a test rules file giving that system an emission interval of 8, a slow-down of 0 and a spawn
   cut-off of 100 (so that claim 9 does not mark it). Emission follows multiples of ⌊*T*⌋ (claim 9). Part a: a hit that
@@ -1572,7 +1605,7 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   frame in each place. Expected: identical pixels in all three places, equal to the frame drawn with
   the anim palette at brightness 1000 and no tint.
   Falsified by pixels that follow the cell's light level, the coloured light or the height, or match
-  the unit, house-colour or tile palette. The interim rule (unscaled ground level of the cell)
+  the unit, house-colour or tile palette. The unscaled ground level of the cell
   predicts a darker row on the dark ground; this run separates the two.
 - **P26. Image frames (claim 25).** Part a: a smoke type with a nonzero start-frame field and a
   loop-frame field other than 1 (named test rules), and a control with both at their absent values.
@@ -1629,11 +1662,44 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   by grouping by system or by sorting.
 - **P31. System lights and the railgun laser (claim 31).** Named test rules: a spark system with a
   light size and no one-frame flag, the same with the one-frame flag, and a railgun type with the
-  laser flag and a pure laser colour. Run at the highest and the middle detail setting. Observable:
+  laser flag, a pure laser colour, a held type and a particles-per-lepton field large enough that
+  the line count *n* of F12 is at least 1 at the firing distance. Run at the highest and the middle detail setting. Observable:
   frames with a spotlight, its size against the particle count, and the laser's frames and colour.
   Expected: the lasting spotlight only at the highest setting and only after a first-turn burst; the
   one-frame light at both settings while the system holds particles, sized by claim 31; the laser
   for 10 ticks in the laser colour, fading. Falsified by another count, size or duration.
+  Part b (Q-1590 question 2): a railgun system type with the laser flag, a pure laser colour, no
+  held type (its held-type key written as `<none>`, Import mapping; an absent key would give the
+  empty-named type of claim 21, which is a held type) and a particles-per-lepton field of 0, fired at a point a few cells away. Frame capture
+  from the tick of the shot through the 10 ticks after it. Expected: the laser line from the firer's system position to the
+  target point, in the laser colour, for 10 ticks, fading, and no particle. Falsified by no line,
+  a line lasting other than 10 ticks, or a particle.
+  Repeat with a held type and the same field of 0: the same line, no particle. Since *n* = 0 makes
+  no particle either way, part d's result says which case the run written `<none>` backs: the
+  case without a held type when part d finds no first particle, the beam alone otherwise.
+  Part c (Q-1590 question 1): the same type, its held type still written as `<none>`, with a
+  particles-per-lepton field large enough that the line count *n* of F12 is at least 1 at that
+  distance. The firer gets its fire order as scripted input at a fixed tick (the glossary's
+  scripted-input allowance), and each run is set to end 300 ticks after that order, long enough
+  for the firer to turn and fire. Observable: whether the game stops with an error before the
+  run's end. The tick of the stop and the frames just before it are not judged, since nothing
+  cited shows that they survive the stop. Expected: the game stops with an error. Control: the
+  same run with the held-type key absent reaches the run's end, and its recorder log, which
+  survives, shows that it fired, because the empty-named type of claim 21 is a held type. Part c
+  is judged together with part d. With part d finding no first particle for `<none>`, a `<none>`
+  run that reaches the run's end falsifies claim 20's stop. With part d finding a first particle, the
+  `<none>` run has a held type and part c backs nothing. A stop in the control too makes the
+  part inconclusive (a line of the empty-named type might fail for another reason).
+  Part d (the `<none>` reading, Import mapping): named test rules give a test warhead, as its
+  particle system, the railgun type of part b (laser flag, held-type key written as `<none>`,
+  particles-per-lepton field 0, so that its line has no particle and cannot stop the game).
+  Fire once at empty ground and record, from the recorder's particle log, the particles
+  created in the detonation tick and the system's existence. Controls: the same with the
+  held-type key absent, and with a named test particle type. Expected: no first particle in
+  the `<none>` run (S-0613 claim 4 for a system with no held type); exactly one, of the
+  empty-named type, in the absent-key control, and one of the named type in the other.
+  Falsified by a first particle in the `<none>` run while both controls show theirs. A control
+  without its particle makes the part inconclusive.
 
 ## Open questions
 
@@ -1659,3 +1725,12 @@ a tiny flat test map unless the part names terrain, game speed index 2, one huma
   are not analysed. No spec owns spotlights yet.
 - **Laser beam look** (claim 31): owned by the spec that answers Q-1521.
 - **Natural smoke and cloaking** (claim 1): S-0516 claim 18 states the removal at full cloaking and the displacement condition at full uncloaking; both specs agree. Scenario P1 parts b and c decide it.
+
+## Changes for other specs
+
+- **S-0613 claim 4.** "Only a system type whose section is never read has no held type and gets
+  no first particle" should also name a system type whose held-type key reads `<none>`, which
+  S-0004 claim 2 gives as no type for this field. Such a system gets no first particle at a
+  detonation either. Scenario: S-0616 P31 part d (it can join G3's held-type variants).
+- **S-0004 claim 2.** The `<none>` row for a particle system's emitted particle type gains a
+  scenario: S-0616 P31 part d.
