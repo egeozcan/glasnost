@@ -170,6 +170,18 @@ impl Painter {
                     }
                 }
                 Prim::Line { from, to, rgba } => out.extend(batch2d::line(*from, *to, *rgba)),
+                Prim::Layer { scale, list } => {
+                    // Clipped in logical pixels, then each destination
+                    // scaled; the sources stay, so the 2D batch's nearest
+                    // sampling enlarges glyphs, sprites and images alike.
+                    for mut q in self.quads(list) {
+                        let r = scale.rect(Rect::new(q.dst[0], q.dst[1], q.dst[2], q.dst[3]));
+                        if !r.is_empty() {
+                            q.dst = r4(r);
+                            out.push(q);
+                        }
+                    }
+                }
             }
         }
         out
@@ -224,6 +236,27 @@ mod tests {
             &px[(18 * 40 + 30) * 4..(18 * 40 + 30) * 4 + 3],
             &colour::PANEL[..3]
         );
+    }
+
+    #[test]
+    fn a_scaled_layer_enlarges_its_quads_after_clipping() {
+        use glasnost_ui::geom::Scale;
+        let p = Painter::new();
+        let mut inner = DrawList::new();
+        inner.fill(Rect::new(10, 4, 5, 3), colour::PANEL);
+        inner.text(0, 0, "Hi", colour::TEXT, Rect::new(0, 0, 3, 9));
+        let plain = p.quads(&inner);
+        let s = Scale::fit(200, (1280, 960));
+        let mut d = DrawList::new();
+        d.scaled(s, inner);
+        let q = p.quads(&d);
+        assert_eq!(q.len(), plain.len());
+        assert_eq!(q[0].dst, [20, 8, 10, 6]);
+        // The glyph clipped to 3 logical columns covers 6 screen columns and
+        // keeps its 3 source columns.
+        assert_eq!(q[1].dst[2], 6);
+        assert_eq!(q[1].src[2], 3);
+        assert_eq!(q[1].src, plain[1].src);
     }
 
     #[test]

@@ -28,10 +28,10 @@ use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
-use glasnost_ui::geom::{Point, Rect};
+use glasnost_ui::geom::{Point, Rect, Scale};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
 use glasnost_ui::modes::{self, Mode};
-use glasnost_ui::widget::Targets;
+use glasnost_ui::widget::{Focus, Nav, Targets};
 use glasnost_vfs::{FileRef, Vfs};
 
 use super::band;
@@ -140,11 +140,45 @@ pub struct Session {
     /// Each house's display colour by house index (the radar colours,
     /// S-0410 claim 8), for the psychic sensor's intent-line end squares.
     house_colours: Vec<[u8; 3]>,
-    /// The last drawn sidebar's targets.
+    /// The last drawn sidebar's targets, in the interface's logical pixels.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
+    /// The interface scale the sidebar, the options menu and the client's
+    /// notices are drawn at (M8 step C3); the battlefield keeps its pixels.
+    ui: Scale,
+    /// The keyboard focus on the sidebar.
+    hud_focus: Focus<HudHit>,
+    /// The keyboard focus on the options menu.
+    pause_focus: Focus<PauseHit>,
+    /// The keyboard's placement or aiming cell, while the keyboard aims.
+    aim: Option<CellXY>,
     /// Problems met while loading (shown in the log).
     pub problems: Vec<String>,
+}
+
+/// Our own keys for the sidebar and keyboard aiming (M8 step C3; the
+/// client maps keys to them).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SideKey {
+    /// The next or previous sidebar control (`true` forward).
+    Step(bool),
+    /// Press the focused control as a left click (`shift`: with the
+    /// force-select modifier), or place or fire at the keyboard cell while
+    /// it aims.
+    Press {
+        /// Shift was held.
+        shift: bool,
+    },
+    /// The focused control as a right click (hold or cancel production),
+    /// or end keyboard aiming as a battlefield right click does.
+    Back,
+    /// The next (+1) or previous (-1) sidebar tab with icons.
+    Tab(i32),
+    /// Move the keyboard cell one cell in a screen direction (−1, 0 or +1
+    /// in x and y), while placing or aiming.
+    Cell(i32, i32),
+    /// Place or fire at the keyboard cell, while it aims.
+    Place,
 }
 
 /// What the client must do after a gesture.
@@ -162,13 +196,16 @@ impl Session {
     /// Loads the map file `file` of the mounted install and starts the game
     /// `make` sets up from the map's rules, played from house `local` (a
     /// network game's slot), else from the first person's house. `cursor`
-    /// is the session's cursor palette keep (S-0111 claim 19a).
+    /// is the session's cursor palette keep (S-0111 claim 19a);
+    /// `colour_blind` draws the player houses in our colour-blind colours
+    /// (presentation only, M8 step C3).
     pub async fn start(
         vfs: &mut Vfs,
         file: &FileRef,
         make: live::MakeSetup<'_>,
         local: Option<HouseId>,
         cursor: &CursorPaletteKeep,
+        colour_blind: bool,
     ) -> Result<Self, String> {
         let bytes = vfs
             .read(file)
@@ -178,6 +215,7 @@ impl Session {
         let options = Options {
             skirmish: true,
             game: GameMode::Skirmish,
+            colour_blind,
             ..Options::default()
         };
         let mut loaded = load::load_with(
@@ -339,6 +377,10 @@ impl Session {
             house_colours,
             targets: Targets::new(),
             pause_targets: Targets::new(),
+            ui: Scale::one((1024, 768)),
+            hud_focus: Focus::new(),
+            pause_focus: Focus::new(),
+            aim: None,
             problems: Vec::new(),
         };
         problems.append(&mut s.loaded.problems);
@@ -415,23 +457,42 @@ impl Session {
     /// The radar map's top-left pixel on the screen (S-0410 F9's origin
     /// before the image's own offset).
     pub fn radar_origin(&self) -> (i32, i32) {
-        let r = Layout::new(self.screen).radar;
+        // The radar is drawn in the interface's logical pixels, so its
+        // origin is given in them too (equal to the screen's at 100 %).
+        let r = self.layout().radar;
         (r.x, r.y)
     }
 
-    /// The battlefield's rectangle on the screen.
-    pub fn map_rect(&self) -> Rect {
-        Layout::new(self.screen).map
+    /// The sidebar's layout in the interface's logical pixels.
+    fn layout(&self) -> Layout {
+        Layout::new(self.ui.ui)
     }
 
-    /// Sets the window size. The client's first call, as the game starts,
-    /// sets the starting size; a later change is an in-game change of the
-    /// battlefield view's dimensions (S-0213 claim 25).
-    pub fn resize(&mut self, size: (i32, i32)) {
+    /// The interface scale.
+    pub fn ui_scale(&self) -> Scale {
+        self.ui
+    }
+
+    /// The battlefield's rectangle on the screen: the screen left of the
+    /// scaled sidebar, at the battlefield's own pixel scale.
+    pub fn map_rect(&self) -> Rect {
+        let l = self.layout();
+        Rect::new(0, 0, self.ui.x(l.map.right()).max(0), self.screen.1)
+    }
+
+    /// Sets the window size and the interface scale. The client's first
+    /// call, as the game starts, sets the starting size; a later change of
+    /// the battlefield's size (a new window size, or a scale that widens or
+    /// narrows the sidebar) is an in-game change of the battlefield view's
+    /// dimensions (S-0213 claim 25).
+    pub fn resize(&mut self, size: (i32, i32), scale: Scale) {
         let first = !self.sized;
         self.sized = true;
-        if size != self.screen {
-            self.screen = size;
+        let before = self.map_rect();
+        let resized = size != self.screen;
+        self.ui = scale;
+        self.screen = size;
+        if resized || self.map_rect() != before {
             let c = self.centre;
             self.set_centre(c);
             let view_w = self.map_rect().w;
@@ -684,24 +745,32 @@ impl Session {
         if self.paused {
             return;
         }
-        let rows = Layout::new(self.screen).rows();
+        let rows = self.layout().rows();
         self.play.wheel_icons(delta, rows);
+    }
+
+    /// The sidebar target under a screen pixel.
+    fn hud_at(&self, p: Point) -> Option<HudHit> {
+        self.targets.hit(self.ui.to_ui(p))
     }
 
     /// A button went down.
     pub fn pointer_down(&mut self, b: Button, p: Point) {
         self.pointer = Some(p);
         self.press = Some((p, b));
+        // The pointer takes over from the keyboard.
+        self.hud_focus.shown = false;
+        self.pause_focus.shown = false;
+        let on_map = self.hud_at(p) == Some(HudHit::Map);
+        if on_map {
+            self.aim = None;
+        }
         // spec: S-0214 claim 18 (a left-button press in the battlefield can start a selection drag when sell, repair, power, building-placement and superweapon targeting modes are off)
-        self.drag = (b == Button::Left
-            && !self.paused
-            && self.play.tool == Tool::Select
-            && self.targets.hit(p) == Some(HudHit::Map))
-        .then(|| band::Drag::armed(p));
+        self.drag = (b == Button::Left && !self.paused && self.play.tool == Tool::Select && on_map)
+            .then(|| band::Drag::armed(p));
         // spec: S-0214 claim 27 (an accepted right-button press in the battlefield anchors a possible scroll drag at that pixel)
         self.right =
-            (b == Button::Right && !self.paused && self.targets.hit(p) == Some(HudHit::Map))
-                .then(|| band::RightDrag::armed(p));
+            (b == Button::Right && !self.paused && on_map).then(|| band::RightDrag::armed(p));
     }
 
     /// A button went up: a click or the end of a drag.
@@ -716,32 +785,14 @@ impl Session {
             return SessionEvent::None;
         }
         if self.paused {
-            return match self.pause_targets.hit(p) {
-                Some(PauseHit::Resume) => {
-                    self.paused = false;
-                    SessionEvent::None
-                }
-                // Q-1806 (interim: a network game keeps the room's speed)
-                Some(PauseHit::Speed(_)) if self.network => SessionEvent::None,
-                Some(PauseHit::Speed(d)) => {
-                    // spec: S-0201 claim 8 (the options menu's speed control)
-                    self.speed = hud::step_speed(self.speed, d);
-                    SessionEvent::None
-                }
-                Some(PauseHit::Surrender) => {
-                    self.paused = false;
-                    self.play.surrender();
-                    SessionEvent::None
-                }
-                Some(PauseHit::Settings) if !self.network => SessionEvent::Settings,
-                Some(PauseHit::Settings) => SessionEvent::None,
-                Some(PauseHit::Leave) => SessionEvent::Leave,
+            return match self.pause_targets.hit(self.ui.to_ui(p)) {
+                Some(hit) => self.pause_hit(hit),
                 None => SessionEvent::None,
             };
         }
         let dragged = drag.is_some_and(|d| d.active) && b == Button::Left;
         let scrolled = right.is_some_and(|r| r.scrolling) && b == Button::Right;
-        match self.targets.hit(start) {
+        match self.hud_at(start) {
             // spec: S-0214 claim 27 (a scroll drag's release neither clears the selection, nor cancels a targeting mode, nor gives an order)
             // spec: S-0411 claim 10 (a classified right drag and release keep placement mode and the ready item: no cancellation, no refund)
             Some(HudHit::Map) if scrolled => {}
@@ -761,27 +812,238 @@ impl Session {
                 self.show_markers();
             }
             Some(HudHit::Radar) if b == Button::Left => {
-                let l = Layout::new(self.screen);
+                let l = self.layout();
+                // The radar's pixel, in the logical pixels it is drawn in.
+                let u = self.ui.to_ui(p);
                 if let Some(cell) = self.radar.as_ref().and_then(|r| {
-                    r.cell_at(&self.play.game.world, p.x - l.radar.x, p.y - l.radar.y)
+                    r.cell_at(&self.play.game.world, u.x - l.radar.x, u.y - l.radar.y)
                 }) && !self.play.click_radar(cell)
                 {
                     let (x, y) = glasnost_render::projection::cell_centre(cell.x, cell.y);
                     self.set_centre(project_lifted(x, y, 0));
                 }
             }
-            Some(HudHit::Tab(i)) => self.play.tab_click(i),
-            Some(HudHit::Cameo(n)) => self.play.cameo_click(n, b, mods.force_select),
             // spec: S-0411 claim 18 (a page button acts on release over the button after a press there)
-            Some(HudHit::Scroll(d)) if self.targets.hit(p) == Some(HudHit::Scroll(d)) => {
-                let rows = Layout::new(self.screen).rows();
-                self.play.scroll_icons(d, rows);
+            Some(HudHit::Scroll(d)) if self.hud_at(p) == Some(HudHit::Scroll(d)) => {
+                self.hud_hit(HudHit::Scroll(d), b, false);
             }
-            Some(HudHit::Mode(m)) => self.play.mode_click(m),
-            Some(HudHit::Options) => self.paused = true,
+            Some(hit @ (HudHit::Tab(_) | HudHit::Cameo(_) | HudHit::Mode(_) | HudHit::Options)) => {
+                self.hud_hit(hit, b, mods.force_select)
+            }
             _ => {}
         }
         SessionEvent::None
+    }
+
+    /// A sidebar control pressed with button `b` (a click, or the
+    /// keyboard's press of the focused control).
+    fn hud_hit(&mut self, hit: HudHit, b: Button, shift: bool) {
+        match hit {
+            HudHit::Tab(i) => self.play.tab_click(i),
+            HudHit::Cameo(n) => self.play.cameo_click(n, b, shift),
+            HudHit::Scroll(d) => {
+                let rows = self.layout().rows();
+                self.play.scroll_icons(d, rows);
+            }
+            HudHit::Mode(m) => self.play.mode_click(m),
+            HudHit::Options => self.paused = true,
+            HudHit::Map | HudHit::Radar => {}
+        }
+    }
+
+    /// An options-menu control pressed (a click or the keyboard).
+    fn pause_hit(&mut self, hit: PauseHit) -> SessionEvent {
+        match hit {
+            PauseHit::Resume => {
+                self.paused = false;
+                SessionEvent::None
+            }
+            // Q-1806 (interim: a network game keeps the room's speed)
+            PauseHit::Speed(_) if self.network => SessionEvent::None,
+            PauseHit::Speed(d) => {
+                // spec: S-0201 claim 8 (the options menu's speed control)
+                self.speed = hud::step_speed(self.speed, d);
+                SessionEvent::None
+            }
+            PauseHit::Surrender => {
+                self.paused = false;
+                self.play.surrender();
+                SessionEvent::None
+            }
+            PauseHit::Settings if !self.network => SessionEvent::Settings,
+            PauseHit::Settings => SessionEvent::None,
+            PauseHit::Leave => SessionEvent::Leave,
+        }
+    }
+
+    /// A keyboard step on the open options menu (our own keys, M8 step
+    /// C3).
+    pub fn pause_key(&mut self, n: Nav) -> SessionEvent {
+        match self.pause_focus.nav(&self.pause_targets, n) {
+            Some(hit) => self.pause_hit(hit),
+            None => SessionEvent::None,
+        }
+    }
+
+    /// Whether the keyboard cell aims a placement or a superweapon now.
+    pub fn aiming(&self) -> bool {
+        self.aim.is_some() && matches!(self.play.tool, Tool::Place(_) | Tool::Superweapon { .. })
+    }
+
+    /// Whether the tool places a building or aims a superweapon, so that
+    /// the keyboard cell can aim it.
+    pub fn tool_aims(&self) -> bool {
+        !self.paused && matches!(self.play.tool, Tool::Place(_) | Tool::Superweapon { .. })
+    }
+
+    /// The cell under the battlefield's centre.
+    fn centre_cell(&mut self) -> CellXY {
+        let c = self.map_rect().centre();
+        self.under(c).0
+    }
+
+    /// Our own keyboard play of the sidebar and keyboard aiming (M8 step
+    /// C3). Every press goes through the same paths as the pointer's
+    /// clicks, so orders reach the replay alike.
+    pub fn sidebar_key(&mut self, k: SideKey) {
+        if self.paused {
+            return;
+        }
+        if !self.aiming() {
+            self.aim = None;
+        }
+        match k {
+            SideKey::Step(forward) => self.sidebar_step(forward),
+            SideKey::Press { .. } | SideKey::Place if self.aiming() => {
+                let cell = self.aim.expect("aiming");
+                self.play
+                    .click_map(Button::Left, None, cell, Modifiers::default());
+                self.show_markers();
+                if !self.aiming() {
+                    self.aim = None;
+                }
+            }
+            SideKey::Place => {}
+            SideKey::Press { shift } => {
+                if let Some(hit) = self.hud_focus.nav(&self.targets, Nav::Activate) {
+                    let before = self.play.tool;
+                    self.hud_hit(hit, Button::Left, shift);
+                    // A placement or an aim started from the keyboard aims
+                    // with the keyboard cell.
+                    let aims = matches!(self.play.tool, Tool::Place(_) | Tool::Superweapon { .. });
+                    if aims && self.play.tool != before {
+                        self.aim = Some(self.centre_cell());
+                    }
+                }
+            }
+            SideKey::Back if self.aiming() => {
+                let cell = self.aim.take().expect("aiming");
+                self.play
+                    .click_map(Button::Right, None, cell, Modifiers::default());
+            }
+            SideKey::Back => {
+                if let Some(hit @ HudHit::Cameo(_)) = self.hud_focus.target(&self.targets) {
+                    self.hud_hit(hit, Button::Right, false);
+                }
+            }
+            SideKey::Tab(d) => self.sidebar_tab(d),
+            SideKey::Cell(dx, dy) => {
+                if !matches!(self.play.tool, Tool::Place(_) | Tool::Superweapon { .. }) {
+                    return;
+                }
+                let c = match self.aim {
+                    Some(c) => c,
+                    None => self.centre_cell(),
+                };
+                let to = aim_step(c, dx, dy);
+                self.aim = Some(to);
+                self.keep_in_view(to);
+            }
+        }
+    }
+
+    /// Moves the sidebar focus; past the last or first shown icon the grid
+    /// moves one row, silently, as the wheel does (S-0411 claim 18).
+    fn sidebar_step(&mut self, forward: bool) {
+        if let Some(HudHit::Cameo(n)) = self.hud_focus.target(&self.targets) {
+            let w = &self.play.game.world;
+            let count = hud::entries(w, self.play.local, self.play.shown_tab()).len();
+            let next = if forward { n + 1 } else { n.wrapping_sub(1) };
+            if next < count && self.targets.rect_of(&HudHit::Cameo(next)).is_none() {
+                let rows = self.layout().rows();
+                self.play.wheel_icons(if forward { -1 } else { 1 }, rows);
+                self.hud_focus.at = Some(HudHit::Cameo(next));
+                self.hud_focus.shown = true;
+                return;
+            }
+        }
+        let n = if forward { Nav::Next } else { Nav::Prev };
+        self.hud_focus.nav(&self.targets, n);
+    }
+
+    /// Shows the next or previous tab that has icons and focuses its first
+    /// icon.
+    fn sidebar_tab(&mut self, d: i32) {
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        let shown = self.play.shown_tab() as i32;
+        let tabs = hud::TABS as i32;
+        let found = (1..=tabs)
+            .map(|k| (shown + d.signum() * k).rem_euclid(tabs) as usize)
+            .find(|&i| !hud::entries(w, local, i).is_empty());
+        if let Some(i) = found {
+            self.play.tab_click(i);
+            self.hud_focus.at = Some(HudHit::Cameo(0));
+            self.hud_focus.shown = true;
+        }
+    }
+
+    /// Centres the view on `cell` when its centre is not well inside the
+    /// battlefield.
+    fn keep_in_view(&mut self, cell: CellXY) {
+        let m = self.map_rect();
+        let v = self.view();
+        let level = self
+            .play
+            .game
+            .world
+            .cells
+            .cell(cell)
+            .map_or(0, |x| i32::from(x.level));
+        let (tx, ty) = cell_top(cell.x, cell.y);
+        // The cell's centre: half a cell (S-0101 F1's 30 × 15 half sizes) below its top corner.
+        let (wx, wy) = (tx, ty + 15 - TERRAIN_LIFT * level); // spec: S-0101 F1 (a cell's top corner projects to (30(x − y), 15(x + y)); the diamond is 60 × 30)
+        let p = Point::new(wx - v.origin.0 + m.x, wy - v.origin.1 + m.y);
+        // nocite: our own keyboard aiming (the cell stays a cell's width inside the view)
+        if !m.inset(60).contains(p) {
+            self.set_centre((wx, wy));
+        }
+    }
+
+    /// Whether the sidebar's keyboard focus mark is on `hit` (tests).
+    pub fn sidebar_focus(&self) -> Option<HudHit> {
+        self.hud_focus.target(&self.targets)
+    }
+
+    /// The sidebar's targets of the last frame, in logical pixels (tests).
+    pub fn hud_targets(&self) -> &Targets<HudHit> {
+        &self.targets
+    }
+
+    /// The options menu's targets of the last frame, in logical pixels
+    /// (tests).
+    pub fn pause_targets(&self) -> &Targets<PauseHit> {
+        &self.pause_targets
+    }
+
+    /// The options menu's keyboard focus (tests).
+    pub fn pause_focus(&self) -> Option<PauseHit> {
+        self.pause_focus.target(&self.pause_targets)
+    }
+
+    /// The keyboard cell, while it aims (tests and the drawing).
+    pub fn aim_cell(&self) -> Option<CellXY> {
+        self.aim.filter(|_| self.aiming())
     }
 
     /// The live box candidates whose box point is inside the box from
@@ -1010,8 +1272,9 @@ impl Session {
 
     /// The interface over the battlefield image: the image, the
     /// placement preview, our selection markers, the box, messages, the
-    /// sidebar and the options menu.
-    pub fn draw(&mut self) -> DrawList {
+    /// sidebar, the options menu and the client's `overlay` (notices in the
+    /// interface's logical pixels, drawn with the sidebar at its scale).
+    pub fn draw(&mut self, overlay: DrawList) -> DrawList {
         let size = self.screen;
         let m = self.map_rect();
         let mut d = DrawList::new();
@@ -1024,27 +1287,48 @@ impl Session {
         }
         let world_to_screen = |x: i32, y: i32| (x - view.origin.0 + m.x, y - view.origin.1 + m.y);
         // Placement preview (S-0411 claim 10, S-0406): green where the
-        // building would be placed, red elsewhere.
-        if let Some(p) = self.pointer.filter(|&p| m.contains(p)) {
-            let (cell, _) = self.under(p);
-            if let Some((cells, ok)) = self.play.preview(cell) {
-                let fill = if ok {
-                    [60, 220, 80, 110]
-                } else {
-                    [230, 50, 40, 110]
-                };
-                for c in cells {
-                    let level = self
-                        .play
-                        .game
-                        .world
-                        .cells
-                        .cell(c)
-                        .map_or(0, |x| i32::from(x.level));
-                    let (tx, ty) = cell_top(c.x, c.y);
-                    let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
-                    diamond(&mut d, sx, sy, fill, m);
-                }
+        // building would be placed, red elsewhere; at the keyboard cell
+        // while the keyboard aims.
+        let aim = self.aim_cell();
+        let at = match aim {
+            Some(c) => Some(c),
+            None => self
+                .pointer
+                .filter(|&p| m.contains(p))
+                .map(|p| self.under(p).0),
+        };
+        if let Some(c) = aim {
+            // Our own mark of the keyboard cell (M8 step C3).
+            let level = self
+                .play
+                .game
+                .world
+                .cells
+                .cell(c)
+                .map_or(0, |x| i32::from(x.level));
+            let (tx, ty) = cell_top(c.x, c.y);
+            let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
+            diamond(&mut d, sx, sy, AIM_INK, m);
+        }
+        if let Some(cell) = at
+            && let Some((cells, ok)) = self.play.preview(cell)
+        {
+            let fill = if ok {
+                [60, 220, 80, 110]
+            } else {
+                [230, 50, 40, 110]
+            };
+            for c in cells {
+                let level = self
+                    .play
+                    .game
+                    .world
+                    .cells
+                    .cell(c)
+                    .map_or(0, |x| i32::from(x.level));
+                let (tx, ty) = cell_top(c.x, c.y);
+                let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
+                diamond(&mut d, sx, sy, fill, m);
             }
         }
         // Our markers for selected objects the S-0111 bracket does not mark.
@@ -1156,11 +1440,17 @@ impl Session {
             );
         }
         if let Some(font) = &self.play.status_font {
+            // The status lines keep the battlefield's pixels: S-0213 claim
+            // 25 fixes their width budget and places in screen pixels.
             status_font::draw(&mut d, font, &self.play.messages, m);
         }
+        // The interface over the battlefield, in logical pixels at the
+        // interface scale.
+        let mut ui = DrawList::new();
+        let lm = self.layout().map;
         if let Some(f) = &self.play.failed {
-            d.fill(Rect::new(m.x, m.bottom() - 16, m.w, 16), [0, 0, 0, 200]);
-            d.text(m.x + 4, m.bottom() - 13, f.clone(), colour::BAD, m);
+            ui.fill(Rect::new(lm.x, lm.bottom() - 16, lm.w, 16), [0, 0, 0, 200]);
+            ui.text(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
         }
         let rules = self.play.game.world.rules().clone();
         let name = |t: TypeRef| live::type_name(&rules, t.kind, t.index);
@@ -1183,14 +1473,20 @@ impl Session {
         };
         let model = self.play.hud_model(&name, &art);
         let pointer = self.pointer;
-        let (hud_list, targets) = hud::view(&model, size, Some(RADAR_IMAGE), pointer);
-        d.extend(hud_list);
+        let hover = pointer.map(|p| self.ui.to_ui(p));
+        let (hud_list, targets) = hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover);
+        ui.extend(hud_list);
         self.targets = targets;
         if self.paused {
-            let (p, t) = hud::pause_view(size, self.speed, !self.network, pointer);
-            d.extend(p);
+            let (p, t) = hud::pause_view(self.ui.ui, self.speed, !self.network, hover);
+            ui.extend(p);
             self.pause_targets = t;
+            self.pause_focus.mark(&mut ui, &self.pause_targets);
+        } else {
+            self.hud_focus.mark(&mut ui, &self.targets);
         }
+        ui.extend(overlay);
+        d.scaled(self.ui, ui);
         if let (Some((frame, (hx, hy))), Some(p)) = (self.cursor_shown, pointer) {
             // spec: S-0214 claim 22 (the hot spot coincides with the pointer's input pixel)
             let all = Rect::new(0, 0, size.0, size.1);
@@ -1198,6 +1494,34 @@ impl Session {
         }
         d
     }
+}
+
+/// The keyboard cell's step in a screen direction (`dx`, `dy`: one of
+/// them −1 or +1): to the neighbouring cell half a diamond that way. S-0101
+/// F1 puts cell (x, y)'s top corner at (30(x − y), 15(x + y)), so a step in
+/// x moves (+30, +15) and a step in y (−30, +15); a screen direction
+/// alternates between the two diagonal neighbours on its side, by the
+/// parity of x + y, so that the steps reach every cell and each undoes the
+/// opposite one.
+fn aim_step(c: CellXY, dx: i32, dy: i32) -> CellXY {
+    // spec: S-0101 F1 (a cell's top corner projects to (30(x − y), 15(x + y)))
+    let even = (c.x + c.y).rem_euclid(2) == 0;
+    let (x, y) = match (dx.signum(), dy.signum(), even) {
+        // Right: down-right from an even cell, up-right from an odd one.
+        (1, _, true) => (1, 0),
+        (1, _, false) => (0, -1),
+        // Left: down-left from an even cell, up-left from an odd one.
+        (-1, _, true) => (0, 1),
+        (-1, _, false) => (-1, 0),
+        // Down: down-left from an even cell, down-right from an odd one.
+        (0, 1, true) => (0, 1),
+        (0, 1, false) => (1, 0),
+        // Up: up-left from an even cell, up-right from an odd one.
+        (0, -1, true) => (-1, 0),
+        (0, -1, false) => (0, -1),
+        _ => (0, 0),
+    };
+    CellXY::new(c.x + x, c.y + y)
 }
 
 /// A filled cell diamond with its top corner at (x, y): 60 × 30 pixels
@@ -1235,6 +1559,9 @@ const RING_INK: [u8; 4] = [200, 80, 230, 255];
 /// The stand-in permanent control ring's ink (our own).
 // nocite: our own stand-in colour for the permanent control ring
 const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
+/// The keyboard cell's mark (our own; the interface's focus colour, veiled).
+// nocite: our own client setting (keyboard aiming)
+const AIM_INK: [u8; 4] = [96, 208, 255, 90];
 
 /// A small flat ring (an ellipse outline, 12 × 6 pixels) centred at
 /// `(x, y)`: the stand-in for the control ring animations (S-0601 claim
@@ -1669,5 +1996,69 @@ mod cursor_palette_tests {
             pollster::block_on(CursorPaletteKeep::EachGame.for_game(&later)),
             Some(vec![7u8; 768])
         );
+    }
+}
+
+#[cfg(test)]
+mod aim_tests {
+    use super::*;
+
+    /// The keyboard cell's steps go the screen's way, reach every cell and
+    /// undo each other. spec: S-0101 F1 (a cell's top corner projects to (30(x − y), 15(x + y)))
+    #[test]
+    fn keyboard_cell_steps_follow_the_screen_and_reach_every_cell() {
+        let top = |c: CellXY| cell_top(c.x, c.y);
+        let dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        for x in 0..4 {
+            for y in 0..4 {
+                let c = CellXY::new(x, y);
+                let (sx, sy) = top(c);
+                for (dx, dy) in dirs {
+                    let to = aim_step(c, dx, dy);
+                    let (tx, ty) = top(to);
+                    // Half a diamond the arrow's way.
+                    if dx != 0 {
+                        assert_eq!(tx - sx, 30 * dx, "{c:?} {dx}");
+                        assert_eq!((ty - sy).abs(), 15);
+                    } else {
+                        assert_eq!(ty - sy, 15 * dy, "{c:?} {dy}");
+                        assert_eq!((tx - sx).abs(), 30);
+                    }
+                    assert_eq!(aim_step(to, -dx, -dy), c, "the opposite step undoes it");
+                }
+            }
+        }
+        // Two steps right or down move a whole diamond straight that way.
+        let c = CellXY::new(5, 2);
+        let r = aim_step(aim_step(c, 1, 0), 1, 0);
+        assert_eq!(top(r), (top(c).0 + 60, top(c).1));
+        let d = aim_step(aim_step(c, 0, 1), 0, 1);
+        assert_eq!(top(d), (top(c).0, top(c).1 + 30));
+        // Every neighbouring cell is at most three steps away, from a cell
+        // of either parity.
+        for c in [CellXY::new(5, 2), CellXY::new(5, 3)] {
+            let mut reached = std::collections::BTreeSet::from([(c.x, c.y)]);
+            for _ in 0..3 {
+                let now: Vec<_> = reached.iter().copied().collect();
+                for (x, y) in now {
+                    for (dx, dy) in dirs {
+                        let n = aim_step(CellXY::new(x, y), dx, dy);
+                        reached.insert((n.x, n.y));
+                    }
+                }
+            }
+            for (dx, dy) in [
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (-1, -1),
+                (1, -1),
+                (-1, 1),
+            ] {
+                assert!(reached.contains(&(c.x + dx, c.y + dy)), "{c:?} {dx} {dy}");
+            }
+        }
     }
 }

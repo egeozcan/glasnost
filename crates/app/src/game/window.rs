@@ -341,10 +341,19 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 // first pressed during an order block must not become an
                 // accepted press afterwards (S-0213 claim 23).
                 let key = match &event.logical_key {
-                    // Backspace repeats while held, as in any text field.
-                    keyboard::Key::Named(NamedKey::Backspace) => Some(Key::Backspace),
+                    // Backspace repeats while held, as in any text field
+                    // (and only there: in the game it holds or cancels).
+                    keyboard::Key::Named(NamedKey::Backspace)
+                        if !event.repeat || self.client.typing_text() =>
+                    {
+                        Some(Key::Backspace)
+                    }
                     _ if event.repeat => None,
                     keyboard::Key::Named(NamedKey::Enter) => Some(Key::Enter),
+                    keyboard::Key::Named(NamedKey::Tab) => Some(Key::Tab),
+                    keyboard::Key::Named(NamedKey::Space) => Some(Key::Space),
+                    keyboard::Key::Named(NamedKey::PageUp) => Some(Key::PageUp),
+                    keyboard::Key::Named(NamedKey::PageDown) => Some(Key::PageDown),
                     keyboard::Key::Named(NamedKey::Escape) => Some(Key::Escape),
                     keyboard::Key::Named(NamedKey::ArrowLeft) => Some(Key::Left),
                     keyboard::Key::Named(NamedKey::ArrowRight) => Some(Key::Right),

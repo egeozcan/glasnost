@@ -25,20 +25,21 @@ use glasnost_sim::targeting::{KeyCommand, Modifiers};
 use glasnost_sim::world::HouseId;
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::end::End;
-use glasnost_ui::geom::{Point, Rect};
+use glasnost_ui::geom::{Point, Rect, Scale};
 use glasnost_ui::menu::{self, MenuHit};
 use glasnost_ui::netmenu::{NetForm, NetHit};
 use glasnost_ui::setup::{self as ui_setup, Lobby, SetupHit};
 use glasnost_ui::shell::{Event, Screen, Shell};
-use glasnost_ui::widget::Targets;
+use glasnost_ui::widget::{Focus, Nav, Targets};
 use glasnost_vfs::{FileRef, PickedFile, Vfs};
 
+use super::captions::Captions;
 use super::install::{self, Install};
 use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
 use super::play::Button;
 use super::report::{SaveReport, platform_save};
-use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
+use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent, SideKey};
 use crate::mapview::live::Pacer;
 use crate::settings::{Action, Bindings, Settings, Store};
 use glasnost_ui::settings::SettingsHit;
@@ -71,6 +72,9 @@ pub enum Job {
         local: Option<HouseId>,
         /// The session's cursor palette keep (S-0111 claim 19a).
         cursor: super::session::CursorPaletteKeep,
+        /// The player houses show our colour-blind colours (the person's
+        /// setting; presentation only).
+        colour_blind: bool,
     },
 }
 
@@ -109,13 +113,14 @@ pub async fn run_job(job: Job) -> Done {
             speech,
             local,
             cursor,
+            colour_blind,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
                 // takes it too (S-0412 claims 6 and 7)
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
-            let r = Session::start(&mut vfs, &file, &make, local, &cursor).await;
+            let r = Session::start(&mut vfs, &file, &make, local, &cursor, colour_blind).await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
                 let set = local_voice_set(&s.play.game.world, Some(s.play.local));
@@ -146,10 +151,20 @@ pub enum Key {
     Up,
     /// An arrow key.
     Down,
-    /// Enter: sends a chat line, opens the game's chat.
+    /// Enter: sends a chat line, opens the game's chat; presses the focused
+    /// control on a menu; places at the keyboard cell.
     Enter,
-    /// Backspace in a text field.
+    /// Backspace in a text field; holds or cancels the focused sidebar
+    /// icon.
     Backspace,
+    /// Tab (with Shift: backwards): the next control.
+    Tab,
+    /// Space: presses the focused control.
+    Space,
+    /// Page Up: the previous sidebar tab.
+    PageUp,
+    /// Page Down: the next sidebar tab.
+    PageDown,
 }
 
 /// The images a frame shows, by id, when they changed.
@@ -239,6 +254,23 @@ pub struct Client {
     chat_field: Option<Rect>,
     /// The host time of the last update.
     clock: i64,
+    /// The modifiers held (Shift turns Tab backwards; Ctrl with an arrow
+    /// moves the keyboard cell).
+    mods: Modifiers,
+    /// The keyboard focus on the main menu.
+    pub menu_focus: Focus<MenuHit>,
+    /// The keyboard focus on the setup and room screens.
+    pub setup_focus: Focus<SetupHit>,
+    /// The keyboard focus on the multiplayer screen.
+    pub net_focus: Focus<NetHit>,
+    /// The keyboard focus on the settings screen.
+    pub settings_focus: Focus<SettingsHit>,
+    /// The keyboard focus on the end screen.
+    pub end_focus: Focus<()>,
+    /// The screen of the last frame (a new screen starts without focus).
+    last_screen: Option<std::mem::Discriminant<Screen>>,
+    /// The announcements' captions (M8 step C3).
+    pub captions: Captions,
 }
 
 impl Client {
@@ -288,7 +320,32 @@ impl Client {
             net_status: (String::new(), false),
             chat_field: None,
             clock: 0,
+            mods: Modifiers::default(),
+            menu_focus: Focus::new(),
+            setup_focus: Focus::new(),
+            net_focus: Focus::new(),
+            settings_focus: Focus::new(),
+            end_focus: Focus::new(),
+            last_screen: None,
+            captions: Captions::new(),
         }
+    }
+
+    /// The interface scale for the window: the settings' scale, lowered
+    /// where the screen would be smaller than the smallest interface.
+    pub fn ui_scale(&self) -> Scale {
+        Scale::fit(i32::from(self.settings.ui_scale), self.size)
+    }
+
+    /// The interface's size in its logical pixels.
+    pub fn ui_size(&self) -> (i32, i32) {
+        self.ui_scale().ui
+    }
+
+    /// Whether a text field or the chat takes the keyboard's text now (the
+    /// window repeats a held Backspace only then).
+    pub fn typing_text(&self) -> bool {
+        self.typing()
     }
 
     /// Reads the settings from `store` and keeps every later change there.
@@ -323,8 +380,13 @@ impl Client {
             m.set_volume(Settings::mixer_level(st.sound));
             m.set_voice_volume(Settings::mixer_level(st.voices));
         }
+        let scale = self.ui_scale();
+        if !self.settings.captions {
+            self.captions.clear();
+        }
         if let Some(s) = self.session.as_mut() {
-            s.scroll_index = st.scroll_index;
+            s.scroll_index = self.settings.scroll_index;
+            s.resize(self.size, scale);
         }
     }
 
@@ -362,7 +424,8 @@ impl Client {
                         for p in &s.problems {
                             log::info!("game load: {p}");
                         }
-                        s.resize(self.size);
+                        s.resize(self.size, self.ui_scale());
+                        self.captions.clear();
                         // A fresh atlas per game: the icons of the last one go.
                         self.painter = Painter::new();
                         s.register_art(&mut self.painter);
@@ -459,19 +522,22 @@ impl Client {
                 .unwrap_or_default(),
             local: None,
             cursor: install.cursor_palette.clone(),
+            colour_blind: self.settings.colour_blind,
         });
     }
 
     /// Sets the window size.
     pub fn resize(&mut self, size: (i32, i32)) {
         self.size = (size.0.max(64), size.1.max(64));
+        let scale = self.ui_scale();
         if let Some(s) = self.session.as_mut() {
-            s.resize(self.size);
+            s.resize(self.size, scale);
         }
     }
 
     /// The modifiers held changed.
     pub fn modifiers(&mut self, m: Modifiers) {
+        self.mods = m;
         if let Some(s) = self.session.as_mut() {
             s.mods = m;
         }
@@ -514,6 +580,12 @@ impl Client {
         self.gesture();
         self.pointer = Some(p);
         self.press = Some(p);
+        // The pointer takes over from the keyboard: the focus marks go.
+        self.menu_focus.shown = false;
+        self.setup_focus.shown = false;
+        self.net_focus.shown = false;
+        self.settings_focus.shown = false;
+        self.end_focus.shown = false;
         if self.shell.screen == Screen::Game
             && let Some(s) = self.session.as_mut()
         {
@@ -525,83 +597,126 @@ impl Client {
     pub fn pointer_up(&mut self, b: Button, p: Point, mods: Modifiers) {
         self.pointer = Some(p);
         let pressed = self.press.take();
+        // The screens outside the game are laid out in the interface's
+        // logical pixels.
+        let q = self.ui_scale().to_ui(p);
         match &self.shell.screen {
             Screen::Game => {
                 let Some(s) = self.session.as_mut() else {
                     return;
                 };
-                match s.pointer_up(b, p, mods) {
-                    SessionEvent::Leave => {
-                        self.session = None;
-                        self.net_leave();
-                        self.shell.leave_game();
-                    }
-                    SessionEvent::Settings => self.open_settings(true),
-                    SessionEvent::None => {}
-                }
+                let e = s.pointer_up(b, p, mods);
+                self.session_event(e);
             }
             _ if b != Button::Left || pressed.is_none() || self.busy => {}
             Screen::Menu => {
-                let ready = self.install.is_some();
-                if let Some(hit) = self.menu_targets.hit(p) {
-                    if hit == MenuHit::Skirmish && !ready {
-                        return;
-                    }
-                    if hit == MenuHit::Settings {
-                        self.open_settings(false);
-                        return;
-                    }
-                    let rules = self.install.as_ref().map(|i| i.setup.clone());
-                    match rules {
-                        Some(r) => {
-                            let e = self.shell.menu(hit, &r);
-                            self.event(e);
-                        }
-                        None if hit == MenuHit::Install => self.pick_install = true,
-                        None if hit == MenuHit::Quit => self.quit = true,
-                        None => {}
-                    }
+                if let Some(hit) = self.menu_targets.hit(q) {
+                    self.menu_focus.at = Some(hit);
+                    self.menu_press(hit);
                 }
             }
             Screen::Setup => {
-                let Some(hit) = self.setup_targets.hit(p) else {
-                    return;
-                };
-                let Some(i) = self.install.as_ref() else {
-                    return;
-                };
-                let rules = i.setup.clone();
-                let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
-                let e = self.shell.setup(hit, &rules, &maps);
-                self.event(e);
+                if let Some(hit) = self.setup_targets.hit(q) {
+                    self.setup_focus.at = Some(hit);
+                    self.setup_press(hit);
+                }
             }
             Screen::Multiplayer => {
-                if let Some(hit) = self.net_targets.hit(p) {
+                if let Some(hit) = self.net_targets.hit(q) {
+                    self.net_focus.at = Some(hit);
                     self.net_menu(hit);
                 } else {
                     self.netform.focus = None;
                 }
             }
             Screen::Settings => {
-                if let Some(hit) = self.settings_targets.hit(p) {
+                if let Some(hit) = self.settings_targets.hit(q) {
+                    self.settings_focus.at = Some(hit);
                     self.settings_click(hit);
                 }
             }
-            Screen::Room => self.room_click(p),
+            Screen::Room => self.room_click(q),
             Screen::End(_) => {
-                if self.end_targets.hit(p).is_some() {
-                    self.session = None;
-                    self.net_leave();
-                    self.shell.end_done();
+                if self.end_targets.hit(q).is_some() {
+                    self.end_press();
                 }
             }
         }
+    }
+
+    /// What the client does after a gesture in the game.
+    fn session_event(&mut self, e: SessionEvent) {
+        match e {
+            SessionEvent::Leave => {
+                self.session = None;
+                self.captions.clear();
+                self.net_leave();
+                self.shell.leave_game();
+            }
+            SessionEvent::Settings => self.open_settings(true),
+            SessionEvent::None => {}
+        }
+    }
+
+    /// A main-menu control pressed (a click or the keyboard).
+    fn menu_press(&mut self, hit: MenuHit) {
+        let ready = self.install.is_some();
+        if hit == MenuHit::Skirmish && !ready {
+            return;
+        }
+        if hit == MenuHit::Settings {
+            self.open_settings(false);
+            return;
+        }
+        let rules = self.install.as_ref().map(|i| i.setup.clone());
+        match rules {
+            Some(r) => {
+                let e = self.shell.menu(hit, &r);
+                self.event(e);
+            }
+            None if hit == MenuHit::Install => self.pick_install = true,
+            None if hit == MenuHit::Quit => self.quit = true,
+            None => {}
+        }
+    }
+
+    /// A setup-screen control pressed (a click or the keyboard).
+    fn setup_press(&mut self, hit: SetupHit) {
+        let Some(i) = self.install.as_ref() else {
+            return;
+        };
+        let rules = i.setup.clone();
+        let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
+        let e = self.shell.setup(hit, &rules, &maps);
+        self.event(e);
+    }
+
+    /// The end screen's control pressed.
+    fn end_press(&mut self) {
+        self.session = None;
+        self.captions.clear();
+        self.net_leave();
+        self.shell.end_done();
     }
 
     /// A key went down or up.
     pub fn key(&mut self, k: Key, down: bool) {
         if down {
             self.gesture();
+        }
+        // Enter presses the open options menu's focused control, or places
+        // at the keyboard cell, before it opens a network game's chat.
+        if down
+            && k == Key::Enter
+            && self.shell.screen == Screen::Game
+            && !self.typing()
+            && self
+                .session
+                .as_ref()
+                .is_some_and(|s| s.paused || s.aiming())
+        {
+            self.game_key(k, down);
+            return;
         }
         // Text fields and the chat take their keys first; a letter typed
         // into one is no command.
@@ -614,7 +729,14 @@ impl Client {
             }
             return;
         }
-        if matches!(k, Key::Char(_)) && self.typing() {
+        if matches!(k, Key::Char(_) | Key::Space) && self.typing() {
+            return;
+        }
+        if self.shell.screen != Screen::Game {
+            if down && !self.busy {
+                self.menu_key(k);
+            }
+        } else if self.game_key(k, down) {
             return;
         }
         // spec: S-0213 claim 23 (holding Left, Right, Up or Down scrolls the view that way; releasing an arrow ends its contribution)
@@ -648,6 +770,143 @@ impl Client {
             Some(Bound::Command(c)) => s.key(c),
             Some(Bound::Cheer) if !s.paused => s.play.cheer(),
             _ => {}
+        }
+    }
+
+    /// Our own keyboard play in the game (M8 step C3): the options menu's
+    /// controls while it is open, else the sidebar and keyboard aiming.
+    /// Returns whether the key was taken. None of these keys is one of
+    /// S-0213's bindings: letters, digits and Escape keep their meaning,
+    /// and an arrow still scrolls as it always does (on the open menu it
+    /// also moves the focus) unless Ctrl makes it move the keyboard cell.
+    fn game_key(&mut self, k: Key, down: bool) -> bool {
+        let shift = self.mods.force_select;
+        let ctrl = self.mods.force_fire;
+        let arrow = matches!(k, Key::Left | Key::Right | Key::Up | Key::Down);
+        if self.typing() || (arrow && !down) {
+            // An arrow's release always reaches the scrolling.
+            return false;
+        }
+        let Some(s) = self.session.as_mut() else {
+            return false;
+        };
+        if s.paused {
+            let nav = match k {
+                Key::Tab if shift => Nav::Prev,
+                Key::Tab | Key::Down => Nav::Next,
+                Key::Up => Nav::Prev,
+                Key::Left => Nav::Left,
+                Key::Right => Nav::Right,
+                Key::Enter | Key::Space => Nav::Activate,
+                _ => return false,
+            };
+            if down {
+                let e = s.pause_key(nav);
+                self.session_event(e);
+            }
+            return !arrow;
+        }
+        let cell = |dx: i32, dy: i32| SideKey::Cell(dx, dy);
+        let side = match k {
+            Key::Tab => SideKey::Step(!shift),
+            Key::Space => SideKey::Press { shift },
+            Key::Backspace => SideKey::Back,
+            Key::PageUp => SideKey::Tab(-1),
+            Key::PageDown => SideKey::Tab(1),
+            Key::Enter if s.aiming() => SideKey::Place,
+            Key::Left if ctrl && s.tool_aims() => cell(-1, 0),
+            Key::Right if ctrl && s.tool_aims() => cell(1, 0),
+            Key::Up if ctrl && s.tool_aims() => cell(0, -1),
+            Key::Down if ctrl && s.tool_aims() => cell(0, 1),
+            _ => return false,
+        };
+        if down {
+            s.sidebar_key(side);
+        }
+        true
+    }
+
+    /// A key on a screen outside the game: the keyboard focus moves
+    /// through its controls and presses them (our own keys, M8 step C3).
+    fn menu_key(&mut self, k: Key) {
+        let nav = self.nav_of(k);
+        if k == Key::Escape {
+            self.menu_back();
+            return;
+        }
+        let Some(nav) = nav else {
+            return;
+        };
+        match self.shell.screen {
+            Screen::Menu => {
+                if let Some(hit) = self.menu_focus.nav(&self.menu_targets, nav) {
+                    self.menu_press(hit);
+                }
+            }
+            Screen::Setup => {
+                if let Some(hit) = self.setup_focus.nav(&self.setup_targets, nav) {
+                    self.setup_press(hit);
+                }
+            }
+            Screen::Room => {
+                if nav == Nav::Activate
+                    && !self.setup_focus.shown
+                    && let Some(n) = self.net.as_mut()
+                {
+                    // Enter with no control focused opens the chat line.
+                    n.typing = true;
+                    return;
+                }
+                if let Some(n) = self.net.as_mut() {
+                    n.typing = false;
+                }
+                if let Some(hit) = self.setup_focus.nav(&self.setup_targets, nav) {
+                    self.room_press(hit);
+                }
+            }
+            Screen::Multiplayer => {
+                let hit = self.net_focus.nav(&self.net_targets, nav);
+                // A text field takes the typing while it has the focus.
+                self.netform.focus = match self.net_focus.target(&self.net_targets) {
+                    Some(NetHit::Field(f)) => Some(f),
+                    _ => None,
+                };
+                if let Some(hit) = hit {
+                    self.net_menu(hit);
+                }
+            }
+            Screen::End(_) => {
+                if self.end_focus.nav(&self.end_targets, nav).is_some() {
+                    self.end_press();
+                }
+            }
+            Screen::Settings | Screen::Game => {}
+        }
+    }
+
+    /// The focus step a key takes on a screen of controls (our own keys,
+    /// listed on the settings screen as `KEYBOARD_KEYS`).
+    pub(super) fn nav_of(&self, k: Key) -> Option<Nav> {
+        match k {
+            Key::Tab if self.mods.force_select => Some(Nav::Prev),
+            Key::Tab | Key::Down => Some(Nav::Next),
+            Key::Up => Some(Nav::Prev),
+            Key::Left => Some(Nav::Left),
+            Key::Right => Some(Nav::Right),
+            Key::Enter | Key::Space => Some(Nav::Activate),
+            _ => None,
+        }
+    }
+
+    /// Escape on a screen outside the game: back, as the screen's back
+    /// control does (the main menu has none).
+    fn menu_back(&mut self) {
+        match self.shell.screen {
+            Screen::Setup => self.setup_press(SetupHit::Back),
+            Screen::Room => self.room_press(SetupHit::Back),
+            Screen::Multiplayer => self.net_menu(NetHit::Back),
+            Screen::End(_) => self.end_press(),
+            Screen::Menu | Screen::Settings | Screen::Game => {}
         }
     }
 
@@ -736,7 +995,14 @@ impl Client {
                 project: glasnost_render::projection::project_lifted,
             });
             a.frame(now_ms, &mut self.unsync);
+            // Q-1735 (interim: an announcement's caption is the name of its entry in the person's speech data)
+            for name in a.take_started() {
+                if self.settings.captions {
+                    self.captions.push(&name, now_ms);
+                }
+            }
         }
+        self.captions.update(now_ms);
         if let Some(end) = s.play.end() {
             self.shell.game_over(end);
         }
@@ -744,10 +1010,25 @@ impl Client {
 
     /// The frame's draw list, and the images that changed (the battlefield
     /// on the CPU when [`Client::cpu_map`], the radar when it moved on).
+    /// The screens are laid out in the interface's logical pixels and
+    /// drawn at the interface scale; in the game only the sidebar, the
+    /// options menu and the notices over the battlefield are (the
+    /// battlefield keeps its own pixels).
     pub fn frame(&mut self) -> (DrawList, FrameImages) {
-        let size = self.size;
-        let hover = self.pointer;
+        let scale = self.ui_scale();
+        let size = scale.ui;
+        let hover = self.pointer.map(|p| scale.to_ui(p));
         let mut changed = Vec::new();
+        let here = std::mem::discriminant(&self.shell.screen);
+        if self.last_screen != Some(here) {
+            // A new screen starts without keyboard focus.
+            self.last_screen = Some(here);
+            self.menu_focus = Focus::new();
+            self.setup_focus = Focus::new();
+            self.net_focus = Focus::new();
+            self.settings_focus = Focus::new();
+            self.end_focus = Focus::new();
+        }
         let list = match &self.shell.screen {
             Screen::Menu => {
                 let status = if self.busy {
@@ -755,15 +1036,21 @@ impl Client {
                 } else {
                     self.status.clone()
                 };
-                let (d, t) =
+                let (mut d, t) =
                     menu::view(size, &status, self.install.is_some(), self.can_quit, hover);
+                self.menu_focus.mark(&mut d, &t);
                 self.menu_targets = t;
                 d
             }
-            Screen::Multiplayer => self.net_menu_frame(hover),
+            Screen::Multiplayer => {
+                let mut d = self.net_menu_frame(hover);
+                self.net_focus.mark(&mut d, &self.net_targets);
+                d
+            }
             Screen::Settings => self.settings_frame(hover),
             Screen::Room => {
                 let mut d = self.room_frame(hover);
+                self.setup_focus.mark(&mut d, &self.setup_targets);
                 if self.busy {
                     busy_veil(&mut d, size, &self.status);
                 }
@@ -772,7 +1059,9 @@ impl Client {
             Screen::Setup => match (self.shell.setup.as_ref(), self.install.as_ref()) {
                 (Some(setup), Some(i)) => {
                     let maps: Vec<_> = i.maps.iter().map(|(_, m)| m.clone()).collect();
-                    let (mut d, t) = setup.view(size, &i.setup, &maps, hover);
+                    let rules = self.shown_setup_rules(&i.setup);
+                    let (mut d, t) = setup.view(size, &rules, &maps, hover);
+                    self.setup_focus.mark(&mut d, &t);
                     if self.busy {
                         busy_veil(&mut d, size, &self.status);
                     }
@@ -781,46 +1070,65 @@ impl Client {
                 }
                 _ => DrawList::new(),
             },
-            Screen::Game => match self.session.as_mut() {
-                Some(s) => {
-                    s.update_marks();
-                    s.update_cursor(&mut self.painter);
-                    s.update_status_glyphs(&mut self.painter);
-                    if self.cpu_map {
+            Screen::Game => {
+                // The notices over the battlefield, in logical pixels.
+                let mut overlay = DrawList::new();
+                self.net_overlay(&mut overlay);
+                let map = glasnost_ui::hud::Layout::new(size).map;
+                self.captions.draw(&mut overlay, map);
+                match self.session.as_mut() {
+                    Some(s) => {
+                        s.update_marks();
+                        s.update_cursor(&mut self.painter);
+                        s.update_status_glyphs(&mut self.painter);
+                        if self.cpu_map {
+                            let v = s.view();
+                            changed.push((MAP_IMAGE, v.size.0, v.size.1, s.map_rgba()));
+                        }
+                        let tick = s.play.game.world.tick;
+                        if tick != self.radar_tick
+                            && let Some(rgba) = s.radar_rgba()
+                        {
+                            let (w, h) = glasnost_ui::hud::RADAR;
+                            changed.push((RADAR_IMAGE, w as u32, h as u32, rgba));
+                            self.radar_tick = tick;
+                        }
                         let v = s.view();
-                        changed.push((MAP_IMAGE, v.size.0, v.size.1, s.map_rgba()));
+                        self.painter
+                            .set_image_size(MAP_IMAGE, (v.size.0 as i32, v.size.1 as i32));
+                        self.painter
+                            .set_image_size(RADAR_IMAGE, glasnost_ui::hud::RADAR);
+                        // The session scales its own interface layer.
+                        return (s.draw(overlay), FrameImages { changed });
                     }
-                    let tick = s.play.game.world.tick;
-                    if tick != self.radar_tick
-                        && let Some(rgba) = s.radar_rgba()
-                    {
-                        let (w, h) = glasnost_ui::hud::RADAR;
-                        changed.push((RADAR_IMAGE, w as u32, h as u32, rgba));
-                        self.radar_tick = tick;
+                    None => {
+                        // Loading the map.
+                        let mut d = DrawList::new();
+                        busy_veil(&mut d, size, &self.status);
+                        d
                     }
-                    let v = s.view();
-                    self.painter
-                        .set_image_size(MAP_IMAGE, (v.size.0 as i32, v.size.1 as i32));
-                    self.painter
-                        .set_image_size(RADAR_IMAGE, glasnost_ui::hud::RADAR);
-                    let mut d = s.draw();
-                    self.net_overlay(&mut d);
-                    d
                 }
-                None => {
-                    // Loading the map.
-                    let mut d = DrawList::new();
-                    busy_veil(&mut d, size, &self.status);
-                    d
-                }
-            },
+            }
             Screen::End(end) => {
-                let (d, t) = end.view(size, hover);
+                let (mut d, t) = end.view(size, hover);
+                self.end_focus.mark(&mut d, &t);
                 self.end_targets = t;
                 d
             }
         };
-        (list, FrameImages { changed })
+        let mut out = DrawList::new();
+        out.scaled(scale, list);
+        (out, FrameImages { changed })
+    }
+
+    /// The setup values as the screens show them: with the colour-blind
+    /// swatches when the person asked for them.
+    fn shown_setup_rules(&self, rules: &ui_setup::SetupRules) -> ui_setup::SetupRules {
+        let mut r = rules.clone();
+        if self.settings.colour_blind {
+            r.colours = install::colour_blind_swatches();
+        }
+        r
     }
 
     /// The whole frame drawn on the CPU (tests and local snapshots).
@@ -921,3 +1229,7 @@ mod tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[path = "client_net_tests.rs"]
 mod net_tests;
+
+#[cfg(test)]
+#[path = "client_access_tests.rs"]
+mod access_tests;

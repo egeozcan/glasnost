@@ -3,7 +3,7 @@
 //! list into draws.
 
 use crate::font;
-use crate::geom::Rect;
+use crate::geom::{Rect, Scale};
 
 /// An 8-bit RGBA colour.
 pub type Rgba = [u8; 4];
@@ -67,6 +67,14 @@ pub enum Prim {
         to: (i32, i32),
         /// Its colour.
         rgba: Rgba,
+    },
+    /// A list in logical pixels drawn at an interface scale (each of its
+    /// primitives is clipped in logical pixels, then scaled).
+    Layer {
+        /// The scale.
+        scale: Scale,
+        /// The primitives.
+        list: DrawList,
     },
 }
 
@@ -152,15 +160,28 @@ impl DrawList {
         self.prims.extend(other.prims);
     }
 
-    /// Every text string in the list, in order (for tests).
+    /// Adds `list`, laid out in logical pixels, drawn at `scale`; without
+    /// scaling its primitives are appended as they are.
+    pub fn scaled(&mut self, scale: Scale, list: DrawList) {
+        if scale.is_one() {
+            self.extend(list);
+        } else if !list.prims.is_empty() {
+            self.prims.push(Prim::Layer { scale, list });
+        }
+    }
+
+    /// Every text string in the list, in order, scaled layers included (for
+    /// tests).
     pub fn texts(&self) -> Vec<&str> {
-        self.prims
-            .iter()
-            .filter_map(|p| match p {
-                Prim::Text { text, .. } => Some(text.as_str()),
-                _ => None,
-            })
-            .collect()
+        let mut out = Vec::new();
+        for p in &self.prims {
+            match p {
+                Prim::Text { text, .. } => out.push(text.as_str()),
+                Prim::Layer { list, .. } => out.extend(list.texts()),
+                _ => {}
+            }
+        }
+        out
     }
 }
 
@@ -191,6 +212,8 @@ pub mod colour {
     pub const BAD: Rgba = [220, 80, 72, 255];
     /// Darkening veil over unavailable cameos.
     pub const VEIL: Rgba = [0, 0, 0, 150];
+    /// The keyboard focus mark (a cool colour apart from the amber hover).
+    pub const FOCUS: Rgba = [96, 208, 255, 255];
 }
 
 #[cfg(test)]

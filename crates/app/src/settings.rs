@@ -67,6 +67,23 @@ pub const FIXED_KEYS: [(&str, &str); 2] = [
     ("Scroll the view", "Arrow keys"),
 ];
 
+/// Our own keyboard-only keys (M8 step C3), for the screen to list. None is
+/// a letter or a digit, so no rebinding of a command key can take one, and
+/// none is Escape or a plain arrow in running play (S-0213 claims 22 and
+/// 23 keep their meaning there).
+// nocite: our own client setting (keyboard-only play of the menus and the sidebar)
+pub const KEYBOARD_KEYS: [(&str, &str); 9] = [
+    ("Next, previous control", "Tab, Shift+Tab"),
+    ("Move in menus", "Up, Down"),
+    ("Change a value", "Left, Right"),
+    ("Press (menus)", "Enter, Space"),
+    ("Back (menus)", "Escape"),
+    ("Press (sidebar)", "Space"),
+    ("Hold, cancel (sidebar)", "Backspace"),
+    ("Sidebar tab", "Page Up, Page Down"),
+    ("Placement cell; place", "Ctrl+arrows; Enter"),
+];
+
 /// The key bindings of the command keys. Keys are lower-case letters or
 /// digits, and no two actions share one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,8 +155,14 @@ pub struct Settings {
     pub music: u8,
     /// Scroll-speed index, [`SCROLL_RANGE`].
     pub scroll_index: i32,
-    /// Interface scale, percent, one of [`SCALES`] (stored; C3 seam).
+    /// Interface scale, percent, one of [`SCALES`] (lowered where the
+    /// window is too small for it: `glasnost_ui::geom::Scale::fit`).
     pub ui_scale: u16,
+    /// Whether announcements are shown as captions.
+    pub captions: bool,
+    /// Whether house colours use our colour-blind palette (from the next
+    /// game on).
+    pub colour_blind: bool,
     /// The command keys.
     pub bindings: Bindings,
     /// The relay address last used on the multiplayer screen ("" none).
@@ -159,6 +182,10 @@ impl Default for Settings {
             scroll_index: 3,
             // nocite: our own client setting (no scaling)
             ui_scale: 100,
+            // nocite: our own client setting (captions shown by default)
+            captions: true,
+            // nocite: our own client setting (the colour-blind palette is off by default)
+            colour_blind: false,
             bindings: Bindings::default(),
             relay: String::new(),
         }
@@ -180,6 +207,11 @@ impl Settings {
             self.sound, self.voices, self.music
         );
         s += &format!("scroll={}\nscale={}\n", self.scroll_index, self.ui_scale);
+        s += &format!(
+            "captions={}\ncolour_blind={}\n",
+            u8::from(self.captions),
+            u8::from(self.colour_blind)
+        );
         for a in ACTIONS {
             s += &format!("key.{}={}\n", a.name(), self.bindings.key(a));
         }
@@ -199,6 +231,11 @@ impl Settings {
                 continue;
             };
             let num = || v.trim().parse::<i64>().ok();
+            let flag = || match v.trim() {
+                "1" => Some(true),
+                "0" => Some(false),
+                _ => None,
+            };
             match k.trim() {
                 "sound" => s.sound = num().map_or(s.sound, |n| n.clamp(0, 100) as u8),
                 "voices" => s.voices = num().map_or(s.voices, |n| n.clamp(0, 100) as u8),
@@ -213,6 +250,8 @@ impl Settings {
                         s.ui_scale = n as u16;
                     }
                 }
+                "captions" => s.captions = flag().unwrap_or(s.captions),
+                "colour_blind" => s.colour_blind = flag().unwrap_or(s.colour_blind),
                 "relay" => {
                     s.relay = v
                         .chars()

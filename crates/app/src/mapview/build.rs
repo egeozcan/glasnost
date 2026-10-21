@@ -114,7 +114,29 @@ pub struct Options {
     pub unresolved_owners: Vec<Vec<u8>>,
     /// The game a loaded map starts.
     pub game: GameMode,
+    /// Player houses show our colour-blind colours
+    /// ([`COLOUR_BLIND_SLOTS`]) instead of their slots' definitions: the
+    /// person's presentation choice (M8 step C3), never game data.
+    pub colour_blind: bool,
 }
+
+/// Our colour-blind house colours (M8 step C3): the colour definition (H,
+/// S, V on S-0103's 0 … 255 scales) a player house in lobby colour slot
+/// 0 … 7 shows when the person asks for them, in place of the slot's own
+/// definition, shaded by the S-0103 ramp like any definition. They are the
+/// Okabe–Ito colours (chosen to stay apart under the common colour-vision
+/// deficiencies) in our own order, with white for the last.
+// nocite: our own client setting (colour-blind house colours; Okabe and Ito, "Color Universal Design", 2008)
+pub const COLOUR_BLIND_SLOTS: [[u8; 3]; 8] = [
+    [40, 185, 240],  // yellow
+    [19, 255, 213],  // vermillion
+    [143, 255, 178], // blue
+    [116, 255, 158], // bluish green
+    [29, 255, 230],  // orange
+    [143, 161, 233], // sky blue
+    [231, 104, 204], // reddish purple
+    [0, 0, 240],     // white
+];
 
 /// The game the viewer starts on a loaded map (our own viewer choice).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -140,6 +162,7 @@ impl Default for Options {
             map_colours: Vec::new(),
             unresolved_owners: Vec::new(),
             game: GameMode::Sandbox,
+            colour_blind: false,
         }
     }
 }
@@ -450,6 +473,11 @@ pub fn owner_definition(import: &Import, options: &Options, owner: &[u8]) -> ([u
             .map(|c| c.hsv)
     };
     let by_slot = |s: u8| {
+        if options.colour_blind {
+            // Our colour-blind colours stand in for the slot's definition
+            // (presentation only).
+            return COLOUR_BLIND_SLOTS.get(usize::from(s)).copied();
+        }
         glasnost_render::palette::slot_position(s)
             .and_then(|p| colours.get(p))
             .map(|c| c.hsv)

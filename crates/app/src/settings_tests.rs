@@ -16,6 +16,8 @@ fn custom() -> Settings {
         music: 70,
         scroll_index: 0,
         ui_scale: 150,
+        captions: false,
+        colour_blind: true,
         bindings: b,
         relay: "ws://relay.example:9000/".into(),
     }

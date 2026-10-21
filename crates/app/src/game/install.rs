@@ -80,6 +80,20 @@ pub fn slot_swatches() -> Vec<Rgba> {
         .collect()
 }
 
+/// The swatch of each lobby colour slot 0 … 7 when the person asks for
+/// colour-blind house colours (M8 step C3): our colour definition
+/// ([`crate::mapview::build::COLOUR_BLIND_SLOTS`]) at full saturation and
+/// value as plain RGB, so the setup shows the colours the game will.
+pub fn colour_blind_swatches() -> Vec<Rgba> {
+    crate::mapview::build::COLOUR_BLIND_SLOTS
+        .iter()
+        .map(|&[h, s, v]| {
+            let c = glasnost_render::palette::hsv_to_rgb(h, s, v);
+            [c.r, c.g, c.b, 255]
+        })
+        .collect()
+}
+
 /// The setup screen's values from the base rules (S-0412 claim 1 and
 /// Import mapping).
 pub fn setup_rules(r: &Ruleset, sim: &SimRules) -> SetupRules {
@@ -236,6 +250,20 @@ mod tests {
         // No colour definition is consulted: the swatches take no rules input.
         assert_ne!(s[0], s[1]);
         assert_eq!(glasnost_render::palette::lobby_swatch_565(8), None);
+    }
+
+    /// Our colour-blind swatches (M8 step C3) are eight distinct opaque colours, none of them
+    /// the fixed slot swatch of the same slot.
+    #[test]
+    fn colour_blind_swatches_differ_from_the_slot_swatches() {
+        let ours = colour_blind_swatches();
+        let fixed = slot_swatches();
+        assert_eq!(ours.len(), 8);
+        for (i, c) in ours.iter().enumerate() {
+            assert_eq!(c[3], 255);
+            assert_ne!(Some(c), fixed.get(i));
+            assert!(!ours[i + 1..].contains(c));
+        }
     }
 
     // spec: S-0412 claim 15 (registration indices 0 … 9 with the listing flag on, in registration order; passive countries are not excluded)

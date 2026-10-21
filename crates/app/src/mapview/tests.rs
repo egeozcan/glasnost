@@ -1975,6 +1975,46 @@ fn owner_definition_and_radar_colour() {
     assert_eq!(radar(b"Yuri"), [112, 116, 192]);
 }
 
+/// Our colour-blind house colours (M8 step C3, our own presentation choice) stand in for a
+/// player house's slot definition, for named slots and the human and computer slots alike; map
+/// colours, the neutral grey and the unresolved-owner mark stay as they are. spec: S-0103 claim 10
+/// (the slot picks the definition the ramp shades)
+#[test]
+fn colour_blind_colours_replace_slot_definitions_only() {
+    use super::build::COLOUR_BLIND_SLOTS;
+    let (import, _, _) = context_with(RULES);
+    let plain = Options {
+        slots: vec![(b"Americans".to_vec(), 0), (b"Yuri".to_vec(), 1)],
+        human_slot: 2,
+        computer_slot: 3,
+        map_colours: vec![(b"Mapped".to_vec(), [1, 2, 3])],
+        unresolved_owners: vec![b"Lost".to_vec()],
+        ..Options::default()
+    };
+    let blind = Options {
+        colour_blind: true,
+        ..plain.clone()
+    };
+    let def = |o: &Options, h: &[u8]| super::build::owner_definition(&import, o, h);
+    assert_eq!(def(&blind, b"Americans"), (COLOUR_BLIND_SLOTS[0], false));
+    assert_eq!(def(&blind, b"Yuri"), (COLOUR_BLIND_SLOTS[1], false));
+    assert_eq!(
+        def(&blind, b"<human player>"),
+        (COLOUR_BLIND_SLOTS[2], false)
+    );
+    assert_eq!(def(&blind, b"Computer"), (COLOUR_BLIND_SLOTS[3], false));
+    assert_ne!(def(&plain, b"Americans"), def(&blind, b"Americans"));
+    for owner in [&b"Mapped"[..], b"Neutral", b"Lost"] {
+        assert_eq!(def(&plain, owner), def(&blind, owner), "{owner:?}");
+    }
+    // The eight colours are told apart.
+    for (i, a) in COLOUR_BLIND_SLOTS.iter().enumerate() {
+        for b in &COLOUR_BLIND_SLOTS[i + 1..] {
+            assert_ne!(a, b);
+        }
+    }
+}
+
 /// spec: S-0101 claim 3 and F2 (r10: the exact lift is the drawing lift only; the sight
 /// centre keeps S-0409 claim 5's floating-point simulation lift), S-0409 F2
 #[test]

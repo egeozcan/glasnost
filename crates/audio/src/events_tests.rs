@@ -1171,6 +1171,39 @@ fn announcements_one_at_a_time() {
     assert!(a.mixer().speaking());
 }
 
+// spec: S-0701 claim 27 (one at a time, more than 500 ms after the previous start): the names kept for captions (M8 step C3) follow the starts, not the requests, and a missing file still counts
+#[test]
+fn started_announcements_are_named_for_captions() {
+    let w = world();
+    let mut a = announcing(
+        &w,
+        &[
+            (Announcement::Building, "Bld"),
+            (Announcement::OnHold, "Hold"),
+        ],
+    );
+    a.cue(UiCue::BuildStarted { infantry: false });
+    a.service(1000, &mut Rng::new(1));
+    assert_eq!(a.take_started(), ["Bld"]);
+    a.cue(UiCue::BuildHeld);
+    render(&mut a, 100);
+    a.service(1500, &mut Rng::new(1));
+    assert!(a.take_started().is_empty(), "the second waits its turn");
+    a.service(1501, &mut Rng::new(1));
+    assert_eq!(a.take_started(), ["Hold"]);
+    assert!(a.take_started().is_empty());
+    // Without the announcement's file nothing is heard, but it is named.
+    let mut mute = audio(&w, &[]);
+    mute.set_speech(speech_of(&["Mute"]));
+    let mut names = SoundNames::default();
+    names.set_announcement(Announcement::Building, "Mute");
+    mute.set_names(names);
+    mute.cue(UiCue::BuildStarted { infantry: false });
+    mute.service(1000, &mut Rng::new(1));
+    assert!(!mute.mixer().speaking());
+    assert_eq!(mute.take_started(), ["Mute"]);
+}
+
 fn base_names(a: &mut Audio) {
     let mut n = SoundNames::default();
     for (r, s) in [

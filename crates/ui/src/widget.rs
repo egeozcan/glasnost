@@ -6,22 +6,66 @@ use crate::draw::{DrawList, colour};
 use crate::font;
 use crate::geom::{Point, Rect};
 
-/// Widgets laid out by a screen: a rectangle per target, topmost last.
+/// Widgets laid out by a screen: a rectangle per target, topmost last, and
+/// the keyboard's focus stops in focus order.
 #[derive(Clone, Debug)]
 pub struct Targets<T> {
     /// The rectangles and their targets.
     pub list: Vec<(Rect, T)>,
+    /// The focus stops, in the order the keyboard moves through them.
+    pub stops: Vec<Stop<T>>,
+}
+
+/// A keyboard focus stop: one widget.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stop<T> {
+    /// The widget's rectangle (where the focus mark goes).
+    pub rect: Rect,
+    /// What activating it does.
+    pub main: T,
+    /// A choice box's previous and next steps (Left and Right).
+    pub sides: Option<(T, T)>,
 }
 
 impl<T: Clone> Targets<T> {
     /// No targets.
     pub fn new() -> Self {
-        Self { list: Vec::new() }
+        Self {
+            list: Vec::new(),
+            stops: Vec::new(),
+        }
     }
 
-    /// Adds a target.
+    /// Adds a target that is also a focus stop.
     pub fn push(&mut self, rect: Rect, t: T) {
+        self.list.push((rect, t.clone()));
+        self.stops.push(Stop {
+            rect,
+            main: t,
+            sides: None,
+        });
+    }
+
+    /// Adds a target the pointer reaches but the keyboard focus skips.
+    pub fn push_hit(&mut self, rect: Rect, t: T) {
         self.list.push((rect, t));
+    }
+
+    /// Adds a choice box's two halves ([`choice`]) as one focus stop:
+    /// activating it steps to the next value, Left and Right step either
+    /// way.
+    pub fn push_choice(&mut self, prev_rect: Rect, prev: T, next_rect: Rect, next: T) {
+        self.list.push((prev_rect, prev.clone()));
+        self.list.push((next_rect, next.clone()));
+        let x = prev_rect.x.min(next_rect.x);
+        let y = prev_rect.y.min(next_rect.y);
+        let r = prev_rect.right().max(next_rect.right());
+        let b = prev_rect.bottom().max(next_rect.bottom());
+        self.stops.push(Stop {
+            rect: Rect::new(x, y, r - x, b - y),
+            main: next.clone(),
+            sides: Some((prev, next)),
+        });
     }
 
     /// The topmost target under `p`.
@@ -45,6 +89,116 @@ impl<T: Clone> Targets<T> {
 impl<T: Clone> Default for Targets<T> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A keyboard navigation step (the client's keys choose them).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Nav {
+    /// The next stop.
+    Next,
+    /// The previous stop.
+    Prev,
+    /// A choice's previous value; elsewhere the previous stop.
+    Left,
+    /// A choice's next value; elsewhere the next stop.
+    Right,
+    /// Activate the focused stop.
+    Activate,
+}
+
+/// Where the keyboard focus is on a screen: the focused stop's target,
+/// kept across frames so that it stays on its widget while the screen
+/// changes around it. The mark shows only after a keyboard step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Focus<T> {
+    /// The focused stop's main target.
+    pub at: Option<T>,
+    /// Whether the mark is drawn (after a key; a pointer press hides it).
+    pub shown: bool,
+}
+
+impl<T> Default for Focus<T> {
+    fn default() -> Self {
+        Self {
+            at: None,
+            shown: false,
+        }
+    }
+}
+
+impl<T: Clone + PartialEq> Focus<T> {
+    /// No focus.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The focused stop's place in `t`, when it is still there.
+    fn index(&self, t: &Targets<T>) -> Option<usize> {
+        let at = self.at.as_ref()?;
+        t.stops.iter().position(|s| &s.main == at)
+    }
+
+    /// Takes a step on the screen whose targets are `t`. Returns the target
+    /// to act on, when the step activates one: [`Nav::Activate`] on the
+    /// focused stop, or Left and Right on a choice. The first step with
+    /// nothing focused only focuses a stop.
+    pub fn nav(&mut self, t: &Targets<T>, n: Nav) -> Option<T> {
+        let len = t.stops.len();
+        if len == 0 {
+            self.at = None;
+            return None;
+        }
+        self.shown = true;
+        let i = self.index(t);
+        let step = |d: usize| match i {
+            Some(i) => (i + d) % len,
+            None if d == 1 => 0,
+            None => len - 1,
+        };
+        let to = match (n, i) {
+            (Nav::Activate, Some(i)) => return Some(t.stops[i].main.clone()),
+            (Nav::Left | Nav::Right, Some(i)) if t.stops[i].sides.is_some() => {
+                let (a, b) = t.stops[i].sides.clone().expect("checked");
+                return Some(if n == Nav::Left { a } else { b });
+            }
+            (Nav::Next | Nav::Right | Nav::Activate, _) => step(1),
+            (Nav::Prev | Nav::Left, _) => step(len - 1),
+        };
+        self.at = Some(t.stops[to].main.clone());
+        None
+    }
+
+    /// Focuses the stop whose main target is `x`, if `t` has one.
+    pub fn set(&mut self, t: &Targets<T>, x: &T) -> bool {
+        if t.stops.iter().any(|s| &s.main == x) {
+            self.at = Some(x.clone());
+            self.shown = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The focused stop's main target, while it is on the screen.
+    pub fn target(&self, t: &Targets<T>) -> Option<T> {
+        self.index(t).map(|i| t.stops[i].main.clone())
+    }
+
+    /// The rectangle the mark goes around, while shown.
+    pub fn rect(&self, t: &Targets<T>) -> Option<Rect> {
+        self.index(t)
+            .filter(|_| self.shown)
+            .map(|i| t.stops[i].rect)
+    }
+
+    /// Draws the focus mark: a two-pixel outline just outside the focused
+    /// widget, in the focus colour (our own look, unlike the amber hover).
+    pub fn mark(&self, d: &mut DrawList, t: &Targets<T>) {
+        if let Some(r) = self.rect(t) {
+            d.frame(r.inset(-2), colour::FOCUS);
+            d.frame(r.inset(-3), colour::FOCUS);
+        }
     }
 }
 
@@ -169,6 +323,45 @@ mod tests {
         assert_eq!(t.hit(Point::new(50, 50)), Some(1));
         assert_eq!(t.hit(Point::new(150, 50)), None);
         assert_eq!(t.rect_of(&2), Some(Rect::new(10, 10, 10, 10)));
+    }
+
+    #[test]
+    fn the_focus_moves_through_the_stops_and_activates_them() {
+        let mut t = Targets::new();
+        t.push_hit(Rect::new(0, 0, 500, 500), 0);
+        t.push(Rect::new(10, 10, 10, 10), 1);
+        t.push_choice(Rect::new(10, 30, 5, 10), 2, Rect::new(15, 30, 5, 10), 3);
+        t.push(Rect::new(10, 50, 10, 10), 4);
+        // The pointer-only target is no stop; the choice is one stop.
+        assert_eq!(t.stops.len(), 3);
+        assert_eq!(t.stops[1].rect, Rect::new(10, 30, 10, 10));
+        let mut f = Focus::new();
+        assert_eq!(f.rect(&t), None);
+        // The first activation only focuses.
+        assert_eq!(f.nav(&t, Nav::Activate), None);
+        assert_eq!(f.at, Some(1));
+        assert_eq!(f.nav(&t, Nav::Activate), Some(1));
+        assert_eq!(f.nav(&t, Nav::Next), None);
+        assert_eq!(f.rect(&t), Some(Rect::new(10, 30, 10, 10)));
+        assert_eq!(f.nav(&t, Nav::Left), Some(2));
+        assert_eq!(f.nav(&t, Nav::Right), Some(3));
+        assert_eq!(f.nav(&t, Nav::Activate), Some(3));
+        // Left and Right elsewhere move, and the order wraps.
+        f.nav(&t, Nav::Next);
+        assert_eq!(f.at, Some(4));
+        f.nav(&t, Nav::Right);
+        assert_eq!(f.at, Some(1));
+        f.nav(&t, Nav::Prev);
+        assert_eq!(f.at, Some(4));
+        // A focused target that left the screen starts the order again.
+        let mut fewer = Targets::new();
+        fewer.push(Rect::new(0, 0, 4, 4), 7);
+        assert_eq!(f.target(&fewer), None);
+        f.nav(&fewer, Nav::Next);
+        assert_eq!(f.target(&fewer), Some(7));
+        let mut d = DrawList::new();
+        f.mark(&mut d, &fewer);
+        assert_eq!(d.prims.len(), 2);
     }
 
     #[test]
