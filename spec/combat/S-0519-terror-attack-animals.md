@@ -2,13 +2,13 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 6
+revision: 15
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-21
 measurements: []
-requests: [Q-0986, Q-1524]
+requests: [Q-0986, Q-1524, Q-1621]
 supersedes: []
 ---
 
@@ -66,7 +66,7 @@ ignores defences*, *quirk switch*. Also used:
   The mark's colour and brightness are presentation. Its phase sequence (claim 26) is game state,
   because one of its phases takes a scenario-stream draw.
 - **Flash count.** A per-building count of ticks of flashing still to come (claim 25).
-- **Mark clock.** A per-building countdown of 100000 ticks, started whenever a start or a redirect
+- **Mark clock.** A per-building countdown of 100 000 ticks, started whenever a start or a redirect
   marks the building (claim 26). It only bounds the mark's phase sequence.
 - **Charge countdown.** The building countdown that S-0302 claim 16 calls the delayed-kill
   countdown when a charge starts it. A building has at most one, whichever started it.
@@ -573,11 +573,39 @@ sequence and its draw in claim 26, which are game state.
       selects gives a mask by S-0102 F9. While the building is marked, in every drawn frame, the mask
       is combined by the bitwise union of S-0102 claim 34 with the building's body drawn as a sprite
       (in either pass), its voxel turret and barrel, and building animations at its cells (S-0102
-      claim 34's animation rule: the building occupying the animation's cell decides). A building
+      claim 34's animation rule: the building occupying the animation's cell decides). For the
+      body, voxel turret and barrel this covers a viewer to whom the building's centre cell is not
+      shrouded; for any other viewer it is open (Houses, below). While the
+      cell holding an animation's own position is under shroud for the local player, that
+      animation takes no marking colour and no force-shield mask, whatever the state of the
+      building's centre cell (S-0513 claim 29b; pending S-0513 SW10 part i5, and `unmeasured`
+      for a building that is only marked). A building
       that is also force-shielded takes the union of both masks. Curtain protection adds no mask. The
       mask itself never pulses. It is read from the rules at drawing time, so a building marked by a
       redirect looks the same as one marked by a start. This covers ordinary opaque drawings.
       Translucent and special accessory drawings remain outside this claim, as in S-0102 claim 34.
+    - **Selector outside the table (Q-1621).** The laser-target selector is a zero-based signed
+      integer naming one of the 16 positions of the colour-adjustment table: position *k*, from 0
+      to 15, is entry *k* + 1 in S-0006 claim 2's numbering. The
+      original does not reduce it modulo 16 and does not clamp it. This half is carried over by
+      analogy from what S-0513 claim 29a says of the protection selectors, a different claim
+      with its own rating and scenario; here it is medium, pending T27 part e. This spec adds that it does not fall back to the absent-key
+      default and does not keep the earlier layer's selector either (medium, pending T27 part e).
+      So 16 does not select position 0 and −1 does not select position 15. What any other
+      selector outside the table shows is open (Open questions). The values T27 part e uses, −1 and 16, name no
+      table position; what the original's marked building then shows is open
+      (Open questions). A selector far outside the table may make the original fail
+      (`unmeasured`: no run uses such a value). It is bad data.
+      **Our engine (bad data; a departure, no switch).** After every rules layer has been
+      applied, a held laser-target selector below 0 or above 15 counts as no selected
+      adjustment: every drawing that would take the laser-target mask takes *K* = 0 (S-0102 F9)
+      on 5-6-5 and 5-5-5 surfaces alike, so a marked building's body, voxel turret and barrel
+      and building animations at its cells take no laser-target colour. A force-shielded marked
+      building still takes the force-shield mask, unchanged. The importer warns once, naming the
+      key and its value (glossary, *importer warning*). The pulse of the phases below, the phase
+      draw and every other part of the mark are the same as for a valid selector. A selector
+      from 0 to 15 behaves as above, including a position whose triple is the empty (0, 0, 0)
+      entry, which also gives *K* = 0.
     - **Restart.** A start or redirect that marks the building (claims 17 and 19) puts its phase
       sequence back to *before the first marked turn* and starts its mark clock (Terms). A mark that
       passes to another strike holding the same building (claim 19) restarts neither. At any turn of
@@ -606,7 +634,7 @@ sequence and its draw in claim 26, which are game state.
       All arithmetic is integer, divisions truncated toward zero. So the brightness doubles over
       6 ticks, holds 4 ticks, falls back over 15 to 25 ticks (from between 448/256 and 576/256
       of ordinary), and then pulses as a 128-tick triangle between ordinary and double brightness. Low
-      hold is reachable only about 99842 ticks after the mark, so in practice the pulse lasts as long
+      hold is reachable only about 99 842 ticks after the mark, so in practice the pulse lasts as long
       as the mark.
     - **Draw.** Each restart that reaches Initial dimming takes exactly one inclusive ranged draw
       from −5 through 5 on the scenario stream (S-0202 claim 10, ranged-draw rule), in the building's
@@ -623,19 +651,45 @@ sequence and its draw in claim 26, which are game state.
       shows each pulse value or retains the value from its last repaint is unmeasured; T27(b)
       investigates this distinction. The per-frame rule is a presentation choice, not a confirmed
       original result, and introduces no quirk switch.
-    - **Houses.** Colour and pulse are the same for every viewer and every owner.
+    - **Houses.** Colour and pulse are the same for every owner, and for every viewer except
+      through the shroud exception for building animations above and the open body case below: shroud is kept per viewer, so
+      an animation whose own cell is shrouded for one viewer and not for another takes the
+      marking colour for the second viewer only. This follows from per-viewer shroud and is
+      `unmeasured`: every cited scenario uses one viewer. Whether a marked building's body also loses
+      the marking colour for a viewer to whom its centre cell is shrouded, as a protected
+      object's body loses its mask (S-0513 claim 29b), is open (Open questions).
     - Backing: `measurable` (scenario T27; the draw with the random-state recorder) for the
       colour, initial phases, repeating pulse, restart and shared-mark behaviour. The original's
       persistent-body refresh is `unmeasured`: no validated capture isolates pulse changes from
-      unrelated repaints. T27(b) is an investigation, and separately tests our per-frame design.
+      unrelated repaints. For a selector outside the table: `measurable` that the original
+      neither wraps nor clamps it, nor rejects it in favour of the absent-key default or of the
+      earlier layer's value (T27 part e, which would show that the colour does not follow table
+      positions 0, 15 and the earlier layer's position); what the original then shows is open
+      (Open questions); the possible failure with a far-out selector is `unmeasured`, since no
+      run uses such a value; our engine's rule is a departure by decision, checked on our
+      engine by T27 part e's engine fixture. The shroud exception for building animations is `measurable` (S-0513 scenario
+      SW10 part i5) for a building that is both force-shielded and marked, the only case that
+      part runs; for a building that is only marked it rests on that combined run and is
+      `unmeasured`. T27(b) is an investigation, and separately tests our per-frame design.
       The mark-clock thresholds and phases from Low hold onwards are `unmeasured`: no validated
-      fixture keeps a mark for nearly 100000 ticks without ending or restarting it. Missed-turn
+      fixture keeps a mark for nearly 100 000 ticks without ending or restarting it. Missed-turn
       phase advancement is likewise `unmeasured`: T27 does not suspend building turns.
       Negative-input rounding in F7 is `unmeasured` for the fixture limitation in claim 25.
       Per-frame rendering is a design rule, tested on our engine in T27(b), not an oracle claim
-    - Confidence: high for the colour source, the union with the force-shield mask, the phase lengths,
-      factors and the draw; medium for the list of parts and for the draw's place among other draws
-      in the same building turn
+    - Confidence: high for the colour source (except whether a body whose centre cell is
+      shrouded for the viewer keeps the marking colour, which is open), the union with the force-shield mask, the phase lengths,
+      factors and the draw; medium for the list of parts, for the shroud exception for building
+      animations on a building that is both force-shielded and marked (pending S-0513 SW10 part
+      i5's combined run); medium for that exception on a building that is only
+      marked, which no run covers, and for its consequence for two viewers with different
+      shroud; medium for the draw's place among other draws
+      in the same building turn. For a selector outside the table: medium that the original
+      neither wraps nor clamps it (by analogy with S-0513 claim 29a), until T27 part e has run; medium that it
+      neither falls back to the absent-key default nor keeps the earlier layer's value (this
+      spec's own, pending T27 part e); low for the possible failure with a far-out selector
+      (`unmeasured`). Our engine's rule for such a selector is
+      a departure by decision: backing `unmeasured` on the original, checked on our engine by
+      T27 part e's engine fixture; confidence high
 
 ## Formulas
 
@@ -740,7 +794,7 @@ The normal-light override still forces their drawn brightness to 1000 ‰.
 | Flash step | 500 | ‰ | F6 |
 | Flash step-down threshold | 1500 | ‰ | F6: above it the flash darkens |
 | Flash pattern period | 4 | ticks (2 on, 2 off) | F6 |
-| Mark clock | 100000 | ticks | Claim 26 |
+| Mark clock | 100 000 | ticks | Claim 26 |
 | Mark phase lengths | 6, 4, 20, 64, 64, 6, 4, 20 | ticks | Claim 26, in table order |
 | Mark dimming draw range | −5 to 5 | ticks, inclusive | Claim 26 |
 | Mark low-hold and final thresholds | 158, 31 | ticks of the mark clock | Claim 26 |
@@ -852,6 +906,9 @@ additions to the earlier isolated-protection contracts, not changes to protectio
   type stops the original at the first start. Our engine treats such a type as no designator, and
   the importer warns (bad-data departure, no switch). A missing elite type takes the normal type
   (Import mapping).
+- **Out-of-range laser-target selector** (claim 26): no laser-target colour and an importer
+  warning, a departure for bad data whose original colour is not established (Open
+  questions), matching S-0513's out-of-range protection selector.
 - **Large strikes.** A cancel orders at most 101 strike aircraft to retreat, taking the most
   recently placed first. Any further ones keep their orders. No stock strike comes near this.
 - **Several strikes on one building.** Each strike marks its own strike target. When one is
@@ -895,7 +952,7 @@ additions to the earlier isolated-protection contracts, not changes to protectio
 | Object types `EliteAirstrikeRechargeTime` | recharge delay *R*, elite | integer, ticks | the normal value |
 | Rules, audio-visual section, `AirstrikeAttackVoice` | air-strike attack sound (claim 17) | sound name | none |
 | Rules, audio-visual section, `AirstrikeAbortSound` | air-strike abort sound (claim 20) | sound name | none |
-| Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claims 17 and 26, presentation): a position in the colour-adjustment table (S-0006), read at drawing time | integer, dimensionless selector | 0 |
+| Rules, audio-visual section, `LaserTargetColor` | laser-target colour of a marked building (claims 17 and 26, presentation): a position in the colour-adjustment table (S-0006), read at drawing time; below 0 or above 15 our engine gives no laser-target mask and the importer warns (claim 26, Q-1621) | integer, dimensionless selector | 0 |
 | Imported bomb-icon image asset | bomb icon image (claim 24), image frames by F3 | sprite asset, resolved by S-0005 | missing: no icon is drawn; the importer warns (design) |
 | Imported cursor-palette asset | fixed palette of the bomb icon (claim 24), the same asset role as S-0111 claim 19's repair wrench | palette asset, resolved by S-0005 | owned by S-0111 |
 
@@ -1239,10 +1296,72 @@ result falsifies that part of its claim.
   pulsing normal-light animation falsifies that part.
   (d) Repeat (a) with the marked building owned by the local player, and with an allied owner.
   After accounting for the ordinary house-colour ramp, mask and phase factors must be identical.
-  A viewer- or owner-dependent effect falsifies the houses rule. The near-expiry phases and missed
+  A viewer- or owner-dependent effect falsifies the houses rule, apart from the shroud exception
+  for building animations (S-0513 SW10 part i5) and the open case of a body whose centre cell is
+  shrouded, which these runs avoid by keeping every cell of the building's foundation, and every
+  cell holding one of its slot animations, visible. The near-expiry phases and missed
   building turns are not covered by these runs (claim 26).
+  (e) Selector outside the table (Q-1621). Repeat (a)'s capture of the marked building with the
+  laser-target selector set to 16 and then to −1 in a named test selector layer (the named
+  test map's own rule sections), each in two
+  runs A and B. The two runs differ only in table positions 0 and 15 and in position *e*, the
+  position named by the laser-target selector in force before the selector layer (the stock
+  data's selector, written here only by its role). Before the runs, *e* is read from the rules
+  in force without the selector layer and recorded with the measurement; it is not written
+  into the test files. Run A gives each distinct position among 0, 15 and *e* a distinct,
+  clearly visible invented triple, run B others, each of B's triples differing from each of A's.
+  The fourth control's position (below) is the one exception: it holds (0, 0, 0) in both runs.
+  These
+  triples are written in a separate named test table layer, loaded before the selector layer
+  and present in every run and every control; it changes no selector. The table layer is a named
+  test game-mode file, or a named loose copy of the base rules that changes only the table.
+  S-0006 claim 2 lets either change the table by position, while a language rules file cannot
+  change positions the base rules give, so it is never used here. The selector layer
+  holds only the selector. Compare each capture with three control runs in A and in B, each with the table layer in force: at selectors 0
+  and 15 set in the selector layer, and at the earlier layer's selector *e* with the selector
+  layer left out. A wrapped selector (16 to 0, −1 to 15), a
+  clamped one (16 to 15, −1 to 0), a rejected one that falls back to the absent-key default
+  (position 0), or a rejected one that keeps the earlier layer's value (position *e*) would make
+  the marked colour follow position 0's, 15's or *e*'s triple from A to B. The
+  original's colour itself is recorded but not asserted. Expected: the pulse and the phase draw as
+  in (a), and for each selector the marked colour is the same in A and B. Falsified (for that
+  selector) by a marked colour that changes from A to B as the position-0, position-15 or
+  position-*e* triple does. A selector's run is inconclusive when any of its three controls
+  (positions 0, 15 and *e*) shows no change in the marked colour from A to B, since that
+  position's triples then cannot be told apart in the marked pixels. A colour that changes from
+  A to B in any other way is inconclusive. If the stock data's position *e* is 0 or 15, keeping
+  the earlier layer's value cannot be told apart from a wrap or a clamp onto that position: a
+  marked colour following that position's triple falsifies the claim but does not say which of
+  those alternatives occurred, while a marked colour that follows none of the three positions
+  still backs the whole claim, keeping the earlier value included. The original's marked
+  colour at selectors 16 and −1 is recorded in every run but not asserted. For Q-1621
+  question 1, run A adds a fourth control: the selector layer names a table position other
+  than 0, 15 and *e*, whose triple both runs' table layers set to (0, 0, 0), a triple that adds
+  nothing. A marked colour at 16 or −1 that differs from this control shows that the original
+  changes the colour; one that matches it leaves question 1 open, since a colour that adds
+  nothing and no mask look the same (Open questions). Engine fixture:
+  the same settings give the marked building's pixels without any laser-target colour (*K* = 0),
+  the pulse unchanged, the force-shield mask kept in a repeat with the test building also
+  force-shielded, and one importer
+  warning per run naming the key and its value; any laser-target colour or a missing warning
+  falsifies the engine rule. The oracle cannot falsify the engine rule.
 
 ## Open questions
+
+- (Q-1621 question 1, the part left open.) Whether the original's marked building shows any
+  colour change at all for a laser-target selector outside the table. Its colour would come
+  from no imported triple and might add nothing visible. T27 part e records the original's
+  colour and compares it with a control whose selector names a position with the triple
+  (0, 0, 0), which adds nothing. A marked colour at 16 or −1 that differs from that control
+  settles the question: the colour changes. One that matches it leaves the question open,
+  since a colour that adds nothing and no mask look the same.
+- (Q-1621 question 1, claim 26.) What a laser-target selector outside the table other than −1
+  and 16 shows. T27 part e avoids such values, which may make the original fail.
+- Whether a marked building's body (and its voxel turret and barrel) loses the marking colour
+  for a viewer to whom the building's centre cell is shrouded, as S-0513 claim 29b's
+  centre-cell rule removes a protected object's mask. Not traced for the marking; a T27 (a)
+  repeat with the centre cell shrouded for the local player and a foundation corner visible
+  would show it.
 
 - No separate effect of the imported animal marker has been traced beyond parsing it. Claim 1
   specifies only that the marker does not itself supply the latching weapon attack.
@@ -1260,3 +1379,15 @@ result falsifies that part of its claim.
   pulse (claim 26), or only the value at its area's last repaint. No repaint tied to the pulse was
   found, only to the flash's on/off changes. Claim 26 chooses the current value in every frame for
   our engine only; T27(b) distinguishes that design test from the unresolved original hypotheses.
+
+## Changes for other specs
+
+- **S-0102 F9.** Its sentence on "no selected adjustment" names the protection selectors (S-0513
+  claim 29a) and the berserk selector (S-0610); it should name the laser-target selector too
+  (claim 26, Q-1621).
+- **S-0102 claim 34's marked-building rows and S-0006 claim 2.** The rows cite claim 26 for the
+  laser-target selector, so the out-of-table rule reaches them without a change; S-0006 claim
+  2 describes the table by position only and needs none.
+- **S-0102 claim 34, shroud exception for building animations.** The change is listed under
+  S-0513's Changes for other specs, which owns it (S-0513 claim 29b); this spec's claim 26
+  relies on it.
