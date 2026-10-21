@@ -595,6 +595,8 @@ pub enum PauseHit {
     Speed(i32),
     /// Give up and see the end screen.
     Surrender,
+    /// Open the settings screen.
+    Settings,
     /// Leave to the main menu.
     Leave,
 }
@@ -603,13 +605,14 @@ pub enum PauseHit {
 pub fn pause_view(
     size: (i32, i32),
     speed: u8,
+    settings: bool,
     hover: Option<Point>,
 ) -> (DrawList, Targets<PauseHit>) {
     let (w, h) = size;
     let mut d = DrawList::new();
     let mut t = Targets::new();
     d.fill(Rect::new(0, 0, w, h), [0, 0, 0, 120]);
-    let r = Rect::new((w - 240) / 2, (h - 160) / 2, 240, 160);
+    let r = Rect::new((w - 240) / 2, (h - 186) / 2, 240, 186);
     widget::panel(&mut d, r, Some("OPTIONS (PAUSED)"));
     let hot = |x: Rect| hover.is_some_and(|p| x.contains(p));
     // spec: S-0201 claim 8 (control position p sets index 6 − p)
@@ -624,11 +627,15 @@ pub fn pause_view(
     t.push(a, PauseHit::Speed(-1));
     t.push(b, PauseHit::Speed(1));
     let mut y = r.y + 50;
-    for (hit, label) in [
-        (PauseHit::Resume, "Resume"),
+    let mut items = vec![(PauseHit::Resume, "Resume")];
+    if settings {
+        items.push((PauseHit::Settings, "Settings"));
+    }
+    items.extend([
         (PauseHit::Surrender, "Surrender"),
         (PauseHit::Leave, "Leave game"),
-    ] {
+    ]);
+    for (hit, label) in items {
         let br = Rect::new(r.x + 30, y, 180, 20);
         widget::button(&mut d, br, label, hot(br), true);
         t.push(br, hit);
@@ -757,10 +764,17 @@ mod tests {
         assert_eq!(step_speed(0, 1), 0);
         assert_eq!(step_speed(0, -1), 1);
         assert_eq!(step_speed(6, -1), 6);
-        let (d, t) = pause_view((800, 600), 4, None);
+        let (d, t) = pause_view((800, 600), 4, true, None);
         assert!(d.texts().contains(&"3 of 7"));
         let r = t.rect_of(&PauseHit::Resume).unwrap();
         assert_eq!(t.hit(r.centre()), Some(PauseHit::Resume));
+        assert!(t.rect_of(&PauseHit::Settings).is_some());
+        assert!(
+            pause_view((800, 600), 4, false, None)
+                .1
+                .rect_of(&PauseHit::Settings)
+                .is_none()
+        );
     }
 
     #[test]

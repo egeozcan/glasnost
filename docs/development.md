@@ -1753,6 +1753,30 @@ Known limits:
 - The seed of a game comes from the host clock when Start is clicked.
 - Natively, the install is read when the window opens and the game is loaded synchronously after the frame that shows "Loading". The window does not respond while it loads (a few seconds in a debug build).
 
+## Settings (M8 step C2)
+
+Our own settings screen (`glasnost_ui::settings`, driven by `game/client_settings.rs`), reached from the main menu ("Settings", no install needed) and from the in-game options menu (not in a network game, whose lockstep must keep being pumped; Escape or Back returns to the paused game). Settings are presentation and input choices of the person at this machine. They live in `glasnost-app` (`settings.rs`), never reach the simulation crates (`xtask deps` and the determinism lint pass) and never change a state hash (`client::tests::state_hash_is_the_same_under_any_settings` plays one game under default and under extreme settings and compares every tick's hash).
+
+What is stored (all fields optional on load):
+
+| Setting | Key | Range, default | Used by |
+|---|---|---|---|
+| Sound-effects volume | `sound` | 0 to 100 percent, 100 (S-0701 F3, option at full) | `Mixer::set_volume`, level = percent x 16384 / 100 |
+| Voice volume | `voices` | 0 to 100, 100 (S-0701 claim 35) | `Mixer::set_voice_volume`, scales the announcement voice (new) |
+| Music volume | `music` | 0 to 100, 100 | stored and shown only: seam for step C1 (no music output yet) |
+| Scroll speed | `scroll` | index 0 fastest to 6 slowest, 3 (S-0101 Terms and Import mapping) | `Session::scroll_index`, replacing the fixed default in the edge, drag and arrow scroll |
+| Display scale | `scale` | 100, 125, 150, 200, 300 percent, 100 (our own) | stored and shown only: seam for C3 (the 2D batch draws the interface at scale 1 today) |
+| Command keys | `key.stop`, `key.scatter`, `key.guard`, `key.deploy`, `key.cheer` | a lower-case letter or digit each, S X G D C (S-0213 claim 22) | `client::bound_with` |
+| Relay address | `relay` | text, empty | the multiplayer screen's field, set from it when a connection is tried; the command line's `--relay` still wins for a run |
+
+Fixed keys, listed on the screen and not rebindable: Escape (options menu) and the arrows (scroll), S-0213 claim 23. Rebinding: click a key button, press the new key; a key another action has is refused with a note and the button keeps waiting (no swapping); Escape cancels; "Reset to defaults" restores everything except the relay address. A file with clashing or non-alphanumeric keys loads the default keys together (the other fields still load). The scroll speed is shown as "n of 7" with 7 fastest. The scroll speed's table and index range follow S-0101 F9; the screen is our own.
+
+Format: UTF-8 text, one `key=value` per line, first line `version=1`. A field that is missing (an older file), unknown (a newer file) or wrong takes its default or is ignored; numbers clamp to their range; control characters are removed from the relay. Version 1 is the first; bump `settings::VERSION` only when a field's meaning changes (adding a field needs no bump).
+
+Where: natively `<config folder>/glasnost/settings.txt` (`XDG_CONFIG_HOME` or `~/.config` on Unix-like systems, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows; a relative or missing folder means no store and the defaults, with nothing written); written beside the file and renamed over it. Never in the repository or the game folder. On the web, `localStorage` under `glasnost.settings`; a blocked storage reads as empty and a failed write shows a note on the screen. Both go through the `settings::Store` trait (`FileStore`, `KvStore<K: KeyValue>`); tests: `settings_tests.rs` (format, defaults, clamping, conflicts, native file round trip, config path per platform, the web layer's logic with a blocking mock) and `client_tests.rs` (screen, persistence into a new client, rebinding, remembered relay, refusing store). The web build compiles `web-sys`'s `Storage`; a browser test is not added (the existing web harness has no storage case).
+
+Seams: music volume (C1), display scale (C3). The in-game screen is not offered in network games. The screenshot test `crates/app/tests/settings_shot.rs` writes `settings.png` when `GLASNOST_SHOT_DIR` is set.
+
 ## Arena mode (M7b)
 
 PLAN.md §5 (M7 exit: "Arena win rates within tolerance of the stock oracle") and §6 layer 2B (unit-arena win rates and time to kill across seeds, two-proportion and KS tests). Code: `crates/tools/src/oracle.rs` (the oracle arena: the lead's records M-0001 to M-0003, their setup and the comparison), `crates/tools/src/arena.rs` (the synthetic arena on our own flat map, with its own record form), `crates/tools/src/stats.rs` (the statistics), `crates/tools/tests/arena.rs`. The arena is tooling: it touches no simulation state, so the save format and goldens are unchanged.

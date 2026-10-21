@@ -39,6 +39,8 @@ use super::paint::Painter;
 use super::play::Button;
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
 use crate::mapview::live::Pacer;
+use crate::settings::{Action, Bindings, Settings, Store};
+use glasnost_ui::settings::SettingsHit;
 
 /// Asynchronous work the client asks for. One job is in flight at a time,
 /// so the size of its largest variant does not matter.
@@ -214,6 +216,18 @@ pub struct Client {
     pub build: String,
     /// The multiplayer screen's targets of the last frame.
     pub net_targets: Targets<NetHit>,
+    /// The person's settings (M8 step C2): presentation and input only, never
+    /// read by the simulation.
+    pub settings: Settings,
+    /// The settings screen's targets of the last frame.
+    pub settings_targets: Targets<SettingsHit>,
+    /// The binding waiting for a key on the settings screen.
+    pub rebinding: Option<usize>,
+    /// The settings screen's last note (a refusal or a storage problem).
+    pub settings_note: String,
+    /// The settings screen was opened from the game's options menu.
+    settings_from_game: bool,
+    store: Option<Box<dyn Store>>,
     net: Option<net::Net>,
     net_status: (String, bool),
     chat_field: Option<Rect>,
@@ -256,10 +270,53 @@ impl Client {
             connect: platform_connect(),
             build: net::BUILD.into(),
             net_targets: Targets::new(),
+            settings: Settings::default(),
+            settings_targets: Targets::new(),
+            rebinding: None,
+            settings_note: String::new(),
+            settings_from_game: false,
+            store: None,
             net: None,
             net_status: (String::new(), false),
             chat_field: None,
             clock: 0,
+        }
+    }
+
+    /// Reads the settings from `store` and keeps every later change there.
+    /// A store with nothing readable leaves the defaults.
+    pub fn attach_store(&mut self, store: Box<dyn Store>) {
+        if let Some(text) = store.read() {
+            self.settings = Settings::from_text(&text);
+        }
+        self.store = Some(store);
+        self.apply_settings();
+        if !self.settings.relay.is_empty() {
+            self.netform.relay = self.settings.relay.clone();
+        }
+    }
+
+    /// Puts the settings to use (sound levels, the game's scroll speed) and
+    /// keeps them in the store.
+    fn settings_changed(&mut self) {
+        self.apply_settings();
+        if let Some(store) = self.store.as_ref()
+            && let Err(e) = store.write(&self.settings.to_text())
+        {
+            log::warn!("settings not kept: {e}");
+            self.settings_note = format!("Settings could not be kept: {e}");
+        }
+    }
+
+    fn apply_settings(&mut self) {
+        let st = &self.settings;
+        if let Some(a) = self.audio.as_mut() {
+            let m = a.mixer_mut();
+            m.set_volume(Settings::mixer_level(st.sound));
+            m.set_voice_volume(Settings::mixer_level(st.voices));
+        }
+        if let Some(s) = self.session.as_mut() {
+            s.scroll_index = st.scroll_index;
         }
     }
 
@@ -307,6 +364,7 @@ impl Client {
                         self.radar_tick = -1;
                         self.game_serial += 1;
                         self.session = Some(s);
+                        self.apply_settings();
                         self.net_started();
                         self.start_audio(voices);
                         self.shell.screen = Screen::Game;
@@ -348,6 +406,7 @@ impl Client {
         audio.set_voices(voices);
         audio.set_names(install.names.clone());
         audio.start(w, Some(s.play.local));
+        self.apply_settings();
     }
 
     /// A user gesture happened: the browser lets sound start now.
@@ -463,10 +522,14 @@ impl Client {
                 let Some(s) = self.session.as_mut() else {
                     return;
                 };
-                if s.pointer_up(b, p, mods) == SessionEvent::Leave {
-                    self.session = None;
-                    self.net_leave();
-                    self.shell.leave_game();
+                match s.pointer_up(b, p, mods) {
+                    SessionEvent::Leave => {
+                        self.session = None;
+                        self.net_leave();
+                        self.shell.leave_game();
+                    }
+                    SessionEvent::Settings => self.open_settings(true),
+                    SessionEvent::None => {}
                 }
             }
             _ if b != Button::Left || pressed.is_none() || self.busy => {}
@@ -474,6 +537,10 @@ impl Client {
                 let ready = self.install.is_some();
                 if let Some(hit) = self.menu_targets.hit(p) {
                     if hit == MenuHit::Skirmish && !ready {
+                        return;
+                    }
+                    if hit == MenuHit::Settings {
+                        self.open_settings(false);
                         return;
                     }
                     let rules = self.install.as_ref().map(|i| i.setup.clone());
@@ -507,6 +574,11 @@ impl Client {
                     self.netform.focus = None;
                 }
             }
+            Screen::Settings => {
+                if let Some(hit) = self.settings_targets.hit(p) {
+                    self.settings_click(hit);
+                }
+            }
             Screen::Room => self.room_click(p),
             Screen::End(_) => {
                 if self.end_targets.hit(p).is_some() {
@@ -526,6 +598,12 @@ impl Client {
         // Text fields and the chat take their keys first; a letter typed
         // into one is no command.
         if down && self.net_key(k) {
+            return;
+        }
+        if self.shell.screen == Screen::Settings {
+            if down {
+                self.settings_key(k);
+            }
             return;
         }
         if matches!(k, Key::Char(_)) && self.typing() {
@@ -557,7 +635,7 @@ impl Client {
         let Some(s) = self.session.as_mut() else {
             return;
         };
-        match bound(k) {
+        match bound_with(&self.settings.bindings, k) {
             Some(Bound::Options) => s.open_options(),
             Some(Bound::Command(c)) => s.key(c),
             Some(Bound::Cheer) if !s.paused => s.play.cheer(),
@@ -675,6 +753,7 @@ impl Client {
                 d
             }
             Screen::Multiplayer => self.net_menu_frame(hover),
+            Screen::Settings => self.settings_frame(hover),
             Screen::Room => {
                 let mut d = self.room_frame(hover);
                 if self.busy {
@@ -791,6 +870,21 @@ pub enum Bound {
 /// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
 /// route-mode key Z is not bound: route mode does not exist yet.
 pub fn bound(k: Key) -> Option<Bound> {
+    bound_with(&Bindings::default(), k)
+}
+
+/// What a pressed key does under the person's bindings (the settings
+/// screen's choices; [`bound`] is a fresh profile).
+pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
+    if let Key::Char(c) = k {
+        return b.action(c).map(|a| match a {
+            Action::Stop => Bound::Command(KeyCommand::Stop),
+            Action::Scatter => Bound::Command(KeyCommand::Scatter),
+            Action::Guard => Bound::Command(KeyCommand::Guard),
+            Action::Deploy => Bound::Command(KeyCommand::Deploy),
+            Action::Cheer => Bound::Cheer,
+        });
+    }
     match k {
         // spec: S-0213 claim 23 (Escape opens the in-game options menu, reserved for it; closing keys are not specified, so the menu closes through its return control)
         Key::Escape => Some(Bound::Options),
@@ -806,6 +900,9 @@ pub fn bound(k: Key) -> Option<Bound> {
 
 #[path = "client_net.rs"]
 mod net;
+
+#[path = "client_settings.rs"]
+mod settings_screen;
 
 pub use net::BUILD;
 

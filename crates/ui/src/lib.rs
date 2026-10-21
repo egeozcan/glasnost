@@ -16,6 +16,7 @@ pub mod hud;
 pub mod menu;
 pub mod modes;
 pub mod netmenu;
+pub mod settings;
 pub mod setup;
 pub mod shell;
 pub mod status;

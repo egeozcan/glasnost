@@ -638,3 +638,20 @@ fn announcement_voice_is_separate() {
     assert!(!m.speaking());
     assert_eq!(m.busy_channels(), CHANNELS);
 }
+
+// spec: S-0701 claim 35 (the voice option is at full by default); the person's voice volume setting (M8 C2) scales it and zero silences it
+#[test]
+fn voice_volume_option_scales_announcements() {
+    let level = |option: Option<i32>| {
+        let mut m = mixer();
+        if let Some(o) = option {
+            m.set_voice_volume(o);
+        }
+        m.speak(clip(100, 1000));
+        render(&mut m, 4)[0]
+    };
+    let full = level(None);
+    assert_eq!(full, level(Some(FULL)));
+    assert_eq!(level(Some(FULL / 2)), full / 2);
+    assert_eq!(level(Some(0)), 0);
+}

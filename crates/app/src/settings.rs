@@ -1,0 +1,395 @@
+//! The client's settings (M8 step C2) and where they are kept.
+//!
+//! Settings are presentation and input choices of the person at this
+//! machine: they never reach the simulation crates and never change a state
+//! hash. They are kept as a small versioned text file (`key=value` lines) in
+//! the platform's configuration folder natively and in the browser's
+//! `localStorage` on the web. A missing or unreadable store gives defaults;
+//! a field a file lacks (an older file) or holds wrongly takes its default.
+
+use std::path::PathBuf;
+
+/// The format version this build writes. Version 1 holds every field below;
+/// a later version may add fields, which older builds ignore.
+// nocite: our own client setting (storage format)
+pub const VERSION: u32 = 1;
+
+/// The key `localStorage` keeps the text under on the web.
+// nocite: our own client setting (storage name)
+pub const WEB_KEY: &str = "glasnost.settings";
+
+/// A bindable command key (S-0213 table T2 without route mode).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    /// Stop.
+    Stop,
+    /// Scatter.
+    Scatter,
+    /// Guard.
+    Guard,
+    /// Deploy.
+    Deploy,
+    /// Cheer.
+    Cheer,
+}
+
+/// Every bindable action, in the order the screen lists them.
+pub const ACTIONS: [Action; 5] = [
+    Action::Stop,
+    Action::Scatter,
+    Action::Guard,
+    Action::Deploy,
+    Action::Cheer,
+];
+
+impl Action {
+    /// The name shown and stored.
+    pub fn name(self) -> &'static str {
+        match self {
+            Action::Stop => "stop",
+            Action::Scatter => "scatter",
+            Action::Guard => "guard",
+            Action::Deploy => "deploy",
+            Action::Cheer => "cheer",
+        }
+    }
+
+    fn index(self) -> usize {
+        ACTIONS.iter().position(|a| *a == self).unwrap_or(0)
+    }
+}
+
+/// The keys of the fixed bindings, for the screen to list: the options menu
+/// key and the view-scroll arrows.
+// spec: S-0213 claim 23 (Escape is reserved for the options menu; the arrow keys scroll the view)
+pub const FIXED_KEYS: [(&str, &str); 2] = [
+    ("Options menu", "Escape"),
+    ("Scroll the view", "Arrow keys"),
+];
+
+/// The key bindings of the command keys. Keys are lower-case letters or
+/// digits, and no two actions share one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Bindings([char; 5]);
+
+/// Why a key could not be bound.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindError {
+    /// The key is not a letter or a digit.
+    NotBindable,
+    /// Another action has the key.
+    Taken(Action),
+}
+
+impl Default for Bindings {
+    fn default() -> Self {
+        // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer)
+        Self(['s', 'x', 'g', 'd', 'c'])
+    }
+}
+
+impl Bindings {
+    /// The key of an action.
+    pub fn key(&self, a: Action) -> char {
+        self.0[a.index()]
+    }
+
+    /// The action a key is bound to.
+    pub fn action(&self, c: char) -> Option<Action> {
+        ACTIONS.iter().copied().find(|a| self.key(*a) == c)
+    }
+
+    /// Binds `c` to `a`. A key another action has is refused, not swapped.
+    pub fn rebind(&mut self, a: Action, c: char) -> Result<(), BindError> {
+        let c = c.to_ascii_lowercase();
+        if !c.is_ascii_alphanumeric() {
+            return Err(BindError::NotBindable);
+        }
+        match self.action(c) {
+            Some(other) if other != a => Err(BindError::Taken(other)),
+            _ => {
+                self.0[a.index()] = c;
+                Ok(())
+            }
+        }
+    }
+}
+
+/// The scroll-speed index range: 0 fastest to 6 slowest.
+// spec: S-0101 Terms (scroll index r, 0 fastest to 6 slowest) and Import mapping (ordinary control range 0 … 6)
+pub const SCROLL_RANGE: (i32, i32) = (0, 6);
+
+/// The display scales offered, percent.
+// nocite: our own client setting (display scale steps)
+pub const SCALES: [u16; 5] = [100, 125, 150, 200, 300];
+
+/// The longest relay address kept, in characters.
+// nocite: our own client setting (matches the multiplayer screen's field)
+const RELAY_CHARS: usize = 200;
+
+/// The settings.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Settings {
+    /// Sound-effects volume, 0 … 100 percent.
+    pub sound: u8,
+    /// Announcement volume, 0 … 100 percent.
+    pub voices: u8,
+    /// Music volume, 0 … 100 percent (stored; no music output yet, step C1).
+    pub music: u8,
+    /// Scroll-speed index, [`SCROLL_RANGE`].
+    pub scroll_index: i32,
+    /// Interface scale, percent, one of [`SCALES`] (stored; C3 seam).
+    pub ui_scale: u16,
+    /// The command keys.
+    pub bindings: Bindings,
+    /// The relay address last used on the multiplayer screen ("" none).
+    pub relay: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            // spec: S-0701 F3 (the player's sound volume option starts at full volume)
+            sound: 100,
+            // spec: S-0701 claim 35 (the voice option is at full)
+            voices: 100,
+            // nocite: our own client setting (music volume default)
+            music: 100,
+            // spec: S-0101 Import mapping (a missing saved scroll setting gives 3)
+            scroll_index: 3,
+            // nocite: our own client setting (no scaling)
+            ui_scale: 100,
+            bindings: Bindings::default(),
+            relay: String::new(),
+        }
+    }
+}
+
+impl Settings {
+    /// The mixer option for a volume percentage, 0 … 16384.
+    // nocite: our own client setting (percent to the mixer's range, S-0701 F3's o is 0 … 16384)
+    pub fn mixer_level(percent: u8) -> i32 {
+        i32::from(percent.min(100)) * 16384 / 100
+    }
+
+    /// The text kept for these settings.
+    pub fn to_text(&self) -> String {
+        let mut s = format!("version={VERSION}\n");
+        s += &format!(
+            "sound={}\nvoices={}\nmusic={}\n",
+            self.sound, self.voices, self.music
+        );
+        s += &format!("scroll={}\nscale={}\n", self.scroll_index, self.ui_scale);
+        for a in ACTIONS {
+            s += &format!("key.{}={}\n", a.name(), self.bindings.key(a));
+        }
+        let relay: String = self.relay.chars().filter(|c| !c.is_control()).collect();
+        s += &format!("relay={relay}\n");
+        s
+    }
+
+    /// Settings from kept text: a field that is missing or wrong takes its
+    /// default; keys that clash fall back to the default bindings together.
+    pub fn from_text(text: &str) -> Self {
+        let mut s = Self::default();
+        let mut keys = Bindings::default();
+        let mut taken: Vec<(Action, char)> = Vec::new();
+        for line in text.lines() {
+            let Some((k, v)) = line.split_once('=') else {
+                continue;
+            };
+            let num = || v.trim().parse::<i64>().ok();
+            match k.trim() {
+                "sound" => s.sound = num().map_or(s.sound, |n| n.clamp(0, 100) as u8),
+                "voices" => s.voices = num().map_or(s.voices, |n| n.clamp(0, 100) as u8),
+                "music" => s.music = num().map_or(s.music, |n| n.clamp(0, 100) as u8),
+                "scroll" => {
+                    s.scroll_index = num().map_or(s.scroll_index, |n| {
+                        n.clamp(i64::from(SCROLL_RANGE.0), i64::from(SCROLL_RANGE.1)) as i32
+                    });
+                }
+                "scale" => {
+                    if let Some(n) = num().filter(|n| SCALES.iter().any(|x| i64::from(*x) == *n)) {
+                        s.ui_scale = n as u16;
+                    }
+                }
+                "relay" => {
+                    s.relay = v
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(RELAY_CHARS)
+                        .collect();
+                }
+                other => {
+                    if let Some(name) = other.strip_prefix("key.")
+                        && let Some(a) = ACTIONS.iter().copied().find(|a| a.name() == name)
+                        && let Some(c) = v.trim().chars().next()
+                    {
+                        taken.push((a, c.to_ascii_lowercase()));
+                    }
+                }
+            }
+        }
+        for (a, c) in taken {
+            keys.0[a.index()] = c;
+        }
+        // A key that is not a letter or digit, or that two actions share,
+        // spoils the whole set; the defaults stand then.
+        let distinct = ACTIONS.iter().all(|a| keys.key(*a).is_ascii_alphanumeric())
+            && ACTIONS.iter().enumerate().all(|(i, a)| {
+                ACTIONS[i + 1..]
+                    .iter()
+                    .all(|b| keys.key(*a) != keys.key(*b))
+            });
+        if distinct {
+            s.bindings = keys;
+        }
+        s
+    }
+
+    /// The scroll rows' text: 1 (slowest) … 7 (fastest).
+    pub fn scroll_label(&self) -> String {
+        format!("{} of 7", 7 - self.scroll_index)
+    }
+
+    /// Steps the scroll speed: `d` > 0 faster.
+    pub fn step_scroll(&mut self, d: i32) {
+        self.scroll_index = (self.scroll_index - d).clamp(SCROLL_RANGE.0, SCROLL_RANGE.1);
+    }
+
+    /// Steps the display scale to the next or previous offered one.
+    pub fn step_scale(&mut self, d: i32) {
+        let at = SCALES.iter().position(|x| *x == self.ui_scale).unwrap_or(0) as i32;
+        self.ui_scale = SCALES[(at + d).clamp(0, SCALES.len() as i32 - 1) as usize];
+    }
+}
+
+/// Steps a volume by ten percent.
+// nocite: our own client setting (volume step)
+pub fn step_volume(v: u8, d: i32) -> u8 {
+    (i32::from(v) + 10 * d).clamp(0, 100) as u8
+}
+
+/// Where the settings are kept.
+pub trait Store {
+    /// The kept text, if any can be read.
+    fn read(&self) -> Option<String>;
+    /// Keeps the text.
+    fn write(&self, text: &str) -> Result<(), String>;
+}
+
+/// A string key-value storage that may refuse (the browser's `localStorage`).
+pub trait KeyValue {
+    /// The value of a key.
+    fn get(&self, key: &str) -> Result<Option<String>, String>;
+    /// Sets a key.
+    fn set(&self, key: &str, value: &str) -> Result<(), String>;
+}
+
+/// The settings in a [`KeyValue`] storage. A storage that refuses reads as
+/// empty (defaults) and reports its refusals on writes.
+pub struct KvStore<K: KeyValue>(pub K);
+
+impl<K: KeyValue> Store for KvStore<K> {
+    fn read(&self) -> Option<String> {
+        self.0.get(WEB_KEY).ok().flatten()
+    }
+
+    fn write(&self, text: &str) -> Result<(), String> {
+        self.0.set(WEB_KEY, text)
+    }
+}
+
+/// The settings file in a folder.
+pub struct FileStore(pub PathBuf);
+
+impl Store for FileStore {
+    fn read(&self) -> Option<String> {
+        std::fs::read_to_string(&self.0).ok()
+    }
+
+    fn write(&self, text: &str) -> Result<(), String> {
+        if let Some(dir) = self.0.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        // Written beside the file and renamed over it, so a crash leaves
+        // the old file whole.
+        let tmp = self.0.with_extension("tmp");
+        std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, &self.0).map_err(|e| e.to_string())
+    }
+}
+
+/// The host systems whose configuration folders differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Host {
+    /// Linux and the other Unix systems.
+    Unix,
+    /// macOS.
+    Mac,
+    /// Windows.
+    Windows,
+}
+
+/// The settings file's path under the platform's configuration folder, from
+/// an environment lookup. `None` when no absolute folder can be named.
+// nocite: our own client setting (the platform's conventional configuration folders)
+pub fn config_path(host: Host, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    let abs = |v: Option<String>| v.map(PathBuf::from).filter(|p| p.is_absolute());
+    let base = match host {
+        Host::Windows => abs(env("APPDATA")),
+        Host::Mac => abs(env("HOME")).map(|h| h.join("Library").join("Application Support")),
+        Host::Unix => {
+            abs(env("XDG_CONFIG_HOME")).or_else(|| abs(env("HOME")).map(|h| h.join(".config")))
+        }
+    }?;
+    Some(base.join("glasnost").join("settings.txt"))
+}
+
+/// The store of this platform: the settings file natively, `localStorage`
+/// on the web; `None` when there is nowhere to keep them.
+pub fn platform_store() -> Option<Box<dyn Store>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let host = if cfg!(windows) {
+            Host::Windows
+        } else if cfg!(target_os = "macos") {
+            Host::Mac
+        } else {
+            Host::Unix
+        };
+        let path = config_path(host, |k| std::env::var(k).ok())?;
+        Some(Box::new(FileStore(path)))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        web::local_storage().map(|s| Box::new(KvStore(s)) as Box<dyn Store>)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod web {
+    use super::KeyValue;
+
+    /// The page's `localStorage`.
+    pub struct Local(web_sys::Storage);
+
+    /// `localStorage`, if the browser gives it (it may throw when blocked).
+    pub fn local_storage() -> Option<Local> {
+        web_sys::window()?.local_storage().ok().flatten().map(Local)
+    }
+
+    impl KeyValue for Local {
+        fn get(&self, key: &str) -> Result<Option<String>, String> {
+            self.0.get_item(key).map_err(|e| format!("{e:?}"))
+        }
+
+        fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            self.0.set_item(key, value).map_err(|e| format!("{e:?}"))
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "settings_tests.rs"]
+mod tests;

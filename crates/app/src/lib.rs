@@ -21,6 +21,7 @@ use winit::window::{Window, WindowId};
 
 pub mod game;
 pub mod mapview;
+pub mod settings;
 mod status;
 pub mod viewer;
 pub use game::{GameOptions, run_game};

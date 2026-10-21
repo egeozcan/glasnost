@@ -16,6 +16,8 @@ pub enum Screen {
     Setup,
     /// The multiplayer screen: name, relay address, room code.
     Multiplayer,
+    /// The settings screen.
+    Settings,
     /// A network room: the setup screen of a room on a relay.
     Room,
     /// A game is running (or paused in its options menu).
@@ -71,6 +73,10 @@ impl Shell {
             }
             MenuHit::Multiplayer => {
                 self.screen = Screen::Multiplayer;
+                None
+            }
+            MenuHit::Settings => {
+                self.screen = Screen::Settings;
                 None
             }
             MenuHit::Install => Some(Event::PickInstall),

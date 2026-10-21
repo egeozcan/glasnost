@@ -402,6 +402,8 @@ pub struct Mixer {
     master: i32,
     /// The player's sound volume option o of F3.
     option: i32,
+    /// The player's voice volume option, 0 … 16384 (announcements).
+    voice_option: i32,
     speech: Option<Speech>,
     acc: Vec<i64>,
 }
@@ -426,6 +428,8 @@ impl Mixer {
             master: FULL,
             // spec: S-0701 F3 (o = trunc(option fraction × 16384); full volume)
             option: FULL,
+            // spec: S-0701 claim 35 (the voice option is at full unless the player sets it)
+            voice_option: FULL,
             speech: None,
             acc: Vec::new(),
         }
@@ -465,6 +469,12 @@ impl Mixer {
     /// Sets the player's sound volume option, 0 … 16384 (F3's o).
     pub fn set_volume(&mut self, o: i32) {
         self.option = o.clamp(0, FULL);
+    }
+
+    /// Sets the player's voice volume option for announcements, 0 … 16384
+    /// (S-0701 claim 35 keeps it at full by default).
+    pub fn set_voice_volume(&mut self, o: i32) {
+        self.voice_option = o.clamp(0, FULL);
     }
 
     /// The master level g of F3.
@@ -1083,8 +1093,10 @@ impl Mixer {
         }
         if let Some(s) = self.speech.as_mut() {
             // spec: S-0701 claim 35 (announcements skip the master level and the sound volume option; the voice option is at full, centred)
-            let unity = 1 << 16;
-            mix(&mut s.voice, &mut self.acc, 0, frames, unity, unity);
+            let unity = 1i64 << 16;
+            // The player's voice option scales the announcement (a client setting; at full it is unity).
+            let g = unity * i64::from(self.voice_option) / i64::from(FULL);
+            mix(&mut s.voice, &mut self.acc, 0, frames, g, g);
             if (s.voice.pos >> 32) as usize >= s.voice.clip.frames() {
                 self.speech = None;
             }

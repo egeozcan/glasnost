@@ -1,0 +1,140 @@
+//! The settings screen of the client (M8 step C2): opening it from the main
+//! menu or the game's options menu, stepping values, rebinding keys, and
+//! keeping the relay address last used. Nothing here reaches the simulation.
+
+use super::{Client, Key};
+use crate::settings::{self, ACTIONS, Action, BindError, FIXED_KEYS, Settings};
+use glasnost_ui::draw::DrawList;
+use glasnost_ui::geom::Point;
+use glasnost_ui::settings::{Page, Row, SettingsHit};
+use glasnost_ui::shell::Screen;
+
+impl Client {
+    /// Shows the settings screen; `from_game` returns to the paused game.
+    pub(super) fn open_settings(&mut self, from_game: bool) {
+        self.settings_from_game = from_game;
+        self.rebinding = None;
+        self.settings_note.clear();
+        self.shell.screen = Screen::Settings;
+    }
+
+    fn close_settings(&mut self) {
+        self.rebinding = None;
+        self.shell.screen = if std::mem::take(&mut self.settings_from_game) {
+            Screen::Game
+        } else {
+            Screen::Menu
+        };
+    }
+
+    pub(super) fn settings_click(&mut self, hit: SettingsHit) {
+        self.rebinding = None;
+        self.settings_note.clear();
+        match hit {
+            SettingsHit::Step(row, d) => {
+                let s = &mut self.settings;
+                match row {
+                    Row::Sound => s.sound = settings::step_volume(s.sound, d),
+                    Row::Voices => s.voices = settings::step_volume(s.voices, d),
+                    Row::Music => s.music = settings::step_volume(s.music, d),
+                    Row::Scroll => s.step_scroll(d),
+                    Row::Scale => s.step_scale(d),
+                }
+                self.settings_changed();
+            }
+            SettingsHit::Rebind(i) => self.rebinding = Some(i),
+            SettingsHit::Reset => {
+                // The relay address is not a preference to reset.
+                let relay = std::mem::take(&mut self.settings.relay);
+                self.settings = Settings {
+                    relay,
+                    ..Settings::default()
+                };
+                self.settings_changed();
+            }
+            SettingsHit::Back => self.close_settings(),
+        }
+    }
+
+    pub(super) fn settings_key(&mut self, k: Key) {
+        match (self.rebinding, k) {
+            (Some(_), Key::Escape) => self.rebinding = None,
+            (Some(i), Key::Char(c)) => {
+                let Some(a) = ACTIONS.get(i).copied() else {
+                    self.rebinding = None;
+                    return;
+                };
+                let mut b = self.settings.bindings;
+                match b.rebind(a, c) {
+                    Ok(()) => {
+                        self.settings.bindings = b;
+                        self.rebinding = None;
+                        self.settings_note.clear();
+                        self.settings_changed();
+                    }
+                    Err(BindError::Taken(other)) => {
+                        // The binding stays open for another try.
+                        self.settings_note =
+                            format!("{} is already {}.", c.to_ascii_uppercase(), other.name());
+                    }
+                    Err(BindError::NotBindable) => {
+                        self.settings_note = "Use a letter or a digit.".into();
+                    }
+                }
+            }
+            (Some(_), _) => {}
+            (None, Key::Escape) => self.close_settings(),
+            (None, _) => {}
+        }
+    }
+
+    pub(super) fn settings_frame(&mut self, hover: Option<Point>) -> DrawList {
+        let s = &self.settings;
+        let page = Page {
+            values: [
+                format!("{}%", s.sound),
+                format!("{}%", s.voices),
+                format!("{}%", s.music),
+                s.scroll_label(),
+                format!("{}%", s.ui_scale),
+            ],
+            bindings: ACTIONS
+                .iter()
+                .map(|a| {
+                    (
+                        label(*a).to_owned(),
+                        s.bindings.key(*a).to_ascii_uppercase().to_string(),
+                    )
+                })
+                .collect(),
+            rebinding: self.rebinding,
+            fixed: FIXED_KEYS
+                .iter()
+                .map(|(a, k)| ((*a).to_owned(), (*k).to_owned()))
+                .collect(),
+            note: &self.settings_note,
+        };
+        let (d, t) = glasnost_ui::settings::view(self.size, &page, hover);
+        self.settings_targets = t;
+        d
+    }
+
+    /// Remembers the relay address of a connection that was tried.
+    pub(super) fn remember_relay(&mut self) {
+        let relay = self.netform.relay.trim().to_owned();
+        if relay != self.settings.relay {
+            self.settings.relay = relay;
+            self.settings_changed();
+        }
+    }
+}
+
+fn label(a: Action) -> &'static str {
+    match a {
+        Action::Stop => "Stop",
+        Action::Scatter => "Scatter",
+        Action::Guard => "Guard",
+        Action::Deploy => "Deploy",
+        Action::Cheer => "Cheer",
+    }
+}

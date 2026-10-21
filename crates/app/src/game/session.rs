@@ -92,6 +92,8 @@ pub struct Session {
     /// person's orders go through it (`Play::outbox`); the speed is the
     /// room's (Q-1806's interim rule).
     pub network: bool,
+    /// The scroll-speed index of the person's settings (S-0101: 0 fastest to 6 slowest).
+    pub scroll_index: i32,
     /// The window size.
     pub screen: (i32, i32),
     /// Whether the client has set the starting window size.
@@ -158,6 +160,8 @@ pub enum SessionEvent {
     None,
     /// Leave the game for the main menu.
     Leave,
+    /// Open the settings screen (the game stays paused behind it).
+    Settings,
 }
 
 impl Session {
@@ -311,6 +315,7 @@ impl Session {
             speed,
             paused: false,
             network: false,
+            scroll_index: scroll::DEFAULT_SCROLL_INDEX,
             screen: (1024, 768),
             sized: false,
             centre: (0, 0),
@@ -497,7 +502,7 @@ impl Session {
                 (r.press.x - m.x, r.press.y - m.y),
                 (p.x - m.x, p.y - m.y),
                 self.screen,
-                scroll::DEFAULT_SCROLL_INDEX,
+                self.scroll_index,
                 scroll::DragMethod::Hold,
             )
             .displacement
@@ -510,7 +515,7 @@ impl Session {
         let e = self.edge.cycle(
             pointer,
             self.screen,
-            scroll::DEFAULT_SCROLL_INDEX,
+            self.scroll_index,
             self.loaded.scroll_multiplier,
             now_ms,
             blocked,
@@ -734,6 +739,8 @@ impl Session {
                     self.play.surrender();
                     SessionEvent::None
                 }
+                Some(PauseHit::Settings) if !self.network => SessionEvent::Settings,
+                Some(PauseHit::Settings) => SessionEvent::None,
                 Some(PauseHit::Leave) => SessionEvent::Leave,
                 None => SessionEvent::None,
             };
@@ -943,7 +950,7 @@ impl Session {
                 .shown_direction(
                     self.pointer.map(|p| (p.x, p.y)),
                     self.screen,
-                    scroll::DEFAULT_SCROLL_INDEX,
+                    self.scroll_index,
                 )
                 .filter(|_| self.edge_live)
                 .and_then(|d| cursor::edge(d, self.scroll_blocked()(d), size.0, size.1))
@@ -1186,7 +1193,7 @@ impl Session {
         d.extend(hud_list);
         self.targets = targets;
         if self.paused {
-            let (p, t) = hud::pause_view(size, self.speed, pointer);
+            let (p, t) = hud::pause_view(size, self.speed, !self.network, pointer);
             d.extend(p);
             self.pause_targets = t;
         }

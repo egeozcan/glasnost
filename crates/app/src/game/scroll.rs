@@ -25,8 +25,8 @@ pub const ARROW_STEP: i32 = 21; // spec: S-0101 claim 14
 const CLOCK_UNIT_MS: u64 = 16; // spec: S-0101 F9 (⌊host milliseconds / 16⌋)
 
 /// The default scroll index *r* (S-0101 Import mapping: a missing saved
-/// setting gives 3). Our engine has no settings file yet, so it always
-/// applies.
+/// setting gives 3). The settings screen (`crate::settings`) replaces it with the
+/// person's own choice.
 pub const DEFAULT_SCROLL_INDEX: i32 = 3; // spec: S-0101 Import mapping (scroll-speed control default 3)
 
 /// The direction vectors of F9 for *d* = 0 … 7 (screen x right, y down).
