@@ -86,9 +86,20 @@ const PERCENT: i64 = 100; // nocite: percent scale
 /// house builds no yard vehicle to expand (`Brain::expand`).
 const EXPANSION_YARDS: usize = 2; // nocite: tuning of our own opponent
 
-/// Multiples of a yard vehicle's cost the house has in hand before it
-/// builds one to expand.
+/// Multiples of a yard vehicle's cost the house has in hand, beyond what
+/// its superweapon building still owes, before it builds one to expand.
 const EXPANSION_RICH: i64 = 2; // nocite: tuning of our own opponent
+
+/// Multiples of a yard vehicle's cost the house earns per income window
+/// (`scripted::INCOME_WINDOW`) before it buys one with less money in hand
+/// (`Brain::rich`): it then pays for itself within a window.
+const EXPANSION_EARNING: i64 = 1; // nocite: tuning of our own opponent
+
+/// A house that earns less than a yard vehicle's cost divided by this per
+/// income window is broke for the expansion (`Brain::drop_expansion`);
+/// below [`EXPANSION_EARNING`], so that a house whose income hovers at the
+/// threshold does not buy and cancel in turn.
+const EXPANSION_BROKE: i64 = 2; // nocite: tuning of our own opponent
 
 /// Cells from home within which a ferry counts as at home, and idle
 /// infantry is sent aboard it.
@@ -272,6 +283,7 @@ impl Brain {
         };
         if w.tick % THINK_PERIOD == 0 {
             let paying = self.economy_first(w, &mut out);
+            self.drop_expansion(w, &mut out);
             self.send_for_repair(w, &mut out);
             self.ferry(w, &mut out);
             self.build_superweapon(w, &mut out);
@@ -390,7 +402,15 @@ impl Brain {
         // (`Self::losing`), and only an item that still owes money is held.
         // A yard vehicle bought to expand (`Self::expand`, M8 step B1) also
         // draws on that money and is held with the army; one bought while
-        // the house has no yard is its way back and runs on.
+        // the house has no yard is its way back and runs on. M8 step B5
+        // narrows B2's rule: while the house is not safe, the building
+        // still short, only the army that can join the fight resumes; a
+        // yard vehicle and an engineer, which do not fight, stay held. In
+        // the lane a house losing a fight for 300 ticks put 23 steps into
+        // an engineer and 8 into a tank while the mutator building waited
+        // for money. Held, the engineer's share went to the tank instead
+        // (the earlier line is paid first, S-0404 claim 1), and that game's
+        // mutator did not come sooner.
         let has_yard = self
             .script
             .own(w)
@@ -400,7 +420,12 @@ impl Brain {
             (t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army))
                 || (has_yard && deploys_into_yard(w, t.kind, t.index))
         };
-        let saving = !paying && self.saving(w);
+        let short = !paying && !self.script.selling() && self.superweapon_short(w);
+        let saving = short && self.safe(w);
+        let fights = |t: TypeRef| {
+            !deploys_into_yard(w, t.kind, t.index)
+                && w.rules().unit(t.kind, t.index).is_some_and(|u| !u.engineer)
+        };
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
             if i.done() || economy(i.t) {
@@ -412,7 +437,7 @@ impl Brain {
                     out.push(Order::Hold { what: i.t });
                     self.special.count_economy_hold();
                 }
-            } else if saving && army(i.t) {
+            } else if army(i.t) && (saving || (short && !fights(i.t))) {
                 // Only an item that still owes money competes for it.
                 if i.hold == Hold::None && i.owed > 0 {
                     // spec: S-0404 claim 5 (the hold order)
@@ -462,8 +487,14 @@ impl Brain {
     /// ([`Self::economy_first`]): safe, and such a building runs on its
     /// line owing more than the money in hand.
     fn saving(&self, w: &World) -> bool {
+        self.safe(w) && self.superweapon_short(w)
+    }
+
+    /// Whether a superweapon building runs on the house's lines owing more
+    /// than the money in hand.
+    fn superweapon_short(&self, w: &World) -> bool {
         let credits = w.houses[usize::from(self.house().0)].credits;
-        self.safe(w) && self.superweapon_owed(w).is_some_and(|owed| credits < owed)
+        self.superweapon_owed(w).is_some_and(|owed| credits < owed)
     }
 
     /// Whether the house is losing a fight, as a person reads it off the
@@ -742,6 +773,22 @@ impl Brain {
         }) {
             return;
         }
+        if let Some(t) = self.superweapon_next(w)
+            && !self.script.busy(w, t)
+        {
+            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
+            out.push(Order::Build { what: t });
+        }
+    }
+
+    /// The building [`Self::build_superweapon`] goes for next: the
+    /// cheapest building the house can build and place now that gives a
+    /// kind of superweapon it fires and has no building for yet, or one
+    /// that clears the blocker of such a building on the tech tree; none
+    /// once the house has a building of every kind it can climb to. A
+    /// building of it on a line, done or not, still counts (its kind is
+    /// the house's only once it stands).
+    fn superweapon_next(&self, w: &World) -> Option<TypeRef> {
         let owned: std::collections::BTreeSet<_> = self
             .script
             .own(w)
@@ -762,7 +809,7 @@ impl Brain {
         // tech tree still blocks, the building that clears the blocker (as a
         // person climbs the tree to a superweapon), the tech climb's own
         // rule. The cheapest of these is built next.
-        let t = giving
+        giving
             .iter()
             .copied()
             .filter(|&t| tech::buildable(w, self.house(), t))
@@ -774,13 +821,7 @@ impl Brain {
                     .filter(|&t| !tech::buildable(w, self.house(), t))
                     .filter_map(|t| self.script.unblocker(w, t, CLIMB_DEPTH)),
             )
-            .min_by_key(|&t| (production::cost_field(w, t), t.index));
-        if let Some(t) = t
-            && !self.script.busy(w, t)
-        {
-            out.retain(|o| !matches!(o, Order::Build { what } if climb(what)));
-            out.push(Order::Build { what: t });
-        }
+            .min_by_key(|&t| (production::cost_field(w, t), t.index))
     }
 
     /// Fires every ready superweapon of the house (granted, ready and not
@@ -1354,10 +1395,91 @@ impl Brain {
     /// drew the credits down as they came in (the probe read them in the
     /// low hundreds or below in most samples), so a house with nothing more
     /// urgent to pay for buys the yard vehicle step by step like any item
-    /// (S-0404 claim 4: no money is needed to start one).
+    /// (S-0404 claim 4: no money is needed to start one). M8 step B5: the
+    /// money in hand counts beyond the balance the superweapon building
+    /// owes, and the second test also wants an income of
+    /// [`EXPANSION_EARNING`] times the cost per income window
+    /// (`Script::income`) and no superweapon building left to go for
+    /// ([`Self::superweapon_next`]), not only none on the lines: in the
+    /// think in which the next one is ordered it is not on them yet
+    /// (orders are applied after the think), and the yard vehicle, and
+    /// before it the building that clears its blocker, went in front of the
+    /// superweapons (in one game every later superweapon of the house came
+    /// 1 000 ticks or more after round 3's).
     fn rich(&self, w: &World, credits: i64, cost: i64) -> bool {
-        credits >= EXPANSION_RICH * cost
-            || (self.script.economy_kept(w) && self.superweapon_owed(w).is_none())
+        let owed = self.superweapon_owed(w).map_or(0, i64::from);
+        rich_by(
+            credits - owed,
+            cost,
+            self.script.economy_kept(w),
+            self.script.income(),
+            || self.superweapon_wanted(w),
+        )
+    }
+
+    /// Whether a superweapon building is on the house's lines or left to
+    /// go for ([`Self::superweapon_next`]).
+    fn superweapon_wanted(&self, w: &World) -> bool {
+        self.superweapon_owed(w).is_some() || self.superweapon_next(w).is_some()
+    }
+
+    /// Cancels a yard vehicle bought to expand (the house has a yard) when
+    /// the house is broke for it, with the cancel-all order a person gives
+    /// on the sidebar (S-0404 claim 6: at an unchanged price the refund is
+    /// everything paid): it earns less than the yard vehicle's cost divided
+    /// by [`EXPANSION_BROKE`] per income window (`Script::income`), and its
+    /// credits do not cover what the yard vehicle and a superweapon
+    /// building on its lines still owe. A yard vehicle bought with no yard
+    /// (`Self::rebuild_yard`) runs on. Found in M8 step B5: a house that
+    /// kept every harvester it wanted on a nearly mined-out map earned 275
+    /// to 600 credits per 1 500 ticks, and its yard vehicle stood on the
+    /// line from tick 43 500 to the end of the game (57 798), never past
+    /// step 23 of 54, the army vehicles queued behind it (an order to a
+    /// busy line joins its queue, S-0404 claim 3).
+    fn drop_expansion(&mut self, w: &World, out: &mut Vec<Order>) {
+        let Some(income) = self.script.income() else {
+            return;
+        };
+        let h = self.house();
+        let has_yard = self
+            .script
+            .own(w)
+            .iter()
+            .any(|&id| w.obj(id).is_some_and(|o| is_yard(w, o)));
+        if !has_yard {
+            return;
+        }
+        let types = yard_types(w);
+        let mut lined: Vec<TypeRef> = Vec::new();
+        let mut owed: i64 = 0;
+        for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
+            if let Some(i) = l.item.as_ref().filter(|i| types.contains(&i.t)) {
+                owed += i64::from(i.owed);
+                if !lined.contains(&i.t) {
+                    lined.push(i.t);
+                }
+            }
+            for &q in l.queue.iter().filter(|q| types.contains(q)) {
+                if !lined.contains(&q) {
+                    lined.push(q);
+                }
+            }
+        }
+        let Some(&first) = lined.first() else {
+            return;
+        };
+        let credits = i64::from(w.houses[usize::from(h.0)].credits);
+        let superweapon = self.superweapon_owed(w).map_or(0, i64::from);
+        let cost = i64::from(production::cost_field(w, first));
+        if income * EXPANSION_BROKE >= cost || credits >= superweapon + owed {
+            return;
+        }
+        for t in lined {
+            out.retain(|o| !matches!(o, Order::Build { what } if *what == t));
+            // spec: S-0404 claim 6 (the cancel-all order and its refund)
+            out.push(Order::CancelAll { what: t });
+            self.special.count_expansion_cancel();
+        }
     }
 
     /// Whether a unit `id` that deploys into building type `b` could deploy
@@ -1929,6 +2051,22 @@ pub fn yard_units(w: &World, h: HouseId) -> Vec<TypeRef> {
         .collect()
 }
 
+/// The wealth test of [`Brain::rich`], shared with the probe: `spare`
+/// credits (in hand, less what the superweapon building owes) of
+/// [`EXPANSION_RICH`] times the yard vehicle's `cost`, or the economy kept,
+/// an `income` per window of [`EXPANSION_EARNING`] times the cost, and no
+/// superweapon building `wanted` (read last: it searches the tech tree).
+fn rich_by(
+    spare: i64,
+    cost: i64,
+    economy_kept: bool,
+    income: Option<i64>,
+    wanted: impl FnOnce() -> bool,
+) -> bool {
+    spare >= EXPANSION_RICH * cost
+        || (economy_kept && income.is_some_and(|i| i >= EXPANSION_EARNING * cost) && !wanted())
+}
+
 /// Every vehicle type that deploys into a construction yard, cheapest
 /// first.
 fn yard_types(w: &World) -> Vec<TypeRef> {
@@ -2010,6 +2148,13 @@ pub struct ExpansionProbe {
     /// Whether a building that gives a superweapon it fires runs on its
     /// lines.
     pub superweapon_building: bool,
+    /// The balance that building owes.
+    pub superweapon_owed: i64,
+    /// Whether such a building is on its lines or left to go for
+    /// (M8 step B5).
+    pub superweapon_wanted: bool,
+    /// Its income over the last income window (`Script::income`).
+    pub income: Option<i64>,
 }
 
 impl ExpansionProbe {
@@ -2035,9 +2180,13 @@ impl ExpansionProbe {
         if self.yards + self.units + usize::from(self.lined) >= EXPANSION_YARDS {
             v.push("yards enough");
         }
-        if self.credits < EXPANSION_RICH * self.cost
-            && !(self.economy_kept && !self.superweapon_building)
-        {
+        if !rich_by(
+            self.credits - self.superweapon_owed,
+            self.cost,
+            self.economy_kept,
+            self.income,
+            || self.superweapon_wanted,
+        ) {
             v.push("not rich");
         }
         if self.outnumbered {
@@ -2116,6 +2265,9 @@ impl Brain {
             losing: self.losing(w),
             saving: self.saving(w),
             superweapon_building: self.superweapon_owed(w).is_some(),
+            superweapon_owed: self.superweapon_owed(w).map_or(0, i64::from),
+            superweapon_wanted: self.superweapon_wanted(w),
+            income: self.script.income(),
         }
     }
 }

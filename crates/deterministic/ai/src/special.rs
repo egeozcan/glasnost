@@ -176,6 +176,10 @@ pub struct Uses {
     /// tree for an expansion (S-0407 claim 8, `expand`).
     #[serde(default)]
     pub expansion_unblocks: u32,
+    /// Such vehicles cancelled on the line because the house could not pay
+    /// for them (S-0404 claim 6, `Brain::drop_expansion`).
+    #[serde(default)]
+    pub expansion_cancels: u32,
     /// Units or defences built because nothing of the house could hit a
     /// seen airborne drainer (S-0306 claim 23, `antiair`).
     #[serde(default)]
@@ -273,6 +277,11 @@ impl Special {
 
     pub(crate) fn count_expansion_unblock(&mut self) {
         self.uses.expansion_unblocks += 1;
+    }
+
+    /// Counts one cancel order for a yard vehicle bought to expand.
+    pub(crate) fn count_expansion_cancel(&mut self) {
+        self.uses.expansion_cancels += 1;
     }
 
     /// Counts one anti-air unit or defence ordered against drainers.

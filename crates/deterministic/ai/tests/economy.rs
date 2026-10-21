@@ -17,6 +17,11 @@
 //!   army items that still owe money) while the building owes more than
 //!   the money in hand and the house is safe, which now also means not
 //!   losing a fight.
+//! - M8 step B5: while the superweapon building owes more than the money
+//!   in hand, a yard vehicle or an engineer on the lines stays held also
+//!   while the house is not safe (neither fights); a yard vehicle bought to
+//!   expand is cancelled (S-0404 claim 6) while the house is broke for the
+//!   expansion; the brain reads its income off the credits and the lines.
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
@@ -27,7 +32,7 @@ use glasnost_sim::econ::{TypeRef, tech};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, World};
+use glasnost_sim::world::{HouseId, ObjectId, World};
 
 const H: HouseId = HouseId(0);
 
@@ -524,22 +529,33 @@ fn holds_the_army_only_while_the_balance_is_not_in_hand() {
     assert!(holds(owed - 1));
 }
 
+/// The yard vehicle type.
+fn mcv(w: &World) -> TypeRef {
+    TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, "MCV").unwrap(),
+    }
+}
+
+/// Puts a yard vehicle on house 0's lines.
+fn line_mcv(w: &mut World) -> TypeRef {
+    let mcv = mcv(w);
+    assert!(
+        orders::issue(w, H, Order::Build { what: mcv }),
+        "{:?}",
+        tech::answer(w, H, mcv)
+    );
+    to_think(w);
+    assert_eq!(item_of(w, mcv).hold, Hold::None);
+    mcv
+}
+
 // S-0404 claim 5 (the hold order) and PLAN §4.7 (M8 step B1): while the house saves for the superweapon building, a yard vehicle on its line (bought to expand) is held with the army; with the balance in hand it runs on.
 #[test]
 fn holds_an_expansion_yard_vehicle_while_saving() {
     let map = fixture::map();
     let (mut w, silo, _) = saving_for_a_silo();
-    let mcv = TypeRef {
-        kind: Kind::Vehicle,
-        index: w.rules().index_of(Kind::Vehicle, "MCV").unwrap(),
-    };
-    assert!(
-        orders::issue(&mut w, H, Order::Build { what: mcv }),
-        "{:?}",
-        tech::answer(&w, H, mcv)
-    );
-    to_think(&mut w);
-    assert_eq!(item_of(&w, mcv).hold, Hold::None);
+    let mcv = line_mcv(&mut w);
     let owed = item_of(&w, silo).owed;
     let holds = |credits: i32| {
         let mut w = w.clone();
@@ -551,43 +567,171 @@ fn holds_an_expansion_yard_vehicle_while_saving() {
     assert!(!holds(owed));
 }
 
+/// A brain for house 0 that has watched its income over two whole income
+/// windows, its credits rising by `per_window` in each: the brain thinks
+/// at the start of each window (orders dropped) while the simulation does
+/// not run, so the credits are its only income and nothing pays.
+fn earning(w: &mut World, map: &Map, per_window: i32) -> Brain {
+    let window = glasnost_ai::scripted::INCOME_WINDOW;
+    let mut brain = Brain::with_plan(w, map, H, plan(2));
+    w.tick = (w.tick / window + 1) * window;
+    brain.think(w);
+    for _ in 0..2 {
+        w.tick += window;
+        w.houses[0].credits += per_window;
+        brain.think(w);
+    }
+    w.tick += glasnost_ai::scripted::THINK_PERIOD;
+    brain
+}
+
+// S-0404 claim 6 (the cancel-all order) and PLAN §4.7 (M8 step B5): a house broke for the expansion (earning less than half a yard vehicle's cost per income window) cancels the yard vehicle on its line once its credits do not cover what it still owes; earning half the cost, or with the balance in hand, it keeps it.
+#[test]
+fn cancels_an_expansion_yard_vehicle_while_broke() {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    let mcv = line_mcv(&mut w);
+    let cost = glasnost_sim::econ::production::cost_field(&w, mcv);
+    let cancels = |per_window: i32, credits: i32| {
+        let mut w = w.clone();
+        let mut brain = earning(&mut w, &map, per_window);
+        w.houses[0].credits = credits;
+        let before = brain.special_uses().expansion_cancels;
+        let orders = brain.think(&w);
+        let n = brain.special_uses().expansion_cancels - before;
+        assert_eq!(
+            n,
+            u32::from(orders.contains(&Order::CancelAll { what: mcv }))
+        );
+        n == 1
+    };
+    let owed = item_of(&w, mcv).owed;
+    assert!(cancels(cost / 2 - 1, 0));
+    assert!(!cancels(cost / 2, 0));
+    assert!(!cancels(cost / 2 - 1, owed));
+}
+
+// S-0404 claim 4 (each step is paid from the credits) and PLAN §4.7 (M8 step B5): the brain's income over a window is what the credits counter gained plus what the lines paid, as the lane counts it tick by tick.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn reads_income_off_the_credits_and_the_lines() {
+    let map = fixture::map();
+    let mut w = settled(&map, 5000);
+    let soldier = first(&w, Role::Army, Kind::Infantry);
+    let window = glasnost_ai::scripted::INCOME_WINDOW;
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    while w.tick % window != 0 {
+        testkit::run(&mut w, 1);
+    }
+    brain.think(&w);
+    // Tick by tick, as `GLASNOST_AI_ECON` counts it.
+    let owed = |w: &World| -> std::collections::BTreeMap<_, _> {
+        w.econ
+            .lines
+            .lines
+            .iter()
+            .filter(|l| l.house == H)
+            .filter_map(|l| l.item.as_ref())
+            .map(|i| (i.object, (i.owed, i.start_price)))
+            .collect()
+    };
+    let mut earned = 0i64;
+    let mut last = owed(&w);
+    let mut credits = w.houses[0].credits;
+    for _ in 0..window {
+        if w.tick % 300 == 0 {
+            assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+        }
+        testkit::run(&mut w, 1);
+        let now = owed(&w);
+        let mut paid = 0i64;
+        for (id, &(o, start)) in &now {
+            paid += i64::from(last.get(id).map_or(start, |&(b, _)| b) - o);
+        }
+        for (id, &(o, _)) in &last {
+            if !now.contains_key(id) {
+                paid += i64::from(o);
+            }
+        }
+        earned += (i64::from(w.houses[0].credits - credits) + paid).max(0);
+        credits = w.houses[0].credits;
+        last = now;
+        if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
+            brain.think(&w);
+        }
+    }
+    assert!(earned > 0, "the harvesters deliver within a window");
+    assert_eq!(brain.expansion_probe(&w).income, Some(earned));
+}
+
+/// Puts house 0 of `w` in a fight away from its base, an own soldier and
+/// two enemy soldiers that see each other; returns the own soldier and the
+/// enemy ones, which shoot at nothing yet.
+fn a_fight(w: &mut World) -> (ObjectId, Vec<ObjectId>) {
+    for d in 0..4 {
+        testkit::spawn(w, Kind::Infantry, "WALKER", 0, fixture::at(-10, 12 + d), 0);
+    }
+    let mine = testkit::spawn(w, Kind::Infantry, "WALKER", 0, fixture::at(4, 3), 0);
+    let shooters: Vec<_> = (0..2)
+        .map(|d| testkit::spawn(w, Kind::Infantry, "WALKER", 1, fixture::at(4, d), 0))
+        .collect();
+    glasnost_sim::econ::shroud::area_reveal(
+        w,
+        H,
+        glasnost_sim::world::Pos::centre(fixture::at(4, 0), 0),
+        5,
+    );
+    to_think(w);
+    for &s in &shooters {
+        w.obj_mut(s).unwrap().target = None;
+    }
+    (mine, shooters)
+}
+
+/// The enemy `shooters` of [`a_fight`] shoot at `mine`.
+fn shoot(w: &mut World, mine: ObjectId, shooters: &[ObjectId]) {
+    for &s in shooters {
+        w.obj_mut(s).unwrap().target = Some(glasnost_sim::world::Target::Object(mine));
+    }
+}
+
 // PLAN §4.7 (M8 step B2): a house losing a fight away from its base (seen enemy army units shoot at its objects and are worth at least its own army units there) keeps training while it saves for the superweapon building, though it is not outnumbered overall.
 #[test]
 fn keeps_training_while_losing_a_fight() {
     let map = fixture::map();
     let (mut w, _, soldier) = saving_for_a_silo();
-    for d in 0..4 {
-        testkit::spawn(
-            &mut w,
-            Kind::Infantry,
-            "WALKER",
-            0,
-            fixture::at(-10, 12 + d),
-            0,
-        );
-    }
-    let mine = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, fixture::at(4, 3), 0);
-    let shooters: Vec<_> = (0..2)
-        .map(|d| testkit::spawn(&mut w, Kind::Infantry, "WALKER", 1, fixture::at(4, d), 0))
-        .collect();
-    glasnost_sim::econ::shroud::area_reveal(
-        &mut w,
-        H,
-        glasnost_sim::world::Pos::centre(fixture::at(4, 0), 0),
-        5,
-    );
-    to_think(&mut w);
+    let (mine, shooters) = a_fight(&mut w);
     let holds = |w: &World| {
         let mut brain = Brain::with_plan(w, &map, H, plan(2));
         brain.think(w).contains(&Order::Hold { what: soldier })
     };
-    for &s in &shooters {
-        w.obj_mut(s).unwrap().target = None;
-    }
     // Not shot at: the house saves.
     assert!(holds(&w));
-    for &s in &shooters {
-        w.obj_mut(s).unwrap().target = Some(glasnost_sim::world::Target::Object(mine));
-    }
+    shoot(&mut w, mine, &shooters);
     assert!(!holds(&w));
+}
+
+// PLAN §4.7 (M8 step B5): while the superweapon building owes more than the money in hand, a house losing a fight resumes the army that can join it, but its yard vehicle and an engineer, which do not fight, stay held.
+#[test]
+fn keeps_a_yard_vehicle_and_an_engineer_held_while_losing_a_fight() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    let mcv = line_mcv(&mut w);
+    let (mine, shooters) = a_fight(&mut w);
+    shoot(&mut w, mine, &shooters);
+    let held = |w: &World| {
+        let mut brain = Brain::with_plan(w, &map, H, plan(2));
+        assert!(brain.expansion_probe(w).losing);
+        let orders = brain.think(w);
+        (
+            orders.contains(&Order::Hold { what: soldier }),
+            orders.contains(&Order::Hold { what: mcv }),
+        )
+    };
+    assert_eq!(held(&w), (false, true));
+    // The soldier's type made an engineer (test data of our own).
+    let mut r = (*w.rules_arc()).clone();
+    r.infantry[soldier.index as usize].engineer = true;
+    w.rules = Some(std::sync::Arc::new(r));
+    assert_eq!(held(&w), (true, true));
 }
