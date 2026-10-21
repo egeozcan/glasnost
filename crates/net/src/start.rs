@@ -94,7 +94,7 @@ pub struct StartInfo {
 }
 
 /// A start value that differs between two peers.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Field {
     /// The wire format's version.
     Protocol,

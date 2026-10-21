@@ -999,6 +999,7 @@ dependencies = [
  "glasnost-ai",
  "glasnost-map",
  "glasnost-sim",
+ "glasnost-ui",
  "postcard",
  "serde",
  "sha2",

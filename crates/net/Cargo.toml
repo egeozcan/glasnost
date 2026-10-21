@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 glasnost-ai.workspace = true
 glasnost-sim.workspace = true
+glasnost-ui.workspace = true
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"

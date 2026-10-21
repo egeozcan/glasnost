@@ -16,6 +16,8 @@
 //! - [`transport`]: the seam to a network ([`transport::Transport`],
 //!   [`transport::pump`]).
 //! - [`simnet`]: a seeded in-memory network for tests.
+//! - [`lobby`]: the network lobby's protocol and room state machine (N2),
+//!   which the relay keeps and the client drives.
 //!
 //! Nothing here reads a clock, opens a socket or starts a thread: the
 //! caller passes its clock into every call (`now_ms`) and moves the bytes.
@@ -24,6 +26,7 @@
 //! delay rule are our own design (docs/development.md, *Multiplayer (M9)*).
 
 pub mod delay;
+pub mod lobby;
 pub mod session;
 pub mod sim;
 pub mod simnet;
