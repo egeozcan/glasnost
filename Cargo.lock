@@ -1134,11 +1134,14 @@ dependencies = [
  "glasnost-fmt",
  "glasnost-ini",
  "glasnost-map",
+ "glasnost-net",
  "glasnost-num",
  "glasnost-rules",
  "glasnost-sim",
  "glasnost-vfs",
  "pollster",
+ "postcard",
+ "serde",
  "sha2",
 ]
 

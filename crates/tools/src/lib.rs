@@ -6,10 +6,14 @@
 //! `glasnost-local-lane`); the asset viewer lives in `glasnost-app`. **M3**
 //! adds the headless simulation runner ([`headless`], binary
 //! `glasnost-headless`). **M7b** adds its arena mode ([`arena`], with the
-//! statistics of the comparison in [`stats`]).
+//! statistics of the comparison in [`stats`]). **M9 N4** adds the desync
+//! tool ([`desync`], `glasnost-headless desync`), with a field-by-field
+//! view of any serializable value in [`inspect`].
 
 pub mod arena;
+pub mod desync;
 pub mod headless;
+pub mod inspect;
 pub mod local_lane;
 pub mod oracle;
 pub mod side_audit;

@@ -1917,15 +1917,15 @@ M9 adds multiplayer by lockstep: every peer runs the whole game from the same st
 
 The crate `glasnost-net` holds the protocol and one peer's lockstep session. It does no I/O: it reads no clock, opens no socket and starts no thread. The caller passes its clock in milliseconds into every call and moves the bytes. `crates/net/clippy.toml` forbids clocks, threads, locks, sockets, files and hashed containers in the crate, and `xtask deps` forbids it every socket or async runtime crate (the list `FORBIDDEN_EXTERNAL`, which now also names the WebSocket, WebRTC and HTTP crates). The simulation crates' determinism lint now also forbids `std::net::TcpListener`, with a canary.
 
-**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 3: N2 reserved the sender id 255, `wire::RELAY`, for the relay, and N3 added chat lines to the lobby messages that share the version) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
+**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 4: N2 reserved the sender id 255, `wire::RELAY`, for the relay, N3 added chat lines to the lobby messages that share the version, and N4 added the desync report's digest to the frames message) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
 
 - `Start`: the sender's start values.
-- `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, and an echo of every other peer's latest stamp with the time it held that stamp.
+- `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, an echo of every other peer's latest stamp with the time it held that stamp, and, once it has written one, its desync report's tick and digest (N4).
 - `Dropped { slot, kept }`: the relay's report that a slot left (N2). A session acts on it only from the sender `RELAY`; from any other sender it is a bad message, as is any other body from `RELAY`.
 
 Each message carries the whole unacknowledged window, so a lost message costs nothing once a later one arrives. A receiver keeps the first copy of each (slot, frame) and ignores duplicates. It also ignores frames beyond the window: two largest delays past its own tick.
 
-**Session start** (`start.rs`). The start values are the build id, the rules hash, the map hash, the seed, the slot table, the hash of the whole `GameSetup`, and the lockstep parameters: the initial, smallest and largest delay, and the checkpoint period. The slot table lists the player houses in house order, each marked person or computer. The caller supplies the build id (N3: the client's version string) and the map hash (the client's `session::content_hash` string). The setup hash is SHA-256 over the setup's postcard bytes. Each peer resends its start until it has heard frames from every other peer. It starts running once every other person's start matches its own. On the first difference it stops, with `Phase::Refused` and `Event::Refused { slot, field }`. The protocol version is checked first, in the header; the start's fields are then compared in a fixed order (build, rules hash, map hash, seed, slots, setup, parameters), so the reported field is the first that differs. A start from a slot that is not another person's slot is refused on the field *slot* (`a_mismatched_start_is_refused_with_the_field_named`).
+**Session start** (`start.rs`). The start values are the build id, the rules hash, the map hash, the seed, the slot table, the hash of the whole `GameSetup`, and the lockstep parameters: the initial, smallest and largest delay, and the checkpoint period. The slot table lists the player houses in house order, each marked person or computer. The caller supplies the build id (N3: the client's version string) and the map hash (the `content_hash` string of the map file, `glasnost_net::start::content_hash` since N4). The setup hash is SHA-256 over the setup's postcard bytes. Each peer resends its start until it has heard frames from every other peer. It starts running once every other person's start matches its own. On the first difference it stops, with `Phase::Refused` and `Event::Refused { slot, field }`. The protocol version is checked first, in the header; the start's fields are then compared in a fixed order (build, rules hash, map hash, seed, slots, setup, parameters), so the reported field is the first that differs. A start from a slot that is not another person's slot is refused on the field *slot* (`a_mismatched_start_is_refused_with_the_field_named`).
 
 **Frames and the tick rule** (`session.rs`). Frame *n* of a person's slot is that person's input for tick *n*. After *k* ticks with delay *D*, a peer has made its frames 0 to *k* + *D* − 1. The person's orders since the last frame go into the first new frame, and the other new frames are empty. A frame never changes once made. Tick *n* runs only when frame *n* of every live person's slot is in. Its orders are issued slot by slot in slot order, and in the order the person gave them within a slot; then the game steps. So whatever order the frames arrive in, every peer issues the same orders in the same order (`merged_orders_apply_in_slot_order_whatever_the_arrival_order`). No peer can run more than the delay ahead of the slowest peer, and a stalled peer stalls everyone (`a_stalled_peer_stalls_all_and_none_runs_ahead`). The session's `step` runs at most one tick when the caller's pacer says one is due. It returns the tick's merged orders (`Tick`), and for each order whether the game took it.
 
@@ -1946,7 +1946,7 @@ The peer repeats its own proposal, not the session's delay. Otherwise another pe
 - `Session::drop_slot` and `Body::Dropped { slot, kept }` handle a departure. The relay (N2) chooses `kept`: the number of that slot's frames it forwarded to everyone. Every peer then treats that slot's frames from `kept` on as empty. Since N2 the session honours a `Dropped` only from the sender `RELAY` (255), and the relay never forwards a client's `Dropped` or a message whose sender byte is not the client's own slot, so only the relay can report a drop (N7 must keep this over WebRTC, see *The relay and lobby (N2)*). A drop that contradicts a tick already run is reported as a bad message.
 - `Event::Silent` and `Event::Heard` report a peer that has gone unheard for `silent_ms` and its return (for N3's notice and N5's rules). `Session::waiting_for` names the slots the next tick waits on, for the "waiting for player" notice.
 - `Session::ahead` is for N3's pacer, which may stretch its tick while this peer leads.
-- `Event::Desync` is for N4's desync report.
+- `Event::Desync` is for N4's desync report (done: see *Desync reports (N4)*).
 - `sim::Simulation` is what the session drives. It is implemented for `glasnost_ai::game::Game`.
 
 **Tests.** `crates/net/tests/lockstep.rs` covers the protocol on a toy game whose state is a hash chain of every order and step, so any difference in what was applied shows. One sweep runs 24 seeds of 2 to 8 persons and 0 to 2 computer slots, in shuffled slot order, on bad links (loss, duplication, reordering, jitter); every tick's hash matches a single-process run fed the same orders. `crates/net/tests/games.rs` does the same with real games built on the synthetic fixture rules: 2, 4 and 8 persons, with computer slots and persons played by our own AI's brain or by a script, all on bad links. Each peer's hash after every tick must equal the hash of one game fed the merged orders, and the games' replays must agree.
@@ -2028,7 +2028,7 @@ In a network game, the options menu and lost focus never stop the ticks, the opt
 
 The client reads its link once per update, on every screen. It sorts lobby messages (`GL`) from lockstep messages (`GN`, `lobby_wire::is_lobby`). Lockstep messages that arrive after `Begin` but before the game has loaded are kept for the session (at most 4096).
 
-**Chat.** `ToRelay::Chat` and `FromRelay::Chat(ChatLine)` are part of N2's lobby protocol. They carry a line to every member of the room, the sender included, both in the room and during the game; a line never reaches a simulation. They changed the lobby layout, so the shared wire version is now 3.
+**Chat.** `ToRelay::Chat` and `FromRelay::Chat(ChatLine)` are part of N2's lobby protocol. They carry a line to every member of the room, the sender included, both in the room and during the game; a line never reaches a simulation. They changed the lobby layout, so the shared wire version became 3 (4 since N4).
 
 The relay cleans each line: control characters go, the ends are trimmed, and at most 200 characters are kept. It refuses an empty line as bad text. It also refuses lines that come faster than one a second on average, with a burst of five (`Refusal::ChatTooFast`). Those refusals do not count against the refusal limit. This adds the limits `chat_every_ms` and `chat_burst` and the stats `chats` and `chats_too_fast`.
 
@@ -2057,10 +2057,81 @@ Web: run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open 
 
 **Seams for the later steps.**
 
-- N4 (desync reports): a lockstep `Desync` shows the notice "The games went apart at tick N (a desync)." Making and sending the report belongs to N4.
+- N4 (desync reports): done, see *Desync reports (N4)*.
 - N5 (reconnect, surrender, late join): a dropped peer shows "X left the game.", and the game goes on without it (N2's `Dropped`). A link that closes during the game is a notice, with no rejoin. A reconnect would enter at `Client::net_open` with the old room and slot; a surrender would be a new order through `Play::give`.
 - N6 (soak): `m9_lane.rs` takes `GLASNOST_LANE_TICKS`.
 - N7 (WebRTC): a data channel is another `Link`. The relay's WebSocket stays the signalling channel, and the only one whose `Dropped` is honoured.
+
+### Desync reports (N4)
+
+When two peers' checkpoint hashes differ, every peer that sees it writes a desync report: a file with what it needs to replay its own game from the last state every peer agreed on to a few ticks past the mismatch. The desync tool reads two peers' reports, replays both, and names the first tick on which they differ and the objects, houses and fields that differ. The evidence and the report are in `crates/net/src/desync.rs`, the tool in `crates/tools/src/desync.rs` and `inspect.rs`, and the client's side in `client_net.rs` and `game/report.rs`. Everything here is our own netcode (`// nocite: our own netcode`). No game rule changes, and the simulation crates gain only a read-only accessor (`glasnost_ai::game::Game::brains`, for the tool's view of our AI's state).
+
+**The evidence** (`desync::Evidence`). Every network game keeps two things in memory:
+
+- *Snapshots.* A snapshot is the game's own save bytes (`Game::save`, which hold the AI houses' brains and the whole replay and load back to the same state hash). There is one of the start, and one after every checkpoint, that is every K = `hash_every` ticks (default 30). A snapshot is taken right after the tick that ends a checkpoint, so its state hash is the checkpoint hash every peer compares.
+- *Tick records.* For every tick since the oldest snapshot held: the merged orders (slot, house, order, and whether the game took it), and at a checkpoint the peer's own state hash after the tick.
+
+The client feeds it from `net_tick` (`Evidence::before_tick` and `after_tick` around `Lockstep::step`). It keeps everything from the newest snapshot every peer has agreed on: `Session::agreed()` is the number of leading checkpoints that every live other peer has matched with ours, without a gap. A mismatch is found only when the other peer's hash arrives, at most about two largest delays after its checkpoint, so the evidence never holds more than 3 + ⌈2 × `max_delay` / K⌉ snapshots (5 with the default parameters). Once a mismatch is noted it stops forgetting, and once the report is made it holds nothing more.
+
+**Per-tick hashes.** A state hash serializes the whole world. On the install's maps one takes 4 to 16 ms natively, more than a tick (2 to 4 ms), so the evidence does not take one after every tick while the game runs: a running game pays only the snapshot at each checkpoint (a save, 8 to 29 ms once every K ticks; about 0.2 to 0.7 ms a tick on average). When it makes the report, the peer instead replays its own ticks from the base snapshot, on its own machine and build, and records its state hash after every tick (`TickRecord::live` is false for those). A difference of platform or build shows in those hashes as it would have live. The checkpoints' hashes stay the ones taken live, so a fault the replay does not repeat (a memory fault, a change it did not record) still shows at its checkpoint. Making the report took 0.24 to 0.6 s on the lane's maps, once. `Evidence::with_tick_hashes(true)` takes every tick's hash live instead; the lane measured 4 to 13 ms a tick for it, so only tests use it.
+
+**The report** (`desync::Bundle`). On `Event::Desync` the client notes the mismatch (the earliest counts) and shows "The games went apart at tick N (a desync)." once. Five ticks later (`PAST_TICKS`) the evidence makes the bundle. It holds:
+
+- the build and the start values (`StartInfo`: rules hash, map hash, seed, slots, setup hash, parameters);
+- the writer's slot and the mismatch (its tick, the other slot, both hashes);
+- the test perturbation it applied, if any (below);
+- the base snapshot: the agreed checkpoint before the mismatch;
+- the writer's own snapshot at the mismatched checkpoint (`after`);
+- the tick records from the base to at least `PAST_TICKS` ticks past the mismatch, each with its state hash (live at the checkpoints, replayed for the others; below).
+
+The file is the magic `GDSY`, the format version (`BUNDLE_VERSION`, 1), then a postcard body. The extension is `.gdsync`. A reader refuses another magic, another version and trailing bytes, and never panics on hostile bytes (`hostile_bundle_bytes_never_panic`). Bump the version whenever the layout changes; a change of the save format changes the snapshots inside, which the save format's own version already names.
+
+**Size.** A bundle is two snapshots plus about K + `PAST_TICKS` tick records (small: the persons' orders only), so it is about twice the size of a save of the game at that point. On the synthetic fixture it is about 630 KB. On the lane's three maps of the install a save was 1.5 to 4.6 MB and a bundle 3.0 to 9.1 MB. While a game runs the evidence holds at most 5 snapshots with the default parameters, that is about five saves (up to about 23 MB on the largest of those maps); the lane held 2 at most (3 to 9 MB).
+
+**Only the digest crosses the network.** A bundle holds the whole game state, and it is far larger than the relay's 64 KiB message limit, so it never crosses the network. The peer sends only the bundle's SHA-256 digest: `Session::set_report(tick, digest)` puts `Report { tick, digest }` into every later frames message (`Frames.report`). This changed the frames layout, so `WIRE_VERSION` is now 4 (the lobby shares it). Every other peer gets `Event::Report { slot, tick, digest }` once per report and shows it as a notice.
+
+**In the client.** The client stores the bundle through its `SaveReport` function (`game::report`; `Client::save_report`, `GameOptions.report`):
+
+- Native: a file in `desync-reports/` under the working directory the client was started from, made if need be (`report::save_file`).
+- Web: a download through a Blob URL and a clicked anchor (`crates/platform-web/src/download.rs`), which goes into the browser's downloads.
+
+The file name is `desync-<ROOM CODE>-tick<N>-slot<k>.gdsync`, where N is the mismatched checkpoint's last tick and k the writer's slot counted from 1 (`Bundle::file_name`). The notices are:
+
+- "Desync at tick N; report saved to PLACE (digest XXXXXXXXXXXX)." The digest is the first 12 hex digits of the file's SHA-256. PLACE is the file's path, or "your downloads as NAME".
+- "Bea saved a desync report of tick N (digest XXXXXXXXXXXX)." for every other peer's report.
+- "Desync at tick N; the report was not saved: WHY." when the store fails. The digest is then not sent.
+
+The game goes on after a desync; nothing stops it.
+
+**Collecting and reading a report.**
+
+1. When the notice shows, note the room code and the tick. Each player who saw the desync has a report: natively in `desync-reports/` beside where they started the client, in the browser in their downloads.
+2. Collect two reports, one from each side of the mismatch. In a game of three or more, take the one of the slot the notices name and one other. To check that a file is the one its player's game made, compare the first 12 hex digits of `sha256sum FILE` with that player's digest in your notices.
+3. Run `GLASNOST_GAME_DIR=DIR cargo run --release -p glasnost-tools --bin glasnost-headless -- desync A.gdsync B.gdsync`, where DIR is the install the game ran on. The tool finds the map by the report's map hash and checks the rules hash. Without `GLASNOST_GAME_DIR` it reads only reports of the synthetic test rules. It exits with 0 when the two agree, 1 when they differ, and 2 when they cannot be compared (a file that is no report, an install without the map or with other rules). Reports of different start values differ (exit code 1), and the tool names the first start value that differs.
+4. Read the output from the top:
+   - Each file with its digest, slot, build, ticks, mismatch, how many of its hashes were taken live and how many replayed, and any test perturbation.
+   - "The first differing tick: N." This is from the hashes each peer recorded while it played.
+   - Whether the tool's replay gives the hashes its peer recorded (live or replayed on the peer's machine). A peer whose own run is not reproduced from its snapshot and orders changed outside what this build computes: another build, a platform difference, memory corruption, or a test perturbation it did not record. This is the signal of nondeterminism.
+   - Whether the merged orders differ. They never should; if they do, it is a lockstep fault.
+   - A field-by-field diff at the first tick where the two games can be compared. Where the replays differ, this is the replayed state at that tick, which is exactly the first differing tick when the bundle records the perturbation that caused it. Otherwise it is each peer's own snapshot at the mismatched checkpoint. The diff lists objects first (id, kind, type name, owner, then each differing field with both values, at most 64 objects and 48 fields each), then houses, the game-wide state, and our AI's state.
+
+**Forcing a desync** (tests and by hand). `desync::Perturb` changes one object's health or one house's credits from outside the rules, before a given tick runs, so the first differing hash is the one after that tick. Only a test client honours it. Natively, a debug build reads `GLASNOST_PERTURB`: `health:TICK:OBJECT[:BY]`, `credits:TICK:HOUSE[:BY]` (BY defaults to 1), or `none`. Any value makes the client a test client (`Client::set_test`), whose build is `glasnost <version> (test)`, so a room or a game of ordinary clients refuses it. To force a desync between two native clients, start both debug clients with `GLASNOST_PERTURB` set, one to a perturbation and the other to `none`. A release build ignores the variable. The bundle records the perturbation it applied, and the tool applies it in the replay.
+
+**Tests.**
+
+- `crates/tools/tests/desync.rs`: peers play the synthetic skirmish over the seeded network (bad links). In `a_perturbed_object_is_named_with_its_field_and_tick`, an object's health changes on one of two peers before tick 100. The tool names tick 100, the object and its health; with the perturbation's record removed, it reports the peer as unreproduced and falls back to the snapshots at the checkpoint; the binary exits with 1. In `a_perturbed_house_is_named_and_the_others_agree`, a house's credits change on the middle one of three peers, with every tick's hash taken live; the two unperturbed peers' bundles compare as the same. In `without_a_perturbation_nothing_differs`, there is no desync; bundles made on demand compare as the same (exit code 0), a junk file gives exit code 2, and the evidence stays bounded.
+- `crates/net/tests/lockstep.rs`: `agreed_checkpoints_stop_at_a_desync_and_a_report_reaches_the_others`.
+- `crates/net/src/desync.rs`: `perturbations_parse` and `hostile_bundle_bytes_never_panic`.
+- `crates/tools/src/inspect.rs`: `differences_are_named_by_path`.
+- `crates/app/src/game/client_net_tests.rs`: in `a_desync_is_reported_by_both_with_their_digests`, two test clients play over an in-process relay, and one changes its credits before tick 100. Each shows the desync notice once, stores a report through a test store, and shows the other's digest. The two reports name the same checkpoint and start.
+
+The local lane `lane_a_desync_on_the_installs_maps_is_reported` in `crates/tools/tests/desync.rs` (opt-in, needs `GLASNOST_GAME_DIR`) forces a desync on the first three multiplayer maps of the install. Two persons and computers play there for 400 ticks, slot 0's game changes before tick 300, and the tool runs on the install's rules. On every map both peers wrote a bundle and heard the other's digest, and the tool named tick 300 and the changed object or house, with both replays reproducing their peers' hashes. It prints counts and timings only, and writes them to `local-lane/m9/n4/lane.txt`. Run it with `cargo test --release -p glasnost-tools --test desync -- --ignored --nocapture lane`.
+
+**Seams for the later steps.**
+
+- N5 (reconnect, late join): a snapshot is a whole game that loads back to the same hash. A late joiner could start from the agreed one (`Evidence::snapshots`) and the tick records after it.
+- N6 (soak): `Evidence::bytes_held` and the lane's timings show what the evidence costs a long game.
+- A report on demand (`Evidence::bundle_now`) makes a bundle with no mismatch, for a person who suspects a desync the hashes missed.
 
 ## M6c step ledger
 

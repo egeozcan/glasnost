@@ -450,3 +450,188 @@ fn an_unreachable_relay_is_reported() {
             .starts_with("The connection closed: cannot reach the relay")
     );
 }
+
+/// The desync reports the test store keeps: file name and bytes.
+static SAVED: std::sync::Mutex<Vec<(String, Vec<u8>)>> = std::sync::Mutex::new(Vec::new());
+
+/// The test's way to store a report (a `SaveReport`): the store.
+fn save_test(name: &str, bytes: &[u8]) -> Result<String, String> {
+    SAVED
+        .lock()
+        .expect("the store")
+        .push((name.into(), bytes.to_vec()));
+    Ok(format!("the test store as {name}"))
+}
+
+/// Whether a client shows a notice that `has` holds of.
+fn notice(c: &Client, has: impl Fn(&str) -> bool) -> bool {
+    c.chat_lines().iter().any(|l| l.notice && has(&l.text))
+}
+
+/// Two test clients, one of which changes its house's credits before
+/// tick 100, play on through the desync (M9 N4): each notices it once,
+/// saves a report through its store, tells the other the report's digest
+/// and shows the other's. The two reports name the same mismatched
+/// checkpoint, carry the start, the perturbation of the one that made it,
+/// and the ticks to a few past the mismatch.
+#[test]
+fn a_desync_is_reported_by_both_with_their_digests() {
+    use glasnost_net::desync::{Bundle, PAST_TICKS, Perturb};
+    let (_rt, relay) = relay(77);
+    let clock = Clock(Instant::now());
+    let mut a = client(&relay, "Ann");
+    let mut b = client(&relay, "Bea");
+    let perturb = Perturb::Credits {
+        tick: 100,
+        house: 0,
+        by: 1,
+    };
+    a.set_test(Some(perturb));
+    b.set_test(None);
+    assert_eq!(a.build, test_build());
+    assert_ne!(a.build, BUILD, "a test client names another build");
+    for c in [&mut a, &mut b] {
+        c.save_report = Some(save_test);
+    }
+
+    press_menu(&mut a, MenuHit::Multiplayer);
+    press_net(&mut a, NetHit::Host);
+    pump(&clock, &mut [&mut a], "the room", |c| {
+        c[0].room_code().is_some()
+    });
+    let code = a.room_code().unwrap().to_owned();
+    press_room(&mut a, SetupHit::Kind(1, -1));
+    pump(&clock, &mut [&mut a], "an open row", |c| {
+        c[0].room().unwrap().setup.slots[1].kind == SlotKind::Human
+    });
+    press_room(&mut a, SetupHit::Kind(2, -1));
+    pump(&clock, &mut [&mut a], "a computer row", |c| {
+        c[0].room().unwrap().setup.slots[2].kind == SlotKind::Ai
+    });
+    press_menu(&mut b, MenuHit::Multiplayer);
+    b.netform.code = code.clone();
+    press_net(&mut b, NetHit::Join);
+    pump(&clock, &mut [&mut a, &mut b], "the join", |c| {
+        c.iter()
+            .all(|c| c.room().is_some_and(|v| v.members.len() == 2))
+    });
+    press_room(&mut b, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "ready", |c| {
+        c[0].room()
+            .unwrap()
+            .members
+            .iter()
+            .all(|m| m.ready || m.row == 0)
+    });
+    press_room(&mut a, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "the start", |c| {
+        c.iter()
+            .all(|c| c.lockstep().is_some_and(|ls| ls.phase() == Phase::Running))
+    });
+
+    // Both play on, with orders, until each has its report and the other's
+    // digest.
+    let mut rng = [3u64, 4u64];
+    let mut last = [0, 0];
+    let saved = |c: &Client| notice(c, |t| t.contains("report saved to the test store"));
+    let heard = |c: &Client| notice(c, |t| t.contains("saved a desync report of tick"));
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        for (k, c) in [&mut a, &mut b].into_iter().enumerate() {
+            c.update(clock.now());
+            let t = c.session.as_ref().unwrap().play.game.world.tick;
+            if t > last[k] {
+                last[k] = t;
+                script(c, t, &mut rng[k]);
+            }
+        }
+        if [&a, &b].iter().all(|c| saved(c) && heard(c)) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "no reports: {:?} / {:?}",
+            a.chat_lines(),
+            b.chat_lines()
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+
+    // The two reports, by their names.
+    let prefix = format!("desync-{code}-");
+    let saved: Vec<(String, Vec<u8>)> = SAVED
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(n, _)| n.starts_with(&prefix))
+        .cloned()
+        .collect();
+    assert_eq!(saved.len(), 2, "one report each");
+    let bundles: Vec<Bundle> = saved
+        .iter()
+        .map(|(_, bytes)| Bundle::from_bytes(bytes).expect("a report reads back"))
+        .collect();
+    let m = bundles[0].mismatch.expect("a mismatch");
+    let every = bundles[0].start.params.sane().hash_every;
+    assert!(m.tick >= 100 && (m.tick + 1).is_multiple_of(every), "{m:?}");
+    assert!(
+        m.tick < 100 + every,
+        "the first checkpoint after the change"
+    );
+    for (r, (name, _)) in bundles.iter().zip(&saved) {
+        assert_eq!(r.mismatch.map(|m| m.tick), Some(m.tick));
+        assert_eq!(r.build, test_build());
+        assert_eq!(r.start, bundles[0].start);
+        assert_eq!(*name, r.file_name(&prefix));
+        assert!(r.end() > m.tick + PAST_TICKS, "ticks past the mismatch");
+        assert!(r.ticks.first().is_some_and(|t| t.tick < 100));
+    }
+    let of = |c: &Client| {
+        let slot = c.lockstep().unwrap().me();
+        bundles
+            .iter()
+            .zip(&saved)
+            .find(|(r, _)| r.writer == slot)
+            .map(|(r, (_, bytes))| (r, bytes))
+            .expect("a report of the slot")
+    };
+    let (ra, bytes_a) = of(&a);
+    let (rb, bytes_b) = of(&b);
+    assert_eq!(
+        ra.perturb,
+        Some(perturb),
+        "the one that changed its game says so"
+    );
+    assert_eq!(rb.perturb, None);
+    assert_eq!(ra.mismatch.unwrap().mine, rb.mismatch.unwrap().theirs);
+    assert_eq!(ra.mismatch.unwrap().theirs, rb.mismatch.unwrap().mine);
+
+    // Each noticed the desync once, and shows the other's digest.
+    let short = |bytes: &[u8]| glasnost_net::sim::hex(&Bundle::digest(bytes))[..12].to_owned();
+    let went = format!("The games went apart at tick {} (a desync).", m.tick);
+    for (c, other, theirs) in [(&a, "Bea", bytes_b), (&b, "Ann", bytes_a)] {
+        let n = c
+            .chat_lines()
+            .iter()
+            .filter(|l| l.notice && l.text == went)
+            .count();
+        assert_eq!(n, 1, "{:?}", c.chat_lines());
+        let said = format!(
+            "{other} saved a desync report of tick {} (digest {}).",
+            m.tick,
+            short(theirs)
+        );
+        assert!(notice(c, |t| t == said), "{:?}", c.chat_lines());
+    }
+    let mine = format!(
+        "Desync at tick {}; report saved to the test store as {prefix}",
+        m.tick
+    );
+    assert!(notice(&a, |t| t.starts_with(&mine)));
+    // The evidence keeps nothing more once the report is made.
+    assert!(
+        a.evidence()
+            .is_some_and(|e| e.done() && e.bytes_held() == 0)
+    );
+    relay.stop();
+}

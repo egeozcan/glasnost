@@ -15,6 +15,8 @@
 //! and tests with plain `cargo`.
 
 #[cfg(target_arch = "wasm32")]
+pub mod download;
+#[cfg(target_arch = "wasm32")]
 pub mod socket;
 
 #[cfg(target_arch = "wasm32")]
@@ -52,6 +54,8 @@ mod web {
                 exit_after_frames: None,
                 relay: Some(param("relay")).filter(|r| !r.is_empty()),
                 connect: Some(crate::socket::connect),
+                report: Some(crate::download::save),
+                test: None,
             })
         } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {

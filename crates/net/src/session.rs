@@ -35,7 +35,10 @@
 //! state hash (checkpoint *c* after tick (*c* + 1) × `hash_every` − 1) and
 //! sends it, again until acknowledged. Each peer compares every other
 //! peer's hash with its own and reports a difference as
-//! [`Event::Desync`].
+//! [`Event::Desync`]. [`Session::agreed`] counts the checkpoints every live
+//! peer has matched, which bounds the evidence a desync report keeps
+//! ([`crate::desync`], N4); a peer's report digest rides in its frames
+//! ([`Session::set_report`], [`Event::Report`]).
 
 use std::collections::{BTreeMap, VecDeque};
 
@@ -45,7 +48,7 @@ use glasnost_sim::world::HouseId;
 use crate::delay::{Control, Rtt};
 use crate::sim::Simulation;
 use crate::start::{Field, Params, SlotKind, StartInfo};
-use crate::wire::{self, Body, Echo, Envelope, Frame, Frames, Hash, WireError};
+use crate::wire::{self, Body, Echo, Envelope, Frame, Frames, Hash, Report, WireError};
 
 /// A wait counts as a late frame only while this peer is at most this many
 /// ticks ahead of the slowest other peer (estimates are off by a tick).
@@ -155,6 +158,17 @@ pub enum Event {
         /// How many of its frames count.
         kept: u32,
     },
+    /// `slot` has written a desync report of the mismatch after `tick`;
+    /// its bundle's bytes have the SHA-256 `digest` (N4). Reported once per
+    /// report a peer sends.
+    Report {
+        /// The slot.
+        slot: u8,
+        /// The tick of the mismatch it reports.
+        tick: u32,
+        /// The digest of its bundle.
+        digest: Hash,
+    },
     /// A message could not be used.
     BadMessage {
         /// Why.
@@ -207,6 +221,10 @@ struct Remote {
     hash_have: u32,
     /// How many of its checkpoint hashes we have compared with ours.
     compared: u32,
+    /// How many of its checkpoint hashes, from 0 without a gap, equal ours.
+    agreed: u32,
+    /// The last desync report it told us of.
+    report: Option<Report>,
     /// How many of our checkpoint hashes it holds.
     hash_acked: u32,
     /// The ticks it says it has run.
@@ -265,6 +283,8 @@ pub struct Session {
     my_hashes: BTreeMap<u32, Hash>,
     /// How many checkpoint hashes we have taken.
     hashes_made: u32,
+    /// Our desync report, once written (N4).
+    report: Option<Report>,
     ctrl: Control,
     events: VecDeque<Event>,
     dirty: bool,
@@ -307,6 +327,7 @@ impl Session {
             queued: Vec::new(),
             my_hashes: BTreeMap::new(),
             hashes_made: 0,
+            report: None,
             ctrl: Control::default(),
             events: VecDeque::new(),
             dirty: false,
@@ -391,6 +412,28 @@ impl Session {
             .filter(|(_, r)| r.needs(tick) && !r.frames.contains_key(&tick))
             .map(|(&s, _)| s)
             .collect()
+    }
+
+    /// How many checkpoints, from checkpoint 0 without a gap, every live
+    /// other peer has matched with ours (all we have taken, with no other
+    /// peer). The state after `agreed() × hash_every` ticks is the same on
+    /// every live peer, by its hash. A desync's checkpoint and every later
+    /// one never count.
+    pub fn agreed(&self) -> u32 {
+        self.remotes
+            .values()
+            .filter(|r| r.live())
+            .map(|r| r.agreed)
+            .min()
+            .unwrap_or(self.hashes_made)
+    }
+
+    /// Tells every other peer of our desync report: the tick of the mismatch
+    /// and the digest of the bundle (N4). It rides in every later frames
+    /// message.
+    pub fn set_report(&mut self, tick: u32, digest: Hash) {
+        self.report = Some(Report { tick, digest });
+        self.dirty = true;
     }
 
     /// Takes the events since the last call, oldest first.
@@ -546,6 +589,16 @@ impl Session {
         while r.hashes.contains_key(&r.hash_have) {
             r.hash_have += 1;
         }
+        if let Some(rep) = f.report
+            && r.report != Some(rep)
+        {
+            r.report = Some(rep);
+            self.events.push_back(Event::Report {
+                slot: from,
+                tick: rep.tick,
+                digest: rep.digest,
+            });
+        }
         self.compare(from);
     }
 
@@ -562,7 +615,11 @@ impl Session {
             let (Some(theirs), Some(&mine)) = (r.hashes.remove(&c), self.my_hashes.get(&c)) else {
                 continue;
             };
-            if theirs != mine {
+            if theirs == mine {
+                if r.agreed == c {
+                    r.agreed = c + 1;
+                }
+            } else {
                 self.events.push_back(Event::Desync {
                     tick: (c + 1) * k - 1,
                     mine: SlotHash {
@@ -818,6 +875,7 @@ impl Session {
             frames,
             first_hash,
             hashes,
+            report: self.report,
         }))
     }
 

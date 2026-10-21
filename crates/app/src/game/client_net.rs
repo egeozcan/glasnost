@@ -12,7 +12,14 @@
 //! client hands them to the session, and the world changes only when the
 //! session runs a tick (`Session::step_by`). The pacer says when a tick is
 //! due, the session whether it can run.
+//!
+//! Every network game keeps desync evidence (`glasnost_net::desync`, M9
+//! N4): at a mismatch the client makes a report, stores it through its
+//! [`SaveReport`](super::report::SaveReport) (a file natively, a download
+//! in the browser), tells the other peers its digest and says where it
+//! went.
 
+use glasnost_net::desync::{Bundle, Evidence, Perturb};
 use glasnost_net::lobby::wire::{self as lobby_wire};
 use glasnost_net::lobby::{
     Begin, CHAT_CHARS, Edit, FromRelay, MapChoice, Offered, Refusal, RoomView, ToRelay,
@@ -33,6 +40,16 @@ use crate::mapview::live::period_ms;
 
 /// The build a client names in a room and in the lockstep handshake.
 pub const BUILD: &str = concat!("glasnost ", env!("CARGO_PKG_VERSION"));
+
+/// The build a test client names ([`Client::set_test`]): not [`BUILD`], so
+/// a room or a game of ordinary clients refuses it.
+pub fn test_build() -> String {
+    format!("{BUILD} (test)")
+}
+
+/// The hex digits of a report's digest a notice shows.
+// nocite: our own netcode
+const DIGEST_SHOWN: usize = 12;
 
 /// How long the lockstep waits for a peer's frame before the game names
 /// whom it waits for.
@@ -84,6 +101,10 @@ pub(super) struct Net {
     pub(super) begin: Option<Begin>,
     /// The game's lockstep session.
     pub(super) lockstep: Option<Lockstep>,
+    /// The game's desync evidence, kept from the session's start.
+    pub(super) evidence: Option<Evidence>,
+    /// The first desync's tick, once one is noticed.
+    desynced: Option<u32>,
     early: Vec<Vec<u8>>,
     stalled_since: Option<u64>,
     last_tick: Option<u64>,
@@ -107,6 +128,8 @@ impl Net {
             note: None,
             begin: None,
             lockstep: None,
+            evidence: None,
+            desynced: None,
             early: Vec::new(),
             stalled_since: None,
             last_tick: None,
@@ -351,13 +374,34 @@ impl Client {
                     net.refused = Some(text.clone());
                     net.line(now_ms, "", &text, true);
                 }
-                // N4 seam: the desync report. Now a notice.
-                NetEvent::Desync { tick, .. } => net.line(
-                    now_ms,
-                    "",
-                    &format!("The games went apart at tick {tick} (a desync)."),
-                    true,
-                ),
+                // The report is made a few ticks later (`net_report`).
+                NetEvent::Desync { tick, mine, theirs } => {
+                    if let Some(ev) = net.evidence.as_mut() {
+                        ev.desync(tick, theirs.slot, mine.hash, theirs.hash);
+                    }
+                    if net.desynced.is_none() {
+                        net.desynced = Some(tick);
+                        net.line(
+                            now_ms,
+                            "",
+                            &format!("The games went apart at tick {tick} (a desync)."),
+                            true,
+                        );
+                    }
+                }
+                NetEvent::Report { slot, tick, digest } => {
+                    let who = net.slot_name(slot);
+                    let hex = glasnost_net::sim::hex(&digest);
+                    net.line(
+                        now_ms,
+                        "",
+                        &format!(
+                            "{who} saved a desync report of tick {tick} (digest {}).",
+                            &hex[..DIGEST_SHOWN]
+                        ),
+                        true,
+                    );
+                }
                 // N5 seam: surrender and reconnection. Now a notice; the
                 // game goes on without the slot.
                 NetEvent::Dropped { slot, .. } => {
@@ -373,6 +417,46 @@ impl Client {
                 | NetEvent::Heard { .. } => {}
             }
         }
+        self.net_report(now_ms);
+    }
+
+    /// Makes the desync report once the evidence has the ticks past the
+    /// mismatch, stores it, tells the other peers its digest and says where
+    /// it went. Making it replays the ticks since the base snapshot for
+    /// their hashes (a moment's work, once).
+    fn net_report(&mut self, now_ms: i64) {
+        let save = self.save_report;
+        let (Some(net), Some(s)) = (self.net.as_mut(), self.session.as_ref()) else {
+            return;
+        };
+        let (Some(ls), Some(ev)) = (net.lockstep.as_mut(), net.evidence.as_mut()) else {
+            return;
+        };
+        let Some(b) = ev.take(ls.ran(), &s.play.game) else {
+            return;
+        };
+        let tick = b.mismatch.map_or(0, |m| m.tick);
+        let bytes = b.to_bytes();
+        let digest = Bundle::digest(&bytes);
+        let hex = glasnost_net::sim::hex(&digest);
+        let code = net.room.as_ref().map_or("game", |v| v.code.as_str());
+        let name = b.file_name(&format!("desync-{code}-"));
+        let text = match save.map(|f| f(&name, &bytes)) {
+            Some(Ok(place)) => {
+                ls.set_report(tick, digest);
+                log::info!("desync report of tick {tick} saved to {place} (digest {hex})");
+                format!(
+                    "Desync at tick {tick}; report saved to {place} (digest {}).",
+                    &hex[..DIGEST_SHOWN]
+                )
+            }
+            Some(Err(why)) => {
+                log::warn!("the desync report of tick {tick} was not saved: {why}");
+                format!("Desync at tick {tick}; the report was not saved: {why}.")
+            }
+            None => format!("Desync at tick {tick}; this client cannot save a report."),
+        };
+        net.line(now_ms, "", &text, true);
     }
 
     fn net_message(&mut self, m: FromRelay, now_ms: i64) {
@@ -523,12 +607,15 @@ impl Client {
             b.params,
         );
         let cfg = Config::new(period_ms(s.speed) as u32);
+        let evidence = Evidence::new(&self.build, &info, b.you, &s.play.game);
         match Lockstep::new(cfg, info, b.you, now) {
             Ok(mut ls) => {
                 for bytes in net.early.drain(..) {
                     ls.receive(now, &bytes);
                 }
                 net.lockstep = Some(ls);
+                net.evidence = Some(evidence.with_perturb(self.perturb));
+                net.desynced = None;
                 s.network = true;
                 s.play.outbox = Some(Vec::new());
             }
@@ -566,7 +653,19 @@ impl Client {
         if self.pacer.remaining(now_ms, s.speed) > 0 || stretched {
             return false;
         }
-        let ran = s.step_by(|g| ls.step(now, g).is_some());
+        let ev = &mut net.evidence;
+        let ran = s.step_by(|g| {
+            if let Some(ev) = ev.as_mut() {
+                ev.before_tick(ls.ran(), g);
+            }
+            let Some(t) = ls.step(now, g) else {
+                return false;
+            };
+            if let Some(ev) = ev.as_mut() {
+                ev.after_tick(&t, g, ls.agreed());
+            }
+            true
+        });
         if ran {
             self.pacer.due(now_ms, s.speed);
             net.last_tick = Some(now);
@@ -891,6 +990,20 @@ impl Client {
         let (d, t) = self.netform.view(self.size, &status, bad, busy, hover);
         self.net_targets = t;
         d
+    }
+
+    /// Makes this a test client (M9 N4; the native client in a debug build
+    /// with `GLASNOST_PERTURB` set, and tests): it names [`test_build`], so
+    /// that only other test clients play with it, and makes `perturb` in
+    /// its network games to force a desync.
+    pub fn set_test(&mut self, perturb: Option<Perturb>) {
+        self.build = test_build();
+        self.perturb = perturb;
+    }
+
+    /// The network game's desync evidence, once the game runs.
+    pub fn evidence(&self) -> Option<&Evidence> {
+        self.net.as_ref()?.evidence.as_ref()
     }
 
     /// The room code, while in a room.

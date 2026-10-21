@@ -60,16 +60,10 @@ const ICON_SPRITES: u32 = 1000;
 // nocite: our own sprite id, above the main icons'
 const ALT_ICON_SPRITES: u32 = 6000;
 /// The 64-bit FNV-1a hash of a map file: the map's name in replays, so
-/// that no map is named by its title (our own identifier).
-pub fn content_hash(bytes: &[u8]) -> String {
-    // nocite: FNV-1a 64-bit offset basis and prime (a public hash, our own identifier choice)
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for &b in bytes {
-        h ^= u64::from(b);
-        h = h.wrapping_mul(0x0100_0000_01b3);
-    }
-    format!("map-{h:016x}")
-}
+/// that no map is named by its title (our own identifier). It lives in
+/// `glasnost-net` since M9 N4, where the desync tool finds a report's map
+/// by it too.
+pub use glasnost_net::start::content_hash;
 
 /// A game on a loaded map.
 pub struct Session {

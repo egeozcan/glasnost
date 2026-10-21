@@ -39,6 +39,12 @@ pub struct GameOptions {
     /// How the client opens a link to a relay, when the platform gives one
     /// (the web shell's WebSocket); `None`: the built-in native link.
     pub connect: Option<super::link::Connect>,
+    /// How the client stores a desync report, when the platform gives one
+    /// (the web shell's download); `None`: the built-in native file.
+    pub report: Option<super::report::SaveReport>,
+    /// A test client ([`Client::set_test`]) with this perturbation, if any
+    /// (the native client in a debug build with `GLASNOST_PERTURB` set).
+    pub test: Option<Option<glasnost_net::desync::Perturb>>,
 }
 
 /// Events delivered to the game's loop.
@@ -65,6 +71,12 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     }
     if let Some(c) = options.connect {
         client.connect = Some(c);
+    }
+    if let Some(r) = options.report {
+        client.save_report = Some(r);
+    }
+    if let Some(p) = options.test {
+        client.set_test(p);
     }
     if cfg!(not(target_arch = "wasm32")) && options.game_dir.is_none() {
         client.status = "Start with --game-dir DIR to read an install.".into();

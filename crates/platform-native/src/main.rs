@@ -11,6 +11,12 @@
 //! viewer on the first map whose name contains `NAME`). Without either, the
 //! M0 palette-quad demo. `--relay URL` fills the multiplayer screen's relay
 //! address (default `ws://127.0.0.1:8787/`, the relay binary's own).
+//!
+//! In a debug build only, `GLASNOST_PERTURB` makes the game client a test
+//! client (M9 N4): it names another build, so it plays only with other
+//! test clients, and with a value such as `credits:300:0:100` (house 0's
+//! credits +100 before tick 300) or `health:300:5:-1` (object 5's health)
+//! it changes its own game to force a desync; `none` changes nothing.
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
@@ -63,6 +69,22 @@ fn main() -> std::process::ExitCode {
         }
     }
 
+    // A test client, in a debug build only (M9 N4; our own netcode).
+    #[cfg(debug_assertions)]
+    let test = match std::env::var("GLASNOST_PERTURB") {
+        Ok(v) if v.trim() == "none" => Some(None),
+        Ok(v) => match glasnost_app::Perturb::parse(&v) {
+            Ok(p) => Some(Some(p)),
+            Err(e) => {
+                eprintln!("glasnost: GLASNOST_PERTURB: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        Err(_) => None,
+    };
+    #[cfg(not(debug_assertions))]
+    let test = None;
+
     if game && viewer {
         eprintln!("glasnost: --game and --viewer exclude each other");
         return ExitCode::from(2);
@@ -74,6 +96,8 @@ fn main() -> std::process::ExitCode {
             exit_after_frames: options.exit_after_frames,
             relay,
             connect: None,
+            report: None,
+            test,
         })
     } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {

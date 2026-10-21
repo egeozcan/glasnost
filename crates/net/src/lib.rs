@@ -18,14 +18,17 @@
 //! - [`simnet`]: a seeded in-memory network for tests.
 //! - [`lobby`]: the network lobby's protocol and room state machine (N2),
 //!   which the relay keeps and the client drives.
+//! - [`desync`]: the evidence every peer keeps and the desync report it
+//!   makes on a mismatch (N4).
 //!
 //! Nothing here reads a clock, opens a socket or starts a thread: the
 //! caller passes its clock into every call (`now_ms`) and moves the bytes.
-//! The relay (N2), the client's transports (N3), desync reports (N4) and
-//! reconnects (N5) build on this crate. The protocol, the frame rule and the
+//! The relay (N2), the client's transports (N3) and reconnects (N5) build on
+//! this crate. The protocol, the frame rule and the
 //! delay rule are our own design (docs/development.md, *Multiplayer (M9)*).
 
 pub mod delay;
+pub mod desync;
 pub mod lobby;
 pub mod session;
 pub mod sim;
