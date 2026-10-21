@@ -40,7 +40,9 @@ use super::play::Button;
 use super::session::{MAP_IMAGE, RADAR_IMAGE, Session, SessionEvent};
 use crate::mapview::live::Pacer;
 
-/// Asynchronous work the client asks for.
+/// Asynchronous work the client asks for. One job is in flight at a time,
+/// so the size of its largest variant does not matter.
+#[allow(clippy::large_enum_variant)]
 pub enum Job {
     /// Mount the picked install files.
     Mount(Vec<PickedFile>),

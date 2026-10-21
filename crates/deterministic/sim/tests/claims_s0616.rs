@@ -481,12 +481,15 @@ fn claim_17_railgun_line() {
     assert_eq!(list(&w, s).len(), n, "a marked system emits no more");
 }
 
+/// A railgun line effect: system type, from, to.
+type RailLine = (u32, Pos, Pos);
+
 /// The effects of one line turn of a fresh railgun system of type `name`
 /// whose target point is 1024 leptons east of it: the particles after the
 /// turn and whether it is marked (`None`: it left play in that turn, S-0616
 /// claim 22: marked and empty), the raw values taken and the line effects
 /// reported (system type, from, to).
-fn rail_turn(name: &str) -> (Option<(usize, bool)>, u64, Vec<(u32, Pos, Pos)>) {
+fn rail_turn(name: &str) -> (Option<(usize, bool)>, u64, Vec<RailLine>) {
     let mut w = game(&rules());
     let p = centre(-3, 0);
     let s = system(&mut w, name, p, None);
@@ -506,7 +509,7 @@ fn rail_turn(name: &str) -> (Option<(usize, bool)>, u64, Vec<(u32, Pos, Pos)>) {
 }
 
 /// The railgun line effects reported: system type, from, to.
-fn rail_lines(w: &World) -> Vec<(u32, Pos, Pos)> {
+fn rail_lines(w: &World) -> Vec<RailLine> {
     use glasnost_sim::combat::effects::Effect;
     w.effects
         .iter()

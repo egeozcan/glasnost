@@ -3902,19 +3902,20 @@ fn bomb_assets() -> super::build::Assets {
     assets
 }
 
-/// A bomb on the combat scene's cart, drawn with `assets` in a fresh game
-/// (the drawing caches what it loaded): the cart's status items in
-/// painting order, the first pixel of each, the icon's F3 frame, the
-/// cart's projected position and the notes.
-fn bomb_run(
-    assets: &super::build::Assets,
-) -> (
+/// What [`bomb_run`] gives.
+type BombRun = (
     Vec<glasnost_render::scene::Item>,
     Vec<u8>,
     usize,
     (i32, i32),
     std::collections::BTreeSet<String>,
-) {
+);
+
+/// A bomb on the combat scene's cart, drawn with `assets` in a fresh game
+/// (the drawing caches what it loaded): the cart's status items in
+/// painting order, the first pixel of each, the icon's F3 frame, the
+/// cart's projected position and the notes.
+fn bomb_run(assets: &super::build::Assets) -> BombRun {
     use glasnost_render::scene::Group;
     let (mut live, mut scene, map, import, catalogue, cart, _) =
         combat_live_with(3, assets.clone());
