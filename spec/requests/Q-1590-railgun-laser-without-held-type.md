@@ -1,8 +1,9 @@
 ---
 id: Q-1590
 title: Whether a railgun system without a held particle type makes its laser beam
-status: open
+status: answered
 related: [S-0616, S-0518]
+answered-by: [S-0616]
 ---
 
 ## Need
