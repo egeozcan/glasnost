@@ -1,9 +1,9 @@
 ---
 id: Q-1622
 title: The fixed cursor palette of the bomb icon and the wrench is not found by the search order
-status: open
+status: answered
 related: [S-0111, S-0519, S-0005]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
