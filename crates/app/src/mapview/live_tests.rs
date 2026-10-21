@@ -2785,7 +2785,7 @@ fn particles_draw_their_sprites_in_the_air_layer() {
 /// position 1 and the force-shield selector position 2 (invented triples).
 fn protection_rules() -> String {
     format!(
-        "{RULES}[AudioVisual]\nIronCurtainColor=1\nForceShieldColor=2\n[ColorAdd]\nA=0,0,0\nB=7,19,3\nC=1,0,1\n"
+        "{RULES}[AudioVisual]\nIronCurtainColor=1\nForceShieldColor=2\n[ColorAdd]\nA=0,0,0\nB=7,19,3\nC=1,0,1\nD=0,8,0\n"
     )
 }
 
@@ -2997,7 +2997,7 @@ fn protected_hut_items(
     roles: &[&'static str],
     slot_art: &str,
     building: LiveBuilding,
-    cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook>,
+    cells: std::collections::BTreeMap<glasnost_map::CellXY, super::protection::SlotCell>,
 ) -> Vec<glasnost_render::scene::Item> {
     use super::tests::{ART, art_of, context_full};
     let rules = format!("{}[Animations]\n0=SLOTA\n{rules_extra}", protection_rules());
@@ -3086,7 +3086,7 @@ fn lit_parts(
 /// HUTX's foundation cells (2 × 2 from cell (2, 2)), each under `look`.
 fn hut_cells(
     look: Option<super::protection::Look>,
-) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook> {
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::SlotCell> {
     look.map(|l| {
         hut_cells_with(super::protection::BuildingLook {
             protection: Some(l),
@@ -3096,12 +3096,30 @@ fn hut_cells(
     .unwrap_or_default()
 }
 
-/// HUTX's four foundation cells, each with the building look `look`.
+/// HUTX's four foundation cells, each with the building look `look` and
+/// not shrouded.
 fn hut_cells_with(
     look: super::protection::BuildingLook,
-) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::BuildingLook> {
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::SlotCell> {
+    hut_cells_shrouded(look, &[])
+}
+
+/// HUTX's four foundation cells, each with the building look `look`, the
+/// cells `shrouded` shrouded for the local player.
+fn hut_cells_shrouded(
+    look: super::protection::BuildingLook,
+    shrouded: &[(i32, i32)],
+) -> std::collections::BTreeMap<glasnost_map::CellXY, super::protection::SlotCell> {
     [(2, 2), (3, 2), (2, 3), (3, 3)]
-        .map(|(x, y)| (glasnost_map::CellXY::new(x, y), look))
+        .map(|(x, y)| {
+            (
+                glasnost_map::CellXY::new(x, y),
+                super::protection::SlotCell {
+                    look,
+                    shrouded: shrouded.contains(&(x, y)),
+                },
+            )
+        })
         .into_iter()
         .collect()
 }
@@ -3371,9 +3389,217 @@ fn protection_slot_animation_rows() {
     let normal_plain = anim(None, "UseNormalLight=yes\n", 0);
     assert_eq!(normal.2.rho, normal_plain.2.rho);
     assert_eq!(normal.2.mask, shield);
-    // A shrouded occupying building supplies no mask (Q-1529 interim).
-    let shrouded = anim(Some(bright(ProtectKind::ForceShield).shrouded(true)), "", 0);
-    assert_eq!(shrouded.2.mask, 0);
+    // An occupying building whose centre cell is shrouded still supplies its mask while the
+    // animation's own cell is not shrouded (S-0513 claim 29b: the centre cell plays no part).
+    let centre_shrouded = anim(Some(bright(ProtectKind::ForceShield).shrouded(true)), "", 0);
+    assert_eq!(centre_shrouded.2.mask, shield);
+}
+
+/// spec: S-0513 claim 29b (slot animations, Q-1529; SW10 parts i1, i2, i3 and i5 in our engine:
+/// the animation tests the cell holding its own position; that cell not shrouded, S-0102 claim
+/// 34's masks of the occupying building, whatever the state of the building's centre cell; that
+/// cell shrouded, no colour mask at all, neither the force-shield nor the laser-target mask; the
+/// brightness follows S-0102 claim 34 and S-0519 claim 26 unchanged), S-0519 claim 26
+#[test]
+fn protection_claim29b_slot_animation_own_cell() {
+    use glasnost_render::compose::{PixelLayout, protection_mask};
+    use glasnost_sim::mark::Adjust;
+    use glasnost_sim::superweapons::ProtectKind;
+    let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    let laser = protection_mask(MARK_TRIPLE, PixelLayout::Rgb565);
+    assert!(shield & laser == 0 && shield != 0 && laser != 0);
+    // HUTX from cell (2, 2): its centre cell is (3, 3) (S-0104 claim 13), its slot animation
+    // with no displacement lies in cell E = (2, 2), the anchor cell.
+    let draw = |protection: Option<super::protection::Look>, adjust, shrouded: &[(i32, i32)]| {
+        let mut b = hut(protection, None);
+        b.adjust = adjust;
+        b.slots = vec![slot_a(0)];
+        let look = super::protection::BuildingLook { protection, adjust };
+        let parts = lit_parts(&protected_hut_items(
+            MARK_SELECTORS,
+            &[],
+            "",
+            b,
+            hut_cells_shrouded(look, shrouded),
+        ));
+        (parts[0].2, parts.last().expect("the slot animation").2)
+    };
+    let none = Adjust::default();
+    let mark = Adjust {
+        mark: Some(Some(512)),
+        ..Adjust::default()
+    };
+    let visible = Some(bright(ProtectKind::ForceShield));
+    let centre_hidden = visible.map(|l| l.shrouded(true));
+    // i1: E visible, the centre cell shrouded: the animation shows the force-shield colour, the
+    // body none.
+    let (body, slot) = draw(centre_hidden, none, &[(3, 3)]);
+    assert_eq!((body.mask, slot.mask), (0, shield), "i1");
+    // i2: E shrouded, the centre cell visible: the body shows the colour, the animation only the
+    // protected brightness.
+    let (body_i2, slot_i2) = draw(visible, none, &[(2, 2)]);
+    assert_eq!((body_i2.mask, slot_i2.mask), (shield, 0), "i2");
+    let (_, slot_open) = draw(visible, none, &[]);
+    assert_eq!(slot_open.mask, shield);
+    assert_eq!(slot_i2.rho, slot_open.rho, "i2: the brightness unchanged");
+    // i3: the colour follows E only, not another foundation corner.
+    let (_, slot) = draw(centre_hidden, none, &[(3, 2), (3, 3)]);
+    assert_eq!(slot.mask, shield, "i3: a corner shrouded, E visible");
+    let (_, slot) = draw(centre_hidden, none, &[(2, 2), (3, 3)]);
+    assert_eq!(slot.mask, 0, "i3: E shrouded, the corner visible");
+    // i5: also marked: the union while E is visible, neither half while E is shrouded.
+    let (_, slot) = draw(centre_hidden, mark, &[(3, 3)]);
+    assert_eq!(slot.mask, shield | laser, "i5, i1 placement");
+    let (_, slot_marked_hidden) = draw(visible, mark, &[(2, 2)]);
+    assert_eq!(slot_marked_hidden.mask, 0, "i5, i2 placement");
+    let (_, slot_marked_open) = draw(visible, mark, &[]);
+    assert_eq!(slot_marked_hidden.rho, slot_marked_open.rho);
+    // Only marked: the marking colour while E is visible, none while it is shrouded (S-0519
+    // claim 26); the brightness unchanged.
+    let (_, open) = draw(None, mark, &[]);
+    let (_, hidden) = draw(None, mark, &[(2, 2)]);
+    assert_eq!((open.mask, hidden.mask), (laser, 0));
+    assert_eq!(open.rho, hidden.rho);
+}
+
+/// spec: S-0513 claim 29b (slot animations: the cell holding the animation's own position is
+/// shrouded when S-0110 claim 8's point test at its centre, at its ground height, finds it so;
+/// on raised ground that test reads a displaced cell, SW10 part i4; only the local player's
+/// shroud counts), S-0110 claim 8, S-0519 claim 26 (Houses: shroud per viewer)
+#[test]
+fn protection_slot_cell_shroud_is_the_point_test() {
+    use super::live::slot_cell_shrouded;
+    use glasnost_sim::econ::shroud;
+    let (mut live, _) = synthetic_live();
+    let (a, b) = (HouseId(0), HouseId(1));
+    // A cell of the plateau one level up (testkit::map: cell(0, −6)): u = 1, so the test reads
+    // the cell itself and its map north-west neighbour.
+    let up = glasnost_sim::testkit::cell(0, -6);
+    let nw = glasnost_map::CellXY::new(up.x - 1, up.y - 1);
+    assert_eq!(live.world.cells.cell(up).unwrap().level, 1);
+    assert!(slot_cell_shrouded(&live.world, a, up), "nothing explored");
+    // Explore the north-west neighbour but not the cell itself: the raised cell is not
+    // shrouded, although its own explored state is not set (the displaced reading).
+    let idx = |c: glasnost_map::CellXY| live.world.cells.idx(c).map(|i| i as u32);
+    let (i_nw, i_up) = (idx(nw), idx(up));
+    let reveal = (-4..=0)
+        .flat_map(|dx| (-4..=0).map(move |dy| (dx, dy)))
+        .flat_map(|(dx, dy)| (1..=3).map(move |r| (dx, dy, r)))
+        .find_map(|(dx, dy, r)| {
+            let c = glasnost_map::CellXY::new(nw.x + dx, nw.y + dy);
+            let centre = glasnost_sim::world::Pos::centre(c, 0);
+            let z = live.world.surface_at(centre.x, centre.y);
+            let p = glasnost_sim::world::Pos::new(centre.x, centre.y, z);
+            let cells = shroud::sight_cells(&live.world, p, r);
+            (i_nw.is_some_and(|i| cells.contains(&i)) && !i_up.is_some_and(|i| cells.contains(&i)))
+                .then_some((p, r))
+        })
+        .expect("a reveal that covers the north-west neighbour only");
+    shroud::area_reveal(&mut live.world, a, reveal.0, reveal.1);
+    assert!(shroud::explored(&live.world, a, nw) && !shroud::explored(&live.world, a, up));
+    assert!(
+        !slot_cell_shrouded(&live.world, a, up),
+        "displaced cell explored"
+    );
+    // A flat cell at level 0 reads its own explored state.
+    let flat = glasnost_sim::testkit::cell(-8, 6);
+    assert_eq!(live.world.cells.cell(flat).unwrap().level, 0);
+    assert!(slot_cell_shrouded(&live.world, b, flat));
+    shroud::area_reveal(
+        &mut live.world,
+        b,
+        glasnost_sim::world::Pos::centre(flat, 0),
+        1,
+    );
+    assert!(shroud::explored(&live.world, b, flat));
+    assert!(!slot_cell_shrouded(&live.world, b, flat), "explored for b");
+    assert!(
+        slot_cell_shrouded(&live.world, a, flat),
+        "still shrouded for a"
+    );
+}
+
+/// spec: S-0513 claim 29b (slot animations: each cell of a force-shielded building carries its own
+/// shroud answer for the local player, so an animation over a visible edge cell *E* takes the
+/// mask while the centre cell is shrouded, SW10 part i1; the local player is not the owner;
+/// without a local player nothing counts as shrouded), S-0406 claim 2 (the foundation cells)
+#[test]
+fn protection_slot_cells_carry_their_own_shroud() {
+    use glasnost_sim::econ::shroud;
+    use glasnost_sim::rules::Kind as SimKind;
+    use glasnost_sim::superweapons::{ProtectKind, Protection, Tint};
+    let (import, catalogue, _) = context();
+    let assets = overlay_assets();
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut ruleset = testkit::combat_ruleset();
+    ruleset.sim.buildings.get_mut("TOWER").unwrap().foundation = Some([3, 3]);
+    let mut world = testkit::game_with(&ruleset, 24, 3);
+    let anchor = testkit::mid(24, 0, 0);
+    let tower = testkit::spawn(&mut world, SimKind::Building, "TOWER", 0, anchor, 0);
+    let tick = world.tick;
+    world.obj_mut(tower).unwrap().sw.protection = Some(Protection {
+        start: tick - 1,
+        duration: 1000,
+        kind: ProtectKind::ForceShield,
+        tint: Tint::Rise(tick - 1),
+    });
+    let rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    let at = |dx, dy| glasnost_map::CellXY::new(anchor.x + dx, anchor.y + dy);
+    // E: the middle cell of the edge away from the anchor; P: the centre cell.
+    let (e, centre) = (at(2, 1), at(1, 1));
+    let viewer = HouseId(1);
+    let idx = |live: &Live, c| live.world.cells.idx(c).map(|i| i as u32);
+    let (i_e, i_p) = (idx(&live, e), idx(&live, centre));
+    let reveal = (3..=6)
+        .flat_map(|dx| (-2..=4).map(move |dy| (dx, dy)))
+        .flat_map(|(dx, dy)| (1..=3).map(move |r| (dx, dy, r)))
+        .find_map(|(dx, dy, r)| {
+            let p = glasnost_sim::world::Pos::centre(at(dx, dy), 0);
+            let cells = shroud::sight_cells(&live.world, p, r);
+            (i_e.is_some_and(|i| cells.contains(&i)) && !i_p.is_some_and(|i| cells.contains(&i)))
+                .then_some((p, r))
+        })
+        .expect("a reveal that covers E but not the centre cell");
+    shroud::area_reveal(&mut live.world, viewer, reveal.0, reveal.1);
+    assert!(shroud::explored(&live.world, viewer, e));
+    assert!(!shroud::explored(&live.world, viewer, centre));
+    live.set_viewer(Some(viewer));
+    let cells = live.protected_cells();
+    assert_eq!(cells.len(), 9, "the 3 × 3 foundation");
+    let (ce, cp) = (cells[&e], cells[&centre]);
+    assert!(!ce.shrouded && cp.shrouded);
+    assert!(
+        ce.look.protection.is_some_and(|l| l.shrouded),
+        "the body's centre-cell answer: shrouded"
+    );
+    let m = super::protection::Masks {
+        shield: 0x0841,
+        ..Default::default()
+    };
+    assert_eq!(m.slot_animation(Some(ce)), 0x0841, "i1: E visible");
+    assert_eq!(m.slot_animation(Some(cp)), 0, "over the shrouded centre");
+    assert_eq!(m.building_look(ce.look), 0, "the body: no mask");
+    live.set_viewer(None);
+    assert!(live.protected_cells().values().all(|c| !c.shrouded));
 }
 
 /// S-0513 Open questions (a slot animation whose own art draws it translucent is open): our
@@ -3442,9 +3668,21 @@ fn magnetic_wave_follows_the_older_animations_of_the_air_list() {
 // claim 19)
 // ---------------------------------------------------------------------------
 
+/// The audio-visual selectors of a marked-building test: the curtain and
+/// force-shield selectors of [`protection_rules`] restated (a second
+/// section of the same name in the file takes the place of the first) and
+/// the laser-target selector 3, whose triple shares no bit with the
+/// force-shield triple, so their union differs from each mask alone (as
+/// S-0513 SW10 part i5 asks).
+const MARK_SELECTORS: &str =
+    "[AudioVisual]\nIronCurtainColor=1\nForceShieldColor=2\nLaserTargetColor=3\n";
+
+/// The laser-target triple [`MARK_SELECTORS`] selects.
+const MARK_TRIPLE: [u8; 3] = [0, 8, 0];
+
 /// HUTX's body (first lit part) and its SLOTA slot animation (last lit
-/// part) under `protection` and `adjust`, with the laser-target selector 1
-/// and the slot animation's art `art`.
+/// part) under `protection` and `adjust`, with [`MARK_SELECTORS`] and the
+/// slot animation's art `art`.
 fn marked_hut(
     protection: Option<super::protection::Look>,
     adjust: glasnost_sim::mark::Adjust,
@@ -3462,13 +3700,7 @@ fn marked_hut(
     } else {
         Default::default()
     };
-    let parts = lit_parts(&protected_hut_items(
-        "[AudioVisual]\nLaserTargetColor=1\n",
-        &[],
-        art,
-        b,
-        cells,
-    ));
+    let parts = lit_parts(&protected_hut_items(MARK_SELECTORS, &[], art, b, cells));
     (parts[0].2, parts.last().expect("the slot animation").2)
 }
 
@@ -3482,8 +3714,9 @@ fn mark_claim26_body_and_slot_rows() {
     use glasnost_render::compose::{PixelLayout, protection_mask};
     use glasnost_sim::mark::Adjust;
     use glasnost_sim::superweapons::ProtectKind;
-    let laser = protection_mask([7, 19, 3], PixelLayout::Rgb565);
+    let laser = protection_mask(MARK_TRIPLE, PixelLayout::Rgb565);
     let shield = protection_mask([1, 0, 1], PixelLayout::Rgb565);
+    assert_eq!(shield & laser, 0, "the union differs from each mask alone");
     let marked = |m: Option<i32>| Adjust {
         mark: Some(m),
         ..Default::default()

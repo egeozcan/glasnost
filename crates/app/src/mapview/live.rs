@@ -2318,9 +2318,12 @@ impl Live {
         }
     }
 
-    /// The look of the building occupying each cell, for the slot
-    /// animations' mask (S-0102 claim 34, animation rule; S-0519 claim 26).
-    fn protected_cells(&self) -> BTreeMap<CellXY, super::protection::BuildingLook> {
+    /// The look of the building occupying each cell and the cell's own
+    /// shroud answer for the local player, for the slot animations' mask
+    /// (S-0102 claim 34, animation rule; S-0519 claim 26; S-0513 claim
+    /// 29b). Only cells a protected, marked or flashing building occupies
+    /// are listed: an animation over any other cell takes no mask.
+    pub(super) fn protected_cells(&self) -> BTreeMap<CellXY, super::protection::SlotCell> {
         let mut cells = BTreeMap::new();
         for o in self.world.objects.values() {
             if o.kind != SimKind::Building || !o.on_map {
@@ -2336,7 +2339,10 @@ impl Live {
                 o.type_index,
                 o.pos.cell(),
             ) {
-                cells.insert(c, look);
+                let shrouded = self
+                    .viewer
+                    .is_some_and(|v| slot_cell_shrouded(&self.world, v, c));
+                cells.insert(c, super::protection::SlotCell { look, shrouded });
             }
         }
         cells
@@ -3553,6 +3559,26 @@ pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP or its im
 /// The note for a missing cursor palette, given once (S-0111 claim 19a and
 /// Edge cases: our engine's departure, no switch).
 pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is missing: neither the repair wrench nor the bomb icon is drawn (S-0111 claim 19a)";
+
+/// Whether cell `c` counts as shrouded for house `viewer` for the slot
+/// animations drawn over it (S-0513 claim 29b): S-0110 claim 8's point
+/// test at the centre of the cell, at its ground height, which on raised
+/// ground reads the explored state of a displaced cell. The ground height
+/// is the surface height at the centre (S-0106 claims 2 and 3), as S-0410
+/// claim 6 gives the radar's test (our reading on a slope, Q-1740).
+pub(super) fn slot_cell_shrouded(w: &World, viewer: HouseId, c: CellXY) -> bool {
+    // spec: S-0513 claim 29b (the centre of the cell); S-0110 claim 8
+    let centre = glasnost_sim::world::Pos::centre(c, 0);
+    // spec: S-0513 claim 29b (at its ground height); S-0106 claims 2 and 3 (the surface height at that point; Q-1740 interim on a slope)
+    let z = w.surface_at(centre.x, centre.y);
+    // spec: S-0110 claim 8 and Edge cases (the point test, with the renderer's quirks.shroud_on_flat_grid, whose direct-cell test takes precedence when off)
+    glasnost_sim::econ::shroud::point_shrouded_on(
+        w,
+        viewer,
+        glasnost_sim::world::Pos::new(centre.x, centre.y, z),
+        glasnost_render::shroud::ShroudQuirks::default().shroud_on_flat_grid,
+    )
+}
 
 /// The shadow height *h*ₛ of infantry unit `o`'s generic shadow, or `None`
 /// when it draws none (S-0107 claim 19 b and c): only off the surface, and

@@ -1410,6 +1410,65 @@ fn protection_selector_outside_the_table_warns() {
     assert!(!warned(&w, "names no position"));
 }
 
+/// spec: S-0519 claim 26 (selector outside the table: after every rules layer a held laser-target
+/// selector below 0 or above 15 gives no laser-target mask, and the importer warns once, naming the
+/// key and its value; a departure, no switch; a later layer's out-of-range value does not keep the
+/// earlier layer's), Edge cases (out-of-range laser-target selector), Import mapping
+/// (`LaserTargetColor`)
+#[test]
+fn laser_target_selector_outside_the_table_warns() {
+    let count = |w: &[Warning], key: &str| w.iter().filter(|w| w.message.contains(key)).count();
+    for bad in ["16", "-1"] {
+        let (_, w) = sim(&format!("[AudioVisual]\nLaserTargetColor={bad}\n"), "", "");
+        let key = format!("LaserTargetColor={bad} names no position");
+        assert_eq!(
+            count(&w, &key),
+            1,
+            "{bad}: one warning naming the key and value"
+        );
+        let at = w
+            .iter()
+            .find(|w| w.message.contains("LaserTargetColor"))
+            .map(|w| {
+                (
+                    w.file.clone(),
+                    w.line,
+                    w.message.contains("S-0519 claim 26"),
+                )
+            });
+        assert_eq!(at, Some(("rules.ini (test)".to_owned(), 2, true)), "{bad}");
+        // An earlier layer's valid selector is not kept: the map's bad value is held and warned.
+        let (_, w) = sim(
+            "[AudioVisual]\nLaserTargetColor=3\n",
+            &format!("[AudioVisual]\nLaserTargetColor={bad}\n"),
+            "",
+        );
+        assert_eq!(count(&w, &key), 1, "{bad} over an earlier valid layer");
+    }
+    // After every layer: the map's valid value replaces the bad one.
+    let (_, w) = sim(
+        "[AudioVisual]\nLaserTargetColor=16\n",
+        "[AudioVisual]\nLaserTargetColor=5\n",
+        "",
+    );
+    assert!(!warned(&w, "LaserTargetColor"));
+    // A later value with no hexadecimal digit keeps the held selector (S-0003 claim 3), and so
+    // the warning.
+    let (_, w) = sim(
+        "[AudioVisual]\nLaserTargetColor=-1\n",
+        "[AudioVisual]\nLaserTargetColor=zzh\n",
+        "",
+    );
+    assert_eq!(count(&w, "LaserTargetColor=-1 names no position"), 1);
+    // 0 … 15 and an absent selector do not warn.
+    for ok in ["0", "15"] {
+        let (_, w) = sim(&format!("[AudioVisual]\nLaserTargetColor={ok}\n"), "", "");
+        assert!(!warned(&w, "LaserTargetColor"), "{ok}");
+    }
+    let (_, w) = sim("", "", "");
+    assert!(!warned(&w, "LaserTargetColor"));
+}
+
 /// The entries of a colour-list text under one setting of
 /// `quirks.colour_list_item_triples`.
 fn colours(text: &str, item_triples: bool) -> Vec<[i32; 3]> {

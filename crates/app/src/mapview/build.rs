@@ -1065,10 +1065,10 @@ pub struct Painter {
     /// The cell-pass items of terrain tiles (diamonds and extra images)
     /// with their cells, for a relight.
     tile_items: Vec<(usize, CellXY)>,
-    /// The protection look of the building occupying each cell, for the
-    /// live game's building slot animations (S-0102 claim 34, animation
-    /// rule); empty for the static scene.
-    protected_cells: BTreeMap<CellXY, super::protection::BuildingLook>,
+    /// The look of the building occupying each cell and that cell's shroud
+    /// answer, for the live game's building slot animations (S-0102 claim
+    /// 34, animation rule; S-0513 claim 29b); empty for the static scene.
+    protected_cells: BTreeMap<CellXY, super::protection::SlotCell>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -2815,8 +2815,9 @@ impl Builder<'_> {
             // world units)
             let (dx, dy) = screen_to_ground(def.x, def.y);
             let pos = (256 * cell.x + dx, 256 * cell.y + dy, z);
-            let anim_cell = CellXY::new(pos.0 >> 8, pos.1 >> 8);
-            let row = self.anim_row(&t, hsv, u, anim_cell);
+            let row = self.anim_row(&t, hsv, u, CellXY::new(pos.0 >> 8, pos.1 >> 8));
+            // spec: S-0513 claim 29b (the cell holding the animation's world position: its horizontal coordinates divided by 256, truncated toward zero, height ignored)
+            let anim_cell = CellXY::new(pos.0 / 256, pos.1 / 256);
             let detail = self.options.detail.number();
             let (frame, code) = match at {
                 // spec: S-0109 claims 1 and 20 (image frame a + k; the code from stage k and end E,
@@ -2829,21 +2830,16 @@ impl Builder<'_> {
             };
             // spec: S-0102 claim 34, animation rule (a building slot animation is marked as a
             // building animation: the building occupying its cell supplies the force-shield mask
-            // while it is force-shielded; curtain protection supplies none). The rule is for
-            // opaque drawings; one whose own art draws it translucent takes no mask (our interim
-            // reading: S-0513 Open questions leave it open, and F8's blend takes no mask). An
-            // occupying building whose centre cell is shrouded supplies no mask (Q-1529 interim:
-            // S-0513 claim 29b's shroud row read as reaching its slot animations). The building
-            // occupying the cell also supplies the laser-target mask while it is marked, united with
-            // the force-shield mask (S-0519 claim 26, S-0102 claim 34 animation rule)
-            let look = self
-                .p
-                .protected_cells
-                .get(&anim_cell)
-                .copied()
-                .unwrap_or_default();
+            // while it is force-shielded; curtain protection supplies none; the laser-target mask
+            // while it is marked, united with the force-shield mask, S-0519 claim 26). S-0513 claim
+            // 29b (slot animations, Q-1529): the animation tests its own cell, not its building's
+            // centre cell; while that cell is shrouded for the local player it takes no colour mask
+            // at all, and its brightness is unchanged. The rule is for opaque drawings; one whose
+            // own art draws it translucent takes no mask (our interim reading: S-0513 claim 29b and
+            // Open questions leave it open, and F8's blend takes no mask).
+            let cell_look = self.p.protected_cells.get(&anim_cell).copied();
             let row = if code == 0 {
-                row.with_mask(self.protection_masks().building_look(look))
+                row.with_mask(self.protection_masks().slot_animation(cell_look))
             } else {
                 row
             };
@@ -4929,13 +4925,11 @@ impl Painter {
         }
     }
 
-    /// Sets the protection look of the building occupying each cell, which
-    /// the next [`Painter::buildings`] draws building slot animations by
-    /// (S-0102 claim 34, animation rule).
-    pub fn set_protected_cells(
-        &mut self,
-        cells: BTreeMap<CellXY, super::protection::BuildingLook>,
-    ) {
+    /// Sets the look of the building occupying each cell and whether the
+    /// cell is shrouded for the local player, which the next
+    /// [`Painter::buildings`] draws building slot animations by (S-0102
+    /// claim 34, animation rule; S-0513 claim 29b).
+    pub fn set_protected_cells(&mut self, cells: BTreeMap<CellXY, super::protection::SlotCell>) {
         self.protected_cells = cells;
     }
 
