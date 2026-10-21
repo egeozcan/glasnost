@@ -3651,7 +3651,7 @@ impl Quirks {
 
 /// Quirk switches named in the specs that are owned by the importer or the
 /// renderer rather than the simulation, with their owner.
-// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases, S-0308 claim 1, S-0309 Edge cases, S-0003 claim 13 (the owning specs of these switches)
+// spec: S-0215 claim 21, S-0104, S-0107 claim 22, S-0009 Edge cases, S-0006 Edge cases, S-0010 Edge cases, S-0308 claim 1, S-0309 Edge cases, S-0003 claim 13, S-0202 claim 17 (the owning specs of these switches)
 pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "override_resets_keys",
@@ -3771,6 +3771,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "list_items_untrimmed",
         "importer (ini::Quirks), S-0003 claim 12",
+    ),
+    (
+        "colour_list_item_triples",
+        "importer (convert::sim::SimQuirks), S-0202 claim 17 and Edge cases",
     ),
 ];
 

@@ -385,6 +385,10 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
             "importer warnings: <none> attached particle system (S-0004 claim 2)",
             "keeps the attached particle system",
         ),
+        (
+            "importer warnings: colour list not clean (S-0202 claim 17)",
+            "ColorList is not a clean list",
+        ),
     ] {
         let n = import
             .warnings
