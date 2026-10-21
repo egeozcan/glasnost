@@ -65,7 +65,7 @@ gives the records in which the site took at least one draw (1 = M-0001, 2 = M-00
 | S-0312 claim 19 | building-death smudge and fire draws | built | `combat/death.rs` | 1, 2 |
 | S-0312 claim 26 | smudges | not modelled (the draws of claim 19 are taken; the smudge itself is not placed) | — | — |
 | S-0107 F4, claim 14 | infantry idle timer, idle row and facing | built | `infantry.rs` | 1, 2, 3 (many) |
-| S-0107 claim 17 row 3 | the death-animation row | interim: the importer reads no death-animation list, so this row's pick is never offered (`death_anims_row`, `combat/death.rs`) | — | — |
+| **S-0107 claim 17, row 3 and the corpse pick** | a type's own death animation; the corpse a completed death sequence leaves (one raw value modulo the list length) | **built at this step** (was the seam `death_anims_row`, and the corpse lists were not imported) | `combat/death.rs` (`infantry_death`, `corpse`) | every infantry death that completes die-1 or die-2 (1, 2, 3); not counted, built after the count |
 | S-0208 claim 3 | the standing row of a walking infantry | built | `walk.rs` | 1, 2 |
 | S-0208 claims 12, 13 | the scatter direction | built | `scatter.rs` | 1, 2, 3 |
 | S-0615 claim 6 | the walker's fallback destination | built | `walker.rs` | 2 |
@@ -83,8 +83,19 @@ gives the records in which the site took at least one draw (1 = M-0001, 2 = M-00
 | S-0011 F2 | trigger timers | built | `triggers.rs` | 1, 2, 3 |
 | S-0109 claims 11, 14 (μ > 0), 15, 17, 28, 29 | an animation's between-pass loop delay, its follow-up switch (and the follow-up's creation and start-event draws), damage over time | seam: the simulation does not play animations (claim 28's seam, *Animation playback (M6b)* in development.md). A diagnostic note (`load::anim_created`) shows that the loop and follow-up parts are created in nearly every pairing; an animation with damage over time is created in none | `load.rs` | notes in 1, 2, 3 |
 
-No draw the combat, movement and targeting specs name is reached and left out except the two of the
-last row (and the smudges of S-0312 claim 26, which take no draw of their own here). The animation
+The table lists only built sites, since the counter sees only those. The other direction (draws the
+specs name that the code does not take) was checked with a sweep of the claims of S-0107, S-0109,
+S-02xx, S-03xx, S-05xx and S-06xx whose text names a draw, against the claim ledgers and the code's
+citations. Reachable in the arena and not built, besides the S-0109 row above:
+
+| spec and claim | decides | status | reached |
+|---|---|---|---|
+| S-0312 claim 18 | survivors of a destroyed building | seam (no sides in the simulation's rules, so the count is 0; `docs/m4-claims/S-0312.md`) | 1, 2 (the few building deaths: S-0312 claim 19 draws were taken) |
+| S-0312 claims 13 and F4, rows 2 to 5 | the crew type by side | partly: the crew type is always F4's first row, with no draw (no sides) | not reached: the crew chance draw of claim 13 was taken in no arena game |
+| S-0312 claims 22, 23, 26 | spilled resources, barrels set off, the smudge type | seams | 22 and 23 not reached (no harvester dies, and the exploding-overlay draws of S-0303 claim 19 were taken in no game); 26 takes no draw while no smudge type fits |
+
+The draws of S-0107 claim 17 were the one specified gap the arena reaches at every infantry death;
+they are built at this step (d). The animation
 playback is a large piece of architecture (the simulation would run every animation's frames) and is
 not attempted at this step; it is proposed as its own step.
 
@@ -119,15 +130,22 @@ game is won (or stalls) so clearly that the draws we take have nothing to vary.
 
 | claim | status | tests or reason |
 |---|---|---|
+| S-0107 claim 17, row 3 and the corpse pick | tested | The importer reads `DeadBodies` (infantry types and `[General]`) and `DeathAnims` (Import mapping). Row 3: a type with its own death-animation list shows entry *w* (entry 0 when *w* is outside the list or the entry names no type), with no sequence, and is removed at once, ahead of rows 4 to 8 (`combat::death::infantry_death`, `death_anim`). The corpse: when die-1 or die-2 completes (and for a death request refused with `quirks.refused_death_keeps_unit` off), the type's own list when not empty, else the general list unless the type is "not human"; one raw value modulo the length picks the entry (`combat::death::corpse`); wet-die leaves none. No-type entries follow the interim rule of Q-1715. Tests in `claims_s0615.rs`: `s0107_claim_17_corpse_from_the_general_list_by_one_draw`, `s0107_claim_17_own_corpse_list_not_human_and_wet`, `s0107_claim_17_refused_death_with_the_quirk_off_leaves_a_corpse`, `s0107_claim_17_row_3_own_death_animations`; importer `corpse_and_death_animation_lists` |
 | S-0309 claim 25 (g) | tested | `acquire::admit` and the `Verdict` of `acquire::candidate`: for a searcher of a computer-owner house (not a player house with `human` set, S-0309 Terms), a target that appears disguised is rejected without a draw unless its disguise is blinking (S-0516 claim 39); when it blinks and every row outside the six of part g lets the target through, one R(0, 99) draw is taken (after the targeting timer's draw), and the target is let through when the draw is at most the house's entry of the disguise-detection list, selected by its difficulty index (a marked test house reads its index 0). A target that the capture, engineer, storage, bridge-layers, healer or score row rejects has still taken the draw. No such entry: nothing is let through (Import mapping). Tests in `claims_s0309.rs`: `neutral_searcher_sees_through_a_blinking_disguise_by_one_draw`, `player_searcher_never_takes_the_disguise_draw`, `disguise_draw_entry_by_difficulty_index`, `disguise_draw_only_for_an_object_the_other_rows_let_through` |
 
 The draw is reached in the arena's MGTK pairings: both arena houses are marked test houses (computer
 owners), so a searcher of either side now sees through a mirage tank whose disguise blinks with the
 draw. Only MGTK pairings changed: M-0003 MGTK against APOC (rank 6) and M-0001 YTNK against MGTK now
 pass, and four more side-unanimous stock outcomes in M-0001 and two in M-0003 are reproduced (MIND
-against MGTK still fails, on another test). The sim gate's goldens and the three seed sweeps are
-unchanged, so default play did not change (no mirage tank meets a computer-owner searcher in those
-scenarios); no state was added, so the save and AI formats stay as they were.
+against MGTK still fails, on another test).
+
+Effect on play outside the arena: the sim gate's goldens and the three seed sweeps are unchanged
+(no golden or sweep scenario has a mirage tank meeting a computer-owner searcher, and their
+synthetic rules give no corpse or death-animation list). In a game on real rules data both builds
+are reachable: claim 25 (g) for a searcher of the neutral or special house at a blinking disguise
+(our AI's houses are player houses with `human` set, so they never take it), and the corpse pick
+at every infantry death sequence that completes when the rules give a corpse list. No state was
+added (a corpse is an ordinary animation), so the save and AI formats stay as they were.
 
 ## (e) Requests
 
@@ -138,6 +156,7 @@ scenarios); no state was added, so the save and AI formats stay as they were.
 | [Q-1712](../../spec/requests/Q-1712-battle-fortress-group-in-the-arena.md) | what a BFRT group without passengers does (TELE and CAOS against BFRT) | the built rules |
 | [Q-1713](../../spec/requests/Q-1713-infantry-on-cliff-cells-after-q1502.md) | how the games with infantry on the cliff cells end, after Q-1502 | S-0309 revision 21 and S-0208 revision 34 as built |
 | [Q-1714](../../spec/requests/Q-1714-ytnk-against-sref-opening.md) | how YTNK against SREF unfolds | the built rules |
+| [Q-1715](../../spec/requests/Q-1715-none-entries-in-corpse-and-death-animation-lists.md) | what a no-type entry does in a corpse list or a death-animation list (S-0107 claim 17, built at this step) | death-animation list: positions kept, `none` counts as empty; corpse lists: `none` left out; an unlisted name shows nothing, its draw taken |
 
 ## Arena and sweeps, before and after
 
@@ -146,13 +165,19 @@ Oracle arena (release, 8 threads; outputs in `local-lane/m8/a1/before/` and `aft
 | record | when | fail win | fail row-left KS | fail column-left KS | pairings failing any test | side-unanimous stock outcomes reproduced |
 |---|---|---|---|---|---|---|
 | M-0001 | before | 6 | 26 | 16 | 35 of 96 | 145 of 172 |
-| M-0001 | after | 5 | 25 | 15 | 34 of 96 | 149 of 172 |
+| M-0001 | with claim 25 (g) | 5 | 25 | 15 | 34 of 96 | 149 of 172 |
+| M-0001 | after (with the corpse pick too) | 5 | 25 | 14 | 34 of 96 | 148 of 172 |
 | M-0002 | before and after | 4 | 9 | 3 | 16 of 24 | 43 of 47 |
 | M-0003 | before | 1 | 3 | 2 | 4 of 35 | 59 of 64 |
-| M-0003 | after | 0 | 2 | 1 | 3 of 35 | 61 of 64 |
+| M-0003 | after (both builds) | 0 | 2 | 1 | 3 of 35 | 61 of 64 |
+
+Claim 25 (g) moved only MGTK pairings (above). The corpse pick of S-0107 claim 17 changed 37 of
+M-0001's 1152 games (5 pairings) and 37 of M-0002's 288 (7 pairings), none of M-0003's: it is taken
+only when an infantry death sequence completes. In M-0001 one column-left KS test now passes, and
+CAOS against E1 (still failing) no longer reproduces one side-unanimous stock outcome.
 
 Sides on which all six of our games end alike: 178 of 310 before, 179 after (the stock games: 135).
 
 Seed sweeps 1 to 16 (`m6c_seed_sweep`, `m7a_seed_sweep`, `m7b_seed_sweep`): every counter's minimum
-and median are the same before and after (the smallest minimums: 0 in M6c, 1 in M7a, 3 for the
+and median are the same before, with claim 25 (g) and after both builds (the smallest minimums: 0 in M6c, 1 in M7a, 3 for the
 drain in M7b).
