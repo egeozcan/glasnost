@@ -225,7 +225,7 @@ fn on_wet(w: &World, id: ObjectId) -> bool {
 }
 
 /// The substitution of S-0107 claim 7 for a requested kind.
-fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
+pub(crate) fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
     let Some(o) = w.obj(id) else { return q };
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return q;

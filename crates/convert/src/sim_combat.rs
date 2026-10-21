@@ -1099,6 +1099,14 @@ const GENERAL_COMBAT: &[(&str, &[u8], &str, Form, &str)] = &[
         Ref(Kind::Animations),
         "S-0302, S-0615",
     ),
+    // spec: S-0107 Import mapping ([General] DeadBodies: the general corpse list, animation names, absent empty)
+    (
+        "dead_bodies",
+        GENERAL,
+        "DeadBodies",
+        Refs(Kind::Animations),
+        "S-0107",
+    ),
     // spec: S-0615 Import mapping ([General] FlamingInfantry, InfantryHeadPop, InfantryNuked, InfantryBrute: animation type names, absent none; [AudioVisual] DiskLaserChargeUp: a sound name, absent silent)
     (
         "flaming_infantry",

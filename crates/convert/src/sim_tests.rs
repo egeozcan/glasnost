@@ -1005,6 +1005,29 @@ fn voice_select_keeps_every_entry() {
     );
 }
 
+/// spec: S-0107 Import mapping (DeadBodies of an infantry type and of [General]: corpse lists of animation names; DeathAnims: death animations indexed by death kind, every entry kept in its position; absent: empty)
+#[test]
+fn corpse_and_death_animation_lists() {
+    let base = "[InfantryTypes]\n1=Walker\n2=Plain\n[Animations]\n1=Ba\n2=Bb\n\
+                [General]\nDeadBodies=Ba,Bb\n\
+                [Walker]\nDeadBodies=Bb\nDeathAnims=Ba,none,Bb\n[Plain]\nStrength=5\n";
+    let (s, _) = sim(base, "", "");
+    assert_eq!(
+        s.general.dead_bodies,
+        Some(vec!["Ba".to_string(), "Bb".to_string()])
+    );
+    assert_eq!(
+        s.infantry["Walker"].dead_bodies,
+        Some(vec!["Bb".to_string()])
+    );
+    assert_eq!(
+        s.infantry["Walker"].death_anims,
+        Some(vec!["Ba".to_string(), "none".to_string(), "Bb".to_string()])
+    );
+    assert_eq!(s.infantry["Plain"].dead_bodies, None);
+    assert_eq!(s.infantry["Plain"].death_anims, None);
+}
+
 /// spec: S-0215 Edge cases (the importer warns for a turreted building type whose turn-rate field is outside 0 to 127, quirks.turret_snap_bound_wraps)
 #[test]
 fn turret_snap_bound_warning() {

@@ -461,9 +461,6 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         leave_play(w, id);
         return;
     }
-    // Seam `death_anims_row`: row 3 (the type's own death animation list, `DeathAnims`, which
-    // takes precedence over row 4 and over the extra virus effect of a ground "not human" type,
-    // S-0615 claim 1) is not built; the importer does not carry the list into the ruleset yet.
     let not_human = u.raw.not_human.unwrap_or(false);
     let virus = |k: i32| k == 8; // spec: S-0107 claim 17 (death kind 8: the virus death of S-0613)
     let warhead_kind = hit.warhead.map_or(0, |h| rules.combat.warhead(h).inf_death);
@@ -479,6 +476,25 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     // spec: S-0615 claim 1 (Order with the extra virus effect: a parachutist's virus effect is created first, before its row 8 kind 3 or 5 animation or its row 4 die-1 request; a "not human" parachutist gets this one only)
     if extra {
         crate::gas::virus_death(w, o.pos, owner, true);
+    }
+    // spec: S-0107 claim 17 row 3 (the type has its own list of death animations: entry w, entry 0 when w is outside the list or entry w is empty; no sequence) and S-0615 claim 1 (it precedes rows 4 to 8: no die-1 request, no virus effect of a ground "not human" type, no conversion)
+    if let Some(list) = u.raw.death_anims.as_ref().filter(|l| !l.is_empty()) {
+        // Interim rule of Q-1715: every entry keeps its position, and `none` or `<none>` counts as empty.
+        let entry = |i: usize| list.get(i).filter(|n| !no_type(n));
+        let name = usize::try_from(kind)
+            .ok()
+            .and_then(entry)
+            .or_else(|| entry(0))
+            .cloned();
+        if let Some(name) = name {
+            death_anim(w, &name, o.pos);
+        }
+        // spec: S-0107 claim 17 (the rows that show no sequence remove the unit at once, unless its type has the crash flag and a crash begins instead)
+        if u.vehicle.crashable && crate::jump::start_crash(w, id, Some(hit)) {
+            return;
+        }
+        leave_play(w, id);
+        return;
     }
     // spec: S-0107 claim 17 row 7 and S-0611 claims 1 and 6 (w = 9 reached: the conversion takes place unless claim 6's test refuses it)
     if !not_human
@@ -524,7 +540,10 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
         return;
     }
     if !started && !rules.quirks.refused_death_keeps_unit {
-        // spec: S-0107 claim 17 (refused_death_keeps_unit off: treated as completed on the tick of its death)
+        // spec: S-0107 claim 17 (refused_death_keeps_unit off: treated as if the kind that would have resulted, after claim 7's substitutions, had completed on the tick of its death, with the corpse or removal that completion gives)
+        if matches!(crate::infantry::substitute(w, id, q), Seq::Die1 | Seq::Die2) {
+            corpse(w, id);
+        }
         leave_play(w, id);
     }
     // Otherwise the unit stays in play while its death sequence plays (S-0203 claim 6c).
@@ -550,20 +569,70 @@ pub fn death_kind_effect(w: &mut World, kind: i32, pos: Pos) {
         10 => g.infantry_brute.clone(),
         _ => None,
     };
+    let Some(name) = name else { return };
+    death_anim(w, &name, pos);
+}
+
+/// `none` or `<none>`, in any case: an entry that names no type (S-0003
+/// claim 14).
+fn no_type(name: &str) -> bool {
+    name.eq_ignore_ascii_case("none") || name.eq_ignore_ascii_case("<none>")
+}
+
+/// One death animation of type `name` at `pos` (S-0615 claim 2): no owner,
+/// no attachment; a burning walker when its type has the flag.
+fn death_anim(w: &mut World, name: &str, pos: Pos) {
+    let rules = w.rules_arc();
     // spec: S-0615 claim 2 (missing type: when the rules data names none, or names a type that is not listed and so cannot be created, no animation; the unit is still removed)
-    let Some(name) = name.filter(|n| rules.animation(n).is_some()) else {
+    if rules.animation(name).is_none() {
         return;
-    };
+    }
     let walker = rules
         .animations
         .iter()
-        .position(|a| a.name.eq_ignore_ascii_case(&name))
+        .position(|a| a.name.eq_ignore_ascii_case(name))
         .filter(|&i| rules.animations[i].flaming);
     match walker {
         // spec: S-0615 claim 1 (kind 4's type is a burning walker when it has the burning-walker flag; the flag decides, whatever the kind, claims 4 to 11)
         Some(i) => crate::walker::create(w, u32::try_from(i).unwrap_or(u32::MAX), pos),
         // spec: S-0615 claim 2 (no loop delay, repeat factor 1, no house, unattached, at the unit's position; S-0109 playback from then on)
-        None => crate::combat::effects::anim(w, &name, pos),
+        None => crate::combat::effects::anim(w, name, pos),
+    }
+}
+
+/// The corpse a completed *die-1* to *die-5* leaves (S-0107 claim 17): from
+/// the type's own corpse list when it is not empty, else from the general
+/// list unless the type is marked "not human"; one draw picks the entry.
+fn corpse(w: &mut World, id: ObjectId) {
+    let rules = w.rules_arc();
+    let Some(o) = w.obj(id) else { return };
+    let pos = o.pos;
+    let Some(u) = rules.unit(o.kind, o.type_index) else {
+        return;
+    };
+    let own = u.raw.dead_bodies.as_deref().unwrap_or_default();
+    // spec: S-0107 claim 17 (the type's own corpse list when not empty; otherwise the general list, unless the type is marked "not human": no corpse)
+    let list: &[String] = if !own.is_empty() {
+        own
+    } else if u.raw.not_human.unwrap_or(false) {
+        &[]
+    } else {
+        &rules.combat.general.dead_bodies
+    };
+    let Ok(n) = u64::try_from(list.len()) else {
+        return;
+    };
+    if n == 0 {
+        return;
+    }
+    // spec: S-0107 claim 17 (the pick: one draw from the scenario random stream, read as an unsigned 32-bit number and reduced modulo the list length)
+    let r = u64::from(w.rng.raw()) % n;
+    let Some(name) = usize::try_from(r).ok().and_then(|i| list.get(i)) else {
+        return;
+    };
+    // spec: S-0107 claim 17 (a corpse animation is left at the unit's position); interim rule of Q-1715: an entry that names no listed animation shows nothing, the draw taken
+    if rules.animation(name).is_some() {
+        crate::combat::effects::anim(w, name, pos);
     }
 }
 
@@ -587,7 +656,10 @@ pub fn infantry_death_turn(w: &mut World, id: ObjectId) {
         .map_or(0, |e| e.count);
     // spec: S-0107 claim 8 (a sequence is complete once its stage has reached C)
     if s.stage(t) >= c {
-        // The corpse lists of claim 17 are not imported, so no corpse is picked and no draw taken.
+        // spec: S-0107 claim 17 (die-1 to die-5 complete: a corpse animation is left and the unit is removed on the same tick; wet-die-1 and wet-die-2: no corpse)
+        if matches!(q, Seq::Die1 | Seq::Die2) {
+            corpse(w, id);
+        }
         leave_play(w, id);
     }
 }

@@ -1491,3 +1491,161 @@ fn cell_target_over_a_bridge_deck() {
     set_deck(&mut w, cell, false);
     assert_eq!(disc::final_point(&w, Target::Cell(cell)), ground);
 }
+
+// ---------------------------------------------------------------------------
+// S-0107 claim 17: row 3 (the type's own death animations) and the corpse
+// pick (M8 step A1, docs/m8-claims/a1-arena-spread.md)
+
+/// `rules()` plus the animations ROW0, ROW2, OWNBODY, BODYA and BODYB
+/// (10 frames, no creation draws), the general corpse list BODYA, BODYB and
+/// the infantry type DYER: WALKER with die-1, die-2 and wet-die-1 entries
+/// of 2 frames.
+fn corpse_rules() -> Ruleset {
+    let mut r = rules();
+    for n in ["ROW0", "ROW2", "OWNBODY", "BODYA", "BODYB"] {
+        register(&mut r, "animations", n);
+        r.sim.animations.insert(
+            n.into(),
+            AnimationType {
+                frame_count: Some(10),
+                ..Default::default()
+            },
+        );
+    }
+    r.sim.general.dead_bodies = Some(vec!["BODYA".into(), "BODYB".into()]);
+    let mut dyer = r.sim.infantry["WALKER"].clone();
+    for k in ["die_1", "die_2", "wet_die_1"] {
+        dyer.sequences.insert(
+            k.into(),
+            glasnost_rules::sim::SequenceEntry {
+                start: 0,
+                count: 2,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    register(&mut r, "infantry", "DYER");
+    r.sim.infantry.insert("DYER".into(), dyer);
+    r
+}
+
+/// Kills a DYER with `wh`, lets its death sequence complete, and gives the
+/// animations of the completion, the stream before it, the world and the
+/// unit. `wet`: the sequence is wet-die-1 instead.
+fn completed_death(
+    r: &Ruleset,
+    wh: &str,
+    wet: bool,
+) -> (Vec<String>, glasnost_sim::rng::Rng, World, ObjectId) {
+    let mut w = game(r);
+    let id = testkit::spawn(&mut w, Kind::Infantry, "DYER", 0, c(0, 0), 0);
+    kill(&mut w, id, wh, None);
+    let st = w.obj_mut(id).unwrap().infantry.as_mut().unwrap();
+    assert!(
+        matches!(st.seq, Some(Seq::Die1 | Seq::Die2)),
+        "the death sequence started"
+    );
+    if wet {
+        st.seq = Some(Seq::WetDie1);
+    }
+    w.tick += 100;
+    w.effects.clear();
+    let before = w.rng.clone();
+    glasnost_sim::combat::death::infantry_death_turn(&mut w, id);
+    (made(&w).0, before, w, id)
+}
+
+/// The entry of BODYA, BODYB that one raw value of `x` picks.
+fn general_pick(x: &mut glasnost_sim::rng::Rng) -> &'static str {
+    if x.raw().is_multiple_of(2) {
+        "BODYA"
+    } else {
+        "BODYB"
+    }
+}
+
+// spec: S-0107 claim 17 (die-1 and die-2 complete: a corpse from the general list when the type's own list is empty, picked by one draw read as an unsigned 32-bit number modulo the list length; the unit is removed on the same tick) and Import mapping ([General] DeadBodies)
+#[test]
+fn s0107_claim_17_corpse_from_the_general_list_by_one_draw() {
+    let r = corpse_rules();
+    for wh in ["DK1", "DK2"] {
+        let (anims, before, w, id) = completed_death(&r, wh, false);
+        let mut x = before.clone();
+        let pick = general_pick(&mut x);
+        assert_eq!(anims, [pick], "{wh}");
+        assert_eq!(w.rng, x, "{wh}: exactly the pick's raw value");
+        assert!(w.obj(id).is_none(), "{wh}");
+    }
+}
+
+// spec: S-0107 claim 17 (the type's own corpse list when it is not empty, the pick still one draw; a type marked "not human" with no list of its own leaves no corpse and takes no draw; wet-die-1 completes with no corpse) and Import mapping (DeadBodies of the type)
+#[test]
+fn s0107_claim_17_own_corpse_list_not_human_and_wet() {
+    let mut r = corpse_rules();
+    r.sim.infantry.get_mut("DYER").unwrap().dead_bodies = Some(vec!["OWNBODY".into()]);
+    let (anims, before, w, _) = completed_death(&r, "DK1", false);
+    let mut x = before.clone();
+    let _ = x.raw();
+    assert_eq!(anims, ["OWNBODY"]);
+    assert_eq!(w.rng, x);
+    let (anims, before, w, id) = completed_death(&r, "DK1", true);
+    assert!(anims.is_empty(), "wet-die-1: no corpse");
+    assert_eq!(w.rng, before);
+    assert!(w.obj(id).is_none());
+    let mut r = corpse_rules();
+    r.sim.infantry.get_mut("DYER").unwrap().not_human = Some(true);
+    let (anims, before, w, id) = completed_death(&r, "DK1", false);
+    assert!(anims.is_empty(), "not human: no corpse");
+    assert_eq!(w.rng, before);
+    assert!(w.obj(id).is_none());
+}
+
+// spec: S-0107 claim 17 (quirks.refused_death_keeps_unit off: a die-1 request refused because its entry has C = 0 is treated as completed on the tick of its death, with its corpse)
+#[test]
+fn s0107_claim_17_refused_death_with_the_quirk_off_leaves_a_corpse() {
+    let mut r = corpse_rules();
+    r.globals.quirks.refused_death_keeps_unit = false;
+    let mut w = game(&r);
+    // WALKER has no death sequences: the die-1 request is refused by its C = 0.
+    let id = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c(0, 0), 0);
+    w.effects.clear();
+    let mut x = w.rng.clone();
+    kill(&mut w, id, "DK1", None);
+    let pick = general_pick(&mut x);
+    assert_eq!(made(&w).0, [pick]);
+    assert_eq!(w.rng, x);
+    assert!(w.obj(id).is_none());
+}
+
+// spec: S-0107 claim 17 row 3 (a type with its own list of death animations shows entry w, entry 0 when w is outside the list or entry w names no type, with no sequence, and is removed at once; it takes precedence over rows 4 to 8, so no die-1 request, no conversion and no game-wide death animation) and Import mapping (DeathAnims, entries kept in position)
+#[test]
+fn s0107_claim_17_row_3_own_death_animations() {
+    let mut r = corpse_rules();
+    r.sim.infantry.get_mut("DYER").unwrap().death_anims =
+        Some(vec!["ROW0".into(), "none".into(), "ROW2".into()]);
+    for (wh, expect) in [
+        ("DK2", "ROW2"),
+        ("DK1", "ROW0"),
+        ("DK7", "ROW0"),
+        ("DK9", "ROW0"),
+        ("DK-1", "ROW0"),
+    ] {
+        let mut w = game(&r);
+        let id = testkit::spawn(&mut w, Kind::Infantry, "DYER", 0, c(0, 0), 0);
+        w.effects.clear();
+        let before = w.rng.clone();
+        kill(&mut w, id, wh, None);
+        assert_eq!(made(&w).0, [expect], "{wh}");
+        assert!(w.obj(id).is_none(), "{wh}: removed at once");
+        assert_eq!(w.rng, before, "{wh}: no corpse pick, no dispatch draw");
+    }
+    // A "not human" type with its own list: entry 0 for kind 8, no die-1 request.
+    r.sim.infantry.get_mut("DYER").unwrap().not_human = Some(true);
+    let mut w = game(&r);
+    let id = testkit::spawn(&mut w, Kind::Infantry, "DYER", 0, c(0, 0), 0);
+    w.effects.clear();
+    kill(&mut w, id, "DK8", None);
+    assert_eq!(made(&w).0, ["ROW0"]);
+    assert!(w.obj(id).is_none());
+}

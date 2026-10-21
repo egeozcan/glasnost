@@ -991,6 +991,8 @@ pub struct CombatGeneral {
     /// Infantry-explosion animation (S-0302 claim 15; death kind 3 of
     /// S-0615 claim 1).
     pub infantry_explode: Option<String>,
+    /// The general corpse list (S-0107 claim 17).
+    pub dead_bodies: Vec<String>,
     /// The burning death animation, death kind 4 (S-0615 claim 1).
     pub flaming_infantry: Option<String>,
     /// The head-pop death animation, death kind 6 (S-0615 claim 1).
@@ -1858,6 +1860,8 @@ pub fn combat_rules(
         veteran_cap: dec(&g.veteran_cap, mode).unwrap_or(one),
         damage_fire_types: g.damage_fire_types.clone().unwrap_or_default(),
         infantry_explode: g.infantry_explode.clone(),
+        // spec: S-0107 Import mapping ([General] DeadBodies, absent empty)
+        dead_bodies: g.dead_bodies.clone().unwrap_or_default(),
         // spec: S-0615 Import mapping (the game-wide death animations of kinds 4, 6, 7 and 10: absent none; the charge-up sound: absent silent)
         flaming_infantry: g.flaming_infantry.clone(),
         infantry_head_pop: g.infantry_head_pop.clone(),

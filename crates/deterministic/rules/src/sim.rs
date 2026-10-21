@@ -898,6 +898,10 @@ pub struct General {
     /// death kind 3 of S-0615 claim 1).
     #[serde(default)]
     pub infantry_explode: Option<String>,
+    /// `[General] DeadBodies`, the general corpse list, animation names
+    /// (S-0107 claim 17 and Import mapping; absent empty).
+    #[serde(default)]
+    pub dead_bodies: Option<Vec<String>>,
     /// `[General] FlamingInfantry`, the death-kind 4 animation (S-0615
     /// claim 1); absent: none.
     #[serde(default)]
@@ -1717,6 +1721,15 @@ pub struct UnitType {
     /// `NotHuman`.
     #[serde(default)]
     pub not_human: Option<bool>,
+    /// `DeadBodies`: the type's corpse list, animation names (S-0107
+    /// claim 17 and Import mapping; absent empty).
+    #[serde(default)]
+    pub dead_bodies: Option<Vec<String>>,
+    /// `DeathAnims`: the type's death animations, entry *w* for death kind
+    /// *w*, every listed entry kept in its position (S-0107 claim 17 row 3
+    /// and Import mapping; absent empty).
+    #[serde(default)]
+    pub death_anims: Option<Vec<String>>,
     /// `VehicleThief`.
     #[serde(default)]
     pub vehicle_thief: Option<bool>,

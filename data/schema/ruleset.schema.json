@@ -5424,6 +5424,17 @@
             "type": "string"
           }
         },
+        "dead_bodies": {
+          "description": "`[General] DeadBodies`, the general corpse list, animation names\n(S-0107 claim 17 and Import mapping; absent empty).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
         "death_weapon": {
           "description": "`DeathWeapon`, the game-wide death weapon (S-0312 claim 6).",
           "type": [
@@ -12072,6 +12083,28 @@
               "type": "null"
             }
           ]
+        },
+        "dead_bodies": {
+          "description": "`DeadBodies`: the type's corpse list, animation names (S-0107\nclaim 17 and Import mapping; absent empty).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
+        },
+        "death_anims": {
+          "description": "`DeathAnims`: the type's death animations, entry *w* for death kind\n*w*, every listed entry kept in its position (S-0107 claim 17 row 3\nand Import mapping; absent empty).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
         },
         "default_to_guard_area": {
           "description": "`DefaultToGuardArea`.",
