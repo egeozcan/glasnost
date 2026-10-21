@@ -34,7 +34,8 @@
 //! **Leaving.** A member who leaves before the start frees their row (open,
 //! its choices back on random). When the host leaves, the member on the
 //! lowest row becomes host; a room with no member is gone. Once the game
-//! has begun nobody joins (N5 will let a dropped member rejoin its slot).
+//! has begun nobody joins; a member who dropped comes back to its own slot
+//! by its ticket ([`Room::rejoin`], N5).
 //! These rules are our own; S-0412 does not cover network games.
 
 use std::collections::BTreeMap;
@@ -399,7 +400,8 @@ impl Room {
             return Err(Refusal::NotInRoom);
         };
         if self.playing {
-            // N5: a dropped member's rejoin would enter here, by its slot.
+            // A dropped member comes back by its ticket instead
+            // (`ToRelay::Rejoin`, N5).
             return Err(Refusal::Playing);
         }
         if self.members.contains_key(&id) {
@@ -634,8 +636,38 @@ impl Room {
                 names,
                 params: params.sane(),
                 you: 0,
+                ticket: [0; 16],
             },
             persons,
         })
+    }
+
+    /// `id` comes back to its game on row `row` under `name` after a drop
+    /// (N5): the relay has checked its ticket. The room only lists it again,
+    /// for chat; the game's slots are the relay's.
+    pub fn rejoin(&mut self, id: MemberId, row: u8, name: &str) -> Result<(), Refusal> {
+        if !self.playing {
+            return Err(Refusal::NoGame);
+        }
+        if self.members.contains_key(&id) {
+            return Err(Refusal::InRoom);
+        }
+        let seat = self
+            .seats
+            .get_mut(usize::from(row))
+            .ok_or(Refusal::Bad(Value::Row))?;
+        if seat.is_some() {
+            return Err(Refusal::Seated(row));
+        }
+        *seat = Some(id);
+        self.members.insert(
+            id,
+            Member {
+                name: clean_name(name).unwrap_or_else(|| "?".into()),
+                row,
+                ready: true,
+            },
+        );
+        Ok(())
     }
 }

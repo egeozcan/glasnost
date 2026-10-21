@@ -223,6 +223,7 @@ mod tests {
             min_delay: 1,
             max_delay: 10,
             hash_every: 1,
+            ..Params::default()
         };
         let mut c = Control::default();
         // No sample: keep the delay.

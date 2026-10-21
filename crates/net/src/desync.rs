@@ -69,7 +69,7 @@ pub const BUNDLE_MAGIC: [u8; 4] = *b"GDSY";
 
 /// The bundle format's version. Bump it whenever the layout changes.
 // nocite: our own netcode
-pub const BUNDLE_VERSION: u8 = 1;
+pub const BUNDLE_VERSION: u8 = 2;
 
 /// The bundle's file name extension.
 // nocite: our own netcode
@@ -402,6 +402,13 @@ impl Evidence {
     /// The evidence of the peer of slot `me` of a session from `start`, with
     /// the game `g` as it starts (no tick run): the first snapshot.
     pub fn new(build: &str, start: &StartInfo, me: u8, g: &Game) -> Self {
+        Self::resume(build, start, me, g, 0)
+    }
+
+    /// The evidence of a rejoining peer (N5), with the game `g` it was sent
+    /// after `ran` ticks: the first snapshot. The ticks before are not its
+    /// own to report.
+    pub fn resume(build: &str, start: &StartInfo, me: u8, g: &Game, ran: u32) -> Self {
         let p = start.params.sane();
         let every = p.hash_every;
         // Snapshots from the newest agreed one on: a mismatch is found up to
@@ -410,7 +417,7 @@ impl Evidence {
         // nocite: our own netcode
         let max_snapshots = 3 + (2 * u32::from(p.max_delay)).div_ceil(every) as usize;
         let mut snaps = VecDeque::new();
-        snaps.push_back(snapshot(0, hash_of(g), g));
+        snaps.push_back(snapshot(ran, hash_of(g), g));
         Self {
             build: build.to_owned(),
             start: start.clone(),
@@ -672,7 +679,7 @@ mod tests {
             Err(BundleError::Version(9))
         );
         assert!(matches!(
-            Bundle::from_bytes(b"GDSY\x01\xff\xff"),
+            Bundle::from_bytes(&[b'G', b'D', b'S', b'Y', BUNDLE_VERSION, 0xff, 0xff]),
             Err(BundleError::Body(_))
         ));
         let mut x: u64 = 7;

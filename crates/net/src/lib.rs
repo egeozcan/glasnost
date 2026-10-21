@@ -30,6 +30,7 @@
 pub mod delay;
 pub mod desync;
 pub mod lobby;
+pub mod rejoin;
 pub mod session;
 pub mod sim;
 pub mod simnet;
@@ -37,7 +38,9 @@ pub mod start;
 pub mod transport;
 pub mod wire;
 
-pub use session::{Applied, Config, Event, Phase, Session, SlotHash, Tick};
+pub use session::{
+    Applied, Catchup, Config, Event, Life, Phase, Session, SlotCatchup, SlotHash, Tick,
+};
 pub use sim::Simulation;
 pub use start::{Field, Params, Slot, SlotKind, StartInfo};
 pub use transport::{Transport, pump};

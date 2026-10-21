@@ -16,12 +16,15 @@
 //! relay of N2 forwards it, a mesh transport copies it to each link).
 //!
 //! Only the relay speaks as [`RELAY`], and only the relay sends
-//! [`Body::Dropped`]: it checks the sender byte of every message it forwards
-//! against the sender's slot and never forwards a `Dropped` from a client,
-//! and a session takes a `Dropped` only from [`RELAY`] (N2). Version 2 added
-//! that rule and the lobby's messages ([`crate::lobby::wire`]), which share
-//! this version; version 3 the lobby's chat (N3); version 4 the desync
-//! report's digest in [`Frames::report`] (N4).
+//! [`Body::Dropped`], [`Body::Serve`] and [`Body::Resume`]: it checks the
+//! sender byte of every message it forwards against the sender's slot and
+//! never forwards one of those from a client, and a session takes them only
+//! from [`RELAY`] (N2, N5). Version 2 added that rule and the lobby's
+//! messages ([`crate::lobby::wire`]), which share this version; version 3
+//! the lobby's chat (N3); version 4 the desync report's digest in
+//! [`Frames::report`] (N4); version 5 the rejoin (N5): [`Body::Serve`],
+//! [`Body::Resume`], [`Frame::resume`] and the grace period in the start
+//! values.
 //!
 //! This is our own protocol (docs/development.md, *Multiplayer (M9)*); it is
 //! not compatible with the original game's clients.
@@ -37,7 +40,7 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 4;
+pub const WIRE_VERSION: u8 = 5;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.
@@ -70,13 +73,30 @@ pub enum Body {
     Frames(Frames),
     /// A slot has left the session: its frames from number `kept` on are
     /// empty and no longer awaited. Only the relay sends it, as [`RELAY`],
-    /// after the last frame of that slot it forwarded to every other peer;
-    /// N5 adds the surrender order.
+    /// after the last frame of that slot it forwarded to every other peer.
+    /// Unless the slot rejoins, its house surrenders on tick `kept +
+    /// grace_ticks` (N5).
     Dropped {
         /// The slot that left.
         slot: u8,
         /// How many of its frames (from frame 0) count.
         kept: u32,
+    },
+    /// The relay asks this peer to send the game to `slot`'s rejoining
+    /// peer (`on`), or no longer (N5): the peer keeps its frames until that
+    /// peer acknowledges them, sends them even when no other peer is live,
+    /// and its caller sends the snapshot ([`crate::rejoin`]).
+    Serve {
+        /// The rejoining slot.
+        slot: u8,
+        /// Start or stop.
+        on: bool,
+    },
+    /// The relay asks this peer to readmit `slot`, whose rejoining peer has
+    /// caught up: the next frame it makes carries [`Frame::resume`] (N5).
+    Resume {
+        /// The rejoining slot.
+        slot: u8,
     },
 }
 
@@ -143,6 +163,12 @@ pub struct Frame {
     pub delay: u8,
     /// The person's orders for this tick, in the order given.
     pub orders: Vec<Order>,
+    /// A slot this frame readmits (N5): when the frame is of tick *n*,
+    /// every peer awaits that slot's frames again from frame
+    /// `max(n + max_delay + 1, kept)` on, and its surrender is called off
+    /// if it was not due by tick *n*. Only the peer the relay asked
+    /// ([`Body::Resume`]) sets it; the relay refuses any other.
+    pub resume: Option<u8>,
 }
 
 /// Why bytes are not a message.
