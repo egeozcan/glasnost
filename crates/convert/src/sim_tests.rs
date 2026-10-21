@@ -1409,3 +1409,207 @@ fn protection_selector_outside_the_table_warns() {
     let (_, w) = sim("", "", "");
     assert!(!warned(&w, "names no position"));
 }
+
+/// The entries of a colour-list text under one setting of
+/// `quirks.colour_list_item_triples`.
+fn colours(text: &str, item_triples: bool) -> Vec<[i32; 3]> {
+    colour_list(text.as_bytes(), item_triples).entries
+}
+
+/// spec: S-0202 claim 17 (the colour list read as comma-separated items in
+/// threes, parentheses ordinary bytes; red without its first byte, blue
+/// without its last; every row of the claim's table of malformed groups)
+#[test]
+fn colour_list_item_triples_table() {
+    let table: &[(&str, &[[i32; 3]])] = &[
+        ("(10,20)", &[]),
+        ("(10,20),(30,40,50)", &[[10, 20, 0]]),
+        ("(1,2,3,4)", &[[1, 2, 0]]),
+        ("(1,2,3,4),(5,6,7)", &[[1, 2, 0], [0, 0, 0]]),
+        ("(1,x,3)", &[[1, 0, 3]]),
+        ("( ,2,3)", &[[0, 2, 3]]),
+        ("(1,,3)", &[]),
+        ("(1,2,3),(4,5", &[[1, 2, 3]]),
+        ("(1,2,3),(4,5,67", &[[1, 2, 3], [4, 5, 6]]),
+        ("( 7,+8,9z)", &[[7, 8, 9]]),
+        ("(1,2,3), (4,5,6)", &[[1, 2, 3], [0, 5, 6]]),
+        ("junk(1,2,3)", &[[0, 2, 3]]),
+        ("(1,2,3)junk", &[[1, 2, 3]]),
+        ("1,2,3", &[[0, 2, 0]]),
+    ];
+    for (text, want) in table {
+        assert_eq!(colours(text, true), *want, "{text}");
+    }
+    // A clean list: one entry per triple, in order.
+    assert_eq!(
+        colours("(1,2,3),(4,5,6),(7,8,9)", true),
+        [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    );
+}
+
+/// spec: S-0202 claim 17 (components: the decimal form of S-0003 claim 3
+/// only, with claim 4's wrapping, reduced modulo 256 to the least
+/// non-negative residue; R16's two discriminating texts)
+#[test]
+fn colour_list_components_decimal_modulo_256() {
+    // Not the hexadecimal forms: `1Fh` reads 1 and `$20` reads 0.
+    assert_eq!(colours("(1Fh,$20,-1)", true), [[1, 0, 255]]);
+    // Wrapping to 32 bits, then modulo 256: neither limited to the 32-bit range nor clamped to 0 … 255.
+    assert_eq!(colours("(300,-56,4294967340)", true), [[44, 200, 44]]);
+    assert_eq!(colours("(256,-1,7)", true), [[0, 255, 7]]);
+    // The same component reading under the off setting.
+    assert_eq!(colours("(1Fh,$20,-1)", false), [[1, 0, 255]]);
+    assert_eq!(colours("(300,-56,4294967340)", false), [[44, 200, 44]]);
+}
+
+/// spec: S-0202 claim 17 (the value cut to its first 511 bytes, trailing
+/// whitespace of the cut removed: a cut ending in `(4,5,6 ` leaves the
+/// item `6`, whose blue reads 0; the importer warns about the cut) and
+/// Edge cases (off: the cut leaves an unclosed group, which gives nothing)
+#[test]
+fn colour_list_511_byte_cut() {
+    // 63 clean triples of 8 bytes each fill 504 bytes; the next 7 bytes are `(4,5,6 `.
+    let text = format!("{}(4,5,6 7)", "(1,2,3),".repeat(63));
+    assert_eq!(&text.as_bytes()[504..511], b"(4,5,6 ");
+    let on = colour_list(text.as_bytes(), true);
+    assert_eq!(on.entries.len(), 64);
+    assert_eq!(on.entries[63], [4, 5, 0]);
+    assert!(on.unclean.iter().any(|w| w.contains("511-byte")));
+    let off = colour_list(text.as_bytes(), false);
+    assert_eq!(off.entries, vec![[1, 2, 3]; 63]);
+    assert_eq!(
+        off.unclean, on.unclean,
+        "the warning is the same with either setting"
+    );
+    // A clean list of exactly 511 bytes is not cut and does not warn.
+    let exact = format!("{}(4,5,6)", "(1,2,3),".repeat(63));
+    assert_eq!(exact.len(), 511);
+    let read = colour_list(exact.as_bytes(), true);
+    assert_eq!(read.entries.len(), 64);
+    assert_eq!(read.entries[63], [4, 5, 6]);
+    assert!(read.unclean.is_empty(), "{:?}", read.unclean);
+}
+
+/// spec: S-0202 Edge cases (quirks.colour_list_item_triples off: the
+/// parenthesis-aware reading; a group from an opening parenthesis to the
+/// first closing one; a group with another opening parenthesis inside
+/// gives nothing; text outside groups and an unclosed final group give
+/// nothing; empty parts kept, missing or digitless parts 0, parts after the
+/// third ignored; on a clean list the two readings agree)
+#[test]
+fn colour_list_parenthesis_aware_reading() {
+    let table: &[(&str, &[[i32; 3]])] = &[
+        ("(10,20)", &[[10, 20, 0]]),
+        ("(10,20),(30,40,50)", &[[10, 20, 0], [30, 40, 50]]),
+        ("(1,2,3,4)", &[[1, 2, 3]]),
+        ("(1,2,3,4),(5,6,7)", &[[1, 2, 3], [5, 6, 7]]),
+        ("(1,x,3)", &[[1, 0, 3]]),
+        ("( ,2,3)", &[[0, 2, 3]]),
+        ("(1,,3)", &[[1, 0, 3]]),
+        ("(1,2,3),(4,5", &[[1, 2, 3]]),
+        ("(1,2,3),(4,5,67", &[[1, 2, 3]]),
+        ("( 7,+8,9z)", &[[7, 8, 9]]),
+        ("(1,2,3), (4,5,6)", &[[1, 2, 3], [4, 5, 6]]),
+        ("junk(1,2,3)", &[[1, 2, 3]]),
+        ("(1,2,3)junk", &[[1, 2, 3]]),
+        ("1,2,3", &[]),
+        ("((1,2,3))", &[]),
+        ("(1,(2,3)", &[]),
+        ("(1,(2,3),(4,5,6)", &[[4, 5, 6]]),
+        (")(1,2,3)", &[[1, 2, 3]]),
+        ("(1,2,00,4)", &[[1, 2, 0]]),
+    ];
+    for (text, want) in table {
+        assert_eq!(colours(text, false), *want, "{text}");
+    }
+    for clean in ["(1,2,3)", "(1,2,3),(4,5,6)", "(1, 2, 3),(4, 5 ,6)"] {
+        assert_eq!(colours(clean, false), colours(clean, true), "{clean}");
+    }
+}
+
+/// spec: S-0202 claim 17 (the importer warning, with either setting: (a)
+/// the two readings differ, (b) a component without a digit or with other
+/// bytes after its digits, (c) bytes outside groups, an unclosed group
+/// included, (d) a malformed group or a group of other than three parts;
+/// `(1,2,00,4)` warns under (d) alone; a clean list does not warn)
+#[test]
+fn colour_list_unclean_warning() {
+    let reasons = |text: &str| {
+        let on = colour_list(text.as_bytes(), true).unclean;
+        assert_eq!(on, colour_list(text.as_bytes(), false).unclean, "{text}");
+        on
+    };
+    for clean in [
+        "(1,2,3)",
+        "(1,2,3),(4,5,6)",
+        "(1, 2, 3),(4, 5 ,6)",
+        "(-1,+2,300)",
+    ] {
+        assert!(reasons(clean).is_empty(), "{clean}: {:?}", reasons(clean));
+    }
+    let has = |text: &str, what: &str| reasons(text).iter().any(|r| r.contains(what));
+    assert!(has("(1,2,3), (4,5,6)", "readings differ"));
+    assert_eq!(
+        reasons("(1,x,3)"),
+        ["a component has no digit or other bytes after its digits"]
+    );
+    assert!(has("( 7,+8,9z)", "no digit or other bytes"));
+    assert_eq!(
+        reasons("(1,2,3),)"),
+        ["bytes lie outside the parenthesised groups"]
+    );
+    assert!(has("(1,2,3),(4,5", "outside the parenthesised groups"));
+    assert!(has("junk(1,2,3)", "outside the parenthesised groups"));
+    assert_eq!(
+        reasons("(1,2,00,4)"),
+        ["a group is malformed or has other than three components"]
+    );
+    assert!(has("((1,2,3))", "malformed"));
+    assert!(has("(10,20)", "malformed"));
+}
+
+/// spec: S-0202 claim 17, Edge cases and Import mapping (ColorList read by
+/// quirks.colour_list_item_triples; a reading with no entry is an empty
+/// list, which claim 15's colour draw does not take; the importer warns
+/// with either setting and the warning does not change the result),
+/// S-0616 claim 29 (a spark type with fewer than two entries warns)
+#[test]
+fn colour_list_switch_in_the_import() {
+    let base = "[Particles]\n0=Pair\n1=Shift\n2=Clean\n\
+                [Pair]\nBehavesLike=Smoke\nColorList=(200,100)\nStartColor1=1,2,3\n\
+                [Shift]\nBehavesLike=Spark\nColorList=(200,100),(50,150,250)\n\
+                [Clean]\nBehavesLike=Spark\nColorList=(1,2,3),(4,5,6)\n";
+    let (s, w) = sim(base, "", "");
+    let p = &s.particles;
+    assert_eq!(p["Pair"].color_count, None, "two items: no entry");
+    assert_eq!(p["Pair"].color_list, None);
+    assert_eq!(p["Shift"].color_list, Some(vec![[200, 100, 0]]));
+    assert_eq!(p["Clean"].color_list, Some(vec![[1, 2, 3], [4, 5, 6]]));
+    assert!(warned(&w, "particle Pair: ColorList is not a clean list"));
+    assert!(warned(&w, "particle Shift: ColorList is not a clean list"));
+    assert!(!warned(&w, "particle Clean: ColorList"));
+    assert!(warned(
+        &w,
+        "particle Shift: a spark or railgun type with 1 colour-list entries"
+    ));
+
+    let options = ImportOptions {
+        sim: SimQuirks {
+            colour_list_item_triples: false,
+            ..SimQuirks::default()
+        },
+        ..ImportOptions::default()
+    };
+    let (s, w) = sim_with(base, "", "", &options);
+    let p = &s.particles;
+    assert_eq!(p["Pair"].color_count, Some(1));
+    assert_eq!(p["Pair"].color_list, Some(vec![[200, 100, 0]]));
+    assert_eq!(
+        p["Shift"].color_list,
+        Some(vec![[200, 100, 0], [50, 150, 250]])
+    );
+    assert_eq!(p["Clean"].color_list, Some(vec![[1, 2, 3], [4, 5, 6]]));
+    assert!(warned(&w, "particle Pair: ColorList is not a clean list"));
+    assert!(warned(&w, "particle Shift: ColorList is not a clean list"));
+    assert!(!warned(&w, "particle Clean: ColorList"));
+}

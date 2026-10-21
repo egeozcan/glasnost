@@ -455,7 +455,8 @@ pub struct ParticleType {
     /// `MaxEC`: the lifetime field (absent 1).
     #[serde(default)]
     pub max_ec: Option<i32>,
-    /// The number of colours of `ColorList` (absent 0).
+    /// The number of entries of `ColorList` as S-0202 claim 17 reads it
+    /// (absent 0).
     #[serde(default)]
     pub color_count: Option<i32>,
     /// `StartColor1`, components 0 … 255 (absent black).
@@ -541,10 +542,12 @@ pub struct ParticleType {
     /// `ZVelocityRange`, the spark *Z*ᵣ field (S-0616 F10; absent 1).
     #[serde(default)]
     pub z_velocity_range: Option<i32>,
-    /// `ColorList`, the colours in order, each component reduced modulo
-    /// 256 (S-0616 claim 29, F16; S-0202 Import mapping; absent empty).
+    /// `ColorList`, the entries in order, read as comma-separated items
+    /// taken in threes, each component reduced modulo 256 (S-0202 claim 17
+    /// and Import mapping, `quirks.colour_list_item_triples`; S-0616 claim
+    /// 29, F16; absent empty).
     #[serde(default)]
-    pub color_list: Option<Vec<[i32; 3]>>, // spec: S-0202 Import mapping (parenthesised RGB triples)
+    pub color_list: Option<Vec<[i32; 3]>>, // spec: S-0202 claim 17 and Import mapping (RGB entries, components 0 … 255)
     /// `ColorSpeed`, the colour speed *v*, a double (S-0616 F16; absent
     /// 0.0).
     #[serde(default)]

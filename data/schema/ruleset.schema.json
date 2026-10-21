@@ -7837,7 +7837,7 @@
           "default": null
         },
         "color_count": {
-          "description": "The number of colours of `ColorList` (absent 0).",
+          "description": "The number of entries of `ColorList` as S-0202 claim 17 reads it\n(absent 0).",
           "type": [
             "integer",
             "null"
@@ -7846,7 +7846,7 @@
           "default": null
         },
         "color_list": {
-          "description": "`ColorList`, the colours in order, each component reduced modulo\n256 (S-0616 claim 29, F16; S-0202 Import mapping; absent empty).",
+          "description": "`ColorList`, the entries in order, read as comma-separated items\ntaken in threes, each component reduced modulo 256 (S-0202 claim 17\nand Import mapping, `quirks.colour_list_item_triples`; S-0616 claim\n29, F16; absent empty).",
           "type": [
             "array",
             "null"

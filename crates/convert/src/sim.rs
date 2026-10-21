@@ -271,34 +271,165 @@ const BEHAVES_LIKE_LIMIT: usize = 31; // spec: S-0202 Import mapping (BehavesLik
 // spec: S-0202 Import mapping (BehavesLike: Gas, Smoke, Fire, Spark or Railgun)
 const PARTICLE_BEHAVIOURS: [&str; 5] = ["Gas", "Smoke", "Fire", "Spark", "Railgun"];
 
-/// The text limit of a colour list (S-0202 Import mapping).
-const COLOUR_LIST_LIMIT: usize = 511; // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
+/// The text limit of a colour list (S-0202 Import mapping, claim 17).
+const COLOUR_LIST_LIMIT: usize = 511; // spec: S-0202 claim 17 and Import mapping (ColorList: at most 511 text bytes)
 
-/// The colours of a colour list (S-0202 Import mapping: comma-separated
-/// parenthesised RGB triples), one per parenthesised group it closes, each
-/// component reduced modulo 256. A component that is missing or not an
-/// integer is 0 (our interim rule, Q-1562).
-fn colour_list(v: &[u8]) -> Vec<[i32; 3]> {
-    // spec: S-0202 Import mapping (ColorList: at most 511 text bytes)
-    let text = value::text(v, COLOUR_LIST_LIMIT);
-    let mut open: Option<usize> = None;
+/// A particle type's colour list as read (S-0202 claim 17 and Edge cases).
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ColourList {
+    /// The entries, in list order, each component 0 … 255.
+    entries: Vec<[i32; 3]>,
+    /// What the importer warning of claim 17 found; empty for a clean list.
+    unclean: Vec<&'static str>,
+}
+
+/// A colour component (S-0202 claim 17): the decimal form of S-0003 claim
+/// 3 with claim 4's wrapping, reduced modulo 256 to the least non-negative
+/// residue; and whether it is unclean for the importer warning (no digit,
+/// or bytes other than whitespace after the digits).
+fn colour_component(text: &[u8]) -> (i32, bool) {
+    use glasnost_ini::lex::is_whitespace;
+    // spec: S-0202 claim 17 (the decimal form only, no `$` or `h` hexadecimal form; 0 with no digit; S-0003 claim 4's wrapping; reduced modulo 256 to the least non-negative residue)
+    let v = value::decimal_integer(text).rem_euclid(256);
+    let rest = &text[text.iter().take_while(|&&b| is_whitespace(b)).count()..];
+    let rest = match rest.first() {
+        Some(b'+' | b'-') => &rest[1..],
+        _ => rest,
+    };
+    let digits = rest.iter().take_while(|b| b.is_ascii_digit()).count();
+    // spec: S-0202 claim 17 (importer warning b: a component with no digit, or with bytes other than whitespace after its digits)
+    let unclean = digits == 0 || rest[digits..].iter().any(|&b| !is_whitespace(b));
+    (v, unclean)
+}
+
+/// Claim 17's reading (`quirks.colour_list_item_triples` on): the items of
+/// the cut text, empty ones dropped and none trimmed, taken in consecutive
+/// threes; red from the first item without its first byte, green from the
+/// second whole, blue from the third without its last byte. Returns the
+/// entries and whether a component was unclean.
+fn colour_list_triples(v: &[u8]) -> (Vec<[i32; 3]>, bool) {
+    // spec: S-0202 claim 17 (S-0003 claim 1's text with a 511-byte limit; split at every comma, empty items dropped, no item trimmed, parentheses ordinary bytes)
+    let items = value::list(v, COLOUR_LIST_LIMIT);
+    let mut unclean = false;
     let mut out = Vec::new();
-    for (i, &b) in text.iter().enumerate() {
-        match b {
-            b'(' => open = Some(i + 1),
-            b')' if open.is_some() => {
-                let inner = &text[open.take().unwrap_or(i)..i];
-                let mut c = [0i32; 3];
-                for (slot, part) in c.iter_mut().zip(inner.split(|&x| x == b',')) {
-                    // spec: S-0202 Import mapping (integer components reduced modulo 256); Q-1562 interim rule (an unreadable component is 0)
-                    *slot = value::integer(part).map_or(0, |x| x.rem_euclid(256));
-                }
-                out.push(c);
-            }
-            _ => {}
+    // spec: S-0202 claim 17 (consecutive threes from the start, ⌊k / 3⌋ entries in list order; one or two items left over give nothing)
+    for &[r, g, b] in items.as_chunks::<3>().0 {
+        // spec: S-0202 claim 17 (red: the first item without its first byte; green: the second item whole; blue: the third item without its last byte)
+        let parts = [&r[1..], g, &b[..b.len() - 1]];
+        let mut c = [0i32; 3];
+        for (slot, part) in c.iter_mut().zip(parts) {
+            let (x, bad) = colour_component(part);
+            *slot = x;
+            unclean |= bad;
         }
+        out.push(c);
     }
-    out
+    (out, unclean)
+}
+
+/// What the parenthesis-aware reading finds (S-0202 Edge cases,
+/// `quirks.colour_list_item_triples` off).
+#[derive(Default)]
+struct Groups {
+    /// The entries, one per well-formed group.
+    entries: Vec<[i32; 3]>,
+    /// A component of a well-formed group was unclean (warning b).
+    component: bool,
+    /// Bytes other than whitespace and commas outside every group, an
+    /// unclosed group included (warning c).
+    outside: bool,
+    /// A malformed group, or a well-formed one whose split at commas gives
+    /// other than three parts (warning d).
+    malformed: bool,
+}
+
+/// The parenthesis-aware reading of the off setting (S-0202 Edge cases, a
+/// rule of our own): read from left to right, a group runs from an opening
+/// parenthesis to the first closing one after it; a group with another
+/// opening parenthesis inside gives nothing; text outside groups gives
+/// nothing; inside a group the parts split at every comma, empty parts
+/// kept, the first three the components, a missing one 0, later ones
+/// ignored.
+fn colour_list_groups(v: &[u8]) -> Groups {
+    use glasnost_ini::lex::is_whitespace;
+    // spec: S-0202 claim 17 and Edge cases (the value taken as S-0003 claim 1's text with a 511-byte limit, for either setting)
+    let text = value::text(v, COLOUR_LIST_LIMIT);
+    let mut g = Groups::default();
+    let mut i = 0;
+    while i < text.len() {
+        let b = text[i];
+        if b != b'(' {
+            // spec: S-0202 Edge cases (text outside groups, a closing parenthesis with no opening one included, gives nothing) and claim 17 (importer warning c)
+            if b != b',' && !is_whitespace(b) {
+                g.outside = true;
+            }
+            i += 1;
+            continue;
+        }
+        // spec: S-0202 Edge cases (a group ends at the first closing parenthesis after its opening one; reading continues after it)
+        let Some(len) = text[i + 1..].iter().position(|&x| x == b')') else {
+            // spec: S-0202 Edge cases (an unclosed final group gives nothing) and claim 17 (importer warning c, an unclosed group included)
+            g.outside = true;
+            break;
+        };
+        let inner = &text[i + 1..i + 1 + len];
+        i += len + 2;
+        if inner.contains(&b'(') {
+            // spec: S-0202 Edge cases (a group with another opening parenthesis inside it is malformed and gives nothing) and claim 17 (importer warning d)
+            g.malformed = true;
+            continue;
+        }
+        // spec: S-0202 Edge cases (split at every comma, empty parts kept; the first three parts red, green and blue; a missing part gives 0; parts after the third ignored)
+        let parts: Vec<&[u8]> = inner.split(|&x| x == b',').collect();
+        if parts.len() != 3 {
+            // spec: S-0202 claim 17 (importer warning d: a well-formed group whose split at commas gives other than exactly three parts)
+            g.malformed = true;
+        }
+        let mut c = [0i32; 3];
+        for (slot, part) in c.iter_mut().zip(&parts) {
+            let (x, bad) = colour_component(part);
+            *slot = x;
+            g.component |= bad;
+        }
+        g.entries.push(c);
+    }
+    g
+}
+
+/// A particle type's colour list (S-0202 claim 17, Edge cases and Import
+/// mapping): the entries of the reading `item_triples`
+/// (`quirks.colour_list_item_triples`) picks, and the importer warning's
+/// findings, which are the same with either setting.
+fn colour_list(v: &[u8], item_triples: bool) -> ColourList {
+    use glasnost_ini::lex::is_whitespace;
+    let (triples, triple_component) = colour_list_triples(v);
+    let groups = colour_list_groups(v);
+    let mut unclean = Vec::new();
+    // spec: S-0202 claim 17 (importer warning, with either setting: (a) the two readings differ; (b) an unclean component in either; (c) bytes outside groups; (d) a malformed group or other than three parts; the 511-byte cut falling inside the list)
+    if triples != groups.entries {
+        unclean.push("the item-triples and parenthesis-aware readings differ");
+    }
+    if triple_component || groups.component {
+        unclean.push("a component has no digit or other bytes after its digits");
+    }
+    if groups.outside {
+        unclean.push("bytes lie outside the parenthesised groups");
+    }
+    if groups.malformed {
+        unclean.push("a group is malformed or has other than three components");
+    }
+    if v.iter().skip(COLOUR_LIST_LIMIT).any(|&b| !is_whitespace(b)) {
+        unclean.push("the 511-byte limit cuts the list");
+    }
+    ColourList {
+        // spec: S-0202 claim 17 and Edge cases (quirks.colour_list_item_triples on: claim 17's reading; off: the parenthesis-aware reading)
+        entries: if item_triples {
+            triples
+        } else {
+            groups.entries
+        },
+        unclean,
+    }
 }
 
 /// How a field's stored value is read.
@@ -2161,11 +2292,26 @@ impl Builder<'_> {
             );
         }
         // spec: S-0202 Import mapping (ColorList: empty also when omitted or empty in a later layer, so the last section read decides)
-        let colours = t
+        let read = t
             .reads
             .last()
             .and_then(|&r| given_at(t, "ColorList", r))
-            .map_or_else(Vec::new, colour_list);
+            .map(|v| colour_list(v, self.i.sim_quirks.colour_list_item_triples))
+            .unwrap_or_default();
+        if !read.unclean.is_empty() {
+            // spec: S-0202 claim 17 (importer warning: the value is not a clean list; the warning does not change the result)
+            self.warn(
+                t.reads.last().copied().unwrap_or(t.created_in),
+                0,
+                format!(
+                    "particle {}: ColorList is not a clean list of parenthesised triples ({}); read as {} entries (S-0202 claim 17, quirks.colour_list_item_triples)",
+                    show(&t.name),
+                    read.unclean.join("; "),
+                    read.entries.len()
+                ),
+            );
+        }
+        let colours = read.entries;
         if !colours.is_empty() {
             rec.put("color_count", int_node(colours.len() as i32));
             rec.put(
