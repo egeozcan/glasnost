@@ -1595,6 +1595,101 @@ Exit not met on this main: 2 of the 4 launches in the full games took at least o
 
 **Gate and arena.** The `duel-m7b` golden is regenerated (on main 54554a5); no save or AI game format change (no new state). Seed sweeps 1 to 16 on main 54554a5, min / median: M6c and M7a unchanged. M7b, before → after: dominator launches 8/8 → 6/7, objects taken 12/20 → 11/20, mutator launches 5/7 → 5/7, infantry mutated 15/22 → 15/20, berserk orders 20/30 → 15/27, units made berserk 12/21 → 12/21, takeover orders 0/3 → 0/1, takeovers 0/1 → 0/1, absorber entries 11/22 → 13/18, absorbed 5/9 → 4/8, grinder entries 4/9 → 6/9, ground 4/7 → 5/8, bunker builds 4/4 → 3/4, slave buildings 4/12 → 4/12, slaves 3 413/3 682 → 3 413/3 693; the drain counters unchanged (smallest drain minimum 3). The oracle arena attaches no brain: its CSVs are byte-identical before and after (M-0001: 34 of 96 pairings failing any test, 148 of 172 unanimous outcomes reproduced; M-0002: 16 of 24, 43 of 47; M-0003: 3 of 35, 61 of 64).
 
+## Own AI (M8 step B5: tempo after expansion)
+
+Follow-up of B1 and B2 (above), in `Brain::expand`, `Brain::rich` and `Brain::economy_first` (`crates/deterministic/ai/src/brain.rs`). Lane outputs are git-ignored under `local-lane/m8/b5/` (counts and ticks only). The quick lane is seeds 7 to 14, maps 8, 2 and 0, Yuri (house 1) against Allied and against Soviet (48 games); the six full games are seed 7 (quick unset). Binaries: *main* is main without this branch; *round 3* is the same main with B1's and B2's brain changes (4b050ea) reversed, so the round-3 saving rebuilt on that main, not the binary B2 measured; *nosave* is a binary with both hold branches of `Brain::economy_first` forced off (scratch only, nothing of it is in the tree). The findings below were made on main f3aab5d; the results were measured twice, on f3aab5d and again after the rebase onto d38748f (step A5's animation playback, which changes play). Six quick games of seed 7 replay the same on 33b9844 as on d38748f.
+
+### What the probes found (main f3aab5d)
+
+- **No stall on main.** The Allied, map 2, seed 7 game with no winner at 120 000 ticks was B2's final binary on main 6fe1b84. On f3aab5d (B3 in) the six full games all have winners, as in B3's table above (Yuri 5 of 6), and so do the 48 quick games of seeds 7 to 14; seeds 7 to 10 play the same 24 games as B3's final quick lane. What the old game showed (B2's binary rerun with `GLASNOST_AI_ECON`): from about tick 60 000 the map was mined out and both houses lived on tech-building income (Allied 5 000 to 13 000 credits per 3 000 ticks, Yuri 1 500 to 5 000), feeding their armies in piece by piece. The Allied house was in drain blackout from tick 42 000 or earlier to the end (power output 0), its superweapons and defences dark, under one Yuri drainer in the air that no unit of the house targeted. It had built one anti-air type: `antiair::build_type` builds while the house has fewer objects able to hit the drainer than drainers, and `antiair::able` counted the house's anti-air defence, which stood dark (no power) and about 12 cells from the drainer. The same count shows on main in Allied houses drained for long (02-0-10: 114 027 drained-building ticks in a 69 793-tick game, 3 anti-air builds or fewer). Left as a finding: no main game stalls, and a change there plays the opponents differently, which would mix into the tempo comparison. The fix would count only a defence the firing check lets fire (`power::firing_answer` none: in operation, not drained) and within reach of a drainer.
+- **The yard vehicle's prerequisite before the superweapon building.** The B1 unblocker (`Script::unblocker` of the yard vehicle) is ordered when the house would expand, and an order for a building whose line is busy queues behind the line's item (S-0404 claim 3). In 12-8-7 (Soviet, map 8, seed 7) it queued behind a power plant and started when the plant ended (tick 7 441); the next superweapon building, which round 3 started on the same line at tick 7 471, started at 8 641. Every later Yuri superweapon of the game is 1 000 ticks or more behind round 3 (force shield 13 790 → 14 799, mutator 16 732 → 19 419, dominator 29 445 → 34 032); 12-8-8 and 12-8-10 show the same.
+- **The yard vehicle bought between superweapon buildings.** `Brain::rich` lets a house with its economy whole buy the yard vehicle with no money in hand when no superweapon building is on its lines (`superweapon_owed` none). That test misses the think in which `build_superweapon` orders the next building: the order is applied after the think, so `expand` in the same think sees no such building. In 12-8-7 (a probe every 15 ticks) the unblocker ended at 8 641, the yard vehicle became buildable at the think of tick 8 640, the superweapon building and the yard vehicle were ordered in that think, and the probe of tick 8 655 already read "superweapon building". The same test passes while a superweapon building is done but not placed, on hold, or not yet buildable while its own prerequisite is built. Over the 48 quick games, in 70 of the 177 probe samples (every 1 500 ticks) with a yard vehicle on Yuri's line, a superweapon building was on that line too.
+- **What the yard vehicle then costs.** B2 holds it with the army while the house saves; saving stops whenever the house is not safe, and the vehicle draws money again. In 12-8-7 the yard vehicle was queued behind an army vehicle at 8 640 and was the Ground line's item from about 15 000, 17 of 54 steps done at 19 500; about a third of its price was paid before the mutator and the rest before the dominator. In 12-8-8 the whole yard vehicle was bought between the mutator and the dominator, which came 4 978 ticks after round 3's. And a held item keeps its line: the queue does not advance while the line is held (S-0404 claim 5), so a held yard vehicle stops every army vehicle queued behind it. A cancel (S-0404 claim 6) frees the line and refunds what was paid (at an unchanged price the refund is everything paid).
+- **The yard vehicle bought while broke.** In 02-0-7 (Allied, map 0, seed 7) Yuri's superweapons were all built by tick 37 500 and the yard vehicle went on the line then; income was 275 to 600 credits per 1 500 ticks from 40 500 on, credits stayed under 30 in every sample, and the yard vehicle stood on the Ground line from 43 500 to the end (57 798) and never passed step 23 of 54, with army vehicles queued behind it. `rich` passed because the house kept every harvester it wanted (`Script::economy_kept`), which says nothing of what they earn on a nearly mined-out map. Of the 177 Yuri samples with a yard vehicle on the line, 172 had credits under 500 and 46 income under 1 500 per 1 500 ticks (02-0-7, 12-0-10 and 02-0-13 most; for the Allied and Soviet houses 27 of 129, 02-8-10, 12-0-8 and 12-8-14 most).
+- **Where Yuri's tempo goes, by spending.** Credits spent by category between Yuri's superweapons first ready (`GLASNOST_AI_ECON`, main against round 3 on the same seeds): in 12-8-7, less than half of round 3's spending on superweapon buildings before the psychic reveal, the unblocker taking the difference; in 12-0-8 (Soviet, map 0), about eleven times round 3's spending on other buildings between force shield and mutator (the tech climb, not the expansion: the house bought no yard vehicle there, and its game differs from round 3's because the Soviet house expanded); in 02-0-7, spending on other buildings and on the yard vehicle between force shield and mutator, none in round 3.
+- **The hold released while losing a fight.** B2 lifts the hold whenever the house is not safe, so that the army can answer the fight. Map 2's small delays come from there. In 12-2-7 the house was losing a fight from tick 8 100 to 8 340. The held items resumed, an engineer took 23 steps and a tank 8, and the mutator came 406 ticks after round 3's. Round 3 had no such release.
+
+### What the brain does now (B5)
+
+- **No yard vehicle before a superweapon building** (`Brain::rich`). The second wealth test (economy whole) now also needs no superweapon building on the lines *or left to go for* (`Brain::superweapon_next`, the search `build_superweapon` uses, split out of it). The test sees the next building in the think that orders it, and while it is done but not placed, on hold or waiting on its own prerequisite. The unblocker follows `rich`, so it waits too.
+- **Income, not harvesters, for the second test.** The economy watch (`Script::watch_income`) adds up what the house earned: the change of its credits plus what its lines paid since the last think (S-0404 claim 4). A finished item pays the rest of its balance. A cancelled item's payments are refunded (S-0404 claim 6). A credit fall that no payment explains is not income. Every `INCOME_WINDOW` (3 000) ticks the sum becomes `Script::income`. The second test needs an income of one yard vehicle's cost per window (`EXPANSION_EARNING`). The first test (twice the cost in hand) now counts the money in hand beyond what the superweapon building still owes.
+- **A broke house drops the yard vehicle** (`Brain::drop_expansion`). The house has a yard and a yard vehicle on a line or queued. If its income per window is under half the cost (`EXPANSION_BROKE`) and its credits do not cover what the yard vehicle and the superweapon building still owe, it sends the cancel-all order (S-0404 claim 6), counted as `Uses::expansion_cancels`. The threshold is below the buying threshold, so a house at the edge does not buy and cancel in turn. A yard vehicle bought with no yard (`rebuild_yard`) runs on. In 12-0-10 on f3aab5d, Yuri's yard vehicle stood on the line in 29 probe samples without the cancel (lane *a*, below) and in 5 with it.
+- **Non-fighters stay held while losing a fight** (`Brain::economy_first`). Saving keeps B2's trigger. While the house is not safe and the building is still short, only army items that can join the fight resume. A yard vehicle and an engineer stay held.
+  - **Deviation from B2's rule.** The plan said "never while the house is losing a fight", and this narrows it.
+  - **Benefit not shown.** In 12-2-7 the engineer stayed held, but the tank line took the freed credits (the earlier line is paid first, S-0404 claim 1). The mutator stayed at 14 292. It is also the first step down in wins on f3aab5d (*eng*, below: 26 against main's 28). It is the first piece to revert if the plan's rule is wanted as written.
+- **AI game format 31** (the watch's new fields, serde default). All six duel goldens of the sim gate are regenerated on the rebased branch: they change from their first line because the state hash includes the brain.
+
+**Tried on the way (B5, on f3aab5d).** Same quick lane; medians against round 3.
+- *v1*: the `rich` guard and the income test, plus a cancel of the yard vehicle whenever the superweapon building was short. Force shield 0, mutator +116, dominator −496. Yuri won 25. The mutator came later than round 3.
+- *eng*: the non-fighter hold alone. Force shield 0, mutator 0, dominator +353.5. Yuri won 26.
+- *a*: *eng* plus the `rich` guard (no income test, no cancel). Force shield 0, mutator −14.5, dominator +425. Yuri won 25. In 12-0-10 the yard vehicle bought while broke stood on the line in 29 samples.
+- *Final*: *a* plus the income test and the broke cancel. Its superweapon tempo is nearly the same as *a*'s.
+
+### Results on main d38748f
+
+Yuri's superweapons, first tick ready, against round 3: the median difference, with games later / games compared.
+
+| Binary | Force shield | Mutator | Dominator | Psychic reveal | Yuri wins vs Allied / Soviet | No winner |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 3 | – | – | – | – | 3 / 18 (21) | 0 |
+| main | +57.5 (23 / 44) | +145 (17 / 29) | +1 147 (12 / 16) | 0 (3 / 48) | 9 / 19 (28) | 0 |
+| **final** | 0 (20 / 44) | +43.5 (16 / 28) | +2 380 (9 / 13) | 0 (0 / 48) | 7 / 17 (24) | 0 |
+| final, nosave | +3 347 (35 / 36) | +7 496 (21 / 21) | +6 043 (3 / 3) | +22 (27 / 48) | 5 / 20 (25) | 1 |
+
+- **Final against main:** force shield 0 (4 later of 44), mutator −29 (8 of 35), dominator +320.5 (10 of 18), reveal 0.
+- **Final against final, nosave:** every superweapon is earlier with saving. Force shield −3 300 (1 later of 36), mutator −7 375 (0 of 23), dominator −5 759 (0 of 4), reveal −22. The dominator is ready in 20 games with saving and in 6 without.
+- **Dominator against round 3**, the 13 games where both ready it, sorted (final minus round 3): −15 857, −2 558, −1 270, −230, +1 052, +2 145, +2 380, +3 058, +3 728, +5 645, +5 932, +8 282, +61 093. Ten of the 13 are Soviet, map 2 or 8. Only round 3 readies it in 6 games (Yuri lost 3 of them in final), and only final in 7.
+
+**Brain counters, quick lane** (house 0, house 1):
+
+| Binary | Expansion builds | Unblocks | Cancels | Superweapon holds | Games where Yuri had 2 yards | Dominator launches / changed an owner / objects taken |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 3 | 0, 2 | 0, 0 | 0, 0 | 1 798, 1 422 | 8 | 27 / 19 / 23 |
+| main | 23, 25 | 27, 16 | 0, 0 | 2 106, 2 113 | 17 | 31 / 12 / 19 |
+| final | 19, 28 | 21, 7 | 3, 1 | 1 879, 2 097 | 15 | 20 / 8 / 11 |
+
+**Full games, seed 7, main → final.** Every game has a winner. All replay to the same state and survive save and load. Yuri wins 5 of 6 in both. Yuri's superweapons are given as first tick ready.
+
+| Opponent, map | Winner, tick | Force shield | Mutator | Dominator |
+| --- | --- | --- | --- | --- |
+| Allied, 0 | Yuri 43 035 → Yuri 52 169 | 15 107 → 15 107 | – → – | – → – |
+| Allied, 2 | Yuri 42 692 → Yuri 61 146 | 10 710 → 10 710 | 14 263 → 14 495 | 30 582 → 59 962 |
+| Allied, 8 | Allied 29 203 → Allied 32 673 | 15 603 → 14 211 | – → 18 527 | – → – |
+| Soviet, 0 | Yuri 51 486 → Yuri 32 108 | 15 241 → 15 241 | 18 727 → 18 727 | 30 783 → 30 029 |
+| Soviet, 2 | Yuri 47 145 → Yuri 28 796 | 10 710 → 10 710 | 14 060 → 13 886 | 24 180 → 25 941 |
+| Soviet, 8 | Yuri 44 122 → Yuri 35 985 | 15 285 → 13 919 | 20 752 → 16 968 | 34 826 → 28 385 |
+
+Soviet, map 8 is again at round 3's tempo (round 3's quick game: mutator 16 975).
+
+**Dominator in the full games.** Main launched 6 times and 3 launches took a unit; final launched once (Soviet, map 8, tick 28 386) and it took a unit. In three of final's games the game ended 1 184 to 2 855 ticks after the dominator was ready, Yuri winning each (Soviet, maps 0 and 2, about 19 000 ticks sooner than on main; Allied, map 2).
+
+**Exit B5 on d38748f: missed.**
+- Met: force shield 0 and psychic reveal 0 against round 3; all six full games have a winner.
+- Missed:
+  - Mutator +43.5 and dominator +2 380 against round 3.
+  - Wins against saving off: 24 against 25 (saving off has one game with no winner).
+  - Full-game launches that took a unit: 1 (of 1), against B3's 2 of 4 and main's 3 of 6.
+- Lower than main in both measurements: Yuri wins 24 against main's 28 (on f3aab5d and on d38748f). Quick-lane dominator launches 20 against 31.
+- The tempo medians against round 3 do not hold from one base to the other: on f3aab5d final had mutator −14.5 and dominator +425, and main +58 and −1.5; one game now swings by 61 093 ticks. Medians of 13 to 28 compared games cannot settle differences of this size. What held on both: the mechanism fix of 12-8-7, and the four wins fewer than main.
+
+### Results on main f3aab5d (same code, earlier main)
+
+| Binary | Force shield | Mutator | Dominator | Psychic reveal | Yuri wins vs Allied / Soviet | No winner |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 3 | – | – | – | – | 7 / 16 (23) | 0 |
+| main | 0 (17 / 45) | +58 (17 / 27) | −1.5 (8 / 16) | 0 (2 / 48) | 7 / 21 (28) | 0 |
+| main, nosave | +4 190 (33 / 34) | +7 043 (17 / 17) | +9 567 (1 / 1) | +22 (30 / 48) | 4 / 19 (23) | 1 |
+| final | 0 (13 / 45) | −14.5 (12 / 26) | +425 (9 / 16) | 0 (0 / 48) | 7 / 17 (24) | 0 |
+| final, nosave | +3 697 (33 / 34) | +7 135.5 (18 / 18) | +5 314 (1 / 1) | +22 (30 / 48) | 4 / 20 (24) | 1 |
+
+Full games there: all six with a winner, Yuri 4 of 6 (main 5 of 6); dominator 4 launches, 2 took a unit (main 4 and 2); Soviet, map 8 at round 3's tempo (13 790, 16 471, 29 569). Quick-lane dominator launches / changed an owner / objects taken: round 3 41 / 28 / 42, main 31 / 14 / 17, final 27 / 16 / 18.
+
+**Tests** (synthetic data).
+- `tests/economy.rs`: `keeps_a_yard_vehicle_and_an_engineer_held_while_losing_a_fight`, `cancels_an_expansion_yard_vehicle_while_broke`, `reads_income_off_the_credits_and_the_lines`. The last is ignored in debug builds and passes in release.
+- `tests/expansion.rs`: `a_house_earning_a_yard_vehicle_per_window_buys_one_step_by_step` and `a_house_with_a_superweapon_to_climb_to_buys_no_yard_vehicle`.
+
+**Arena and duel sweeps (d38748f).** The oracle arena attaches no brain, and its CSVs are byte-identical to step A5's after-run: M-0001 33 of 96 pairings failing, 151 of 172 reproduced; M-0002 13 of 24, 43 of 47; M-0003 3 of 35, 61 of 64. The M6c, M7a and M7b seed sweeps 1 to 16 print the same min and median with and without this branch for every counter. For M7b: dominator launches 7/7, objects taken 14/18, mutator 5/7, infantry mutated 15/23, berserk orders 9/29, drain orders 4/6, drain links 3/3. (On f3aab5d likewise the same before and after.)
+
 ## Map triggers (M5b)
 
 `glasnost_sim::triggers` runs the map triggers of S-0011 in a skirmish; the converter
