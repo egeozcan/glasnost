@@ -12,22 +12,32 @@
 //! - The building that gives the dominator is built by the brain's
 //!   superweapon step, like every other kind it fires
 //!   ([`crate::brain::Brain`], `build_superweapon`).
-//! - [`dominate_cell`] picks the target cell: among the cells of seen enemy
-//!   objects, the one where the launch is worth most, and only where its
-//!   gain is larger than its loss. Gain: the value of the seen enemy units
-//!   the sweep would take, and the part of their value that the area damage
-//!   is expected to destroy of the seen enemy objects it does not take
-//!   (buildings, which are never taken, and refused units: claims 9 and
-//!   13). Loss: the allied value the sweep would take, and the part of the
-//!   house's own value the area damage is expected to destroy. What the
-//!   sweep takes is the simulation's own preview of claims 11 to 13
-//!   (`glasnost_sim::domination::preview`: the swept cells and layers, the
-//!   objects examined from each cell's start object, and the takeover
-//!   tests), cut to the enemy units the house sees: a person reads the
-//!   reach off the cursor and sees what stands in it. There is no smallest
-//!   group (M7b AI round 3: in the stock lane the dominator stood ready for
-//!   up to 4 000 ticks at a time with at most one dominable enemy unit in
-//!   sight, and never fired, while the aim waited for [`MIN_UNITS`]).
+//! - [`dominate_cell`] picks the target cell. What a launch at a cell is
+//!   worth: gain, the value of the seen enemy units the sweep would take,
+//!   and the part of their value that the area damage is expected to
+//!   destroy of the seen enemy objects it does not take (buildings, which
+//!   are never taken, refused units, and takeable units the damage itself
+//!   destroys: claims 9, 10 and 13); loss, the allied value the sweep would
+//!   take, and the part of the house's own value the area damage is
+//!   expected to destroy. What the sweep takes is the simulation's own
+//!   preview of claims 11 to 13 (`glasnost_sim::domination::preview`: the
+//!   swept cells and layers, the objects examined from each cell's start
+//!   object, and the takeover tests), cut to the enemy units the house sees:
+//!   a person reads the reach off the cursor and sees what stands in it.
+//! - Takeovers first (M8 step B3: in the stock lane every launch went to
+//!   area damage on buildings while takeable units stood in sight
+//!   elsewhere). The aim searches the explored cells from which a sweep
+//!   reaches a seen takeable unit, and fires at the one worth most among
+//!   those that take at least one enemy unit and gain more than they lose.
+//!   Only when no cell takes any does it aim for the damage alone, at the
+//!   cells of the seen enemy objects, and only once the record has been
+//!   ready for [`HOLD_PERCENT`] of its charge time: a person holds a ready
+//!   dominator a while for a group to take, but never so long that a whole
+//!   charge goes by for nothing.
+//! - There is no smallest group (M7b AI round 3: in the stock lane the
+//!   dominator stood ready for up to 4 000 ticks at a time with at most one
+//!   dominable enemy unit in sight, and never fired, while the aim waited
+//!   for [`MIN_UNITS`]).
 //! - A launch while a domination is in force is refused (S-0612 claim 3); a
 //!   person sees the domination and does not try.
 //!
@@ -47,6 +57,11 @@ use glasnost_sim::econ::tech;
 /// lane reports a group against. The aim itself fires at the best value it
 /// sees, a smaller group included.
 pub const MIN_UNITS: usize = 3; // nocite: tuning of our own opponent
+
+/// How long a ready dominator is held for a group to take before it is
+/// fired for its area damage alone, in percent of the type's charge time.
+/// Below 100, so a hold never costs a whole charge.
+pub const HOLD_PERCENT: i32 = 50; // nocite: tuning of our own opponent
 
 /// The value a person puts on object `o`: its type's cost, at least 1.
 pub(crate) fn value(w: &World, o: &Object) -> i64 {
@@ -99,29 +114,12 @@ pub(crate) fn blast_value(
     warhead: Option<glasnost_sim::combat::data::WarheadId>,
     count: impl Fn(&Object) -> bool,
 ) -> i64 {
-    let Some(h) = warhead else { return 0 };
-    if amount <= 0 {
-        return 0;
-    }
-    let (r, _) = glasnost_sim::combat::area::radii(w, h);
-    let (x, y) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0612 claim 9 (the centre of the target cell)
     w.objects
         .values()
         .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
         .filter(|o| count(o))
-        // spec: S-0612 claim 9 (the ground layer; no flying objects)
-        .filter(|o| o.layer == Layer::Ground && !glasnost_sim::combat::weapon::in_air(w, o.id))
         .filter_map(|o| {
-            let (dx, dy) = (i64::from(o.pos.x) - x, i64::from(o.pos.y) - y);
-            let d2 = dx * dx + dy * dy;
-            if d2 > i64::from(r) * i64::from(r) {
-                return None;
-            }
-            let d = d2.isqrt() as i32;
-            let class =
-                glasnost_sim::combat::veterancy::type_combat(w, o.id).map_or(0, |t| t.armour);
-            let v = w.rules().combat.warhead(h).versus(class);
-            let dmg = glasnost_sim::combat::damage::falloff_versus(w, h, amount, d, v);
+            let dmg = blast_hit(w, c, amount, warhead, o)?;
             if dmg >= o.health {
                 // Destroyed: its whole value.
                 return Some(value(w, o));
@@ -132,10 +130,45 @@ pub(crate) fn blast_value(
         .sum()
 }
 
+/// The damage an area hit of `amount` with `warhead` at the centre of cell
+/// `c`, ground layer, is expected to deal to `o` (S-0303 F1, S-0302 F3), or
+/// `None` when `o` is outside the warhead's spread radius or not on the
+/// ground. An estimate a person makes (see [`blast_loss`]).
+fn blast_hit(
+    w: &World,
+    c: CellXY,
+    amount: i32,
+    warhead: Option<glasnost_sim::combat::data::WarheadId>,
+    o: &Object,
+) -> Option<i32> {
+    let h = warhead?;
+    if amount <= 0 {
+        return None;
+    }
+    // spec: S-0612 claim 9 (the ground layer; no flying objects)
+    if o.layer != Layer::Ground || glasnost_sim::combat::weapon::in_air(w, o.id) {
+        return None;
+    }
+    let (r, _) = glasnost_sim::combat::area::radii(w, h);
+    let (x, y) = (i64::from(c.x) * 256 + 128, i64::from(c.y) * 256 + 128); // spec: S-0612 claim 9 (the centre of the target cell)
+    let (dx, dy) = (i64::from(o.pos.x) - x, i64::from(o.pos.y) - y);
+    let d2 = dx * dx + dy * dy;
+    if d2 > i64::from(r) * i64::from(r) {
+        return None;
+    }
+    let d = d2.isqrt() as i32;
+    let class = glasnost_sim::combat::veterancy::type_combat(w, o.id).map_or(0, |t| t.armour);
+    let v = w.rules().combat.warhead(h).versus(class);
+    Some(glasnost_sim::combat::damage::falloff_versus(
+        w, h, amount, d, v,
+    ))
+}
+
 /// What a launch at `c` is worth to `house`: the value of the seen enemy
 /// units of `takeable` it would take (gain), and the allied value it would
 /// take plus the own value its area damage would destroy (loss), and the
-/// number of enemy units taken.
+/// number of enemy units taken. A takeable unit the area damage is expected
+/// to destroy is not taken (S-0612 claim 10): it counts by the damage.
 fn worth(
     w: &World,
     house: HouseId,
@@ -144,11 +177,18 @@ fn worth(
     seen: &BTreeSet<ObjectId>,
 ) -> (i64, i64, usize) {
     let me = &w.houses[usize::from(house.0)];
+    let d = &w.rules().superweapons.domination;
     let taken = glasnost_sim::domination::preview(w, house, c);
     let (mut gain, mut loss, mut n) = (0, 0, 0);
+    let mut destroyed: BTreeSet<ObjectId> = BTreeSet::new();
     for id in taken {
         let Some(o) = w.obj(id) else { continue };
         if takeable.contains(&id) {
+            if blast_hit(w, c, d.damage, d.warhead, o).is_some_and(|x| x >= o.health) {
+                // spec: S-0612 claim 10 (an object the area damage destroys is not taken over)
+                destroyed.insert(id);
+                continue;
+            }
             gain += value(w, o);
             n += 1;
         } else if o
@@ -159,12 +199,11 @@ fn worth(
             loss += value(w, o);
         }
     }
-    let d = &w.rules().superweapons.domination;
     // spec: S-0612 claim 14 (own objects change no owner) and claim 9 (the area damage, of the imported amount and warhead)
     loss += blast_loss(w, &[house], c, d.damage, d.warhead, true);
-    // spec: S-0612 claim 9 (the area damage hurts the seen enemy objects that are not taken: buildings, which are never taken (claim 13), and units the takeover tests refuse)
+    // spec: S-0612 claims 9 and 10 (the area damage hurts the seen enemy objects that are not taken: buildings, which are never taken (claim 13), units the takeover tests refuse, and takeable units it destroys)
     gain += blast_value(w, c, d.damage, d.warhead, |o| {
-        seen.contains(&o.id) && !takeable.contains(&o.id)
+        seen.contains(&o.id) && (!takeable.contains(&o.id) || destroyed.contains(&o.id))
     });
     (gain, loss, n)
 }
@@ -185,15 +224,76 @@ fn takeable(script: &Script, w: &World, spent: &[ObjectId]) -> BTreeSet<ObjectId
 }
 
 /// The best cell for a launch by the house of `script` and what it is
-/// worth: `(cell, gain, loss, enemy units taken)`.
+/// worth: `(cell, gain, loss, enemy units taken)`. A cell that takes at
+/// least one enemy unit beats every cell that takes none (the damage
+/// alone).
 fn best(script: &Script, w: &World, spent: &[ObjectId]) -> Option<(CellXY, i64, i64, usize)> {
-    let takeable = takeable(script, w, spent);
-    let seen: BTreeSet<ObjectId> = script
+    best_take(script, w, spent).or_else(|| best_damage(script, w, spent))
+}
+
+/// The seen enemy objects, less `spent`.
+fn seen(script: &Script, w: &World, spent: &[ObjectId]) -> BTreeSet<ObjectId> {
+    script
         .seen_enemies(w)
         .into_iter()
         .map(|(id, _)| id)
         .filter(|id| !spent.contains(id))
+        .collect()
+}
+
+/// The best of `cands` by gain less loss, the earlier cell in scan order on
+/// a tie, among those whose gain is larger than their loss and that take
+/// at least `min` enemy units.
+fn pick(
+    script: &Script,
+    w: &World,
+    cands: Vec<CellXY>,
+    takeable: &BTreeSet<ObjectId>,
+    seen: &BTreeSet<ObjectId>,
+    min: usize,
+) -> Option<(CellXY, i64, i64, usize)> {
+    cands
+        .into_iter()
+        .map(|c| {
+            let (gain, loss, n) = worth(w, script.house, c, takeable, seen);
+            (c, gain, loss, n)
+        })
+        .filter(|&(_, gain, loss, n)| gain > loss && n >= min)
+        .max_by_key(|&(c, gain, loss, _)| (gain - loss, std::cmp::Reverse((c.y, c.x))))
+}
+
+/// The best cell whose sweep takes at least one seen enemy unit, among the
+/// explored cells from which the sweep reaches a seen takeable unit (a
+/// person aims anywhere it has seen, and the house's shroud is all it
+/// knows of the map).
+fn best_take(script: &Script, w: &World, spent: &[ObjectId]) -> Option<(CellXY, i64, i64, usize)> {
+    let takeable = takeable(script, w, spent);
+    if takeable.is_empty() {
+        return None;
+    }
+    let seen = seen(script, w, spent);
+    let mut cands: Vec<CellXY> = takeable
+        .iter()
+        .filter_map(|&id| w.obj(id))
+        // spec: S-0612 claim 11 and S-0303 Terms (the swept cells around the unit's cell; the ring metric m(Δx, Δy) depends only on |Δx| and |Δy|, so these are the cells whose sweep reaches it)
+        .flat_map(|o| glasnost_sim::domination::swept(w, o.pos.cell()))
+        .map(|(c, _)| c)
+        .filter(|&c| glasnost_sim::econ::shroud::explored(w, script.house, c))
         .collect();
+    cands.sort_by_key(|c| (c.y, c.x));
+    cands.dedup();
+    pick(script, w, cands, &takeable, &seen, 1)
+}
+
+/// The best cell for the area damage alone, among the cells of the seen
+/// enemy objects.
+fn best_damage(
+    script: &Script,
+    w: &World,
+    spent: &[ObjectId],
+) -> Option<(CellXY, i64, i64, usize)> {
+    let takeable = takeable(script, w, spent);
+    let seen = seen(script, w, spent);
     let mut cands: Vec<CellXY> = seen
         .iter()
         .filter_map(|&id| w.obj(id))
@@ -201,26 +301,47 @@ fn best(script: &Script, w: &World, spent: &[ObjectId]) -> Option<(CellXY, i64, 
         .collect();
     cands.sort_by_key(|c| (c.y, c.x));
     cands.dedup();
-    cands
-        .into_iter()
-        .map(|c| {
-            let (gain, loss, n) = worth(w, script.house, c, &takeable, &seen);
-            (c, gain, loss, n)
-        })
-        .filter(|&(_, gain, loss, _)| gain > loss)
-        .max_by_key(|&(c, gain, loss, _)| (gain - loss, std::cmp::Reverse((c.y, c.x))))
+    pick(script, w, cands, &takeable, &seen, 0)
 }
 
-/// The psychic dominator's target cell for the house of `script`, if a
-/// target worth it is seen and no domination is in force. `spent` are the
-/// units an earlier launch of the same think already reaches; they do not
-/// count.
-pub(crate) fn dominate_cell(script: &Script, w: &World, spent: &[ObjectId]) -> Option<CellXY> {
+/// Whether record `sw` of `house` has been ready for less than
+/// [`HOLD_PERCENT`] of its type's charge time (S-0512 claim 5: the ready
+/// tick; a person sees how long its icon has been ready).
+fn holding(w: &World, house: HouseId, sw: u32) -> bool {
+    let Some(r) = glasnost_sim::superweapons::charge::get(w, house, sw) else {
+        return false;
+    };
+    let Some(t) = w.rules().superweapons.types.get(sw as usize) else {
+        return false;
+    };
+    // nocite: tuning of our own opponent (the hold, a part of one charge time)
+    let hold = i64::from(t.charge.max(0)) * i64::from(HOLD_PERCENT) / 100;
+    i64::from(w.tick) - i64::from(r.ready_tick) < hold
+}
+
+/// The psychic dominator's target cell for the house of `script` and its
+/// record `sw`, if a target worth it is seen and no domination is in
+/// force: a cell that takes at least one seen enemy unit, else, once the
+/// hold is over ([`HOLD_PERCENT`]), the best cell for the damage alone.
+/// `spent` are the units an earlier launch of the same think already
+/// reaches; they do not count.
+pub(crate) fn dominate_cell(
+    script: &Script,
+    w: &World,
+    sw: u32,
+    spent: &[ObjectId],
+) -> Option<CellXY> {
     // spec: S-0612 claim 3 (a launch while a domination is in force is refused)
     if glasnost_sim::domination::in_force(w) {
         return None;
     }
-    best(script, w, spent).map(|(c, ..)| c)
+    if let Some((c, ..)) = best_take(script, w, spent) {
+        return Some(c);
+    }
+    if holding(w, script.house, sw) {
+        return None;
+    }
+    best_damage(script, w, spent).map(|(c, ..)| c)
 }
 
 /// What the lane's dominator probe reports for a house.

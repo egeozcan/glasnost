@@ -818,7 +818,9 @@ impl Brain {
                 Some(SwKind::ChronoWarp) if Self::has_source(w, h) => self.landing_cell(w),
                 Some(SwKind::PsychicReveal) => crate::psychic::reveal_cell(&self.script, w),
                 Some(SwKind::Genetic) => crate::mutator::mutate_cell(&self.script, w),
-                Some(SwKind::Dominator) => crate::dominator::dominate_cell(&self.script, w, &spent),
+                Some(SwKind::Dominator) => {
+                    crate::dominator::dominate_cell(&self.script, w, i, &spent)
+                }
                 _ => None,
             };
             if let Some(cell) = cell {

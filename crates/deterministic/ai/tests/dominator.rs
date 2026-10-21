@@ -3,10 +3,15 @@
 //! units it would take and the seen enemy objects its area damage would
 //! destroy, against the allied units it would take and the own objects its
 //! damage would destroy (the house's own units change no owner, claim 14);
-//! a group smaller than `dominator::MIN_UNITS` is fired at too, and so are
-//! enemy buildings with no unit in sight (M7b AI round 3); never while a
-//! domination is in force; a launch takes the group over for the house; the house builds
-//! the giving building once its tech tree allows. The tests use the
+//! a group smaller than `dominator::MIN_UNITS` is fired at too (M7b AI
+//! round 3). A cell that takes at least one enemy unit beats every cell
+//! that takes none, refused units and units the damage destroys count no
+//! take, and the aim looks off a unit's own cell for one (M8 step B3); with
+//! nothing to take it holds the shot for `dominator::HOLD_PERCENT` of the
+//! charge time and then fires for the damage, at enemy buildings too.
+//! Never while a domination is in force; a launch takes the group over for
+//! the house; the house builds the giving building once its tech tree
+//! allows. The tests use the
 //! invented types of the synthetic M7b skirmish (DOMB giving DOM, Alpha
 //! only; CROWD, an unarmed walker, as the target units). Alpha's start
 //! discs are taken off the map first.
@@ -22,8 +27,13 @@ use glasnost_sim::world::{HouseId, ObjectId, World};
 use glasnost_sim::{objects, testkit, tick};
 
 fn game() -> Game {
+    game_with(kit::rules())
+}
+
+/// The skirmish on `rules` (the scenario's, or a test's own copy).
+fn game_with(rules: std::sync::Arc<glasnost_sim::rules::SimRules>) -> Game {
     let mut g = Game::new(
-        kit::rules(),
+        rules,
         &kit::map(),
         kit::MAP_NAME,
         fixture::catalogue(),
@@ -80,7 +90,11 @@ fn ready(w: &World) -> bool {
 /// The skirmish with DOMB standing for Alpha and the dominator ready, at a
 /// thinking tick, before Alpha's own brain has thought again.
 fn armed() -> World {
-    let g = game();
+    armed_on(game())
+}
+
+/// [`armed`] on the skirmish `g`.
+fn armed_on(g: Game) -> World {
     let mut w = g.world.clone();
     let h = home(&w);
     let at = (3..14)
@@ -171,18 +185,33 @@ fn own_units_the_damage_spares_do_not_stop_it() {
     assert_eq!(fired(&br.think(&w), &w).len(), 1);
 }
 
-// S-0612 claim 9 (the area damage hurts every object in its radius, the house's own too): where the damage would destroy more own value than the launch takes, it holds fire.
+// S-0612 claim 9 (the area damage hurts every object in its radius, the house's own too) and claim 11 (the swept cells): where every cell from which the sweep reaches the enemy walker has a wounded own walker in the damage's radius, the damage would destroy at least as much own value as the launch takes, and it holds fire.
 #[test]
 fn holds_fire_where_the_damage_destroys_more_own_value_than_it_takes() {
     let mut w = armed();
-    group(&mut w, 1, &GROUP);
-    let own = group(&mut w, 0, &[(6, 5), (7, 7), (5, 6), (7, 5)]);
+    group(&mut w, 1, &[(6, 6)]);
+    let r = w.rules().superweapons.domination.range;
+    let around: Vec<(i32, i32)> = (-r..=r)
+        .flat_map(|dx| (-r..=r).map(move |dy| (dx, dy)))
+        .filter(|&(dx, dy)| (dx, dy) != (0, 0))
+        // spec: S-0303 Terms (the ring metric) and S-0612 claim 11 (the swept rings up to the capture range)
+        .filter(|&(dx, dy)| {
+            let (a, b) = (dx.abs(), dy.abs());
+            a.max(b) + a.min(b) / 2 <= r
+        })
+        .map(|(dx, dy)| (6 + dx, 6 + dy))
+        .collect();
+    let own = group(&mut w, 0, &around);
     // Wounded below the launch's damage, the own walkers would die.
     for id in own {
         w.objects.get_mut(&id).unwrap().health = 1;
     }
     let mut br = brain(&w);
-    assert!(fired(&br.think(&w), &w).is_empty());
+    assert!(
+        fired(&br.think(&w), &w).is_empty(),
+        "{:?}",
+        glasnost_ai::dominator::probe(&w, HouseId(0))
+    );
     assert_eq!(br.special_uses().dominator_launches, 0);
 }
 
@@ -221,6 +250,9 @@ fn fires_at_a_seen_enemy_building_with_no_unit_in_sight() {
         glasnost_sim::world::Pos::centre(at, 0),
         4,
     );
+    // Nothing to take: the shot is held at first (M8 step B3).
+    assert!(fired(&brain(&w).think(&w), &w).is_empty(), "held");
+    hold_over(&mut w);
     let mut br = brain(&w);
     let cells = fired(&br.think(&w), &w);
     assert_eq!(
@@ -237,6 +269,124 @@ fn fires_at_a_seen_enemy_building_with_no_unit_in_sight() {
         d2 * 256 * 256 <= i64::from(r) * i64::from(r) * 4,
         "aimed at the building"
     );
+}
+
+/// Runs the world (no brain) to the first thinking tick at which the ready
+/// dominator has been ready for `HOLD_PERCENT` of its charge time.
+fn hold_over(w: &mut World) {
+    let i = dom(w);
+    let charge = w.rules().superweapons.types[i as usize].charge;
+    let r = glasnost_sim::superweapons::charge::get(w, HouseId(0), i).unwrap();
+    let until = r.ready_tick + charge * glasnost_ai::dominator::HOLD_PERCENT / 100;
+    while w.tick < until {
+        tick::step(w);
+    }
+    settle(w);
+    assert!(ready(w));
+}
+
+/// Enemy objects of house 1 at `(dx, dy)` from Alpha's home that the house
+/// has scouted.
+fn scouted(w: &mut World, kind: Kind, name: &str, dx: i32, dy: i32) -> ObjectId {
+    let id = spawn(w, kind, name, 1, dx, dy);
+    let at = w.obj(id).unwrap().pos.cell();
+    glasnost_sim::econ::shroud::area_reveal(
+        w,
+        HouseId(0),
+        glasnost_sim::world::Pos::centre(at, 0),
+        4,
+    );
+    id
+}
+
+// M8 step B3 (S-0612 claims 9 and 13): one takeable enemy walker beats an enemy factory the damage would destroy, though the factory is worth more.
+#[test]
+fn a_takeable_unit_beats_a_richer_damage_cell() {
+    let mut w = armed();
+    let b = scouted(&mut w, Kind::Building, "FACT", -12, 10);
+    w.objects.get_mut(&b).unwrap().health = 1;
+    group(&mut w, 1, &[(6, 6)]);
+    let mut br = brain(&w);
+    let cells = fired(&br.think(&w), &w);
+    assert_eq!(cells.len(), 1);
+    assert!(in_reach(&w, cells[0], &[(6, 6)]), "aimed at the walker");
+    let taken = glasnost_sim::domination::preview(&w, HouseId(0), cells[0]);
+    assert!(
+        taken
+            .iter()
+            .any(|&id| w.obj(id).unwrap().owner == Some(HouseId(1)))
+    );
+}
+
+// S-0612 claim 13 and S-0610 claim 1 (a type with psionics immunity is not taken): immune enemy walkers count as no take, so the shot is held, and then fired for the area damage (claim 9).
+#[test]
+fn immune_units_count_no_take() {
+    let mut rs = kit::ruleset();
+    rs.sim
+        .infantry
+        .get_mut("CROWD")
+        .unwrap()
+        .combat
+        .immune_to_psionics = Some(true);
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&rs, kit::MAP_NAME));
+    let mut w = armed_on(game_with(rules));
+    group(&mut w, 1, &GROUP);
+    let p = glasnost_ai::dominator::probe(&w, HouseId(0));
+    assert_eq!(p.dominable, 0, "{p:?}");
+    assert!(p.refused.iter().all(|&x| x == "immune") && p.refused.len() >= GROUP.len());
+    assert_eq!(p.best.map(|(_, _, n)| n), Some(0), "the damage alone");
+    assert!(fired(&brain(&w).think(&w), &w).is_empty(), "held");
+    hold_over(&mut w);
+    let cells = fired(&brain(&w).think(&w), &w);
+    assert_eq!(cells.len(), 1, "fired for the damage after the hold");
+}
+
+// S-0612 claim 13 (a unit that hovers like a balloon is not taken): a seen enemy start disc counts as no take.
+#[test]
+fn a_balloon_unit_counts_no_take() {
+    let mut w = armed();
+    scouted(&mut w, Kind::Vehicle, "DISC", 6, 6);
+    let p = glasnost_ai::dominator::probe(&w, HouseId(0));
+    assert_eq!((p.units, p.dominable), (1, 0), "{p:?}");
+    assert!(fired(&brain(&w).think(&w), &w).is_empty(), "held");
+}
+
+// S-0612 claim 10 (an object the area damage destroys is not taken over): a wounded walker the damage would kill at its own cell is taken from a cell whose damage misses it.
+#[test]
+fn aims_where_the_damage_spares_the_unit_it_takes() {
+    let mut w = armed();
+    let id = group(&mut w, 1, &[(6, 6)])[0];
+    w.objects.get_mut(&id).unwrap().health = 1;
+    let mut br = brain(&w);
+    let out = br.think(&w);
+    let cells = fired(&out, &w);
+    assert_eq!(
+        cells.len(),
+        1,
+        "{:?}",
+        glasnost_ai::dominator::probe(&w, HouseId(0))
+    );
+    let c = cells[0];
+    assert!(glasnost_sim::domination::preview(&w, HouseId(0), c).contains(&id));
+    let (r, _) =
+        glasnost_sim::combat::area::radii(&w, w.rules().superweapons.domination.warhead.unwrap());
+    let p = w.obj(id).unwrap().pos;
+    let (dx, dy) = (
+        i64::from(p.x) - (i64::from(c.x) * 256 + 128),
+        i64::from(p.y) - (i64::from(c.y) * 256 + 128),
+    );
+    assert!(
+        dx * dx + dy * dy > i64::from(r) * i64::from(r),
+        "outside the damage's radius"
+    );
+    // The sweep takes it.
+    for o in out {
+        orders::issue(&mut w, HouseId(0), o);
+    }
+    for _ in 0..60 {
+        tick::step(&mut w);
+    }
+    assert_eq!(w.obj(id).map(|o| o.owner), Some(Some(HouseId(0))));
 }
 
 #[test]
