@@ -9,7 +9,7 @@
 //!   GENEB;
 //! - warheads Mutate (infantry-death kind 9, the cell warhead), MutateX
 //!   (kind 9, cell spread 1, the explosion warhead), Plain (kind 0);
-//! - infantry BRUTE (strength 300, the made type), BIG (strength 30 000),
+//! - infantry GROWN (strength 300, the made type), BIG (strength 30 000),
 //!   HUSK (not human), JJC (crashable, jumpjet movement without the
 //!   jumpjet type flag);
 //! - animations MUTA (make-infantry index 0, 4 image frames, no rate field:
@@ -38,7 +38,7 @@ use sw_common::{ALPHA, BETA, at, fire_now, ready_tick};
 /// GENE's list position (after `sw_common`'s twelve).
 const GENE: u32 = 12;
 /// The made type's strength.
-const BRUTE_HP: i32 = 300;
+const GROWN_HP: i32 = 300;
 
 fn d(s: &str) -> Decimal {
     Decimal(s.into())
@@ -110,7 +110,7 @@ fn rules(explosion: bool) -> Ruleset {
     jjc.crashable = Some(true);
     r.sim.infantry.insert("JJC".into(), jjc);
     reg(&mut r, "infantry", "JJC");
-    for (n, hp) in [("BRUTE", BRUTE_HP), ("BIG", 30_000), ("HUSK", 100)] {
+    for (n, hp) in [("GROWN", GROWN_HP), ("BIG", 30_000), ("HUSK", 100)] {
         let mut t = walker_like(&r, hp);
         if n == "HUSK" {
             t.not_human = Some(true);
@@ -144,7 +144,7 @@ fn rules(explosion: bool) -> Ruleset {
     g.mutate_explosion_warhead = Some("MutateX".into());
     g.mutate_warhead = Some("Mutate".into());
     g.infantry_mutate = Some("MUTA".into());
-    g.anim_to_infantry = Some(vec!["BRUTE".into()]);
+    g.anim_to_infantry = Some(vec!["GROWN".into()]);
     g.ion_blast = Some("IONB".into());
     g.genetic_mutator_activate_sound = Some("Gene".into());
     r
@@ -814,7 +814,7 @@ fn claim_10_new_unit() {
     let mut seen = None;
     let (unit, end) = loop {
         step(&mut w);
-        if seen.is_none() && !infantry_of(&w, "BRUTE").is_empty() {
+        if seen.is_none() && !infantry_of(&w, "GROWN").is_empty() {
             seen = Some(w.tick);
         }
         if let Some((_, MakerEvent::Ended { unit, conversion }, _, _)) = maker_events(&w)
@@ -830,7 +830,7 @@ fn claim_10_new_unit() {
     assert_eq!(end - death, 5);
     let o = w.obj(unit).unwrap();
     assert_eq!(o.owner, Some(ALPHA));
-    assert_eq!(o.health, BRUTE_HP);
+    assert_eq!(o.health, GROWN_HP);
     assert_eq!(o.body.target, mutation::MADE_FACING);
     assert_eq!(mutation::MADE_FACING, 24_576);
     assert_eq!(o.pos.cell(), c);
@@ -854,7 +854,7 @@ fn claim_9_index_and_followup() {
     mutate(&mut w, v, None, Some(ALPHA));
     let m = makers(&w)[0];
     assert_eq!(finish(&mut w, m).0, None);
-    assert!(infantry_of(&w, "BRUTE").is_empty());
+    assert!(infantry_of(&w, "GROWN").is_empty());
     // PRE makes nothing itself, its follow-up MUTA makes the unit.
     let mut r = rules(false);
     r.sim.general.superweapons.infantry_mutate = Some("PRE".into());
@@ -863,7 +863,7 @@ fn claim_9_index_and_followup() {
     mutate(&mut w, v, None, Some(ALPHA));
     let m = makers(&w)[0];
     assert!(finish(&mut w, m).0.is_some());
-    assert_eq!(infantry_of(&w, "BRUTE").len(), 1);
+    assert_eq!(infantry_of(&w, "GROWN").len(), 1);
 }
 
 // spec: S-0611 claim 9 (no civilian house: an ownerless animation creates nothing; a defeated owner keeps the unit)
@@ -1005,7 +1005,7 @@ fn claim_11_placement_refused() {
         refused += n;
     }
     assert!(refused >= 2, "it keeps retrying: {refused}");
-    assert!(infantry_of(&w, "BRUTE").is_empty());
+    assert!(infantry_of(&w, "GROWN").is_empty());
     assert!(w.mutation.makers.contains_key(&m), "the animation stays");
     assert_eq!(w.objects.len(), objects_before, "no never-placed unit");
     // spec: S-0611 claim 14 (Q-1460: each refused attempt consumes one creation number, never given back)
@@ -1079,11 +1079,11 @@ fn refused_then_made(r: &Ruleset, p: u8, set: u32) -> (World, ObjectId, Vec<Obje
     (w, unit, made, taken)
 }
 
-/// BRUTE with a spawned type (SPYP ×2) and a slave type (WALKER ×3): MU12's
+/// GROWN with a spawned type (SPYP ×2) and a slave type (WALKER ×3): MU12's
 /// combined variant.
 fn set_rules() -> Ruleset {
     let mut r = rules(false);
-    let b = r.sim.infantry.get_mut("BRUTE").unwrap();
+    let b = r.sim.infantry.get_mut("GROWN").unwrap();
     b.combat.spawns = Some("SPYP".into());
     b.combat.spawns_number = Some(2);
     b.econ.enslaves = Some("WALKER".into());
@@ -1132,7 +1132,7 @@ fn claim_14_weapon_controllers_take_nothing() {
     let mut ray = r.sim.weapons["Rifle"].clone();
     ray.warhead = Some("MIND".into());
     r.sim.weapons.insert("Ray".into(), ray);
-    r.sim.infantry.get_mut("BRUTE").unwrap().primary = Some("Ray".into());
+    r.sim.infantry.get_mut("GROWN").unwrap().primary = Some("Ray".into());
     let (w, unit, _, draws) = refused_then_made(&r, position::RIGHT, 1);
     assert_eq!(draws, 1);
     assert!(
@@ -1158,7 +1158,7 @@ fn claim_14_parasite_and_designator_take_nothing() {
         let mut ray = r.sim.weapons["Rifle"].clone();
         ray.warhead = Some("CTRL".into());
         r.sim.weapons.insert("Ray".into(), ray);
-        let brute = r.sim.infantry.get_mut("BRUTE").unwrap();
+        let brute = r.sim.infantry.get_mut("GROWN").unwrap();
         brute.primary = Some("Ray".into());
         if variant == "designator" {
             brute.combat.airstrike_team = Some(2);
