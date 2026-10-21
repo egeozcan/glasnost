@@ -570,9 +570,57 @@ fn class_ok(w: &World, c: Classes, t: ObjectId) -> bool {
     }
 }
 
+/// The answer of table C for one candidate (S-0309 claim 12), before the
+/// draw of claim 25 (g).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// A row rejects T, with no draw.
+    Reject,
+    /// Every row lets T through.
+    Accept,
+    /// Claim 25 (g): T's disguise blinks for a computer-owner searcher, and
+    /// every row outside the six of part g lets T through, so the draw is
+    /// taken. `rest`: the rows of the six that [`candidate`] tests (capture,
+    /// engineer, storage, bridge layers, healer; score is the caller's) let
+    /// T through too.
+    Draw { rest: bool },
+}
+
+/// Table C for one candidate, with claim 25 (g)'s draw taken when it is due
+/// (S-0309 claim 12; the score row follows in the caller).
+fn admit(
+    w: &mut World,
+    a: ObjectId,
+    t: ObjectId,
+    c: Classes,
+    big_r: i32,
+    kind: SearchKind,
+    zone: bool,
+) -> bool {
+    match candidate(w, a, t, c, big_r, kind, zone) {
+        Verdict::Reject => false,
+        Verdict::Accept => true,
+        Verdict::Draw { rest } => {
+            let half = w.rules().quirks.ranged_draw_half_span;
+            // spec: S-0309 claim 25 (g) (one ranged draw R(0, 99) from the scenario random stream, taken for this test)
+            let d = w.rng.ranged(0, 99, half);
+            // spec: S-0309 claim 25 (g) (the house's entry of the disguise-detection list, selected by its difficulty index; S-0309 Terms, Test-only exception: a marked house's oracle index)
+            let entry = w
+                .obj(a)
+                .and_then(|o| o.owner)
+                .and_then(|h| w.houses.get(usize::from(h.0)))
+                .and_then(|h| usize::try_from(h.econ.setup.difficulty).ok())
+                .and_then(|i| w.rules().combat.general.disguise_detection.get(i).copied());
+            // spec: S-0309 claim 25 (g) (let through when the draw is at most the entry) and Import mapping (no such entry: no disguised target is let through by the draw, a departure)
+            rest && entry.is_some_and(|e| d <= e)
+        }
+    }
+}
+
 /// The candidate tests of table C (S-0309 claim 12). `big_r` is the
 /// search radius R (0: the weapon's reach), `zone` whether the zone row
-/// applies (claims 7 and 11).
+/// applies (claims 7 and 11). The rows of claim 25 (g) that reject only
+/// after its draw set `six` instead of returning at once.
 // spec: S-0309 Constants (lowest searchable height −20 leptons)
 fn candidate(
     w: &World,
@@ -582,13 +630,19 @@ fn candidate(
     big_r: i32,
     kind: SearchKind,
     zone: bool,
-) -> bool {
+) -> Verdict {
+    // spec: S-0309 claim 25 (g) (an object that the capture, engineer, storage, bridge-layers, healer or score row rejects has still taken the draw)
+    let mut six = false;
     let r = w.rules();
-    let Some(ao) = w.obj(a) else { return false };
-    let Some(to) = w.obj(t) else { return false };
+    let Some(ao) = w.obj(a) else {
+        return Verdict::Reject;
+    };
+    let Some(to) = w.obj(t) else {
+        return Verdict::Reject;
+    };
     // spec: S-0309 table C (exists, self)
     if t == a || to.health <= 0 || !to.on_map || crate::combat::damage::dead(to) {
-        return false;
+        return Verdict::Reject;
     }
     let ttc = type_combat(w, t);
     // spec: S-0309 table C (legal target)
@@ -603,20 +657,20 @@ fn candidate(
             .is_none_or(|u| u.raw.legal_target.unwrap_or(true)),
     };
     if !legal || !class_ok(w, c, t) {
-        return false;
+        return Verdict::Reject;
     }
     let tt = Target::Object(t);
     let (slot, weapon) = would_use(w, a, Some(tt));
     // spec: S-0309 table C (the firing check without range answers illegal)
     if check(w, a, Some(tt), slot, false) == Answer::Illegal {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C and S-0304 claim 4 (the versus value at most τ_a)
     if let Some(wp) = weapon
         && r.combat.warhead_of(wp).is_some()
         && !versus(w, wp, tt).is_some_and(|v| v.gt(tau_a()))
     {
-        return false;
+        return Verdict::Reject;
     }
     let atc = type_combat(w, a);
     // spec: S-0309 table C (land targeting: mode 2 and a floor-bound target on a cell that is not water)
@@ -626,21 +680,21 @@ fn candidate(
             .cell(to.pos.cell())
             .is_some_and(|cl| cl.land != glasnost_map::terrain::land::WATER)
     {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (playfield; no-threat; underground below −20)
     if !w.cells.usable(to.pos.cell()) {
-        return false;
+        return Verdict::Reject;
     }
     if to.beh.seen().is_some_and(|b| r.behaviour(b).no_threat) {
-        return false;
+        return Verdict::Reject;
     }
     if w.height_above_surface(t) < -20 {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (zone, in the searches claims 7 and 11 restrict)
     if zone && ao.kind.is_mobile() && ao.kind != Kind::Aircraft && !same_zone(w, a, t) {
-        return false;
+        return Verdict::Reject;
     }
     let allied = w.allied(ao.owner, to.owner);
     let healer = crate::combat::weapon::healer_for_acquisition(w, a);
@@ -648,11 +702,11 @@ fn candidate(
     let full = to.health >= crate::combat::damage::strength(w, t);
     // spec: S-0309 table C (friendly)
     if !friendly_exception(w, a) && allied && (!(healer || engineer) || full) {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (healer: an infantry or vehicle healer rejects an object not allied)
     if healer && matches!(ao.kind, Kind::Infantry | Kind::Vehicle) && !allied {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (healer aircraft)
     if healer
@@ -662,7 +716,7 @@ fn candidate(
         && !friendly_exception(w, a)
         && w.height_above_surface(t) > 0
     {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (distance: F3)
     if kind != SearchKind::MapWide {
@@ -679,26 +733,28 @@ fn candidate(
             delta <= i64::from(r.unit(ao.kind, ao.type_index).map_or(0, |u| u.guard_range))
         };
         if !pass {
-            return false;
+            return Verdict::Reject;
         }
     }
     // spec: S-0309 table C (invisible building)
     if to.kind == Kind::Building && r.buildings[to.type_index as usize].invisible {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (cloak: fully cloaked, not on a sensed cell of A's owner, not owned by A's owner); S-0516 claim 21
     if crate::cloak::fully_cloaked(w, t)
         && !crate::cloak::senses(w, ao.owner, t)
         && to.owner != ao.owner
     {
-        return false;
+        return Verdict::Reject;
     }
-    // spec: S-0309 table C (disguise: appears disguised to A's owner and A's type cannot detect disguises); claim 25 (g) for the neutral and special houses is a seam (`cloak::disguise::neutral_sees_through`)
-    if crate::cloak::appears_disguised(w, t, ao.owner)
-        && !atc.is_some_and(|x| x.detect_disguise)
-        && (player_owned(w, a) || !crate::cloak::disguise::neutral_sees_through(w, a, t))
-    {
-        return false;
+    // spec: S-0309 table C (disguise: appears disguised to A's owner and A's type cannot detect disguises)
+    let mut draw = false;
+    if crate::cloak::appears_disguised(w, t, ao.owner) && !atc.is_some_and(|x| x.detect_disguise) {
+        // spec: S-0309 claim 25 (g) (a searcher of the computer-owner houses: rejected unless T's disguise is blinking and the draw lets it through; S-0516 claim 39 for the blink)
+        if player_owned(w, a) || !crate::cloak::disguise::blinking(w, t) {
+            return Verdict::Reject;
+        }
+        draw = true;
     }
     let player = player_owned(w, a);
     // spec: S-0309 table C (passive house: T's owner multiplayer-passive and A's owner a player house)
@@ -717,7 +773,7 @@ fn candidate(
         && t_building.is_some_and(|b| b.raw.needs_engineer.unwrap_or(false))
         && to.owner != ao.owner;
     if passive && (player || !house_exception) {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (insignificant: T not mind-controlled, not a building of a non-passive owner, A's owner a player house; claim 25 part e for the neutral and special houses)
     if ttc.is_some_and(|x| x.insignificant)
@@ -725,20 +781,20 @@ fn candidate(
         && !(to.kind == Kind::Building && !passive)
         && (player || !house_exception)
     {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (controller's allies: A a passenger of a mind-controlled open-topped transport and T allied with the house that controls the transport)
     if let Some(h) = controlled_carrier_house(w, a)
         && w.allied(h, to.owner)
     {
-        return false;
+        return Verdict::Reject;
     }
     // spec: S-0309 table C (train: T a train and A a vehicle thief)
     if r.unit(ao.kind, ao.type_index)
         .is_some_and(|u| u.vehicle_thief)
         && r.unit(to.kind, to.type_index).is_some_and(|u| u.train)
     {
-        return false;
+        return Verdict::Reject;
     }
     let money_thief =
         ao.kind == Kind::Infantry && a_unit.is_some_and(|u| u.raw.thief.unwrap_or(false));
@@ -746,11 +802,11 @@ fn candidate(
     if (money_thief || (!player && a_engineer))
         && !t_building.is_some_and(|b| b.raw.capturable.unwrap_or(false))
     {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (storage: A a money thief and T's type without storage capacity; Storage absent: 0)
     if money_thief && t_building.is_none_or(|b| b.raw.storage.unwrap_or(0) <= 0) {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (harmless building: a player searcher, a building with no current weapon or a threat value of 0; not for an engineer)
     if player
@@ -764,12 +820,12 @@ fn candidate(
             .and_then(|v| type_combat(w, v))
             .map_or_else(|| ttc.map_or(0, |x| x.threat_posed), |v| v.threat_posed);
         if weaponless || threat == 0 {
-            return false;
+            return Verdict::Reject;
         }
     }
     // spec: S-0309 table C (engineer: T not a building, or allied and above the red ratio)
     if engineer && to.kind != Kind::Building {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (bridge layers)
     let deck_cell = |id: ObjectId| w.obj(id).is_some_and(|o| w.high_bridge(o.pos.cell()));
@@ -777,15 +833,19 @@ fn candidate(
         && deck_cell(t)
         && (ao.layer == crate::world::Layer::Deck) != (to.layer == crate::world::Layer::Deck)
     {
-        return false;
+        six = true;
     }
     // spec: S-0309 table C (strong scan: expected remaining health 0 or less)
     if atc.is_some_and(|x| x.scan_mode == crate::combat::data::ScanMode::Strong)
         && to.combat.expected_health <= 0
     {
-        return false;
+        return Verdict::Reject;
     }
-    true
+    match (draw, six) {
+        (true, _) => Verdict::Draw { rest: !six },
+        (false, true) => Verdict::Reject,
+        (false, false) => Verdict::Accept,
+    }
 }
 
 /// ρ₂ between reference points.
@@ -1087,7 +1147,7 @@ pub fn search(
                     continue;
                 }
                 // spec: S-0309 claim 7 (the zone test applies to the ground-layer objects of the second pass)
-                if candidate(w, a, x, c, 0, kind, pass == 1)
+                if admit(w, a, x, c, 0, kind, pass == 1)
                     && let Some(s) = score(w, a, x, pass == 1)
                 {
                     cands.push((x, s));
@@ -1120,7 +1180,7 @@ pub fn search(
                 if w.allied(ao.owner, o.owner) && !friendly_exception(w, a) {
                     continue;
                 }
-                if candidate(w, a, x, ca, big_r, kind, false)
+                if admit(w, a, x, ca, big_r, kind, false)
                     && let Some(s) = score(w, a, x, false)
                 {
                     cands.push((x, s));
@@ -1156,7 +1216,7 @@ pub fn search(
                             || crate::combat::weapon::healer_for_acquisition(w, a)
                             || friendly_exception(w, a);
                         if tested
-                            && candidate(w, a, x, c, big_r, kind, kind == SearchKind::Area)
+                            && admit(w, a, x, c, big_r, kind, kind == SearchKind::Area)
                             && let Some(s) = score(w, a, x, false)
                         {
                             cands.push((x, s));

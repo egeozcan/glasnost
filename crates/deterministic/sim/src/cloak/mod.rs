@@ -21,8 +21,6 @@
 //! - S-0520 claim 15 (cloaking crates: [`machine::grant_own_flag`]);
 //! - S-0517 claim 6 (undeploy disguise loss: [`disguise::clear`]);
 //! - S-0510 claim 2 (infiltration uses the spy up);
-//! - S-0309 claim 25 (g) (the neutral and special houses' blinking-disguise
-//!   draw: [`disguise::neutral_sees_through`]);
 //! - S-0210 claim 11 (automatic crush choice: [`appears_disguised`]);
 //! - S-0414 (a house leaving the game: [`disguise::house_left`]);
 //! - S-0518, S-0525 and S-06xx (psychic detection and the special-weapon

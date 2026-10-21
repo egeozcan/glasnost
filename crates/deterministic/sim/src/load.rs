@@ -218,6 +218,17 @@ pub(crate) fn anim_created(
 ) -> Option<i32> {
     let rules = w.rules_arc();
     let a = rules.animation(name)?;
+    if !played {
+        // The parts of S-0109 that need the animation's playback in the
+        // simulation (claim 28's seam, docs/development.md *Animation
+        // playback*), noted where an animation that has them is created.
+        if a.damage.gt(glasnost_num::F64::ZERO) && !a.bouncing {
+            w.note("S-0109 claims 17 and 28: an animation with damage over time is not played in the simulation, so its damage is not delivered");
+        }
+        if a.next.is_some() || a.random_loop_delay.0 != a.random_loop_delay.1 {
+            w.note("S-0109 claims 11, 15 and 28: an animation's between-pass loop delay or follow-up switch is not played in the simulation, so its draws (and the follow-up's creation and start-event draws) are not taken");
+        }
+    }
     let delay = creation_draws(w, a);
     start_event(w, a, at, played);
     delay

@@ -345,11 +345,3 @@ pub fn appears_disguised(w: &World, id: ObjectId, h: Option<HouseId>) -> bool {
         && !detected(w, h, centre_cell(w, id))
         && (d.house.is_none() || d.house == h || w.allied(h, d.house))
 }
-
-/// Seam: S-0309 claim 25 (g), the neutral and special houses' draw that
-/// may see through a blinking disguise. Not built: such a searcher never
-/// sees through, and no draw is taken.
-pub fn neutral_sees_through(w: &World, searcher: ObjectId, target: ObjectId) -> bool {
-    let _ = (w, searcher, target);
-    false
-}

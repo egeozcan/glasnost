@@ -2753,3 +2753,132 @@ fn test_house_needs_the_retaliate_property() {
     acquire::retaliate(&mut w, a, x);
     assert!(!retaliated(&w, a, x));
 }
+
+// ---------------------------------------------------------------------------
+// Claim 25 part g: the disguise draw of the computer-owner houses
+
+/// Disguises `id` as vehicle type T5 with no house (S-0516 claim 30); with
+/// `blink`, its fake blink runs (S-0516 claim 39).
+fn disguise(w: &mut World, id: ObjectId, blink: bool) {
+    use glasnost_sim::cloak::{Disguise, DisguiseAs};
+    let t5 = w.rules().index_of(Kind::Vehicle, "T5").unwrap();
+    let tick = w.tick;
+    let o = w.obj_mut(id).unwrap();
+    o.cloak.disguise = Some(Disguise {
+        what: Some(DisguiseAs::Vehicle(t5)),
+        house: None,
+        since: tick,
+    });
+    o.cloak.blink_until = if blink { tick + 10 } else { 0 };
+}
+
+/// The base rules with CART's guard range 4 cells and the disguise-detection
+/// list `list`.
+fn detection(list: &[i32]) -> Ruleset {
+    let mut r = base();
+    guard(&mut r, "CART", "4");
+    r.sim.general.disguise_detection_percent = Some(list.to_vec());
+    r
+}
+
+/// The stream after a search from `before`: the targeting timer's restart
+/// draw U(0, 2) (S-0215 claim 33, S-0309 claim 4), then, with `disguise`,
+/// exactly one R(0, 99) draw (claim 25 (g): it follows the timer draw).
+fn draws(before: &glasnost_sim::rng::Rng, w: &World, disguise: bool) -> glasnost_sim::rng::Rng {
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let mut x = before.clone();
+    let _ = x.ranged(0, 2, half);
+    if disguise {
+        let _ = x.ranged(0, 99, half);
+    }
+    x
+}
+
+// spec: S-0309 claim 25 (g) (a searcher of the neutral or special house: a target that appears disguised is rejected unless its disguise is blinking and one draw R(0, 99), taken for this test, is at most the house's entry)
+#[test]
+fn neutral_searcher_sees_through_a_blinking_disguise_by_one_draw() {
+    let r = detection(&[100, 100, 100]);
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let b = veh(&mut w, "T0", 0, 2, 0);
+    // Not blinking: rejected, no draw.
+    disguise(&mut w, b, false);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None);
+    assert_eq!(
+        w.rng,
+        draws(&before, &w, false),
+        "no draw for a disguise that does not blink"
+    );
+    // Blinking: one draw, and an entry of 100 lets it through.
+    disguise(&mut w, b, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), Some(b));
+    assert_eq!(w.rng, draws(&before, &w, true), "exactly one R(0, 99) draw");
+}
+
+// spec: S-0309 claim 25 (g) and table C row disguise (the draw is the computer-owner houses' only: a player house's searcher rejects a target that appears disguised, blinking or not, with no draw)
+#[test]
+fn player_searcher_never_takes_the_disguise_draw() {
+    let r = detection(&[100, 100, 100]);
+    let mut w = game(&r);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let b = veh(&mut w, "T0", 0, 2, 0);
+    disguise(&mut w, b, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None);
+    assert_eq!(w.rng, draws(&before, &w, false));
+}
+
+// spec: S-0309 claim 25 (g) (the entry is selected by the house's difficulty index, easy, normal, difficult; the neutral and special houses have index 1, the second entry), Terms (Test-only exception: a marked house reads its oracle index) and Import mapping (no such entry: nothing is let through by the draw, a departure)
+#[test]
+fn disguise_draw_entry_by_difficulty_index() {
+    // A negative entry lets nothing through (every draw is at least 0), but
+    // the draw is still taken.
+    let r = detection(&[100, -1, -1]);
+    let mut w = game_role(&r, HouseRole::Special);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let b = veh(&mut w, "T0", 0, 2, 0);
+    disguise(&mut w, b, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None, "index 1: the second entry");
+    assert_eq!(w.rng, draws(&before, &w, true));
+    // A marked test house with index 0 reads the first entry.
+    let mut w = game_test_house(&r);
+    w.houses[1].econ.setup.difficulty = 0;
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let b = veh(&mut w, "T0", 0, 2, 0);
+    disguise(&mut w, b, true);
+    assert_eq!(range_search(&mut w, a), Some(b), "index 0: the first entry");
+    // A list without the house's entry lets nothing through by the draw.
+    let r = detection(&[100]);
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let b = veh(&mut w, "T0", 0, 2, 0);
+    disguise(&mut w, b, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None, "no second entry");
+    assert_eq!(w.rng, draws(&before, &w, true));
+}
+
+// spec: S-0309 claim 25 (g) (the draw is taken only for an object that every other row lets through, except the capture, engineer, storage, bridge-layers, healer and score rows; an object that any other row rejects takes none)
+#[test]
+fn disguise_draw_only_for_an_object_the_other_rows_let_through() {
+    let r = detection(&[100, 100, 100]);
+    // Beyond the guard range: the distance row rejects it, no draw.
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let far = veh(&mut w, "T0", 0, 7, 0);
+    disguise(&mut w, far, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None);
+    assert_eq!(w.rng, draws(&before, &w, false), "distance row: no draw");
+    // A friendly disguised object: the friendly row rejects it, no draw.
+    let mut w = game_role(&r, HouseRole::Neutral);
+    let a = veh(&mut w, "CART", 1, 0, 0);
+    let own = veh(&mut w, "T0", 1, 2, 0);
+    disguise(&mut w, own, true);
+    let before = w.rng.clone();
+    assert_eq!(range_search(&mut w, a), None);
+    assert_eq!(w.rng, draws(&before, &w, false), "friendly row: no draw");
+}
