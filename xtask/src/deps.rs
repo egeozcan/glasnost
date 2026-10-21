@@ -12,7 +12,11 @@
 //! runtime, socket, clock or host-randomness crate) and not on the relay.
 //!
 //! The relay (`glasnost-relay`, M9 N2) is a native server: no crate of the
-//! game client (the app and the platform shells) may depend on it.
+//! game client (the app and the platform shells) may depend on it. The
+//! client crates may reach only the external crates of [`CLIENT_ALLOWED`]
+//! among those below: graphics, the browser, what those bring, and (M9 N3)
+//! the native client's WebSocket. Never a server runtime's I/O driver, an
+//! async WebSocket or an HTTP stack.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -88,10 +92,13 @@ impl Graph {
         for node in &resolve.nodes {
             let from = &name_of[&node.id];
             for dep in &node.deps {
-                let counts = dep
-                    .dep_kinds
-                    .iter()
-                    .any(|k| k.kind != DependencyKind::Development);
+                let counts = dep.dep_kinds.iter().any(|k| {
+                    k.kind != DependencyKind::Development
+                        && !k
+                            .target
+                            .as_ref()
+                            .is_some_and(|t| never_built(&t.to_string()))
+                });
                 if counts {
                     g.add(from, &name_of[&dep.pkg]);
                 }
@@ -118,6 +125,14 @@ impl Graph {
         }
         paths
     }
+}
+
+/// Whether a dependency's target condition holds only on emscripten, a
+/// target the project never builds (it builds for native hosts and for
+/// `wasm32-unknown-unknown`), so that no build of ours compiles it.
+pub fn never_built(target: &str) -> bool {
+    let t = target.replace(' ', "");
+    t == r#"cfg(target_os="emscripten")"# || t.starts_with(r#"cfg(all(target_os="emscripten","#)
 }
 
 /// Every forbidden package reachable from each root, with the path.
@@ -170,11 +185,7 @@ pub fn check(md: &Metadata) -> Result<Vec<String>, String> {
         .filter(|c| graph.edges.contains_key(**c))
         .map(|c| (*c).to_owned())
         .collect();
-    out.extend(violations(
-        &graph,
-        &client,
-        &BTreeSet::from([RELAY_CRATE.to_owned()]),
-    ));
+    out.extend(violations(&graph, &client, &client_forbidden()));
     Ok(out)
 }
 
@@ -190,6 +201,39 @@ pub const CLIENT_CRATES: &[&str] = &[
     "glasnost-platform-native",
     "glasnost-platform-web",
 ];
+
+/// The external crates of [`FORBIDDEN_EXTERNAL`] the client crates may
+/// reach.
+pub const CLIENT_ALLOWED: &[&str] = &[
+    // The window, the GPU and the browser.
+    "wgpu",
+    "winit",
+    "web-sys",
+    "js-sys",
+    "wasm-bindgen",
+    // What egui, wgpu and winit bring: hash maps, frame timing, futures
+    // helpers.
+    "ahash",
+    "foldhash",
+    "web-time",
+    "futures-util",
+    // M9 N3: the native client's blocking WebSocket to the relay, with the
+    // host randomness of its frame masks.
+    "tungstenite",
+    "rand",
+    "getrandom",
+];
+
+/// What the client crates must not reach: the relay, and every external
+/// crate of [`FORBIDDEN_EXTERNAL`] outside [`CLIENT_ALLOWED`].
+fn client_forbidden() -> BTreeSet<String> {
+    FORBIDDEN_EXTERNAL
+        .iter()
+        .filter(|c| !CLIENT_ALLOWED.contains(c))
+        .map(|c| (*c).to_owned())
+        .chain([RELAY_CRATE.to_owned()])
+        .collect()
+}
 
 /// `cargo xtask deps`.
 pub fn run() -> Result<Vec<String>, String> {
@@ -219,6 +263,17 @@ mod tests {
                 "sim must not depend on wgpu (via sim -> rules -> helper -> render -> wgpu)",
             ]
         );
+    }
+
+    #[test]
+    fn only_emscripten_dependencies_are_never_built() {
+        assert!(never_built(r#"cfg(target_os = "emscripten")"#));
+        assert!(never_built(
+            r#"cfg(all(target_os = "emscripten", wasm_bindgen_unstable_tokio))"#
+        ));
+        assert!(!never_built(r#"cfg(any(target_os = "emscripten", unix))"#));
+        assert!(!never_built(r#"cfg(target_arch = "wasm32")"#));
+        assert!(!never_built(r#"cfg(not(target_os = "emscripten"))"#));
     }
 
     #[test]
@@ -275,5 +330,55 @@ mod tests {
         for dep in ["tokio", "tokio-tungstenite", "futures-util", NET_CRATE] {
             assert!(relay.contains_key(dep), "the relay reaches {dep}");
         }
+    }
+
+    /// The client reaches the lockstep crate and the native WebSocket, but
+    /// neither the relay nor a server runtime's I/O or async WebSocket; its
+    /// allowance holds for the client crates only.
+    #[test]
+    fn the_client_reaches_the_socket_but_no_server_runtime() {
+        let md = workspace::metadata().expect("cargo metadata");
+        let graph = Graph::from_metadata(&md).expect("a graph");
+        let app = graph.paths_from("glasnost-app");
+        for dep in ["tungstenite", NET_CRATE] {
+            assert!(app.contains_key(dep), "the client reaches {dep}");
+        }
+        let forbidden = client_forbidden();
+        assert!(!app.contains_key("tokio"), "the client reaches no runtime");
+        for dep in [
+            "tokio",
+            "mio",
+            "socket2",
+            "tokio-tungstenite",
+            "hyper",
+            RELAY_CRATE,
+        ] {
+            assert!(forbidden.contains(dep), "{dep} stays forbidden");
+        }
+        let client: Vec<String> = CLIENT_CRATES.iter().map(|c| (*c).to_owned()).collect();
+        let v = violations(&graph, &client, &forbidden);
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        // The simulation and the lockstep crate are not allowed what the
+        // client is.
+        let (det, _) = workspace::members(&md);
+        let mut roots: Vec<String> = det.into_iter().map(|(n, _)| n).collect();
+        roots.push(NET_CRATE.to_owned());
+        let v = violations(&graph, &roots, &set(CLIENT_ALLOWED));
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        // A client crate that reached the relay's socket stack would fail.
+        let mut g = Graph::default();
+        g.add("glasnost-app", "tungstenite");
+        g.add("glasnost-app", "tokio-tungstenite");
+        g.add("tokio-tungstenite", "tokio");
+        g.add("tokio", "mio");
+        let v = violations(&g, &["glasnost-app".into()], &forbidden);
+        assert_eq!(
+            v,
+            vec![
+                "glasnost-app must not depend on mio (via glasnost-app -> tokio-tungstenite -> tokio -> mio)",
+                "glasnost-app must not depend on tokio (via glasnost-app -> tokio-tungstenite -> tokio)",
+                "glasnost-app must not depend on tokio-tungstenite (via glasnost-app -> tokio-tungstenite)",
+            ]
+        );
     }
 }
