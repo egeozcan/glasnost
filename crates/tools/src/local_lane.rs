@@ -411,7 +411,10 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
             Some((import.tree.clone(), import.provenance.clone())),
             &[],
         ) {
-            Ok(_) => t.pass(),
+            Ok(ruleset) => {
+                t.pass();
+                a4_counts(&import, &ruleset.ruleset, report);
+            }
             Err(glasnost_rules::Error::Resolve(_)) => t.fail("resolve"),
             Err(glasnost_rules::Error::Schema(_)) => t.fail("schema"),
             Err(glasnost_rules::Error::Invalid(_)) => t.fail("invalid"),
@@ -428,6 +431,191 @@ async fn rules_import(vfs: &mut Vfs, report: &mut Report) {
         report.count(&format!("coverage rows: {}", outcome.word()), n as u64);
     }
     report.coverage_csv = glasnost_convert::coverage::csv(&import.coverage);
+}
+
+/// The data checks of M8 step A4 (counts only): multi-turret vehicles'
+/// imported voxel parts (S-0007 claim 16), the anti-ground flag of the
+/// projectile of buildings' primary weapons (S-0306 Import mapping), and
+/// the aircraft types' dock lists and landable and airport-bound flags
+/// (S-0501 Import mapping).
+fn a4_counts(
+    import: &glasnost_convert::Import,
+    ruleset: &glasnost_rules::schema::Ruleset,
+    report: &mut Report,
+) {
+    use glasnost_convert::kinds::Kind;
+    use glasnost_ini::value::{boolean, integer};
+    let regs = &import.outcome.registries;
+    let raw = |t: &glasnost_convert::layers::TypeRec, key: &str| {
+        t.keys.get(key.as_bytes()).and_then(|k| k.value.clone())
+    };
+    let flag = |t: &glasnost_convert::layers::TypeRec, key: &str| {
+        raw(t, key).and_then(|v| boolean(&v)).unwrap_or(false)
+    };
+    // (a) Multi-turret vehicles: the importer's numbered case (S-0007 claim 16).
+    let (mut multi, mut numbered, mut single, mut discarded) = (0, 0, 0, 0);
+    if let Some(vehicles) = regs.get(&Kind::Vehicles) {
+        for (i, t) in vehicles.iter().enumerate() {
+            let n = raw(t, "TurretCount").and_then(|v| integer(&v)).unwrap_or(0);
+            if !(flag(t, "Turret") && n >= 1 && !flag(t, "IsGattling")) {
+                continue;
+            }
+            multi += 1;
+            let Some(art) = import.arts.get(&(Kind::Vehicles, i)) else {
+                continue;
+            };
+            if art.voxels.is_empty() {
+                discarded += 1;
+            }
+            if art.voxels.contains_key("turret0") {
+                numbered += 1;
+            }
+            if art.voxels.contains_key("turret") {
+                single += 1;
+            }
+        }
+    }
+    report.count(
+        "A4: multi-turret vehicle types (Turret, TurretCount >= 1, not gattling)",
+        multi,
+    );
+    report.count(
+        "A4: multi-turret vehicle types with a turret0 part",
+        numbered,
+    );
+    report.count(
+        "A4: multi-turret vehicle types with a single turret part",
+        single,
+    );
+    report.count(
+        "A4: multi-turret vehicle types whose voxel art is discarded",
+        discarded,
+    );
+    // (b) Buildings whose primary weapon's projectile is anti-air and not anti-ground in the rules text.
+    let projectile_raw: std::collections::BTreeMap<String, &glasnost_convert::layers::TypeRec> =
+        regs.get(&Kind::Projectiles)
+            .into_iter()
+            .flatten()
+            .map(|t| (String::from_utf8_lossy(&t.name).to_ascii_lowercase(), t))
+            .collect();
+    let (mut aa_only, mut ag_no, mut ag_mismatch) = (0, 0, 0);
+    for b in ruleset.sim.buildings.values() {
+        let Some(p) = b
+            .primary
+            .as_ref()
+            .and_then(|x| ruleset.sim.weapons.get(x))
+            .and_then(|x| x.projectile.as_ref())
+        else {
+            continue;
+        };
+        let Some(t) = projectile_raw.get(&p.to_ascii_lowercase()) else {
+            continue;
+        };
+        let raw_ag = raw(t, "AG").and_then(|v| boolean(&v));
+        if flag(t, "AA") && raw_ag == Some(false) {
+            aa_only += 1;
+            // spec: S-0306 Import mapping (AG, boolean, absent yes)
+            let resolved = ruleset.sim.projectiles.get(p).and_then(|x| x.ag);
+            if resolved == Some(false) {
+                ag_no += 1;
+            } else {
+                ag_mismatch += 1;
+            }
+        }
+    }
+    report.count(
+        "A4: buildings whose primary weapon's projectile is AA=yes, AG=no in the rules",
+        aa_only,
+    );
+    report.count("A4: of those, imported anti-ground no", ag_no);
+    report.count(
+        "A4: of those, imported anti-ground not no (an importer bug)",
+        ag_mismatch,
+    );
+    // (c) Aircraft types.
+    let buildings: std::collections::BTreeSet<String> = ruleset
+        .registries
+        .get("buildings")
+        .into_iter()
+        .flatten()
+        .map(|n| n.to_ascii_lowercase())
+        .collect();
+    let (mut n, mut no_dock, mut resolving, mut unresolved, mut landable, mut bound) =
+        (0, 0, 0, 0, 0, 0);
+    for u in ruleset.sim.aircraft.values() {
+        n += 1;
+        match u.econ.dock.as_deref() {
+            None | Some([]) => no_dock += 1,
+            Some(list) => {
+                if list
+                    .iter()
+                    .any(|d| buildings.contains(&d.to_ascii_lowercase()))
+                {
+                    resolving += 1;
+                } else {
+                    unresolved += 1;
+                }
+            }
+        }
+        if u.econ.landable == Some(true) {
+            landable += 1;
+        }
+        if u.econ.airport_bound == Some(true) {
+            bound += 1;
+        }
+    }
+    report.count("A4: aircraft types", n);
+    report.count("A4: aircraft types with no dock types", no_dock);
+    report.count(
+        "A4: aircraft types with a dock type that names a registered building",
+        resolving,
+    );
+    report.count(
+        "A4: aircraft types whose dock types name no registered building",
+        unresolved,
+    );
+    report.count("A4: aircraft types landable", landable);
+    report.count("A4: aircraft types airport-bound", bound);
+    let mut armed_landable_no_dock = 0;
+    for u in ruleset.sim.aircraft.values() {
+        if u.primary.is_some()
+            && u.econ.landable == Some(true)
+            && u.econ.dock.as_deref().is_none_or(<[String]>::is_empty)
+        {
+            armed_landable_no_dock += 1;
+        }
+    }
+    report.count(
+        "A4: armed landable aircraft types with no dock types",
+        armed_landable_no_dock,
+    );
+    // spec: S-0501 Import mapping (Dock: a list of building types, absent empty)
+    let (mut raw_dock, mut raw_dock_lost) = (0, 0);
+    for t in regs.get(&Kind::Aircraft).into_iter().flatten() {
+        let given = raw(t, "Dock").is_some_and(|v| v.iter().any(|b| !b.is_ascii_whitespace()));
+        if !given {
+            continue;
+        }
+        raw_dock += 1;
+        let name = String::from_utf8_lossy(&t.name).into_owned();
+        let imported = ruleset
+            .sim
+            .aircraft
+            .get(&name)
+            .and_then(|u| u.econ.dock.as_deref())
+            .is_some_and(|d| !d.is_empty());
+        if !imported {
+            raw_dock_lost += 1;
+        }
+    }
+    report.count(
+        "A4: aircraft types with a Dock value in the rules",
+        raw_dock,
+    );
+    report.count(
+        "A4: of those, imported with no dock types (an importer bug)",
+        raw_dock_lost,
+    );
 }
 
 /// Counts what the art lookup (S-0007, temperate theater) found, per kind.
