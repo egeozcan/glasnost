@@ -1883,7 +1883,7 @@ M9 adds multiplayer by lockstep: every peer runs the whole game from the same st
 
 The crate `glasnost-net` holds the protocol and one peer's lockstep session. It does no I/O: it reads no clock, opens no socket and starts no thread. The caller passes its clock in milliseconds into every call and moves the bytes. `crates/net/clippy.toml` forbids clocks, threads, locks, sockets, files and hashed containers in the crate, and `xtask deps` forbids it every socket or async runtime crate (the list `FORBIDDEN_EXTERNAL`, which now also names the WebSocket, WebRTC and HTTP crates). The simulation crates' determinism lint now also forbids `std::net::TcpListener`, with a canary.
 
-**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 2: N2 reserved the sender id 255, `wire::RELAY`, for the relay) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
+**Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 3: N2 reserved the sender id 255, `wire::RELAY`, for the relay, and N3 added chat lines to the lobby messages that share the version) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
 
 - `Start`: the sender's start values.
 - `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, and an echo of every other peer's latest stamp with the time it held that stamp.
@@ -1967,6 +1967,66 @@ Bytes that are no message of ours (a text message, another magic, a body that do
 - N3 (the clients): the lobby screen drives `ToRelay`/`FromRelay` over a WebSocket transport and builds the session from `Begin` as `games.rs` does; `Transport` over the same socket carries the lockstep messages after `Begin`. The relay's keepalives are WebSocket pings, which browsers and tungstenite answer.
 - N5 (rejoin, surrender): a rejoin enters at `Room::join`, which refuses a room that is `Playing`; N5 lets a dropped member back into its own slot by slot identity (the slot of the `Dropped` it was reported in), not into an open row, and must decide how the relay replays the frames since `kept`. A peer that was told `Dropped { kept }` but lacks some of that slot's frames below `kept` waits for them; with honest peers this cannot happen (N1's frame window keeps every frame a peer can be sent), but a hostile client that sends frames far beyond the window and then leaves can stall the others this way, which N5's surrender and N3's waiting notice must cover.
 - N7 (WebRTC): peer-to-peer data channels carry no relay in between, so anyone can send `from = 255` there. A `Dropped` must be accepted only from the relay's channel (the signalling WebSocket), never from a data channel.
+
+### The client (N3)
+
+The game client plays network games through the relay (`crates/app/src/game/client_net.rs` and `link.rs`, the UI in `crates/ui/src/netmenu.rs` and `chat.rs`). Everything here is our own netcode or our own layout. The only rules of the original it touches are the setup's house order (S-0009 claim 19, as in N2) and the options menu and focus rules that Q-1806 asks about.
+
+**Screens.** The main menu gains **Multiplayer**, which opens the multiplayer screen (`Screen::Multiplayer`, `ui::netmenu`). It has three text fields (your name, the relay address, a room code), **Host**, **Join** and **Back**, and a status line. A text field takes the focus on a click and gets the keyboard's text while it has it. Enter moves to the next field, Escape lets go and Backspace deletes. **Host** sends `Create` with the install's build, rules hash and map list. **Join** sends `Join` with the code, normalised to Crockford letters; a code that is not one is refused before anything is sent. A refusal shows on the status line, in the error colour, with the field it names (for example "The relay refused: the build differs from the room's."). A link that closes before the game returns to this screen with the reason.
+
+The room (`Screen::Room`) is the skirmish setup in a frame titled with the room code (`ui::setup::view_framed`, `RoomFrame`). It shows each row's member and whether they are ready. The host edits the map, the options and every row; a guest edits only its own row. Every edit is sent as `Edit`, and the screen shows the relay's `RoomView`, never a local guess. A guest's button reads **Ready** or **Not ready**. The host's button reads **Start game** and is offered once every other member is ready. A note below the rows says what the room waits for, or that you lack the room's map. A chat box below the panel shows the last lines and has a **Say** field. **Leave** (and **End** in the game) sends `Leave` and closes the link.
+
+**The start.** On `Begin` the client builds the game as a skirmish would (`Job::Start`), with the room's setup, the relay's seed and `local: Some(the house of its row)`, so each person plays its own house. When the game has loaded, the client checks the build, rules hash and map hash against the room's (`StartInfo`). If they match, it starts a `glasnost_net::Lockstep` at the period of the room's speed. A mismatch on either side is a notice ("The game cannot start: Bea's map hash differs from yours."), and no ticks run.
+
+**Pacing.** Two things pace a network game's ticks at once:
+
+- the client's own pacer, at the room's game speed as in a skirmish;
+- the lockstep session, which runs a tick only when every slot's frame for it has arrived (`Session::step_by`).
+
+The person's orders do not reach the world directly. `Play::give` puts them in `play.outbox`, and `net_tick` submits them to the lockstep, which schedules them after its input delay. A client more than one tick ahead of the slowest other peer (`Lockstep::ahead`) stretches its period by half, so the others catch up without a stall. A client that cannot run a due tick for one second shows a banner naming whom it waits for ("Waiting for Bea...").
+
+In a network game, the options menu and lost focus never stop the ticks, the options menu's speed control does nothing, and the active clock runs whenever the game does. This is an interim rule (**Q-1806**): S-0201 claims 8, 9 and 13 and S-0414 claim 23 cover single-player games only.
+
+**Transports.** A `Link` (`game::link`) is a message pipe to the relay, with `send`, `recv`, `state` (connecting, open, or closed with a reason) and `close`. `GameOptions.connect` chooses which kind.
+
+- Native: one thread per link with a blocking tungstenite socket. It uses a 2 ms read timeout, so it answers the relay's pings and sends queued messages promptly, and takes messages of at most 64 KiB.
+- Web (`crates/platform-web/src/socket.rs`): a `web-sys` WebSocket with array-buffer messages, whose callbacks only queue. Messages sent while it connects wait for it.
+
+The client reads its link once per update, on every screen. It sorts lobby messages (`GL`) from lockstep messages (`GN`, `lobby_wire::is_lobby`). Lockstep messages that arrive after `Begin` but before the game has loaded are kept for the session (at most 4096).
+
+**Chat.** `ToRelay::Chat` and `FromRelay::Chat(ChatLine)` are part of N2's lobby protocol. They carry a line to every member of the room, the sender included, both in the room and during the game; a line never reaches a simulation. They changed the lobby layout, so the shared wire version is now 3.
+
+The relay cleans each line: control characters go, the ends are trimmed, and at most 200 characters are kept. It refuses an empty line as bad text. It also refuses lines that come faster than one a second on average, with a burst of five (`Refusal::ChatTooFast`). Those refusals do not count against the refusal limit. This adds the limits `chat_every_ms` and `chat_burst` and the stats `chats` and `chats_too_fast`.
+
+In the game, Enter opens the chat line, Enter sends and closes it, and Escape drops it. The last lines show over the battlefield for ten seconds. Notices (a refusal, a member who left, a desync, a closed connection) are chat lines without a speaker.
+
+**Settings.** No setting is stored. The relay address comes from `--relay URL` (native) or `?relay=` (web) and defaults to `ws://127.0.0.1:8787/`, the relay binary's default. The name and code are typed each time. The build string is `glasnost <crate version>`.
+
+**Dependencies.** `cargo xtask deps` lets the client crates (`glasnost-app` and the platforms) reach the native WebSocket (tungstenite, with its rand and getrandom) and the browser's (web-sys, js-sys). It never lets them reach a server runtime (tokio, tokio-tungstenite) or the relay crate (`the_client_reaches_the_socket_but_no_server_runtime`). Edges built only for emscripten are skipped (`only_emscripten_dependencies_are_never_built`). The relay is a dev-dependency of the app's tests only.
+
+**Tests.** `crates/app/src/game/client_net_tests.rs` runs a relay in the test process and two windowless clients on the native link, with the synthetic install (`glasnost_ai::fixture`).
+
+- `two_clients_meet_chat_and_play_in_lockstep`: the host makes a room and adds a computer row; the guest joins by the typed code; a chat line reaches both; the guest says ready and the host starts. They play 300 ticks with scripted orders through the order path, and the state hashes are equal at every tick. When the guest stops, the host shows the waiting banner. When the guest goes, the host shows "Bea left the game." and plays on.
+- `a_join_of_another_build_is_refused_on_that_field`.
+- `an_unreachable_relay_is_reported`.
+
+The local lane `crates/app/tests/m9_lane.rs` (opt-in, needs `GLASNOST_GAME_DIR`) does the same with real data against the relay binary, which it starts with `cargo run --release -p glasnost-relay` on a free port. It writes each client's room and game screens to `local-lane/m9/n3/`. Run it with `cargo test --release -p glasnost-app --test m9_lane -- --ignored --nocapture`; `GLASNOST_LANE_TICKS` sets how many ticks it plays (default 400).
+
+**Trying it by hand.** Native:
+
+1. Run `cargo run -p glasnost-relay`.
+2. In two terminals, run `cargo run --release -p glasnost-platform-native -- --game --game-dir DIR`. Add `--relay ws://HOST:PORT/` to use another relay.
+3. In one window, click **Multiplayer**, then **Host**, open row 2 for a person, and read out the room code.
+4. In the other window, click **Multiplayer**, type the code and click **Join**.
+
+Web: run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open `/?mode=game&relay=ws://127.0.0.1:8787/` in two tabs.
+
+**Seams for the later steps.**
+
+- N4 (desync reports): a lockstep `Desync` shows the notice "The games went apart at tick N (a desync)." Making and sending the report belongs to N4.
+- N5 (reconnect, surrender, late join): a dropped peer shows "X left the game.", and the game goes on without it (N2's `Dropped`). A link that closes during the game is a notice, with no rejoin. A reconnect would enter at `Client::net_open` with the old room and slot; a surrender would be a new order through `Play::give`.
+- N6 (soak): `m9_lane.rs` takes `GLASNOST_LANE_TICKS`.
+- N7 (WebRTC): a data channel is another `Link`. The relay's WebSocket stays the signalling channel, and the only one whose `Dropped` is honoured.
 
 ## M6c step ledger
 

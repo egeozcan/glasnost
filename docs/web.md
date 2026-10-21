@@ -46,6 +46,8 @@ The viewer lists archives (nested ones included) and their entries, previews spr
 
 `/?mode=game` opens the game client (M5b): main menu, skirmish setup, a game against our AI, and the end screen (docs/development.md, "Game client (M5b)"). **Game folder** on the main menu opens the same folder dialog as the viewer. The install is mounted lazily as above, then the rules, maps and samples are read. **Skirmish** is offered once that is done. Sound starts on the first click or key press (browsers only allow audio after a gesture). The battlefield is drawn on the GPU into a texture that the 2D batch shows. Everything stays within the WebGL2 core. There is no Quit button on the web.
 
+**Multiplayer** (M9 N3) on the main menu reaches a relay through the browser's WebSocket (docs/development.md, "The client (N3)"). `?relay=ws://HOST:PORT/` fills in the relay address; without it the address is `ws://127.0.0.1:8787/`. To try it locally, run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open `/?mode=game&relay=ws://127.0.0.1:8787/` in two tabs. A page served over `https://` needs a `wss://` relay.
+
 Natively:
 
 ```sh
