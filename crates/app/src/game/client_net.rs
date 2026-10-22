@@ -73,7 +73,7 @@ pub struct PairReport {
 }
 
 /// The build a client names in a room and in the lockstep handshake.
-pub const BUILD: &str = concat!("glasnost ", env!("CARGO_PKG_VERSION"));
+pub const BUILD: &str = glasnost_net::BUILD;
 
 /// The build a test client names ([`Client::set_test`]): not [`BUILD`], so
 /// a room or a game of ordinary clients refuses it.
@@ -921,6 +921,19 @@ impl Client {
                 }
                 if info.playing {
                     self.net_status = ("That room's game has begun.".into(), true);
+                    self.net_leave();
+                    return;
+                }
+                // Say which two builds differ before the relay refuses the
+                // join with only the field's name (M9 N8b).
+                if info.build != self.build {
+                    self.net_status = (
+                        format!(
+                            "That room runs {}; this is {}. Everybody must run the same build.",
+                            info.build, self.build
+                        ),
+                        true,
+                    );
                     self.net_leave();
                     return;
                 }
