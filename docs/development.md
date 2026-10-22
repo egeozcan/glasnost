@@ -1690,6 +1690,418 @@ Full games there: all six with a winner, Yuri 4 of 6 (main 5 of 6); dominator 4 
 
 **Arena and duel sweeps (d38748f).** The oracle arena attaches no brain, and its CSVs are byte-identical to step A5's after-run: M-0001 33 of 96 pairings failing, 151 of 172 reproduced; M-0002 13 of 24, 43 of 47; M-0003 3 of 35, 61 of 64. The M6c, M7a and M7b seed sweeps 1 to 16 print the same min and median with and without this branch for every counter. For M7b: dominator launches 7/7, objects taken 14/18, mutator 5/7, infantry mutated 15/23, berserk orders 9/29, drain orders 4/6, drain links 3/3. (On f3aab5d likewise the same before and after.)
 
+## Own AI (M8 step B4: gate margins)
+
+The duel gates assert that each counter of their full run is above zero at one seed (the gate seed). B4 measured how far each counter stands from zero over seeds 1 to 32, with the default quirk switches and with each switch the duel reaches flipped. Then it fixed the zeros through the duel's setup, or through the own AI where the AI was at fault (D14: orders a person could give, no scripted choices). Lane outputs are git-ignored under `local-lane/m8/b4/` (counts and ticks only).
+
+**Method** (`crates/sim-gate/tests/margins.rs`, local-only, every test ignored and doing nothing unless its variable is set).
+- `margins_sweep` (`GLASNOST_SWEEP=1-32`, `GLASNOST_DUELS`, `GLASNOST_QUIRKS=default,<switch>,…`) plays each duel's full gate run per seed and setting and prints min, median, max and the seeds at zero per counter. "Asserted" counters are those the gate's full run asserts on; the others are reported only (for example the plain duels' rocket and aircraft flight, and M7b's view of M7a's counters).
+- `quirk_reach` (`GLASNOST_REACH_SEEDS=gate`) decides reach: a switch is reached by a duel when flipping that switch alone changes the per-tick state hash after some tick of the full run at the duel's gate seed (duel and duel-naval 20 261 018, duel-diagonal 8, M6c 1, M7a 92, M7b 11), or panics (none did). The candidates are the 423 switches of `quirks.rs` that some file of the sim or AI crate reads, plus two unread controls (`chrono_flash_keeps_order_block`, `crate_phantom_place`), which no duel reached. The other 44 switches are read nowhere in those crates and cannot change a duel.
+- Reached: duel 37, duel-diagonal 40, duel-naval 45, M6c 46, M7a 39, M7b 35. Each reached switch was then flipped for seeds 1 to 32 (32 games each).
+- One-game diagnostics: `watch` (`GLASNOST_WATCH=<duel>,<seed>,<every>[,<switch>]`, with `GLASNOST_WATCH_TYPE=<type>,…` to trace objects), `hits` (`GLASNOST_HITS`) and `losses` (`GLASNOST_LOSSES`, `GLASNOST_LOSSES_NONE`, `GLASNOST_LOSSES_SHOTS`), with `GLASNOST_QUIRK` flipping one switch. `GLASNOST_THREADS` sets the workers and `GLASNOST_SWEEP_OUT` the lane CSV.
+
+**Bases.** *Before* is main fd7e38a without this branch. The plain duels' *after* sweeps ran on this branch before the M6c, M7a and grinder changes (binary a173533); those changes do not reach the plain duels, whose goldens did not move with them. M6c and M7a *after* ran on the final fixtures and AI; M7b *after* ran with the grinder change, the only one of the later changes M7b reaches (the WARD and sensor setup is M7a's `margins`, which M7b's `base_ruleset` does not call). The rebased final binary gives the same per-counter min, median and max over seeds 1 to 16 for M6c, M7a and M7b (*Arena and duel sweeps* below).
+
+### What made the zeros, and the fixes
+
+- **Plain duels, no money** (duel seeds 7 and 29, duel-naval seed 7: no load). Both houses spent their last credit by about tick 6 800; a transport bought in place of a gun vehicle lost a house the game before it loaded a passenger. The plain duels now set the lobby's credits to 20 000 (S-0412 claim 2; `plain::setup`).
+- **The ferry behind a busy line** (duel-naval seed 1: no load, no unload). The brain ordered a ferry only when the vehicle line stood idle, and a house short of money kept it busy at every think. The ferry now joins the line's queue when the queue has room (S-0404 claim 3), as a person queues it on the sidebar. Test `a_ferry_is_queued_behind_a_busy_vehicle_line`.
+- **M6c's decoy** (seed 5: no jumpjet built). The strike aircraft killed the islet DECOY early, or a radiation deployer of its house deployed among its own army for it. The DECOY now has armour class special 1, at a versus value of zero for every warhead but the jumpjets' own JETW (S-0304 claim 1).
+- **M6c's prism support reach** (with the fixes above alone: support beams at zero in 7 flipped games, default min 9; on fd7e38a default min 0). Support reach is the master's slot-1 weapon range (S-0518, Terms). The brain placed its prisms 10 to 18 cells apart, beyond the reach of 10. The reach is now 24 cells. Default support beams: min 72, median 101 (min 9, median 40 with the fixes above alone; min 0, median 56 on fd7e38a).
+- **The charger's reach** (`linked::CHARGE_REACH`, own tuning; M6c seed 18 with `path_no_reopen` flipped: no charger order all game). The chargers built later stood idle at the barracks door 15 to 16 cells from the nearest prism and then left with the waves. A charger now looks 24 cells for an own coil. Test `sends_a_charger_at_a_coil_across_the_base`.
+- **M7a's start TAKER** (seed 20: no takeover order). It now begins two cells toward the middle (`START_INFANTRY_AHEAD`), within the brain's control reach of the nearest PREY. This thinned the bunker margin (default vehicles bunkered min 1), which the WARD fix below restored.
+- **M7a's WARD** (flipped seeds 12 and 13 bunkered no vehicle; from the B4 notes, the raw CSV of that run was overwritten). A berserk gattling of its own house or the enemy's killed it before the bunkers stood, or a controller took it. WARD now has armour class special 1, at a versus value of zero for every warhead (S-0304 claim 1). Default vehicles bunkered: min 8, median 11.
+- **M7a's sensor radius** (after the WARD fix: default seed 10 saw hostile intent in 40 ticks, 5 221 without that fix, and eight flipped games in none). The sensor sees a unit whose target or destination lies within its radius (S-0610 claim 10); at 12 cells that was only raids into its own base. EYE now has a radius of 24 cells, beyond a start's 22 cells to the middle. The radius changes what the sensor shows, not play: the probed games (default seeds 10 and 22, and `absorber_stale_contact_kept` seeds 10 and 22) have every other counter the same.
+- **The grinder's sides** (M7a seed 4 with `corridor_split_probe` flipped: no unit ground). The brain moved a far unit to the grinder's side facing it; the move never started, and every think clicked the same cell again. S-0212 claim 13a and its edge cases expect such failures at fewer alignments with the probe off, so this is no spec gap. As a person would, the brain now clicks the next nearest of the eight cells around the grinder once its order memory marks a side failed from where the unit stands. No new saved state: the AI game format stays 31. Test `a_far_unit_that_does_not_move_tries_another_side`.
+
+**Tried on the way.**
+- *Bait for the prisms* (M6c): a sturdy unarmed unit of steel armour beside the DECOY, which only the prism shot's own warhead touched, so that the prisms always had a target. Support beams fell to min 0, median 1 over the default seeds, with zeros at 11 of 32 seeds: all prisms attacked the bait together, and a building whose behaviour is *attack* may not support (S-0518 claim 2). Dropped; the reach of 24 alone gave min 72.
+
+**Findings left as they are.**
+- **`antiair::able`** (B5's finding: it counts an anti-air defence that stands dark or far from the drainer). It explains no zero or stall here: no plain-duel game stalled, and M7b's drain counters keep their margin (drain links min 3). Not changed.
+- **Self-irradiation** (M6c). Hits with no attacker are radiation (S-0525; `radiation.rs` damage every 15 ticks). A radiation deployer deploying near an enemy inside its own army irradiates that army. This happens in default games too and does not by itself explain a zero, and a change there would move the radiation-exits margin. Not changed.
+- **Thinned margins.** Over seeds 1 to 32 with the default switches, 18 asserted counters have a lower minimum than on fd7e38a, none at zero: M7a berserk weapon orders 30 to 7 (median 82 to 27) and units made berserk 61 to 16 (97 to 47), psychic sensor orders 2 to 1, hostile intent 2 336 to 388, psychic reveal orders and reveals fired 12 to 6, takeovers 6 to 4, grinder entry orders 5 to 4, lifter build orders 4 to 3, lift orders 6 to 4, vehicles seized 11 to 7, seized units dropped 10 to 5; M6c deploy orders 44 to 37, changes of deployed form 4 to 3, radiation exits 8 to 7, erasures begun 6 to 3; duel superweapon charging ticks 3 600 to 2 700 and launches 3 to 2. The M7a falls came with its setup changes (start TAKER, WARD); which change thinned which counter was not followed.
+- **Residual zeros** (below): each is a game in which one house collapsed early or one rare event did not happen.
+
+### Results
+
+Seeds 1 to 32 per duel and setting. A median of an even count is the mean of the two middle values (the sweep's own text output prints the upper middle value instead). Reach: the switches each duel reaches, as decided above.
+
+#### Default switches
+
+**duel**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| transport loads (S-0507) | yes | 5 / 19 | 14 / 29 | none |
+| transport unloads (S-0507) | yes | 1 / 18 | 10 / 26 | none |
+| superweapon charging ticks (S-0512 claims 3, 5) | yes | 3 600 / 8 996.5 | 2 700 / 11 919 | none |
+| superweapon launches (S-0513 claim 5) | yes | 3 / 12 | 2 / 13.5 | none |
+| rocket flight ticks (S-0506) | no | 0 / 1 336 | 564 / 2 077 | none |
+| aircraft flight ticks (S-0501) | no | 228 / 4 217.5 | 771 / 9 265.5 | none |
+
+**duel-diagonal**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| transport loads (S-0507) | yes | 0 / 11 | 7 / 16 | none |
+| transport unloads (S-0507) | yes | 0 / 10 | 7 / 16 | none |
+| superweapon charging ticks (S-0512 claims 3, 5) | no | 0 / 4 239 | 981 / 10 097 | none |
+| superweapon launches (S-0513 claim 5) | no | 0 / 4 | 1 / 16 | none |
+| rocket flight ticks (S-0506) | no | 0 / 594.5 | 0 / 1 690 | 3, 23 |
+| aircraft flight ticks (S-0501) | no | 0 / 459.5 | 0 / 6 461 | 3, 14 |
+
+**duel-naval**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| transport loads (S-0507) | yes | 0 / 14.5 | 15 / 23.5 | none |
+| transport unloads (S-0507) | yes | 0 / 14.5 | 15 / 21 | none |
+| superweapon charging ticks (S-0512 claims 3, 5) | no | 0 / 9 692.5 | 3 119 / 12 891 | none |
+| superweapon launches (S-0513 claim 5) | no | 0 / 11.5 | 3 / 15 | none |
+| rocket flight ticks (S-0506) | no | 0 / 1 455 | 656 / 1 864.5 | none |
+| aircraft flight ticks (S-0501) | no | 0 / 3 022 | 0 / 9 573.5 | 13 |
+
+**duel-m6c**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| garrison orders (S-0508) | yes | 12 / 34 | 12 / 29.5 | none |
+| garrison occupants inside (S-0508) | yes | 1 / 5.5 | 5 / 7 | none |
+| engineer orders (S-0509) | yes | 5 / 6 | 6 / 6 | none |
+| buildings captured (S-0509) | yes | 3 / 4 | 4 / 4 | none |
+| spy orders (S-0510) | yes | 6 / 6 | 6 / 6 | none |
+| infiltrations (S-0510) | yes | 4 / 6 | 6 / 6 | none |
+| tech building orders (S-0515) | yes | 4 / 4 | 4 / 4 | none |
+| tech building income cycles (S-0515) | yes | 888 / 2 343 | 2 307 / 2 343 | none |
+| jumpjet orders (S-0502) | yes | 0 / 53.5 | 10 / 52.5 | none |
+| jumpjet flight (S-0502) | yes | 0 / 8 673 | 9 107 / 9 108 | none |
+| jumpjet units built and flown (S-0417 claim 15) | yes | 0 / 11 | 8 / 9.5 | none |
+| deploy orders (S-0517) | yes | 44 / 80 | 37 / 82 | none |
+| changes of deployed form (S-0517) | yes | 4 / 7.5 | 3 / 7 | none |
+| radiation exits (S-0525) | yes | 8 / 42.5 | 7 / 36 | none |
+| radiation in the field (S-0525) | yes | 1 802 / 5 548 | 2 015 / 5 038 | none |
+| chrono erasure orders (S-0514) | yes | 20 / 31 | 20 / 33 | none |
+| erasures begun (S-0514) | yes | 6 / 11.5 | 3 / 11.5 | none |
+| prism buildings ordered (S-0518) | yes | 7 / 12 | 10 / 11 | none |
+| charger orders (S-0518) | yes | 0 / 14 | 3 / 19.5 | none |
+| support beams (S-0518) | yes | 0 / 56 | 72 / 101 | none |
+| bomb planter orders (S-0519) | yes | 32 / 48 | 36 / 53 | none |
+| bombs planted (S-0519) | yes | 14 / 29.5 | 18 / 29.5 | none |
+| disarm orders (S-0519) | yes | 7 / 11.5 | 7 / 12 | none |
+| suicide orders (S-0519) | yes | 7 / 22 | 11 / 21 | none |
+| sabotage orders (S-0519) | yes | 2 / 18 | 9 / 18.5 | none |
+| air-strike orders (S-0519) | yes | 2 / 7.5 | 3 / 14 | none |
+| air strikes called (S-0519) | yes | 4 / 7 | 7 / 13 | none |
+| crate orders (S-0520) | yes | 46 / 155.5 | 82 / 174.5 | none |
+| crates picked up (S-0520) | yes | 2 / 8.5 | 4 / 13 | none |
+
+**duel-m7a**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| berserk weapon orders (S-0610) | yes | 30 / 82 | 7 / 27 | none |
+| units made berserk (S-0610 claim 4) | yes | 61 / 97 | 16 / 47 | none |
+| psychic sensor orders (S-0610 claim 9) | yes | 2 / 2 | 1 / 2 | none |
+| hostile intent seen by a sensor (S-0610 claims 9 to 11) | yes | 2 336 / 4 442 | 388 / 4 693 | none |
+| psychic reveal orders (S-0610 claim 13) | yes | 12 / 12 | 6 / 11 | none |
+| psychic reveals fired (S-0610 claims 13 and 14) | yes | 12 / 12 | 6 / 11 | none |
+| slave-miner buildings placed or deployed (S-0402 claim 14) | yes | 12 / 13 | 12 / 13 | none |
+| slaves at work (S-0402 claim 14) | yes | 2 287 / 7 413 | 3 489 / 7 255 | none |
+| gattling stage rises (S-0609 claim 2) | yes | 6 / 17 | 8 / 21 | none |
+| gattling at its top stage (S-0609 claim 2) | yes | 960 / 3 201 | 1 746 / 4 751.5 | none |
+| takeover orders (S-0601) | yes | 0 / 2 | 1 / 6.5 | none |
+| takeovers (S-0601 claim 6) | yes | 6 / 17 | 4 / 13 | none |
+| gas clouds (S-0613 claims 2 to 4) | yes | 82 / 257.5 | 158 / 307.5 | none |
+| gas hits (S-0613 claim 13) | yes | 310 / 2 084 | 426 / 1 261 | none |
+| absorber entry orders (S-0605) | yes | 3 / 13 | 8 / 15.5 | none |
+| infantry absorbed (S-0605 claims 1 and 7) | yes | 2 / 6.5 | 3 / 8 | none |
+| grinder entry orders (S-0603) | yes | 5 / 10 | 4 / 9 | none |
+| units ground (S-0603 claims 5 and 8) | yes | 3 / 5 | 3 / 6 | none |
+| tank bunker build orders (S-0606) | yes | 4 / 4 | 4 / 4 | none |
+| bunker entry orders (S-0606 claim 3) | yes | 4 / 9 | 9 / 13 | none |
+| vehicles bunkered (S-0606 claim 7) | yes | 3 / 7 | 8 / 11 | none |
+| bunker exit orders (S-0606 claim 12) | yes | 2 / 7 | 8 / 11 | none |
+| lifter build orders (S-0607) | yes | 4 / 4 | 3 / 4 | none |
+| lift orders (S-0607) | yes | 6 / 12 | 4 / 11 | none |
+| vehicles seized (S-0607 claim 5) | yes | 11 / 16.5 | 7 / 16 | none |
+| seized units dropped (S-0607 claim 13) | yes | 10 / 16 | 5 / 15 | none |
+
+**duel-m7b**
+
+| Counter | Asserted | Before: min / median | After: min / median | After: seeds at 0 |
+|---|---|---|---|---|
+| drain orders (S-0608) | yes | 4 / 6 | 4 / 6 | none |
+| drain links formed (S-0608 claims 2 and 5) | yes | 3 / 3 | 3 / 3 | none |
+| credits drained (S-0608 claims 7 to 10) | yes | 7 280 / 7 700 | 7 280 / 7 700 | none |
+| drained-building ticks (S-0608 claim 1) | yes | 19 794 / 20 232.5 | 19 794 / 20 232.5 | none |
+| mutator launches (S-0611 claim 2) | yes | 5 / 7 | 5 / 7 | none |
+| infantry mutated (S-0611 claims 9 to 12) | yes | 15 / 23 | 15 / 23 | none |
+| dominator launches (S-0612 claim 1) | yes | 6 / 7 | 6 / 7 | none |
+| objects taken over (S-0612 claim 14) | yes | 13 / 19 | 13 / 19 | none |
+| berserk weapon orders (S-0610) | no | 9 / 28.5 | 9 / 29 | none |
+| units made berserk (S-0610 claim 4) | no | 11 / 21.5 | 11 / 21.5 | none |
+| psychic sensor orders (S-0610 claim 9) | no | 1 / 1 | 1 / 1 | none |
+| hostile intent seen by a sensor (S-0610 claims 9 to 11) | no | 0 / 0 | 0 / 0 | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32 |
+| psychic reveal orders (S-0610 claim 13) | no | 1 / 1 | 1 / 1 | none |
+| psychic reveals fired (S-0610 claims 13 and 14) | no | 1 / 1 | 1 / 1 | none |
+| slave-miner buildings placed or deployed (S-0402 claim 14) | no | 3 / 12 | 3 / 12 | none |
+| slaves at work (S-0402 claim 14) | no | 3 053 / 3 682.5 | 3 053 / 3 682.5 | none |
+| gattling stage rises (S-0609 claim 2) | no | 0 / 0 | 0 / 0 | all |
+| gattling at its top stage (S-0609 claim 2) | no | 0 / 0 | 0 / 0 | all |
+| takeover orders (S-0601) | no | 0 / 1 | 0 / 1 | 2, 6, 9, 12, 13, 20, 25, 26, 27, 30, 32 |
+| takeovers (S-0601 claim 6) | no | 0 / 2 | 0 / 2 | 3, 7, 8, 9, 14, 20, 23, 26, 32 |
+| gas clouds (S-0613 claims 2 to 4) | no | 0 / 0 | 0 / 0 | all |
+| gas hits (S-0613 claim 13) | no | 0 / 0 | 0 / 0 | all |
+| absorber entry orders (S-0605) | no | 12 / 21.5 | 12 / 21 | none |
+| infantry absorbed (S-0605 claims 1 and 7) | no | 3 / 7 | 3 / 7 | none |
+| grinder entry orders (S-0603) | no | 4 / 10 | 4 / 10 | none |
+| units ground (S-0603 claims 5 and 8) | no | 4 / 8 | 4 / 8 | none |
+| tank bunker build orders (S-0606) | no | 3 / 4 | 3 / 4 | none |
+| bunker entry orders (S-0606 claim 3) | no | 0 / 0 | 0 / 0 | 1, 4, 5, 6, 7, 8, 9, 11, 15, 17, 21, 22, 28, 29, 30, 31, 32 |
+| vehicles bunkered (S-0606 claim 7) | no | 0 / 0 | 0 / 0 | 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 |
+| bunker exit orders (S-0606 claim 12) | no | 0 / 0 | 0 / 0 | all |
+| lifter build orders (S-0607) | no | 1 / 1 | 1 / 1 | none |
+| lift orders (S-0607) | no | 0 / 0 | 0 / 0 | all |
+| vehicles seized (S-0607 claim 5) | no | 0 / 0 | 0 / 0 | all |
+| seized units dropped (S-0607 claim 13) | no | 0 / 0 | 0 / 0 | all |
+
+#### Each reached switch flipped
+
+Per counter: the smallest value over all flipped games of the duel, with the switch and seed that gave it, the median over those games, and how many of them are at zero.
+
+**duel** (1184 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| transport loads (S-0507) | yes | 8 (`stored_target_point`, 23) | 29 | 0 |
+| transport unloads (S-0507) | yes | 8 (`corridor_split_probe`, 17) | 26 | 0 |
+| superweapon charging ticks (S-0512 claims 3, 5) | yes | 1 614 (`spread_mark_kept_on_last_neighbour`, 30) | 11 700 | 0 |
+| superweapon launches (S-0513 claim 5) | yes | 1 (`building_sight_top_left`, 2) | 14 | 0 |
+| rocket flight ticks (S-0506) | no | 0 (`drive_leftover_kept_at_rest`, 30) | 2 212 | 3 |
+| aircraft flight ticks (S-0501) | no | 0 (`building_sight_top_left`, 2) | 8 923.5 | 16 |
+
+**duel-diagonal** (1280 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| transport loads (S-0507) | yes | 3 (`area_damage_per_foundation_cell`, 21) | 17 | 0 |
+| transport unloads (S-0507) | yes | 2 (`drive_brake_floor_raises`, 1) | 16 | 0 |
+| superweapon charging ticks (S-0512 claims 3, 5) | no | 363 (`detour_mirrored_reference`, 15) | 10 169 | 0 |
+| superweapon launches (S-0513 claim 5) | no | 0 (`detour_mirrored_reference`, 15) | 14 | 4 |
+| rocket flight ticks (S-0506) | no | 0 (`aircraft_smoke_scenario_draw`, 3) | 1 764.5 | 70 |
+| aircraft flight ticks (S-0501) | no | 0 (`aircraft_smoke_scenario_draw`, 3) | 6 674 | 66 |
+
+**duel-naval** (1440 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| transport loads (S-0507) | yes | 9 (`corridor_split_probe`, 17) | 25 | 0 |
+| transport unloads (S-0507) | yes | 6 (`corridor_split_probe`, 18) | 23 | 0 |
+| superweapon charging ticks (S-0512 claims 3, 5) | no | 1 207 (`last_bale_lost`, 25) | 12 382.5 | 0 |
+| superweapon launches (S-0513 claim 5) | no | 1 (`building_sight_top_left`, 2) | 14 | 0 |
+| rocket flight ticks (S-0506) | no | 0 (`drive_leftover_kept_at_rest`, 30) | 1 853 | 3 |
+| aircraft flight ticks (S-0501) | no | 0 (`aircraft_smoke_scenario_draw`, 13) | 8 751 | 64 |
+
+**duel-m6c** (1472 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| garrison orders (S-0508) | yes | 8 (`corridor_split_probe`, 6) | 28 | 0 |
+| garrison occupants inside (S-0508) | yes | 4 (`approach_alternative_walk`, 3) | 7 | 0 |
+| engineer orders (S-0509) | yes | 5 (`approach_alternative_walk`, 23) | 6 | 0 |
+| buildings captured (S-0509) | yes | 4 (`airstrike_recharge_same_target_only`, 1) | 4 | 0 |
+| spy orders (S-0510) | yes | 5 (`chop_rounding`, 5) | 6 | 0 |
+| infiltrations (S-0510) | yes | 5 (`chop_rounding`, 5) | 6 | 0 |
+| tech building orders (S-0515) | yes | 4 (`airstrike_recharge_same_target_only`, 1) | 4 | 0 |
+| tech building income cycles (S-0515) | yes | 1 101 (`path_no_reopen`, 15) | 2 343 | 0 |
+| jumpjet orders (S-0502) | yes | 1 (`approach_alternative_walk`, 5) | 48 | 0 |
+| jumpjet flight (S-0502) | yes | 3 132 (`path_no_reopen`, 15) | 9 108 | 0 |
+| jumpjet units built and flown (S-0417 claim 15) | yes | 1 (`flatten_straight_run_v`, 23) | 9 | 0 |
+| deploy orders (S-0517) | yes | 30 (`chop_rounding`, 21) | 78 | 0 |
+| changes of deployed form (S-0517) | yes | 3 (`approach_alternative_walk`, 26) | 7 | 0 |
+| radiation exits (S-0525) | yes | 1 (`path_refresh_keeps_old_step`, 11) | 36 | 0 |
+| radiation in the field (S-0525) | yes | 1 801 (`jumpjet_turn_slowdown_one_sided`, 21) | 5 024 | 0 |
+| chrono erasure orders (S-0514) | yes | 9 (`update_order_removal_skip`, 23) | 33 | 0 |
+| erasures begun (S-0514) | yes | 3 (`area_damage_per_foundation_cell`, 23) | 11 | 0 |
+| prism buildings ordered (S-0518) | yes | 7 (`approach_alternative_walk`, 5) | 11 | 0 |
+| charger orders (S-0518) | yes | 0 (`flatten_straight_run_v`, 23) | 18 | 1 |
+| support beams (S-0518) | yes | 0 (`detour_mirrored_reference`, 23) | 101 | 4 |
+| bomb planter orders (S-0519) | yes | 27 (`corridor_retry_no_fallback`, 25) | 51 | 0 |
+| bombs planted (S-0519) | yes | 13 (`path_refresh_keeps_old_step`, 5) | 30 | 0 |
+| disarm orders (S-0519) | yes | 5 (`airstrike_recharge_same_target_only`, 2) | 12 | 0 |
+| suicide orders (S-0519) | yes | 4 (`path_refresh_keeps_old_step`, 29) | 20 | 0 |
+| sabotage orders (S-0519) | yes | 1 (`detour_mirrored_reference`, 23) | 17 | 0 |
+| air-strike orders (S-0519) | yes | 1 (`building_sight_top_left`, 32) | 14 | 0 |
+| air strikes called (S-0519) | yes | 4 (`spread_attempts_count_failures`, 3) | 13 | 0 |
+| crate orders (S-0520) | yes | 38 (`flatten_straight_run_v`, 23) | 159 | 0 |
+| crates picked up (S-0520) | yes | 2 (`building_sight_top_left`, 22) | 13 | 0 |
+
+**duel-m7a** (1248 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| berserk weapon orders (S-0610) | yes | 2 (`foundation_exit_lists`, 14) | 29 | 0 |
+| units made berserk (S-0610 claim 4) | yes | 13 (`spread_mark_kept_on_last_neighbour`, 12) | 51 | 0 |
+| psychic sensor orders (S-0610 claim 9) | yes | 1 (`absorber_stale_contact_kept`, 10) | 2 | 0 |
+| hostile intent seen by a sensor (S-0610 claims 9 to 11) | yes | 0 (`corridor_retry_no_fallback`, 22) | 5 075 | 3 |
+| psychic reveal orders (S-0610 claim 13) | yes | 6 (`absorber_stale_contact_kept`, 10) | 11 | 0 |
+| psychic reveals fired (S-0610 claims 13 and 14) | yes | 6 (`absorber_stale_contact_kept`, 10) | 11 | 0 |
+| slave-miner buildings placed or deployed (S-0402 claim 14) | yes | 5 (`jumpjet_step_truncation`, 31) | 13 | 0 |
+| slaves at work (S-0402 claim 14) | yes | 2 549 (`corridor_split_probe`, 24) | 7 313 | 0 |
+| gattling stage rises (S-0609 claim 2) | yes | 7 (`flatten_straight_run_v`, 14) | 20 | 0 |
+| gattling at its top stage (S-0609 claim 2) | yes | 1 661 (`corridor_retry_no_fallback`, 5) | 4 420 | 0 |
+| takeover orders (S-0601) | yes | 1 (`absorber_stale_contact_kept`, 16) | 6 | 0 |
+| takeovers (S-0601 claim 6) | yes | 4 (`absorber_stale_contact_kept`, 15) | 15 | 0 |
+| gas clouds (S-0613 claims 2 to 4) | yes | 136 (`corridor_retry_no_fallback`, 5) | 289 | 0 |
+| gas hits (S-0613 claim 13) | yes | 426 (`approach_alternative_walk`, 23) | 1 166.5 | 0 |
+| absorber entry orders (S-0605) | yes | 3 (`detour_mirrored_reference`, 1) | 15 | 0 |
+| infantry absorbed (S-0605 claims 1 and 7) | yes | 0 (`flatten_straight_run_v`, 27) | 8 | 1 |
+| grinder entry orders (S-0603) | yes | 4 (`absorber_stale_contact_kept`, 15) | 10 | 0 |
+| units ground (S-0603 claims 5 and 8) | yes | 2 (`corridor_split_probe`, 16) | 6 | 0 |
+| tank bunker build orders (S-0606) | yes | 2 (`spread_mark_kept_on_last_neighbour`, 21) | 4 | 0 |
+| bunker entry orders (S-0606 claim 3) | yes | 4 (`spread_stage_from_index`, 31) | 13 | 0 |
+| vehicles bunkered (S-0606 claim 7) | yes | 4 (`spread_stage_from_index`, 31) | 11 | 0 |
+| bunker exit orders (S-0606 claim 12) | yes | 3 (`spread_stage_from_index`, 31) | 11 | 0 |
+| lifter build orders (S-0607) | yes | 2 (`jumpjet_step_truncation`, 11) | 4 | 0 |
+| lift orders (S-0607) | yes | 3 (`absorber_stale_contact_kept`, 26) | 12 | 0 |
+| vehicles seized (S-0607 claim 5) | yes | 3 (`spread_mark_kept_on_last_neighbour`, 21) | 16 | 0 |
+| seized units dropped (S-0607 claim 13) | yes | 3 (`corridor_split_probe`, 13) | 15 | 0 |
+
+**duel-m7b** (1120 flipped games)
+
+| Counter | Asserted | Min (switch, seed) | Median | Games at 0 |
+|---|---|---|---:|---:|
+| drain orders (S-0608) | yes | 3 (`chop_rounding`, 12) | 6 | 0 |
+| drain links formed (S-0608 claims 2 and 5) | yes | 3 (`absorber_stale_contact_kept`, 2) | 3 | 0 |
+| credits drained (S-0608 claims 7 to 10) | yes | 7 240 (`spread_stage_from_index`, 3) | 7 960 | 0 |
+| drained-building ticks (S-0608 claim 1) | yes | 19 341 (`spread_stage_from_index`, 31) | 20 402 | 0 |
+| mutator launches (S-0611 claim 2) | yes | 4 (`chop_rounding`, 4) | 7 | 0 |
+| infantry mutated (S-0611 claims 9 to 12) | yes | 10 (`jumpjet_step_truncation`, 25) | 22 | 0 |
+| dominator launches (S-0612 claim 1) | yes | 6 (`absorber_stale_contact_kept`, 2) | 7 | 0 |
+| objects taken over (S-0612 claim 14) | yes | 7 (`detour_mirrored_reference`, 2) | 19 | 0 |
+| berserk weapon orders (S-0610) | no | 9 (`absorber_stale_contact_kept`, 1) | 28 | 0 |
+| units made berserk (S-0610 claim 4) | no | 9 (`jumpjet_step_truncation`, 13) | 22 | 0 |
+| psychic sensor orders (S-0610 claim 9) | no | 1 (`absorber_stale_contact_kept`, 1) | 1 | 0 |
+| hostile intent seen by a sensor (S-0610 claims 9 to 11) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1062 |
+| psychic reveal orders (S-0610 claim 13) | no | 0 (`absorber_stale_contact_kept`, 25) | 1 | 17 |
+| psychic reveals fired (S-0610 claims 13 and 14) | no | 0 (`absorber_stale_contact_kept`, 25) | 1 | 17 |
+| slave-miner buildings placed or deployed (S-0402 claim 14) | no | 2 (`drive_brake_floor_raises`, 30) | 12 | 0 |
+| slaves at work (S-0402 claim 14) | no | 2 713 (`table_direction`, 20) | 3 683 | 0 |
+| gattling stage rises (S-0609 claim 2) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1119 |
+| gattling at its top stage (S-0609 claim 2) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1119 |
+| takeover orders (S-0601) | no | 0 (`absorber_stale_contact_kept`, 6) | 1 | 395 |
+| takeovers (S-0601 claim 6) | no | 0 (`absorber_stale_contact_kept`, 3) | 2 | 317 |
+| gas clouds (S-0613 claims 2 to 4) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1119 |
+| gas hits (S-0613 claim 13) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1119 |
+| absorber entry orders (S-0605) | no | 10 (`corridor_split_probe`, 3) | 21 | 0 |
+| infantry absorbed (S-0605 claims 1 and 7) | no | 0 (`spread_mark_kept_on_last_neighbour`, 2) | 8 | 1 |
+| grinder entry orders (S-0603) | no | 0 (`spread_attempts_count_failures`, 2) | 9 | 1 |
+| units ground (S-0603 claims 5 and 8) | no | 0 (`absorber_stale_contact_kept`, 25) | 8 | 11 |
+| tank bunker build orders (S-0606) | no | 3 (`absorber_stale_contact_kept`, 2) | 4 | 0 |
+| bunker entry orders (S-0606 claim 3) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 579 |
+| vehicles bunkered (S-0606 claim 7) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1011 |
+| bunker exit orders (S-0606 claim 12) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1110 |
+| lifter build orders (S-0607) | no | 1 (`absorber_stale_contact_kept`, 1) | 1 | 0 |
+| lift orders (S-0607) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1120 |
+| vehicles seized (S-0607 claim 5) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1120 |
+| seized units dropped (S-0607 claim 13) | no | 0 (`absorber_stale_contact_kept`, 1) | 0 | 1120 |
+
+#### Smallest asserted counter per switch and duel
+
+"–": the duel does not reach the switch.
+
+| Switch flipped | duel | duel-diagonal | duel-naval | duel-m6c | duel-m7a | duel-m7b |
+|---|---:|---:|---:|---:|---:|---:|
+| `absorber_stale_contact_kept` | – | – | – | – | 1 | 3 |
+| `aircraft_smoke_scenario_draw` | – | 7 | 15 | – | – | – |
+| `aircraft_unit_step_stall` | – | 7 | – | – | – | – |
+| `airstrike_recharge_same_target_only` | – | – | – | 4 | – | – |
+| `anim_damage_starts_at_one` | – | – | – | – | – | 3 |
+| `approach_alternative_walk` | – | 7 | 9 | 1 | 1 | – |
+| `area_damage_per_foundation_cell` | 2 | 3 | 14 | 3 | 1 | 3 |
+| `building_pitch_term` | 2 | 7 | 15 | – | – | – |
+| `building_sight_top_left` | 1 | 7 | 13 | 1 | 1 | 3 |
+| `building_smudge_discarded_draws` | 2 | 6 | 10 | 3 | – | – |
+| `cash_cycle_one_short` | – | – | – | 3 | – | – |
+| `chop_rounding` | 3 | 7 | 11 | 4 | 1 | 3 |
+| `corridor_retry_no_fallback` | 2 | 9 | 9 | 2 | **0** (hostile intent seen by a sensor, seed 22) | 3 |
+| `corridor_split_probe` | 3 | 10 | 6 | 2 | 1 | 3 |
+| `crate_count_humans_only` | 2 | 7 | 15 | – | 1 | 3 |
+| `detour_mirrored_reference` | 2 | 3 | 13 | **0** (support beams, seed 23) | 1 | 3 |
+| `dominator_marks_own_objects` | – | – | – | – | – | 3 |
+| `drive_brake_floor_raises` | 3 | 2 | 14 | 1 | 1 | 3 |
+| `drive_duplicate_scatter_request` | – | – | 15 | 3 | – | – |
+| `drive_leftover_kept_at_rest` | 2 | 7 | 14 | 3 | 1 | 3 |
+| `drive_subpoint_compounding` | 2 | 7 | 13 | 3 | 1 | 3 |
+| `erasure_double_experience` | – | – | – | 3 | – | – |
+| `fire_reveal_expires` | 2 | 6 | 11 | 3 | 1 | – |
+| `flatten_straight_run_v` | 2 | 6 | 12 | **0** (charger orders, seed 23; support beams, seed 23) | **0** (infantry absorbed, seed 27) | 3 |
+| `flying_listed_double_hit` | – | – | – | 3 | 1 | – |
+| `foundation_exit_lists` | 2 | 6 | 12 | 3 | 1 | 3 |
+| `full_cell_no_regrowth` | 2 | 8 | 16 | 3 | 1 | – |
+| `ground_detonation_misses_aircraft` | – | – | 14 | 3 | – | – |
+| `infantry_fixed_turn_rate` | 2 | 7 | 15 | 3 | 1 | 3 |
+| `jumpjet_step_truncation` | – | – | – | 2 | 1 | 3 |
+| `jumpjet_turn_slowdown_one_sided` | – | – | – | 3 | 1 | 3 |
+| `last_bale_lost` | 2 | 8 | 11 | 3 | 1 | 3 |
+| `lift_impact_removes_survivor` | – | – | – | – | 1 | – |
+| `ownership_gain_counts_as_kill` | – | – | – | 3 | 1 | 3 |
+| `path_congestion_toggle` | 5 | 7 | – | – | 1 | – |
+| `path_no_reopen` | 2 | 4 | 16 | **0** (support beams, seed 15) | 1 | 3 |
+| `path_refresh_keeps_old_step` | 2 | 5 | 14 | **0** (support beams, seed 29) | 1 | 3 |
+| `placed_buildings_not_ever_built` | 2 | 7 | 15 | 3 | 1 | 3 |
+| `placed_buildup_twice` | 2 | 7 | 15 | 3 | 1 | 3 |
+| `prism_count_survives_dropped_shot` | – | – | – | 3 | – | – |
+| `rail_missile_vanishes_with_spawner` | – | – | 15 | – | – | – |
+| `resume_restarts_step` | – | 7 | 15 | – | – | – |
+| `rocket_aim_at_heading_point` | 2 | 6 | 13 | 3 | – | – |
+| `search_one_object_per_cell` | 3 | 3 | 13 | 3 | 1 | – |
+| `set_facing_keeps_target` | 2 | – | 15 | 3 | – | – |
+| `sidebar_tie_newest_first` | 2 | 7 | 15 | 3 | 1 | 3 |
+| `sight_bonus_wrap` | – | – | – | – | – | 3 |
+| `sight_centre_off_map` | 2 | 7 | 15 | – | – | – |
+| `spread_attempts_count_failures` | 2 | 3 | 15 | 1 | – | 3 |
+| `spread_mark_kept_on_last_neighbour` | 1 | 4 | 16 | 3 | **0** (hostile intent seen by a sensor, seed 21) | 3 |
+| `spread_stage_from_index` | 2 | 5 | 10 | 3 | 1 | 3 |
+| `stale_suspended_revert` | – | – | 15 | 2 | – | – |
+| `stored_target_point` | 2 | 7 | 8 | 2 | 1 | – |
+| `table_direction` | 2 | 4 | 13 | 1 | 1 | 3 |
+| `table_root_distance` | 3 | 7 | 15 | 2 | 1 | 3 |
+| `turret_reaim_after_turn` | 2 | 7 | 14 | 2 | 1 | 3 |
+| `unit_changes_no_recheck` | – | – | 15 | 3 | – | 3 |
+| `unload_facing_gap_no_wrap` | – | 5 | 15 | – | – | – |
+| `update_order_removal_skip` | 2 | 4 | 15 | 1 | **0** (hostile intent seen by a sensor, seed 29) | 3 |
+| `uphill_arc_45` | – | – | – | 3 | 1 | – |
+| `vehicle_buildings_keep_nobody_alive` | – | – | – | – | 1 | 3 |
+| `zero_load_period_stalls` | 2 | – | 15 | – | – | – |
+
+Reached switches per duel: duel 37, duel-diagonal 40, duel-naval 45, duel-m6c 46, duel-m7a 39, duel-m7b 35.
+
+### Residual zeros (flipped switches)
+
+Nine of the 7 744 flipped games have an asserted counter at zero; no default game has one.
+- **M6c support beams**, 4 games. `path_no_reopen` seed 15, `path_refresh_keeps_old_step` seed 29 and `flatten_straight_run_v` seed 23 end with a winner at ticks 6 024, 7 032 and 6 580. `detour_mirrored_reference` seed 23 runs its 12 000 ticks, but the losing house keeps only two strike aircraft from early on, and the winner's three prisms stand on guard all game with nothing to fire at.
+- **M6c charger orders**, 1 game: `flatten_straight_run_v` seed 23, the same early end.
+- **M7a hostile intent seen by a sensor**, 3 games: `corridor_retry_no_fallback` seed 22, `spread_mark_kept_on_last_neighbour` seed 21, `update_order_removal_skip` seed 29. In the first (followed with `watch`), one house's sensor stood from about tick 6 900 to the end, the other house built none, and no enemy unit aimed at or moved to a point within 24 cells of it. The other two were not followed.
+- **M7a infantry absorbed**, 1 game: `flatten_straight_run_v` seed 27. Four absorbers stood from early on and the brain gave 16 entry orders, and no infantry unit got in. Not followed further.
+
+M6c's flipped zero games went from 10 (before the prism and charger reaches) to 7 (prism reach) to 5. Some came back in every round (seed 23 with `detour_mirrored_reference` and with `flatten_straight_run_v`, seed 15 with `path_no_reopen`): games in which one house collapses early, where a counter that needs fighting near the prisms cannot rise. Keeping a losing house alive would change the duel's balance and was not done.
+
+### Exit B4: met for the default switches, missed for the flipped switches
+
+- Met: with the default switches, every asserted counter of all six duels is above zero at every seed of 1 to 32 (the tables above). With any reached switch flipped, the three plain duels and M7b have no asserted zero.
+- Missed: 9 of 7 744 flipped games (M6c 5 of 1 472, M7a 4 of 1 248), above.
+
+**Formats and goldens.** The AI game format stays 31: no change adds saved state (the grinder's sides use the existing order memory). The goldens of duel, duel-diagonal and duel-naval were regenerated for the 20 000 credits and the queued ferry; duel-m6c for the decoy (first step), then for the two reaches of 24 (from about tick 5 620); duel-m7a for the start TAKER, then for WARD's armour and the grinder's sides (from about tick 1 640); duel-m7b for the grinder's sides only (from about tick 7 370). The sensor radius changes no play. The gate seeds' full runs still exercise every asserted counter.
+
+**Tests** (synthetic data). `a_ferry_is_queued_behind_a_busy_vehicle_line` (`tests/ai.rs`), `a_far_unit_that_does_not_move_tries_another_side` (`tests/grinder.rs`), `sends_a_charger_at_a_coil_across_the_base` (`tests/linked.rs`).
+
+**Arena and duel sweeps (310dba1, on main 63c1df4).** The oracle arena attaches no brain, and its CSVs are byte-identical to the before-run on fd7e38a: M-0001 33 of 96 pairings failing, 151 of 172 reproduced; M-0002 13 of 24, 43 of 47; M-0003 3 of 35, 61 of 64. The duels' own seed sweeps 1 to 16 (`m6c_seed_sweep`, `m7a_seed_sweep`, `m7b_seed_sweep`; upper-middle medians), before (fd7e38a) and after:
+- M6c: smallest minimum 0 before (support beams, charger orders, jumpjet orders, flight and units, sabotage orders), 3 after (air-strike orders, 3 before as well; M7a's units ground is also 3). Over these 16 seeds the final binary gives the same min, median and max per counter as the frozen binaries' CSVs behind the 32-seed tables (M6c 29, M7a 26 and M7b 34 counters). Support beams 0/54 to 78/101, charger orders 0/11 to 10/22, jumpjet units built and flown 0/12 to 8/10.
+- M7a: smallest minimum 1 before and after (takeover orders, median 2 to 7). Vehicles bunkered 3/7 to 8/10, bunker exit orders 2/7 to 8/10, hostile intent 2 709/4 524 to 2 239/4 611. Berserk weapon orders fell 32/84 to 7/25 and units made berserk 63/108 to 26/48 (see *Thinned margins* above).
+- M7b: every drain, mutator and dominator counter the same (drain links min 3); of M7a's reported-only counters, seed 12 gives one bunker entry order where it gave none.
+
 ## Map triggers (M5b)
 
 `glasnost_sim::triggers` runs the map triggers of S-0011 in a skirmish; the converter

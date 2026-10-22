@@ -33,8 +33,13 @@
 //! can fail at once when a short line of buildings stands across the route
 //! (S-0603 claim 3, S-0212 Edge cases "short line of buildings": the
 //! original's behaviour with `quirks.corridor_retry_no_fallback` on, its
-//! default), and a person would then click a nearer cell first. The
-//! brain's base defence leaves a unit on its way in alone.
+//! default), and a person would then click a nearer cell first. When the
+//! unit does not take that click either (it stands idle on the same cell:
+//! the order memory), the next think clicks another side of the grinder,
+//! the nearest one not yet failed from there, rather than the same cell
+//! again (M8 B4: with `quirks.corridor_split_probe` off, M7a seed 4's
+//! vehicles stood all game beside a grinder). The brain's base defence
+//! leaves a unit on its way in alone.
 //!
 //! It never sends an own harvester, slave miner or slave, engineer or spy
 //! (a controlled enemy one standing idle is sent), nor a controller or a
@@ -274,20 +279,25 @@ impl Special {
                 && dist2(g, at) > NEAR * NEAR
             {
                 // Far off, it is first walked or driven to the grinder's
-                // side by a click on the ground, and sent in once there.
-                let (dx, dy) = (at.x - g.x, at.y - g.y);
-                let k = dx.abs().max(dy.abs()).max(1);
-                let side = CellXY::new(g.x + dx * SIDE / k, g.y + dy * SIDE / k);
-                let r = targeting::click(
-                    w,
-                    house,
-                    &[id],
-                    targeting::ClickOn::Cell(side),
-                    targeting::Modifiers::default(),
-                );
-                if !r.orders.is_empty() {
-                    out.extend(r.orders);
-                    sent += 1;
+                // side by a click on the ground, and sent in once there:
+                // the side facing it, or, once a side failed from where the
+                // unit stands, the next nearest one.
+                for side in sides(g, at) {
+                    if !self.memory.ok(w, id, Target::Cell(side)) {
+                        continue;
+                    }
+                    let r = targeting::click(
+                        w,
+                        house,
+                        &[id],
+                        targeting::ClickOn::Cell(side),
+                        targeting::Modifiers::default(),
+                    );
+                    if !r.orders.is_empty() {
+                        out.extend(r.orders);
+                        sent += 1;
+                        break;
+                    }
                 }
                 continue;
             }
@@ -298,6 +308,28 @@ impl Special {
             }
         }
     }
+}
+
+/// The cells [`SIDE`] cells off grinder cell `g` a far unit at `at` may be
+/// moved to first: the one on the line towards the unit, then the eight
+/// around the grinder (straight and diagonal), nearest to the unit first.
+fn sides(g: CellXY, at: CellXY) -> Vec<CellXY> {
+    let (dx, dy) = (at.x - g.x, at.y - g.y);
+    let k = dx.abs().max(dy.abs()).max(1);
+    let mut out = vec![CellXY::new(g.x + dx * SIDE / k, g.y + dy * SIDE / k)];
+    let mut ring: Vec<CellXY> = [-SIDE, 0, SIDE]
+        .into_iter()
+        .flat_map(|x| [-SIDE, 0, SIDE].into_iter().map(move |y| (x, y)))
+        .filter(|&(x, y)| (x, y) != (0, 0))
+        .map(|(x, y)| CellXY::new(g.x + x, g.y + y))
+        .collect();
+    ring.sort_by_key(|&c| (dist2(c, at), c.y, c.x));
+    for c in ring {
+        if !out.contains(&c) {
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn distance(w: &World, b: ObjectId, at: CellXY) -> i64 {

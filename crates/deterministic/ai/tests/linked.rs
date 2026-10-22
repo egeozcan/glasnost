@@ -280,3 +280,34 @@ fn sends_a_charger_at_an_own_coil() {
     let orders = brain.think(&w);
     assert_eq!(attack_of(&orders, z), None);
 }
+
+// PLAN §4.7 (M8 B4): the charger looks for an own coil across the base, 18 cells off, but not 26.
+#[test]
+fn sends_a_charger_at_a_coil_across_the_base() {
+    for (off, sent) in [(18, true), (26, false)] {
+        let g = game();
+        let mut w = g.world.clone();
+        let h = home(&w);
+        let at = CellXY::new(h.x, h.y + 8);
+        let coil = testkit::spawn(
+            &mut w,
+            Kind::Building,
+            "COIL",
+            0,
+            CellXY::new(at.x + off, at.y),
+            0,
+        );
+        let z = testkit::spawn(&mut w, Kind::Infantry, "ZAPPER", 0, at, 0);
+        testkit::run(&mut w, 1);
+        while w.tick % 15 != 0 {
+            testkit::run(&mut w, 1);
+        }
+        let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+        let orders = brain.think(&w);
+        assert_eq!(
+            attack_of(&orders, z),
+            sent.then_some(coil),
+            "{off} cells: {orders:?}"
+        );
+    }
+}

@@ -260,11 +260,12 @@ impl Brain {
                 .collect();
             let crossing = infantry.iter().any(|&p| Self::crossing(w, p, goal));
             s.push_str(&format!(
-                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}",
+                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}, its line busy {}",
                 infantry.len(),
                 self.ferries(w).len(),
                 self.ferry_type(w, false).is_some(),
-                self.ferry_type(w, true).is_some()
+                self.ferry_type(w, true).is_some(),
+                self.ferry_type(w, crossing).is_some_and(|t| self.script.busy(w, t))
             ));
         }
         s
@@ -1698,7 +1699,11 @@ impl Brain {
     /// - builds a ferry ([`Brain::ferry_type`]) once the harvesters are
     ///   kept, while the house has idle infantry and no ferry that suits
     ///   the run: one that hovers over water when the infantry cannot walk
-    ///   to the goal, else the cheapest;
+    ///   to the goal, else the cheapest; when its line is making something
+    ///   else, the ferry joins the line's queue (S-0404 claim 3), as a
+    ///   person queues it on the sidebar rather than waiting for the line
+    ///   to stand idle (M8 step B4: a house short of money kept its
+    ///   vehicle line busy at every think and never had a ferry);
     /// - at home, sends idle infantry aboard with a click on the ferry
     ///   (the enter cursor, claim 5);
     /// - with [`FERRY_LOAD`] aboard (or every boarder in and no more idle
@@ -1733,7 +1738,8 @@ impl Brain {
             && !self.script.selling()
             && self.script.harvesters_kept(w)
             && let Some(t) = self.ferry_type(w, crossing)
-            && !self.script.busy(w, t)
+            && !self.script.in_line(w, t)
+            && self.script.queue_room(w, t)
             && !out
                 .iter()
                 .any(|o| matches!(o, Order::Build { what } if *what == t))

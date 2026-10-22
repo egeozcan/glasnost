@@ -47,8 +47,9 @@
 pub mod m6c;
 pub mod m7a;
 pub mod m7b;
+pub mod plain;
 
-use glasnost_ai::{fixture, game::Game, skirmish};
+use glasnost_ai::{fixture, skirmish};
 use glasnost_sim::{save, testkit};
 
 /// Seed of the gate's replay.
@@ -249,142 +250,21 @@ impl Scenario {
     }
 }
 
-/// Whether a rocket is in flight, and whether an aircraft that is no rocket
-/// is in the air.
-fn in_flight(w: &glasnost_sim::world::World) -> (bool, bool) {
-    use glasnost_sim::rules::Kind;
-    let rocket = w
-        .objects
-        .values()
-        .any(|o| o.rocket.as_ref().is_some_and(|x| x.phase.is_some()));
-    let plane = w.objects.iter().any(|(&id, o)| {
-        o.kind == Kind::Aircraft
-            && o.rocket.is_none()
-            && o.on_map
-            && glasnost_sim::air::height(w, id) > 0
-    });
-    (rocket, plane)
-}
-
-/// The objects that ride in a transport now, with their transports
-/// (S-0507), in id order.
-fn riders(
-    w: &glasnost_sim::world::World,
-) -> Vec<(glasnost_sim::world::ObjectId, glasnost_sim::world::ObjectId)> {
-    w.objects
-        .values()
-        .filter_map(|o| Some((o.id, o.transport.riding?)))
-        .collect()
-}
-
-/// Whether a house holds a superweapon record that is granted and still
-/// charging (S-0512 claims 3 and 5).
-fn charging(w: &glasnost_sim::world::World) -> bool {
-    w.sw.houses
-        .iter()
-        .any(|h| h.records.iter().any(|r| r.granted && !r.ready))
-}
-
-/// Whether the tick just run launched a superweapon (S-0513 claim 5: the
-/// launch event).
-fn launched(w: &glasnost_sim::world::World) -> bool {
-    w.effects.iter().any(|e| {
-        matches!(
-            e,
-            glasnost_sim::combat::effects::Effect::Superweapon {
-                event: glasnost_sim::superweapons::SwEvent::Launch,
-                ..
-            }
-        )
-    })
-}
-
-/// The state hash of an AI duel after each tick until the game is over or
-/// `ticks` ticks ran; saved and loaded halfway, at the first tick with a
-/// rocket in flight, with an aircraft in the air, with a passenger aboard a
-/// transport and with a superweapon charging (panics when the loaded game
-/// hashes differently). With `flies`, a full run must have flown both.
-/// Every full run must have loaded a passenger into a transport and let
-/// one out (M6b, S-0507); with `launches`, it must have launched a
-/// superweapon (M6b, S-0512 and S-0513).
-fn duel(
-    map: &glasnost_map::Map,
-    name: &str,
-    ticks: i32,
-    seed: u32,
-    flies: bool,
-    launches: bool,
-) -> Vec<String> {
-    let mut g = Game::new(
-        fixture::rules(),
-        map,
-        name,
-        fixture::catalogue(),
-        fixture::setup(seed),
-    )
-    .expect("the synthetic duel loads");
-    let mut out = Vec::new();
-    let (mut rocket_saved, mut plane_saved) = (false, false);
-    let (mut aboard_saved, mut loads, mut unloads) = (false, 0, 0);
-    let (mut charge_saved, mut launch_seen) = (false, false);
-    let mut before = riders(&g.world);
-    while g.world.tick < ticks {
-        let (rocket, plane) = in_flight(&g.world);
-        let first_rocket = rocket && !rocket_saved;
-        let first_plane = plane && !plane_saved;
-        let first_aboard = !before.is_empty() && !aboard_saved;
-        rocket_saved |= rocket;
-        plane_saved |= plane;
-        aboard_saved |= !before.is_empty();
-        let first_charge = !charge_saved && charging(&g.world);
-        charge_saved |= first_charge;
-        if g.world.tick == ticks / 2 || first_rocket || first_plane || first_aboard || first_charge
-        {
-            let loaded = Game::load(&g.save(), fixture::rules(), fixture::catalogue())
-                .expect("the duel's save loads");
-            assert_eq!(
-                loaded.state_hash(),
-                g.state_hash(),
-                "{name}: a save and load keeps the state"
-            );
-            g = loaded;
-        }
-        g.step();
-        out.push(g.state_hash());
-        // Effects are presentation only (neither saved nor hashed).
-        launch_seen |= launched(&g.world);
-        g.world.effects.clear();
-        let now = riders(&g.world);
-        let alive = |id| g.world.obj(id).is_some_and(|o| o.on_map && o.health > 0);
-        loads += now.iter().filter(|r| !before.contains(r)).count();
-        // Let out: on the map again beside a transport that still stands
-        // (not the escape from a destroyed one).
-        unloads += before
-            .iter()
-            .filter(|&&(p, t)| !now.contains(&(p, t)) && alive(p) && alive(t))
-            .count();
-        before = now;
-        // As the skirmish: stop after the tick in which the game ends.
-        if g.outcome().is_some() {
-            break;
-        }
-    }
+/// The state hash of a plain AI duel after each tick until the game is
+/// over or `ticks` ticks ran ([`plain::play`]: saved and loaded halfway and
+/// at the first tick with a rocket in flight, an aircraft in the air, a
+/// passenger aboard and a superweapon charging). Every full run must have
+/// loaded a passenger into a transport and let one out (M6b, S-0507); the
+/// straight duel must also have charged and launched a superweapon (M6b,
+/// S-0512 and S-0513).
+fn duel(duel: plain::Plain, ticks: i32) -> Vec<String> {
+    let (out, _, ex) = plain::play(duel, duel.seed(), ticks);
     if ticks >= SKIRMISH_TICKS {
         assert!(
-            loads > 0 && unloads > 0 && aboard_saved,
-            "{name}: the full duel loads a transport ({loads}) and unloads one ({unloads})"
-        );
-    }
-    if launches && ticks >= SKIRMISH_TICKS {
-        assert!(
-            charge_saved && launch_seen,
-            "{name}: the full duel charges ({charge_saved}) and launches ({launch_seen}) a superweapon"
-        );
-    }
-    if flies && ticks >= SKIRMISH_TICKS {
-        assert!(
-            rocket_saved && plane_saved,
-            "{name}: the full duel flies a rocket ({rocket_saved}) and an aircraft ({plane_saved})"
+            ex.missing(duel).is_empty(),
+            "{}: the full duel did not exercise {:?} ({ex:?})",
+            duel.name(),
+            ex.missing(duel)
         );
     }
     out
@@ -400,14 +280,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         // S-0506's claim tests and the local lane's "rocket flights" count, so it is no
         // longer required to fly one. It still must load and unload a transport and launch.
         Scenario::Duel => {
-            return duel(
-                &fixture::map(),
-                "synthetic-duel",
-                ticks,
-                DUEL_SEED,
-                false,
-                true,
-            );
+            return duel(plain::Plain::Straight, ticks);
         }
         // The diagonal game ends before a launcher is sent; the straight
         // duel flies both a rocket and an aircraft. Since S-0507 revision 4
@@ -419,17 +292,10 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
         // needs either (M6b), so it is not required to launch one; the
         // straight and the diagonal duels launch.
         Scenario::DuelDiagonal => {
-            return duel(
-                &fixture::map_diagonal(),
-                "synthetic-duel-diagonal",
-                ticks,
-                DUEL_DIAGONAL_SEED,
-                false,
-                // Since the M6b2 round-4 revisions (S-0501 revision 15: aircraft are listed
-                // by height) the diagonal game charges its superweapon but no longer fires
-                // one within its run; the straight duel still must.
-                false,
-            );
+            // Since the M6b2 round-4 revisions (S-0501 revision 15: aircraft are listed
+            // by height) the diagonal game charges its superweapon but no longer fires
+            // one within its run; the straight duel still must (`Plain::launches`).
+            return duel(plain::Plain::Diagonal, ticks);
         }
         Scenario::DuelM6c => {
             let (out, _, ex) = m6c::play(M6C_SEED, ticks);
@@ -465,14 +331,7 @@ pub fn hashes(scenario: Scenario, ticks: i32) -> Vec<String> {
             return out;
         }
         Scenario::DuelNaval => {
-            return duel(
-                &fixture::map_naval(),
-                "synthetic-duel-naval",
-                ticks,
-                DUEL_SEED,
-                false,
-                false,
-            );
+            return duel(plain::Plain::Naval, ticks);
         }
         _ => {}
     }

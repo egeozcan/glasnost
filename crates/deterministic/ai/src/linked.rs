@@ -32,8 +32,12 @@ const RESERVE: i32 = 2; // nocite: tuning of our own opponent
 /// with a charger wants.
 const OVERPOWERABLE_WANTED: usize = 1; // nocite: tuning of our own opponent
 
-/// How near, in cells, a charger looks for an own overpowerable building.
-const CHARGE_REACH: i64 = 12; // nocite: tuning of our own opponent
+/// How near, in cells, a charger looks for an own overpowerable building:
+/// across the base, as a person sends one from the barracks door (M8 B4:
+/// at 12, chargers stood idle at the barracks 15 to 16 cells from the
+/// prisms and none was sent all game, in M6c seed 18 with
+/// `quirks.path_no_reopen` flipped).
+const CHARGE_REACH: i64 = 24; // nocite: tuning of our own opponent
 
 /// The prism type as a buildable type of the house.
 fn prism_type(w: &World, house: HouseId) -> Option<TypeRef> {

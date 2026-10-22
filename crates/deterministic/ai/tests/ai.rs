@@ -1076,6 +1076,68 @@ fn ferries_infantry_across_a_strait() {
     );
 }
 
+// The ferry joins a busy line's queue (S-0404 claim 3, PLAN §4.7; M8 step
+// B4): a house whose war factory is making a gun vehicle, with idle
+// riflemen at home and no transport, orders the transport at once, as a
+// person queues it on the sidebar, and the order queues it behind the gun
+// vehicle; with a transport already queued it orders no second one.
+#[test]
+fn a_ferry_is_queued_behind_a_busy_vehicle_line() {
+    use glasnost_sim::econ::{TypeRef, production};
+    let map = fixture::map();
+    let mut w = glasnost_sim::load::new_game(
+        fixture::rules(),
+        &map,
+        fixture::catalogue(),
+        &fixture::setup(5),
+    )
+    .expect("loads");
+    for id in of(&w, 0, "MCV") {
+        objects::remove(&mut w, id);
+    }
+    let at = |dx: i32, dy: i32| fixture::at(dx, dy);
+    testkit::spawn(&mut w, Kind::Building, "YARD", 0, at(-12, 0), 0);
+    testkit::spawn(&mut w, Kind::Building, "POWR", 0, at(-12, 5), 0);
+    testkit::spawn(&mut w, Kind::Building, "POWR", 0, at(-15, 5), 0);
+    testkit::spawn(&mut w, Kind::Building, "PROC", 0, at(-16, -5), 0);
+    testkit::spawn(&mut w, Kind::Building, "FACT", 0, at(-8, -5), 0);
+    // The transports' prerequisite.
+    testkit::spawn(&mut w, Kind::Building, "RADR", 0, at(-18, 0), 0);
+    for dy in [8, 10] {
+        testkit::spawn(&mut w, Kind::Vehicle, "MINR", 0, at(-16, dy), 0);
+    }
+    for dx in [-10, -9, -8] {
+        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, at(dx, 4), 0);
+    }
+    w.houses[0].credits = 10_000;
+    let vehicle = |w: &World, n: &str| TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, n).expect(n),
+    };
+    let (gunr, truk) = (vehicle(&w, "GUNR"), vehicle(&w, "TRUK"));
+    production::build(&mut w, HouseId(0), gunr);
+    testkit::run(&mut w, glasnost_ai::scripted::THINK_PERIOD);
+    let line = |w: &World| production::line_of(w, HouseId(0), truk).cloned();
+    assert_eq!(
+        line(&w).and_then(|l| l.item).map(|i| i.t),
+        Some(gunr),
+        "the vehicle line is making the gun vehicle"
+    );
+    let wants = |w: &World| {
+        Brain::new(w, &map, HouseId(0))
+            .think(w)
+            .iter()
+            .any(|o| matches!(o, Order::Build { what } if *what == truk))
+    };
+    assert!(wants(&w), "the transport is ordered on the busy line");
+    production::build(&mut w, HouseId(0), truk);
+    assert!(
+        line(&w).is_some_and(|l| l.queue.contains(&truk)),
+        "the order queues it behind the gun vehicle"
+    );
+    assert!(!wants(&w), "no second transport while one is queued");
+}
+
 // A ferry stuck unloading (S-0507 claim 10: a passenger with no exit blocks
 // those behind it and the transport retries until the unload is
 // interrupted) is moved on to land nearby, as a person would; one that has

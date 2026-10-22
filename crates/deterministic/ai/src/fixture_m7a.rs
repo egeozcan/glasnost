@@ -54,12 +54,15 @@
 //!   Beta; a start TAKER for Alpha ([`START_INFANTRY`]); Alpha's HULKs
 //!   behind its start, of PREY's armour class, so that only the lifters
 //!   and the controllers touch them before the grinder stands; a frail
-//!   EYE, which a raid can destroy and its house builds again; WARD, an
+//!   EYE, which a raid can destroy and its house builds again, whose
+//!   radius reaches past the middle (M8 step B4); WARD, an
 //!   unbuildable turreted vehicle whose gun sits in a multi-weapon slot
 //!   (no primary weapon, so the AI's waves leave it at home), one behind
 //!   each start, which the house's bunkers take in. The PREY, the TAKER,
 //!   the HULKs' class and WARD came in M7b AI round 3, for seeds of 1 to
-//!   16 with no takeover order, no unit ground or no vehicle bunkered.
+//!   16 with no takeover order, no unit ground or no vehicle bunkered; the
+//!   TAKER begins [`START_INFANTRY_AHEAD`] cells toward the middle since
+//!   M8 step B4, for seed 20 of 1 to 32 with no takeover order.
 //!
 //! To add a type, insert it in [`base_ruleset`] (with `register`) and, for
 //! a start unit, add its name to [`INFANTRY`] or [`VEHICLES`] (or, for the
@@ -128,9 +131,17 @@ fn margins(r: &mut Ruleset) {
         t.spread = Some(0);
     }
     // A frail psychic sensor, which raids destroy and the house builds
-    // again.
+    // again, and whose radius reaches past the middle of the map from a
+    // start (S-0610 claim 10: it sees a unit whose target or destination
+    // lies within the radius). M8 step B4: at 12 cells it saw only raids
+    // into its own base; once nothing could fire at WARD (below), seed 10
+    // of 1 to 32 saw hostile intent in 40 ticks (5 221 before), and eight
+    // games with a quirk switch flipped in none. The radius changes what
+    // the sensor shows, not play: every other counter of those games is
+    // the same.
     if let Some(b) = r.sim.buildings.get_mut("EYE") {
         b.strength = Some(EYE_STRENGTH);
+        b.econ.psychic_detection_radius = Some(EYE_RADIUS);
     }
     // PREY: an unarmed, sturdy vehicle nobody can build, of the last
     // armour class, which only the lifter's beam and the mind
@@ -162,7 +173,13 @@ fn margins(r: &mut Ruleset) {
     // and the AI, which counts a vehicle with a primary weapon (or a
     // gattling's slots) as army, keeps it at home: each house starts with
     // one, which its bunkers take in (the sweep's seeds with no vehicle
-    // bunkered had every tank fighting when the bunkers stood).
+    // bunkered had every tank fighting when the bunkers stood). Its armour
+    // class (special 1, index 9) has a versus value of zero for every
+    // warhead, so no weapon may fire at it, the lifters' and the
+    // controllers' included (S-0304 claim 1; M8 step B4: a berserk gattling
+    // of its own house, or the enemy's, killed it before the bunkers stood,
+    // or a controller took it, in the seeds of 1 to 32 that bunkered no
+    // vehicle with a quirk switch flipped).
     let mut ward = r.sim.vehicles["GUNR"].clone();
     ward.primary = None;
     ward.secondary = None;
@@ -171,13 +188,17 @@ fn margins(r: &mut Ruleset) {
     ward.combat.weapon_slots = Some(vec!["Gun".into()]);
     ward.strength = Some(2000);
     ward.tech_level = Some(-1);
+    ward.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special1);
     register(r, "vehicles", "WARD");
     r.sim.vehicles.insert("WARD".into(), ward);
     for (n, h) in r.sim.warheads.iter_mut() {
+        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
+        if let Some(special1) = v.get_mut(9) {
+            *special1 = d("0");
+        }
         if n == "MAGWH" || n == "MIND" {
             continue;
         }
-        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
         if let Some(last) = v.get_mut(10) {
             *last = d("0");
         }
@@ -579,7 +600,10 @@ pub fn map() -> Map {
     }
     for (name, dx, list) in START_INFANTRY {
         for (i, ty) in list.iter().enumerate() {
-            let c = at(dx + 2 * i as i32 - 4, START_INFANTRY_ROW);
+            let c = at(
+                dx + dx.signum() * (2 * i as i32 - START_INFANTRY_AHEAD),
+                START_INFANTRY_ROW,
+            );
             m.objects.infantry.push(Infantry {
                 placed: placed(name, ty, c, key),
                 sub_cell: 2,
@@ -610,6 +634,10 @@ pub fn map() -> Map {
 /// The psychic sensor's strength in the gate's scenario.
 const EYE_STRENGTH: i32 = 10;
 
+/// The psychic sensor's radius in cells in the gate's scenario: beyond
+/// [`fixture::START_DX`], the distance from a start to the middle.
+const EYE_RADIUS: i32 = 24;
+
 /// Cells behind Alpha's start (away from the middle) where its HULKs
 /// stand in the gate's scenario, in a column.
 const HULK_BEHIND: i32 = 7;
@@ -632,6 +660,12 @@ const START_VEHICLE_ROW: i32 = -3;
 pub const START_INFANTRY: [(&str, i32, &[&str]); 1] = [("Alpha", -START_DX, &["TAKER"])];
 /// The row (dy from the middle) of the extra start infantry.
 const START_INFANTRY_ROW: i32 = -5;
+/// Cells toward the middle from its start where the extra start infantry
+/// begin (M8 step B4): the TAKER stands within the brain's mind-control
+/// reach of the nearest PREY from the first think, so that the brain gives
+/// a takeover order early. Before, seed 20 of the 32-seed sweep ended with
+/// four PREY changed owner and no takeover order given at all.
+const START_INFANTRY_AHEAD: i32 = 2;
 
 /// The fixture's flat ground and resource fields with the starts at
 /// ±[`START_DX`] and each house's start objects, without the gate's margin

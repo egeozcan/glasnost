@@ -17,3 +17,6 @@ glasnost-sim.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+glasnost-rules.workspace = true
