@@ -2264,7 +2264,7 @@ A person whose connection or whole client goes during a network game has a grace
 
 **Serving.** When a rejoin is accepted, the relay picks the live person of the lowest slot to serve it and sends that peer `Body::Serve { slot, on: true }`. From then on, the relay also sends the rejoining connection every lockstep message it forwards and every drop. The serving peer:
 
-- keeps its frames until the rejoining peer acknowledges them, and sends them even when no other peer is live (a lone peer now sends a frames message every period);
+- keeps its frames until the rejoining peer acknowledges them, and sends them to it even when no other peer is live;
 - makes a `rejoin::Transfer` once its session runs: its session's view of every person's slot (`Session::catch_up`: lives, the frames that count and those it holds but has not run), the game's save (`Game::save`) and its state hash, after the same ticks;
 - sends it as `ToRelay::Snapshot(Part)` parts, one every 25 ms, while it plays on. The relay passes each on as `FromRelay::Snapshot`.
 
@@ -2311,6 +2311,7 @@ It writes counts, timings and both clients' screens to `local-lane/m9/n5/`. Run 
 - A hostile peer that claims to have run more ticks than it has (`Frames.ran`) can make the relay think a slot's grace period is over, and so refuse that slot's rejoin while its house has not yet surrendered. A hostile client that sends frames far ahead and then leaves can still stall the others (N2's seam).
 - A member who never received `Begin` has no ticket and cannot join late.
 - One rejoin at a time per game (`Refusal::Rejoining`).
+- A peer whose others have all dropped still sends its frames message, empty of new frames, once every resend interval (by default a tick's period), whether or not it serves anyone: the relay learns from it how far the game has run, and so whether a dropped house has surrendered.
 - A lost link takes the person to the multiplayer screen; the client does not reconnect by itself.
 - After the game is put in place on a rejoin, some presentation state of the fresh load stays until it next changes: the "Game started." line, the credits counter's roll, the selection.
 - N6 (soak): rejoins under load and long games, where the transfer and the catch-up are longer.
