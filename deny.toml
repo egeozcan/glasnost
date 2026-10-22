@@ -34,6 +34,14 @@ unused-allowed-license = "allow"
 # Our own crates are unpublished and GPL-3.0-or-later.
 ignore = true
 
+# webpki 0.22 (through webrtc-rs's DTLS, M9 N7) names no licence in its
+# manifest. Its LICENSE file gives ISC-style terms for the crate and the
+# 3-clause BSD licence for the files under third-party/chromium.
+[[licenses.clarify]]
+crate = "webpki@0.22.4"
+expression = "ISC AND BSD-3-Clause"
+license-files = [{ path = "LICENSE", hash = 0x001c7e6c }]
+
 [bans]
 multiple-versions = "allow"
 wildcards = "deny"

@@ -1,0 +1,21 @@
+[package]
+name = "glasnost-rtc"
+description = "Glasnost's native direct links between peers (M9 N7): one WebRTC data channel per pair, through matchbox and webrtc-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Native only: the browser's direct links are glasnost-platform-web's
+# (`rtc.rs`, the page's own RTCPeerConnection). On wasm32 this crate is
+# empty.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+glasnost-net.workspace = true
+futures = { version = "0.3", default-features = false, features = ["executor", "std"] }
+log = "0.4"
+matchbox_socket = "0.14"
+uuid = "1"
+
+[lints]
+workspace = true

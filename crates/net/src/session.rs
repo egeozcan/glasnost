@@ -56,6 +56,22 @@
 //! slot's frames again from `max(n + max_delay + 1, kept)` on, which no peer
 //! has run when it runs *n*, and the surrender is off if it was not due by
 //! tick *n*. The rejoin protocol and the grace period are our own design.
+//!
+//! **Direct links (N7).** A peer may also get another peer's frames on a
+//! WebRTC data channel ([`Session::receive_via`] with [`Via::Direct`]), as
+//! well as through the relay. The first copy of a frame wins, as always.
+//! From a data channel the session takes only [`Body::Frames`] whose sender
+//! byte is the channel's slot, while that slot is live and not leaving, and
+//! of those frames only the ones without a readmission marker and less than
+//! [`Session::lead`] ahead of the frames of that slot the relay has passed
+//! on (its *relay frontier*). It keeps the frames it ran from a direct copy
+//! the relay has not passed on yet, so that when the slot leaves and the
+//! relay asks ([`Body::Closing`]) it can answer with every frame of the
+//! slot it holds or ran beyond what the relay forwarded ([`Body::Held`]).
+//! The relay passes the answers on to everyone before its
+//! [`Body::Dropped`], so `kept` counts every frame any peer ran. A relay
+//! copy that differs from the direct copy of the same frame is reported
+//! ([`Event::Conflicting`]): the sender told two stories. Our own design.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -63,7 +79,7 @@ use glasnost_sim::orders::Order;
 use glasnost_sim::world::HouseId;
 use serde::{Deserialize, Serialize};
 
-use crate::delay::{Control, Rtt};
+use crate::delay::{Control, MAX_RTT_MS, Rtt};
 use crate::sim::Simulation;
 use crate::start::{Field, Params, SlotKind, StartInfo};
 use crate::wire::{self, Body, Echo, Envelope, Frame, Frames, Hash, Report, WireError};
@@ -211,6 +227,21 @@ pub enum Event {
         /// The digest of its bundle.
         digest: Hash,
     },
+    /// `slot` is leaving and had direct links (N7): the relay asked which
+    /// of its frames this peer holds. Its direct link is no longer used.
+    Closing {
+        /// The slot.
+        slot: u8,
+    },
+    /// Two copies of `slot`'s frame `frame` differ (N7): one came on a
+    /// direct link, the other through the relay. The first one counts here,
+    /// so the peers may have run different orders.
+    Conflicting {
+        /// The slot.
+        slot: u8,
+        /// The frame's number.
+        frame: u32,
+    },
     /// A message could not be used.
     BadMessage {
         /// Why.
@@ -294,6 +325,10 @@ pub struct SlotCatchup {
     pub have: u32,
     /// Its frames the sender holds and has not run, by number.
     pub frames: Vec<(u32, Frame)>,
+    /// How many of its frames, from 0 without a gap, the sender knows the
+    /// relay has passed on (N7: its relay frontier; for the sender's own
+    /// slot, the frames it has sent).
+    pub relayed: u32,
 }
 
 /// What a rejoining peer's session starts from (N5): the sender's session
@@ -306,6 +341,33 @@ pub struct Catchup {
     pub delay: u8,
     /// Every person's slot, the sender's too, in slot order.
     pub slots: Vec<SlotCatchup>,
+}
+
+/// Which way a message came (N7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Via {
+    /// Through the relay's WebSocket: every message of the protocol.
+    Relay,
+    /// On the direct link opened for this slot: only that slot's frames.
+    Direct(u8),
+}
+
+/// How another peer's frames came (N7, counts for the soak's numbers).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Paths {
+    /// Frames whose first copy came on the direct link.
+    pub direct_first: u64,
+    /// Frames whose first copy came through the relay (or a drop's
+    /// [`Body::Held`]).
+    pub relay_first: u64,
+    /// Direct copies not taken: too far ahead of the relay frontier, or
+    /// carrying a readmission marker.
+    pub gated: u64,
+    /// Frames whose two copies differed.
+    pub conflicts: u64,
+    /// The slot's relay frontier: how many of its frames, from 0 without a
+    /// gap, came through the relay (or are counted as passed on by it).
+    pub relay_top: u32,
 }
 
 /// What we know of another person's peer.
@@ -354,6 +416,60 @@ struct Remote {
     /// readmitted it with a marker we have not run yet (N5). They count
     /// once we readmit it, from its first frame that counts on.
     early: BTreeMap<u32, Frame>,
+    /// The relay frontier (N7): its frames, from 0 without a gap, that came
+    /// through the relay or count as passed on by it.
+    relay_top: u32,
+    /// Its frames we ran from or at the relay frontier on: their relay copy
+    /// has not come yet (N7). Kept for the relay's drop round and to compare
+    /// with the relay copy.
+    retained: BTreeMap<u32, Frame>,
+    /// The relay is asking about its frames (it is leaving, N7): its direct
+    /// link is not used.
+    closing: bool,
+    /// How its frames came.
+    paths: Paths,
+    /// The latest frame of it whose two copies differed, reported.
+    conflicted: Option<u32>,
+}
+
+/// How far a direct copy of a slot's frame may be ahead of that slot's
+/// relay frontier and still be taken, in frames, under `params` (N7): eight
+/// largest delays, several seconds of frames at any game speed. The relay
+/// takes no longer answer to a drop round.
+pub fn lead(params: &Params) -> u32 {
+    8 * u32::from(params.max_delay) // nocite: our own netcode (several seconds of frames at any game speed)
+}
+
+/// The most frames in one part of a [`Body::Held`] (N7): a part stays far
+/// below the relay's message limit with a person's orders in every frame.
+// nocite: our own netcode
+pub const HELD_PART: usize = 32;
+
+/// The [`Body::Held`] messages from `from` (a slot, or [`wire::RELAY`]) of
+/// `slot`'s frames from `first` on, in parts of at most [`HELD_PART`]
+/// frames; one empty part when there are none.
+pub fn held_parts(from: u8, slot: u8, first: u32, frames: Vec<Frame>) -> Vec<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut at = first;
+    let mut rest = frames.into_iter().peekable();
+    loop {
+        let part: Vec<Frame> = rest.by_ref().take(HELD_PART).collect();
+        let n = part.len() as u32;
+        let last = rest.peek().is_none();
+        out.push(wire::encode(&Envelope {
+            from,
+            body: Body::Held {
+                slot,
+                first: at,
+                frames: part,
+                last,
+            },
+        }));
+        at = at.saturating_add(n);
+        if last {
+            return out;
+        }
+    }
 }
 
 /// Whether stamp `a` is later than stamp `b` (stamps are milliseconds that
@@ -417,6 +533,12 @@ pub struct Session {
     pending_resume: Option<u8>,
     /// Slots the relay asked us to serve before we started.
     pending_serve: Vec<u8>,
+    /// Drop rounds to answer (N7): the leaving slot and the frames of it
+    /// the relay forwarded.
+    answers: Vec<(u8, u32)>,
+    /// How many of our frames, from 0, went out in a frames message (all
+    /// of which the caller sends through the relay, N7).
+    sent_top: u32,
     /// The caller's clock at its latest call.
     clock: u64,
 }
@@ -465,6 +587,8 @@ impl Session {
             my_life: Life::default(),
             pending_resume: None,
             pending_serve: Vec::new(),
+            answers: Vec::new(),
+            sent_top: 0,
             clock: now_ms,
         };
         s.maybe_start(now_ms);
@@ -524,6 +648,9 @@ impl Session {
                 while r.frames.contains_key(&r.have) {
                     r.have += 1;
                 }
+                // The relay copies forwarded before this peer connected
+                // never come: the sender's frontier stands for them (N7).
+                r.relay_top = sc.relayed;
             }
         }
         let until = s.next_frame;
@@ -557,19 +684,20 @@ impl Session {
             if slot.kind != SlotKind::Human {
                 continue;
             }
-            let (life, have, frames) = if s == self.me {
-                (self.my_life, self.next_frame, &self.mine)
+            let (life, have, frames, relayed) = if s == self.me {
+                (self.my_life, self.next_frame, &self.mine, self.sent_top)
             } else {
                 let Some(r) = self.remotes.get(&s) else {
                     continue;
                 };
-                (r.life, r.have, &r.frames)
+                (r.life, r.have, &r.frames, r.relay_top)
             };
             slots.push(SlotCatchup {
                 slot: s,
                 life,
                 have,
                 frames: frames.range(ran..).map(|(&t, f)| (t, f.clone())).collect(),
+                relayed,
             });
         }
         Some(Catchup {
@@ -646,6 +774,33 @@ impl Session {
     /// The smoothed round trip to `slot`, in milliseconds.
     pub fn rtt(&self, slot: u8) -> Option<u32> {
         self.remotes.get(&slot).and_then(|r| r.rtt.smoothed())
+    }
+
+    /// How far a direct copy of a slot's frame may be ahead of that slot's
+    /// relay frontier and still be taken, in frames (N7): eight largest
+    /// delays. A relay path that falls further behind holds the game back,
+    /// and a drop round never has more frames to gather.
+    pub fn lead(&self) -> u32 {
+        lead(&self.params)
+    }
+
+    /// How `slot`'s frames came (N7).
+    pub fn paths(&self, slot: u8) -> Option<Paths> {
+        self.remotes.get(&slot).map(|r| Paths {
+            relay_top: r.relay_top,
+            ..r.paths
+        })
+    }
+
+    /// Whether a direct link to `slot` may be used (N7): it is another
+    /// person's live slot, not leaving, and this peer is not catching up.
+    pub fn direct_ok(&self, slot: u8) -> bool {
+        self.phase == Phase::Running
+            && self.my_life.live()
+            && self
+                .remotes
+                .get(&slot)
+                .is_some_and(|r| r.live() && !r.closing)
     }
 
     /// How many ticks this peer is ahead of the slowest live other peer, by
@@ -775,13 +930,175 @@ impl Session {
             (wire::RELAY, Body::Dropped { slot, kept }) => self.drop_slot(slot, kept),
             (wire::RELAY, Body::Serve { slot, on }) => self.serve(slot, on),
             (wire::RELAY, Body::Resume { slot }) => self.resume_asked(slot),
+            (wire::RELAY, Body::Closing { slot, forwarded }) => self.closing(slot, forwarded),
+            (
+                wire::RELAY,
+                Body::Held {
+                    slot,
+                    first,
+                    frames,
+                    ..
+                },
+            ) => self.held(slot, first, frames),
             (wire::RELAY, _) => self.bad("the relay sends only drops and rejoins".into()),
-            (_, Body::Dropped { slot, .. } | Body::Serve { slot, .. } | Body::Resume { slot }) => {
-                self.bad(format!(
-                    "a drop or rejoin message for slot {slot} from slot {from}, not from the relay"
-                ))
-            }
+            (
+                _,
+                Body::Dropped { slot, .. }
+                | Body::Serve { slot, .. }
+                | Body::Resume { slot }
+                | Body::Closing { slot, .. }
+                | Body::Held { slot, .. },
+            ) => self.bad(format!(
+                "a drop or rejoin message for slot {slot} from slot {from}, not from the relay"
+            )),
             (_, body) => self.on_message(now_ms, from, body),
+        }
+    }
+
+    /// Hands the session a message that came `via` the relay or a direct
+    /// link at `now_ms` (N7). A direct link carries only its slot's frames:
+    /// anything else on it is refused ([`Event::BadMessage`]), and its
+    /// frames count only while that slot is live and not leaving.
+    pub fn receive_via(&mut self, now_ms: u64, bytes: &[u8], via: Via) {
+        let Via::Direct(slot) = via else {
+            return self.receive(now_ms, bytes);
+        };
+        let env = match wire::decode(bytes) {
+            Ok(e) => e,
+            Err(e) => return self.bad(format!("on slot {slot}'s direct link: {e}")),
+        };
+        if env.from != slot {
+            return self.bad(format!(
+                "a message from slot {} on slot {slot}'s direct link",
+                env.from
+            ));
+        }
+        let Body::Frames(f) = env.body else {
+            return self.bad(format!(
+                "a message other than frames on slot {slot}'s direct link"
+            ));
+        };
+        self.clock = self.clock.max(now_ms);
+        let Some(r) = self
+            .remotes
+            .get_mut(&slot)
+            .filter(|r| r.live() && !r.closing)
+        else {
+            return;
+        };
+        r.last_heard = Some(now_ms);
+        if r.silent {
+            r.silent = false;
+            self.events.push_back(Event::Heard { slot });
+        }
+        self.on_frames(now_ms, slot, f, via);
+    }
+
+    /// The relay asks for `slot`'s frames from `forwarded` on (N7): its
+    /// direct link is no longer used, and the next poll answers.
+    fn closing(&mut self, slot: u8, forwarded: u32) {
+        let Some(r) = self.remotes.get_mut(&slot) else {
+            return self.bad(format!(
+                "a drop round of slot {slot}, not another person's slot"
+            ));
+        };
+        // Always answered: the relay closes a peer that does not. A slot
+        // not live here (its readmission not run yet) has no frames of
+        // ours beyond the relay's, so the answer is empty.
+        self.answers.retain(|&(s, _)| s != slot);
+        self.answers.push((slot, forwarded));
+        if r.live() {
+            r.closing = true;
+            // The relay forwarded the frames before `forwarded` to everyone.
+            if forwarded > r.relay_top {
+                r.relay_top = forwarded;
+                r.retained = r.retained.split_off(&forwarded);
+            }
+            self.events.push_back(Event::Closing { slot });
+        }
+    }
+
+    /// Frames of a leaving slot that the relay gathered from the peers
+    /// (N7), before it reports the drop.
+    fn held(&mut self, slot: u8, first: u32, frames: Vec<Frame>) {
+        let ran = self.ran;
+        let Some(r) = self.remotes.get_mut(&slot) else {
+            return self.bad(format!(
+                "held frames of slot {slot}, not another person's slot"
+            ));
+        };
+        if !r.live() {
+            // Its readmission is not run here yet: they count from then on,
+            // with the frames that came while it was away (N5).
+            if !r.life.surrendered {
+                for (i, fr) in frames.into_iter().enumerate() {
+                    let t = first.saturating_add(i as u32);
+                    if t >= ran {
+                        r.early.entry(t).or_insert(fr);
+                    }
+                }
+            }
+            return;
+        }
+        let n = frames.len() as u32;
+        let mut conflicts = Vec::new();
+        for (i, fr) in frames.into_iter().enumerate() {
+            let t = first.saturating_add(i as u32);
+            if !r.needs(t) {
+                continue;
+            }
+            if let Some(t) = Self::take_frame(r, t, fr, false) {
+                conflicts.push(t);
+            }
+        }
+        while r.frames.contains_key(&r.have) {
+            r.have += 1;
+        }
+        Self::advance_relay(r, first, n);
+        self.conflicts(slot, conflicts);
+    }
+
+    /// Keeps frame `t` of a remote unless a copy is in already; returns the
+    /// frame's number when the copy kept differs.
+    fn take_frame(r: &mut Remote, t: u32, fr: Frame, direct: bool) -> Option<u32> {
+        if t < r.have {
+            let kept = r.frames.get(&t).or_else(|| r.retained.get(&t));
+            return kept.is_some_and(|k| *k != fr).then_some(t);
+        }
+        match r.frames.entry(t) {
+            std::collections::btree_map::Entry::Vacant(v) => {
+                v.insert(fr);
+                if direct {
+                    r.paths.direct_first += 1;
+                } else {
+                    r.paths.relay_first += 1;
+                }
+                None
+            }
+            std::collections::btree_map::Entry::Occupied(o) => (*o.get() != fr).then_some(t),
+        }
+    }
+
+    /// The relay passed on a remote's frames `first` to `first + n` (N7).
+    fn advance_relay(r: &mut Remote, first: u32, n: u32) {
+        if first <= r.relay_top {
+            r.relay_top = r.relay_top.max(first.saturating_add(n));
+            let top = r.relay_top;
+            r.retained = r.retained.split_off(&top);
+        }
+    }
+
+    /// Reports frames whose two copies differed, each once.
+    fn conflicts(&mut self, slot: u8, frames: Vec<u32>) {
+        let Some(r) = self.remotes.get_mut(&slot) else {
+            return;
+        };
+        for frame in frames {
+            r.paths.conflicts += 1;
+            if r.conflicted.is_none_or(|c| frame > c) {
+                r.conflicted = Some(frame);
+                self.events.push_back(Event::Conflicting { slot, frame });
+            }
         }
     }
 
@@ -879,8 +1196,12 @@ impl Session {
                     }
                 }
             }
-            Body::Frames(f) => self.on_frames(now_ms, from, f),
-            Body::Dropped { .. } | Body::Serve { .. } | Body::Resume { .. } => {}
+            Body::Frames(f) => self.on_frames(now_ms, from, f, Via::Relay),
+            Body::Dropped { .. }
+            | Body::Serve { .. }
+            | Body::Resume { .. }
+            | Body::Closing { .. }
+            | Body::Held { .. } => {}
         }
     }
 
@@ -900,8 +1221,10 @@ impl Session {
         }
     }
 
-    fn on_frames(&mut self, now_ms: u64, from: u8, f: Frames) {
+    fn on_frames(&mut self, now_ms: u64, from: u8, f: Frames, via: Via) {
         let limit = self.frame_limit();
+        let lead = self.lead();
+        let direct = via != Via::Relay;
         let hash_limit = self
             .hashes_made
             .saturating_add(limit / self.params.hash_every + 1); // nocite: our own netcode (checkpoints within the frame window)
@@ -922,11 +1245,16 @@ impl Session {
         if r.echo.is_none_or(|(s, _)| newer(f.stamp, s)) {
             r.echo = Some((f.stamp, now_ms));
         }
+        // An implausible round trip moves nothing: an echo of another
+        // process's stamp (from before a restart and rejoin) taken as the
+        // newest would make every later, true echo look old.
         for e in f.echoes.iter().filter(|e| usize::from(e.slot) == me) {
             if r.sampled.is_none_or(|s| newer(e.stamp, s)) {
-                r.sampled = Some(e.stamp);
                 let rtt = (now_ms as u32).wrapping_sub(e.stamp).wrapping_sub(e.hold);
-                r.rtt.sample(rtt);
+                if rtt <= MAX_RTT_MS {
+                    r.sampled = Some(e.stamp);
+                    r.rtt.sample(rtt);
+                }
             }
         }
         if let Some(&a) = f.acks.get(me) {
@@ -935,15 +1263,30 @@ impl Session {
         if let Some(&a) = f.hash_acks.get(me) {
             r.hash_acked = r.hash_acked.max(a.min(hashes_made));
         }
+        let n = f.frames.len() as u32;
+        let top = r.relay_top;
+        let mut conflicts = Vec::new();
         for (i, fr) in f.frames.into_iter().enumerate() {
             let t = f.first.saturating_add(i as u32);
-            if t < r.have || t >= limit || !r.needs(t) {
+            if t >= limit || !r.needs(t) {
                 continue;
             }
-            r.frames.entry(t).or_insert(fr);
+            // A direct copy is taken only near the relay frontier, and never
+            // with a readmission marker: the relay must have passed that one
+            // on (N7).
+            if direct && (fr.resume.is_some() || t >= top.saturating_add(lead)) {
+                r.paths.gated += 1;
+                continue;
+            }
+            if let Some(t) = Self::take_frame(r, t, fr, direct) {
+                conflicts.push(t);
+            }
         }
         while r.frames.contains_key(&r.have) {
             r.have += 1;
+        }
+        if !direct {
+            Self::advance_relay(r, f.first, n);
         }
         // A sender keeps its hashes only for the peers it counts live: one
         // that did not count us (we were away, N5) starts past checkpoints
@@ -971,6 +1314,7 @@ impl Session {
                 digest: rep.digest,
             });
         }
+        self.conflicts(from, conflicts);
         self.compare(from);
     }
 
@@ -1033,7 +1377,10 @@ impl Session {
         let until = kept.max(r.life.from);
         r.life.until = Some(until);
         r.served = false;
+        r.closing = false;
+        r.retained.clear();
         r.frames.retain(|&t, _| t < until);
+        self.answers.retain(|&(s, _)| s != slot);
         self.events.push_back(Event::Dropped { slot, kept: until });
         if ran > until {
             self.bad(format!(
@@ -1082,6 +1429,15 @@ impl Session {
             while r.frames.contains_key(&r.have) {
                 r.have += 1;
             }
+            // The relay counts the frames before `from` as passed on, and
+            // the ones that came while the slot was away here came through
+            // it (N7).
+            r.relay_top = r.relay_top.max(from);
+            while r.frames.contains_key(&r.relay_top) {
+                r.relay_top += 1;
+            }
+            r.retained = r.retained.split_off(&r.relay_top);
+            r.closing = false;
             r.hashes.clear();
             r.hash_have = r.hash_have.max(made);
             r.compared = r.compared.max(made);
@@ -1174,7 +1530,15 @@ impl Session {
                 self.remotes
                     .get_mut(&s)
                     .filter(|r| r.needs(tick))
-                    .and_then(|r| r.frames.remove(&tick))
+                    .and_then(|r| {
+                        let f = r.frames.remove(&tick)?;
+                        // Not yet passed on by the relay: kept for a drop
+                        // round (N7).
+                        if tick >= r.relay_top {
+                            r.retained.insert(tick, f.clone());
+                        }
+                        Some(f)
+                    })
             };
             let Some(frame) = frame else {
                 continue;
@@ -1369,7 +1733,10 @@ impl Session {
             if let Some(a) = hash_acks.get_mut(usize::from(s)) {
                 *a = r.hash_have;
             }
-            if let Some((stamp, at)) = r.echo {
+            // Only a live peer's stamps are echoed: the stamps of a peer
+            // that dropped belong to a process that may be gone, and its
+            // rejoining successor would take them for its own.
+            if let Some((stamp, at)) = r.echo.filter(|_| r.live()) {
                 echoes.push(Echo {
                     slot: s,
                     stamp,
@@ -1395,6 +1762,19 @@ impl Session {
             hashes,
             report: self.report,
         }))
+    }
+
+    /// The answer to a drop round of `slot` (N7): its frames this peer
+    /// holds or ran from `forwarded` on, without a gap, in parts of at most
+    /// [`HELD_PART`] frames.
+    fn held_messages(&self, slot: u8, forwarded: u32) -> Vec<Vec<u8>> {
+        let Some(r) = self.remotes.get(&slot) else {
+            return Vec::new();
+        };
+        let frames: Vec<Frame> = (forwarded..)
+            .map_while(|t| r.frames.get(&t).or_else(|| r.retained.get(&t)).cloned())
+            .collect();
+        held_parts(self.me, slot, forwarded, frames)
     }
 
     fn check_silence(&mut self, now_ms: u64) {
@@ -1441,12 +1821,16 @@ impl Session {
             out.push(self.envelope(Body::Start(self.info.clone())));
             self.last_start_sent = Some(now_ms);
         }
+        for (slot, forwarded) in std::mem::take(&mut self.answers) {
+            out.extend(self.held_messages(slot, forwarded));
+        }
         if self.phase == Phase::Running {
             let recipients = self.remotes.values().any(Remote::recipient);
             let due = (self.dirty && recipients)
                 || self.last_frames_sent.is_none_or(|t| now_ms >= t + resend);
             if due {
                 out.push(self.frames_message(now_ms));
+                self.sent_top = self.next_frame;
                 self.dirty = false;
                 self.last_frames_sent = Some(now_ms);
             }

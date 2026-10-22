@@ -36,7 +36,8 @@ use glasnost_ui::netmenu::NetHit;
 use glasnost_ui::setup::{MAX_SLOTS, SetupHit, SlotKind, period_ms};
 use glasnost_ui::shell::Screen;
 
-use super::client::Client;
+use super::client::{Client, PairReport};
+use super::direct::{Ice, Shape};
 use super::play::Button;
 
 /// How long a tick may come after the paced period before the bot counts a
@@ -207,6 +208,11 @@ pub struct BotStats {
     pub over: Option<i32>,
     /// The bot's own house.
     pub house: Option<u8>,
+    /// The direct links to the other persons, as last seen in the game
+    /// (M9 N7).
+    pub pairs: Vec<PairReport>,
+    /// The relay's round trip, smoothed, and its range, in milliseconds.
+    pub relay_rtt: (Option<u32>, Option<(u32, u32)>),
 }
 
 impl BotStats {
@@ -267,6 +273,42 @@ impl BotStats {
                 .as_ref()
                 .map(|w| { w.iter().map(u8::to_string).collect::<Vec<_>>().join(",") }))
         );
+        let range = |r: Option<(u32, u32)>| r.map_or("-".into(), |(a, b)| format!("{a}-{b}"));
+        let _ = writeln!(
+            s,
+            "relay_rtt_ms {} {}",
+            opt(self.relay_rtt.0.map(|v| v.to_string())),
+            range(self.relay_rtt.1)
+        );
+        for p in &self.pairs {
+            let paths = p.paths.unwrap_or_default();
+            let st = &p.stats;
+            let _ = writeln!(
+                s,
+                "pair{} enabled={} open={} direct_first={} relay_first={} gated={} conflicts={} \
+attempts={} opened={} failed={} fallbacks={} connect_ms={} rtt_ms={} rtt_range={} session_rtt_ms={} \
+sent={} taken={} refused={} open_ms={}",
+                p.slot,
+                u8::from(p.enabled),
+                u8::from(p.open),
+                paths.direct_first,
+                paths.relay_first,
+                paths.gated,
+                paths.conflicts,
+                st.attempts,
+                st.opened,
+                st.failed,
+                st.fallbacks,
+                opt(st.connect_ms.map(|v| v.to_string())),
+                opt(st.rtt_ms.map(|v| v.to_string())),
+                range(st.rtt_range),
+                opt(p.rtt_ms.map(|v| v.to_string())),
+                st.packets.0,
+                st.packets.1,
+                st.refused,
+                st.open_ms,
+            );
+        }
         s
     }
 }
@@ -763,7 +805,9 @@ impl Bot {
 /// wasm client take the same options).
 pub const USAGE: &str = "net-client --relay ws://HOST:PORT/ (--host N [--map M] | --join CODE) \
 [--name NAME] [--team T] [--slot ROW] [--seed S] [--ticks N | --minutes M] [--hash-log FILE] \
-[--report FILE] [--code-file FILE] [--settings FILE] [--resume] [--no-ai] [--no-dedupe] [--game-dir DIR | --synthetic]";
+[--report FILE] [--code-file FILE] [--settings FILE] [--resume] [--no-ai] [--no-dedupe] \
+[--relay-only] [--ice URLS] [--direct-shape LAT,JIT,LOSS,EVERY_MIN,EVERY_MAX,STALL_MIN,STALL_MAX] \
+[--game-dir DIR | --synthetic]";
 
 /// The options of a net-client.
 #[derive(Clone, Debug)]
@@ -782,6 +826,47 @@ pub struct Options {
     pub settings: Option<String>,
     /// The install's folder, or none for the synthetic install.
     pub game_dir: Option<String>,
+    /// No direct links: the relay carries everything (M9 N7).
+    pub relay_only: bool,
+    /// The direct links' STUN or TURN servers ([`Ice::from_urls`]).
+    pub ice: Option<String>,
+    /// A bad network on the direct path, seeded by the seed.
+    pub direct_shape: Option<Shape>,
+}
+
+impl Options {
+    /// Sets the client's direct links as the options say.
+    pub fn apply(&self, c: &mut Client) {
+        if self.relay_only {
+            c.direct = None;
+        }
+        if let Some(ice) = self.ice.as_deref() {
+            c.ice = Ice::from_urls(ice);
+        }
+        c.direct_shape = self.direct_shape;
+    }
+}
+
+/// Reads `--direct-shape`: latency, jitter, loss in a thousand, the
+/// shortest and longest wait between stalls and the shortest and longest
+/// stall, in milliseconds, comma-separated.
+fn shape(text: &str, seed: u64) -> Result<Shape, String> {
+    let v: Vec<u64> = text
+        .split(',')
+        .map(|p| p.trim().parse::<u64>())
+        .collect::<Result<_, _>>()
+        .map_err(|_| format!("--direct-shape needs seven numbers: {text}"))?;
+    let [latency_ms, jitter_ms, loss, e0, e1, s0, s1] = v[..] else {
+        return Err(format!("--direct-shape needs seven numbers: {text}"));
+    };
+    Ok(Shape {
+        latency_ms,
+        jitter_ms,
+        loss_permille: loss.min(1000) as u32,
+        stall_every_ms: (e0, e1),
+        stall_ms: (s0, s1),
+        seed,
+    })
 }
 
 /// Reads a net-client's options; `game_dir` is the install folder when no
@@ -804,6 +889,9 @@ pub fn parse(args: &[String], game_dir: Option<String>) -> Result<Options, Strin
     let mut resume = false;
     let mut ai = true;
     let mut dedupe = true;
+    let mut relay_only = false;
+    let mut ice = None;
+    let mut direct_shape = None;
     let mut game_dir = game_dir;
     let mut it = args.iter();
     let num = |v: Option<&String>, what: &str| -> Result<u64, String> {
@@ -832,6 +920,9 @@ pub fn parse(args: &[String], game_dir: Option<String>) -> Result<Options, Strin
             "--resume" => resume = true,
             "--no-ai" => ai = false,
             "--no-dedupe" => dedupe = false,
+            "--relay-only" => relay_only = true,
+            "--ice" => ice = Some(text(it.next(), a)?),
+            "--direct-shape" => direct_shape = Some(text(it.next(), a)?),
             "--game-dir" => game_dir = Some(text(it.next(), a)?),
             "--synthetic" => game_dir = None,
             other => return Err(format!("unknown option {other}")),
@@ -854,6 +945,11 @@ pub fn parse(args: &[String], game_dir: Option<String>) -> Result<Options, Strin
     // The reconnect wait, jittered by the seed so that peers cut at once do
     // not all come back on the same frame.
     bot.reconnect_after_ms += (seed % 1000) as i64; // nocite: our own harness (up to a second more)
+    // The direct path's draws, apart from the relay path's.
+    let direct_shape = match direct_shape {
+        Some(t) => Some(shape(&t, seed ^ 0x5EED_D1EC)?), // nocite: our own harness (any constant apart from the seed)
+        None => None,
+    };
     Ok(Options {
         bot,
         seed,
@@ -862,6 +958,9 @@ pub fn parse(args: &[String], game_dir: Option<String>) -> Result<Options, Strin
         code_file,
         settings,
         game_dir,
+        relay_only,
+        ice,
+        direct_shape,
     })
 }
 
@@ -902,6 +1001,11 @@ impl Driver {
     /// `readmitted N at tick T after MS ms`, a progress line now and then.
     pub fn step(&mut self, c: &mut Client, now: i64) -> Vec<String> {
         self.bot.step(c, now);
+        let pairs = c.direct_stats();
+        if !pairs.is_empty() {
+            self.bot.stats.pairs = pairs;
+            self.bot.stats.relay_rtt = c.relay_rtt();
+        }
         let s = &self.bot.stats;
         let mut out = Vec::new();
         if !self.said_room

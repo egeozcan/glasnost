@@ -178,6 +178,12 @@ pub struct Settings {
     pub relay: String,
     /// The network game this client can rejoin, while one runs (M9 N5).
     pub rejoin: Option<Rejoin>,
+    /// Whether network games try direct links between the peers (M9 N7);
+    /// off: the relay carries everything.
+    pub direct: bool,
+    /// The direct links' STUN or TURN servers, space-separated URLs (M9
+    /// N7); none by default.
+    pub ice: String,
 }
 
 /// A network game a client can rejoin after its link or its process went
@@ -248,6 +254,10 @@ impl Default for Settings {
             bindings: Bindings::default(),
             relay: String::new(),
             rejoin: None,
+            // nocite: our own netcode (direct links on, the relay keeps every frame)
+            direct: true,
+            // nocite: our own netcode (no STUN or TURN server: nothing contacted by default)
+            ice: String::new(),
         }
     }
 }
@@ -279,6 +289,13 @@ impl Settings {
         s += &format!("relay={relay}\n");
         if let Some(r) = &self.rejoin {
             s += &format!("rejoin={}\n", r.to_text());
+        }
+        if !self.direct {
+            s += "direct=0\n";
+        }
+        let ice: String = self.ice.chars().filter(|c| !c.is_control()).collect();
+        if !ice.is_empty() {
+            s += &format!("ice={ice}\n");
         }
         s
     }
@@ -323,6 +340,16 @@ impl Settings {
                         .collect();
                 }
                 "rejoin" => s.rejoin = Rejoin::from_text(v),
+                "direct" => s.direct = flag().unwrap_or(s.direct),
+                "ice" => {
+                    s.ice = v
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(RELAY_CHARS)
+                        .collect::<String>()
+                        .trim()
+                        .to_owned();
+                }
                 other => {
                     if let Some(name) = other.strip_prefix("key.")
                         && let Some(a) = ACTIONS.iter().copied().find(|a| a.name() == name)

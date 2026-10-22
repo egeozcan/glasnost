@@ -42,7 +42,7 @@ pub mod transport;
 pub mod wire;
 
 pub use session::{
-    Applied, Catchup, Config, Event, Life, Phase, Session, SlotCatchup, SlotHash, Tick,
+    Applied, Catchup, Config, Event, Life, Paths, Phase, Session, SlotCatchup, SlotHash, Tick, Via,
 };
 pub use sim::Simulation;
 pub use start::{Field, Params, Slot, SlotKind, StartInfo};

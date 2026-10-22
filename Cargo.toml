@@ -15,6 +15,7 @@ members = [
     "crates/ui",
     "crates/net",
     "crates/relay",
+    "crates/rtc",
     "crates/app",
     "crates/platform-native",
     "crates/platform-web",
@@ -45,6 +46,7 @@ glasnost-render = { path = "crates/render" }
 glasnost-audio = { path = "crates/audio" }
 glasnost-ui = { path = "crates/ui" }
 glasnost-net = { path = "crates/net" }
+glasnost-rtc = { path = "crates/rtc" }
 glasnost-app = { path = "crates/app" }
 glasnost-sim-gate = { path = "crates/sim-gate" }
 

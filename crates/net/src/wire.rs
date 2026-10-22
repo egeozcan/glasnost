@@ -16,15 +16,30 @@
 //! relay of N2 forwards it, a mesh transport copies it to each link).
 //!
 //! Only the relay speaks as [`RELAY`], and only the relay sends
-//! [`Body::Dropped`], [`Body::Serve`] and [`Body::Resume`]: it checks the
-//! sender byte of every message it forwards against the sender's slot and
-//! never forwards one of those from a client, and a session takes them only
-//! from [`RELAY`] (N2, N5). Version 2 added that rule and the lobby's
+//! [`Body::Dropped`], [`Body::Serve`], [`Body::Resume`] and
+//! [`Body::Closing`]: it checks the sender byte of every message it
+//! forwards against the sender's slot and never forwards one of those from
+//! a client, and a session takes them only from [`RELAY`] (N2, N5, N7). Version 2 added that rule and the lobby's
 //! messages ([`crate::lobby::wire`]), which share this version; version 3
 //! the lobby's chat (N3); version 4 the desync report's digest in
 //! [`Frames::report`] (N4); version 5 the rejoin (N5): [`Body::Serve`],
 //! [`Body::Resume`], [`Frame::resume`] and the grace period in the start
-//! values.
+//! values; version 6 the direct links (N7): [`Body::Closing`],
+//! [`Body::Held`] and the lobby's signalling and ping.
+//!
+//! **Direct links (N7).** A peer may also copy its [`Body::Frames`]
+//! messages, and only those, onto a WebRTC data channel to another peer. The
+//! relay still gets every message, so the data channel only shortens the
+//! path, and a receiver keeps whichever copy of a frame comes first. A data
+//! channel carries no relay in between: a receiver takes from it only
+//! frames whose sender byte is the slot that channel was opened for, never
+//! a frame that carries a readmission marker ([`Frame::resume`]), and never
+//! one more than a lead ahead of the frames the relay has passed on
+//! (`Session`). When a slot that had direct links drops, the relay first
+//! asks its direct peers which of its frames they hold beyond those it
+//! forwarded ([`Body::Closing`]), passes the answers on to everyone
+//! ([`Body::Held`]) and only then sends the [`Body::Dropped`], whose `kept`
+//! counts them.
 //!
 //! This is our own protocol (docs/development.md, *Multiplayer (M9)*); it is
 //! not compatible with the original game's clients.
@@ -40,7 +55,7 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 5;
+pub const WIRE_VERSION: u8 = 6;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.
@@ -97,6 +112,32 @@ pub enum Body {
     Resume {
         /// The rejoining slot.
         slot: u8,
+    },
+    /// A slot that had direct links is leaving (N7): the relay asks this
+    /// peer for that slot's frames it holds from frame `forwarded` on (the
+    /// relay forwarded the ones before to everyone). The peer takes no more
+    /// of that slot's frames from a data channel and answers with
+    /// [`Body::Held`]. Only the relay sends it, as [`RELAY`].
+    Closing {
+        /// The slot that leaves.
+        slot: u8,
+        /// How many of its frames (from frame 0) the relay forwarded.
+        forwarded: u32,
+    },
+    /// Frames of a leaving slot (N7): from a peer to the relay, those it
+    /// holds or has run from the relay's `forwarded` on, without a gap, as
+    /// its answer to [`Body::Closing`]; from the relay ([`RELAY`]) to every
+    /// peer, the answers put together, before the [`Body::Dropped`] that
+    /// counts them. Long answers come in parts; `last` ends one.
+    Held {
+        /// The slot that leaves.
+        slot: u8,
+        /// The number of the first frame in `frames`.
+        first: u32,
+        /// Its frames `first`, `first + 1`, … in order.
+        frames: Vec<Frame>,
+        /// The last part of this answer.
+        last: bool,
     },
 }
 
@@ -201,6 +242,21 @@ impl std::fmt::Display for WireError {
             WireError::Body(e) => write!(f, "unreadable message body: {e}"),
         }
     }
+}
+
+/// The postcard tag of [`Body::Frames`], the body's first byte.
+// nocite: our own netcode (the variant's index in `Body`)
+const FRAMES_TAG: u8 = 1;
+
+/// Whether `bytes` are a [`Body::Frames`] message of this version from
+/// slot `from`, by the header and the body's first byte (the only message a
+/// peer copies onto a direct link, N7). The body is not read.
+pub fn is_frames_from(bytes: &[u8], from: u8) -> bool {
+    bytes.len() > HEADER_LEN
+        && bytes[..2] == MAGIC
+        && bytes[2] == WIRE_VERSION
+        && bytes[3] == from
+        && bytes[HEADER_LEN] == FRAMES_TAG
 }
 
 /// Writes a message.

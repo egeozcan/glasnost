@@ -21,6 +21,7 @@ pub mod captions;
 pub mod capture;
 pub mod client;
 pub mod cursor;
+pub mod direct;
 pub mod install;
 pub mod link;
 pub mod paint;

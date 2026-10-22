@@ -17,6 +17,9 @@
 //!    and must cross one way in that time, with a tick to spare.
 //! 2. *Late frames raise it*: if the peer had to wait for a frame since the
 //!    last change took effect, it proposes at least the current delay + 1.
+//!    Each wait raises it once: at the largest delay the raise changes
+//!    nothing, and a wait that counted again on every proposal would hold
+//!    the delay there for good, since only a change of the delay ends it.
 //! 3. *A better link lowers it, in steps*: a need below the peer's own last
 //!    proposal lowers the proposal half the way to the need (at least one)
 //!    only after `calm_ticks` ticks with no wait, no change of the delay and
@@ -116,6 +119,8 @@ pub struct Control {
     pub last_lower: u32,
     /// Its last proposal, if it made one.
     pub held: Option<u8>,
+    /// The last wait that raised a proposal: it raises none again.
+    pub answered: Option<u32>,
 }
 
 impl Control {
@@ -147,9 +152,12 @@ impl Control {
         // A change takes a delay's worth of ticks to show in the frames
         // that arrive; a wait before that says nothing about the new delay.
         let effective = self.last_change.saturating_add(current32);
-        let waited_since = self.last_wait.is_some_and(|w| w > effective);
+        let waited_since = self
+            .last_wait
+            .is_some_and(|w| w > effective && self.answered.is_none_or(|a| w > a));
         if waited_since {
             p = p.max(current32 + 1);
+            self.answered = self.last_wait;
         }
         if p < held {
             let calm_since = self
@@ -261,5 +269,32 @@ mod tests {
         // Clamped to the smallest.
         let mut calm = Control::default();
         assert_eq!(calm.propose(100, 1, Some(0), 33, 20, &params), 1);
+    }
+
+    #[test]
+    fn a_wait_at_the_largest_delay_does_not_hold_it_there() {
+        let params = Params {
+            initial_delay: 3,
+            min_delay: 1,
+            max_delay: 10,
+            hash_every: 1,
+            ..Params::default()
+        };
+        let mut c = Control::default();
+        c.changed(10);
+        assert_eq!(c.propose(10, 10, Some(600), 33, 20, &params), 10);
+        // A wait after the largest delay took effect: the raise is clamped.
+        c.waited(30);
+        assert_eq!(c.propose(30, 10, Some(30), 33, 20, &params), 10);
+        // The delay cannot change, so no change ends the wait; it still
+        // raises only once, and after a calm stretch the proposal falls.
+        assert_eq!(c.propose(40, 10, Some(30), 33, 20, &params), 10);
+        assert_eq!(c.propose(50, 10, Some(30), 33, 20, &params), 6);
+        // A new wait raises again.
+        c.changed(51);
+        c.waited(70);
+        assert_eq!(c.propose(70, 6, Some(30), 33, 20, &params), 7);
+        // Below the largest delay the raise holds until a calm stretch.
+        assert_eq!(c.propose(71, 6, Some(30), 33, 20, &params), 7);
     }
 }

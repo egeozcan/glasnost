@@ -2100,7 +2100,7 @@ The crate `glasnost-net` holds the protocol and one peer's lockstep session. It 
 **Wire format** (`wire.rs`). A message is a 4-byte header, then a postcard body. The header holds the magic `GN`, the protocol version (`WIRE_VERSION`, now 5: N2 reserved the sender id 255, `wire::RELAY`, for the relay, N3 added chat lines to the lobby messages that share the version, N4 added the desync report's digest to the frames message, and N5 added `Body::Serve`, `Body::Resume`, `Frame.resume`, the grace period in the start values, and the lobby's `Rejoin`, `Snapshot`, `CaughtUp`, `Rejoined`, `Begin.ticket` and new refusals) and the sender's slot. A receiver reports a message with another version as a refusal on the field *protocol*. Trailing bytes, a short header or a body that does not decode are reported as `Event::BadMessage`, and never cause a panic (`hostile_bytes_never_panic`). The body is one of three kinds:
 
 - `Start`: the sender's start values.
-- `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, an echo of every other peer's latest stamp with the time it held that stamp, and, once it has written one, its desync report's tick and digest (N4).
+- `Frames`: its frames not yet acknowledged by every live peer, and its checkpoint hashes not yet acknowledged. The message also carries the ticks it has run, its acknowledgements of every other slot's frames and hashes (how many it holds from 0 without a gap), its time stamp, an echo of every other live peer's latest stamp with the time it held that stamp (since N7 only a live peer's: a dropped slot's stamps belong to a process that may be gone), and, once it has written one, its desync report's tick and digest (N4).
 - `Dropped { slot, kept }`: the relay's report that a slot left (N2). A session acts on it only from the sender `RELAY`; from any other sender it is a bad message, as is any other body from `RELAY`.
 
 Each message carries the whole unacknowledged window, so a lost message costs nothing once a later one arrives. A receiver keeps the first copy of each (slot, frame) and ignores duplicates. It also ignores frames beyond the window: two largest delays past its own tick.
@@ -2109,10 +2109,10 @@ Each message carries the whole unacknowledged window, so a lost message costs no
 
 **Frames and the tick rule** (`session.rs`). Frame *n* of a person's slot is that person's input for tick *n*. After *k* ticks with delay *D*, a peer has made its frames 0 to *k* + *D* − 1. The person's orders since the last frame go into the first new frame, and the other new frames are empty. A frame never changes once made. Tick *n* runs only when frame *n* of every live person's slot is in. Its orders are issued slot by slot in slot order, and in the order the person gave them within a slot; then the game steps. So whatever order the frames arrive in, every peer issues the same orders in the same order (`merged_orders_apply_in_slot_order_whatever_the_arrival_order`). No peer can run more than the delay ahead of the slowest peer, and a stalled peer stalls everyone (`a_stalled_peer_stalls_all_and_none_runs_ahead`). The session's `step` runs at most one tick when the caller's pacer says one is due. It returns the tick's merged orders (`Tick`), and for each order whether the game took it.
 
-**The delay** (`delay.rs`). Each peer measures the round trip to every other peer from the echoes of its own stamps, minus the time the other peer held each stamp. The smoothed estimate and its variation are integers, using the RFC 6298 estimator. A sample below the estimate counts an eighth as much in the variation, so a link that gets faster does not raise the timeout. Only an echo newer than the last one sampled is used. From the largest timeout (smoothed + 4 × variation), the peer works out its *need*: ⌈timeout / (2 × tick period)⌉ + 1, a one-way trip and a tick to spare. It writes a proposal into every frame it makes, as follows:
+**The delay** (`delay.rs`). Each peer measures the round trip to every other peer from the echoes of its own stamps, minus the time the other peer held each stamp. The smoothed estimate and its variation are integers, using the RFC 6298 estimator. A sample below the estimate counts an eighth as much in the variation, so a link that gets faster does not raise the timeout. Only an echo newer than the last one sampled is used, and only if its round trip is plausible (at most 60 s); since N7 an implausible one moves nothing, so an echo of a restarted process's old stamps cannot make every later echo look old. From the largest timeout (smoothed + 4 × variation), the peer works out its *need*: ⌈timeout / (2 × tick period)⌉ + 1, a one-way trip and a tick to spare. It writes a proposal into every frame it makes, as follows:
 
 - The need raises the proposal at once.
-- A wait for a frame since the last change took effect raises the proposal to at least the delay + 1.
+- A wait for a frame since the last change took effect raises the proposal to at least the delay + 1, once per wait (since N7: at the largest delay the raise changes nothing, and a wait that counted again on every proposal held the delay there to the end of the game).
 - A need below the peer's own last proposal lowers it half the way down (at least one step). This happens only after `calm_ticks` ticks with no wait, no change and no lowering of its own; until then the peer repeats its last proposal.
 - The proposal is clamped to the smallest and largest delay.
 
@@ -2459,6 +2459,116 @@ Shorter runs: 3 minutes native and 3 minutes with the wasm row on the bad networ
 - *A checkpoint can go unlogged.* If the link closes in the same update as a checkpoint, the client may drop that checkpoint before the bot takes it; the soak compares only the ticks it has.
 - *Rejoin times after a kill* count from the restarted client finding its game, plus the 2 s wait it skips.
 - *Not a browser.* The wasm row is the wasm32 build under node, not a page: no drawing, audio, folder picker or browser download.
+
+### WebRTC (N7)
+
+A network game's peers also send each other their frames on direct WebRTC data channels, beside the relay. The relay stays the game's path and its only authority: every lockstep message still goes through it, and a direct link only lets a frame arrive sooner. Nothing here is a game rule; it is all our own netcode (`// nocite: our own netcode`), and the simulation crates do not change. Code: `crates/net/src/session.rs` (`Via`, `receive_via`, `Paths`, `direct_ok`, the drop round's `Closing` and `Held`), `crates/net/src/lobby/wire.rs` (`Signal`, `Ping`, `Pong`), `crates/relay/src/hub.rs` (signal routing and the drop round), `crates/rtc` (`glasnost-rtc`, the native link), `crates/app/src/game/direct.rs` (the pairs, their timeouts and the shaped network), `crates/platform-web/src/rtc.rs` (the browser's link), `crates/tools/src/soak.rs` (`--transport`) and `web-tests/rtc.mjs`.
+
+**Design.**
+
+- *One data channel per pair of persons.* Each pair of human slots in a game tries one link; the lower slot offers. AI slots have no peer and need none. A peer copies only its own `Frames` messages onto its open links (`wire::is_frames_from`), and still sends everything to the relay.
+- *Unordered and never resent.* The channel is negotiated (id 0 on both ends, so neither waits for the other to announce it), unordered, with no retransmits (`maxRetransmits: 0`). The lockstep needs every frame, but it already gets every frame through the relay, over TCP: a datagram the direct path loses costs nothing, the relay's copy comes a moment later, and the lockstep's own resend of unacknowledged frames (N1) goes through the relay too. A reliable, ordered channel would only add head-of-line waits to the path that is meant to be the fast one.
+- *Signalling on the relay, as lobby messages.* `ToRelay::Signal { to, attempt, signal }` and `FromRelay::Signal { from, attempt, signal }`, with `Signal::{Offer, Answer, Candidate}` (SDP text, or a candidate as the JSON of `RTCIceCandidate.toJSON()`, at most `MAX_SIGNAL` = 16 KiB, printable ASCII; `Signal::plausible` checks the shape on the relay and again on the receiver). Matchbox's own signalling protocol was not used: it wants its own WebSocket server and peer ids, while the relay already knows the room, its slots and who is live, so the slots are the peer ids and there is no second server and no second room code. The relay passes a signal only between two live persons of one game, from the sender's own slot, with its own budget: one per `signal_every_ms` = 50 ms on average, at most `signal_burst` = 64 at once; the rest is dropped. `ToRelay::Ping { stamp }` / `FromRelay::Pong { stamp }` measure the relay path's round trip (once a second, `RELAY_PING_MS`); a pong spends the general message budget. Lobby wire and lockstep wire version 6.
+- *Attempts.* The offering end numbers its attempts. A signal of another attempt than the current one is dropped; an offer of a new attempt replaces the answering end's link. A peer that rejoins is a new process and numbers from 1 again, so the answering end forgets the number while the slot is out, and keeps signals that come before the slot plays on its side (a rejoined peer may be readmitted on its own side a moment earlier) for when it does, at most `MAX_SIGNALS`, none older than the connect timeout.
+- *Native.* `glasnost-rtc` wraps `matchbox_socket` 0.14 (webrtc-rs underneath) for one pair: our own signaller in place of matchbox's WebSocket, our ICE servers only (`.ice_server(...)`, so matchbox's default Google STUN server is never used), no reconnects, no keep-alive to a signalling server. Its loop runs on its own thread, `glasnost-rtc`, under `catch_unwind`: matchbox panics on some hostile SDP (an `expect` in its native handshake), and that ends only the attempt. It uses matchbox's non-panicking calls (`try_update_peers`, `try_send`). `cargo xtask deps` keeps the WebRTC stack inside `glasnost-rtc` and out of `glasnost-net`.
+- *Browser.* `glasnost-platform-web`'s `rtc` module drives `RTCPeerConnection` through `web-sys`, not matchbox: matchbox's wasm path panics on an empty ICE URL list (which is our default), `expect`s on a hostile SDP, and mishandles a channel that opens after the attempt was given up. The same channel settings; an empty server list is passed as `iceServers: []` (browsers reject an entry with no URLs); candidates either way wait until the remote description is set; a browser without `RTCPeerConnection` closes the attempt at once. A browser and a native client can link (the same SDP and candidate fields), though only browser to browser and native to native were run.
+- *Control packets.* Each link carries its own pings: `GP`, version 1, kind 0 (ping) or 1 (pong), a 32-bit stamp, 8 bytes, every `PING_MS`. They give the direct round trip and tell a live link from a dead one: matchbox did not notice a peer that went away within 40 s in a trial.
+
+**Trust.**
+
+- `Dropped`, `Serve`, `Resume`, `Closing`, `Held` and the rejoin markers come only from the relay's WebSocket. A data channel carries frames and nothing else: the session takes from a direct link (`Session::receive_via(.., Via::Direct(slot))`) only `Body::Frames` whose sender byte is the channel's slot, while that slot is live and not leaving and this peer is not catching up (`Session::direct_ok`). Every other byte on a link is refused and counted (`PairStats::refused`). A direct frame that carries a readmission marker (`Frame::resume`), or one more than `Session::lead` (eight largest delays) ahead of what the relay has passed on of that slot (its relay frontier), waits for the relay's copy (`Paths::gated`).
+- *`kept` stays authoritative: the drop round.* The relay still sees every frame, but a peer may have run a frame that came the direct way before the relay forwarded it. So when a slot that signalled with others drops, the relay first asks the live peers it signalled with for that slot's frames they hold past what the relay forwarded (`Body::Closing`), takes their answers (`Body::Held`, without a gap, first copy wins) for at most `answer_ms` = 10 s, closes a peer that does not answer by then, sends everyone the frames put together, and only then the `Dropped` whose `kept` counts them. Every peer then drops the slot at the same frame.
+- *First copy wins; two stories are reported.* If the relay's copy of a frame differs from the direct copy, the first one ran; the session reports it once per slot (`Event::Conflicting`, a log line and a notice "X's orders came twice and differed"). The checkpoint hashes (N4) then tell whether the peers ran the same.
+- *The cost.* A hostile peer can send different frames on its direct links than through the relay (equivocate), or claim false `Held` frames within its last `lead` frames when another slot drops; the conflict notice and the desync check catch it, and relay-only (below) removes it. Bandwidth roughly doubles for a peer's own frames (each goes to the relay and to every open link). A native matchbox panic costs one attempt. webrtc-rs may keep some memory per attempt, and matchbox pulls in `async-tungstenite` and `async-std` that are compiled but unused.
+
+**Fallback.** Nothing for the players to do, and no desync: the relay carries every frame all along, so a pair whose link cannot be made, or dies, simply has its frames come through the relay; the game never waits for a link. A link that dies ends on both sides; the offering end tries again, and a link that comes back is used again. The timeouts (`game::direct`, `Timeouts`):
+
+| What | Default | Constant |
+|---|---|---|
+| An attempt may take this long to open; then it is given up | 10 s | `CONNECT_MS` |
+| An open link may be silent this long; then it is dead | 3 s | `STALE_MS` |
+| An open link is pinged every | 0.5 s | `PING_MS` |
+| After a failed or dead attempt, the offering end waits | 15 s, doubling with each failure in a row | `RETRY_MS` |
+| The longest wait between attempts | 120 s | `RETRY_MAX_MS` |
+| The most signals one attempt sends; more ends it | 40 | `MAX_SIGNALS` |
+| The relay's signal budget per person | 1 per 50 ms, burst 64 | `Limits::signal_every_ms`, `signal_burst` |
+| The relay waits for the drop round's answers | 10 s | `Limits::answer_ms` |
+
+A slot that leaves, or a peer that is catching up, ends its links and resets the back-off; the links come again once it plays.
+
+**Switches.** Direct links are on by default. Relay only: the settings line `direct=0`, `--relay-only` (native), `?direct=off` (web), `--relay-only` (net-client). ICE servers: none by default; the settings line `ice=URL ...`, `--ice URL` (native, repeatable), `?ice=` (web), `--ice "URLS"` (net-client), space-separated `stun:HOST:PORT` or `turn:HOST:PORT` URLs, with `username=NAME` and `credential=WORD` words for a TURN server (kept in the settings file as typed).
+
+**How to run it.**
+
+- Two native clients: `cargo run -p glasnost-relay`, then `cargo run -p glasnost-platform-native -- --game --game-dir DIR` twice; host and join as in N3. The log says `direct link to slot N open` and, on a loss, `direct link to slot N lost (...)`.
+- Web: `cargo xtask web --serve` and `/?mode=game&relay=ws://127.0.0.1:8787/` in two tabs (or one tab and a native client).
+- The browser check: `cargo xtask web`, then `node web-tests/rtc.mjs --browser chromium` (or `firefox`).
+- The soak over direct links: as in N6, with `--transport rtc` (`GLASNOST_SOAK_TRANSPORT=rtc` for `long_soak_2v2`); `--transport relay`, the default, is N6's soak with every client on `--relay-only`.
+
+**Tests.**
+
+- `crates/net/tests/direct.rs` (8): a direct link carries only its slot's frames (another slot's frames, the relay's sender byte, `Dropped`, `Serve`, `Resume` on it change nothing); a relay path a lead behind holds the game back; hostile bytes on a link never panic; the first copy wins and a different one is reported once; a drop round is answered with every frame run or held past the relay's, a round for a slot not live here is answered empty, long answers come in parts; only a peer's own `Frames` messages go on a link.
+- `crates/relay/tests/hub.rs` (6 for N7): signals pass between live persons of one game only; signals too fast are dropped, and a ping is answered; a drop of a slot without direct links is reported at once; a drop of a slot with direct links waits for its peers' frames; answers out of turn are refused and a silent peer is closed; an answer with a marker or past a lead ends, and a peer that leaves is not waited for. `crates/relay/tests/rejoin.rs` (3 for N7): a drop with direct links counts every frame a peer ran; a drop and rejoin over a direct link keeps identical hashes; a rejoin while two others play on a direct link. The rejoin harness gives a rejoining peer a new process's clock, far below its slot's old stamps, and every rejoin test checks that it measures its round trips again; `delay.rs`: `a_wait_at_the_largest_delay_does_not_hold_it_there`.
+- `crates/rtc/tests/pair.rs` (2, `#[ignore]`: real UDP on loopback): two pairs link (55 ms) and carry packets both ways; a hostile offer ends that attempt (matchbox's panic is caught) and a new attempt still links.
+- `crates/app/src/game/client_direct_tests.rs` (3, over an in-process relay and the fake network `game::direct::fake`, with the relay path 40 ms late each way): frames come the direct way and hostile bytes injected on a link change nothing (the fallback not forced); three persons where one pair can never link and a client switched to relay only (`direct=0`), every game agreeing (the fallback forced; a mix of direct and relayed pairs); a link that goes dark mid-game falls back, the relay carries the frames, and once the route is back the pair links again and the link is used.
+- `crates/tools/tests/soak.rs`: `four_ai_persons_play_a_2v2_over_direct_links_beside_the_relay`, in CI: N6's short soak with the four on the fake network behind the same bad networks on the direct path; every checkpoint agrees, row 1's cut and rejoin links again, and every pair opened and took frames the direct way first.
+- `web-tests/rtc.mjs`: in Chromium and Firefox, two attempts in one page open with no ICE server (33 to 50 ms) and carry a packet each way, and a hostile offer ends its attempt without a panic.
+- Unit tests: control packets, the shaped lane, ICE words, settings (`direct_links_are_on_with_no_servers_by_default`), `xtask deps` (`the_direct_links_stack_stays_inside_its_crate`, `versions_of_a_package_keep_their_own_dependencies`).
+
+**The soaks** (local lane, on the install, 2026-10-22; counts and timings only). All runs native, with four persons on map index 30 and `--minutes 30`. The bad network is N6's (40 ms, jitter 0 to 30 ms, 2 % of chunks 200 ms late, stalls of 0.5 to 2.5 s every 45 to 150 s). It is on every relay link and, with `--transport rtc`, on every direct path too. Another session's sweep used about 14 of the machine's 32 cores throughout.
+
+The games are AI games and end when one team wins. With the default trouble (cuts at 300, 600 and 1 200 s, a kill at 900 s), the direct-link game ended after the first cut. A second direct-link run therefore moved the four troubles to 60, 120, 180 (the kill) and 240 s. Delay shares come from each client's delay timeline.
+
+| | rtc, default trouble | rtc, trouble at 60 to 240 s | relay, default trouble |
+|---|---|---|---|
+| Result | pass: 0 mismatches, no desync, every client exited with 0 | pass | pass |
+| Game | won at tick 19 994 (5.3 min of game time), 8.3 min wall, 40 ticks/s | won at tick 52 132 (13.9 min), 21.6 min wall, 40 ticks/s | won at tick 98 793 (26.3 min), 34.4 min wall, 48 ticks/s |
+| Rejoins | 1 cut: 12.1 s | cuts 8.4, 8.6 and 10.7 s; the kill 14.7 s | cuts 7.9, 9.2 and 7.9 s; the kill 13.9 s |
+| Checkpoints in common | 662 | 1 717 | 3 269 |
+| Delay, whole game | 10 to 30: 35 to 37 % at 10 to 18, 42 to 45 % at 19 to 24, 9 % at 25 to 29, 12 % at 30 | 10 to 30: 46 to 49 %, 37 to 38 %, 7 to 8 %, 7 % | 22 to 30: 0 %, 0 %, 12 to 13 %, 87 to 88 % |
+| Delay, ticks 0 to 11 900 (before any cut in either default run; the same on each client that covers it) | 33 %, 45 %, 6 %, 16 % | – | 0 %, 0 %, 9 %, 91 % |
+| Round trip peer to peer (`session_rtt_ms`, smoothed, all paths) | 251 to 286 ms | 238 to 287 ms | 333 to 440 ms |
+| Round trip client to relay (`relay_rtt_ms`, smoothed at the end) | 201 to 279 ms | 199 to 240 ms | 178 to 241 ms |
+| Direct link's own round trip (`rtt_ms`, smoothed at the end, over the 12 pairs) | 275 to 310 ms | 274 to 338 ms | – |
+| Frames that came the direct way first | 78 % | 76 % | – |
+| Pairs | 12 of 12 linked; 17 attempts, 0 failed; 5 fallbacks (the cut slot's links, and twice a link that went silent), every pair linked again | 12 of 12; 18 attempts, 0 failed; 6 fallbacks (the troubled slots' links), every pair linked again | relay only |
+| Connect | 186 to 822 ms, median 374 | 155 to 1 585 ms, median 408 | – |
+| Held back (`gated`) | 89 frames | 338 | – |
+| Late ticks (over 100 ms), per client | 122 to 651 | 136 to 513 | 200 to 225 |
+| "Waiting for ..." shown, per client | 0 | 1 or 2 | 38 to 67 |
+| Longest gap between two ticks | 0.5 to 0.6 s | 1.6 to 1.8 s | 2.4 to 3.7 s |
+
+On the bad network the direct path gives the peers a shorter round trip, because a lost packet costs only that frame's copy, which the relay's copy covers. The relay path runs over TCP, where a late chunk holds back every chunk after it. With direct links the delay mostly stayed between 10 and 24, and the players almost never saw "Waiting for". On the relay alone it sat at the largest delay, already in the first 11 900 ticks, before any trouble. Paced at the same delay, the relay-only clients ran more ticks per second (48 against 40). A lower delay leaves less room for a stall, so a stall shows as late ticks instead.
+
+*Milder network* (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, the four troubles at 30, 60, 90 (the kill) and 120 s, 11 250 ticks; both runs pass):
+
+| | rtc | relay |
+|---|---|---|
+| Delay | 3 to 18; 71 to 88 % of ticks at 6 to 8, per client | 3 to 24; 67 to 78 % at 6 to 8 |
+| Rejoins | 7.2, 13.1, 11.1 (the kill) and 8.6 s | 7.5, 8.0, 9.4 (the kill) and 11.9 s |
+| Direct first | 29 % | – |
+| Round trips (smoothed) | session 99 to 107 ms; the direct link's own 122 to 151 ms | session 101 to 113 ms |
+| Connect | 54 to 155 ms; 6 fallbacks after the four troubles, all linked again | – |
+
+On this network the shaped direct path is slower than the relay path. That comes from the harness, not the link. The netem proxies on the relay path run on their own threads. The direct path's shape (`game::direct::Shaped`) moves packets only when the client polls it, so each shaped stage waits for the next client update: about 35 ms more per round trip at 62.5 ticks/s. The soak therefore understates what the direct path gains. Unshaped on loopback, a link opens in about 55 ms (`crates/rtc/tests/pair.rs`). The wasm row of the soak was not run in N7 (it stays on the relay; see below).
+
+*A delay fault these soaks found* (not in the direct links; fixed in `glasnost-net`, see "The delay" above). The first long soaks pinned the delay at the largest value: 83 % of ticks at 30 with direct links, 99 % on the relay. The first milder run stuck at 30 from the host's rejoin to the end. Two causes:
+- one wait at the largest delay raised every later proposal;
+- a peer restarted after a kill took its old process's stamps, still echoed by the others, for its own, and measured no round trip until its new clock passed the old one.
+
+N6's "26 to 30 for the whole game" is very likely the first cause. The numbers above are from the fixed build.
+
+**Seams for N8 and limits.**
+
+- *Routers and firewalls.* With no ICE server a link forms only where the two peers reach each other's host addresses: on one machine or one LAN. Across the internet most pairs need at least a STUN server, and peers behind symmetric NAT or strict firewalls need TURN. Nothing has to be opened on a router for the relay path (outgoing TCP to the relay); a direct link uses outgoing UDP on ephemeral ports, and incoming UDP from the peer once ICE has opened the NAT binding. N8's guide should say which servers to name with `ice=` and that everything still works without them, on the relay.
+- *Nothing phones home.* No STUN or TURN server is configured by default, and matchbox's default (a public Google STUN server) is overridden; a client contacts only the relay and the peers of its game. Naming a STUN or TURN server sends that server the client's addresses.
+- *Host addresses.* Browsers hide host candidates behind mDNS names (`*.local`); peers on one LAN resolve them (webrtc-rs answers mDNS queries), but a headless browser in a container may not, which is why `rtc.mjs` turns the hiding off (`--disable-features=WebRtcHideLocalIpsWithMdns`, `media.peerconnection.ice.obfuscate_host_addresses`).
+- *The wasm soak row stays on the relay.* Node has no `RTCPeerConnection` and no GPL-compatible package already in the repository's tooling provides one, so the wasm client under node keeps `direct = None` (its pairs show as relayed). The browser side runs in `rtc.mjs`. A browser soak row would need the wasm client in a page (Playwright, which `web-tests` already uses), the install's archive reads through a page API instead of `glasnostReadAt`'s synchronous file reads, and the same status lines and files written through the page.
+- *Mixed browser and native pairs* use the same SDP and candidate fields but were not run.
+- *TURN passwords* are kept in the settings file as typed.
+- *Client logs.* webrtc-rs logs ICE, mDNS and connection-state lines at INFO and WARN into the client's log (a few dozen per attempt); they are harmless and could be filtered by target.
+- *The soak's trouble after the end.* A trouble timed after the game ended (an AI game can end early) finds no game: a killed client restarted then cannot rejoin, and the soak fails on its exit. It happened once, in a 3-minute run whose game ended at 84 s; the harness could skip trouble once a game is over.
+- *Security advisories on an unused branch.* `cargo deny check advisories` (not run in CI) lists RUSTSEC-2025-0052 (async-std unmaintained), RUSTSEC-2025-0134 (rustls-pemfile unmaintained) and seven 2026 advisories on rustls 0.21, rustls-webpki 0.101 and webpki-roots 0.22. They all come in through matchbox_socket's WebSocket signaller (async-tungstenite, async-tls), which matchbox 0.14 compiles on native with no feature to leave it out. glasnost-rtc never builds that path: it signals over the relay. No ignores were added; a later matchbox, or a fork without the signaller, would drop them.
 
 ## M6c step ledger
 
