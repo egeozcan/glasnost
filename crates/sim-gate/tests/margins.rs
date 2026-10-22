@@ -13,7 +13,8 @@
 //!   (`GLASNOST_HITS`); and the hits on one house by attacker and victim
 //!   type (`GLASNOST_LOSSES`, with `GLASNOST_LOSSES_NONE` and
 //!   `GLASNOST_LOSSES_SHOTS=<type>` for the hits with no attacker and the
-//!   shots of one type).
+//!   shots of one type; both play with the switch `GLASNOST_QUIRK` flipped
+//!   when it is set).
 //!
 //! ```sh
 //! GLASNOST_SWEEP=1-32 GLASNOST_DUELS=duel-m6c,duel-m7a GLASNOST_QUIRKS=default,table_root_distance \
@@ -208,6 +209,25 @@ fn wanted(var: &str) -> bool {
         println!("skipped: {var} is not set");
     }
     set
+}
+
+/// A type's name: a unit's or a building's.
+fn type_name(
+    w: &glasnost_sim::world::World,
+    kind: glasnost_sim::rules::Kind,
+    index: u32,
+) -> String {
+    if kind == glasnost_sim::rules::Kind::Building {
+        if let Some(b) = usize::try_from(index)
+            .ok()
+            .and_then(|i| w.rules().buildings.get(i))
+        {
+            return b.name.clone();
+        }
+    }
+    w.rules()
+        .unit(kind, index)
+        .map_or_else(|| format!("{kind:?}#{index}"), |u| u.name.clone())
 }
 
 fn env(name: &str, default: &str) -> String {
@@ -536,27 +556,38 @@ fn watch() {
                 let mut by: BTreeMap<String, u32> = BTreeMap::new();
                 for o in g.world.objects.values() {
                     if o.on_map && o.owner == Some(h) {
-                        let n = g
-                            .world
-                            .rules()
-                            .unit(o.kind, o.type_index)
-                            .map(|u| u.name.clone())
-                            .unwrap_or_else(|| format!("{:?}#{}", o.kind, o.type_index));
+                        let n = type_name(&g.world, o.kind, o.type_index);
                         *by.entry(n).or_default() += 1;
                     }
                 }
                 println!("house {}: {line}\n  objects {by:?}", h.0);
+                // `GLASNOST_WATCH_TYPE=<type>[,<type>...]`: each object of
+                // those types, with its cell, health, behaviours, target and
+                // destination.
+                let traced = env("GLASNOST_WATCH_TYPE", "");
+                let traced: Vec<&str> = traced.split(',').filter(|s| !s.is_empty()).collect();
+                for o in g.world.objects.values() {
+                    let t = type_name(&g.world, o.kind, o.type_index);
+                    if o.owner == Some(h) && traced.contains(&t.as_str()) {
+                        println!(
+                            "  {t}#{} at {:?} on map {} health {} beh {:?} target {:?} dest {:?} contact {:?}",
+                            o.id.0,
+                            o.pos.cell(),
+                            o.on_map,
+                            o.health,
+                            o.beh,
+                            o.target,
+                            o.dest,
+                            o.contact
+                        );
+                    }
+                }
                 println!(
                     "  credits {} power {:?}",
                     g.world.houses[usize::from(h.0)].credits,
                     glasnost_sim::econ::power::totals(&g.world, h)
                 );
-                let name = |t: glasnost_sim::econ::TypeRef| {
-                    g.world
-                        .rules()
-                        .unit(t.kind, t.index)
-                        .map_or_else(|| format!("{:?}#{}", t.kind, t.index), |u| u.name.clone())
-                };
+                let name = |t: glasnost_sim::econ::TypeRef| type_name(&g.world, t.kind, t.index);
                 for l in g.world.econ.lines.lines.iter().filter(|l| l.house == h) {
                     println!(
                         "  line {:?}: item {:?} queue {:?}",
@@ -595,7 +626,7 @@ fn hits() {
     let until: i32 = parts
         .get(3)
         .map_or(d.ticks(), |s| s.parse().expect("a tick"));
-    let rules = d.rules(Quirks::default());
+    let rules = d.rules(flipped(&env("GLASNOST_QUIRK", "default")));
     let (map, name, setup) = match d {
         Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), plain::setup(seed)),
         Duel::M6c => (
@@ -648,7 +679,17 @@ fn hits() {
                     .map(|o| {
                         let c = o.pos.cell();
                         let dd = (c.x - at.x).pow(2) + (c.y - at.y).pow(2);
-                        format!("{}#{} of {:?} d2={dd}", tname(&g, o.id), o.id.0, o.owner)
+                        let mood = if o.combat.berserk.is_some() {
+                            " berserk"
+                        } else {
+                            ""
+                        };
+                        format!(
+                            "{}#{} of {:?} d2={dd}{mood}",
+                            tname(&g, o.id),
+                            o.id.0,
+                            o.owner
+                        )
                     })
                     .collect();
                 println!(
@@ -688,7 +729,7 @@ fn losses() {
     let until: i32 = parts
         .get(3)
         .map_or(d.ticks(), |s| s.parse().expect("a tick"));
-    let rules = d.rules(Quirks::default());
+    let rules = d.rules(flipped(&env("GLASNOST_QUIRK", "default")));
     let (map, name, setup) = match d {
         Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), plain::setup(seed)),
         Duel::M6c => (
