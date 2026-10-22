@@ -660,6 +660,22 @@ impl Script {
             .is_some_and(|l| l.item.is_some() || !l.queue.is_empty())
     }
 
+    /// Whether the line of `t` holds `t`, as its item or in its queue.
+    pub(crate) fn in_line(&self, w: &World, t: TypeRef) -> bool {
+        production::line_of(w, self.house, t)
+            .is_some_and(|l| l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+    }
+
+    /// Whether a build order for `t` would start it or join its line's
+    /// queue: the line is idle, or its queue is below the limit (S-0404
+    /// claim 3, the queue limit counts queued types).
+    pub(crate) fn queue_room(&self, w: &World, t: TypeRef) -> bool {
+        // spec: S-0404 claim 3 (the queue limit counts queued types)
+        let max = w.rules().econ.production.max_queued;
+        production::line_of(w, self.house, t)
+            .is_none_or(|l| l.item.is_none() || (l.queue.len() as i32) < max)
+    }
+
     /// Orders a build of the cheapest type the house can build for `role`
     /// when its line is free; returns the type ordered.
     fn build(&self, w: &World, role: Role, out: &mut Vec<Order>) -> Option<TypeRef> {
