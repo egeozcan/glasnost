@@ -767,6 +767,30 @@ impl Session {
         )
     }
 
+    /// The local player's shroud covers of the view (S-0110), from which
+    /// [`Session::light_alpha_of`] gives the light-alpha values.
+    pub fn shroud_covers(&self) -> Vec<glasnost_render::shroud::Cover> {
+        cover::covers(
+            &self.play.game.world,
+            self.play.local,
+            &self.view(),
+            &ShroudQuirks::default(),
+        )
+    }
+
+    /// The light-alpha values of the view after `covers` (the
+    /// [`Session::shroud_covers`] of this frame): [`Session::light_alpha`]
+    /// in two parts, so that a caller can keep the values while the covers
+    /// stay the same.
+    pub fn light_alpha_of(&self, covers: &[glasnost_render::shroud::Cover]) -> Vec<u8> {
+        cover::alpha_of(
+            covers,
+            &self.view(),
+            &self.loaded.covers,
+            &ShroudQuirks::default(),
+        )
+    }
+
     /// The battlefield composed on the CPU, RGBA.
     pub fn map_rgba(&self) -> Vec<u8> {
         self.scene
@@ -1598,7 +1622,9 @@ impl Session {
             ui.fill(Rect::new(lm.x, lm.bottom() - 16, lm.w, 16), [0, 0, 0, 200]);
             ui.text(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
         }
-        let rules = self.play.game.world.rules().clone();
+        // A shared handle: a copy of the rules each frame cost more than the
+        // rest of the draw list (M8 step C4).
+        let rules = self.play.game.world.rules_arc();
         let name = |t: TypeRef| live::type_name(&rules, t.kind, t.index);
         let ids = &self.icon_ids;
         let icons = &self.icons;

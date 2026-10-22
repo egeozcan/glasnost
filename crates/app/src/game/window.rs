@@ -452,11 +452,12 @@ impl ApplicationHandler<GameEvent> for GameApp {
                         return;
                     }
                 };
-                if let Some(b) = self.bench.as_mut()
-                    && !b.finished()
-                {
-                    b.after_frame(&self.client, end);
-                    if b.finished() {
+                if let Some(b) = self.bench.as_mut() {
+                    if !b.finished() {
+                        b.after_frame(&self.client, end);
+                    }
+                    // A run that failed before its frames ends here too.
+                    if b.take_report() {
                         g.finish_timer(b);
                         finish_bench(b, self.options.report);
                         if cfg!(not(target_arch = "wasm32")) {
@@ -506,6 +507,18 @@ struct MapGpu {
     renderer: MapRenderer,
     size: (u32, u32),
     targets: Option<(wgpu::Texture, wgpu::Texture)>,
+    /// The last frame's light alpha with the covers and view it came from:
+    /// the values depend on nothing else in a game, so a frame with the
+    /// same covers and view keeps them (M8 step C4).
+    light: Option<LightKept>,
+}
+
+/// Light-alpha values kept between frames, with what they came from.
+struct LightKept {
+    covers: Vec<glasnost_render::shroud::Cover>,
+    origin: (i32, i32),
+    size: (u32, u32),
+    alpha: Vec<u8>,
 }
 
 /// The client's frames on a device: the 2D batch, and the battlefield on
@@ -652,6 +665,7 @@ impl GpuDraw {
                 renderer,
                 size: (0, 0),
                 targets: None,
+                light: None,
             });
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
@@ -672,7 +686,21 @@ impl GpuDraw {
         let lap = || clock.map_or(0.0, |c| c());
         let lit = lap();
         self.laps.sync = lit - start;
-        let alpha = s.light_alpha();
+        let covers = s.shroud_covers();
+        let kept = m
+            .light
+            .as_ref()
+            .is_some_and(|l| l.origin == v.origin && l.size == v.size && l.covers == covers);
+        if !kept {
+            let alpha = s.light_alpha_of(&covers);
+            m.light = Some(LightKept {
+                covers,
+                origin: v.origin,
+                size: v.size,
+                alpha,
+            });
+        }
+        let alpha = m.light.as_ref().map(|l| l.alpha.as_slice());
         let drawn = lap();
         self.laps.light = drawn - lit;
         m.renderer.render_lit(
@@ -685,7 +713,7 @@ impl GpuDraw {
             &v,
             s.filter(),
             &glasnost_render::compose::ComposeQuirks::default(),
-            Some(&alpha),
+            alpha,
         );
         self.laps.map = lap() - drawn;
         Ok(())

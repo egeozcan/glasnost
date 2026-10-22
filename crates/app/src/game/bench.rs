@@ -313,6 +313,8 @@ pub struct Bench {
     forward_start: Option<f64>,
     notes: Vec<String>,
     failure: Option<String>,
+    /// Whether the window host has stored the outputs.
+    reported: bool,
     resolution: f64,
     load_before: Option<String>,
     load_after: Option<String>,
@@ -348,6 +350,7 @@ impl Bench {
             forward_start: None,
             notes: Vec::new(),
             failure: None,
+            reported: false,
             resolution: clock_resolution(),
             load_before: load_average(),
             load_after: None,
@@ -385,6 +388,14 @@ impl Bench {
     /// Whether the run is over (done or failed).
     pub fn finished(&self) -> bool {
         self.stage == Stage::Finished
+    }
+
+    /// True once, when the run has finished (done or failed) and its
+    /// outputs are still to be stored.
+    pub fn take_report(&mut self) -> bool {
+        let first = self.finished() && !self.reported;
+        self.reported |= first;
+        first
     }
 
     /// Why the run failed, if it did.
@@ -437,7 +448,7 @@ impl Bench {
     }
 
     fn install(&mut self, c: &mut Client) {
-        if c.job.is_some() {
+        if c.job.is_some() || c.busy() {
             return;
         }
         let Some(install) = c.install.as_ref() else {
@@ -500,7 +511,7 @@ impl Bench {
             "the benchmark plays no sound",
         ))));
         c.session = None;
-        c.job = Some(Job::Start {
+        let job = Job::Start {
             vfs,
             file: install.maps[self.opts.map].0.file,
             lobby,
@@ -515,12 +526,13 @@ impl Bench {
             cursor: install.cursor_palette.clone(),
             colour_blind: false,
             watch: true,
-        });
+        };
         self.map_hash = install
             .map_hashes
             .get(self.opts.map)
             .cloned()
             .unwrap_or_default();
+        c.begin_job(job);
         self.stage = Stage::Loading;
         log::info!(
             "benchmark: map {} ({players} AI houses), seed {}",
@@ -536,7 +548,7 @@ impl Bench {
             self.forward_start = Some(now());
             return;
         }
-        if c.job.is_none() && c.shell.screen != Screen::Game {
+        if c.job.is_none() && !c.busy() && c.shell.screen != Screen::Game {
             let why = format!("the game did not start: {}", c.status);
             self.fail(why);
         }
@@ -1028,7 +1040,8 @@ impl Bench {
         let _ = writeln!(out, "mean per timed frame (ms), by part:");
         let timed: Vec<&Row> = self.rows.iter().filter(|r| r.timed).collect();
         let n = timed.len().max(1) as f64;
-        let mean = |f: fn(&Row) -> f64| timed.iter().map(|r| f(r)).sum::<f64>() / n;
+        // (+ 0.0: an empty sum is −0.0, printed as such)
+        let mean = |f: fn(&Row) -> f64| timed.iter().map(|r| f(r)).sum::<f64>() / n + 0.0;
         let parts: [(&str, Part); 15] = [
             ("update (all)", |r| r.update),
             ("  tick", |r| r.tick_ms),

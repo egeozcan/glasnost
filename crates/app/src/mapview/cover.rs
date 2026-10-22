@@ -92,11 +92,21 @@ pub fn light_alpha(
     sprites: &CoverSprites,
     q: &ShroudQuirks,
 ) -> Vec<u8> {
-    let covers = covers(world, house, view, q);
+    alpha_of(&covers(world, house, view, q), view, sprites, q)
+}
+
+/// The light-alpha values of `view` (row by row) after `covers` (the
+/// [`covers`] of the view; [`light_alpha`] with them given).
+pub fn alpha_of(
+    covers: &[Cover],
+    view: &View,
+    sprites: &CoverSprites,
+    q: &ShroudQuirks,
+) -> Vec<u8> {
     shroud::light_alpha(
         view.origin,
         view.size,
-        &covers,
+        covers,
         Sprites {
             shroud: sprites.shroud.as_ref(),
             fog: sprites.fog.as_ref(),

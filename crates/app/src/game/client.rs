@@ -368,6 +368,12 @@ impl Client {
         Scale::fit(i32::from(self.settings.ui_scale), self.size)
     }
 
+    /// Whether a job is running (on the web a job leaves `job` when it
+    /// starts and reports back later).
+    pub fn busy(&self) -> bool {
+        self.busy
+    }
+
     /// The interface's size in its logical pixels.
     pub fn ui_size(&self) -> (i32, i32) {
         self.ui_scale().ui
@@ -419,6 +425,13 @@ impl Client {
             s.scroll_index = self.settings.scroll_index;
             s.resize(self.size, scale);
         }
+    }
+
+    /// Hands `job` to the host's runner; the client is busy until it is
+    /// done.
+    pub fn begin_job(&mut self, job: Job) {
+        self.busy = true;
+        self.job = Some(job);
     }
 
     /// Mounts picked install files.
