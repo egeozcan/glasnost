@@ -48,12 +48,25 @@
 //!   game-wide state and our AI's state. On the synthetic ruleset, or on
 //!   the install's when `GLASNOST_GAME_DIR` is set. Exit code 0 when the
 //!   two agree, 1 when they differ, 2 when they cannot be compared.
+//! - `glasnost-headless net-client --relay URL (--host N | --join CODE)
+//!   [options]`: a windowless client that takes a row in a room as a
+//!   person and plays it with our AI (M9 N6, `glasnost_tools::net_client`),
+//!   on the install of `GLASNOST_GAME_DIR` or `--game-dir`, or on the
+//!   synthetic one (`--synthetic`).
+//! - `glasnost-headless soak --headless BIN [options]`: the local 2v2 of
+//!   four net-clients behind bad networks (M9 N6, `glasnost_tools::soak`):
+//!   starts the relay (`cargo run --release -p glasnost-relay`), plays, and
+//!   compares every client's checkpoint hashes; writes counts and timings
+//!   to the git-ignored `local-lane/m9/n6/` (or `--out`). Exit code 0 when
+//!   it passed.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
-use glasnost_tools::{arena, desync, headless, oracle, skirmish_lane, trigger_lane};
+use glasnost_tools::{
+    arena, desync, headless, net_client, oracle, skirmish_lane, soak, trigger_lane,
+};
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
     args.get(i).and_then(|a| a.parse().ok()).unwrap_or(default)
@@ -315,10 +328,77 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("net-client") => {
+            let opts = match net_client::parse(&args[1..]) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless net-client: {e}\nusage: glasnost-headless {}",
+                        net_client::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            net_client::init_log();
+            match net_client::run(&opts) {
+                Ok(_) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("glasnost-headless net-client: {e}");
+                    println!("failed {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("soak") => {
+            let mut s = match soak::parse(&args[1..]) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless soak: {e}\nusage: glasnost-headless {}",
+                        soak::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            if let Err(e) = std::fs::create_dir_all(&s.out) {
+                eprintln!(
+                    "glasnost-headless soak: cannot make {}: {e}",
+                    s.out.display()
+                );
+                return ExitCode::from(2);
+            }
+            let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+            let relay = match soak::RelayProcess::start(root, &s.out.join("relay-log.txt")) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("glasnost-headless soak: {e}");
+                    return ExitCode::from(2);
+                }
+            };
+            s.relay = relay.addr;
+            match soak::run(&s) {
+                Ok(run) => {
+                    let text = run.text(&s);
+                    print!("{text}");
+                    let _ = std::fs::write(s.out.join("soak.txt"), &text);
+                    if run.passed() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless soak: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {}",
-                arena::USAGE
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {}",
+                arena::USAGE,
+                net_client::USAGE,
+                soak::USAGE
             );
             ExitCode::from(2)
         }

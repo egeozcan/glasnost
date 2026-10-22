@@ -37,7 +37,7 @@ use glasnost_net::lobby::{
     normalise_code,
 };
 use glasnost_net::rejoin::{self, Assembler, Transfer};
-use glasnost_net::{Config, Event as NetEvent, Field, Phase, Session as Lockstep, StartInfo};
+use glasnost_net::{Config, Event as NetEvent, Field, Phase, Session as Lockstep, StartInfo, Tick};
 use glasnost_sim::world::HouseId;
 use glasnost_ui::chat::Line;
 use glasnost_ui::draw::{DrawList, colour};
@@ -95,6 +95,11 @@ const PART_EVERY_MS: u64 = 25;
 /// pacer stretches the tick period by half.
 // nocite: our own netcode (Session::ahead's slack)
 const AHEAD_STRETCH: i64 = 1;
+
+/// The checkpoint hashes kept for [`Client::take_checkpoints`] until taken;
+/// older ones go first.
+// nocite: our own netcode (a few minutes of checkpoints at any game speed)
+const CHECKPOINTS_KEPT: usize = 4096;
 
 /// What the person asked the relay for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +160,9 @@ pub(super) struct Net {
     received_bytes: Option<usize>,
     stalled_since: Option<u64>,
     last_tick: Option<u64>,
+    /// The game's checkpoints as this peer ran them (tick, its state hash),
+    /// until taken (M9 N6, the soak's per-checkpoint log).
+    checkpoints: VecDeque<(u32, glasnost_net::wire::Hash)>,
     /// Whom the game waits for, once it has waited [`STALL_MS`].
     pub(super) waiting: Option<String>,
     /// Why the game cannot start (a handshake refusal).
@@ -190,6 +198,7 @@ impl Net {
             received_bytes: None,
             stalled_since: None,
             last_tick: None,
+            checkpoints: VecDeque::new(),
             waiting: None,
             refused: None,
             closed: None,
@@ -268,6 +277,16 @@ impl Net {
             for b in ls.poll(now) {
                 self.link.send(b);
             }
+        }
+    }
+
+    /// Keeps a tick's checkpoint hash, if it has one.
+    fn checkpoint(checkpoints: &mut VecDeque<(u32, glasnost_net::wire::Hash)>, t: &Tick) {
+        if let Some(h) = t.hash {
+            if checkpoints.len() >= CHECKPOINTS_KEPT {
+                checkpoints.pop_front();
+            }
+            checkpoints.push_back((t.tick, h));
         }
     }
 
@@ -465,7 +484,7 @@ impl Client {
     }
 
     /// Leaves the room or the game and closes the link.
-    pub(super) fn net_leave(&mut self) {
+    pub fn net_leave(&mut self) {
         if let Some(mut n) = self.net.take() {
             if (n.room.is_some() || n.begin.is_some()) && n.closed.is_none() {
                 n.send(&ToRelay::Leave);
@@ -1052,6 +1071,7 @@ impl Client {
             let mut blocked = false;
             for _ in 0..CATCH_UP_TICKS {
                 let ev = &mut net.evidence;
+                let kept = &mut net.checkpoints;
                 let ran = s.step_by(|g| {
                     if let Some(ev) = ev.as_mut() {
                         ev.before_tick(ls.ran(), g);
@@ -1059,6 +1079,7 @@ impl Client {
                     let Some(t) = ls.step(now, g) else {
                         return false;
                     };
+                    Net::checkpoint(kept, &t);
                     if let Some(ev) = ev.as_mut() {
                         ev.after_tick(&t, g, ls.agreed());
                     }
@@ -1096,6 +1117,7 @@ impl Client {
             return false;
         }
         let ev = &mut net.evidence;
+        let kept = &mut net.checkpoints;
         let ran = s.step_by(|g| {
             if let Some(ev) = ev.as_mut() {
                 ev.before_tick(ls.ran(), g);
@@ -1103,6 +1125,7 @@ impl Client {
             let Some(t) = ls.step(now, g) else {
                 return false;
             };
+            Net::checkpoint(kept, &t);
             if let Some(ev) = ev.as_mut() {
                 ev.after_tick(&t, g, ls.agreed());
             }
@@ -1470,6 +1493,28 @@ impl Client {
         self.net
             .as_ref()
             .map_or((0, None), |n| (n.sent_bytes, n.received_bytes))
+    }
+
+    /// The checkpoints this client's game ran since the last call (tick,
+    /// state hash), oldest first: the hashes its lockstep session compares
+    /// with the other peers' (M9 N6). At most the last 4096 are kept.
+    pub fn take_checkpoints(&mut self) -> Vec<(u32, glasnost_net::wire::Hash)> {
+        self.net
+            .as_mut()
+            .map(|n| n.checkpoints.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// The multiplayer screen's status line and whether it reports a
+    /// failure (a refusal, a lost connection).
+    pub fn net_status(&self) -> (&str, bool) {
+        (self.net_status.0.as_str(), self.net_status.1)
+    }
+
+    /// The tick of the first desync this client's network game noticed, if
+    /// any (M9 N6).
+    pub fn net_desync(&self) -> Option<u32> {
+        self.net.as_ref()?.desynced
     }
 
     /// The room code, while in a room.

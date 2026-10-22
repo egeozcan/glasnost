@@ -200,6 +200,8 @@ pub const CLIENT_CRATES: &[&str] = &[
     "glasnost-app",
     "glasnost-platform-native",
     "glasnost-platform-web",
+    // M9 N6: the soak's wasm client (the game client under node).
+    "glasnost-headless-web",
 ];
 
 /// The external crates of [`FORBIDDEN_EXTERNAL`] the client crates may

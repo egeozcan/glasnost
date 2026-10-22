@@ -43,7 +43,8 @@ jobs:
       - name: clippy, wasm32 (web crates and simulation crates)
         run: >-
           cargo clippy --locked --target wasm32-unknown-unknown
-          -p glasnost-platform-web -p glasnost-app -p glasnost-render -p glasnost-fmt
+          -p glasnost-platform-web -p glasnost-headless-web
+          -p glasnost-app -p glasnost-render -p glasnost-fmt
           -p glasnost-vfs -p glasnost-audio
           -p glasnost-sim -p glasnost-ai -p glasnost-map -p glasnost-rules
           -p glasnost-num -p glasnost-sim-gate

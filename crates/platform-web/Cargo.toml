@@ -10,6 +10,13 @@ publish.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# `start`: the page's entry point (the demo, the viewer, the game). The
+# soak's wasm client (glasnost-headless-web, M9 N6) uses this crate's
+# WebSocket link without it.
+[features]
+default = ["start"]
+start = []
+
 [dependencies]
 glasnost-app.workspace = true
 glasnost-render.workspace = true

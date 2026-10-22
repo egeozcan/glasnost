@@ -13,8 +13,10 @@
 //! - [`report`]: where a desync report goes (M9 N4), a file or a download.
 //! - [`status_font`]: the game bitmap font for status text.
 //! - [`captions`]: captions for announcements (M8 step C3).
+//! - [`bot`]: a person played by our AI over the relay (M9 N6, the soak).
 
 pub mod band;
+pub mod bot;
 pub mod captions;
 pub mod client;
 pub mod cursor;
