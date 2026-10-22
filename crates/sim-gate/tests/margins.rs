@@ -217,13 +217,12 @@ fn type_name(
     kind: glasnost_sim::rules::Kind,
     index: u32,
 ) -> String {
-    if kind == glasnost_sim::rules::Kind::Building {
-        if let Some(b) = usize::try_from(index)
+    if kind == glasnost_sim::rules::Kind::Building
+        && let Some(b) = usize::try_from(index)
             .ok()
             .and_then(|i| w.rules().buildings.get(i))
-        {
-            return b.name.clone();
-        }
+    {
+        return b.name.clone();
     }
     w.rules()
         .unit(kind, index)
