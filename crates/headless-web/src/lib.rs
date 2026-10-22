@@ -9,10 +9,16 @@
 //! JS (`globalThis.glasnostReadAt`), a desync report is stored through JS
 //! (`globalThis.glasnostSaveReport`), and the clock comes from JS.
 //!
+//! **M9 N8c**: `web-tests/net-client.mjs` runs the same client in a real
+//! browser's page (Chromium, Firefox), bound with `wasm-bindgen --target
+//! web`. There `RTCPeerConnection` exists, so the client also opens direct
+//! links through the browser's WebRTC (`glasnost_platform_web::rtc`), as
+//! the web client does; under node it stays on the relay.
+//!
 //! What this exercises is the wasm32 build of the client: its lockstep,
-//! simulation, AI, desync evidence and rejoin, and the web link. It is not
-//! a browser: no page, no drawing, no audio, no folder picker. Our own
-//! harness; no spec applies.
+//! simulation, AI, desync evidence and rejoin, the web link and, in a
+//! page, the browser's direct links. It draws nothing, plays no audio and
+//! has no folder picker. Our own harness; no spec applies.
 //!
 //! On native targets this crate is empty.
 
@@ -169,10 +175,17 @@ mod node {
             };
             c.connect = Some(glasnost_platform_web::socket::connect);
             c.save_report = Some(save);
-            // Node has no RTCPeerConnection: this client stays on the
-            // relay (no direct links; it answers no offer).
+            // M9 N8c: in a browser page (web-tests/net-client.mjs) the
+            // client opens direct links as the web client does; node has
+            // no RTCPeerConnection, so there it stays on the relay (no
+            // direct links; it answers no offer). `--relay-only` turns
+            // them off in a page too.
+            c.direct = if glasnost_platform_web::rtc::available() {
+                Some(Rc::new(glasnost_platform_web::rtc::open))
+            } else {
+                None
+            };
             opts.apply(&mut c);
-            c.direct = None;
             let d = Driver::new(opts.bot.clone());
             Ok(NetClient { c, d, opts })
         }
