@@ -19,6 +19,8 @@ glasnost-sim.workspace = true
 glasnost-ai.workspace = true
 glasnost-net.workspace = true
 glasnost-app.workspace = true
+# The pathing report's picture legend (M8 A4): the interface's own font.
+glasnost-ui.workspace = true
 log = "0.4"
 pollster = "0.4"
 postcard = { version = "1", default-features = false, features = ["alloc"] }

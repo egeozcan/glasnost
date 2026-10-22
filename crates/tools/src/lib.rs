@@ -12,7 +12,8 @@
 //! soak: a client that plays our AI over the relay ([`net_client`],
 //! `glasnost-headless net-client`), a bad network between it and the
 //! relay ([`netem`]) and the local 2v2 of four such clients ([`soak`],
-//! `glasnost-headless soak`).
+//! `glasnost-headless soak`). **M8 A4** adds the pathing-report tool
+//! ([`path_report`], `glasnost-headless path-report`).
 
 pub mod arena;
 pub mod desync;
@@ -22,6 +23,7 @@ pub mod local_lane;
 pub mod net_client;
 pub mod netem;
 pub mod oracle;
+pub mod path_report;
 pub mod side_audit;
 pub mod skirmish_lane;
 pub mod soak;
