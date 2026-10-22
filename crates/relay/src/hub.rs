@@ -53,16 +53,37 @@
 //! surrender's tick. A rejoining connection that goes before that is
 //! dropped again at that frame.
 //!
+//! **Direct links (N7).** The hub passes WebRTC signals
+//! ([`ToRelay::Signal`]) between the live persons of a game, from the
+//! sender's slot, at most [`Limits::signal_burst`] at once and one per
+//! [`Limits::signal_every_ms`] on average; it never reads them beyond a
+//! sanity check ([`Signal::plausible`]), and drops the rest. It answers a
+//! [`ToRelay::Ping`] at once. It remembers which pairs of slots signalled:
+//! their peers may hold frames of each other that came on a data channel
+//! and that the hub never saw. So when a slot that signalled drops, the hub
+//! does not report the drop at once: it asks each live peer that slot
+//! signalled with which of its frames that peer holds beyond `kept`
+//! ([`Body::Closing`]), takes the answers ([`Body::Held`], each without a
+//! gap from `kept`, the first copy of a frame winning) for at most
+//! [`Limits::answer_ms`], closes a peer that has not answered by then, and
+//! sends everyone the frames put together, then the `Dropped` whose `kept`
+//! counts them. Every live peer then holds every frame of the slot that any
+//! live peer ran. The hub stays the only authority on drops: a data channel
+//! carries frames, and nothing else.
+//!
 //! The limits and the protocol are our own design (docs/development.md,
-//! *The relay and lobby (N2)*, *Reconnect and surrender (N5)*).
+//! *The relay and lobby (N2)*, *Reconnect and surrender (N5)*, *WebRTC
+//! (N7)*).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use glasnost_net::lobby::{
-    self, CODE_LEN, ChatLine, FromRelay, MemberId, Part, Refusal, Room, Started, Ticket, ToRelay,
-    Value, normalise_code,
+    self, CODE_LEN, ChatLine, FromRelay, MemberId, Part, Refusal, Room, Signal, Started, Ticket,
+    ToRelay, Value, normalise_code,
 };
-use glasnost_net::wire::{self, Body, Envelope, Frames, MAGIC as GAME_MAGIC, RELAY, WireError};
+use glasnost_net::wire::{
+    self, Body, Envelope, Frame, Frames, MAGIC as GAME_MAGIC, RELAY, WireError,
+};
 use glasnost_net::{Field, Params};
 use glasnost_ui::setup::period_ms;
 
@@ -113,6 +134,15 @@ pub struct Limits {
     pub grace_ms: u64,
     /// The most bytes of game a serving peer may send one rejoin.
     pub max_snapshot: usize,
+    /// A WebRTC signal costs this many milliseconds of a connection's
+    /// signal bucket, which refills one millisecond a millisecond (N7).
+    pub signal_every_ms: u64,
+    /// Signals a connection may send at once (N7).
+    pub signal_burst: u32,
+    /// How long the peers of a dropping slot have to say which of its
+    /// frames they hold, in milliseconds (N7); one that has not answered by
+    /// then is closed.
+    pub answer_ms: u64,
 }
 
 impl Default for Limits {
@@ -132,6 +162,9 @@ impl Default for Limits {
             params: Params::default(),
             grace_ms: 60_000, // nocite: our own netcode
             max_snapshot: glasnost_net::rejoin::MAX_TRANSFER,
+            signal_every_ms: 50, // nocite: our own netcode (twenty a second on average)
+            signal_burst: 64, // nocite: our own netcode (an offer, an answer and their candidates, several times over)
+            answer_ms: 10_000, // nocite: our own netcode (well past a stalled path's few seconds, below silent_ms)
         }
     }
 }
@@ -200,6 +233,20 @@ pub struct Stats {
     pub forged_rejoins: u64,
     /// Bytes of game passed on to rejoining peers.
     pub snapshot_bytes: u64,
+    /// WebRTC signals passed on (N7).
+    pub signals: u64,
+    /// WebRTC signals dropped: too fast, malformed, outside a game or to a
+    /// slot that is not another live person's (N7).
+    pub signals_dropped: u64,
+    /// Drops that asked the peers for the slot's frames first (N7).
+    pub rounds: u64,
+    /// Answers' parts taken in those rounds.
+    pub held_parts: u64,
+    /// Answers' parts not taken: late, unasked, out of order, too long or
+    /// with a readmission marker (that answer then ends).
+    pub held_refused: u64,
+    /// Peers closed for not answering a round in time.
+    pub unanswered: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -216,6 +263,25 @@ struct Conn {
     /// The chat bucket, in milliseconds.
     chat_tokens: u64,
     chat_refilled: u64,
+    /// The signal bucket, in milliseconds (N7).
+    signal_tokens: u64,
+    signal_refilled: u64,
+}
+
+/// A drop that waits for the peers' answers (N7).
+#[derive(Clone, Debug)]
+struct Round {
+    /// The dropping slot.
+    slot: u8,
+    /// Its frames forwarded to everyone.
+    forwarded: u32,
+    /// The peers whose answer is due, by slot, with the frames of theirs
+    /// taken so far.
+    waiting: BTreeMap<u8, u32>,
+    /// The frames from `forwarded` on, first copy first.
+    merged: Vec<Frame>,
+    /// When the peers that have not answered are closed.
+    deadline: u64,
 }
 
 /// A rejoin in progress.
@@ -264,6 +330,10 @@ struct Game {
     rejoin: Option<Rejoin>,
     /// Markers let through.
     markers: Vec<Marker>,
+    /// Pairs of slots (lower first) whose peers signalled (N7).
+    signalled: BTreeSet<(u8, u8)>,
+    /// Drops waiting for answers (N7).
+    rounds: Vec<Round>,
 }
 
 impl Game {
@@ -453,6 +523,8 @@ impl Hub {
                 refusals: 0,
                 chat_tokens: u64::from(self.limits.chat_burst) * self.limits.chat_every_ms,
                 chat_refilled: now_ms,
+                signal_tokens: u64::from(self.limits.signal_burst) * self.limits.signal_every_ms,
+                signal_refilled: now_ms,
             },
         );
         Some(id)
@@ -546,11 +618,43 @@ impl Hub {
             } else if let Some(slot) = g.slot_of(conn) {
                 g.conns[usize::from(slot)] = None;
                 let kept = g.kept[usize::from(slot)];
-                let bytes = relay_message(Body::Dropped { slot, kept });
                 e.room.leave(conn);
-                self.stats.drops += 1;
-                for t in g.live().map(|(_, c)| c).chain(g.catching()) {
-                    sends.push((t, bytes.clone()));
+                // It answers no round now (N7).
+                for r in &mut g.rounds {
+                    r.waiting.remove(&slot);
+                }
+                let peers: BTreeMap<u8, u32> = g
+                    .live()
+                    .filter(|&(s, _)| g.signalled.contains(&(s.min(slot), s.max(slot))))
+                    .map(|(s, _)| (s, 0))
+                    .collect();
+                g.signalled.retain(|&(a, b)| a != slot && b != slot);
+                if peers.is_empty() {
+                    let bytes = relay_message(Body::Dropped { slot, kept });
+                    self.stats.drops += 1;
+                    for t in g.live().map(|(_, c)| c).chain(g.catching()) {
+                        sends.push((t, bytes.clone()));
+                    }
+                } else {
+                    // Its direct peers may hold frames the hub never saw:
+                    // they are asked first (N7).
+                    let ask = relay_message(Body::Closing {
+                        slot,
+                        forwarded: kept,
+                    });
+                    for &s in peers.keys() {
+                        if let Some(c) = g.conns[usize::from(s)] {
+                            sends.push((c, ask.clone()));
+                        }
+                    }
+                    self.stats.rounds += 1;
+                    g.rounds.push(Round {
+                        slot,
+                        forwarded: kept,
+                        waiting: peers,
+                        merged: Vec::new(),
+                        deadline: now_ms.saturating_add(self.limits.answer_ms),
+                    });
                 }
                 if g.rejoin.as_ref().is_some_and(|r| r.donor == slot) {
                     // The serving peer went before the readmission: that
@@ -574,6 +678,9 @@ impl Hub {
             }
             for (c, why) in closes {
                 self.close(now_ms, c, why);
+            }
+            if !empty {
+                self.finish_rounds(now_ms, code, false);
             }
             return;
         }
@@ -771,6 +878,53 @@ impl Hub {
             }
             Body::Serve { .. } | Body::Resume { .. } => {
                 self.stats.forged_rejoins += 1;
+                return;
+            }
+            Body::Closing { .. } => {
+                self.stats.forged_drops += 1;
+                return;
+            }
+            Body::Held {
+                slot: of,
+                first,
+                frames,
+                last,
+            } => {
+                let cap = glasnost_net::session::lead(&game.started.begin.params);
+                let taken = game
+                    .rounds
+                    .iter_mut()
+                    .find(|r| r.slot == *of)
+                    .and_then(|r| {
+                        let n = r.waiting.get_mut(&slot)?;
+                        let at = r.forwarded.saturating_add(*n);
+                        let ok = *first == at
+                            && n.saturating_add(frames.len() as u32) <= cap
+                            && frames.iter().all(|f| f.resume.is_none());
+                        if !ok {
+                            // That answer ends here.
+                            r.waiting.remove(&slot);
+                            return Some(false);
+                        }
+                        for (i, f) in frames.iter().enumerate() {
+                            let k = (*n as usize) + i;
+                            if k == r.merged.len() {
+                                r.merged.push(f.clone());
+                            }
+                        }
+                        *n = n.saturating_add(frames.len() as u32);
+                        if *last {
+                            r.waiting.remove(&slot);
+                        }
+                        Some(true)
+                    });
+                match taken {
+                    Some(true) => self.stats.held_parts += 1,
+                    _ => self.stats.held_refused += 1,
+                }
+                if let Some(code) = self.room_of(conn) {
+                    self.finish_rounds(now_ms, &code, false);
+                }
                 return;
             }
             Body::Frames(f) => {
@@ -1003,6 +1157,14 @@ impl Hub {
                 let (to, slot) = (r.donor_conn, r.slot);
                 self.send(now_ms, to, relay_message(Body::Resume { slot }));
             }
+            ToRelay::Signal {
+                to,
+                attempt,
+                signal,
+            } => self.on_signal(now_ms, conn, *to, *attempt, signal),
+            ToRelay::Ping { stamp } => {
+                self.send_lobby(now_ms, conn, &FromRelay::Pong { stamp: *stamp })
+            }
         }
     }
 
@@ -1032,6 +1194,10 @@ impl Hub {
         }
         if g.surrendered(slot) {
             return self.refuse(now_ms, conn, Refusal::Surrendered);
+        }
+        if g.rounds.iter().any(|r| r.slot == slot) {
+            // Its drop is still being put together (N7).
+            return self.send_lobby(now_ms, conn, &FromRelay::Refused(Refusal::Rejoining));
         }
         let mut replaced = Vec::new();
         match &g.rejoin {
@@ -1117,6 +1283,111 @@ impl Hub {
         self.send_lobby(now_ms, to, &FromRelay::Snapshot(part.clone()));
     }
 
+    /// A WebRTC signal from `conn` for slot `to` of its game (N7): passed
+    /// on between live persons only, at the signal rate.
+    fn on_signal(&mut self, now_ms: u64, conn: ConnId, to: u8, attempt: u32, signal: &Signal) {
+        let target = self
+            .room_of(conn)
+            .and_then(|c| self.rooms.get(&c))
+            .and_then(|e| e.game.as_ref())
+            .and_then(|g| {
+                let from = g.slot_of(conn)?;
+                let c = g.conns.get(usize::from(to)).copied().flatten()?;
+                (from != to).then_some((from, c))
+            });
+        let Some((from, target)) = target.filter(|_| signal.plausible()) else {
+            self.stats.signals_dropped += 1;
+            return;
+        };
+        if !self.spend_signal(now_ms, conn) {
+            self.stats.signals_dropped += 1;
+            return;
+        }
+        if let Some(g) = self
+            .room_of(conn)
+            .and_then(|c| self.rooms.get_mut(&c))
+            .and_then(|e| e.game.as_mut())
+        {
+            g.signalled.insert((from.min(to), from.max(to)));
+        }
+        self.stats.signals += 1;
+        self.send_lobby(
+            now_ms,
+            target,
+            &FromRelay::Signal {
+                from,
+                attempt,
+                signal: signal.clone(),
+            },
+        );
+    }
+
+    /// Takes one signal's worth from `conn`'s signal bucket; false when it
+    /// is too low.
+    fn spend_signal(&mut self, now_ms: u64, conn: ConnId) -> bool {
+        let cost = self.limits.signal_every_ms;
+        let cap = u64::from(self.limits.signal_burst) * cost;
+        let Some(c) = self.conns.get_mut(&conn) else {
+            return false;
+        };
+        let ms = now_ms.saturating_sub(c.signal_refilled);
+        c.signal_refilled = c.signal_refilled.max(now_ms);
+        c.signal_tokens = c.signal_tokens.saturating_add(ms).min(cap);
+        if c.signal_tokens < cost {
+            return false;
+        }
+        c.signal_tokens -= cost;
+        true
+    }
+
+    /// Ends the rounds of room `code`'s game that every asked peer has
+    /// answered, and with `late` those past their deadline (N7): the frames
+    /// put together go to every live peer and the rejoining one, then the
+    /// drop counting them; a peer that did not answer in time is closed.
+    fn finish_rounds(&mut self, now_ms: u64, code: &str, late: bool) {
+        let Some(g) = self.rooms.get_mut(code).and_then(|e| e.game.as_mut()) else {
+            return;
+        };
+        let mut sends = Vec::new();
+        let mut closes = Vec::new();
+        let mut i = 0;
+        while i < g.rounds.len() {
+            let r = &g.rounds[i];
+            let due = r.waiting.is_empty() || (late && now_ms >= r.deadline);
+            if !due {
+                i += 1;
+                continue;
+            }
+            let r = g.rounds.remove(i);
+            for &s in r.waiting.keys() {
+                closes.extend(g.conns[usize::from(s)]);
+            }
+            let kept = r.forwarded.saturating_add(r.merged.len() as u32);
+            g.kept[usize::from(r.slot)] = kept;
+            let mut out = glasnost_net::session::held_parts(RELAY, r.slot, r.forwarded, r.merged);
+            out.push(relay_message(Body::Dropped { slot: r.slot, kept }));
+            self.stats.drops += 1;
+            let to: Vec<ConnId> = g
+                .live()
+                .map(|(_, c)| c)
+                .filter(|c| !closes.contains(c))
+                .chain(g.catching())
+                .collect();
+            for t in to {
+                for b in &out {
+                    sends.push((t, b.clone()));
+                }
+            }
+        }
+        for (t, b) in sends {
+            self.send(now_ms, t, b);
+        }
+        for c in closes {
+            self.stats.unanswered += 1;
+            self.close(now_ms, c, "did not answer a drop in time");
+        }
+    }
+
     fn enter(&mut self, conn: ConnId, code: &str) {
         if let Some(c) = self.conns.get_mut(&conn) {
             c.room = Some(code.to_owned());
@@ -1139,6 +1410,8 @@ impl Hub {
             max_ran: 0,
             rejoin: None,
             markers: Vec::new(),
+            signalled: BTreeSet::new(),
+            rounds: Vec::new(),
         };
         for &(m, slot) in &started.persons {
             game.conns[usize::from(slot)] = Some(m);
@@ -1209,6 +1482,19 @@ impl Hub {
                 c.last_sent = now_ms;
                 self.out.push(Out::Keepalive { to: id });
             }
+        }
+        let late: Vec<String> = self
+            .rooms
+            .iter()
+            .filter(|(_, e)| {
+                e.game
+                    .as_ref()
+                    .is_some_and(|g| g.rounds.iter().any(|r| now_ms >= r.deadline))
+            })
+            .map(|(c, _)| c.clone())
+            .collect();
+        for code in late {
+            self.finish_rounds(now_ms, &code, true);
         }
     }
 }

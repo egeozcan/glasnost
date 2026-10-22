@@ -5,7 +5,7 @@
 
 use glasnost_net::lobby::{
     self, CHAT_CHARS, CODE_ALPHABET, CODE_LEN, ChatLine, FromRelay, MapChoice, Offered, Refusal,
-    ToRelay, Value,
+    Signal, ToRelay, Value,
 };
 use glasnost_net::wire::{self, Body, Envelope, Frame, Frames, RELAY};
 use glasnost_net::{Field, StartInfo};
@@ -820,4 +820,380 @@ fn chat_too_fast_is_refused_without_closing_the_connection() {
     assert_eq!(chats(&h.take_out()).len(), 1);
     h.receive(later, host, &chat("again"));
     assert!(chats(&h.take_out()).is_empty());
+}
+
+// ---- Direct links (N7) ----
+
+fn offer() -> Signal {
+    Signal::Offer("v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\n".into())
+}
+
+fn signal(to: u8, signal: Signal) -> Vec<u8> {
+    msg(&ToRelay::Signal {
+        to,
+        attempt: 1,
+        signal,
+    })
+}
+
+/// The signals the hub passed on, by receiver: (to, from slot).
+fn signals(outs: &[Out]) -> Vec<(ConnId, u8)> {
+    lobby_out(outs)
+        .into_iter()
+        .filter_map(|(to, m)| match m {
+            FromRelay::Signal { from, .. } => Some((to, from)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn held(from: u8, slot: u8, first: u32, n: usize, last: bool) -> Vec<u8> {
+    // Frames told apart by their delay: 1, 2, … within each part.
+    wire::encode(&Envelope {
+        from,
+        body: Body::Held {
+            slot,
+            first,
+            frames: (0..n)
+                .map(|i| Frame {
+                    delay: 1 + (i % 200) as u8,
+                    ..Frame::default()
+                })
+                .collect(),
+            last,
+        },
+    })
+}
+
+/// [`game`], with each slot's ticket.
+fn game_tickets(h: &mut Hub, persons: usize) -> (String, Vec<ConnId>, Vec<[u8; 16]>) {
+    let mut rows = vec![SlotKind::Human; persons];
+    rows.push(SlotKind::Ai);
+    let host = h.connect(0).unwrap();
+    h.receive(0, host, &create(&rows));
+    let code = h.codes()[0].clone();
+    let mut conns = vec![host];
+    for i in 1..persons {
+        let c = h.connect(0).unwrap();
+        h.receive(0, c, &join(&code, &format!("P{i}"), "build-1"));
+        conns.push(c);
+    }
+    for &c in &conns[1..] {
+        h.receive(0, c, &ready());
+    }
+    h.receive(0, host, &msg(&ToRelay::Start));
+    let mut by_slot = vec![0; persons];
+    let mut tickets = vec![[0; 16]; persons];
+    for (to, m) in lobby_out(&h.take_out()) {
+        if let FromRelay::Begin(b) = m {
+            by_slot[usize::from(b.you)] = to;
+            tickets[usize::from(b.you)] = b.ticket;
+        }
+    }
+    (code, by_slot, tickets)
+}
+
+#[test]
+fn signals_pass_between_live_persons_of_a_game_only() {
+    let mut h = hub();
+    // Before a game: nobody to signal.
+    let lone = h.connect(0).unwrap();
+    h.receive(0, lone, &signal(1, offer()));
+    assert!(signals(&h.take_out()).is_empty());
+    let (_, c) = game(&mut h, 3);
+    h.take_out();
+    // To each other person, from the sender's slot, the sender's attempt
+    // and signal unchanged.
+    h.receive(10, c[0], &signal(2, offer()));
+    let out = lobby_out(&h.take_out());
+    assert_eq!(
+        out,
+        [(
+            c[2],
+            FromRelay::Signal {
+                from: 0,
+                attempt: 1,
+                signal: offer()
+            }
+        )]
+    );
+    h.receive(
+        10,
+        c[2],
+        &signal(0, Signal::Candidate("{\"candidate\":\"\"}".into())),
+    );
+    assert_eq!(signals(&h.take_out()), [(c[0], 2)]);
+    // Not to itself, a computer's slot, an empty or a missing one; nothing
+    // that does not look like a signal.
+    let s0 = h.stats();
+    for (to, sig) in [
+        (0, offer()),
+        (3, offer()),
+        (7, offer()),
+        (200, offer()),
+        (1, Signal::Offer("hello".into())),
+        (1, Signal::Answer(String::new())),
+        (1, Signal::Candidate("not json".into())),
+        (
+            1,
+            Signal::Offer(format!("v=0{}", "x".repeat(lobby::MAX_SIGNAL))),
+        ),
+        (1, Signal::Offer("v=0\u{7}bell".into())),
+    ] {
+        h.receive(11, c[0], &signal(to, sig));
+    }
+    let outs = h.take_out();
+    assert!(signals(&outs).is_empty());
+    assert!(closes(&outs).is_empty(), "a bad signal closes nothing");
+    let s1 = h.stats();
+    assert_eq!(s1.signals_dropped, s0.signals_dropped + 9);
+    assert_eq!(s1.signals, 2);
+    // Nor to a slot that dropped.
+    h.closed(12, c[1]);
+    h.take_out();
+    h.receive(13, c[0], &signal(1, offer()));
+    assert!(signals(&h.take_out()).is_empty());
+}
+
+#[test]
+fn signals_too_fast_are_dropped_and_a_ping_is_answered() {
+    let limits = Limits::default();
+    let mut h = hub_with(limits);
+    let (_, c) = game(&mut h, 2);
+    h.take_out();
+    let burst = limits.signal_burst as usize;
+    for _ in 0..burst + 20 {
+        h.receive(100, c[0], &signal(1, offer()));
+    }
+    let outs = h.take_out();
+    assert_eq!(signals(&outs).len(), burst);
+    assert!(closes(&outs).is_empty());
+    assert_eq!(h.stats().signals_dropped, 20);
+    // The bucket refills.
+    h.receive(100 + limits.signal_every_ms, c[0], &signal(1, offer()));
+    assert_eq!(signals(&h.take_out()).len(), 1);
+    // A ping, in or out of a game, is answered with its stamp.
+    h.receive(200, c[1], &msg(&ToRelay::Ping { stamp: 77 }));
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(c[1], FromRelay::Pong { stamp: 77 })]
+    );
+}
+
+#[test]
+fn a_drop_of_a_slot_without_direct_links_is_reported_at_once() {
+    let mut h = hub();
+    let (_, c) = game(&mut h, 3);
+    // Slots 1 and 2 signalled; slot 0 did not.
+    h.receive(1, c[1], &signal(2, offer()));
+    h.receive(2, c[0], &frames(0, 0, 4));
+    h.take_out();
+    h.closed(3, c[0]);
+    let out = game_out(&h.take_out());
+    let drop = Envelope {
+        from: RELAY,
+        body: Body::Dropped { slot: 0, kept: 4 },
+    };
+    assert_eq!(out, [(c[1], drop.clone()), (c[2], drop)]);
+    assert_eq!(h.stats().rounds, 0);
+}
+
+#[test]
+fn a_drop_of_a_slot_with_direct_links_waits_for_its_peers_frames() {
+    let mut h = hub();
+    let (code, c, tickets) = game_tickets(&mut h, 3);
+    // Slot 2 signalled with 0 and 1; the hub forwarded 5 of its frames.
+    h.receive(1, c[2], &signal(0, offer()));
+    h.receive(1, c[2], &signal(1, offer()));
+    h.receive(2, c[2], &frames(2, 0, 5));
+    h.take_out();
+    h.closed(3, c[2]);
+    let out = game_out(&h.take_out());
+    let ask = Envelope {
+        from: RELAY,
+        body: Body::Closing {
+            slot: 2,
+            forwarded: 5,
+        },
+    };
+    assert_eq!(
+        out,
+        [(c[0], ask.clone()), (c[1], ask)],
+        "asked, not dropped"
+    );
+    assert_eq!(h.kept(&code, 2), Some(5));
+    // A rejoin of the slot waits for the round.
+    let r = h.connect(4).unwrap();
+    h.receive(
+        4,
+        r,
+        &msg(&ToRelay::Rejoin {
+            code: code.clone(),
+            slot: 2,
+            ticket: tickets[2],
+            build: "build-1".into(),
+            rules_hash: "rules-1".into(),
+        }),
+    );
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(r, FromRelay::Refused(Refusal::Rejoining))]
+    );
+    // Slot 0 held frames 5 to 7 and answers in two parts; slot 1 held 5 to
+    // 10 (its first three the same frames) and answers in one. The answers
+    // are not forwarded.
+    h.receive(5, c[0], &held(0, 2, 5, 2, false));
+    h.receive(5, c[0], &held(0, 2, 7, 1, true));
+    assert!(
+        game_out(&h.take_out()).is_empty(),
+        "still waiting for slot 1"
+    );
+    h.receive(6, c[1], &held(1, 2, 5, 6, true));
+    let out = game_out(&h.take_out());
+    let to0: Vec<&Body> = out
+        .iter()
+        .filter(|(t, _)| *t == c[0])
+        .map(|(_, e)| &e.body)
+        .collect();
+    let to1: Vec<&Body> = out
+        .iter()
+        .filter(|(t, _)| *t == c[1])
+        .map(|(_, e)| &e.body)
+        .collect();
+    assert_eq!(to0, to1, "the same to everyone");
+    assert!(out.iter().all(|(_, e)| e.from == RELAY));
+    let [
+        Body::Held {
+            slot: 2,
+            first: 5,
+            frames,
+            last: true,
+        },
+        Body::Dropped { slot: 2, kept: 11 },
+    ] = &to0[..]
+    else {
+        panic!("{to0:?}");
+    };
+    let delays: Vec<u8> = frames.iter().map(|f| f.delay).collect();
+    // The first copy of each frame wins: slot 0's 5 and 6 (its first
+    // part), its 7, then slot 1's 8 to 10.
+    assert_eq!(delays, [1, 2, 1, 4, 5, 6]);
+    assert_eq!(h.kept(&code, 2), Some(11));
+    let s = h.stats();
+    assert_eq!(
+        (s.rounds, s.held_parts, s.held_refused, s.drops),
+        (1, 3, 0, 1)
+    );
+}
+
+#[test]
+fn answers_out_of_turn_are_refused_and_a_silent_peer_is_closed() {
+    let limits = Limits::default();
+    let mut h = hub_with(limits);
+    let (code, c) = game(&mut h, 3);
+    h.receive(1, c[0], &signal(1, offer()));
+    h.receive(1, c[0], &signal(2, offer()));
+    h.receive(2, c[0], &frames(0, 0, 3));
+    h.take_out();
+    // A peer cannot ask for a round.
+    h.receive(
+        2,
+        c[1],
+        &wire::encode(&Envelope {
+            from: 1,
+            body: Body::Closing {
+                slot: 0,
+                forwarded: 0,
+            },
+        }),
+    );
+    assert!(game_out(&h.take_out()).is_empty());
+    assert_eq!(h.stats().forged_drops, 1);
+    // An answer nobody asked for is not taken.
+    h.receive(2, c[1], &held(1, 0, 3, 1, true));
+    assert_eq!(h.stats().held_refused, 1);
+    h.closed(3, c[0]);
+    h.take_out();
+    // Slot 1's answer starts at the wrong frame: that answer ends, empty.
+    h.receive(4, c[1], &held(1, 0, 4, 1, true));
+    // Slot 2 says nothing; at the deadline it is closed, and the drop
+    // goes to slot 1 with nothing more.
+    h.tick(3 + limits.answer_ms - 1);
+    assert!(game_out(&h.take_out()).is_empty());
+    h.tick(3 + limits.answer_ms);
+    let outs = h.take_out();
+    assert_eq!(
+        closes(&outs),
+        [(c[2], "did not answer a drop in time".to_owned())]
+    );
+    let drops: Vec<(ConnId, Body)> = game_out(&outs)
+        .into_iter()
+        .filter(|(_, e)| matches!(e.body, Body::Dropped { .. }))
+        .map(|(t, e)| (t, e.body))
+        .collect();
+    assert_eq!(drops[0], (c[1], Body::Dropped { slot: 0, kept: 3 }));
+    assert_eq!(h.kept(&code, 0), Some(3));
+    let s = h.stats();
+    assert_eq!((s.held_refused, s.unanswered), (2, 1), "{s:?}");
+    // Slot 2's own drop follows (it never signalled with slot 1 itself, so
+    // at once).
+    assert!(drops.contains(&(c[1], Body::Dropped { slot: 2, kept: 0 })));
+}
+
+#[test]
+fn an_answer_with_a_marker_or_past_a_lead_ends_and_a_peer_that_leaves_is_not_waited_for() {
+    let mut h = hub();
+    let (code, c) = game(&mut h, 3);
+    h.receive(1, c[2], &signal(0, offer()));
+    h.receive(1, c[2], &signal(1, offer()));
+    h.take_out();
+    h.closed(2, c[2]);
+    h.take_out();
+    // Slot 0's answer carries a readmission marker: refused, it ends.
+    h.receive(
+        3,
+        c[0],
+        &wire::encode(&Envelope {
+            from: 0,
+            body: Body::Held {
+                slot: 2,
+                first: 0,
+                frames: vec![Frame {
+                    resume: Some(1),
+                    ..Frame::default()
+                }],
+                last: true,
+            },
+        }),
+    );
+    assert!(game_out(&h.take_out()).is_empty(), "slot 1 still to answer");
+    // Slot 1 leaves before it answers: the round ends without it, and its
+    // own drop follows.
+    h.closed(4, c[1]);
+    let out = game_out(&h.take_out());
+    let bodies: Vec<&Body> = out.iter().map(|(_, e)| &e.body).collect();
+    assert!(
+        bodies.contains(&&Body::Dropped { slot: 2, kept: 0 }),
+        "{bodies:?}"
+    );
+    assert!(
+        bodies.contains(&&Body::Dropped { slot: 1, kept: 0 }),
+        "{bodies:?}"
+    );
+    assert_eq!(h.kept(&code, 2), Some(0));
+    // Past a lead: an answer longer than that ends.
+    let mut h = hub();
+    let (_, c) = game(&mut h, 2);
+    h.receive(1, c[1], &signal(0, offer()));
+    h.take_out();
+    h.closed(2, c[1]);
+    h.take_out();
+    let lead = glasnost_net::session::lead(&Limits::default().params) as usize;
+    h.receive(3, c[0], &held(0, 1, 0, lead + 1, true));
+    let out = game_out(&h.take_out());
+    assert_eq!(
+        out.last().map(|(_, e)| &e.body),
+        Some(&Body::Dropped { slot: 1, kept: 0 })
+    );
+    assert_eq!(h.stats().held_refused, 1);
 }

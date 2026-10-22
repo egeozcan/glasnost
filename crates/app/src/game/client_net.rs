@@ -716,7 +716,11 @@ impl Client {
                 NetEvent::BadMessage { reason } => {
                     log::warn!("a lockstep message was refused: {reason}");
                 }
+                NetEvent::Conflicting { slot, frame } => {
+                    log::warn!("two copies of slot {slot}'s frame {frame} differ");
+                }
                 NetEvent::Started
+                | NetEvent::Closing { .. }
                 | NetEvent::DelayChanged { .. }
                 | NetEvent::Silent { .. }
                 | NetEvent::Heard { .. } => {}
@@ -861,6 +865,8 @@ impl Client {
                 }
             }
             FromRelay::Chat(c) => net.line(now_ms, &c.name, &c.text, false),
+            // Direct links' signalling and the relay's ping (N7).
+            FromRelay::Signal { .. } | FromRelay::Pong { .. } => {}
         }
     }
 

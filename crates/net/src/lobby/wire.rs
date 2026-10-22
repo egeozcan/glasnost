@@ -13,7 +13,12 @@
 //! relay tells the two apart by the magic. A member who dropped from a game
 //! comes back with [`ToRelay::Rejoin`] and its [`Begin::ticket`]; a live
 //! peer sends it the game in [`ToRelay::Snapshot`] parts, which the relay
-//! passes on as [`FromRelay::Snapshot`] (N5). This is our own protocol.
+//! passes on as [`FromRelay::Snapshot`] (N5). During a game a peer may
+//! open WebRTC data channels to the others: the relay passes the signals
+//! that set one up between the game's live peers ([`ToRelay::Signal`],
+//! [`FromRelay::Signal`]) and answers pings ([`ToRelay::Ping`]) so a
+//! client can tell its path through the relay from a direct one (N7). This
+//! is our own protocol.
 
 use glasnost_ui::setup::{Problem, Setup, SlotKind};
 use serde::de::DeserializeOwned;
@@ -180,6 +185,68 @@ pub enum ToRelay {
     /// The rejoining peer has run every tick it has the frames for: it
     /// may be readmitted.
     CaughtUp,
+    /// A WebRTC signal for the peer of slot `to` in the client's game (N7).
+    /// The relay passes it on, from the sender's slot, only between the
+    /// game's live peers and only at a limited rate; one it does not pass
+    /// on is dropped without an answer.
+    Signal {
+        /// The receiving peer's slot.
+        to: u8,
+        /// The sender's attempt at a link to that peer: a signal of another
+        /// attempt starts the link afresh.
+        attempt: u32,
+        /// The signal.
+        signal: Signal,
+    },
+    /// The relay answers with [`FromRelay::Pong`] carrying the same stamp
+    /// (N7: the round trip through the relay).
+    Ping {
+        /// The client's clock, in milliseconds (wrapping).
+        stamp: u32,
+    },
+}
+
+/// A WebRTC signal (N7): the session description of an offer or an answer,
+/// or an ICE candidate as the browsers write it in JSON
+/// (`RTCIceCandidateInit`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Signal {
+    /// An offer's SDP.
+    Offer(String),
+    /// An answer's SDP.
+    Answer(String),
+    /// An ICE candidate, in JSON.
+    Candidate(String),
+}
+
+/// The longest signal, in bytes: an SDP of one data channel and its ICE
+/// lines is a few kilobytes.
+// nocite: our own netcode
+pub const MAX_SIGNAL: usize = 16 * 1024;
+
+impl Signal {
+    /// The signal's text.
+    pub fn text(&self) -> &str {
+        match self {
+            Signal::Offer(t) | Signal::Answer(t) | Signal::Candidate(t) => t,
+        }
+    }
+
+    /// Whether the signal looks like one: at most [`MAX_SIGNAL`] bytes of
+    /// printable ASCII and line ends, a description starting with the SDP
+    /// version line, a candidate a JSON object. Both the relay and the
+    /// receiving client check it; the WebRTC stack reads the rest.
+    pub fn plausible(&self) -> bool {
+        let t = self.text();
+        let ascii = t
+            .bytes()
+            .all(|b| (0x20..0x7f).contains(&b) || b == b'\r' || b == b'\n');
+        let shape = match self {
+            Signal::Offer(t) | Signal::Answer(t) => t.starts_with("v=0"), // nocite: SDP's version line (RFC 8866)
+            Signal::Candidate(t) => t.starts_with('{') && t.ends_with('}'),
+        };
+        !t.is_empty() && t.len() <= MAX_SIGNAL && ascii && shape
+    }
 }
 
 /// A slot's secret, given only to its member in [`Begin`]: the proof that
@@ -462,6 +529,20 @@ pub enum FromRelay {
     Rejoined(Begin),
     /// One part of the game, for a rejoining peer.
     Snapshot(Part),
+    /// A WebRTC signal from the peer of slot `from` of the game (N7).
+    Signal {
+        /// The sending peer's slot.
+        from: u8,
+        /// Its attempt at the link ([`ToRelay::Signal`]).
+        attempt: u32,
+        /// The signal.
+        signal: Signal,
+    },
+    /// The answer to [`ToRelay::Ping`].
+    Pong {
+        /// The stamp the client sent.
+        stamp: u32,
+    },
 }
 
 /// A chat line as the relay passes it on.
