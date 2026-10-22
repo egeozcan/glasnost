@@ -31,8 +31,10 @@
 # home router's firewall does the same): a hole opens only by the player's
 # own send, so two players punch through when both send.
 #
-# Path evidence: each router counts the UDP it forwards to the other homes'
-# public addresses (direct), to the TURN server (STUN and TURN), and the
+# Path evidence: each router counts the UDP it forwards to each other
+# home's public address (`to_hJ`: that pair's direct path), to the STUN and
+# TURN server (`turn`), to its relayed ports (`turn_ports`: a peer whose
+# path is the other end's TURN allocation), and the
 # TCP to the relay; glasnost-turn counts what it relayed. Our own harness;
 # no spec applies.
 set -euo pipefail
@@ -121,15 +123,18 @@ for k in $(seq 0 $((HOMES - 1))); do
   ns $h ip route add default via 10.0.$k.1
   ns $r sysctl -qw net.ipv4.ip_forward=1
   if [ "$(nat_of $k)" = sym ]; then masq="masquerade fully-random"; else masq="masquerade"; fi
-  peers=""
+  # One counter per other home: the pair's direct path.
+  counters=""
+  rules=""
   for j in $(seq 0 $((HOMES - 1))); do
     [ "$j" = "$k" ] && continue
-    peers="$peers${peers:+, }203.0.113.$((10 + j))"
+    counters="$counters  counter to_h$j {}"$'\n'
+    rules="$rules    oifname \"wan$k\" ip daddr 203.0.113.$((10 + j)) meta l4proto udp counter name to_h$j"$'\n'
   done
   ns $r nft -f - <<EOF
 table ip lab {
-  counter direct {}
-  counter turn {}
+$counters  counter turn {}
+  counter turn_ports {}
   counter relay {}
   counter blocked {}
   counter unsolicited {}
@@ -137,8 +142,8 @@ table ip lab {
   chain forward {
     type filter hook forward priority 0; policy accept;
     jump block
-    oifname "wan$k" ip daddr { $peers } meta l4proto udp counter name direct
-    oifname "wan$k" ip daddr { $SERVER, $SERVER2 } udp dport $TURN_PORT counter name turn
+$rules    oifname "wan$k" ip daddr { $SERVER, $SERVER2 } udp dport $TURN_PORT counter name turn
+    oifname "wan$k" ip daddr $SERVER udp dport 49160-49200 counter name turn_ports
     oifname "wan$k" ip daddr $SERVER tcp dport { $RELAY_PORT, $TLS_PORT } counter name relay
   }
   # Unsolicited datagrams from the internet stop here, as on a home
