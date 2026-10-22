@@ -4334,6 +4334,21 @@ impl Builder<'_> {
         Some(v)
     }
 
+    /// The turret displacement δ that the simulation's fire points use for
+    /// type `idx` of `kind` (S-0313 claim 11, F2), when the typed rules are
+    /// present and name the type.
+    fn sim_turret_offset(&self, kind: Kind, idx: usize) -> Option<i32> {
+        let r = self.rules?;
+        let sim = match kind {
+            Kind::Vehicles => SimKind::Vehicle,
+            Kind::Aircraft => SimKind::Aircraft,
+            _ => return None,
+        };
+        let name = &self.import.outcome.registries.get(&kind)?.get(idx)?.name;
+        let t = glasnost_sim::objects::type_index(r, sim, name)?;
+        r.unit(sim, t).map(|u| u.combat.turret_offset)
+    }
+
     /// Adds a voxel part image to the scene: its index and offset from the
     /// draw point (S-0105 claim 25, F6).
     fn add_part(&mut self, img: &voxel::PartImage) -> Option<(u32, [i32; 2])> {
@@ -4471,8 +4486,12 @@ impl Builder<'_> {
                 .and_then(value::integer)
                 .unwrap_or(d)
         };
-        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0)
-        let offset = art_int(self, b"TurretOffset", 0);
+        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0); S-0313 claim 11 (the
+        // turret is drawn with the same displacement δ that F2 uses for the fire point: the
+        // simulation's imported value when the typed rules name the type, else the art read)
+        let offset = self
+            .sim_turret_offset(kind, idx)
+            .unwrap_or_else(|| art_int(self, b"TurretOffset", 0));
         let name = self.import.outcome.registries[&kind][idx].name.clone();
         // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
         let depth_buffered = self
