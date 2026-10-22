@@ -173,7 +173,16 @@ impl Exercise {
 /// loaded game must hash alike and goes on from there. Returns the state
 /// hash after every tick, the final game and what the run exercised.
 pub fn play(seed: u32, ticks: i32) -> (Vec<String>, Game, Exercise) {
-    let rules = kit::rules();
+    play_with(kit::rules(), seed, ticks)
+}
+
+/// [`play`] with other rules (the scenario's ruleset with a quirk switch
+/// flipped, for the margin sweeps of M8 step B4).
+pub fn play_with(
+    rules: std::sync::Arc<glasnost_sim::rules::SimRules>,
+    seed: u32,
+    ticks: i32,
+) -> (Vec<String>, Game, Exercise) {
     let catalogue = glasnost_ai::fixture::catalogue();
     let mut g = Game::new(
         rules.clone(),

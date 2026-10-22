@@ -260,11 +260,12 @@ impl Brain {
                 .collect();
             let crossing = infantry.iter().any(|&p| Self::crossing(w, p, goal));
             s.push_str(&format!(
-                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}",
+                "; ferry: idle infantry at home {}, run crosses water {crossing}, ferries owned {}, type for a land run {}, type for a crossing {}, its line busy {}",
                 infantry.len(),
                 self.ferries(w).len(),
                 self.ferry_type(w, false).is_some(),
-                self.ferry_type(w, true).is_some()
+                self.ferry_type(w, true).is_some(),
+                self.ferry_type(w, crossing).is_some_and(|t| self.script.busy(w, t))
             ));
         }
         s

@@ -1972,6 +1972,7 @@ version = "0.0.0"
 dependencies = [
  "glasnost-ai",
  "glasnost-map",
+ "glasnost-rules",
  "glasnost-sim",
 ]
 
