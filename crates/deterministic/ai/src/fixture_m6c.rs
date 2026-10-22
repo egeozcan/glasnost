@@ -38,7 +38,10 @@
 //!
 //! The counts of each start unit and the HULKs were chosen (M7a step 2b)
 //! so that every counter of the gate's M6c duel has a margin over a seed
-//! sweep (`m6c_seed_sweep` in `crates/sim-gate/tests/m6c.rs`).
+//! sweep (`m6c_seed_sweep` in `crates/sim-gate/tests/m6c.rs`); M8 step B4
+//! added the decoy and the prism's support reach of 24 cells
+//! after a sweep of seeds 1 to 32 with each reached quirk switch flipped
+//! (docs/development.md, "Own AI (M8 step B4: gate margins)").
 //! - Crates: the setting is on, with the power-up table of money only.
 
 use std::sync::Arc;
@@ -276,13 +279,15 @@ pub fn ruleset() -> Ruleset {
     // chargers have a building of the house to charge) and the charger.
     let mut prsm = fixture::building(2, 2, 500, -20);
     // The master's shot, the support reach (the secondary weapon's range)
-    // and the delayed fire that the beam waits for.
+    // and the delayed fire that the beam waits for. The reach spans a base
+    // (M8 step B4: at 10 cells, prisms the brain placed 10 to 18 cells
+    // apart never supported each other).
     r.sim
         .weapons
         .insert("PrismGun".into(), weapon(40, "18", "HE"));
     r.sim
         .weapons
-        .insert("PrismReach".into(), weapon(1, "10", "HE"));
+        .insert("PrismReach".into(), weapon(1, "24", "HE"));
     prsm.primary = Some("PrismGun".into());
     prsm.secondary = Some("PrismReach".into());
     prsm.delayed_fire_delay = Some(5);
