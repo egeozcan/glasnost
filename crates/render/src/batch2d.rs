@@ -328,6 +328,22 @@ pub struct Batch2d {
     instances: wgpu::Buffer,
     capacity: u64,
     runs: Vec<(Option<u32>, u32, u32)>,
+    stats: BatchStats,
+}
+
+/// What the batch uploaded and drew: the counters of the performance
+/// benchmark (M8 step C4). [`Batch2d::take_stats`] returns them and starts
+/// counting again.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BatchStats {
+    /// Quads prepared.
+    pub quads: usize,
+    /// Draw calls of the prepared quads.
+    pub draws: usize,
+    /// Texture and buffer writes.
+    pub uploads: usize,
+    /// Bytes those writes moved.
+    pub upload_bytes: u64,
 }
 
 fn texture(
@@ -513,6 +529,7 @@ impl Batch2d {
             instances,
             capacity,
             runs: Vec::new(),
+            stats: BatchStats::default(),
         }
     }
 
@@ -552,11 +569,18 @@ impl Batch2d {
         })
     }
 
+    /// The counters since the last call, and a fresh start.
+    pub fn take_stats(&mut self) -> BatchStats {
+        std::mem::take(&mut self.stats)
+    }
+
     /// Uploads the atlas when it changed since the last upload.
     pub fn upload_atlas(&mut self, queue: &wgpu::Queue, atlas: &mut Atlas) {
         if atlas.dirty {
             let s = atlas.size.min(self.atlas.width());
             if s == atlas.size {
+                self.stats.uploads += 1;
+                self.stats.upload_bytes += atlas.pixels.len() as u64;
                 write(queue, &self.atlas, s, s, 1, &atlas.pixels);
             }
             atlas.dirty = false;
@@ -589,6 +613,8 @@ impl Batch2d {
         }
         if !rows.is_empty() {
             let bytes: Vec<u8> = rows.iter().flatten().copied().collect();
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += bytes.len() as u64;
             write(queue, &self.palettes, 256, n, 4, &bytes);
         }
     }
@@ -636,6 +662,8 @@ impl Batch2d {
             );
         }
         if let Some(t) = self.images.get(&id).and_then(|i| i.texture.as_ref()) {
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += rgba.len() as u64;
             write(queue, t, w, h, 4, rgba);
         }
     }
@@ -686,7 +714,10 @@ impl Batch2d {
         }
         if n > 0 {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(quads));
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += std::mem::size_of_val(quads) as u64;
         }
+        self.stats.quads += quads.len();
         self.runs.clear();
         for (i, q) in quads.iter().enumerate() {
             let img = (q.mode() == MODE_IMAGE).then_some(q.image);
@@ -695,6 +726,7 @@ impl Batch2d {
                 _ => self.runs.push((img, i as u32, 1)),
             }
         }
+        self.stats.draws += self.runs.len();
     }
 
     /// Records the prepared quads into `pass`.

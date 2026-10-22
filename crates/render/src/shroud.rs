@@ -335,6 +335,51 @@ pub struct Glow<'a> {
     pub y: i32,
 }
 
+/// A view's light-alpha rows: world pixel of the top-left corner and size.
+struct AlphaView {
+    origin: (i32, i32),
+    w: i32,
+    h: i32,
+}
+
+/// Applies one cover frame of a cell whose canvas has its top-left corner
+/// at world pixel `canvas`, with the pixel rule `f`.
+fn apply_frame(
+    a: &mut [u8],
+    view: &AlphaView,
+    canvas: (i32, i32),
+    frame: &CoverFrame,
+    f: impl Fn(u8, u8) -> u8,
+) {
+    let (cl, ct) = canvas;
+    let (fw, fh) = (frame.image.width() as i32, frame.image.height() as i32);
+    // spec: S-0110 claim 7 (pixels outside the 60 × 30 canvas are not applied); claim 5
+    // (pixels outside the frame's own rectangle are not touched)
+    let x0 = frame.x.max(0);
+    let y0 = frame.y.max(0);
+    let x1 = (frame.x + fw).min(CANVAS_WIDTH);
+    let y1 = (frame.y + fh).min(CANVAS_HEIGHT);
+    // Pixels outside the view are not stored: clip the canvas columns and
+    // rows to it once.
+    let x0 = x0.max(view.origin.0 - cl);
+    let x1 = x1.min(view.origin.0 - cl + view.w);
+    let y0 = y0.max(view.origin.1 - ct);
+    let y1 = y1.min(view.origin.1 - ct + view.h);
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let n = (x1 - x0) as usize;
+    let px = frame.image.pixels();
+    for cy in y0..y1 {
+        let vy = ct + cy - view.origin.1;
+        let src = ((cy - frame.y) * fw + (x0 - frame.x)) as usize;
+        let dst = (vy * view.w + cl + x0 - view.origin.0) as usize;
+        for (d, &v) in a[dst..dst + n].iter_mut().zip(&px[src..src + n]) {
+            *d = f(*d, v);
+        }
+    }
+}
+
 /// The light-alpha values of a view at world pixel `origin` of `size`,
 /// row by row, after the covers and glows of one drawn frame (S-0110
 /// claims 5 to 7 and 10, *Observable order*). `covers` must be ordered by
@@ -359,40 +404,41 @@ pub fn light_alpha(
     } else {
         sprites.shroud
     };
+    // Whether a piece's frame changes no value (every pixel the transparent
+    // index for shroud, the neutral value or above for fog), found once a
+    // call per piece: such a frame is skipped (M8 step C4; the result is
+    // the same).
+    let mut shroud_noop = [None::<bool>; 256];
+    let mut fog_noop = [None::<bool>; 256];
+    let view = AlphaView { origin, w, h };
     for c in covers {
         let (cl, ct) = canvas_origin(c.cell, c.level, q);
-        let mut apply = |sprite: Option<&CoverSprite>, piece: u8, f: fn(u8, u8) -> u8| {
-            let Some(frame) = sprite.and_then(|s| s.frame(piece)) else {
-                return;
-            };
-            let (fw, fh) = (frame.image.width() as i32, frame.image.height() as i32);
-            // spec: S-0110 claim 7 (pixels outside the 60 × 30 canvas are not applied); claim 5
-            // (pixels outside the frame's own rectangle are not touched)
-            let x0 = frame.x.max(0);
-            let y0 = frame.y.max(0);
-            let x1 = (frame.x + fw).min(CANVAS_WIDTH);
-            let y1 = (frame.y + fh).min(CANVAS_HEIGHT);
-            let px = frame.image.pixels();
-            for cy in y0..y1 {
-                let vy = ct + cy - origin.1;
-                if vy < 0 || vy >= h {
-                    continue;
-                }
-                for cx in x0..x1 {
-                    let vx = cl + cx - origin.0;
-                    if vx < 0 || vx >= w {
-                        continue;
-                    }
-                    let v = px[((cy - frame.y) * fw + (cx - frame.x)) as usize];
-                    let i = (vy * w + vx) as usize;
-                    a[i] = f(a[i], v);
-                }
-            }
-        };
         // spec: S-0110 State and ordering (S_i then F_i per cell, cells by increasing x + y)
-        apply(shroud_sprite, c.shroud, shroud_pixel);
-        if let Some(fog) = c.fog {
-            apply(sprites.fog, fog, fog_pixel);
+        if let Some(frame) = shroud_sprite.and_then(|s| s.frame(c.shroud)) {
+            let noop = shroud_noop[usize::from(c.shroud)].get_or_insert_with(|| {
+                frame
+                    .image
+                    .pixels()
+                    .iter()
+                    .all(|&v| v == SHROUD_TRANSPARENT)
+            });
+            if !*noop {
+                apply_frame(&mut a, &view, (cl, ct), frame, shroud_pixel);
+            }
+        }
+        if let Some(fog) = c.fog
+            && let Some(frame) = sprites.fog.and_then(|s| s.frame(fog))
+        {
+            let noop = fog_noop[usize::from(fog)].get_or_insert_with(|| {
+                frame
+                    .image
+                    .pixels()
+                    .iter()
+                    .all(|&v| i32::from(v) >= FOG_NEUTRAL)
+            });
+            if !*noop {
+                apply_frame(&mut a, &view, (cl, ct), frame, fog_pixel);
+            }
         }
     }
     for g in glows {
@@ -732,5 +778,123 @@ mod tests {
         short.frames.truncate(15);
         let a = light_alpha((-30, 0), (60, 30), &[cover], sprites(&short), &[], &q);
         assert!(a.iter().all(|&v| v == 127));
+    }
+
+    /// The per-pixel order of S-0110 (*State and ordering*, claims 5 and
+    /// 7) written plainly, for checking that [`light_alpha`] with its
+    /// clipping and skipped frames gives the same values.
+    fn plain_light_alpha(
+        origin: (i32, i32),
+        size: (u32, u32),
+        covers: &[Cover],
+        sprites: Sprites<'_>,
+        q: &ShroudQuirks,
+    ) -> Vec<u8> {
+        let (w, h) = (size.0 as i32, size.1 as i32);
+        let mut a = vec![DEFAULT_LIGHT_ALPHA as u8; (w * h) as usize];
+        let shroud_sprite = if sprites.fog_of_war {
+            sprites.fog
+        } else {
+            sprites.shroud
+        };
+        for c in covers {
+            let (cl, ct) = canvas_origin(c.cell, c.level, q);
+            let mut apply = |sprite: Option<&CoverSprite>, piece: u8, f: fn(u8, u8) -> u8| {
+                let Some(frame) = sprite.and_then(|s| s.frame(piece)) else {
+                    return;
+                };
+                let (fw, fh) = (frame.image.width() as i32, frame.image.height() as i32);
+                for fy in 0..fh {
+                    for fx in 0..fw {
+                        let (cx, cy) = (frame.x + fx, frame.y + fy);
+                        if !(0..CANVAS_WIDTH).contains(&cx) || !(0..CANVAS_HEIGHT).contains(&cy) {
+                            continue;
+                        }
+                        let (vx, vy) = (cl + cx - origin.0, ct + cy - origin.1);
+                        if (0..w).contains(&vx) && (0..h).contains(&vy) {
+                            let i = (vy * w + vx) as usize;
+                            a[i] = f(a[i], frame.image.pixels()[(fy * fw + fx) as usize]);
+                        }
+                    }
+                }
+            };
+            apply(shroud_sprite, c.shroud, shroud_pixel);
+            if let Some(fog) = c.fog {
+                apply(sprites.fog, fog, fog_pixel);
+            }
+        }
+        a
+    }
+
+    /// spec: S-0110 State and ordering, claims 5 and 7 (the clipped rows and the skipped frames
+    /// that change nothing give the plain per-pixel result)
+    #[test]
+    fn clipped_rows_match_the_plain_order() {
+        // A small fixed generator for the test's sprites and covers.
+        let mut seed = 0x2545_f491_u32;
+        let mut next = move |n: u32| {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            (seed >> 16) % n
+        };
+        let values = [0u8, 40, 126, 127, 128, 200, 254, 255];
+        let sprite = |next: &mut dyn FnMut(u32) -> u32| CoverSprite {
+            frames: (0..PIECES)
+                .map(|i| {
+                    if i % 11 == 10 {
+                        return None;
+                    }
+                    let (w, h) = (1 + next(70), 1 + next(40));
+                    // Some frames are all 254, or all 127 and above, and change nothing.
+                    let pixels = match i % 3 {
+                        0 => vec![SHROUD_TRANSPARENT; (w * h) as usize],
+                        1 => (0..w * h).map(|_| values[next(8) as usize]).collect(),
+                        _ => (0..w * h).map(|_| 127 + next(129) as u8).collect(),
+                    };
+                    Some(CoverFrame {
+                        image: IndexedImage::new(w, h, pixels).unwrap(),
+                        x: next(30) as i32 - 10,
+                        y: next(20) as i32 - 6,
+                    })
+                })
+                .collect(),
+        };
+        let (shroud, fog) = (sprite(&mut next), sprite(&mut next));
+        let mut changed = 0;
+        for round in 0..24 {
+            let q = ShroudQuirks {
+                shroud_on_flat_grid: round % 4 != 3,
+            };
+            let mut covers = Vec::new();
+            for x in 0..8 {
+                for y in 0..8 {
+                    if next(4) == 0 {
+                        continue;
+                    }
+                    covers.push(Cover {
+                        cell: (x, y),
+                        level: next(5) as i32,
+                        shroud: next(PIECES as u32 + 2) as u8,
+                        fog: (next(2) == 0).then(|| next(PIECES as u32) as u8),
+                    });
+                }
+            }
+            covers.sort_by_key(|c| (c.cell.0 + c.cell.1, c.cell.0));
+            let origin = (next(400) as i32 - 300, next(300) as i32 - 60);
+            let size = (1 + next(300), 1 + next(200));
+            let sprites = Sprites {
+                shroud: Some(&shroud),
+                fog: Some(&fog),
+                fog_of_war: round % 2 == 1,
+            };
+            let plain = plain_light_alpha(origin, size, &covers, sprites, &q);
+            changed += usize::from(plain.iter().any(|&v| v != DEFAULT_LIGHT_ALPHA as u8));
+            assert_eq!(
+                light_alpha(origin, size, &covers, sprites, &[], &q),
+                plain,
+                "round {round}"
+            );
+        }
+        // Most rounds change some values, so the comparison means something.
+        assert!(changed >= 12, "{changed} rounds changed values");
     }
 }

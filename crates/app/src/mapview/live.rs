@@ -306,8 +306,10 @@ pub struct Live {
     live_gates: BTreeSet<u32>,
     /// Each cell's static overlay objects ([`Built::objects`] indices).
     overlay_codes: BTreeMap<CellXY, Vec<u32>>,
-    /// Each cell's overlay and overlay data value when the game started.
-    start_overlays: BTreeMap<CellXY, (u8, u8)>,
+    /// Each cell's overlay and overlay data value when the game started, by
+    /// the grid's dense index (a lookup per cell and tick in a map was a
+    /// large part of a late game's redraw, M8 step C4).
+    start_overlays: Vec<(u8, u8)>,
     /// The cells whose overlay changed since the start (S-0112 claim 7,
     /// S-0210 claim 8, S-0406 claim 10, S-0408 claim 12, harvesting), with
     /// their overlay and data value as last drawn.
@@ -847,12 +849,13 @@ impl Live {
                 overlay_codes.entry(info.cell).or_default().push(i as u32);
             }
         }
-        let start_overlays = world
-            .cells
-            .grid
-            .iter()
-            .map(|(c, cell)| (c, (cell.overlay, cell.overlay_data)))
-            .collect();
+        let grid = &world.cells.grid;
+        let mut start_overlays = vec![(0, 0); grid.len()];
+        for (c, cell) in grid.iter() {
+            if let Some(i) = grid.index(c) {
+                start_overlays[i] = (cell.overlay, cell.overlay_data);
+            }
+        }
         let static_ground = std::mem::take(&mut built.ground);
         let static_layered = std::mem::take(&mut built.layered);
         let mut anim_table = BTreeMap::new();
@@ -2525,10 +2528,19 @@ impl Live {
         gone.extend(protected_map.iter().copied());
         // Overlays that changed during play are drawn again from the game's
         // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
+        let grid = &self.world.cells.grid;
         let mut changed = self.changed_overlays.clone();
-        for (c, cell) in self.world.cells.grid.iter() {
+        // The cells changed before keep their place with today's values;
+        // the others join when they differ from the start.
+        for (c, v) in changed.iter_mut() {
+            if let Some(cell) = grid.get(*c) {
+                *v = (cell.overlay, cell.overlay_data);
+            }
+        }
+        for (c, cell) in grid.iter() {
             let now = (cell.overlay, cell.overlay_data);
-            if changed.contains_key(&c) || self.start_overlays.get(&c) != Some(&now) {
+            let start = grid.index(c).and_then(|i| self.start_overlays.get(i));
+            if start != Some(&now) {
                 changed.insert(c, now);
             }
         }

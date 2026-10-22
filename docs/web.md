@@ -48,6 +48,8 @@ The viewer lists archives (nested ones included) and their entries, previews spr
 
 **Multiplayer** (M9 N3) on the main menu reaches a relay through the browser's WebSocket (docs/development.md, "The client (N3)"). `?relay=ws://HOST:PORT/` fills in the relay address; without it the address is `ws://127.0.0.1:8787/`. To try it locally, run `cargo run -p glasnost-relay` and `cargo xtask web --serve`, then open `/?mode=game&relay=ws://127.0.0.1:8787/` in two tabs. A page served over `https://` needs a `wss://` relay. Since M9 N7 a network game also tries direct links between the players through the browser's `RTCPeerConnection`, beside the relay (docs/development.md, "WebRTC (N7)"): `?direct=off` keeps the game on the relay alone, and `?ice=stun:HOST:PORT` (space-separated URLs, with `username=` and `credential=` words for a TURN server) names ICE servers, of which there are none by default. `node web-tests/rtc.mjs --browser chromium|firefox` checks the browser's direct link against a `cargo xtask web` build.
 
+**Benchmark** (M8 C4): `/?mode=game&bench=default` (or a spec of `key=value` words, docs/development.md, "Performance (M8 C4)") runs the performance benchmark once the install is picked with **Game folder**, at the page's size, and offers `web.txt` and `web.csv` as downloads at the end. Use a release build (`cargo xtask web --release --serve`). `node web-tests/bench.mjs --install DIR --browser firefox --gpu --headed` does the same in a Playwright browser (headed: a headless Firefox may have no WebGL) and writes the outputs under `local-lane/m8/c4/web/`.
+
 Natively:
 
 ```sh

@@ -18,6 +18,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{self, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
+use super::bench::{self, Bench, FrameEnd};
 use super::client::{Client, Done, Key, run_job};
 use super::play::Button;
 use super::session::{MAP_IMAGE, Session};
@@ -55,6 +56,9 @@ pub struct GameOptions {
     /// A test client ([`Client::set_test`]) with this perturbation, if any
     /// (the native client in a debug build with `GLASNOST_PERTURB` set).
     pub test: Option<Option<glasnost_net::desync::Perturb>>,
+    /// Run the performance benchmark (`--bench`, `?bench=`, M8 step C4)
+    /// instead of the menus, and close (natively) when it is done.
+    pub bench: Option<super::bench::BenchOptions>,
 }
 
 /// Events delivered to the game's loop.
@@ -101,7 +105,17 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     if cfg!(not(target_arch = "wasm32")) && options.game_dir.is_none() {
         client.status = "Start with --game-dir DIR to read an install.".into();
     }
+    let host = if cfg!(target_arch = "wasm32") {
+        "web"
+    } else {
+        "native-window"
+    };
+    let bench = options.bench.clone().map(|o| Bench::new(o, host));
+    if bench.is_some() {
+        client.status = "Benchmark: pick the game folder.".into();
+    }
     let app = GameApp {
+        bench,
         options,
         client,
         proxy,
@@ -162,6 +176,8 @@ fn host_seed() -> u32 {
 }
 
 struct GameApp {
+    /// The performance benchmark's run, when one was asked for.
+    bench: Option<Bench>,
     options: GameOptions,
     client: Client,
     #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
@@ -238,7 +254,13 @@ impl ApplicationHandler<GameEvent> for GameApp {
         let attributes = Window::default_attributes().with_title("Glasnost");
         // The page's style sizes the canvas on the web.
         #[cfg(not(target_arch = "wasm32"))]
-        let attributes = attributes.with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0));
+        let attributes = match self.options.bench.as_ref() {
+            // The benchmark draws at its size in physical pixels.
+            Some(b) => {
+                attributes.with_inner_size(winit::dpi::PhysicalSize::new(b.size.0, b.size.1))
+            }
+            None => attributes.with_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0)),
+        };
         #[cfg(target_arch = "wasm32")]
         let attributes = {
             use winit::platform::web::WindowAttributesExtWebSys;
@@ -252,6 +274,10 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 return;
             }
         };
+        #[cfg(target_arch = "wasm32")]
+        if let Some(b) = self.options.bench.as_ref() {
+            let _ = window.request_inner_size(winit::dpi::PhysicalSize::new(b.size.0, b.size.1));
+        }
         self.window = Some(window.clone());
         Status::Starting.publish();
         let proxy = self.proxy.clone();
@@ -263,16 +289,17 @@ impl ApplicationHandler<GameEvent> for GameApp {
             });
         }
         let backend = self.options.backend;
+        let timing = self.options.bench.as_ref().map(|b| b.vsync);
         #[cfg(not(target_arch = "wasm32"))]
         {
             let display: Box<dyn wgpu::wgt::WgpuHasDisplayHandle> =
                 Box::new(event_loop.owned_display_handle());
-            let result = pollster::block_on(Gfx::new(window, backend, Some(display)));
+            let result = pollster::block_on(Gfx::new(window, backend, Some(display), timing));
             let _ = proxy.send_event(GameEvent::Graphics(Box::new(result)));
         }
         #[cfg(target_arch = "wasm32")]
         wasm_bindgen_futures::spawn_local(async move {
-            let result = Gfx::new(window, backend, None).await;
+            let result = Gfx::new(window, backend, None, timing).await;
             let _ = proxy.send_event(GameEvent::Graphics(Box::new(result)));
         });
     }
@@ -286,6 +313,11 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     self.client.cpu_map = false;
                     self.client
                         .resize((gfx.config.width as i32, gfx.config.height as i32));
+                    if let Some(b) = self.bench.as_mut() {
+                        b.device = gfx.device_label.clone();
+                        b.gpu_timer = gfx.timer.is_some();
+                        b.set_size((gfx.config.width, gfx.config.height));
+                    }
                     gfx.window.request_redraw();
                     self.gfx = Some(gfx);
                     if !self.started {
@@ -315,6 +347,9 @@ impl ApplicationHandler<GameEvent> for GameApp {
                     g.resize(size.width, size.height);
                     self.client
                         .resize((g.config.width as i32, g.config.height as i32));
+                    if let Some(b) = self.bench.as_mut() {
+                        b.set_size((g.config.width, g.config.height));
+                    }
                 }
             }
             WindowEvent::Focused(on) => self.client.focus(on),
@@ -395,14 +430,41 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.client.update(now_ms());
+                let timing = match self.bench.as_mut() {
+                    Some(b) if !b.finished() => {
+                        b.before_frame(&mut self.client);
+                        b.running().then(|| b.frame())
+                    }
+                    Some(_) => None,
+                    None => {
+                        self.client.update(now_ms());
+                        None
+                    }
+                };
                 let Some(g) = &mut self.gfx else {
                     return;
                 };
-                if let Err(e) = g.render(&mut self.client) {
-                    Status::Error(e).publish();
-                    event_loop.exit();
-                    return;
+                let end = match g.render(&mut self.client, timing) {
+                    Ok(end) => end,
+                    Err(e) => {
+                        Status::Error(e).publish();
+                        event_loop.exit();
+                        return;
+                    }
+                };
+                if let Some(b) = self.bench.as_mut() {
+                    if !b.finished() {
+                        b.after_frame(&self.client, end);
+                    }
+                    // A run that failed before its frames ends here too.
+                    if b.take_report() {
+                        g.finish_timer(b);
+                        finish_bench(b, self.options.report);
+                        if cfg!(not(target_arch = "wasm32")) {
+                            event_loop.exit();
+                            return;
+                        }
+                    }
                 }
                 let hide = self.client.draws_cursor();
                 if hide != self.cursor_hidden
@@ -445,6 +507,18 @@ struct MapGpu {
     renderer: MapRenderer,
     size: (u32, u32),
     targets: Option<(wgpu::Texture, wgpu::Texture)>,
+    /// The last frame's light alpha with the covers and view it came from:
+    /// the values depend on nothing else in a game, so a frame with the
+    /// same covers and view keeps them (M8 step C4).
+    light: Option<LightKept>,
+}
+
+/// Light-alpha values kept between frames, with what they came from.
+struct LightKept {
+    covers: Vec<glasnost_render::shroud::Cover>,
+    origin: (i32, i32),
+    size: (u32, u32),
+    alpha: Vec<u8>,
 }
 
 /// The client's frames on a device: the 2D batch, and the battlefield on
@@ -453,6 +527,42 @@ struct MapGpu {
 pub struct GpuDraw {
     batch: Batch2d,
     map: Option<MapGpu>,
+    /// A host clock in milliseconds, set only by the performance benchmark
+    /// (M8 step C4): each [`GpuDraw::prepare`] then records its
+    /// [`DrawLaps`].
+    pub lap_clock: Option<fn() -> f64>,
+    /// The last prepare's laps, when [`GpuDraw::lap_clock`] is set.
+    pub laps: DrawLaps,
+    rebuilds: usize,
+}
+
+/// Host-clock times of one [`GpuDraw::prepare`]'s parts, in milliseconds,
+/// for the performance benchmark (M8 step C4; our own tooling).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DrawLaps {
+    /// The client's draw list and changed images ([`Client::frame`]).
+    pub hud: f64,
+    /// The battlefield's scene uploads ([`MapRenderer::sync`], or a new
+    /// renderer).
+    pub sync: f64,
+    /// The view's light alpha after the shroud covers.
+    pub light: f64,
+    /// The battlefield's draw recorded ([`MapRenderer::render_lit`]).
+    pub map: f64,
+    /// The batch's uploads, quads and buffers.
+    pub batch: f64,
+}
+
+/// The renderer's counts since the last [`GpuDraw::take_stats`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DrawStats {
+    /// The battlefield's.
+    pub map: glasnost_render::map_gpu::MapStats,
+    /// The 2D batch's.
+    pub batch: glasnost_render::batch2d::BatchStats,
+    /// Battlefield renderers made anew (a new game, or a full atlas), each
+    /// uploading the whole scene.
+    pub rebuilds: usize,
 }
 
 impl GpuDraw {
@@ -461,7 +571,27 @@ impl GpuDraw {
         Self {
             batch: Batch2d::new(device, format),
             map: None,
+            lap_clock: None,
+            laps: DrawLaps::default(),
+            rebuilds: 0,
         }
+    }
+
+    /// The counts since the last call (draws, instances, uploads).
+    pub fn take_stats(&mut self) -> DrawStats {
+        DrawStats {
+            map: self
+                .map
+                .as_mut()
+                .map(|m| m.renderer.take_stats())
+                .unwrap_or_default(),
+            batch: self.batch.take_stats(),
+            rebuilds: std::mem::take(&mut self.rebuilds),
+        }
+    }
+
+    fn lap(&self) -> f64 {
+        self.lap_clock.map_or(0.0, |c| c())
     }
 
     /// Takes the client's frame for a target of `size`: records the
@@ -476,7 +606,12 @@ impl GpuDraw {
         size: (u32, u32),
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        let start = self.lap();
         let (list, images) = client.frame();
+        self.laps = DrawLaps {
+            hud: self.lap() - start,
+            ..DrawLaps::default()
+        };
         if !client.cpu_map
             && client.shell.screen == Screen::Game
             && let Some(s) = client.session.as_ref()
@@ -485,6 +620,7 @@ impl GpuDraw {
             log::warn!("the battlefield is drawn on the CPU from now on: {e}");
             client.cpu_map = true;
         }
+        let batched = self.lap();
         let painter = &mut client.painter;
         if painter.dirty {
             self.batch.set_palettes(device, queue, &painter.palettes);
@@ -496,6 +632,7 @@ impl GpuDraw {
         }
         let quads = painter.quads(&list);
         self.batch.prepare(device, queue, size, &quads);
+        self.laps.batch = self.lap() - batched;
     }
 
     /// Records the prepared frame into `pass`.
@@ -514,11 +651,13 @@ impl GpuDraw {
     ) -> Result<(), String> {
         // A game's scene only grows: upload what it gained, or all of it for
         // a new game or when the atlas is full.
+        let start = self.lap();
         let synced = match self.map.as_mut() {
             Some(m) if m.serial == serial => m.renderer.sync(device, queue, &s.scene).is_ok(),
             _ => false,
         };
         if !synced {
+            self.rebuilds += 1;
             let renderer = MapRenderer::new(device, queue, &s.scene, COLOR_FORMAT)
                 .map_err(|e| e.to_string())?;
             self.map = Some(MapGpu {
@@ -526,6 +665,7 @@ impl GpuDraw {
                 renderer,
                 size: (0, 0),
                 targets: None,
+                light: None,
             });
         }
         let m = self.map.as_mut().ok_or("no map renderer")?;
@@ -542,7 +682,27 @@ impl GpuDraw {
             m.size = v.size;
         }
         let (color, depth) = m.targets.as_ref().ok_or("no map targets")?;
-        let alpha = s.light_alpha();
+        let clock = self.lap_clock;
+        let lap = || clock.map_or(0.0, |c| c());
+        let lit = lap();
+        self.laps.sync = lit - start;
+        let covers = s.shroud_covers();
+        let kept = m
+            .light
+            .as_ref()
+            .is_some_and(|l| l.origin == v.origin && l.size == v.size && l.covers == covers);
+        if !kept {
+            let alpha = s.light_alpha_of(&covers);
+            m.light = Some(LightKept {
+                covers,
+                origin: v.origin,
+                size: v.size,
+                alpha,
+            });
+        }
+        let alpha = m.light.as_ref().map(|l| l.alpha.as_slice());
+        let drawn = lap();
+        self.laps.light = drawn - lit;
         m.renderer.render_lit(
             device,
             queue,
@@ -553,13 +713,18 @@ impl GpuDraw {
             &v,
             s.filter(),
             &glasnost_render::compose::ComposeQuirks::default(),
-            Some(&alpha),
+            alpha,
         );
+        self.laps.map = lap() - drawn;
         Ok(())
     }
 }
 
 struct Gfx {
+    /// GPU frame times (the benchmark, where the device has timestamps).
+    timer: Option<glasnost_render::timer::GpuTimer>,
+    /// The backend and adapter, for the benchmark's summary.
+    device_label: String,
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -572,10 +737,12 @@ struct Gfx {
 }
 
 impl Gfx {
+    /// `timing`: the benchmark's frames, with or without vsync.
     async fn new(
         window: Arc<Window>,
         backend: BackendChoice,
         display: Option<Box<dyn wgpu::wgt::WgpuHasDisplayHandle>>,
+        timing: Option<bool>,
     ) -> Result<Self, String> {
         let instance = gpu::create_instance(backend, display).await;
         let surface = instance
@@ -586,9 +753,13 @@ impl Gfx {
             .map_err(|e| e.to_string())?;
         let info = adapter.get_info();
         let webgpu_extras = gpu::extras_available(&adapter);
-        let (device, queue) = gpu::request_device(&adapter)
-            .await
-            .map_err(|e| e.to_string())?;
+        let (device, queue) = match timing {
+            Some(_) => {
+                gpu::request_device_with(&adapter, glasnost_render::timer::TIMER_FEATURES).await
+            }
+            None => gpu::request_device(&adapter).await,
+        }
+        .map_err(|e| e.to_string())?;
         let size = window.inner_size();
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
@@ -599,9 +770,24 @@ impl Gfx {
         if let Some(linear) = caps.formats.iter().copied().find(|f| !f.is_srgb()) {
             config.format = linear;
         }
-        config.present_mode = wgpu::PresentMode::AutoVsync;
-        let draw = GpuDraw::new(&device, config.format);
+        config.present_mode = match timing {
+            Some(false) => wgpu::PresentMode::AutoNoVsync,
+            _ => wgpu::PresentMode::AutoVsync,
+        };
+        let mut draw = GpuDraw::new(&device, config.format);
+        let timer = timing.and_then(|_| glasnost_render::timer::GpuTimer::new(&device, &queue));
+        if timing.is_some() {
+            draw.lap_clock = Some(bench::now);
+        }
+        let device_label = format!(
+            "{} on {} ({})",
+            gpu::backend_label(info.backend),
+            info.name,
+            info.driver
+        );
         let mut gfx = Self {
+            timer,
+            device_label,
             window,
             surface,
             device,
@@ -623,26 +809,34 @@ impl Gfx {
         self.surface.configure(&self.device, &self.config);
     }
 
-    fn render(&mut self, client: &mut Client) -> Result<(), String> {
+    /// Draws the client's frame; `timing` numbers a benchmark frame, whose
+    /// times come back.
+    fn render(&mut self, client: &mut Client, timing: Option<u64>) -> Result<FrameEnd, String> {
+        let mut end = FrameEnd::default();
+        let t0 = bench::now();
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(());
+                return Ok(end);
             }
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.surface.configure(&self.device, &self.config);
-                return Ok(());
+                return Ok(end);
             }
             wgpu::CurrentSurfaceTexture::Validation => {
                 return Err("the surface texture failed validation".into());
             }
         };
+        end.acquire = bench::now() - t0;
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("game frame"),
             });
+        if let Some(t) = self.timer.as_mut().filter(|_| timing.is_some()) {
+            t.begin(&mut encoder);
+        }
         self.draw.prepare(
             &self.device,
             &self.queue,
@@ -650,6 +844,7 @@ impl Gfx {
             (self.config.width, self.config.height),
             &mut encoder,
         );
+        let t1 = bench::now();
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -669,10 +864,83 @@ impl Gfx {
             });
             self.draw.draw(&mut pass);
         }
-        self.queue.submit([encoder.finish()]);
+        if let Some(t) = self.timer.as_mut().filter(|_| timing.is_some()) {
+            t.end(&mut encoder);
+        }
+        let commands = encoder.finish();
+        let t2 = bench::now();
+        self.queue.submit([commands]);
+        if let (Some(t), Some(n)) = (self.timer.as_mut(), timing) {
+            t.submitted(n);
+        }
         self.window.pre_present_notify();
         self.queue.present(frame);
         self.frames_presented += 1;
-        Ok(())
+        if timing.is_some() {
+            end.encode = t2 - t1;
+            end.submit = bench::now() - t2;
+            end.laps = self.draw.laps;
+            end.stats = self.draw.take_stats();
+            if let Some(t) = self.timer.as_mut() {
+                end.gpu = t.collect(&self.device);
+            }
+        }
+        Ok(end)
+    }
+
+    /// The benchmark's last GPU times, once the device is idle (native).
+    fn finish_timer(&mut self, b: &mut Bench) {
+        if let Some(t) = self.timer.as_mut() {
+            #[cfg(not(target_arch = "wasm32"))]
+            let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+            let rest = t.collect(&self.device);
+            b.gpu_times(&rest);
+        }
+    }
+}
+
+/// Stores the benchmark's outputs: natively files in its folder, on the web
+/// downloads (`save`, the web shell's) and the page's `data-glasnost-bench`
+/// (`done` or `failed`) with the summary in `data-glasnost-bench-summary`
+/// and the rows in `data-glasnost-bench-csv`.
+fn finish_bench(b: &Bench, save: Option<super::report::SaveReport>) {
+    let summary = b.summary();
+    log::info!("benchmark summary:\n{summary}");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = save;
+        match b.save() {
+            Ok(paths) => {
+                for p in paths {
+                    log::info!("benchmark: wrote {p}");
+                }
+            }
+            Err(e) => log::error!("benchmark: {e}"),
+        }
+        println!("{summary}");
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Some(save) = save {
+            for (name, bytes) in b.outputs() {
+                if let Err(e) = save(&name, &bytes) {
+                    log::error!("benchmark: {e}");
+                }
+            }
+        }
+        if let Some(body) = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.body())
+        {
+            let data = body.dataset();
+            let _ = data.set("glasnostBenchSummary", &summary);
+            let _ = data.set("glasnostBenchCsv", &b.csv());
+            let state = if b.failure().is_some() {
+                "failed"
+            } else {
+                "done"
+            };
+            let _ = data.set("glasnostBench", state);
+        }
     }
 }

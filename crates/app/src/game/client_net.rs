@@ -1067,6 +1067,7 @@ impl Client {
             local: Some(HouseId(slot.house)),
             cursor: install.cursor_palette.clone(),
             colour_blind: self.settings.colour_blind,
+            watch: false,
         };
         self.session = None;
         self.status = "Loading the map...".into();
