@@ -28,6 +28,7 @@ pub mod scene;
 pub mod shroud;
 pub mod spots;
 pub mod tilt;
+pub mod timer;
 pub mod voxel;
 
 pub use wgpu;

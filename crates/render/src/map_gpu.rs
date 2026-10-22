@@ -199,6 +199,29 @@ impl Role {
     }
 }
 
+/// What the map pass drew and uploaded: the counters of the performance
+/// benchmark (M8 step C4). [`MapRenderer::take_stats`] returns them and
+/// starts counting again.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MapStats {
+    /// Scene items (stack copies counted) looked at by the last render.
+    pub items: usize,
+    /// Instances drawn (each a six-vertex quad).
+    pub instances: usize,
+    /// Draw calls.
+    pub draws: usize,
+    /// Render passes begun.
+    pub passes: usize,
+    /// Copies of the target into the backdrop (one per translucent run).
+    pub copies: usize,
+    /// Pixels those copies moved.
+    pub copied_px: u64,
+    /// Texture and buffer writes.
+    pub uploads: usize,
+    /// Bytes those writes moved.
+    pub upload_bytes: u64,
+}
+
 /// GPU resources for one scene.
 pub struct MapRenderer {
     pipelines: [wgpu::RenderPipeline; 11],
@@ -224,6 +247,8 @@ pub struct MapRenderer {
     /// The copy of the target's pixels that a translucent drawing blends
     /// with (S-0102 claim 32), of the light-alpha texture's size.
     backdrop: wgpu::Texture,
+    /// The counters since the last [`MapRenderer::take_stats`].
+    stats: MapStats,
 }
 
 /// Why the scene could not be uploaded.
@@ -493,7 +518,13 @@ impl MapRenderer {
             alpha: (alpha, (1, 1)),
             alpha_default: true,
             backdrop,
+            stats: MapStats::default(),
         })
+    }
+
+    /// The counters since the last call (or the upload), and a fresh start.
+    pub fn take_stats(&mut self) -> MapStats {
+        std::mem::take(&mut self.stats)
     }
 
     /// Uploads what `scene` gained since the upload or the last sync: images
@@ -522,6 +553,8 @@ impl MapRenderer {
         if scene.rows.len() != self.row_count {
             let (rows, per_column) =
                 rows_texture(device, queue, scene, self.packer.side, self.target_format)?;
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += u64::from(rows.width()) * u64::from(rows.height()) * 4;
             self.bind_group = bind_group(
                 device,
                 &self.layout,
@@ -552,6 +585,8 @@ impl MapRenderer {
             .filter(|s| s.layer < self.atlas_layers)
             .ok_or_else(|| UploadError("the atlas is full".into()))?;
         if w > 0 && h > 0 {
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += u64::from(w) * u64::from(h);
             queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture: &self.atlas,
@@ -646,6 +681,7 @@ impl MapRenderer {
             .enumerate()
             .flat_map(|(n, i)| i.copies(oy).map(move |c| (n, c)));
         for (n, item) in copies {
+            self.stats.items += 1;
             while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
                 if filter.shows_spots(g) {
                     spot_instances(g, view, &mut list, &mut batches);
@@ -789,7 +825,10 @@ impl MapRenderer {
         }
         if !list.is_empty() {
             queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&list));
+            self.stats.uploads += 1;
+            self.stats.upload_bytes += std::mem::size_of_val(list.as_slice()) as u64;
         }
+        self.stats.instances += list.len();
         let target_view = target.create_view(&Default::default());
         let begin = |encoder: &mut wgpu::CommandEncoder, first: bool| {
             let mut pass = encoder
@@ -837,6 +876,8 @@ impl MapRenderer {
             pass
         };
         let mut pass = begin(encoder, true);
+        self.stats.passes += 1;
+        self.stats.draws += batches.len();
         for (role, range, cover) in batches {
             if let Some([x, y, cw, ch]) = cover {
                 // spec: S-0102 claim 32 (a translucent pixel blends with the already-painted
@@ -862,6 +903,9 @@ impl MapRenderer {
                     },
                 );
                 pass = begin(encoder, false);
+                self.stats.passes += 1;
+                self.stats.copies += 1;
+                self.stats.copied_px += u64::from(cw) * u64::from(ch);
             }
             pass.set_pipeline(&self.pipelines[role.index()]);
             pass.draw(0..6, range);
@@ -1001,6 +1045,8 @@ impl MapRenderer {
                 std::borrow::Cow::Owned(vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; n])
             }
         };
+        self.stats.uploads += 1;
+        self.stats.upload_bytes += bytes.len() as u64;
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.alpha.0,

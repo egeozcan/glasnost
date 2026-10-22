@@ -140,6 +140,24 @@ pub async fn request_device(
         .map_err(GpuError::NoDevice)
 }
 
+/// [`request_device`] with those of the optional `features` the adapter
+/// offers (the performance benchmark's timestamp queries, M8 step C4); the
+/// others are left out.
+pub async fn request_device_with(
+    adapter: &wgpu::Adapter,
+    features: wgpu::Features,
+) -> Result<(wgpu::Device, wgpu::Queue), GpuError> {
+    adapter
+        .request_device(&wgpu::DeviceDescriptor {
+            label: Some("glasnost"),
+            required_features: features & adapter.features(),
+            required_limits: core_limits(adapter),
+            ..Default::default()
+        })
+        .await
+        .map_err(GpuError::NoDevice)
+}
+
 /// Whether the adapter supports the full WebGPU feature level, i.e. whether
 /// optional extras beyond the WebGL2 core path may be enabled.
 pub fn extras_available(adapter: &wgpu::Adapter) -> bool {
