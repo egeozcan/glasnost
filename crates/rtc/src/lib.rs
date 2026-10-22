@@ -199,6 +199,9 @@ impl Pair {
             Signal::Offer(sdp) => PeerSignal::Offer(sdp),
             Signal::Answer(sdp) => PeerSignal::Answer(sdp),
             Signal::Candidate(c) => PeerSignal::IceCandidate(c),
+            // The pair takes a decline itself (app::game::direct); a link
+            // never sees one.
+            Signal::Decline => return,
         };
         let _ = self.to_loop.unbounded_send(PeerEvent::Signal {
             sender: peer(),

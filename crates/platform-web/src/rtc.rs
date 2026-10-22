@@ -381,6 +381,9 @@ impl PairLink for WebPair {
                     s.early.push(json);
                 }
             }
+            // The pair takes a decline itself (app::game::direct); a link
+            // never sees one.
+            Signal::Decline => {}
         }
     }
 

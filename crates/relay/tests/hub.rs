@@ -923,6 +923,19 @@ fn signals_pass_between_live_persons_of_a_game_only() {
         &signal(0, Signal::Candidate("{\"candidate\":\"\"}".into())),
     );
     assert_eq!(signals(&h.take_out()), [(c[0], 2)]);
+    // A relay-only peer's decline (M9 N8c) has no text and passes too.
+    h.receive(10, c[2], &signal(0, Signal::Decline));
+    assert_eq!(
+        lobby_out(&h.take_out()),
+        [(
+            c[0],
+            FromRelay::Signal {
+                from: 2,
+                attempt: 1,
+                signal: Signal::Decline
+            }
+        )]
+    );
     // Not to itself, a computer's slot, an empty or a missing one; nothing
     // that does not look like a signal.
     let s0 = h.stats();
@@ -947,7 +960,7 @@ fn signals_pass_between_live_persons_of_a_game_only() {
     assert!(closes(&outs).is_empty(), "a bad signal closes nothing");
     let s1 = h.stats();
     assert_eq!(s1.signals_dropped, s0.signals_dropped + 9);
-    assert_eq!(s1.signals, 2);
+    assert_eq!(s1.signals, 3);
     // Nor to a slot that dropped.
     h.closed(12, c[1]);
     h.take_out();
