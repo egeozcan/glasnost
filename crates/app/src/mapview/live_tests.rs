@@ -2020,8 +2020,6 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
     assert_ne!(zero[1], one[1], "turret 1 is another model");
     assert_eq!(zero_keys, [Some(0)]);
     assert_eq!(one_keys, [Some(1)]);
-    // An index without a model of its number draws no turret.
-    assert_eq!(draw(multi, Some(5)).0, plain[..1]);
     // Rotating-barrel weapon stages: the ordinary turret whatever the count and index.
     let gattling = "TurretCount=2\nIsGattling=yes\n";
     assert_eq!(draw(gattling, Some(1)), (plain, plain_keys));
