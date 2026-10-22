@@ -23,6 +23,8 @@ pub mod projectiles;
 pub mod protection;
 pub mod quirks;
 pub mod radar;
+#[cfg(test)]
+mod shot_anim_tests;
 pub mod sidebar;
 pub mod slot_play;
 pub mod slots;
