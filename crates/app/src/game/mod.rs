@@ -18,6 +18,7 @@
 pub mod band;
 pub mod bot;
 pub mod captions;
+pub mod capture;
 pub mod client;
 pub mod cursor;
 pub mod install;

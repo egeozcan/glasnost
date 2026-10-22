@@ -18,6 +18,11 @@ node_modules/
 /local-data/
 /local-lane/
 measurements/local/
+# The client's desync and pathing reports (they hold saves of a game)
+desync-reports/
+path-reports/
+*.gpath
+*.gdsync
 
 # EA archive and asset formats (any case). Synthetic fixtures made by our own
 # writers are re-included below.

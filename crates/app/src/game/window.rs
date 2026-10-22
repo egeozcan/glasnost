@@ -74,6 +74,7 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     }
     if let Some(r) = options.report {
         client.save_report = Some(r);
+        client.save_path_report = Some(r);
     }
     if let Some(p) = options.test {
         client.set_test(p);

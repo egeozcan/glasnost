@@ -27,6 +27,10 @@ glasnost-net.workspace = true
 egui = { version = "0.36.2", default-features = false }
 egui-wgpu = { version = "0.36.2", default-features = false, features = ["fragile-send-sync-non-atomic-wasm"] }
 log = "0.4"
+# The pathing report's file (M8 A4): postcard body, SHA-256 checksum.
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.11"
 winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

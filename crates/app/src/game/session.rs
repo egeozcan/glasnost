@@ -430,6 +430,8 @@ impl Session {
     /// peer sent it, M9 N5) and brings the drawing and the radar up to it.
     pub fn replace_game(&mut self, game: Game) {
         self.play.game = game;
+        // The pathing report's ring starts again from the game put in.
+        self.play.capture = super::capture::Ring::new(&self.play.game);
         self.with_live(|live, inputs, scene| {
             live.after_tick();
             live.redraw(inputs, scene);
@@ -452,6 +454,7 @@ impl Session {
     /// whether it did (a network game's lockstep session), and when it did,
     /// the interface follows and the live objects are redrawn.
     pub fn step_by(&mut self, tick: impl FnOnce(&mut Game) -> bool) -> bool {
+        self.play.capture.speed = self.speed;
         if !self.play.step_by(tick) {
             return false;
         }
@@ -466,6 +469,60 @@ impl Session {
             r.observe(&self.play.game.world, house);
         }
         true
+    }
+
+    /// What the person looks at now, for a pathing report (M8 A4): the
+    /// selection, the view and the cells under its corners, the cell
+    /// under the pointer and the game speed. The ring adds the clicks.
+    pub fn look(&mut self) -> super::capture::Look {
+        let v = self.view();
+        let m = self.map_rect();
+        let mut corners = [None; 4];
+        if !m.is_empty() {
+            let points = [
+                Point::new(m.x, m.y),
+                Point::new(m.right() - 1, m.y),
+                Point::new(m.x, m.bottom() - 1),
+                Point::new(m.right() - 1, m.bottom() - 1),
+            ];
+            for (c, p) in corners.iter_mut().zip(points) {
+                *c = Some(self.under(p).0);
+            }
+        }
+        let cursor = self
+            .pointer
+            .filter(|p| m.contains(*p))
+            .map(|p| self.under(p).0);
+        super::capture::Look {
+            local: self.play.local.0,
+            selection: self.play.selection.iter().map(|o| o.0).collect(),
+            view: super::capture::ViewRect {
+                origin: v.origin,
+                size: v.size,
+                corners,
+            },
+            cursor,
+            clicks: Vec::new(),
+            speed: self.speed,
+        }
+    }
+
+    /// Makes the pathing report of now (M8 A4) and stores it with `save`;
+    /// returns the status text shown.
+    pub fn save_path_report(&mut self, save: Option<super::report::SaveReport>) -> String {
+        let look = self.look();
+        let (text, _) = super::capture::save_report(&mut self.play, self.network, look, save);
+        log::info!("{text}");
+        self.play.say(text.clone());
+        text
+    }
+
+    /// Marks the present tick for the pathing report (M8 A4).
+    pub fn mark(&mut self) {
+        let tick = self.play.game.world.tick;
+        self.play.capture.mark(tick);
+        self.play
+            .say(format!("Marked tick {tick} for the pathing report."));
     }
 
     /// The radar map's top-left pixel on the screen (S-0410 F9's origin
