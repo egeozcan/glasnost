@@ -3819,6 +3819,8 @@ impl Builder<'_> {
             generic_shadow: None,
             // A map unit is not berserk before any tick (S-0610 claim 4).
             berserk: None,
+            // Without a game state there is no selected turret index (S-0105 claim 12; Q-1760).
+            turret_index: None,
         };
         Some(self.mobile(&m))
     }
@@ -4580,30 +4582,48 @@ impl Builder<'_> {
         }
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
         if rule_bool(self.import, kind, idx, b"Turret", false) {
-            // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins)
+            // spec: S-0105 claim 12 (a multi-turret type draws the turret and barrel models of its
+            // selected turret index instead of the ordinary ones; S-0007 claim 16 names them
+            // turret k and barrel k). Without an index none is drawn (Q-1760 open).
+            let multi = multi_turret(self.import, kind, idx);
+            let index = if multi { m.turret_index } else { None };
+            let (turret_part, barrel_part) = match (multi, index) {
+                (true, Some(k)) => (format!("turret{k}"), format!("barrel{k}")),
+                (true, None) => (String::new(), String::new()),
+                (false, _) => ("turret".to_string(), "barrel".to_string()),
+            };
+            // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins; a numbered turret model takes the vehicle turret frame with its own frame count, the claim's interim rule)
             let frames = art
                 .voxels
-                .get("turret")
+                .get(turret_part.as_str())
                 .cloned()
                 .and_then(|f| self.voxel_model(&f))
                 .map(|t| t.frame_count() as u32);
             let turret_frame = voxel::vehicle_turret_frame(body_frame, m.anim, frames);
             // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
             let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
-            // spec: S-0105 claim 26 (turret key; flat ground, no multi-turret models, the alternative-model state off)
+            // spec: S-0105 claim 26 (turret key; flat ground, the selected turret index of a multi-turret type, the alternative-model state off)
             let turret_key = voxel::vehicle_turret_key(
                 voxel::RAMP_FLAT,
                 body_raw,
                 turret_raw,
                 offset,
-                None,
+                index,
                 false,
                 turret_frame,
             );
             let mut parts = vec![
-                (false, "turret", voxel::ImageKey::Turret(turret_key)),
+                (
+                    false,
+                    turret_part.as_str(),
+                    voxel::ImageKey::Turret(turret_key),
+                ),
                 // spec: S-0105 claim 26 (barrel key: the turret's key plus the current 32-step elevation)
-                (true, "barrel", voxel::barrel_key(turret_key, elevation)),
+                (
+                    true,
+                    barrel_part.as_str(),
+                    voxel::barrel_key(turret_key, elevation),
+                ),
             ];
             // spec: S-0105 claim 11 (turret first when its 4-step facing is 1 or 2)
             if !voxel::turret_drawn_first(m.turret) {
@@ -4847,6 +4867,37 @@ pub struct Mobile {
     /// viewer (S-0610 claim 7); `None` when not berserk or without a game
     /// state.
     pub berserk: Option<bool>,
+    /// For a vehicle of a multi-turret type: its selected turret index
+    /// (S-0105 claim 12 and Terms), which picks the numbered turret and
+    /// barrel models and is a component of the turret image key (claim
+    /// 26). [`selected_turret_index`] gives it; `None` draws no numbered
+    /// turret.
+    pub turret_index: Option<u8>,
+}
+
+/// The selected turret index of a vehicle of a multi-turret type (S-0105
+/// claim 12 and Terms). No approved spec says what sets it (Q-1760 open),
+/// so it is `None` for every object until one does: the renderer then draws
+/// no numbered turret.
+pub(crate) fn selected_turret_index(
+    w: &glasnost_sim::world::World,
+    id: glasnost_sim::world::ObjectId,
+) -> Option<u8> {
+    // Q-1760 open: no index rule is chosen.
+    let _ = (w, id);
+    None
+}
+
+/// Whether a type draws numbered turret and barrel models (S-0105 claim 12,
+/// S-0007 claim 16): a vehicle type with the turret flag, a turret count of
+/// 1 or more and no rotating-barrel weapon stages, the importer's test for
+/// loading `turret{k}` and `barrel{k}`.
+pub(crate) fn multi_turret(import: &Import, kind: Kind, idx: usize) -> bool {
+    // spec: S-0007 claim 16 (numbered parts: a vehicle with Turret, TurretCount 1 or more and not IsGattling); S-0105 claim 12 (rotating-barrel types draw the ordinary turret whatever the count)
+    kind == Kind::Vehicles
+        && rule_bool(import, kind, idx, b"Turret", false)
+        && rule_int(import, kind, idx, b"TurretCount", 0) >= 1
+        && !rule_bool(import, kind, idx, b"IsGattling", false)
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
@@ -4921,6 +4972,15 @@ pub struct Inputs<'a> {
 }
 
 impl Painter {
+    /// Whether a type's image cache holds an image for `key` (S-0105
+    /// claim 26), for tests.
+    #[cfg(test)]
+    pub(crate) fn voxel_cached(&self, kind: Kind, idx: usize, key: &voxel::ImageKey) -> bool {
+        self.voxels
+            .get(&(kind, idx))
+            .is_some_and(|c| c.get(key).is_some())
+    }
+
     /// The unscaled ground light of a cell (S-0104 claim 13), the neutral
     /// brightness off the lit area.
     pub fn ground_light(&self, cell: CellXY) -> i32 {

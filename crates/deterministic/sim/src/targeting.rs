@@ -17,8 +17,8 @@
 //! weapon choice, ranges, healing weapons, veterancy abilities and the
 //! firing rules' legality answer come from the combat module (M4), with its
 //! own seams (garrison occupants, upgrades); the weapon cursor flags of rows
-//! I17 and I18 are not imported; vehicles have no deploy state; the
-//! factory kinds of rows B9 to B12 are not applied yet; a carrier carries nothing. The rows that read these states are in place
+//! I17 and I18 are not imported; the vehicle in-place rows V2, V3, VC4 and VC5
+//! are not built yet; the factory kinds of rows B9 to B12 are not applied yet; a carrier carries nothing. The rows that read these states are in place
 //! behind small predicates, so that the states plug in when their topics
 //! arrive. The nearby-cell search of claim 11 always uses the actor's reach
 //! region and own zone (S-0212 table T5's rows for a free mover's no-move
@@ -678,10 +678,111 @@ fn seq(w: &World, id: ObjectId) -> Option<Seq> {
         .and_then(|s| s.seq)
 }
 
-/// An in-place deployer in its deployed state (vehicles have no deploy
-/// state yet).
+/// Where an in-place deployer stands in its deploy cycle (S-0214 Terms,
+/// *in-place deployer*: it changes between a deployed and an undeployed
+/// state). The transitions are the deploying and undeploying in between.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DeployState {
+    /// Fully undeployed.
+    Undeployed,
+    /// Deploying or undeploying.
+    Changing,
+    /// Fully deployed.
+    Deployed,
+}
+
+/// The deploy state of an in-place deployer; `None` for any other object.
+/// Infantry: the deployed, deployed-firing and deployed-idle sequences are
+/// the deployed state, the deploy and undeploy sequences the transitions
+/// (S-0107 Terms, the deploy kinds). Vehicles: the in-place cycle's form
+/// (S-0517 Terms).
+fn deploy_state(w: &World, id: ObjectId) -> Option<DeployState> {
+    if !in_place_deployer(w, id) {
+        return None;
+    }
+    match kind(w, id) {
+        Some(Kind::Infantry) => Some(match seq(w, id) {
+            Some(Seq::Deployed | Seq::DeployedFire | Seq::DeployedIdle) => DeployState::Deployed,
+            Some(Seq::Deploy | Seq::Undeploy) => DeployState::Changing,
+            _ => DeployState::Undeployed,
+        }),
+        Some(Kind::Vehicle) => Some(match crate::econ::inplace::form(w, id) {
+            crate::econ::inplace::Form::Mobile => DeployState::Undeployed,
+            crate::econ::inplace::Form::Deployed => DeployState::Deployed,
+            crate::econ::inplace::Form::Deploying { .. }
+            | crate::econ::inplace::Form::Undeploying { .. } => DeployState::Changing,
+        }),
+        _ => None,
+    }
+}
+
+/// An in-place deployer in its deployed state (S-0214 Terms), infantry or
+/// vehicle (`econ::inplace::deployed`).
 fn deployed_ipd(w: &World, id: ObjectId) -> bool {
-    in_place_deployer(w, id) && seq(w, id).is_some_and(|q| q == Seq::Deployed)
+    deploy_state(w, id) == Some(DeployState::Deployed)
+}
+
+/// The deploy check (S-0214 Terms): failed only by a vehicle that is
+/// disabled, or inside a tunnel while its type has the deploy-to-fire flag.
+/// Infantry, aircraft and buildings always pass.
+pub fn deploy_check(w: &World, id: ObjectId) -> bool {
+    if kind(w, id) != Some(Kind::Vehicle) {
+        return true;
+    }
+    // spec: S-0214 Import mapping (vehicle types DeployToFire, absent no)
+    let deploy_to_fire = uflag(w, id, |u| u.raw.deploy_to_fire.unwrap_or(false));
+    // spec: S-0214 Terms (deploy check: a disabled vehicle, or one inside a tunnel with the deploy-to-fire flag, fails it)
+    !disabled(w, id) && !(crate::transport::in_tube(w, id) && deploy_to_fire)
+}
+
+/// Deploy readiness (S-0214 Terms): whether the object can carry out a
+/// deploy now, by its kind.
+pub fn deploy_readiness(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
+    if crate::transport::tunnel_cell(w, o.pos.cell()) {
+        return false;
+    }
+    match o.kind {
+        // spec: S-0214 Terms (an aircraft: not disabled and its type can carry passengers)
+        Kind::Aircraft => !disabled(w, id) && passengers(w, id),
+        Kind::Infantry => {
+            // spec: S-0214 Terms (an infantry unit: its type deploys in place)
+            if !uflag(w, id, |u| u.deployer) {
+                return false;
+            }
+            // spec: S-0214 Terms (with an undeploy delay: neither deployed nor undeploying; the timer that follows a deploy is not modelled, Q-1754 interim)
+            !has_undeploy_delay(w, id)
+                || !(deployed_ipd(w, id) || seq(w, id) == Some(Seq::Undeploy))
+        }
+        Kind::Vehicle => {
+            // spec: S-0214 Terms (a vehicle: not disabled and not inside a tunnel)
+            if disabled(w, id) || crate::transport::in_tube(w, id) {
+                return false;
+            }
+            let into = crate::econ::deploy::deploys_into(w, o.kind, o.type_index).is_some();
+            let carries = passengers(w, id);
+            let bunkered = crate::structures::bunker::bunkered(w, id);
+            let deploy_weapon = uflag(w, id, |u| u.raw.deploy_fire.unwrap_or(false));
+            // spec: S-0214 Terms (it deploys into a building, carries passengers, deploys in place, sits in a tank bunker or has a deploy weapon)
+            if !(into
+                || carries
+                || uflag(w, id, |u| u.simple_deployer)
+                || bunkered
+                || deploy_weapon)
+            {
+                return false;
+            }
+            // spec: S-0214 Terms and S-0601 claim 15 (not when it deploys into a building while a parasite is on it, nor into a construction yard while a controlling object controls it)
+            if into && !crate::econ::deploy::deploy_ready(w, id) {
+                return false;
+            }
+            // spec: S-0214 Terms (a vehicle transport: S-0507 claim 7's unload exclusions)
+            !carries || crate::transport::may_unload(w, id)
+        }
+        // spec: S-0214 Terms (a building never has deploy readiness)
+        Kind::Building | Kind::Terrain => false,
+    }
 }
 
 fn has_undeploy_delay(w: &World, id: ObjectId) -> bool {
@@ -1385,6 +1486,20 @@ fn aircraft_on(
     }
 }
 
+/// Row B7's condition (S-0214 table B): the building has a weapon in its
+/// first slot whose projectile is not anti-ground (S-0306 Terms and Import
+/// mapping, `AG`), or its type is a pulse cannon, or it is being sold
+/// (S-0407 Terms).
+fn attack_refused(w: &World, actor: ObjectId) -> bool {
+    // spec: S-0214 table B row B7 (the first slot's weapon, not the weapon chosen against the target)
+    let not_ground = first_weapon(w, actor)
+        .and_then(|x| w.rules().combat.projectile_of(x))
+        .is_some_and(|p| !p.ag);
+    let pulse = building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false));
+    let sold = w.obj(actor).is_some_and(crate::econ::tech::being_sold);
+    not_ground || pulse || sold
+}
+
 /// A building on an object (S-0214 table B).
 fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
     // spec: S-0214 table B row B1
@@ -1402,10 +1517,8 @@ fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
         Action::Deploy if crate::structures::absorb::count(w, actor) > 0 => Action::Deploy,
         // spec: S-0214 table B rows B4 and B6 (the gap generator's power and radius states are not modelled: nothing)
         Action::Deploy => Action::Nothing,
-        // spec: S-0214 table B row B7 (a pulse cannon)
-        Action::Attack if building(w, actor).is_some_and(|b| b.raw.emp_cannon.unwrap_or(false)) => {
-            Action::Nothing
-        }
+        // spec: S-0214 table B row B7 (a weapon in its first slot whose projectile cannot hit ground targets, a pulse cannon, or being sold: nothing, whatever the target; Q-1761 asks about airborne targets)
+        Action::Attack if attack_refused(w, actor) => Action::Nothing,
         // spec: S-0214 table B row B8
         Action::Attack if immune(w, t) => Action::NoMove,
         // spec: S-0214 table B row B13
@@ -2175,6 +2288,9 @@ pub fn key_command(
     selection: &[ObjectId],
     cmd: KeyCommand,
 ) -> Vec<Order> {
+    if cmd == KeyCommand::Deploy {
+        return deploy_command(w, house, selection);
+    }
     let mut out = Vec::new();
     for &id in selection {
         let Some(o) = w.obj(id) else { continue };
@@ -2196,17 +2312,42 @@ pub fn key_command(
                     dest: None,
                 })
             }
-            // spec: S-0213 table T2 (deploy: units that are movable or able to fire; the rest of deploy readiness waits for the deploy specs)
-            KeyCommand::Deploy if (mv || fire) && o.kind != Kind::Building => {
-                // spec: S-0213 the deploy rule and S-0601 claim 15 (revision 9: a vehicle that deploys into a building and fails its deploy readiness, S-0214 Terms, gets no order; no refusal sound or message)
-                let into = o.kind == Kind::Vehicle
-                    && crate::econ::deploy::deploys_into(w, o.kind, o.type_index).is_some();
-                (!into || crate::econ::deploy::deploy_ready(w, id))
-                    .then_some(Order::Deploy { actor: id })
-            }
             _ => None,
         };
         out.extend(order);
+    }
+    out
+}
+
+/// The deploy command (S-0213 table T2, *the deploy rule*; S-0214 Terms).
+fn deploy_command(w: &World, house: HouseId, selection: &[ObjectId]) -> Vec<Order> {
+    // spec: S-0213 the deploy rule (the first object in selection order a building of the player's holding garrison occupants: only that building gets a deploy order)
+    if let Some(&first) = selection.first()
+        && own(w, house, first)
+        && kind(w, first) == Some(Kind::Building)
+        && crate::structures::garrison::count(w, first) > 0
+    {
+        return vec![Order::Deploy { actor: first }];
+    }
+    // spec: S-0213 the deploy rule (a selection holding both deployed in-place deployers and ones that are not: the deployed ones get no order); Q-1753 interim (only fully deployed and fully undeployed members count; one still deploying or undeploying is left to the deploy check and deploy readiness)
+    let states: Vec<Option<DeployState>> =
+        selection.iter().map(|&id| deploy_state(w, id)).collect();
+    let mixed = states.contains(&Some(DeployState::Deployed))
+        && states.contains(&Some(DeployState::Undeployed));
+    let mut out = Vec::new();
+    for (&id, state) in selection.iter().zip(states) {
+        if mixed && state == Some(DeployState::Deployed) {
+            continue;
+        }
+        // spec: S-0213 the deploy rule (a unit or building, movable or able to fire, not berserk, passing the deploy check and deploy readiness of S-0214; S-0601 claim 15: no refusal sound or message)
+        let ok = unit_or_building(w, id)
+            && (movable(w, house, id) || able_to_fire(w, house, id))
+            && !berserk(w, id)
+            && deploy_check(w, id)
+            && deploy_readiness(w, id);
+        if ok {
+            out.push(Order::Deploy { actor: id });
+        }
     }
     out
 }

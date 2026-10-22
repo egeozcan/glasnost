@@ -210,6 +210,7 @@ fn dynamic_pass_places_mobiles_at_their_projected_point() {
         protection: None,
         generic_shadow: None,
         berserk: None,
+        turret_index: None,
     };
     let pos = (2 * 256 + 40, 3 * 256 + 200, 104);
     let (entries, _) = painter.mobiles(&inputs, &mut scene, &[man(pos, sim_code(ObjectId(7)))]);
@@ -297,6 +298,7 @@ fn harvesting_sprite_is_drawn_under_the_vehicle_body() {
         protection: None,
         generic_shadow: None,
         berserk: None,
+        turret_index: None,
     };
     let h = Some(Harvesting { frame: 97, anchor });
     // Without the file: no image, no failure.
@@ -1672,6 +1674,7 @@ fn flying_aircraft_shadow_lies_on_the_ground() {
         protection: None,
         generic_shadow: None,
         berserk: None,
+        turret_index: None,
     };
     let mut offset = |z| {
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[jet(z)]);
@@ -1871,6 +1874,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
             protection: None,
             generic_shadow: None,
             berserk: None,
+            turret_index: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         let size = |shadow: bool| {
@@ -1892,6 +1896,133 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
     assert_eq!(draw(false, true, true).0, main_body);
     // The option without an alternative body file: the main body.
     assert_eq!(draw(true, false, true).0, main_body);
+}
+
+/// spec: S-0105 claim 12 (a vehicle of a multi-turret type draws the turret and barrel models of
+/// its selected turret index instead of the ordinary ones; a type with rotating-barrel weapon
+/// stages draws its ordinary turret whatever its count), S-0007 claim 16 (the numbered parts) and
+/// claim 26 (the index is a turret key component). The index is supplied by the test: no rule
+/// sets it yet (Q-1760), and without one no numbered turret is drawn.
+#[test]
+fn multi_turret_draws_the_models_of_the_selected_index() {
+    use glasnost_fmt::bytes::F32Bits;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    // The lit item sizes (body first) and the cached turret keys of one vehicle.
+    let draw = |extra: &str, index: Option<u8>| {
+        let rules = format!("{RULES}[CARX]\nTurret=yes\n{extra}");
+        let (mut import, catalogue, mut assets) = context_with(&rules);
+        let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        for (part, file, width) in [
+            ("body", "body.vxl", 30.0),
+            ("turret", "tur.vxl", 12.0),
+            ("turret0", "tur0.vxl", 18.0),
+            ("turret1", "tur1.vxl", 24.0),
+        ] {
+            art.voxels.insert(part.into(), file.as_bytes().to_vec());
+            let mut model = synthetic_model();
+            model.limbs[0].max[0] = F32Bits::new(width);
+            assets.insert(file.as_bytes(), VxlWriter { model: &model }.write());
+        }
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+            body: 8192,
+            turret: 8192,
+            elevation: 0,
+            anim: 0,
+            infantry: None,
+            object: sim_code(ObjectId(9)),
+            harvesting: None,
+            shadow: None,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled: false,
+            above: 0,
+            protection: None,
+            generic_shadow: None,
+            berserk: None,
+            turret_index: index,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        let sizes: Vec<(u32, u32)> = entries[0]
+            .items
+            .iter()
+            .filter(|i| i.paint != Paint::Shadow)
+            .map(|i| {
+                let img = &scene.images[i.image as usize];
+                (img.width(), img.height())
+            })
+            .collect();
+        // The turret keys cached, by the index component (turret frame 0, no displacement).
+        let keys: Vec<Option<u8>> = [None, Some(0), Some(1), Some(5)]
+            .into_iter()
+            .filter(|&i| {
+                let key = glasnost_render::voxel::vehicle_turret_key(
+                    glasnost_render::voxel::RAMP_FLAT,
+                    8192,
+                    8192,
+                    0,
+                    i,
+                    false,
+                    0,
+                );
+                painter.voxel_cached(
+                    Kind::Vehicles,
+                    0,
+                    &glasnost_render::voxel::ImageKey::Turret(key),
+                )
+            })
+            .collect();
+        (sizes, keys)
+    };
+    // A single-turret type: the ordinary turret, no index in the key.
+    let (plain, plain_keys) = draw("", None);
+    assert_eq!(plain.len(), 2, "body and turret");
+    assert_eq!(plain_keys, [None]);
+    // An index given to a single-turret type changes nothing.
+    assert_eq!(draw("", Some(1)), (plain.clone(), plain_keys.clone()));
+    // A multi-turret type with no selected index: no turret at all (Q-1760).
+    let multi = "TurretCount=2\n";
+    let (none, none_keys) = draw(multi, None);
+    assert_eq!(none, plain[..1], "the body alone");
+    assert!(none_keys.is_empty());
+    // Index 0 and index 1: the numbered models, the index in the key.
+    let (zero, zero_keys) = draw(multi, Some(0));
+    let (one, one_keys) = draw(multi, Some(1));
+    assert_eq!(zero.len(), 2);
+    assert_eq!(one.len(), 2);
+    assert_ne!(zero[1], plain[1], "turret 0 is not the ordinary turret");
+    assert_ne!(zero[1], one[1], "turret 1 is another model");
+    assert_eq!(zero_keys, [Some(0)]);
+    assert_eq!(one_keys, [Some(1)]);
+    // Rotating-barrel weapon stages: the ordinary turret whatever the count and index.
+    let gattling = "TurretCount=2\nIsGattling=yes\n";
+    assert_eq!(draw(gattling, Some(1)), (plain, plain_keys));
 }
 
 /// S-0105 claims 41 and 42 (Q-0950): a rocket's body is drawn with its current nose pitch, an image is
@@ -1963,6 +2094,7 @@ fn aircraft_attitude_is_drawn() {
         protection: None,
         generic_shadow: None,
         berserk: None,
+        turret_index: None,
     };
     // The body and shadow images drawn: their scene image numbers.
     let mut images = |m: Mobile| {
@@ -2116,6 +2248,7 @@ fn a_disabled_voxel_vehicle_is_drawn_at_half_brightness() {
             protection: None,
             generic_shadow: None,
             berserk: None,
+            turret_index: None,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
         entries[0]
@@ -2885,6 +3018,7 @@ fn protection_curtain_vehicle_rows() {
                 protection,
                 generic_shadow: None,
                 berserk: None,
+                turret_index: None,
             };
             let look = Look {
                 kind: ProtectKind::Curtain,
@@ -3950,6 +4084,7 @@ fn plain_mobile(kind: Kind) -> Mobile {
         protection: None,
         generic_shadow: None,
         berserk: None,
+        turret_index: None,
     }
 }
 
