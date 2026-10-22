@@ -24,6 +24,10 @@
 //!
 //! Both take `GLASNOST_THREADS` (default 8) and write a CSV to
 //! `GLASNOST_SWEEP_OUT` when it is set (a local-lane path; never committed).
+//! Each test does nothing unless its variable (`GLASNOST_SWEEP`,
+//! `GLASNOST_REACH_SEEDS`, `GLASNOST_WATCH`, `GLASNOST_HITS`,
+//! `GLASNOST_LOSSES`) is set, so that the goldens' `--include-ignored` run
+//! plays none of them.
 
 #![allow(clippy::disallowed_methods, clippy::disallowed_macros)] // local diagnostics: read the host environment, print, write the lane CSV; no simulation
 
@@ -195,6 +199,17 @@ fn flipped(name: &str) -> Quirks {
     out
 }
 
+/// Whether `var` is set; when it is not, says that the diagnostic is
+/// skipped (so that `--include-ignored`, which regenerates the goldens,
+/// plays none of them).
+fn wanted(var: &str) -> bool {
+    let set = std::env::var_os(var).is_some();
+    if !set {
+        println!("skipped: {var} is not set");
+    }
+    set
+}
+
 fn env(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.into())
 }
@@ -291,6 +306,9 @@ fn csv_out(lines: &[String]) {
 #[test]
 #[ignore = "a sweep of whole games; set GLASNOST_SWEEP, GLASNOST_DUELS, GLASNOST_QUIRKS"]
 fn margins_sweep() {
+    if !wanted("GLASNOST_SWEEP") {
+        return;
+    }
     let seeds = seeds("GLASNOST_SWEEP", "1-32");
     let settings: Vec<String> = env("GLASNOST_QUIRKS", "default")
         .split(',')
@@ -395,6 +413,9 @@ fn margins_sweep() {
 #[test]
 #[ignore = "plays every candidate switch flipped; set GLASNOST_DUELS, GLASNOST_QUIRKS, GLASNOST_REACH_SEEDS"]
 fn quirk_reach() {
+    if !wanted("GLASNOST_REACH_SEEDS") {
+        return;
+    }
     let candidates: Vec<String> = match std::env::var("GLASNOST_QUIRKS") {
         Ok(v) => v.split(',').map(|s| s.trim().to_string()).collect(),
         Err(_) => Quirks::default()
@@ -477,6 +498,9 @@ fn quirk_reach() {
 #[test]
 #[ignore = "a diagnostic of one game; set GLASNOST_WATCH=<duel>,<seed>,<every>[,<quirk>]"]
 fn watch() {
+    if !wanted("GLASNOST_WATCH") {
+        return;
+    }
     use glasnost_ai::game::Game;
     let v = env("GLASNOST_WATCH", "");
     let parts: Vec<&str> = v.split(',').collect();
@@ -558,6 +582,9 @@ fn watch() {
 #[test]
 #[ignore = "a diagnostic of one game; set GLASNOST_HITS=<duel>,<seed>,<type>[,<until>]"]
 fn hits() {
+    if !wanted("GLASNOST_HITS") {
+        return;
+    }
     use glasnost_ai::game::Game;
     use glasnost_sim::world::Target;
     let v = env("GLASNOST_HITS", "");
@@ -648,6 +675,9 @@ fn hits() {
 #[test]
 #[ignore = "a diagnostic of one game; set GLASNOST_LOSSES=<duel>,<seed>,<house>[,<until>]"]
 fn losses() {
+    if !wanted("GLASNOST_LOSSES") {
+        return;
+    }
     use glasnost_ai::game::Game;
     use glasnost_sim::combat::effects::Effect;
     let v = env("GLASNOST_LOSSES", "");
