@@ -2461,6 +2461,8 @@ impl Live {
                 self.viewer
                     .is_some_and(|v| !glasnost_sim::econ::shroud::explored(w, v, o.pos.cell()))
             }),
+            // spec: S-0105 claim 12 (the selected turret index of a multi-turret vehicle; Q-1760 open, so none)
+            turret_index: super::build::selected_turret_index(w, id),
         })
     }
 
