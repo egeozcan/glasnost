@@ -479,3 +479,17 @@ fn turret_drawn_with_the_fire_points_displacement() {
     );
     assert_ne!(with.parts, without.parts);
 }
+
+/// spec: S-0313 claim 11 (the turret is drawn with the same 32-step turret and body facings that
+/// F2 uses for the fire point: S-0105's 32-step facing equals S-0204 F4's with n = 32 for every
+/// raw facing)
+#[test]
+fn turret_drawn_with_the_fire_points_facings() {
+    for f in 0..=u16::MAX {
+        assert_eq!(
+            u32::from(voxel::facing32(f)),
+            glasnost_num::geom::n_step(f, 32),
+            "raw facing {f}"
+        );
+    }
+}
