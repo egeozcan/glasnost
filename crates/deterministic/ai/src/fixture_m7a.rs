@@ -59,7 +59,9 @@
 //!   (no primary weapon, so the AI's waves leave it at home), one behind
 //!   each start, which the house's bunkers take in. The PREY, the TAKER,
 //!   the HULKs' class and WARD came in M7b AI round 3, for seeds of 1 to
-//!   16 with no takeover order, no unit ground or no vehicle bunkered.
+//!   16 with no takeover order, no unit ground or no vehicle bunkered; the
+//!   TAKER begins [`START_INFANTRY_AHEAD`] cells toward the middle since
+//!   M8 step B4, for seed 20 of 1 to 32 with no takeover order.
 //!
 //! To add a type, insert it in [`base_ruleset`] (with `register`) and, for
 //! a start unit, add its name to [`INFANTRY`] or [`VEHICLES`] (or, for the
@@ -579,7 +581,10 @@ pub fn map() -> Map {
     }
     for (name, dx, list) in START_INFANTRY {
         for (i, ty) in list.iter().enumerate() {
-            let c = at(dx + 2 * i as i32 - 4, START_INFANTRY_ROW);
+            let c = at(
+                dx + dx.signum() * (2 * i as i32 - START_INFANTRY_AHEAD),
+                START_INFANTRY_ROW,
+            );
             m.objects.infantry.push(Infantry {
                 placed: placed(name, ty, c, key),
                 sub_cell: 2,
@@ -632,6 +637,12 @@ const START_VEHICLE_ROW: i32 = -3;
 pub const START_INFANTRY: [(&str, i32, &[&str]); 1] = [("Alpha", -START_DX, &["TAKER"])];
 /// The row (dy from the middle) of the extra start infantry.
 const START_INFANTRY_ROW: i32 = -5;
+/// Cells toward the middle from its start where the extra start infantry
+/// begin (M8 step B4): the TAKER stands within the brain's mind-control
+/// reach of the nearest PREY from the first think, so that the brain gives
+/// a takeover order early. Before, seed 20 of the 32-seed sweep ended with
+/// four PREY changed owner and no takeover order given at all.
+const START_INFANTRY_AHEAD: i32 = 2;
 
 /// The fixture's flat ground and resource fields with the starts at
 /// ±[`START_DX`] and each house's start objects, without the gate's margin
