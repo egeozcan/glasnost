@@ -39,6 +39,9 @@ fn defaults_are_the_specified_ones() {
     for (a, c) in ACTIONS.iter().zip(['s', 'x', 'g', 'd', 'c']) {
         assert_eq!(s.bindings.key(*a), c);
     }
+    // Our own diagnostics keys (M8 A4), none of claim 22's.
+    assert_eq!(s.bindings.key(Action::PathReport), 'p');
+    assert_eq!(s.bindings.key(Action::Mark), 'm');
     assert_eq!(Settings::mixer_level(100), 16384);
     assert_eq!(Settings::mixer_level(0), 0);
 }
@@ -117,6 +120,21 @@ fn a_file_with_clashing_keys_falls_back_to_the_default_keys() {
     assert_eq!(s.sound, 20, "the other fields still load");
     let s = Settings::from_text("key.stop=!\n");
     assert_eq!(s.bindings, Bindings::default());
+}
+
+/// A file written before the pathing-report keys (M8 A4) that gives P to
+/// a command: the command keeps P and the report key moves to a free key;
+/// one that leaves P and M alone gets them.
+#[test]
+fn a_file_older_than_the_report_keys_keeps_its_own() {
+    let s =
+        Settings::from_text("key.stop=p\nkey.scatter=x\nkey.guard=g\nkey.deploy=d\nkey.cheer=c\n");
+    assert_eq!(s.bindings.key(Action::Stop), 'p');
+    assert_eq!(s.bindings.key(Action::PathReport), 'a');
+    assert_eq!(s.bindings.key(Action::Mark), 'm');
+    let s = Settings::from_text("key.stop=q\n");
+    assert_eq!(s.bindings.key(Action::PathReport), 'p');
+    assert_eq!(s.bindings.key(Action::Mark), 'm');
 }
 
 #[test]

@@ -825,6 +825,15 @@ fn step_check(w: &mut World, id: ObjectId, repeated: bool) -> Choice {
     let reference = occupancy::reference_level(w, id);
     // spec: S-0503 claim 12 (the step check: the entry outcome of S-0209, without S-0209 claim 5f's driving substitutions)
     let outcome = path::step_outcome(w, id, here, cell, reference);
+    crate::trace::step(
+        w,
+        id,
+        crate::trace::Mover::Hover,
+        here,
+        cell,
+        outcome,
+        repeated,
+    );
     let refused = |w: &mut World, gave_up: bool| {
         refuse(w, id);
         Choice::Refused { gave_up }

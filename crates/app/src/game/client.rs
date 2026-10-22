@@ -232,6 +232,9 @@ pub struct Client {
     pub build: String,
     /// How the client stores a desync report (`None`: it cannot here).
     pub save_report: Option<SaveReport>,
+    /// How the client stores a pathing report (M8 A4; `None`: it cannot
+    /// here).
+    pub save_path_report: Option<SaveReport>,
     /// The test-only perturbation a test client makes in a network game
     /// ([`Client::set_test`]).
     perturb: Option<glasnost_net::desync::Perturb>,
@@ -311,6 +314,7 @@ impl Client {
             connect: platform_connect(),
             build: net::BUILD.into(),
             save_report: platform_save(),
+            save_path_report: super::capture::platform_save(),
             perturb: None,
             net_targets: Targets::new(),
             settings: Settings::default(),
@@ -781,6 +785,10 @@ impl Client {
             Some(Bound::Options) => s.open_options(),
             Some(Bound::Command(c)) => s.key(c),
             Some(Bound::Cheer) if !s.paused => s.play.cheer(),
+            Some(Bound::PathReport) => {
+                s.save_path_report(self.save_path_report);
+            }
+            Some(Bound::Mark) => s.mark(),
             _ => {}
         }
     }
@@ -1199,6 +1207,10 @@ pub enum Bound {
     Command(KeyCommand),
     /// The cheer command.
     Cheer,
+    /// Save a pathing report (M8 A4, our own diagnostics).
+    PathReport,
+    /// Mark the moment for the pathing report (M8 A4).
+    Mark,
 }
 
 /// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
@@ -1217,6 +1229,8 @@ pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
             Action::Guard => Bound::Command(KeyCommand::Guard),
             Action::Deploy => Bound::Command(KeyCommand::Deploy),
             Action::Cheer => Bound::Cheer,
+            Action::PathReport => Bound::PathReport,
+            Action::Mark => Bound::Mark,
         });
     }
     match k {

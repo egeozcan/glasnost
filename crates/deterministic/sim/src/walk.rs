@@ -15,6 +15,7 @@ use crate::regions::STEPS;
 use crate::rules::{Behaviour, Kind};
 use crate::scatter;
 use crate::teleport::{DECK_HEIGHT, reservation_layer};
+use crate::trace;
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// A walking unit's locomotor state.
@@ -497,6 +498,7 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
     let next = CellXY::new(here.x + dx, here.y + dy);
     let reference = occupancy::reference_level(w, id);
     let outcome = path::step_outcome(w, id, here, next, reference);
+    trace::step(w, id, trace::Mover::Walk, here, next, outcome, !first);
     match outcome {
         Outcome::Clear => {
             // spec: S-0520 claim 6 (a walking mover collects the crate of the cell it commits to, before it arrives; a successful unit crate blocks the step and clears its movement target)
@@ -509,6 +511,9 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             // spec: S-0209 claim 6 (clear: choose the walking target on the asking tick)
             if !choose_target(w, id, d, next) {
                 // spec: S-0209 claim 6 (a clear cell with no free position: stop for this tick)
+                trace::record(w, id, || trace::What::Waited {
+                    why: "no free standing position in the next cell",
+                });
             }
         }
         Outcome::CloakedBlocker
@@ -567,6 +572,10 @@ fn ask(w: &mut World, id: ObjectId, first: bool) {
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.blocked_since = Some(since);
             }
+            trace::record(w, id, || trace::What::Blocked {
+                since,
+                waiting_until: (t < o.path.retry_at).then_some(o.path.retry_at),
+            });
             if t >= o.path.retry_at {
                 let delay = w.rules().general.blockage_delay;
                 // spec: S-0209 claim 10 (re-path when the retry timer allows; avoid blockers once the delay has run out)
@@ -611,6 +620,7 @@ fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
         // spec: S-0209 claim 8 (within the close-enough distance, in contact with nothing, |Δz| < 208, not a tunnel cell)
         if d < i64::from(r.general.close_enough) && o.contact.is_none() && dz.abs() < 208 && !tunnel
         {
+            trace::record(w, id, || trace::What::GaveUp);
             if let Some(ob) = w.obj_mut(id) {
                 ob.dest = None;
                 ob.path.steps.clear();
@@ -619,6 +629,7 @@ fn stationary_friendly(w: &mut World, id: ObjectId, next: CellXY) {
         }
     }
     // spec: S-0209 claim 8 (a scatter request to every object listed there: no threat point, forced, move-anywhere)
+    trace::record(w, id, || trace::What::AskedRoom { cell: next });
     let reference = occupancy::reference_level(w, id);
     let layer = occupancy::layers_for(w, next, reference).0;
     scatter::cell_request(

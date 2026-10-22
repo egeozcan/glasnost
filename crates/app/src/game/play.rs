@@ -154,6 +154,9 @@ pub struct Play {
     /// lockstep session; `None` in a skirmish, where orders go straight
     /// into the game.
     pub outbox: Option<Vec<Order>>,
+    /// The pathing report's ring of snapshots, marks and clicks (M8 A4,
+    /// our own diagnostics; nothing of it reaches the simulation).
+    pub capture: crate::game::capture::Ring,
 }
 
 fn icon_ready(w: &World, house: HouseId, t: TypeRef) -> bool {
@@ -175,7 +178,9 @@ impl Play {
         let mut cheer = CheerMemory::default();
         cheer.game_start(&game.world);
         let radar_on = radar::available(&game.world, local);
+        let capture = crate::game::capture::Ring::new(&game);
         Self {
+            capture,
             game,
             local,
             selection: Vec::new(),
@@ -330,6 +335,9 @@ impl Play {
             Ok(true) => {}
         }
         self.effects = std::mem::take(&mut self.game.world.effects);
+        // The pathing report's ring (M8 A4) after the tick, before any
+        // order of the next.
+        self.capture.after_tick(&self.game);
         let w = &self.game.world;
         let house = self.local;
         // spec: S-0416 claim 1 (one counter step per cycle towards the available credits)
@@ -508,6 +516,12 @@ impl Play {
         cell: CellXY,
         mods: Modifiers,
     ) {
+        self.capture.click(crate::game::capture::Click {
+            tick: self.game.world.tick,
+            right: button == Button::Right,
+            cell,
+            object: object.map(|o| o.0),
+        });
         let on = self.target(object, cell);
         match (self.tool, button) {
             (Tool::Place(t), Button::Left) => {

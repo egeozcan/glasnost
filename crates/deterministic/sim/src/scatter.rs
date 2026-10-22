@@ -50,8 +50,23 @@ fn eighth(f: u16) -> i32 {
 }
 
 /// An infantry unit receives a scatter request (S-0208 claims 11 to 13).
-/// Returns whether it accepted.
+/// Returns whether it accepted. With the movement trace on, the answer is
+/// recorded.
 pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
+    let accepted = answer(w, id, req);
+    crate::trace::record(w, id, || crate::trace::What::Asked {
+        accepted,
+        dest: w.obj(id).and_then(|o| match o.dest {
+            Some(Target::Cell(c)) => Some(c),
+            Some(Target::Object(t)) => w.obj(t).map(|x| x.pos.cell()),
+            None => None,
+        }),
+    });
+    accepted
+}
+
+/// [`request`] without the trace.
+fn answer(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return false;

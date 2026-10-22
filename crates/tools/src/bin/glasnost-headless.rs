@@ -59,13 +59,22 @@
 //!   compares every client's checkpoint hashes; writes counts and timings
 //!   to the git-ignored `local-lane/m9/n6/` (or `--out`). Exit code 0 when
 //!   it passed.
+//! - `glasnost-headless path-report FILE [--out DIR] [--unit ID]… [--tick
+//!   T] [--names] [--any-build]`: a pathing report the client saved (M8
+//!   A4, `glasnost_tools::path_report`) replayed with the movement trace
+//!   on; writes `report.txt` and `paths.png` (and `state-T.txt` with
+//!   `--tick`) to `--out` or a folder named after the file next to it. On
+//!   the synthetic ruleset, or on the install's when `GLASNOST_GAME_DIR`
+//!   is set. Exit code 0 when the replay reproduced the capture's state
+//!   hash, 1 when it did not (the outputs are still written), 2 when the
+//!   report cannot be read or does not match this build or the install.
 
 use std::process::ExitCode;
 
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
 use glasnost_tools::{
-    arena, desync, headless, net_client, oracle, skirmish_lane, soak, trigger_lane,
+    arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak, trigger_lane,
 };
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
@@ -328,6 +337,37 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("path-report") => {
+            let o = match path_report::parse(&args[1..]) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless path-report: {e}\nusage: glasnost-headless {}",
+                        path_report::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let dir = std::env::var_os(GAME_DIR_VAR);
+            match path_report::run(&o, dir.as_deref().map(std::path::Path::new)) {
+                Ok((a, out)) => {
+                    print!("{}", a.text);
+                    println!("wrote report.txt and paths.png to {}", out.display());
+                    if a.reproduced {
+                        ExitCode::SUCCESS
+                    } else {
+                        eprintln!(
+                            "glasnost-headless path-report: the replay did not reproduce the capture's state hash"
+                        );
+                        ExitCode::FAILURE
+                    }
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless path-report: {e}");
+                    ExitCode::from(2)
+                }
+            }
+        }
         Some("net-client") => {
             let opts = match net_client::parse(&args[1..]) {
                 Ok(o) => o,
@@ -395,7 +435,8 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {}",
+                "usage: glasnost-headless synthetic [ticks] [seed] | replay <file> | smoke [ticks] [seed] [index] | skirmish [ticks] [seed] [index …] | ai [ticks] [seed] [index …] | ai-sides [ticks] [seed] [index …] | triggers [index …] | desync <bundle A> <bundle B> | {} | {} | {} | {}",
+                path_report::USAGE,
                 arena::USAGE,
                 net_client::USAGE,
                 soak::USAGE

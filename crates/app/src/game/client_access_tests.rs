@@ -351,14 +351,14 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert!(c.menu_focus.rect(&c.menu_targets).is_none());
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
-    // The settings screen: 7 values, 5 bindings, Reset and Back.
+    // The settings screen: 7 values, 7 bindings, Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 14);
+    assert_eq!(c.settings_targets.stops.len(), 16);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),
@@ -789,4 +789,40 @@ fn state_hash_is_the_same_under_every_accessibility_setting() {
         hashes
     };
     assert_eq!(play(false), play(true));
+}
+
+/// The reports the pathing-report test store keeps (M8 A4).
+static PATH_REPORTS: std::sync::Mutex<Vec<Vec<u8>>> = std::sync::Mutex::new(Vec::new());
+
+fn keep_path_report(name: &str, bytes: &[u8]) -> Result<String, String> {
+    PATH_REPORTS.lock().unwrap().push(bytes.to_vec());
+    Ok(format!("the test store as {name}"))
+}
+
+/// The mark and save keys of the pathing report (M8 A4) in a game: M marks
+/// the present tick, P saves a report with the mark and the selection
+/// through the client's store. Our own diagnostics; no spec applies.
+#[test]
+fn the_mark_and_report_keys_save_a_pathing_report() {
+    use super::super::capture::Bundle;
+    let mut c = client((1024, 768), 100);
+    c.save_path_report = Some(keep_path_report);
+    start_by_keyboard(&mut c);
+    let mcv = *own(&c, Kind::Vehicle).first().expect("a base unit");
+    session_mut(&mut c).play.selection = vec![mcv];
+    // nocite: our own diagnostics (a test length)
+    for _ in 0..40 {
+        session_mut(&mut c).step();
+    }
+    let marked = session(&c).play.game.world.tick;
+    key(&mut c, Key::Char('m'));
+    for _ in 0..10 {
+        session_mut(&mut c).step();
+    }
+    key(&mut c, Key::Char('p'));
+    let saved = PATH_REPORTS.lock().unwrap().clone();
+    let b = Bundle::from_bytes(saved.last().expect("a report was saved")).unwrap();
+    assert_eq!(b.marks, vec![marked]);
+    assert_eq!(b.look.selection, vec![mcv.0]);
+    assert_eq!(b.capture_hash, session(&c).play.game.state_hash());
 }

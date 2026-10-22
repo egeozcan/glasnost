@@ -31,15 +31,21 @@ pub enum Action {
     Deploy,
     /// Cheer.
     Cheer,
+    /// Save a pathing report (M8 A4, our own diagnostics).
+    PathReport,
+    /// Mark the moment in the pathing report's window (M8 A4).
+    Mark,
 }
 
 /// Every bindable action, in the order the screen lists them.
-pub const ACTIONS: [Action; 5] = [
+pub const ACTIONS: [Action; 7] = [
     Action::Stop,
     Action::Scatter,
     Action::Guard,
     Action::Deploy,
     Action::Cheer,
+    Action::PathReport,
+    Action::Mark,
 ];
 
 impl Action {
@@ -51,6 +57,8 @@ impl Action {
             Action::Guard => "guard",
             Action::Deploy => "deploy",
             Action::Cheer => "cheer",
+            Action::PathReport => "report",
+            Action::Mark => "mark",
         }
     }
 
@@ -87,7 +95,7 @@ pub const KEYBOARD_KEYS: [(&str, &str); 9] = [
 /// The key bindings of the command keys. Keys are lower-case letters or
 /// digits, and no two actions share one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bindings([char; 5]);
+pub struct Bindings([char; 7]);
 
 /// Why a key could not be bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,7 +109,8 @@ pub enum BindError {
 impl Default for Bindings {
     fn default() -> Self {
         // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer)
-        Self(['s', 'x', 'g', 'd', 'c'])
+        // nocite: our own client setting (P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22, Z included)
+        Self(['s', 'x', 'g', 'd', 'c', 'p', 'm'])
     }
 }
 
@@ -324,8 +333,24 @@ impl Settings {
                 }
             }
         }
-        for (a, c) in taken {
+        for &(a, c) in &taken {
             keys.0[a.index()] = c;
+        }
+        // A pathing-report key the file leaves out (a file written before
+        // M8 A4) keeps its default unless the file gives that key to
+        // another action; it then takes the first letter or digit free.
+        // The command keys of S-0213 table T2 are left as they were.
+        for a in [Action::PathReport, Action::Mark] {
+            if taken.iter().any(|(t, _)| *t == a) {
+                continue;
+            }
+            let clashes =
+                |k: char, keys: &Bindings| ACTIONS.iter().any(|b| *b != a && keys.key(*b) == k);
+            if clashes(keys.key(a), &keys)
+                && let Some(free) = ('a'..='z').chain('0'..='9').find(|k| !clashes(*k, &keys))
+            {
+                keys.0[a.index()] = free;
+            }
         }
         // A key that is not a letter or digit, or that two actions share,
         // spoils the whole set; the defaults stand then.

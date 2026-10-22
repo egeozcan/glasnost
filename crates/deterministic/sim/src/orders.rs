@@ -724,6 +724,9 @@ fn group_destinations(w: &mut World, orders: &[Order]) -> Vec<Option<Target>> {
                 .collect();
             for (n, c) in spread(w, &run, common) {
                 out[n] = Some(Target::Cell(c));
+                if let Some(a) = orders[n].actor() {
+                    crate::trace::record(w, a, || crate::trace::What::Spread { common, cell: c });
+                }
             }
         }
         i = j;
