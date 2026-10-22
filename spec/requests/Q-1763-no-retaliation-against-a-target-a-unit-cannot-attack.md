@@ -1,9 +1,9 @@
 ---
 id: Q-1763
 title: The lead's play report against S-0306 claim 23 and S-0309 claim 18: no retaliation at a target a unit cannot otherwise attack
-status: open
+status: answered
 related: [S-0306, S-0309, S-0214, Q-1761]
-answered-by: [S-0306]
+answered-by: [S-0306, S-0309]
 ---
 
 ## Need
