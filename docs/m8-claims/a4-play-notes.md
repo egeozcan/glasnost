@@ -21,3 +21,19 @@ Triage was read-only, against the specs and the code at main 80f8a85.
 | 6 | Destroyed units leave spinning particles | The specs are silent. A sprite debris piece (a bouncing animation) plays in place with no motion and no landing, so a looping one never ends. This is the seam "bouncing motion and landing" | S-0109 Terms (bouncing type), claims 7, 22; S-0312 claim 4, F1; S-0202 claim 10 | Q-1762 | Waits for Q-1762. Animations are simulation state, so no interim end rule is invented |
 | 7 | Barracks units with no rally point stay at the door and block later units | Follows the specs: the unit rests in guard and keeps the factory's one contact place, so later releases are busy and refunded | S-0417 claims 10, 14 and Open question 3; S-0404 claims 7, 13 | Q-1757 | Waits for Q-1757 |
 | 8 | A chrono miner should teleport only when it returns to a refinery, but it teleports to any click | Disputes an approved claim: every destination teleports while teleporting locomotion is active, a person's move order included. The claim has no measurement record | S-0207 claims 14, 20 (a); S-0214 claim 11; S-0402 Terms, claims 9, 17 | Q-1759 | Waits for Q-1759 |
+
+## The lead's answers (2026-10-22)
+
+The lead played the native build. Answers to the triage questions:
+
+- Note 4: the Patriot fired at ground units **on its own**, not after a person's order and not only
+  after being hit. By S-0309 claim 5 an anti-air-only building's automatic search looks for aircraft
+  only (classes come from the projectiles of its weapons in slots 0 and 1), so this route is not the
+  retaliation route of Q-1761 and Q-1763. Traced on real data in a follow-up triage.
+- Note 5: the harriers were the computer player's, and they circled over their target, which was
+  the lead's base. The lead has not built harriers. Traced on real data in the same triage (dock
+  types as imported, whether the computer player had pads).
+- Note 6: the spinning particles looked like debris. This matches the premise of Q-1762 (a sprite
+  debris piece played in place with no motion and no landing).
+- Note 1: details will come as a pathing report (M8 A4 capture: a key saves a snapshot from about
+  20 seconds earlier and every order since; `glasnost-headless path-report` replays it).
