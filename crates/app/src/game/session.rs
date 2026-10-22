@@ -26,7 +26,7 @@ use glasnost_render::shroud::ShroudQuirks;
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
-use glasnost_sim::world::{GameSetup, HouseId, ObjectId};
+use glasnost_sim::world::{GameSetup, HouseId, HouseRole, ObjectId};
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::geom::{Point, Rect, Scale};
 use glasnost_ui::hud::{self, HudHit, Layout, PauseHit};
@@ -154,6 +154,25 @@ pub struct Session {
     aim: Option<CellXY>,
     /// Problems met while loading (shown in the log).
     pub problems: Vec<String>,
+    /// A host clock in milliseconds, set only by the performance benchmark
+    /// (M8 step C4): each step then records its [`StepLaps`].
+    pub lap_clock: Option<fn() -> f64>,
+    /// The last step's laps, when [`Session::lap_clock`] is set.
+    pub laps: StepLaps,
+}
+
+/// Host-clock times of one step's parts, in milliseconds, for the
+/// performance benchmark (M8 step C4; our own tooling, never game state).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StepLaps {
+    /// The game's tick (the AI's thinking and the simulation).
+    pub tick: f64,
+    /// The interface model after the tick ([`Play::step_by`] less the tick).
+    pub play: f64,
+    /// The live objects redrawn into the scene.
+    pub scene: f64,
+    /// The radar's observation.
+    pub radar: f64,
 }
 
 /// Our own keys for the sidebar and keyboard aiming (M8 step C3; the
@@ -198,7 +217,9 @@ impl Session {
     /// network game's slot), else from the first person's house. `cursor`
     /// is the session's cursor palette keep (S-0111 claim 19a);
     /// `colour_blind` draws the player houses in our colour-blind colours
-    /// (presentation only, M8 step C3).
+    /// (presentation only, M8 step C3). With `watch`, `local` may be an AI
+    /// house, watched rather than played (the performance benchmark, M8
+    /// step C4).
     pub async fn start(
         vfs: &mut Vfs,
         file: &FileRef,
@@ -206,6 +227,7 @@ impl Session {
         local: Option<HouseId>,
         cursor: &CursorPaletteKeep,
         colour_blind: bool,
+        watch: bool,
     ) -> Result<Self, String> {
         let bytes = vfs
             .read(file)
@@ -243,6 +265,7 @@ impl Session {
             (icons, alt_icons, cursor_art),
             status_font,
             local,
+            watch,
         )
     }
 
@@ -256,6 +279,7 @@ impl Session {
             (BTreeMap::new(), BTreeMap::new(), None),
             Err("no game font in a bare game".into()),
             local,
+            false,
         )
     }
 
@@ -266,6 +290,7 @@ impl Session {
         art: Art,
         status_font: Result<status_font::StatusFont, String>,
         local: Option<HouseId>,
+        watch: bool,
     ) -> Result<Self, String> {
         let (icons, alt_icons, cursor_art) = art;
         // spec: S-0103 claim 13 (the dedicated icon palette file, claim 1's conversion)
@@ -315,9 +340,25 @@ impl Session {
             "the drawn copy and the game start alike"
         );
         let local = match local {
-            Some(h) if setup.houses.get(usize::from(h.0)).is_some_and(|x| !x.ai) => h,
+            Some(h)
+                if setup
+                    .houses
+                    .get(usize::from(h.0))
+                    .is_some_and(|x| watch || !x.ai) =>
+            {
+                h
+            }
             Some(h) => return Err(format!("house {} is no person's house", h.0)),
-            None => local_house(&setup).ok_or("the setup has no person's house")?,
+            None => local_house(&setup)
+                .or_else(|| {
+                    // A watched game's first player house (M8 step C4).
+                    let first = setup
+                        .houses
+                        .iter()
+                        .position(|h| h.role == HouseRole::Player);
+                    first.filter(|_| watch).map(|i| HouseId(i as u8))
+                })
+                .ok_or("the setup has no person's house")?,
         };
         if let Some(l) = loaded.live.as_mut() {
             // spec: S-0516 claims 28 and 29 (the battlefield drawn through the local player's eyes)
@@ -382,6 +423,8 @@ impl Session {
             pause_focus: Focus::new(),
             aim: None,
             problems: Vec::new(),
+            lap_clock: None,
+            laps: StepLaps::default(),
         };
         problems.append(&mut s.loaded.problems);
         match status_font {
@@ -430,7 +473,14 @@ impl Session {
     /// peer sent it, M9 N5) and brings the drawing and the radar up to it.
     pub fn replace_game(&mut self, game: Game) {
         self.play.game = game;
-        // The pathing report's ring starts again from the game put in.
+        self.catch_up();
+    }
+
+    /// Brings the drawing and the radar up to a game that moved on without
+    /// them (a game put in place, or ticks the performance benchmark ran
+    /// directly, M8 step C4).
+    pub fn catch_up(&mut self) {
+        // The pathing report's ring starts again from the game as it is.
         self.play.capture = super::capture::Ring::new(&self.play.game);
         self.with_live(|live, inputs, scene| {
             live.after_tick();
@@ -455,18 +505,38 @@ impl Session {
     /// the interface follows and the live objects are redrawn.
     pub fn step_by(&mut self, tick: impl FnOnce(&mut Game) -> bool) -> bool {
         self.play.capture.speed = self.speed;
-        if !self.play.step_by(tick) {
+        let clock = self.lap_clock;
+        let lap = || clock.map_or(0.0, |c| c());
+        let start = lap();
+        let mut tick_ms = 0.0;
+        let ran = self.play.step_by(|g| {
+            let t = lap();
+            let r = tick(g);
+            tick_ms = lap() - t;
+            r
+        });
+        if !ran {
             return false;
         }
+        let played = lap();
         let effects = self.play.effects.clone();
         self.with_live(|live, inputs, scene| {
             live.world.effects = effects;
             live.after_tick();
             live.redraw(inputs, scene);
         });
+        let drawn = lap();
         let house = self.play.local;
         if let Some(r) = self.radar.as_mut() {
             r.observe(&self.play.game.world, house);
+        }
+        if clock.is_some() {
+            self.laps = StepLaps {
+                tick: tick_ms,
+                play: played - start - tick_ms,
+                scene: drawn - played,
+                radar: lap() - drawn,
+            };
         }
         true
     }
@@ -584,6 +654,11 @@ impl Session {
         let size = self.view_size();
         // spec: S-0101 claim 8 (every request is limited by F5; the stored centre is the limited one)
         self.centre = limit_centre(requested, size, f.width, f.local);
+    }
+
+    /// The view centre (limited by S-0101 F5).
+    pub fn centre(&self) -> (i32, i32) {
+        self.centre
     }
 
     /// Scrolls the view by `d` pixels.

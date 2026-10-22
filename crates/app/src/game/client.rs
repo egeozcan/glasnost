@@ -76,6 +76,9 @@ pub enum Job {
         /// The player houses show our colour-blind colours (the person's
         /// setting; presentation only).
         colour_blind: bool,
+        /// `local` is an AI house the client watches (the performance
+        /// benchmark, M8 step C4).
+        watch: bool,
     },
 }
 
@@ -115,13 +118,15 @@ pub async fn run_job(job: Job) -> Done {
             local,
             cursor,
             colour_blind,
+            watch,
         } => {
             let make = |rules: &glasnost_sim::rules::SimRules| {
                 // spec: S-0202 claim 8 (both streams take the game's seed); the lobby's own stream
                 // takes it too (S-0412 claims 6 and 7)
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
-            let r = Session::start(&mut vfs, &file, &make, local, &cursor, colour_blind).await;
+            let r =
+                Session::start(&mut vfs, &file, &make, local, &cursor, colour_blind, watch).await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
                 let set = local_voice_set(&s.play.game.world, Some(s.play.local));
@@ -553,6 +558,7 @@ impl Client {
             local: None,
             cursor: install.cursor_palette.clone(),
             colour_blind: self.settings.colour_blind,
+            watch: false,
         });
     }
 

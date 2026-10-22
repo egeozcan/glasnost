@@ -20,6 +20,12 @@
 //! test clients, and with a value such as `credits:300:0:100` (house 0's
 //! credits +100 before tick 300) or `health:300:5:-1` (object 5's health)
 //! it changes its own game to force a desync; `none` changes nothing.
+//!
+//! **M8 step C4**: `--game --bench SPEC` runs the performance benchmark
+//! (`glasnost_app::game::bench`) in the game window and closes when it is
+//! done; with `--offscreen` it draws without a window. `SPEC` is `default`
+//! or words such as `map=2,late=18000,frames=600`. The outputs go to
+//! `local-lane/m8/c4/` under the working directory.
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
@@ -39,6 +45,8 @@ fn main() -> std::process::ExitCode {
     let mut relay = None;
     let mut relay_only = false;
     let mut ice: Vec<String> = Vec::new();
+    let mut bench = None;
+    let mut offscreen = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -65,9 +73,16 @@ fn main() -> std::process::ExitCode {
                 Ok(())
             }
             "--ice" => value("--ice").map(|v| ice.push(v)),
+            "--bench" => value("--bench").and_then(|v| {
+                glasnost_app::game::bench::BenchOptions::parse(&v).map(|b| bench = Some(b))
+            }),
+            "--offscreen" => {
+                offscreen = true;
+                Ok(())
+            }
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--game [--bench SPEC [--offscreen]] | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -99,6 +114,26 @@ fn main() -> std::process::ExitCode {
         eprintln!("glasnost: --game and --viewer exclude each other");
         return ExitCode::from(2);
     }
+    if (bench.is_some() || offscreen) && !game {
+        eprintln!("glasnost: --bench and --offscreen go with --game");
+        return ExitCode::from(2);
+    }
+    if offscreen {
+        let (Some(b), Some(dir)) = (bench, game_dir) else {
+            eprintln!("glasnost: --offscreen needs --bench SPEC and --game-dir DIR");
+            return ExitCode::from(2);
+        };
+        return match glasnost_app::game::bench::run_offscreen(b, &dir, options.backend) {
+            Ok(summary) => {
+                println!("{summary}");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("glasnost: benchmark: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let result = if game {
         glasnost_app::run_game(GameOptions {
             backend: options.backend,
@@ -111,6 +146,7 @@ fn main() -> std::process::ExitCode {
             ice: Some(ice.join(" ")).filter(|i| !i.is_empty()),
             report: None,
             test,
+            bench,
         })
     } else if viewer {
         glasnost_app::run_viewer(ViewerOptions {

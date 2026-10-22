@@ -14,8 +14,10 @@
 //! - [`status_font`]: the game bitmap font for status text.
 //! - [`captions`]: captions for announcements (M8 step C3).
 //! - [`bot`]: a person played by our AI over the relay (M9 N6, the soak).
+//! - [`bench`]: the performance benchmark (M8 step C4).
 
 pub mod band;
+pub mod bench;
 pub mod bot;
 pub mod captions;
 pub mod capture;
@@ -33,4 +35,4 @@ pub mod status_font;
 pub mod window;
 
 pub use glasnost_net::desync::Perturb;
-pub use window::{GameOptions, GpuDraw, run_game};
+pub use window::{DrawLaps, DrawStats, GameOptions, GpuDraw, run_game};

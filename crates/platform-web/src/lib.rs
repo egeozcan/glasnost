@@ -60,6 +60,18 @@ mod web {
         if mode == "probe" {
             return;
         }
+        // `?bench=SPEC` runs the performance benchmark (M8 step C4) once
+        // the game folder is picked.
+        let bench = match Some(param("bench")).filter(|b| !b.is_empty()) {
+            Some(spec) => match glasnost_app::game::bench::BenchOptions::parse(&spec) {
+                Ok(b) => Some(b),
+                Err(e) => {
+                    Status::Error(e).publish();
+                    return;
+                }
+            },
+            None => None,
+        };
         let result = if mode == "game" {
             glasnost_app::run_game(GameOptions {
                 backend,
@@ -72,6 +84,7 @@ mod web {
                 ice: Some(param("ice")).filter(|i| !i.trim().is_empty()),
                 report: Some(crate::download::save),
                 test: None,
+                bench,
             })
         } else if mode == "viewer" {
             glasnost_app::run_viewer(ViewerOptions {
