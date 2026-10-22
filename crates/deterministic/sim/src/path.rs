@@ -373,12 +373,40 @@ impl<'a> CorridorFilter<'a> {
 
 /// The cell search of S-0212 claims 7 to 12 and 15, inside a corridor when
 /// `corr` is given (claim 13). `progress` receives the search's progress
-/// cell (claim 13).
+/// cell (claim 13). With the movement trace on, its size is noted.
 fn search(
     w: &World,
     req: &Request,
     corr: Option<&CorridorFilter<'_>>,
     progress: &mut CellXY,
+) -> Option<Vec<u8>> {
+    let mut size = SearchSize::default();
+    let found = counted_search(w, req, corr, progress, &mut size);
+    crate::trace::cell_search(w, || crate::trace::CellSearch {
+        corridor: corr.is_some(),
+        expansions: size.expansions,
+        recorded: size.recorded,
+        found: found.as_ref().map(|p| p.len() as u32),
+        cost_bits: found.as_ref().and(size.cost_bits),
+    });
+    found
+}
+
+/// The size of a cell search, for the movement trace.
+#[derive(Default)]
+struct SearchSize {
+    expansions: u32,
+    recorded: u32,
+    cost_bits: Option<u32>,
+}
+
+/// [`search`], counting its size into `size`.
+fn counted_search(
+    w: &World,
+    req: &Request,
+    corr: Option<&CorridorFilter<'_>>,
+    progress: &mut CellXY,
+    size: &mut SearchSize,
 ) -> Option<Vec<u8>> {
     {
         let r = w.rules();
@@ -432,8 +460,8 @@ fn search(
             cell: from,
             layer: from_layer,
         });
-        let mut expansions = 0u32;
-        let mut recorded = 0u32;
+        let expansions = &mut size.expansions;
+        let recorded = &mut size.recorded;
         // spec: S-0212 claim 13 (progress: e₀ is the start cell)
         *progress = from;
         let mut next_sector: usize = 1;
@@ -471,16 +499,17 @@ fn search(
             }
             if next.cell == to && next.layer == to_layer {
                 // spec: S-0212 claim 12 (reaching the destination after exactly 10000 expansions fails)
-                if q.path_search_10000_failure && expansions == 10000 {
+                if q.path_search_10000_failure && *expansions == 10000 {
                     return None;
                 }
+                size.cost_bits = sc.g(ni).map(|g| g.0);
                 return Some(reconstruct(&sc, &ix, (from, from_layer), (to, to_layer)));
             }
             // spec: S-0212 claim 12 (at most 65527 expansions)
-            if expansions >= 65527 {
+            if *expansions >= 65527 {
                 return None;
             }
-            expansions += 1;
+            *expansions += 1;
             sc.closed[ni] = stamp;
             let ge = sc.g(ni).unwrap_or(F32::ZERO);
             let here_level = if (next.cell, next.layer) == (from, from_layer) {
@@ -513,9 +542,10 @@ fn search(
                             }
                         };
                         if margin_ok {
-                            if expansions == 10000 && q.path_search_10000_failure {
+                            if *expansions == 10000 && q.path_search_10000_failure {
                                 return None;
                             }
+                            size.cost_bits = Some(ge.0);
                             return Some(reconstruct(
                                 &sc,
                                 &ix,
@@ -551,9 +581,9 @@ fn search(
                     continue;
                 }
                 if fresh {
-                    recorded += 1;
+                    *recorded += 1;
                     // spec: S-0212 claim 12 (departure D2: at most 65535 recorded pairs besides the start)
-                    if recorded > 65535 {
+                    if *recorded > 65535 {
                         return None;
                     }
                 }
@@ -1893,14 +1923,44 @@ fn corridor_search(
 }
 
 /// A path computation for a unit (S-0212 claims 6, 20, 24): the gate,
-/// destination substitution, the search, flattening and storage.
+/// destination substitution, the search, flattening and storage. With the
+/// movement trace on, it is recorded ([`crate::trace`]).
 pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
+    if !crate::trace::on(w) {
+        return compute_untraced(w, id, mode);
+    }
+    let from = w.obj(id).map(|o| o.pos.cell());
+    crate::trace::begin_search(w);
+    let result = compute_untraced(w, id, mode);
+    let noted = crate::trace::pending(w);
+    let (steps, to) = match (result, w.obj(id)) {
+        (Search::Found, Some(o)) => (o.path.steps.clone(), o.path.for_goal),
+        _ => (Vec::new(), None),
+    };
+    crate::trace::record(w, id, || crate::trace::What::Search {
+        asked: mode,
+        mode: noted.mode,
+        from: from.unwrap_or(CellXY::new(0, 0)),
+        goal: noted.goal,
+        to,
+        congested: noted.congested,
+        corridor: noted.corridor,
+        searches: noted.searches,
+        result,
+        steps,
+    });
+    result
+}
+
+/// [`compute`] without the trace.
+fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     let Some(o) = w.obj(id).cloned() else {
         return Search::SearchFailed;
     };
     let Some(mut goal) = goal_cell(w, id) else {
         return Search::SearchFailed;
     };
+    crate::trace::note(w, |p| p.goal = Some(goal));
     let r = w.rules_arc();
     let Some(u) = r.unit(o.kind, o.type_index).cloned() else {
         return Search::SearchFailed;
@@ -1991,6 +2051,10 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     } else {
         mode
     };
+    crate::trace::note(w, |p| {
+        p.mode = Some(mode);
+        p.congested = congested.iter().copied().collect();
+    });
     let req = Request {
         unit: id,
         from,
@@ -2004,6 +2068,7 @@ pub fn compute(w: &mut World, id: ObjectId, mode: Mode) -> Search {
     // spec: S-0212 claim 14 (the corridor is used when the unit has entered the usable area, both coarse end cells are inside it, and it is not in the corridor-disabling state)
     let use_corridor =
         entered && w.cells.usable(start_end) && w.cells.usable(dest_end) && !disabling;
+    crate::trace::note(w, |p| p.corridor = Some(use_corridor));
     if use_corridor && !gate(w, goal) {
         // spec: S-0212 claim 14 (with the corridor, reach regions that differ, read as in claim 6, fail the computation at once, as a failed search)
         return Search::SearchFailed;
@@ -2144,6 +2209,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
     let walker = o.walk.is_some();
     // spec: S-0212 claim 23 (the same clearing ends every failed search of a unit with the driving, ship or hovering locomotor)
     let drive = o.drive.is_some() || o.hover.is_some();
+    let mut gave_up = false;
     match res {
         Search::Found => {}
         Search::GateFailed => {
@@ -2175,6 +2241,7 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 Behaviour::AreaGuard
             };
             let gives_up = !near || off_deck;
+            gave_up = gives_up;
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
                 // spec: S-0212 claim 23 (the unit stops and the retry delay R starts)
@@ -2198,6 +2265,17 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
                 }
             }
         }
+    }
+    if res != Search::Found {
+        crate::trace::record(w, id, || {
+            let after = w.obj(id);
+            crate::trace::What::Failed {
+                result: res,
+                gave_up,
+                dest_cleared: after.is_none_or(|x| x.dest.is_none()),
+                retry_at: after.map_or(t, |x| x.path.retry_at),
+            }
+        });
     }
     let _ = Locomotor::None;
 }

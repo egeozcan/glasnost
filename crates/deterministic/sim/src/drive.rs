@@ -14,6 +14,7 @@ use crate::path::{self, Mode, Search};
 use crate::process;
 use crate::regions::STEPS;
 use crate::rules::{Behaviour, Kind, Locomotor, SimRules, UnitRules};
+use crate::trace;
 use crate::tracks::{self, Point};
 use crate::world::{Layer, ObjectId, Pos, Target, World};
 
@@ -644,10 +645,20 @@ fn begin_track(w: &mut World, id: ObjectId, u: &UnitRules) -> bool {
     if crate::spawn::track_held(w, id) {
         // spec: S-0207 claim 6 and S-0506 claim 10 (a launching vehicle begins no track: it waits, destination kept; precedence against other waits not established, checked first here)
         wait(w, id);
+        trace::record(w, id, || trace::What::Waited { why: "launching" });
         return false;
     }
     let first = neighbour(o.pos.cell(), d);
     if let Some(gate) = process::closed_friendly_gate(w, id, first) {
+        trace::step(
+            w,
+            id,
+            trace::Mover::Drive,
+            o.pos.cell(),
+            first,
+            Outcome::ClosedFriendlyGate,
+            false,
+        );
         // spec: S-0207 claim 15 (an allied closed gate: told to open; the vehicle waits without a track and without turning)
         process::gate_met(w, gate);
         wait(w, id);
@@ -713,7 +724,9 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     };
     let here = o.pos.cell();
     let first = neighbour(here, d);
-    match checked_outcome(w, id, u, here, first) {
+    let outcome = checked_outcome(w, id, u, here, first);
+    trace::step(w, id, trace::Mover::Drive, here, first, outcome, repeated);
+    match outcome {
         Outcome::Clear => {
             // spec: S-0520 claim 6 (a driving or ship mover collects the crate of the cell it commits to, before it arrives; a successful unit crate blocks the step and clears its movement target)
             if crate::crates::pickup(w, id, first) {
@@ -791,7 +804,9 @@ fn step_check(w: &mut World, id: ObjectId, u: &UnitRules, repeated: bool, no_cur
     let (_, two) = tracks::track(d, use_e);
     if two {
         // spec: S-0207 claim 15 table T5 (the second cell of a curve, checked after the first gave clear)
-        match checked_outcome(w, id, u, first, second) {
+        let outcome = checked_outcome(w, id, u, first, second);
+        trace::step(w, id, trace::Mover::Drive, first, second, outcome, repeated);
+        match outcome {
             Outcome::Clear => {}
             Outcome::MovingBlocker => {
                 // spec: S-0207 claim 7 and table T5 (moving blocker: the straight or diagonal track into the first cell; path kept)
@@ -1107,6 +1122,7 @@ pub(crate) fn give_up_test(w: &World, id: ObjectId, contact: bool) -> bool {
 /// destinations it stops and falls back to rest (S-0215 claim 13),
 /// otherwise its destination is removed.
 pub(crate) fn give_up(w: &mut World, id: ObjectId) {
+    trace::record(w, id, || trace::What::GaveUp);
     let approach = w.obj(id).is_some_and(|o| !o.queued_dests.is_empty());
     if let Some(ob) = w.obj_mut(id) {
         ob.path.steps.clear();
@@ -1127,6 +1143,7 @@ pub(crate) fn give_up(w: &mut World, id: ObjectId) {
 /// point, forced and move-anywhere, to every object listed in the cell layer
 /// it drives on.
 pub(crate) fn request_scatter(w: &mut World, id: ObjectId, c: CellXY) {
+    trace::record(w, id, || trace::What::AskedRoom { cell: c });
     let Some(o) = w.obj(id) else { return };
     let deck = w.cells.idx(c).is_some_and(|i| w.cells.deck[i]);
     let cell_level = w.cells.cell(c).map_or(0, |x| i32::from(x.level));
@@ -1276,6 +1293,10 @@ pub(crate) fn blocked_step(w: &mut World, id: ObjectId) {
             dd.budget = 0;
         }
     }
+    trace::record(w, id, || trace::What::Blocked {
+        since,
+        waiting_until: (t < o.path.retry_at).then_some(o.path.retry_at),
+    });
     if t < o.path.retry_at {
         return;
     }

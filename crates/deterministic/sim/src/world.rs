@@ -475,6 +475,10 @@ pub struct World {
     /// Working memory of the path search (not state).
     #[serde(skip)]
     pub scratch: std::cell::RefCell<crate::path::SearchScratch>,
+    /// The movement trace of the pathing-report tool (M8 A4): off unless
+    /// switched on, never saved, hashed, cloned or read by the simulation.
+    #[serde(skip)]
+    pub trace: crate::trace::Slot,
 }
 
 impl World {

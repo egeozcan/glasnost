@@ -515,6 +515,7 @@ pub fn new_game(
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),
         scratch: Default::default(),
+        trace: Default::default(),
         pathfinder: Default::default(),
     };
     // spec: S-0409 claim 3 (the states at game start, before any object is placed)

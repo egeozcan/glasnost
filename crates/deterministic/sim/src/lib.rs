@@ -83,6 +83,7 @@ pub mod teleport;
 pub mod temporal;
 pub mod testkit;
 pub mod tick;
+pub mod trace;
 pub mod tracks;
 pub mod transport;
 pub mod triggers;
