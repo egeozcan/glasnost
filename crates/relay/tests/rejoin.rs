@@ -55,6 +55,11 @@ const PARTS_PER_ROUND: usize = 2;
 /// Milliseconds a direct link takes (N7).
 const DIRECT_MS: u64 = 3;
 
+/// The clock of the first peers' processes when the game begins: a
+/// rejoining peer is a new process whose clock starts at 0, far below the
+/// stamps its slot's old process sent.
+const FIRST_CLOCK: u64 = 1_000_000;
+
 /// The hub and what it sent each connection, delivered `LATENCY` later,
 /// and the direct links' messages in flight, by receiving slot.
 struct Net {
@@ -195,15 +200,28 @@ struct Peer {
     /// way.
     lag: u64,
     outq: VecDeque<(u64, Vec<u8>)>,
+    /// Its process's clock at the virtual time 0 (a rejoining peer's starts
+    /// at 0 when it is made).
+    clock0: i64,
 }
 
 impl Peer {
     fn new(begin: Begin, map: &Map, conn: ConnId, rejoining: bool, now: u64) -> Self {
         let (game, info, _) = build(&begin, map);
         let house = HouseId(info.slots[usize::from(begin.you)].house);
+        let clock0 = if rejoining {
+            -(now as i64)
+        } else {
+            FIRST_CLOCK as i64
+        };
         let session = (!rejoining).then(|| {
-            Session::new(Config::new(TICK_MS), info.clone(), begin.you, now)
-                .expect("a person's slot")
+            Session::new(
+                Config::new(TICK_MS),
+                info.clone(),
+                begin.you,
+                now.saturating_add_signed(clock0),
+            )
+            .expect("a person's slot")
         });
         Self {
             slot: begin.you,
@@ -231,7 +249,13 @@ impl Peer {
             signalled: false,
             lag: 0,
             outq: VecDeque::new(),
+            clock0,
         }
+    }
+
+    /// Its process's clock at virtual time `t`.
+    fn clock(&self, t: u64) -> u64 {
+        t.saturating_add_signed(self.clock0)
     }
 
     fn ran(&self) -> u32 {
@@ -260,16 +284,17 @@ impl Peer {
             return;
         };
         let t = net.t;
+        let now = self.clock(t);
         while let Some((from, b)) = net.next_wire(self.slot) {
             // As a client does: a link is used while the session says so.
             if let Some(s) = self.session.as_mut().filter(|s| s.direct_ok(from)) {
-                s.receive_via(t, &b, Via::Direct(from));
+                s.receive_via(now, &b, Via::Direct(from));
             }
         }
         while let Some(m) = net.next(conn) {
             match m {
                 Incoming::Game(b) => match self.session.as_mut() {
-                    Some(s) => s.receive(t, &b),
+                    Some(s) => s.receive(now, &b),
                     None => self.early.push(b),
                 },
                 Incoming::Lobby(FromRelay::Snapshot(part)) => self.take_part(&part, t),
@@ -293,7 +318,7 @@ impl Peer {
             // Unpaced, then once blocked on frames: caught up.
             let mut blocked = false;
             for _ in 0..CATCH_UP_BURST {
-                match s.step(t, &mut self.game) {
+                match s.step(now, &mut self.game) {
                     Some(done) => {
                         self.hashes
                             .insert(done.tick, Simulation::state_hash(&self.game));
@@ -317,7 +342,7 @@ impl Peer {
                     s.submit(o);
                 }
             }
-            if let Some(done) = s.step(t, &mut self.game) {
+            if let Some(done) = s.step(now, &mut self.game) {
                 self.next_due = t + u64::from(TICK_MS);
                 self.record(done);
             }
@@ -338,7 +363,7 @@ impl Peer {
                 );
             }
         }
-        for m in s.poll(t) {
+        for m in s.poll(now) {
             if wire::is_frames_from(&m, self.slot) {
                 for &to in self.direct.iter().filter(|&&d| s.direct_ok(d)) {
                     net.wire(self.slot, to, m.clone());
@@ -387,16 +412,17 @@ impl Peer {
         self.game = tr
             .load(&self.game)
             .expect("the game loads to the sent hash");
+        let now = self.clock(t);
         let mut s = Session::rejoin(
             Config::new(TICK_MS),
             self.info.clone(),
             self.slot,
             &tr.catchup,
-            t,
+            now,
         )
         .expect("a catch-up of our slot");
         for b in self.early.drain(..) {
-            s.receive(t, &b);
+            s.receive(now, &b);
         }
         self.session = Some(s);
         self.transfer = Some((bytes.len(), t));
@@ -717,6 +743,13 @@ fn drop_and_rejoin(plan: &Plan) -> Played {
     }
     for p in &survivors {
         replays(p, &played.map);
+    }
+    // The rejoined process measures its round trips again, though its clock
+    // starts far below its slot's old stamps, which the peers echoed while
+    // the slot was away.
+    let s = back.session.as_ref().expect("a session");
+    for p in survivors.iter().filter(|p| p.info.is_human(p.slot)) {
+        assert!(s.rtt(p.slot).is_some(), "a round trip to slot {}", p.slot);
     }
     // Each drop at the same frame, each readmission from the same frame,
     // everywhere; a rejoining peer cut off after it asked to be readmitted

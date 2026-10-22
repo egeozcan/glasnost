@@ -79,7 +79,7 @@ use glasnost_sim::orders::Order;
 use glasnost_sim::world::HouseId;
 use serde::{Deserialize, Serialize};
 
-use crate::delay::{Control, Rtt};
+use crate::delay::{Control, MAX_RTT_MS, Rtt};
 use crate::sim::Simulation;
 use crate::start::{Field, Params, SlotKind, StartInfo};
 use crate::wire::{self, Body, Echo, Envelope, Frame, Frames, Hash, Report, WireError};
@@ -1245,11 +1245,16 @@ impl Session {
         if r.echo.is_none_or(|(s, _)| newer(f.stamp, s)) {
             r.echo = Some((f.stamp, now_ms));
         }
+        // An implausible round trip moves nothing: an echo of another
+        // process's stamp (from before a restart and rejoin) taken as the
+        // newest would make every later, true echo look old.
         for e in f.echoes.iter().filter(|e| usize::from(e.slot) == me) {
             if r.sampled.is_none_or(|s| newer(e.stamp, s)) {
-                r.sampled = Some(e.stamp);
                 let rtt = (now_ms as u32).wrapping_sub(e.stamp).wrapping_sub(e.hold);
-                r.rtt.sample(rtt);
+                if rtt <= MAX_RTT_MS {
+                    r.sampled = Some(e.stamp);
+                    r.rtt.sample(rtt);
+                }
             }
         }
         if let Some(&a) = f.acks.get(me) {
@@ -1728,7 +1733,10 @@ impl Session {
             if let Some(a) = hash_acks.get_mut(usize::from(s)) {
                 *a = r.hash_have;
             }
-            if let Some((stamp, at)) = r.echo {
+            // Only a live peer's stamps are echoed: the stamps of a peer
+            // that dropped belong to a process that may be gone, and its
+            // rejoining successor would take them for its own.
+            if let Some((stamp, at)) = r.echo.filter(|_| r.live()) {
                 echoes.push(Echo {
                     slot: s,
                     stamp,
