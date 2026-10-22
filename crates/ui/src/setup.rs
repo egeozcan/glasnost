@@ -24,6 +24,19 @@ pub const MAX_SLOTS: usize = 8; // spec: S-0412 claim 15 (at most eight rows)
 /// Team numbers offered besides no team (S-0412 claim 15 and Terms).
 pub const TEAMS: u8 = 4; // spec: S-0412 claim 15 (no team and four distinct teams)
 
+/// The paced period of game-speed index `speed` in milliseconds: 16 × s for
+/// s from 1 to 6, 8 at index 0 (S-0201 claims 4 and 5). The client paces
+/// its ticks by it, and the relay works out a network game's drop grace
+/// period in ticks from it (M9 N5).
+pub fn period_ms(speed: u8) -> i64 {
+    match speed {
+        // spec: S-0201 claim 5 (our engine paces index 0 at a fixed 8 ms)
+        0 => 8,
+        // spec: S-0201 claims 2 and 4 (s pacing units of 16 ms)
+        s => 16 * i64::from(s.min(6)),
+    }
+}
+
 /// The values and ranges the screen offers, read from the rules by the
 /// client.
 #[derive(Clone, Debug, PartialEq, Eq)]

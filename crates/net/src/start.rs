@@ -43,15 +43,21 @@ pub struct Params {
     pub max_delay: u8,
     /// A state-hash checkpoint every this many ticks (at least 1).
     pub hash_every: u32,
+    /// The drop grace period, in ticks: a person's slot that drops with
+    /// its frames from `kept` on empty surrenders on tick `kept +
+    /// grace_ticks` unless it rejoins before (N5). The relay sets it from
+    /// its grace period in milliseconds and the room's game speed.
+    pub grace_ticks: u32,
 }
 
 impl Default for Params {
     fn default() -> Self {
         Self {
-            initial_delay: 3, // nocite: our own netcode
-            min_delay: 1,     // nocite: our own netcode
-            max_delay: 30,    // nocite: our own netcode
-            hash_every: 30,   // nocite: our own netcode
+            initial_delay: 3,   // nocite: our own netcode
+            min_delay: 1,       // nocite: our own netcode
+            max_delay: 30,      // nocite: our own netcode
+            hash_every: 30,     // nocite: our own netcode
+            grace_ticks: 1_800, // nocite: our own netcode (a minute at 30 ticks a second)
         }
     }
 }
@@ -68,6 +74,7 @@ impl Params {
             min_delay,
             max_delay,
             hash_every: self.hash_every.max(1),
+            grace_ticks: self.grace_ticks,
         }
     }
 }

@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod skirmish;
+
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

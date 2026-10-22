@@ -20,16 +20,20 @@
 //!   which the relay keeps and the client drives.
 //! - [`desync`]: the evidence every peer keeps and the desync report it
 //!   makes on a mismatch (N4).
+//! - [`rejoin`]: the game a live peer sends a rejoining peer (its session's
+//!   catch-up and the game's save) and its parts (N5); the drop grace
+//!   period and the surrender are in [`session`].
 //!
 //! Nothing here reads a clock, opens a socket or starts a thread: the
 //! caller passes its clock into every call (`now_ms`) and moves the bytes.
-//! The relay (N2), the client's transports (N3) and reconnects (N5) build on
-//! this crate. The protocol, the frame rule and the
-//! delay rule are our own design (docs/development.md, *Multiplayer (M9)*).
+//! The relay (N2) and the client's transports (N3) build on this crate. The
+//! protocol, the frame rule, the delay rule, the rejoin and the grace
+//! period are our own design (docs/development.md, *Multiplayer (M9)*).
 
 pub mod delay;
 pub mod desync;
 pub mod lobby;
+pub mod rejoin;
 pub mod session;
 pub mod sim;
 pub mod simnet;
@@ -37,7 +41,9 @@ pub mod start;
 pub mod transport;
 pub mod wire;
 
-pub use session::{Applied, Config, Event, Phase, Session, SlotHash, Tick};
+pub use session::{
+    Applied, Catchup, Config, Event, Life, Phase, Session, SlotCatchup, SlotHash, Tick,
+};
 pub use sim::Simulation;
 pub use start::{Field, Params, Slot, SlotKind, StartInfo};
 pub use transport::{Transport, pump};

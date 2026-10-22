@@ -251,6 +251,9 @@ pub struct Client {
     store: Option<Box<dyn Store>>,
     net: Option<net::Net>,
     net_status: (String, bool),
+    /// The map of a network game is loading: its start is dropped if the
+    /// game's link went meanwhile (M9 N5).
+    net_loading: bool,
     chat_field: Option<Rect>,
     /// The host time of the last update.
     clock: i64,
@@ -318,6 +321,7 @@ impl Client {
             store: None,
             net: None,
             net_status: (String::new(), false),
+            net_loading: false,
             chat_field: None,
             clock: 0,
             mods: Modifiers::default(),
@@ -419,7 +423,11 @@ impl Client {
             }
             Done::Started(vfs, r, voices) => {
                 self.vfs = Some(vfs);
+                let net_start = std::mem::take(&mut self.net_loading);
                 match *r {
+                    // The network game's link went while its map loaded
+                    // (the multiplayer screen says so): no game.
+                    Ok(_) if net_start && self.net.is_none() => {}
                     Ok(mut s) => {
                         for p in &s.problems {
                             log::info!("game load: {p}");
@@ -650,6 +658,10 @@ impl Client {
             SessionEvent::Leave => {
                 self.session = None;
                 self.captions.clear();
+                if self.net.is_some() {
+                    // Left on purpose: no rejoin (M9 N5).
+                    self.keep_rejoin(None);
+                }
                 self.net_leave();
                 self.shell.leave_game();
             }
@@ -928,7 +940,9 @@ impl Client {
         if self.shell.screen != Screen::Game {
             return;
         }
-        let networked = self.net.as_ref().is_some_and(|n| n.lockstep.is_some());
+        // A network game ticks only as its lockstep session says, also before
+        // the session exists (a rejoin waiting for the game sent, M9 N5).
+        let networked = self.net.as_ref().is_some_and(|n| n.begin.is_some());
         let Some(s) = self.session.as_mut() else {
             return;
         };
@@ -1005,6 +1019,10 @@ impl Client {
         self.captions.update(now_ms);
         if let Some(end) = s.play.end() {
             self.shell.game_over(end);
+            if networked {
+                // The game is over: nothing to rejoin (M9 N5).
+                self.keep_rejoin(None);
+            }
         }
     }
 

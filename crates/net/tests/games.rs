@@ -223,6 +223,7 @@ fn params() -> Params {
         min_delay: 1,
         max_delay: 20,
         hash_every: 10,
+        ..Params::default()
     }
 }
 

@@ -44,6 +44,7 @@ fn fixed(d: u8) -> Params {
         min_delay: d,
         max_delay: d,
         hash_every: 5,
+        ..Params::default()
     }
 }
 
@@ -53,6 +54,7 @@ fn adaptive() -> Params {
         min_delay: 1,
         max_delay: 20,
         hash_every: 5,
+        ..Params::default()
     }
 }
 
@@ -287,6 +289,7 @@ fn merged_orders_apply_in_slot_order_whatever_the_arrival_order() {
                 actor: ObjectId(a + 1),
             },
         ],
+        resume: None,
     };
     // Tick 0: slot 2's frame arrives before slot 0's.
     s.receive(1, &frames_msg(2, 0, vec![f(20), f(22)]));
@@ -609,6 +612,75 @@ fn a_dropped_peer_no_longer_holds_the_others() {
     check_against_reference(&h);
 }
 
+/// Past the grace period a dropped slot's house surrenders on every peer,
+/// in the orders of the same tick (N5; the order is S-0414 claim 11's
+/// surrender). No peer can ask for that, nor for a rejoin's serve or
+/// readmission: those come from the relay only.
+#[test]
+fn a_dropped_house_surrenders_after_the_grace_period_everywhere_on_one_tick() {
+    let grace = 20; // nocite: a test grace period
+    let info = start(
+        &[SlotKind::Human; 3],
+        Params {
+            grace_ticks: grace,
+            ..fixed(3)
+        },
+    );
+    let mut h = Harness::new(&info, Config::new(TICK_MS), 23, Link::latency(10), || {
+        Toy::new(0)
+    });
+    let mut script = Script::new(&human_slots(&info), 23);
+    let mut input = |slot, _: &Toy, tick| script.input(slot, tick);
+    h.run_ticks(40, 60_000, &mut input);
+    h.net.cut(2);
+    h.peer(2).gone = true;
+    h.run(3_000, &mut input);
+    let kept = h.peers[..2]
+        .iter()
+        .map(|p| p.session.ran())
+        .max()
+        .expect("peers");
+    let now = h.now;
+    for (s, forger) in [(0u8, 1u8), (1, 0), (0, 2)] {
+        for body in [Body::Serve { slot: 2, on: true }, Body::Resume { slot: 2 }] {
+            let forged = wire::encode(&Envelope { from: forger, body });
+            h.peer(s).session.receive(now, &forged);
+            assert!(h.peer(s).session.take_events().iter().any(
+                |e| matches!(e, Event::BadMessage { reason } if reason.contains("not from the relay"))
+            ));
+        }
+        assert!(h.peer(s).session.serving().is_empty());
+    }
+    let bytes = wire::encode(&Envelope {
+        from: wire::RELAY,
+        body: Body::Dropped { slot: 2, kept },
+    });
+    for s in [0u8, 1] {
+        h.peer(s).session.receive(now, &bytes);
+        assert_eq!(h.peer(s).session.surrender_at(2), Some(kept + grace));
+    }
+    h.run_ticks(kept + grace + 30, 60_000, &mut input);
+    let x = kept + grace;
+    for s in [0u8, 1] {
+        let p = h.peer(s);
+        assert!(p.events.contains(&Event::Surrendered { slot: 2, tick: x }));
+        let surrenders: Vec<u32> = p
+            .ticks
+            .iter()
+            .filter(|t| {
+                t.orders
+                    .iter()
+                    .any(|a| a.slot == 2 && a.house == HouseId(2) && a.order == Order::Surrender)
+            })
+            .map(|t| t.tick)
+            .collect();
+        assert_eq!(surrenders, [x], "slot {s}: once, on tick {x}");
+        assert_eq!(p.session.surrender_at(2), None);
+        assert!(p.session.life(2).is_some_and(|l| l.surrendered));
+    }
+    check_against_reference(&h);
+}
+
 #[test]
 fn a_desync_is_reported_with_tick_slots_and_hashes() {
     let info = start(&[SlotKind::Human; 3], fixed(2));
@@ -724,6 +796,7 @@ fn hostile_bytes_never_panic() {
             frames: vec![Frame {
                 delay: 3,
                 orders: vec![Order::Cheer],
+                resume: None,
             }],
             ..Frames::default()
         }),

@@ -6,10 +6,13 @@ const HELP: &str = "\
 glasnost-relay: the Glasnost relay and lobby server (WebSocket)
 
 Usage: glasnost-relay [--listen ADDR] [--max-rooms N] [--max-connections N]
+                      [--grace SECONDS]
 
   --listen ADDR          the address to listen on (default 127.0.0.1:8787)
   --max-rooms N          the most rooms at once (default 256)
   --max-connections N    the most connections at once (default 1024)
+  --grace SECONDS        how long a dropped player has to reconnect before
+                         their house surrenders, in game time (default 60)
   --help                 this text
 
 Clients connect to ws://ADDR/. The relay speaks no TLS: put it behind a
@@ -39,6 +42,10 @@ fn parse() -> Result<Option<(String, Limits)>, String> {
             "--max-rooms" => limits.max_rooms = number("--max-rooms", args.next())?,
             "--max-connections" => {
                 limits.max_connections = number("--max-connections", args.next())?;
+            }
+            "--grace" => {
+                let s = number("--grace", args.next())? as u64;
+                limits.grace_ms = s.saturating_mul(1000); // nocite: milliseconds in a second
             }
             other => return Err(format!("unknown argument: {other} (see --help)")),
         }

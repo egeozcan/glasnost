@@ -317,6 +317,7 @@ fn state_hash_is_the_same_under_any_settings() {
                 colour_blind: true,
                 bindings: b,
                 relay: "ws://elsewhere/".into(),
+                rejoin: None,
             };
             c.settings_changed();
         }

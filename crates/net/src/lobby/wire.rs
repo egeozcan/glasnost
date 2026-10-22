@@ -10,7 +10,10 @@
 //!
 //! On the same connection the client also sends and receives the lockstep
 //! messages of [`crate::wire`] (magic `GN`) once the game has begun; the
-//! relay tells the two apart by the magic. This is our own protocol.
+//! relay tells the two apart by the magic. A member who dropped from a game
+//! comes back with [`ToRelay::Rejoin`] and its [`Begin::ticket`]; a live
+//! peer sends it the game in [`ToRelay::Snapshot`] parts, which the relay
+//! passes on as [`FromRelay::Snapshot`] (N5). This is our own protocol.
 
 use glasnost_ui::setup::{Problem, Setup, SlotKind};
 use serde::de::DeserializeOwned;
@@ -156,6 +159,42 @@ pub enum ToRelay {
         /// What was typed.
         text: String,
     },
+    /// Come back to a game after a drop, on the slot of `ticket` (N5). The
+    /// relay answers [`FromRelay::Rejoined`] and has a live peer send the
+    /// game.
+    Rejoin {
+        /// The room code.
+        code: String,
+        /// The slot.
+        slot: u8,
+        /// The slot's ticket, from the member's [`Begin`].
+        ticket: Ticket,
+        /// The client's build.
+        build: String,
+        /// Its `sim_rules_hash`.
+        rules_hash: String,
+    },
+    /// One part of the game for a rejoining peer, from the peer the relay
+    /// asked ([`crate::wire::Body::Serve`]); parts go in order, from 0.
+    Snapshot(Part),
+    /// The rejoining peer has run every tick it has the frames for: it
+    /// may be readmitted.
+    CaughtUp,
+}
+
+/// A slot's secret, given only to its member in [`Begin`]: the proof that
+/// a rejoin is that member's (N5).
+pub type Ticket = [u8; 16];
+
+/// One part of a rejoining peer's game ([`crate::rejoin`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Part {
+    /// Its number, from 0.
+    pub part: u32,
+    /// How many parts there are.
+    pub parts: u32,
+    /// Its bytes.
+    pub bytes: Vec<u8>,
 }
 
 /// A value that is out of range or malformed.
@@ -245,6 +284,14 @@ pub enum Refusal {
     /// Chat lines came faster than the relay passes them on; this one was
     /// not sent.
     ChatTooFast,
+    /// A rejoin's ticket is not that slot's (N5).
+    Ticket,
+    /// A rejoin came after the slot's grace period: its house surrendered.
+    Surrendered,
+    /// Another person is rejoining the game; try again in a moment.
+    Rejoining,
+    /// A rejoin's room has no game, or nobody left in it to send the game.
+    NoGame,
 }
 
 impl std::fmt::Display for Refusal {
@@ -266,6 +313,14 @@ impl std::fmt::Display for Refusal {
             Refusal::Open(r) => write!(f, "nobody is on row {}", r + 1),
             Refusal::NotReady(r) => write!(f, "the person on row {} is not ready", r + 1),
             Refusal::ChatTooFast => f.write_str("chat lines too fast; that one was not sent"),
+            Refusal::Ticket => f.write_str("that slot is not yours to rejoin"),
+            Refusal::Surrendered => f.write_str(
+                "too late to rejoin: the grace period ran out and the house surrendered",
+            ),
+            Refusal::Rejoining => {
+                f.write_str("another player is rejoining the game; try again in a moment")
+            }
+            Refusal::NoGame => f.write_str("that room has no game to rejoin"),
         }
     }
 }
@@ -352,6 +407,9 @@ pub struct Begin {
     pub params: Params,
     /// The receiving member's slot.
     pub you: u8,
+    /// The receiving member's ticket for a rejoin of its slot (N5); only
+    /// that member is sent it.
+    pub ticket: Ticket,
 }
 
 impl Begin {
@@ -399,6 +457,11 @@ pub enum FromRelay {
     Closing(String),
     /// A member's chat line (to every member, the sender too).
     Chat(ChatLine),
+    /// The answer to [`ToRelay::Rejoin`]: the game's start values, as at
+    /// its start (N5). The game itself follows in [`FromRelay::Snapshot`].
+    Rejoined(Begin),
+    /// One part of the game, for a rejoining peer.
+    Snapshot(Part),
 }
 
 /// A chat line as the relay passes it on.

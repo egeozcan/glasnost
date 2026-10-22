@@ -27,6 +27,8 @@ pub enum NetHit {
     Host,
     /// Join the room of the code.
     Join,
+    /// Rejoin the network game this client was in (M9 N5).
+    Reconnect,
     /// Back to the main menu.
     Back,
 }
@@ -52,6 +54,9 @@ pub struct NetForm {
     pub code: String,
     /// The field typing goes to.
     pub focus: Option<NetField>,
+    /// The room code of a network game this client can rejoin, shown with
+    /// a **Reconnect** button (M9 N5).
+    pub rejoin: Option<String>,
 }
 
 impl NetForm {
@@ -62,6 +67,7 @@ impl NetForm {
             relay: relay.into(),
             code: String::new(),
             focus: None,
+            rejoin: None,
         }
     }
 
@@ -109,11 +115,13 @@ impl NetForm {
         let mut t = Targets::new();
         let (w, h) = size;
         d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
+        // nocite: our own layout (a row more for the reconnect button)
+        let tall = if self.rejoin.is_some() { 260 } else { 230 };
         let outer = Rect::new(
             (w - 460).max(0) / 2,
-            (h - 230).max(0) / 2,
+            (h - tall).max(0) / 2,
             460.min(w),
-            230.min(h),
+            tall.min(h),
         );
         widget::panel(&mut d, outer, Some("MULTIPLAYER"));
         let hot = |r: Rect| hover.is_some_and(|p| r.contains(p));
@@ -151,6 +159,15 @@ impl NetForm {
             t.push(join, NetHit::Join);
         }
         t.push(back, NetHit::Back);
+        if let Some(code) = &self.rejoin {
+            y += 30;
+            let r = Rect::new(x0, y, 290, 22);
+            let can = !busy && !self.relay.trim().is_empty();
+            widget::button(&mut d, r, &format!("Reconnect to game {code}"), hot(r), can);
+            if can {
+                t.push(r, NetHit::Reconnect);
+            }
+        }
         d.text_left(
             Rect::new(x0, outer.bottom() - 26, 440, 14),
             status,
@@ -186,5 +203,23 @@ mod tests {
         let (_, t) = f.view((800, 600), "Connecting", false, true, None);
         assert!(t.rect_of(&NetHit::Host).is_none());
         assert!(t.rect_of(&NetHit::Back).is_some());
+    }
+
+    #[test]
+    fn a_game_to_rejoin_shows_a_reconnect_button() {
+        let mut f = NetForm::new("ws://127.0.0.1:8787/");
+        let (_, t) = f.view((800, 600), "", false, false, None);
+        assert!(t.rect_of(&NetHit::Reconnect).is_none());
+        f.rejoin = Some("ABCD2345".into());
+        let (d, t) = f.view((800, 600), "", false, false, None);
+        let r = t.rect_of(&NetHit::Reconnect).expect("a reconnect button");
+        assert_eq!(t.hit(r.centre()), Some(NetHit::Reconnect));
+        assert!(
+            d.texts()
+                .iter()
+                .any(|s| s.contains("Reconnect to game ABCD2345"))
+        );
+        let (_, t) = f.view((800, 600), "", false, true, None);
+        assert!(t.rect_of(&NetHit::Reconnect).is_none(), "not while busy");
     }
 }

@@ -20,6 +20,12 @@ fn custom() -> Settings {
         colour_blind: true,
         bindings: b,
         relay: "ws://relay.example:9000/".into(),
+        rejoin: Some(Rejoin {
+            relay: "ws://relay.example:9000/a b".into(),
+            code: "ABCD2345".into(),
+            slot: 3,
+            ticket: [0xa5; 16],
+        }),
     }
 }
 
@@ -59,6 +65,24 @@ fn missing_unknown_and_wrong_fields_take_defaults() {
         Settings::default()
     );
     assert_eq!(Settings::from_text(""), Settings::default());
+    // A game to rejoin (M9 N5) that is not whole is no game to rejoin.
+    let hex = "00112233445566778899aabbccddeeff";
+    let s = Settings::from_text(&format!("rejoin=ABCD2345 1 {hex} ws://r/\n"));
+    let r = s.rejoin.expect("a game to rejoin");
+    assert_eq!(
+        (r.code.as_str(), r.slot, r.relay.as_str()),
+        ("ABCD2345", 1, "ws://r/")
+    );
+    assert_eq!(r.ticket[15], 0xff);
+    for bad in [
+        format!("rejoin=ABCD2345 1 {hex}"),
+        format!("rejoin=ABCD2345 x {hex} ws://r/"),
+        format!("rejoin=ABCD2345 1 {} ws://r/", &hex[..30]),
+        "rejoin=ABCD2345 1 zz112233445566778899aabbccddeeff ws://r/".into(),
+        format!("rejoin=AB-D 1 {hex} ws://r/"),
+    ] {
+        assert_eq!(Settings::from_text(&bad).rejoin, None, "{bad}");
+    }
     // Out-of-range values clamp; an unoffered scale is ignored.
     let s = Settings::from_text("sound=900\nmusic=-5\nscroll=99\nscale=77\n");
     assert_eq!(
