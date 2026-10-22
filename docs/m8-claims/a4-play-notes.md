@@ -48,8 +48,11 @@ The lead played the native build. Answers to the triage questions:
   for a human and a computer owner. Two spec routes make them fire at what looks like a ground unit:
   retaliation after any damage from a known attacker, splash included (S-0309 claim 18 with S-0306
   claim 23; Q-1761, Q-1763), and the scan of airborne objects, which accepts infantry and vehicles
-  in flight, such as jumpjet-locomotor units (S-0309 claim 9). Which one the lead saw is open: the
-  lead is asked which enemy units were fired on and whether they were flying.
+  in flight, such as jumpjet-locomotor units (S-0309 claim 9). The lead's answer (2026-10-22): ground
+  units only, none flying. That leaves the retaliation route, which needs damage from the unit fired
+  on (splash included, so a hit the lead did not notice counts). By the lead's report in Q-1763 an
+  anti-air-only building never fires back at ground units, so this is Q-1763's case; no change
+  until it is answered.
 - Note 5 (computer aircraft circling). No code or importer bug. Only the two pad-bound aircraft
   types have dock types; the computer player had a pad for every one it built, and with no pad a
   pad-bound aircraft in flight crashes, by S-0501 claim 18 and T2 (seen in the lane). The armed,
