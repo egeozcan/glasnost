@@ -102,9 +102,7 @@ impl Relay {
 /// Binds `addr` and serves the relay on the current tokio runtime with
 /// host randomness from the operating system.
 pub async fn bind(addr: &str, limits: Limits) -> std::io::Result<Relay> {
-    let mut probe = [0u8; 1];
-    getrandom::fill(&mut probe).map_err(|e| std::io::Error::other(e.to_string()))?;
-    bind_with(addr, limits, Box::new(OsEntropy)).await
+    bind_reporting(addr, limits, Box::new(OsEntropy), None).await
 }
 
 /// Binds `addr` and serves the relay with this randomness (tests use a
@@ -114,16 +112,47 @@ pub async fn bind_with(
     limits: Limits,
     entropy: Box<dyn Entropy>,
 ) -> std::io::Result<Relay> {
+    bind_reporting(addr, limits, entropy, None).await
+}
+
+/// A periodic report (`--stats`): every `every`, `sink` gets one line of
+/// counts ([`crate::stats_line`]).
+pub struct Report {
+    /// The time between lines.
+    pub every: Duration,
+    /// Where a line goes.
+    pub sink: Box<dyn Fn(String) + Send>,
+}
+
+/// [`bind_with`] with a periodic [`Report`].
+pub async fn bind_reporting(
+    addr: &str,
+    limits: Limits,
+    entropy: Box<dyn Entropy>,
+    report: Option<Report>,
+) -> std::io::Result<Relay> {
+    // Fails here, not in the first room, when the system has no randomness.
+    let mut probe = [0u8; 1];
+    getrandom::fill(&mut probe).map_err(|e| std::io::Error::other(e.to_string()))?;
     let listener = TcpListener::bind(addr).await?;
     let addr = listener.local_addr()?;
-    let task = tokio::spawn(serve(listener, limits, entropy));
+    let task = tokio::spawn(serve_reporting(listener, limits, entropy, report));
     Ok(Relay { addr, task })
 }
 
 /// Serves the relay on `listener` until the task is dropped.
 pub async fn serve(listener: TcpListener, limits: Limits, entropy: Box<dyn Entropy>) {
+    serve_reporting(listener, limits, entropy, None).await;
+}
+
+async fn serve_reporting(
+    listener: TcpListener,
+    limits: Limits,
+    entropy: Box<dyn Entropy>,
+    report: Option<Report>,
+) {
     let (events, rx) = mpsc::channel(EVENTS);
-    let hub = tokio::spawn(run_hub(Hub::new(limits, entropy), rx));
+    let hub = tokio::spawn(run_hub(Hub::new(limits, entropy), rx, report));
     let permits = Arc::new(Semaphore::new(limits.max_connections + SPARE));
     let config = WebSocketConfig::default()
         .max_message_size(Some(limits.max_message))
@@ -231,15 +260,37 @@ fn close_message(reason: String) -> Message {
     }))
 }
 
-async fn run_hub(mut hub: Hub, mut events: mpsc::Receiver<Event>) {
+async fn run_hub(mut hub: Hub, mut events: mpsc::Receiver<Event>, report: Option<Report>) {
     let start = Instant::now();
     let now = || u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
     let mut conns: std::collections::BTreeMap<ConnId, mpsc::Sender<Outgoing>> =
         std::collections::BTreeMap::new();
     let mut tick = tokio::time::interval(TICK);
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // The periodic line: its first one comes after one period.
+    let mut lines = report.as_ref().map(|r| {
+        let mut i = tokio::time::interval_at(tokio::time::Instant::now() + r.every, r.every);
+        i.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        i
+    });
+    let mut last = hub.stats();
+    let mut last_at = Instant::now();
     loop {
         tokio::select! {
+            () = async {
+                match lines.as_mut() {
+                    Some(i) => { i.tick().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {
+                if let Some(r) = &report {
+                    let now = hub.stats();
+                    let seconds = u64::try_from((last_at.elapsed().as_millis() + 500) / 1000).unwrap_or(u64::MAX);
+                    (r.sink)(crate::stats_line(&hub, &now.since(&last), seconds));
+                    last = now;
+                    last_at = Instant::now();
+                }
+            }
             ev = events.recv() => {
                 let Some(ev) = ev else { return };
                 let t = now();
