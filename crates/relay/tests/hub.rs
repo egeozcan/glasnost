@@ -1197,3 +1197,45 @@ fn an_answer_with_a_marker_or_past_a_lead_ends_and_a_peer_that_leaves_is_not_wai
     );
     assert_eq!(h.stats().held_refused, 1);
 }
+
+/// The counts behind the relay's periodic line (M9 N8b): messages and bytes
+/// in and out, refusals, rooms, connections and games, as differences since
+/// the last line, and no code, name or address in the text.
+#[test]
+fn the_stats_line_counts_since_the_last_line_and_names_nobody() {
+    use glasnost_relay::stats_line;
+    let mut h = hub();
+    let before = h.stats();
+    let (code, conns) = game(&mut h, 2);
+    h.take_out();
+    // A refused join: another build.
+    let c = h.connect(1).unwrap();
+    h.receive(1, c, &join(&code, "Cy", "build-9"));
+    h.take_out();
+    let first = h.stats().since(&before);
+    assert!(first.messages_in >= 4, "{first:?}");
+    assert!(first.bytes_in > 0 && first.bytes_out > 0);
+    assert!(first.messages_out >= 1);
+    assert_eq!(first.refusals, 1);
+    let line = stats_line(&h, &first, 60);
+    assert!(
+        line.starts_with("stats rooms=1 connections=3 games=1 in="),
+        "{line}"
+    );
+    assert!(
+        line.contains("refused=1 drops=0 rejoins=0 over=60s"),
+        "{line}"
+    );
+    assert!(!line.contains(&code) && !line.contains("Cy"), "{line}");
+    // A quiet minute counts nothing new.
+    let mark = h.stats();
+    let quiet = stats_line(&h, &h.stats().since(&mark), 60);
+    assert!(
+        quiet.contains("in=0msg/0B out=0msg/0B refused=0"),
+        "{quiet}"
+    );
+    // A drop is counted in the next line only.
+    h.closed(2, conns[1]);
+    h.take_out();
+    assert_eq!(h.stats().since(&mark).drops, 1);
+}

@@ -9,9 +9,9 @@ Every player runs the whole game on their own machine, from the same start value
 What you need:
 
 - One machine to run the relay. It needs no copy of the game, a few MB of memory and one open TCP port. The 2v2 in the lead's exit run needs nothing more.
-- For every player: the same Glasnost **build** and the same game install (the same rules and map files). The lobby refuses a player whose rules or map differ, and names the difference. See the build caveat below.
+- For every player: the same Glasnost **build** and the same game install (the same rules and map files). The lobby refuses a player whose rules or map differ, and names the difference. See the build note below.
 
-**Build caveat.** The lobby compares a build string, and that string is `glasnost 0.0.0` for every commit today (it is the crate version). Two players on different commits therefore are not refused: they play, then desync. Every player should build from the same commit. Compare `git rev-parse HEAD` before the game.
+**The build id names the commit.** The lobby compares a build id such as `glasnost 0.0.0 (a1b2c3d4e)`: the version and the short hash of the commit the program was built from. A tree with uncommitted changes to tracked files reads `(a1b2c3d4e+dirty)`, and a build outside a git checkout `(unknown)`; such builds are not known to match anything, so build every player's client from a clean checkout of one commit. A player on another commit is refused when they join, and the screen names both ids ("That room runs X; this is Y."). The multiplayer screen shows your own id at its foot, `glasnost-relay --version` and `glasnost-headless --version` print theirs, and the relay prints its own on its second line. Desync and pathing reports carry the id too. The id is read when the program is built, and Cargo reads it again when the commit or the index changes; if you only edited files without staging them after a build, run `cargo clean -p glasnost-net` to force a fresh read. Setting `GLASNOST_COMMIT=NAME` while building names the commit yourself, for a build outside git.
 
 ## 1. Build and run the relay
 
@@ -22,7 +22,15 @@ cargo build --release -p glasnost-relay
 target/release/glasnost-relay --listen 0.0.0.0:8787
 ```
 
-The first line it prints is `glasnost-relay listening on ws://ADDR/`. Stop it with Ctrl-C. It prints nothing else, ever: there is no access log. The only way to see activity is the operating system's (for example `ss -tn | grep :8787` lists the connected players).
+The first line it prints is `glasnost-relay listening on ws://ADDR/`, the second `build glasnost 0.0.0 (a1b2c3d4e)`. Stop it with Ctrl-C. After that it prints one line of counts every minute (below) and nothing else: there is no access log, and the line holds no room codes, names or addresses. The operating system shows who is connected (for example `ss -tn | grep :8787`).
+
+The line looks like this (rooms, connections and games running now; the rest counted since the last line, whose length in seconds ends it):
+
+```
+stats rooms=2 connections=7 games=1 in=14210msg/3011200B out=39874msg/8452110B refused=3 drops=0 rejoins=0 over=60s
+```
+
+`in` and `out` are WebSocket messages and their bytes (`out` counts each receiver); `refused` is requests the relay refused (a wrong build, a full room, a wrong code, or the connection limit); `drops` are players lost from a running game; `rejoins` are reconnects begun. A relay with nothing happening still prints the line with zeros, so a missing line means a stuck relay.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -30,13 +38,15 @@ The first line it prints is `glasnost-relay listening on ws://ADDR/`. Stop it wi
 | `--max-rooms N` | 256 | Most rooms at once; more are refused. |
 | `--max-connections N` | 1024 | Most connections at once. |
 | `--grace SECONDS` | 60 | How long a dropped player has to come back before their house surrenders. See section 5. |
+| `--stats SECONDS` | 60 | The time between the counts lines above; 0 prints none. |
+| `--version` | | Prints the build id and stops. |
 | `--help` | | Prints the usage. An unknown flag exits with status 2. |
 
 Limits that are not flags (fixed in the relay): a message may be at most 64 KiB; a connection may send about 200 messages a second (400 at once); a connection that is in no room for 2 minutes, or silent for 15 seconds, is closed; at most 32 refused requests per connection (this stops anyone guessing room codes); chat is limited to a line a second. None of these should matter to a 2v2.
 
 Leave it running under `tmux` or as a service; if it stops, every game on it drops (players can reconnect only to a relay that still holds their game, so a relay restart ends the games on it).
 
-The relay speaks plain WebSocket (`ws://`) and no TLS. That is fine for native players; browser players on an `https://` page need the TLS proxy of section 2.
+The relay speaks plain WebSocket (`ws://`) and no TLS itself. Browser players on an `https://` page need a TLS proxy in front of it (section 2), and native players can then use the same `wss://` address.
 
 ## 2. Open the relay to the internet
 
@@ -51,7 +61,7 @@ Plain `ws://` over the internet means the room code, the names and the chat can 
 
 ### Browser players: wss:// through a reverse proxy
 
-A page served over `https://` may only open `wss://` connections. The relay does not do TLS, so put a proxy that does in front of it. **The native client cannot use `wss://` at all** (it has no TLS support: it reports "URL error: TLS support not compiled in"); native players must reach the relay on its plain `ws://` port. So if you have both kinds of player, the relay listens on `0.0.0.0:8787` for natives, and the proxy forwards `wss://` on 443 to the same relay for browsers. If everyone is in a browser, bind the relay to `127.0.0.1:8787` and expose only the proxy.
+A page served over `https://` may only open `wss://` connections. The relay does not do TLS, so put a proxy that does in front of it. **The native client speaks `wss://` too** (rustls; it trusts the operating system's certificate roots, so a certificate from Let's Encrypt or any public authority works, and a self-signed one is refused with "cannot reach the relay at ...", naming the certificate). Everyone, native and browser, can therefore use the one `wss://relay.example.org/` address, and the relay can bind to `127.0.0.1:8787` with only the proxy exposed. (A machine whose certificate store is empty, such as a minimal container, cannot verify any certificate; use `ws://` there.) The relay's own `ws://` port still works for a LAN.
 
 These are examples; none of them is part of Glasnost, and they were written from the proxies' documentation, not run here. Replace `relay.example.org` with a name that points at the proxy machine.
 
@@ -186,19 +196,19 @@ GLASNOST_GAME_DIR=DIR target/release/glasnost-headless desync A.gdsync B.gdsync
 
 **Pathing reports** are a separate tool for "a unit took a strange route". In the game press **M** (mark) as it happens, then **P** (save pathing report) within 20 seconds. The file lands in `path-reports/path-TICK-N.gpath` under the working folder (a browser download). Read it with `target/release/glasnost-headless path-report FILE` (see [development.md](development.md), "Play-note fixes (M8 step A4, part 1)" and the README). Both files hold a save of the game: keep them out of git.
 
-**What to send to the main session** (without game files): the room code and the time; the commit each player built (`git rev-parse HEAD`); the names and tick of the notices; both `.gdsync` files (or their digests and a note saying you have them) and the full output of `glasnost-headless desync`; each player's terminal log; the relay's single line and the time it was started; whether direct links were on, and any `ice=` setting.
+**What to send to the main session** (without game files): the room code and the time; the build id each player's screen shows (the commit, if the id says `unknown`); the names and tick of the notices; both `.gdsync` files (or their digests and a note saying you have them) and the full output of `glasnost-headless desync`; each player's terminal log; the relay's single line and the time it was started; whether direct links were on, and any `ice=` setting.
 
 ## 7. When something goes wrong
 
 | What you see | Meaning and what to do |
 |---|---|
-| "The relay refused: the build differs from the room's." | The player's build string differs from the host's. Everybody must run the same build. (The string is the crate version only, so it will not catch two commits; see the caveat at the top.) |
+| "The relay refused: the build differs from the room's." | The player's build id (version and commit) differs from the host's; the screen shows both ("That room runs X; this is Y."). Everybody must run the same commit, from a clean tree (a `+dirty` id never matches a clean build). |
 | "...the rules hash differs..." | The player's install produces different rules from the host's: a different game version, or a modified install. Everybody needs the same files. |
 | "...the map hash differs..." / "you lack the room's map" | The player does not have the map the host chose, or has a different copy. The host picks a map all of them have. |
 | "...the protocol differs..." | The players' clients speak different versions of the network protocol: mixed commits. Update to the same commit. |
 | Room is full / playing / no such room / too many rooms | The room has no open row, has begun (a started game takes only a reconnect), the code is wrong (check the letters; the relay closes a connection after 32 wrong guesses) or the relay is at its room limit. |
-| "cannot reach the relay at ADDR: ..." | Nothing answers there. Check the address and port, that the relay is running (`ss -ltn` shows its port), the firewall and the forwarded port. From outside, `curl -i http://HOST:8787/` should say "Empty reply from server" (reachable); a refusal or a hang means not. For `wss://`: the native client cannot, see section 2. |
-| "TLS support not compiled in" | A native client was given a `wss://` address. Use the relay's plain `ws://` port. |
+| "cannot reach the relay at ADDR: ..." | Nothing answers there. Check the address and port, that the relay is running (`ss -ltn` shows its port), the firewall and the forwarded port. From outside, `curl -i http://HOST:8787/` should say "Empty reply from server" (reachable); a refusal or a hang means not. For `wss://`: check the proxy and that its certificate is valid for that name (a native client refuses one the system does not trust). |
+| "cannot reach the relay at wss://...", naming a certificate | The proxy's certificate is self-signed, expired, for another name or from an authority the operating system does not trust. Fix the certificate; there is no switch to skip the check. |
 | Browser page cannot connect | A page served over `https://` can only open a `wss://` relay (section 2). Check the address in `?relay=` and the proxy. |
 | "The game cannot start: NAME's map hash differs from yours." | The start-time check found a mismatch after loading; same remedy as above. |
 | "Waiting for NAME..." for a long time | That player's machine or link has stalled. Wait up to 15 seconds: the relay then drops them (section 5). If it happens to many players, note the time and who was waiting; try `--relay-only` or a different relay machine. |
@@ -215,7 +225,7 @@ Goal: a 2v2 of four people (or fewer people and AI), on at least two different h
 **Before**
 
 - [ ] One machine runs the relay: `target/release/glasnost-relay --listen 0.0.0.0:8787` (and the proxy if anyone is in a browser). Check from outside with `curl -i http://HOST:8787/` ("Empty reply from server" means it is reachable).
-- [ ] Every player builds the same commit and tells you `git rev-parse HEAD`. Every player has the same install.
+- [ ] Every player builds the same commit (the multiplayer screen shows the same build id for all; the lobby refuses another). Every player has the same install.
 - [ ] Decide: direct links on (default; STUN named with `--ice` if you have one) or `--relay-only`. Ideally run once each, noting which.
 - [ ] Each player starts the client from a folder they will keep (the reports land there), with the terminal left open so the log is kept: `target/release/glasnost --game --game-dir DIR --relay ws://HOST:8787/ 2>&1 | tee client.log`.
 

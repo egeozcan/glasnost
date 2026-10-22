@@ -84,6 +84,10 @@ fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("--version" | "-V") => {
+            println!("glasnost-headless {}", glasnost_app::game::client::BUILD);
+            ExitCode::SUCCESS
+        }
         Some("synthetic") => {
             for (t, h) in headless::run_synthetic(arg(&args, 2, 7), arg(&args, 1, 1000))
                 .iter()

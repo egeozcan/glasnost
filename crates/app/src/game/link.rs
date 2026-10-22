@@ -63,10 +63,11 @@ pub mod native {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
+    use tungstenite::client::IntoClientRequest;
     use tungstenite::protocol::CloseFrame;
     use tungstenite::protocol::frame::coding::CloseCode;
     use tungstenite::stream::MaybeTlsStream;
-    use tungstenite::{Error, Message, WebSocket};
+    use tungstenite::{Connector, Error, Message, WebSocket};
 
     use super::{Link, LinkState};
 
@@ -91,8 +92,16 @@ pub mod native {
         state: Arc<Mutex<LinkState>>,
     }
 
-    /// Opens a link to `url` (`ws://host:port/`) on a new thread.
+    /// Opens a link to `url` (`ws://host:port/` or `wss://host:port/`) on a
+    /// new thread. `wss://` checks the relay's certificate against the
+    /// system's trusted roots (M9 N8b).
     pub fn connect(url: &str) -> Box<dyn Link> {
+        connect_with(url, None)
+    }
+
+    /// [`connect`] with a TLS configuration of its own, for `wss://` to a
+    /// relay the system does not trust (tests).
+    pub fn connect_with(url: &str, tls: Option<Arc<rustls::ClientConfig>>) -> Box<dyn Link> {
         let (to, commands) = mpsc::channel();
         let (deliver, from) = mpsc::channel();
         let state = Arc::new(Mutex::new(LinkState::Connecting));
@@ -101,7 +110,7 @@ pub mod native {
         let spawned = std::thread::Builder::new()
             .name("glasnost-link".into())
             .spawn(move || {
-                let end = run(&url, &commands, &deliver, &shared);
+                let end = run(&url, tls, &commands, &deliver, &shared);
                 set(&shared, LinkState::Closed(end));
             });
         if let Err(e) = spawned {
@@ -123,15 +132,22 @@ pub mod native {
     /// closes. Returns why it ended.
     fn run(
         url: &str,
+        tls: Option<Arc<rustls::ClientConfig>>,
         commands: &Receiver<Command>,
         deliver: &Sender<Vec<u8>>,
         state: &Mutex<LinkState>,
     ) -> String {
-        let mut socket = match tungstenite::connect(url) {
-            Ok((s, _)) => s,
+        let mut socket = match open(url, tls) {
+            Ok(s) => s,
             Err(e) => return format!("cannot reach the relay at {url}: {e}"),
         };
-        if let MaybeTlsStream::Plain(s) = socket.get_mut()
+        // The poll timeout goes on the TCP socket under the TLS, too.
+        let tcp = match socket.get_mut() {
+            MaybeTlsStream::Plain(s) => Some(s),
+            MaybeTlsStream::Rustls(s) => Some(&mut s.sock),
+            _ => None,
+        };
+        if let Some(s) = tcp
             && let Err(e) = TcpStream::set_read_timeout(s, Some(POLL))
         {
             return format!("the socket refused a timeout: {e}");
@@ -179,6 +195,41 @@ pub mod native {
                 Err(e) => return ended(&e),
             }
         }
+    }
+
+    /// Connects and does the WebSocket handshake (over TLS for `wss://`).
+    fn open(
+        url: &str,
+        tls: Option<Arc<rustls::ClientConfig>>,
+    ) -> Result<WebSocket<MaybeTlsStream<TcpStream>>, Error> {
+        let Some(config) = tls else {
+            return tungstenite::connect(url).map(|(s, _)| s);
+        };
+        let request = url.into_client_request()?;
+        let host = request
+            .uri()
+            .host()
+            .ok_or(Error::Url(tungstenite::error::UrlError::NoHostName))?;
+        // nocite: the standard ports of ws and wss
+        let port =
+            request
+                .uri()
+                .port_u16()
+                .unwrap_or(if request.uri().scheme_str() == Some("wss") {
+                    443
+                } else {
+                    80
+                });
+        let stream = TcpStream::connect((host, port)).map_err(Error::Io)?;
+        let _ = stream.set_nodelay(true);
+        tungstenite::client_tls_with_config(request, stream, None, Some(Connector::Rustls(config)))
+            .map(|(s, _)| s)
+            .map_err(|e| match e {
+                tungstenite::HandshakeError::Failure(e) => e,
+                tungstenite::HandshakeError::Interrupted(_) => {
+                    Error::Io(ErrorKind::Interrupted.into())
+                }
+            })
     }
 
     fn ended(e: &Error) -> String {
@@ -231,3 +282,7 @@ pub mod native {
         }
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "link_tests.rs"]
+mod tests;

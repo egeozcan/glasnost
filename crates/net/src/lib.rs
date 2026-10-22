@@ -41,6 +41,22 @@ pub mod start;
 pub mod transport;
 pub mod wire;
 
+/// The commit this build was made from: the short hash, `+dirty` when
+/// tracked files differed from it, `unknown` outside git (M9 N8b).
+pub const COMMIT: &str = env!("GLASNOST_COMMIT");
+
+/// The build id a client names in a room and in the lockstep handshake, and
+/// the relay and the tools print for `--version`: the version and the
+/// commit, such as `glasnost 0.0.0 (a1b2c3d4e)`. Two builds of one commit
+/// agree; a build of another commit, or of a dirty tree, does not.
+pub const BUILD: &str = concat!(
+    "glasnost ",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("GLASNOST_COMMIT"),
+    ")"
+);
+
 pub use session::{
     Applied, Catchup, Config, Event, Life, Paths, Phase, Session, SlotCatchup, SlotHash, Tick, Via,
 };

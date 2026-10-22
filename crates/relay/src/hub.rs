@@ -247,6 +247,75 @@ pub struct Stats {
     pub held_refused: u64,
     /// Peers closed for not answering a round in time.
     pub unanswered: u64,
+    /// Messages received from connections (N8b).
+    pub messages_in: u64,
+    /// Bytes of those messages.
+    pub bytes_in: u64,
+    /// Messages queued for connections, once per receiver (N8b).
+    pub messages_out: u64,
+    /// Bytes of those messages.
+    pub bytes_out: u64,
+    /// Requests the relay answered with a refusal (N8b).
+    pub refusals: u64,
+}
+
+impl Stats {
+    /// What was counted since `earlier` (counters only grow; a smaller
+    /// number counts as 0).
+    pub fn since(&self, earlier: &Stats) -> Stats {
+        let d = |a: u64, b: u64| a.saturating_sub(b);
+        Stats {
+            forwarded: d(self.forwarded, earlier.forwarded),
+            forged_drops: d(self.forged_drops, earlier.forged_drops),
+            forged_senders: d(self.forged_senders, earlier.forged_senders),
+            outside_game: d(self.outside_game, earlier.outside_game),
+            drops: d(self.drops, earlier.drops),
+            refused_connections: d(self.refused_connections, earlier.refused_connections),
+            closed_unreadable: d(self.closed_unreadable, earlier.closed_unreadable),
+            closed_size: d(self.closed_size, earlier.closed_size),
+            closed_rate: d(self.closed_rate, earlier.closed_rate),
+            closed_refusals: d(self.closed_refusals, earlier.closed_refusals),
+            closed_silent: d(self.closed_silent, earlier.closed_silent),
+            chats: d(self.chats, earlier.chats),
+            chats_too_fast: d(self.chats_too_fast, earlier.chats_too_fast),
+            rejoins: d(self.rejoins, earlier.rejoins),
+            readmitted: d(self.readmitted, earlier.readmitted),
+            forged_rejoins: d(self.forged_rejoins, earlier.forged_rejoins),
+            snapshot_bytes: d(self.snapshot_bytes, earlier.snapshot_bytes),
+            signals: d(self.signals, earlier.signals),
+            signals_dropped: d(self.signals_dropped, earlier.signals_dropped),
+            rounds: d(self.rounds, earlier.rounds),
+            held_parts: d(self.held_parts, earlier.held_parts),
+            held_refused: d(self.held_refused, earlier.held_refused),
+            unanswered: d(self.unanswered, earlier.unanswered),
+            messages_in: d(self.messages_in, earlier.messages_in),
+            bytes_in: d(self.bytes_in, earlier.bytes_in),
+            messages_out: d(self.messages_out, earlier.messages_out),
+            bytes_out: d(self.bytes_out, earlier.bytes_out),
+            refusals: d(self.refusals, earlier.refusals),
+        }
+    }
+}
+
+/// The relay's periodic line (`--stats`): what it holds now and what
+/// `delta` (the counts since the last line, [`Stats::since`]) says happened
+/// in `seconds`. Counts only: no codes, names or addresses.
+pub fn stats_line(hub: &Hub, delta: &Stats, seconds: u64) -> String {
+    format!(
+        "stats rooms={} connections={} games={} in={}msg/{}B out={}msg/{}B \
+         refused={} drops={} rejoins={} over={}s",
+        hub.rooms(),
+        hub.connections(),
+        hub.games(),
+        delta.messages_in,
+        delta.bytes_in,
+        delta.messages_out,
+        delta.bytes_out,
+        delta.refusals + delta.refused_connections,
+        delta.drops,
+        delta.rejoins,
+        seconds
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -475,6 +544,11 @@ impl Hub {
         self.conns.len()
     }
 
+    /// Rooms whose game has begun.
+    pub fn games(&self) -> usize {
+        self.rooms.values().filter(|e| e.room.playing()).count()
+    }
+
     /// Rooms.
     pub fn rooms(&self) -> usize {
         self.rooms.len()
@@ -562,11 +636,16 @@ impl Hub {
     fn send(&mut self, now_ms: u64, to: ConnId, bytes: Vec<u8>) {
         if let Some(c) = self.conns.get_mut(&to) {
             c.last_sent = now_ms;
+            self.stats.messages_out += 1;
+            self.stats.bytes_out += bytes.len() as u64;
             self.out.push(Out::Send { to, bytes });
         }
     }
 
     fn send_lobby(&mut self, now_ms: u64, to: ConnId, msg: &FromRelay) {
+        if matches!(msg, FromRelay::Refused(_)) {
+            self.stats.refusals += 1;
+        }
         self.send(now_ms, to, lobby::wire::encode(msg));
     }
 
@@ -792,6 +871,8 @@ impl Hub {
         if !self.conns.contains_key(&conn) {
             return;
         }
+        self.stats.messages_in += 1;
+        self.stats.bytes_in += bytes.len() as u64;
         self.heard(now_ms, conn);
         if !self.spend(now_ms, conn) {
             self.stats.closed_rate += 1;

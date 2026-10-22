@@ -17,5 +17,5 @@
 pub mod hub;
 pub mod server;
 
-pub use hub::{ConnId, Entropy, Hub, Limits, Out, Stats};
-pub use server::{OsEntropy, Relay, bind, bind_with, serve};
+pub use hub::{ConnId, Entropy, Hub, Limits, Out, Stats, stats_line};
+pub use server::{OsEntropy, Relay, Report, bind, bind_reporting, bind_with, serve};

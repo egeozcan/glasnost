@@ -36,8 +36,11 @@ winit = "0.30.13"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
 # The native client's WebSocket to the relay, on its own thread (M9 N3);
-# plain ws:// only. The browser uses its own WebSocket (glasnost-platform-web).
-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# ws:// and wss:// (TLS by rustls with the ring provider and the system's
+# trusted roots, M9 N8b). The browser uses its own WebSocket
+# (glasnost-platform-web).
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 # The native client's direct links to the other peers (M9 N7): WebRTC data
 # channels through matchbox and webrtc-rs. The browser uses its own
 # RTCPeerConnection (glasnost-platform-web).

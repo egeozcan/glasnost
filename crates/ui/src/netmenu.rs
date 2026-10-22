@@ -57,6 +57,9 @@ pub struct NetForm {
     /// The room code of a network game this client can rejoin, shown with
     /// a **Reconnect** button (M9 N5).
     pub rejoin: Option<String>,
+    /// The client's build id, shown at the foot of the screen so players
+    /// can compare builds (M9 N8b); empty shows nothing.
+    pub build: String,
 }
 
 impl NetForm {
@@ -68,6 +71,7 @@ impl NetForm {
             code: String::new(),
             focus: None,
             rejoin: None,
+            build: String::new(),
         }
     }
 
@@ -116,7 +120,7 @@ impl NetForm {
         let (w, h) = size;
         d.fill(Rect::new(0, 0, w, h), colour::BACKDROP);
         // nocite: our own layout (a row more for the reconnect button)
-        let tall = if self.rejoin.is_some() { 260 } else { 230 };
+        let tall = if self.rejoin.is_some() { 274 } else { 244 };
         let outer = Rect::new(
             (w - 460).max(0) / 2,
             (h - tall).max(0) / 2,
@@ -173,6 +177,13 @@ impl NetForm {
             status,
             if bad { colour::BAD } else { colour::TEXT },
         );
+        if !self.build.is_empty() {
+            d.text_left(
+                Rect::new(x0, outer.bottom() - 13, 440, 12),
+                &format!("Build {}", self.build),
+                colour::DIM,
+            );
+        }
         (d, t)
     }
 }
@@ -203,6 +214,20 @@ mod tests {
         let (_, t) = f.view((800, 600), "Connecting", false, true, None);
         assert!(t.rect_of(&NetHit::Host).is_none());
         assert!(t.rect_of(&NetHit::Back).is_some());
+    }
+
+    #[test]
+    fn the_build_is_shown_at_the_foot() {
+        let mut f = NetForm::new("ws://127.0.0.1:8787/");
+        let (d, _) = f.view((800, 600), "", false, false, None);
+        assert!(!d.texts().iter().any(|s| s.starts_with("Build ")));
+        f.build = "glasnost 0.0.0 (abc123def)".into();
+        let (d, _) = f.view((800, 600), "", false, false, None);
+        assert!(
+            d.texts()
+                .iter()
+                .any(|s| s.contains("Build glasnost 0.0.0 (abc123def)"))
+        );
     }
 
     #[test]

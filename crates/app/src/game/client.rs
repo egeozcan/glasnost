@@ -321,7 +321,10 @@ impl Client {
             end_targets: Targets::new(),
             radar_tick: -1,
             cpu_images: BTreeMap::new(),
-            netform: NetForm::new(DEFAULT_RELAY),
+            netform: NetForm {
+                build: net::BUILD.into(),
+                ..NetForm::new(DEFAULT_RELAY)
+            },
             connect: platform_connect(),
             direct: platform_direct(),
             ice: Ice::default(),

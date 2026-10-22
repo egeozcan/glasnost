@@ -416,13 +416,18 @@ fn a_join_of_another_build_is_refused_on_that_field() {
     assert_eq!(b.shell.screen, Screen::Multiplayer);
     let (text, bad) = &b.net_status;
     assert!(bad);
+    // M9 N8b: the client names both builds from the room's peek, before
+    // the relay has to refuse the join with only the field's name.
     assert_eq!(
         text,
-        "The relay refused: the build differs from the room's."
+        &format!(
+            "That room runs {BUILD}; this is glasnost another. \
+             Everybody must run the same build."
+        )
     );
     // The screen shows it.
     let (d, _) = b.frame();
-    assert!(d.texts().iter().any(|t| t.contains("build differs")));
+    assert!(d.texts().iter().any(|t| t.contains("That room runs")));
     // A code that is no code is refused on the screen.
     b.netform.code = "nope".into();
     press_net(&mut b, NetHit::Join);
