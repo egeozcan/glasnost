@@ -4,13 +4,16 @@
 //! file-system importer and the game itself; the shell lives in `glasnost-app`
 //! and is shared with the web build.
 //!
-//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--backend auto|gl|vulkan] [--frames N]`.
+//! Usage: `glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]`.
 //! With `--game`, the game client (M5b: menu, skirmish setup, a game against
 //! the AI, end screen), reading the install in `DIR`. With `--viewer`, the
 //! asset viewer (optionally mounting `DIR` at start, and opening the map
 //! viewer on the first map whose name contains `NAME`). Without either, the
 //! M0 palette-quad demo. `--relay URL` fills the multiplayer screen's relay
 //! address (default `ws://127.0.0.1:8787/`, the relay binary's own).
+//! **M9 N7**: network games try direct links between the peers;
+//! `--relay-only` keeps them on the relay, and `--ice URL` (repeatable)
+//! names a STUN or TURN server (none by default).
 //!
 //! In a debug build only, `GLASNOST_PERTURB` makes the game client a test
 //! client (M9 N4): it names another build, so it plays only with other
@@ -34,6 +37,8 @@ fn main() -> std::process::ExitCode {
     let mut game_dir = None;
     let mut open_map = None;
     let mut relay = None;
+    let mut relay_only = false;
+    let mut ice: Vec<String> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -55,9 +60,14 @@ fn main() -> std::process::ExitCode {
             "--game-dir" => value("--game-dir").map(|v| game_dir = Some(v)),
             "--map" => value("--map").map(|v| open_map = Some(v)),
             "--relay" => value("--relay").map(|v| relay = Some(v)),
+            "--relay-only" => {
+                relay_only = true;
+                Ok(())
+            }
+            "--ice" => value("--ice").map(|v| ice.push(v)),
             "-h" | "--help" => {
                 println!(
-                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--backend auto|gl|vulkan] [--frames N]"
+                    "usage: glasnost [--game | --viewer [--map NAME]] [--game-dir DIR] [--relay URL] [--relay-only] [--ice URL] [--backend auto|gl|vulkan] [--frames N]"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -96,6 +106,9 @@ fn main() -> std::process::ExitCode {
             exit_after_frames: options.exit_after_frames,
             relay,
             connect: None,
+            direct: None,
+            relay_only,
+            ice: Some(ice.join(" ")).filter(|i| !i.is_empty()),
             report: None,
             test,
         })

@@ -9,7 +9,10 @@
 //! skirmish setup, a game against the AI, end screen) with the same folder
 //! picker. **M9 N3**: the game client's multiplayer screen reaches a relay
 //! through the browser's WebSocket ([`socket`]); `?relay=ws://HOST:PORT/`
-//! fills its relay address.
+//! fills its relay address. **M9 N7**: network games also try direct
+//! links between the peers through the browser's `RTCPeerConnection`
+//! ([`rtc`]); `?direct=off` keeps a game on the relay only, and
+//! `?ice=URL[ URL…]` names STUN or TURN servers (none by default).
 //!
 //! The page's entry point is the default feature `start`; without it (the
 //! soak's wasm client, `glasnost-headless-web`, M9 N6) the crate is only its
@@ -20,6 +23,8 @@
 
 #[cfg(target_arch = "wasm32")]
 pub mod download;
+#[cfg(target_arch = "wasm32")]
+pub mod rtc;
 #[cfg(target_arch = "wasm32")]
 pub mod socket;
 
@@ -51,6 +56,10 @@ mod web {
             }
         };
         let mode = param("mode");
+        // The browser lane's page for `rtc::rtc_probe`: nothing runs.
+        if mode == "probe" {
+            return;
+        }
         let result = if mode == "game" {
             glasnost_app::run_game(GameOptions {
                 backend,
@@ -58,6 +67,9 @@ mod web {
                 exit_after_frames: None,
                 relay: Some(param("relay")).filter(|r| !r.is_empty()),
                 connect: Some(crate::socket::connect),
+                direct: Some(crate::rtc::open),
+                relay_only: param("direct") == "off",
+                ice: Some(param("ice")).filter(|i| !i.trim().is_empty()),
                 report: Some(crate::download::save),
                 test: None,
             })

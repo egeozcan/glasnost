@@ -39,6 +39,16 @@ pub struct GameOptions {
     /// How the client opens a link to a relay, when the platform gives one
     /// (the web shell's WebSocket); `None`: the built-in native link.
     pub connect: Option<super::link::Connect>,
+    /// How the client opens direct links to its game's peers, when the
+    /// platform gives one (the web shell's RTCPeerConnection, M9 N7);
+    /// `None`: the built-in one ([`super::direct::platform_direct`]).
+    pub direct: Option<super::direct::OpenPairFn>,
+    /// No direct links in this run (`--relay-only`, `?direct=off`): the
+    /// relay carries everything.
+    pub relay_only: bool,
+    /// The direct links' STUN or TURN servers, space-separated URLs
+    /// (`--ice`, `?ice=`); `None`: the settings' (none by default).
+    pub ice: Option<String>,
     /// How the client stores a desync report, when the platform gives one
     /// (the web shell's download); `None`: the built-in native file.
     pub report: Option<super::report::SaveReport>,
@@ -71,6 +81,15 @@ pub fn run_game(options: GameOptions) -> Result<(), winit::error::EventLoopError
     }
     if let Some(c) = options.connect {
         client.connect = Some(c);
+    }
+    if let Some(d) = options.direct {
+        client.direct = Some(std::rc::Rc::new(d));
+    }
+    if options.relay_only {
+        client.direct = None;
+    }
+    if let Some(ice) = options.ice.as_deref() {
+        client.ice = super::direct::Ice::from_urls(ice);
     }
     if let Some(r) = options.report {
         client.save_report = Some(r);

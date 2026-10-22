@@ -1884,10 +1884,12 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "glasnost-app",
+ "glasnost-net",
  "glasnost-render",
  "js-sys",
  "log",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
