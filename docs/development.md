@@ -2096,6 +2096,11 @@ M6c's flipped zero games went from 10 (before the prism and charger reaches) to 
 
 **Tests** (synthetic data). `a_ferry_is_queued_behind_a_busy_vehicle_line` (`tests/ai.rs`), `a_far_unit_that_does_not_move_tries_another_side` (`tests/grinder.rs`), `sends_a_charger_at_a_coil_across_the_base` (`tests/linked.rs`).
 
+**Arena and duel sweeps (310dba1, on main 63c1df4).** The oracle arena attaches no brain, and its CSVs are byte-identical to the before-run on fd7e38a: M-0001 33 of 96 pairings failing, 151 of 172 reproduced; M-0002 13 of 24, 43 of 47; M-0003 3 of 35, 61 of 64. The duels' own seed sweeps 1 to 16 (`m6c_seed_sweep`, `m7a_seed_sweep`, `m7b_seed_sweep`; upper-middle medians), before (fd7e38a) and after:
+- M6c: smallest minimum 0 before (support beams, charger orders, jumpjet orders, flight and units, sabotage orders), 3 after (radiation exits min 7, the rest higher). Support beams 0/54 to 78/101, charger orders 0/11 to 10/22, jumpjet units built and flown 0/12 to 8/10.
+- M7a: smallest minimum 1 before and after (takeover orders, median 2 to 7). Vehicles bunkered 3/7 to 8/10, bunker exit orders 2/7 to 8/10, hostile intent 2 709/4 524 to 2 239/4 611. Berserk weapon orders fell 32/84 to 7/25 and units made berserk 63/108 to 26/48, as over seeds 1 to 32 (default min 30 to 7, median 82 to 27): a margin this step thinned without a zero, from the M7a setup changes; which of them was not followed.
+- M7b: every drain, mutator and dominator counter the same (drain links min 3); of M7a's reported-only counters, seed 12 gives one bunker entry order where it gave none.
+
 ## Map triggers (M5b)
 
 `glasnost_sim::triggers` runs the map triggers of S-0011 in a skirmish; the converter
