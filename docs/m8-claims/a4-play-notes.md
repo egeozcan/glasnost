@@ -39,3 +39,24 @@ The lead played the native build. Answers to the triage questions:
   debris piece played in place with no motion and no landing).
 - Note 1: details will come as a pathing report (M8 A4 capture: a key saves a snapshot from about
   20 seconds earlier and every order since; `glasnost-headless path-report` replays it).
+
+## Triage 2 (2026-10-22, real data, read-only; lane `local-lane/m8/a4-triage-2/`)
+
+- Note 4 (Patriot on its own). No code or importer bug. Both anti-air-only buildings have a single
+  weapon slot whose projectile imports anti-air yes, anti-ground no (S-0306 Import mapping). In
+  600-tick scenarios they never acquired a grounded enemy that did not hit them (S-0309 claim 5),
+  for a human and a computer owner. Two spec routes make them fire at what looks like a ground unit:
+  retaliation after any damage from a known attacker, splash included (S-0309 claim 18 with S-0306
+  claim 23; Q-1761, Q-1763), and the scan of airborne objects, which accepts infantry and vehicles
+  in flight, such as jumpjet-locomotor units (S-0309 claim 9). Which one the lead saw is open: the
+  lead is asked which enemy units were fired on and whether they were flying.
+- Note 5 (computer aircraft circling). No code or importer bug. Only the two pad-bound aircraft
+  types have dock types; the computer player had a pad for every one it built, and with no pad a
+  pad-bound aircraft in flight crashes, by S-0501 claim 18 and T2 (seen in the lane). The armed,
+  landable types with no dock types end their run in *guard* (T2), queue *move* to their
+  destination (claim 33), which after a strafing run is the target object (T1), keep the holding
+  mark (claim 6 with Q-1756's workaround) and stay above the target at cruise height. That is the
+  lead's "circled over their target". Q-1776 corrects Q-1756's premise (destination: the target,
+  not the last firing spot) and asks about armed non-landable types with no dock types. Q-1775's
+  question 1 is answered by claim 18 for pad-bound types; the data has no type with dock types that
+  is not pad-bound.
