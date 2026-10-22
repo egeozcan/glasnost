@@ -54,7 +54,8 @@
 //!   Beta; a start TAKER for Alpha ([`START_INFANTRY`]); Alpha's HULKs
 //!   behind its start, of PREY's armour class, so that only the lifters
 //!   and the controllers touch them before the grinder stands; a frail
-//!   EYE, which a raid can destroy and its house builds again; WARD, an
+//!   EYE, which a raid can destroy and its house builds again, whose
+//!   radius reaches past the middle (M8 step B4); WARD, an
 //!   unbuildable turreted vehicle whose gun sits in a multi-weapon slot
 //!   (no primary weapon, so the AI's waves leave it at home), one behind
 //!   each start, which the house's bunkers take in. The PREY, the TAKER,
@@ -130,9 +131,17 @@ fn margins(r: &mut Ruleset) {
         t.spread = Some(0);
     }
     // A frail psychic sensor, which raids destroy and the house builds
-    // again.
+    // again, and whose radius reaches past the middle of the map from a
+    // start (S-0610 claim 10: it sees a unit whose target or destination
+    // lies within the radius). M8 step B4: at 12 cells it saw only raids
+    // into its own base; once nothing could fire at WARD (below), seed 10
+    // of 1 to 32 saw hostile intent in 40 ticks (5 221 before), and eight
+    // games with a quirk switch flipped in none. The radius changes what
+    // the sensor shows, not play: every other counter of those games is
+    // the same.
     if let Some(b) = r.sim.buildings.get_mut("EYE") {
         b.strength = Some(EYE_STRENGTH);
+        b.econ.psychic_detection_radius = Some(EYE_RADIUS);
     }
     // PREY: an unarmed, sturdy vehicle nobody can build, of the last
     // armour class, which only the lifter's beam and the mind
@@ -624,6 +633,10 @@ pub fn map() -> Map {
 
 /// The psychic sensor's strength in the gate's scenario.
 const EYE_STRENGTH: i32 = 10;
+
+/// The psychic sensor's radius in cells in the gate's scenario: beyond
+/// [`fixture::START_DX`], the distance from a start to the middle.
+const EYE_RADIUS: i32 = 24;
 
 /// Cells behind Alpha's start (away from the middle) where its HULKs
 /// stand in the gate's scenario, in a column.
