@@ -244,6 +244,10 @@ pub struct MapRenderer {
     alpha: (wgpu::Texture, (u32, u32)),
     /// Whether the light-alpha texture holds 127 everywhere.
     alpha_default: bool,
+    /// The values the light-alpha texture holds when not `alpha_default`:
+    /// a frame whose values are the same is not uploaded again (M8 step
+    /// C4).
+    alpha_held: Vec<u8>,
     /// The copy of the target's pixels that a translucent drawing blends
     /// with (S-0102 claim 32), of the light-alpha texture's size.
     backdrop: wgpu::Texture,
@@ -517,6 +521,7 @@ impl MapRenderer {
             rows: rows_texture,
             alpha: (alpha, (1, 1)),
             alpha_default: true,
+            alpha_held: Vec::new(),
             backdrop,
             stats: MapStats::default(),
         })
@@ -670,6 +675,15 @@ impl MapRenderer {
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
         let mut list: Vec<Instance> = Vec::new();
+        // The view rectangle each instance draws into, for placing the
+        // backdrop copies (`passes`).
+        let mut rects: Vec<[u32; 4]> = Vec::new();
+        // A spot instance draws its own pixel.
+        let spot_rects = |list: &[Instance], rects: &mut Vec<[u32; 4]>| {
+            for i in &list[rects.len()..] {
+                rects.push([(i.place[0] - ox) as u32, (i.place[1] - oy) as u32, 1, 1]);
+            }
+        };
         // Runs of instances that share a pipeline; a translucent item is a
         // run of its own, with the view rectangle it covers.
         let mut batches: Vec<Batch> = Vec::new();
@@ -685,6 +699,7 @@ impl MapRenderer {
             while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
                 if filter.shows_spots(g) {
                     spot_instances(g, view, &mut list, &mut batches);
+                    spot_rects(&list, &mut rects);
                 }
             }
             if !filter.shows(&item) {
@@ -797,13 +812,16 @@ impl MapRenderer {
                 companion: companion_rect,
             });
             let n = list.len() as u32;
+            // The view pixels the item covers (a translucent item blends
+            // with them).
+            let x0 = (l - ox).max(0) as u32;
+            let y0 = (t - oy).max(0) as u32;
+            let x1 = (r - ox).min(w) as u32;
+            let y1 = (b - oy).min(h) as u32;
+            let rect = [x0, y0, x1 - x0, y1 - y0];
+            rects.push(rect);
             if role.translucent() {
-                // The view pixels the item covers, which it blends with.
-                let x0 = (l - ox).max(0) as u32;
-                let y0 = (t - oy).max(0) as u32;
-                let x1 = (r - ox).min(w) as u32;
-                let y1 = (b - oy).min(h) as u32;
-                batches.push((role, n - 1..n, Some([x0, y0, x1 - x0, y1 - y0])));
+                batches.push((role, n - 1..n, Some(rect)));
                 continue;
             }
             match batches.last_mut() {
@@ -813,6 +831,7 @@ impl MapRenderer {
         }
         for g in spot_groups.filter(|g| filter.shows_spots(g)) {
             spot_instances(g, view, &mut list, &mut batches);
+            spot_rects(&list, &mut rects);
         }
         if list.len() > self.instance_capacity {
             self.instance_capacity = list.len().next_power_of_two();
@@ -875,14 +894,12 @@ impl MapRenderer {
             });
             pass
         };
-        let mut pass = begin(encoder, true);
-        self.stats.passes += 1;
         self.stats.draws += batches.len();
-        for (role, range, cover) in batches {
-            if let Some([x, y, cw, ch]) = cover {
+        let mut first = true;
+        for (copies, run) in passes(batches, &rects) {
+            for [x, y, cw, ch] in copies {
                 // spec: S-0102 claim 32 (a translucent pixel blends with the already-painted
                 // destination: the pixels drawn so far are copied before the item is drawn)
-                drop(pass);
                 encoder.copy_texture_to_texture(
                     wgpu::TexelCopyTextureInfo {
                         texture: target,
@@ -902,15 +919,17 @@ impl MapRenderer {
                         depth_or_array_layers: 1,
                     },
                 );
-                pass = begin(encoder, false);
-                self.stats.passes += 1;
                 self.stats.copies += 1;
                 self.stats.copied_px += u64::from(cw) * u64::from(ch);
             }
-            pass.set_pipeline(&self.pipelines[role.index()]);
-            pass.draw(0..6, range);
+            let mut pass = begin(encoder, first);
+            first = false;
+            self.stats.passes += 1;
+            for (role, range, _) in run {
+                pass.set_pipeline(&self.pipelines[role.index()]);
+                pass.draw(0..6, range);
+            }
         }
-        drop(pass);
         list.len()
     }
 }
@@ -918,6 +937,43 @@ impl MapRenderer {
 /// A run of instances sharing a pipeline, with the view rectangle a
 /// blending run covers.
 type Batch = (Role, std::ops::Range<u32>, Option<[u32; 4]>);
+
+/// The render passes of a frame's `batches` (`rects`: the view rectangle
+/// each instance draws into), each with the backdrop copies taken before
+/// it begins.
+///
+/// A blending run reads the copy of the pixels under it, which must hold
+/// what was drawn before it. The copy is taken where the last pass began
+/// when nothing drawn since then meets the run's rectangle (the pixels
+/// there are the same at both moments), else a new pass begins before the
+/// run. So runs that do not meet what was drawn since share one pass break
+/// instead of one each (M8 step C4); the first pass, which clears the
+/// target, takes no copy. There is always at least one pass.
+fn passes(batches: Vec<Batch>, rects: &[[u32; 4]]) -> Vec<(Vec<[u32; 4]>, Vec<Batch>)> {
+    let meets = |a: &[u32; 4], b: &[u32; 4]| {
+        a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+    };
+    let mut out: Vec<(Vec<[u32; 4]>, Vec<Batch>)> = vec![(Vec::new(), Vec::new())];
+    // The rectangles drawn since the last pass began.
+    let mut drawn: Vec<[u32; 4]> = Vec::new();
+    for b in batches {
+        if let Some(c) = b.2 {
+            if out.len() > 1 && !drawn.iter().any(|d| meets(d, &c)) {
+                if let Some(last) = out.last_mut() {
+                    last.0.push(c);
+                }
+            } else {
+                out.push((vec![c], Vec::new()));
+                drawn.clear();
+            }
+        }
+        drawn.extend_from_slice(&rects[b.1.start as usize..b.1.end as usize]);
+        if let Some(last) = out.last_mut() {
+            last.1.push(b);
+        }
+    }
+    out
+}
 
 /// Appends the instances of spot group `g` (one 1 × 1 instance per spot in
 /// the view) and their batches. A batch reads the copy of the target taken
@@ -1035,13 +1091,17 @@ impl MapRenderer {
             self.alpha_default = true;
         }
         let bytes = match alpha {
+            Some(a) if !self.alpha_default && self.alpha_held == a => return,
             Some(a) => {
                 self.alpha_default = false;
+                self.alpha_held.clear();
+                self.alpha_held.extend_from_slice(a);
                 std::borrow::Cow::Borrowed(a)
             }
             None if self.alpha_default => return,
             None => {
                 self.alpha_default = true;
+                self.alpha_held.clear();
                 std::borrow::Cow::Owned(vec![crate::light::DEFAULT_LIGHT_ALPHA as u8; n])
             }
         };
@@ -1250,6 +1310,70 @@ pub fn targets(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The backdrop copies share pass breaks only where that copies the
+    /// same pixels (M8 step C4): a blending run that meets nothing drawn
+    /// since the last break takes its copy there; one that meets it, or
+    /// any in the first pass, begins a pass of its own.
+    #[test]
+    fn backdrop_copies_share_breaks_only_where_nothing_changed() {
+        let r = |x, y, w, h| [x, y, w, h];
+        // Instances: 0 opaque over the left, 1 blending on the right, 2
+        // blending further right, 3 blending over 0, 4 opaque over 1.
+        let rects = [
+            r(0, 0, 10, 10),
+            r(20, 0, 5, 5),
+            r(30, 0, 5, 5),
+            r(2, 2, 4, 4),
+            r(20, 0, 2, 2),
+        ];
+        let batches: Vec<Batch> = vec![
+            (Role::Writer, 0..1, None),
+            (Role::BlendReader, 1..2, Some(rects[1])),
+            (Role::BlendReader, 2..3, Some(rects[2])),
+            (Role::BlendReader, 3..4, Some(rects[3])),
+            (Role::Reader, 4..5, None),
+        ];
+        let p = passes(batches, &rects);
+        // The first pass (it clears) has no copy; 1 begins a pass; 2 shares
+        // its break (it does not meet 1); 3 shares it too (it meets only 0,
+        // drawn before the break, so the copy holds it); 4 joins the pass.
+        assert_eq!(p.len(), 2);
+        assert!(p[0].0.is_empty());
+        assert_eq!(p[0].1.len(), 1);
+        assert_eq!(p[1].0, vec![rects[1], rects[2], rects[3]]);
+        assert_eq!(p[1].1.len(), 4);
+
+        // A blending run over a blending run drawn since the break begins
+        // a new pass with its own copy.
+        let rects = [r(0, 0, 4, 4), r(10, 0, 4, 4), r(12, 2, 4, 4), r(0, 0, 1, 1)];
+        let batches: Vec<Batch> = vec![
+            (Role::Tile, 0..1, None),
+            (Role::BlendWriter, 1..2, Some(rects[1])),
+            (Role::BlendIgnore, 2..3, Some(rects[2])),
+            (Role::Spot, 3..4, Some(rects[3])),
+        ];
+        let p = passes(batches, &rects);
+        assert_eq!(
+            p.iter().map(|(c, _)| c.len()).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+        assert_eq!(p[2].0, vec![rects[2], rects[3]]);
+        // Every run is kept, in order.
+        let order: Vec<u32> = p
+            .iter()
+            .flat_map(|(_, b)| b.iter().map(|b| b.1.start))
+            .collect();
+        assert_eq!(order, vec![0, 1, 2, 3]);
+
+        // A frame that starts with a blending run, and one with no runs.
+        let rects = [r(0, 0, 1, 1)];
+        let p = passes(vec![(Role::Spot, 0..1, Some(rects[0]))], &rects);
+        assert_eq!(p.len(), 2);
+        assert!(p[0].0.is_empty() && p[0].1.is_empty());
+        assert_eq!(p[1].0, vec![rects[0]]);
+        assert_eq!(passes(Vec::new(), &[]).len(), 1);
+    }
 
     #[test]
     fn shelf_packing_fits() {
