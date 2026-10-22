@@ -25,6 +25,10 @@
 //! it, and `glasnost-rtc` has its own list, [`RTC_ALLOWED`]; never an HTTP
 //! stack, the relay's WebSocket server or the relay. Neither the
 //! simulation nor the lockstep crate may reach `glasnost-rtc`.
+//!
+//! The network lab's STUN and TURN server (`glasnost-netlab`, M9 N8c) is a
+//! test-only server: no client crate, neither the lockstep crate nor the
+//! direct links' crate, and not the relay may reach it.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -68,6 +72,9 @@ pub const FORBIDDEN_EXTERNAL: &[&str] = &[
     "async-tungstenite",
     "matchbox_socket",
     "webrtc",
+    // M9 N8c: webrtc-rs's STUN and TURN (the lab's server is built on them).
+    "turn",
+    "stun",
     "hyper",
     "reqwest",
     "ureq",
@@ -227,9 +234,21 @@ pub fn check(md: &Metadata) -> Result<Vec<String>, String> {
         let external: BTreeSet<String> = FORBIDDEN_EXTERNAL
             .iter()
             .map(|s| (*s).to_owned())
-            .chain([RELAY_CRATE.to_owned(), RTC_CRATE.to_owned()])
+            .chain([
+                RELAY_CRATE.to_owned(),
+                RTC_CRATE.to_owned(),
+                LAB_CRATE.to_owned(),
+            ])
             .collect();
         out.extend(violations(&graph, &[NET_CRATE.to_owned()], &external));
+    }
+    // The lab's test server is never part of the relay (M9 N8c).
+    if graph.edges.contains_key(RELAY_CRATE) {
+        out.extend(violations(
+            &graph,
+            &[RELAY_CRATE.to_owned()],
+            &[LAB_CRATE.to_owned()].into_iter().collect(),
+        ));
     }
     // The relay is a native server, never part of the game client; the
     // direct links' stack is checked on its own, below.
@@ -262,6 +281,9 @@ pub const RELAY_CRATE: &str = "glasnost-relay";
 
 /// The native client's direct links (M9 N7).
 pub const RTC_CRATE: &str = "glasnost-rtc";
+
+/// The network lab's test-only STUN and TURN server (M9 N8c).
+pub const LAB_CRATE: &str = "glasnost-netlab";
 
 /// The crates of the game client, native and web.
 pub const CLIENT_CRATES: &[&str] = &[
@@ -303,6 +325,9 @@ pub const RTC_ALLOWED: &[&str] = &[
     // WebRTC: matchbox over webrtc-rs.
     "matchbox_socket",
     "webrtc",
+    // webrtc-rs's ICE: its STUN and TURN client (M9 N8c named them).
+    "turn",
+    "stun",
     // webrtc-rs's runtime and UDP sockets (ICE).
     "tokio",
     "mio",
@@ -326,7 +351,7 @@ fn rtc_forbidden() -> BTreeSet<String> {
         .iter()
         .filter(|c| !CLIENT_ALLOWED.contains(c) && !RTC_ALLOWED.contains(c))
         .map(|c| (*c).to_owned())
-        .chain([RELAY_CRATE.to_owned()])
+        .chain([RELAY_CRATE.to_owned(), LAB_CRATE.to_owned()])
         .collect()
 }
 
@@ -337,7 +362,7 @@ fn client_forbidden() -> BTreeSet<String> {
         .iter()
         .filter(|c| !CLIENT_ALLOWED.contains(c))
         .map(|c| (*c).to_owned())
-        .chain([RELAY_CRATE.to_owned()])
+        .chain([RELAY_CRATE.to_owned(), LAB_CRATE.to_owned()])
         .collect()
 }
 
@@ -544,6 +569,44 @@ mod tests {
             vec![
                 "glasnost-app must not depend on hyper (via glasnost-app -> hyper)",
                 "glasnost-app must not depend on tokio (via glasnost-app -> hyper -> tokio)",
+            ]
+        );
+    }
+
+    /// The lab's STUN and TURN server (M9 N8c) reaches webrtc-rs's turn and
+    /// stun crates and a runtime, and nothing of the game reaches it: no
+    /// client crate, neither the lockstep crate nor the direct links' crate,
+    /// not the relay and no simulation crate.
+    #[test]
+    fn the_lab_server_stays_out_of_the_game() {
+        let md = workspace::metadata().expect("cargo metadata");
+        let graph = Graph::from_metadata(&md).expect("a graph");
+        let lab = graph.paths_from(LAB_CRATE);
+        for dep in ["turn", "stun", "tokio"] {
+            assert!(lab.contains_key(dep), "glasnost-netlab reaches {dep}");
+        }
+        let (det, _) = workspace::members(&md);
+        let mut roots: Vec<String> = det.into_iter().map(|(n, _)| n).collect();
+        roots.extend(
+            CLIENT_CRATES
+                .iter()
+                .chain(&[NET_CRATE, RTC_CRATE, RELAY_CRATE])
+                .map(|c| (*c).to_owned()),
+        );
+        let v = violations(&graph, &roots, &set(&[LAB_CRATE]));
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        for f in [client_forbidden(), rtc_forbidden()] {
+            assert!(f.contains(LAB_CRATE));
+        }
+        // A client crate that reached it, even past glasnost-rtc, would fail.
+        let mut g = Graph::default();
+        g.add("glasnost-app", RTC_CRATE);
+        g.add(RTC_CRATE, LAB_CRATE);
+        let v = violations(&g, &[RTC_CRATE.into()], &rtc_forbidden());
+        assert_eq!(
+            v,
+            vec![
+                "glasnost-rtc must not depend on glasnost-netlab (via glasnost-rtc -> glasnost-netlab)"
             ]
         );
     }

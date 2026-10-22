@@ -273,19 +273,22 @@ fn a_pair_that_cannot_link_and_a_switched_client_play_on_the_relay() {
     assert!(p.stats.attempts >= 2 && p.stats.failed >= 1, "{p:?}");
     relay.stop();
 
-    // The relay-only switch.
+    // The relay-only switch. The relay-only end declines the offer (M9
+    // N8c), so the offering end makes one attempt in all, not one per
+    // back-off: 300 ticks are several connect timeouts and retries.
     let (_rt2, relay) = super::relay(53);
     let mut a = on(&relay, &net, "Ann");
     let mut b = on(&relay, &net, "Bea");
     b.settings.direct = false;
     meet(&relay, &clock, &mut [&mut a, &mut b]);
     let mut hashes = vec![BTreeMap::new(); 2];
-    play_to(&clock, &mut [&mut a, &mut b], &mut hashes, &mut rng, 200);
-    agree(&hashes, 150);
+    play_to(&clock, &mut [&mut a, &mut b], &mut hashes, &mut rng, 300);
+    agree(&hashes, 250);
     let p = pair(&b, &a);
     assert!(!p.enabled && !p.open && p.stats.attempts == 0, "{p:?}");
     let p = pair(&a, &b);
-    assert!(p.enabled && !p.open && p.stats.failed >= 1, "{p:?}");
+    assert!(p.enabled && !p.open, "{p:?}");
+    assert_eq!((p.stats.attempts, p.stats.failed), (1, 1), "{p:?}");
     for (x, y) in [(&a, &b), (&b, &a)] {
         assert_eq!(pair(x, y).paths.unwrap().direct_first, 0);
     }

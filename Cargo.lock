@@ -1872,6 +1872,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "glasnost-netlab"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "stun",
+ "tokio",
+ "turn",
+ "webrtc-util",
+]
+
+[[package]]
 name = "glasnost-num"
 version = "0.0.0"
 dependencies = [

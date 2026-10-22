@@ -217,6 +217,11 @@ pub enum Signal {
     Answer(String),
     /// An ICE candidate, in JSON.
     Candidate(String),
+    /// This end makes no direct links (relay-only): its answer to an offer,
+    /// so that the offering end stops offering to it until its slot plays
+    /// again (a rejoined process may have the links on). It carries no
+    /// text (M9 N8c).
+    Decline,
 }
 
 /// The longest signal, in bytes: an SDP of one data channel and its ICE
@@ -229,14 +234,19 @@ impl Signal {
     pub fn text(&self) -> &str {
         match self {
             Signal::Offer(t) | Signal::Answer(t) | Signal::Candidate(t) => t,
+            Signal::Decline => "",
         }
     }
 
     /// Whether the signal looks like one: at most [`MAX_SIGNAL`] bytes of
     /// printable ASCII and line ends, a description starting with the SDP
-    /// version line, a candidate a JSON object. Both the relay and the
-    /// receiving client check it; the WebRTC stack reads the rest.
+    /// version line, a candidate a JSON object; a decline has nothing to
+    /// check. Both the relay and the receiving client check it; the WebRTC
+    /// stack reads the rest.
     pub fn plausible(&self) -> bool {
+        if *self == Signal::Decline {
+            return true;
+        }
         let t = self.text();
         let ascii = t
             .bytes()
@@ -244,6 +254,7 @@ impl Signal {
         let shape = match self {
             Signal::Offer(t) | Signal::Answer(t) => t.starts_with("v=0"), // nocite: SDP's version line (RFC 8866)
             Signal::Candidate(t) => t.starts_with('{') && t.ends_with('}'),
+            Signal::Decline => true,
         };
         !t.is_empty() && t.len() <= MAX_SIGNAL && ascii && shape
     }

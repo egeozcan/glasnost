@@ -304,6 +304,10 @@ struct Peer {
     retry_at: u64,
     /// Failed attempts in a row (the offering end's back-off).
     fails: u32,
+    /// The peer declined the offer: it makes no direct links, so the
+    /// offering end makes no more attempts until the slot plays again
+    /// (M9 N8c).
+    declined: bool,
     /// Signals the current attempt sent.
     signals: u32,
     /// Signals that came while the slot was not playing here (yet): a
@@ -326,6 +330,7 @@ impl Peer {
             next_ping: 0,
             retry_at: 0,
             fails: 0,
+            declined: false,
             signals: 0,
             early: VecDeque::new(),
             stats: PairStats::default(),
@@ -356,6 +361,18 @@ impl Peer {
             self.link = Some(self::opened(open, direct, me, from, attempt, false));
         }
         if attempt != self.attempt {
+            return;
+        }
+        if s == Signal::Decline {
+            if self.offerer {
+                self.end(
+                    now,
+                    "the peer makes no direct links",
+                    from,
+                    &direct.timeouts,
+                );
+                self.declined = true;
+            }
             return;
         }
         if let Some(link) = self.link.as_mut() {
@@ -606,9 +623,17 @@ impl Mesh {
         self.direct.open.is_some()
     }
 
-    /// A signal from `from` through the relay.
+    /// A signal from `from` through the relay. With the links off, an
+    /// offer is answered with [`Signal::Decline`] and the rest dropped.
     pub fn signal_in(&mut self, now: u64, ls: &Session, from: u8, attempt: u32, s: Signal) {
         let Some(open) = self.direct.open.clone() else {
+            if matches!(s, Signal::Offer(_)) && self.peers.contains_key(&from) {
+                self.signals.push(ToRelay::Signal {
+                    to: from,
+                    attempt,
+                    signal: Signal::Decline,
+                });
+            }
             return;
         };
         let me = self.me;
@@ -644,6 +669,7 @@ impl Mesh {
                 }
                 p.fails = 0;
                 p.retry_at = 0;
+                p.declined = false;
                 // A rejoined offering end is a new process that numbers
                 // its attempts from 1 again: any attempt of it is new.
                 if !p.offerer {
@@ -657,7 +683,7 @@ impl Mesh {
                     p.signal_in(now, &open, &self.direct, me, slot, attempt, s);
                 }
             }
-            if p.link.is_none() && p.offerer && now >= p.retry_at {
+            if p.link.is_none() && p.offerer && !p.declined && now >= p.retry_at {
                 p.attempt += 1;
                 p.since = now;
                 p.signals = 0;
