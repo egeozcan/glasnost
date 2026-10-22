@@ -281,3 +281,82 @@ fn long_soak_2v2() {
     std::fs::write(out.join("soak.txt"), &text).expect("the soak's report");
     assert!(run.passed(), "the soak failed");
 }
+
+/// A split game (M9 N8c): two soaks of two `net-client` processes each,
+/// on a relay neither started (here, the test's), the second joining with
+/// the room code the first wrote once its rows were seated; row 2's link is
+/// cut and it rejoins. Each half passes on its own, and the halves put
+/// together (`soak::compare`) agree on every checkpoint of all four rows.
+#[test]
+fn a_game_split_in_two_halves_agrees() {
+    let (_rt, relay) = relay(68);
+    let root = std::env::temp_dir().join(format!("glasnost-split-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("a folder");
+    let code = root.join("code.txt");
+    let url = format!("ws://{}/", relay.addr);
+    let half = |name: &str, rows: &str, more: &[String]| {
+        let mut args: Vec<String> = [
+            "--headless",
+            env!("CARGO_BIN_EXE_glasnost-headless"),
+            "--synthetic",
+            "--clean",
+            "--ticks",
+            "600",
+            "--relay-url",
+            &url,
+            "--rows",
+            rows,
+            "--out",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        args.push(root.join(name).display().to_string());
+        args.extend(more.iter().cloned());
+        soak::parse(&args).expect("a half's options")
+    };
+    let a = half(
+        "a",
+        "0,1",
+        &[
+            "--no-trouble".into(),
+            "--code-out".into(),
+            code.display().to_string(),
+        ],
+    );
+    let b = half(
+        "b",
+        "2,3",
+        &[
+            "--trouble".into(),
+            "4:2:cut".into(),
+            "--code-in".into(),
+            code.display().to_string(),
+        ],
+    );
+    let play = |s: soak::Soak| {
+        std::thread::spawn(move || {
+            let run = soak::run(&s).expect("a half runs");
+            let text = run.text(&s);
+            std::fs::write(s.out.join("soak.txt"), &text).expect("its report");
+            (run.passed(), text)
+        })
+    };
+    let (ta, tb) = (play(a), play(b));
+    let (pa, text_a) = ta.join().expect("half a");
+    let (pb, text_b) = tb.join().expect("half b");
+    println!("{text_a}\n{text_b}");
+    assert!(pa && pb, "a half failed");
+    let c = soak::compare(&[root.join("a"), root.join("b")], 0, 600);
+    println!("{}", c.text());
+    assert!(c.passed(), "the halves disagree");
+    assert_eq!(c.clients.len(), soak::PERSONS);
+    assert!(c.common >= 10, "only {} common checkpoints", c.common);
+    assert!(text_b.contains("trouble: row 2 Cut"));
+    assert_eq!(
+        c.clients[2].report.get("lost").map(String::as_str),
+        Some("1")
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

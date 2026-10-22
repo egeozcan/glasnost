@@ -393,6 +393,25 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some("soak") if args.get(1).map(String::as_str) == Some("compare") => {
+            let (dirs, minutes, ticks) = match soak::parse_compare(&args[2..]) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless soak compare: {e}\nusage: glasnost-headless {}",
+                        soak::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let c = soak::compare(&dirs, minutes, ticks);
+            print!("{}", c.text());
+            if c.passed() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
         Some("soak") => {
             let mut s = match soak::parse(&args[1..]) {
                 Ok(s) => s,
@@ -411,15 +430,23 @@ fn main() -> ExitCode {
                 );
                 return ExitCode::from(2);
             }
-            let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-            let relay = match soak::RelayProcess::start(root, &s.out.join("relay-log.txt")) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("glasnost-headless soak: {e}");
-                    return ExitCode::from(2);
+            // A relay of the soak's own, unless it plays on another
+            // (`--relay-url`, a split game).
+            let _relay = if s.relay_url.is_none() {
+                let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+                match soak::RelayProcess::start(root, &s.out.join("relay-log.txt")) {
+                    Ok(r) => {
+                        s.relay = r.addr;
+                        Some(r)
+                    }
+                    Err(e) => {
+                        eprintln!("glasnost-headless soak: {e}");
+                        return ExitCode::from(2);
+                    }
                 }
+            } else {
+                None
             };
-            s.relay = relay.addr;
             match soak::run(&s) {
                 Ok(run) => {
                     let text = run.text(&s);
