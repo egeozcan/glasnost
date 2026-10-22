@@ -485,7 +485,7 @@ fn watch() {
     let every: i32 = parts[2].parse().expect("a period");
     let rules = d.rules(flipped(parts.get(3).copied().unwrap_or("default")));
     let (map, name, setup) = match d {
-        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), fixture::setup(seed)),
+        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), plain::setup(seed)),
         Duel::M6c => (
             fixture_m6c::map(),
             fixture_m6c::MAP_NAME,
@@ -570,7 +570,7 @@ fn hits() {
         .map_or(d.ticks(), |s| s.parse().expect("a tick"));
     let rules = d.rules(Quirks::default());
     let (map, name, setup) = match d {
-        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), fixture::setup(seed)),
+        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), plain::setup(seed)),
         Duel::M6c => (
             fixture_m6c::map(),
             fixture_m6c::MAP_NAME,
@@ -660,7 +660,7 @@ fn losses() {
         .map_or(d.ticks(), |s| s.parse().expect("a tick"));
     let rules = d.rules(Quirks::default());
     let (map, name, setup) = match d {
-        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), fixture::setup(seed)),
+        Duel::Plain(p) => (p.plain().map(), p.plain().map_name(), plain::setup(seed)),
         Duel::M6c => (
             fixture_m6c::map(),
             fixture_m6c::MAP_NAME,

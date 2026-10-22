@@ -123,6 +123,22 @@ impl Exercise {
     }
 }
 
+/// The credits setting of the plain duels (S-0412 claim 2), test data of
+/// our own: the gate's margin setup (M8 step B4). On the rules' default
+/// both houses spend their last credit by about tick 6800 and live from
+/// two harvesters after, so that one transport bought (S-0507) in place of
+/// a gun vehicle lost a house the game before it had loaded a passenger
+/// (the straight duel's seed 7 and 29 of the 32-seed sweep).
+pub const CREDITS: i32 = 20_000;
+
+/// The lobby setup of the plain duels: [`fixture::setup`] with the credits
+/// setting [`CREDITS`].
+pub fn setup(seed: u32) -> glasnost_sim::world::GameSetup {
+    let mut s = fixture::setup(seed);
+    s.skirmish.credits = Some(CREDITS);
+    s
+}
+
 /// Whether a rocket is in flight, and whether an aircraft that is no rocket
 /// is in the air.
 fn in_flight(w: &World) -> (bool, bool) {
@@ -190,7 +206,7 @@ pub fn play_with(
         &duel.map(),
         name,
         catalogue.clone(),
-        fixture::setup(seed),
+        setup(seed),
     )
     .expect("the synthetic duel loads");
     let mut out = Vec::new();
