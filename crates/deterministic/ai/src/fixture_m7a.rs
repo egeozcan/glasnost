@@ -164,7 +164,13 @@ fn margins(r: &mut Ruleset) {
     // and the AI, which counts a vehicle with a primary weapon (or a
     // gattling's slots) as army, keeps it at home: each house starts with
     // one, which its bunkers take in (the sweep's seeds with no vehicle
-    // bunkered had every tank fighting when the bunkers stood).
+    // bunkered had every tank fighting when the bunkers stood). Its armour
+    // class (special 1, index 9) has a versus value of zero for every
+    // warhead, so no weapon may fire at it, the lifters' and the
+    // controllers' included (S-0304 claim 1; M8 step B4: a berserk gattling
+    // of its own house, or the enemy's, killed it before the bunkers stood,
+    // or a controller took it, in the seeds of 1 to 32 that bunkered no
+    // vehicle with a quirk switch flipped).
     let mut ward = r.sim.vehicles["GUNR"].clone();
     ward.primary = None;
     ward.secondary = None;
@@ -173,13 +179,17 @@ fn margins(r: &mut Ruleset) {
     ward.combat.weapon_slots = Some(vec!["Gun".into()]);
     ward.strength = Some(2000);
     ward.tech_level = Some(-1);
+    ward.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special1);
     register(r, "vehicles", "WARD");
     r.sim.vehicles.insert("WARD".into(), ward);
     for (n, h) in r.sim.warheads.iter_mut() {
+        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
+        if let Some(special1) = v.get_mut(9) {
+            *special1 = d("0");
+        }
         if n == "MAGWH" || n == "MIND" {
             continue;
         }
-        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
         if let Some(last) = v.get_mut(10) {
             *last = d("0");
         }
