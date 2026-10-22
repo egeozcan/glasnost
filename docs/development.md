@@ -2301,7 +2301,7 @@ The transfer format is the magic `GRJN`, `TRANSFER_VERSION` 1, then the transfer
 
 - The host noticed the drop 13 ms after the kill.
 - The restarted guest's rejoin reached the relay about 3 s after the restart (most of it mounting the install). It loaded the game 2.2 s after pressing **Reconnect**: a transfer of 1.6 MB in 27 parts.
-- It caught up in 0.74 s (about 230 ticks a second) and was readmitted 5.9 s after the restart.
+- It caught up in about 0.7 s (about 240 ticks a second) and was readmitted 5.9 s after the restart.
 - Both clients then played 300 ticks more with equal hashes at every tick.
 
 It writes counts, timings and both clients' screens to `local-lane/m9/n5/`. Run it with `cargo test --release -p glasnost-app --test m9_lane -- --ignored --nocapture a_killed_client_process_restarts_and_rejoins`.
