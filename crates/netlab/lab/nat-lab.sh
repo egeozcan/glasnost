@@ -84,6 +84,10 @@ mkdir -p /run/netns
 ip link set lo up
 
 ns() { ip netns exec "$@"; }
+# For a background job: `ns ... &` would fork a subshell that runs the
+# function, so $! would be that subshell and cleanup would orphan the
+# process. `nsx ... &` execs in the subshell, so $! is the process.
+nsx() { exec ip netns exec "$@"; }
 
 ip netns add inet
 ns inet ip link set lo up
@@ -185,9 +189,9 @@ mkdir -p "$dir"
 
 # The server side: the relay, the STUN and TURN server, and for wss a TLS
 # proxy with a lab certificate authority.
-ns inet nice -n 19 "$bin/glasnost-relay" --listen $SERVER:$RELAY_PORT --stats 30 >"$dir/relay.txt" 2>&1 &
+nsx inet nice -n 19 "$bin/glasnost-relay" --listen $SERVER:$RELAY_PORT --stats 30 >"$dir/relay.txt" 2>&1 &
 pids+=($!)
-ns inet nice -n 19 "$bin/glasnost-turn" serve --listen $SERVER:$TURN_PORT --listen $SERVER2:$TURN_PORT \
+nsx inet nice -n 19 "$bin/glasnost-turn" serve --listen $SERVER:$TURN_PORT --listen $SERVER2:$TURN_PORT \
   --relay-ip $SERVER --ports 49160-49200 --user lab=labword --stats 10 >"$dir/turn.txt" 2>&1 &
 turn_pid=$!
 pids+=($turn_pid)
@@ -202,7 +206,7 @@ if [ "$scenario" = wss ]; then
   openssl x509 -req -in "$ca/srv.csr" -CA "$ca/ca.pem" -CAkey "$ca/ca.key" -CAcreateserial \
     -days 1 -extfile "$ca/ext.txt" -out "$ca/srv.pem" 2>/dev/null
   cat "$ca/srv.pem" "$ca/srv.key" >"$ca/srv-full.pem"
-  ns inet socat OPENSSL-LISTEN:$TLS_PORT,bind=$SERVER,reuseaddr,fork,cert="$ca/srv-full.pem",verify=0 \
+  nsx inet socat OPENSSL-LISTEN:$TLS_PORT,bind=$SERVER,reuseaddr,fork,cert="$ca/srv-full.pem",verify=0 \
     TCP:$SERVER:$RELAY_PORT 2>"$dir/tls.txt" &
   pids+=($!)
   export SSL_CERT_FILE="$ca/ca.pem"
@@ -236,7 +240,7 @@ for k in $(seq 0 $((HOMES - 1))); do
     --code-out "$dir/code$k.txt")
   [ "$k" != 0 ] && args+=(--code-in "$dir/code$((k - 1)).txt")
   # A home that never gets its game does not hold the lab for ever.
-  ns h$k timeout $((minutes * 60 + 600)) nice -n 19 "$bin/glasnost-headless" "${args[@]}" >"$dir/soak$k.txt" 2>&1 &
+  nsx h$k timeout $((minutes * 60 + 600)) nice -n 19 "$bin/glasnost-headless" "${args[@]}" >"$dir/soak$k.txt" 2>&1 &
   soaks+=($!)
   pids+=($!)
 done
