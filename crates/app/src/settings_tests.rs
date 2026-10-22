@@ -26,6 +26,8 @@ fn custom() -> Settings {
             slot: 3,
             ticket: [0xa5; 16],
         }),
+        direct: false,
+        ice: "stun:stun.example:3478 turn:turn.example:3478".into(),
     }
 }
 
@@ -44,6 +46,24 @@ fn defaults_are_the_specified_ones() {
     assert_eq!(s.bindings.key(Action::Mark), 'm');
     assert_eq!(Settings::mixer_level(100), 16384);
     assert_eq!(Settings::mixer_level(0), 0);
+}
+
+/// Direct links (M9 N7): on, with no STUN or TURN server, unless the
+/// settings say otherwise; the default text has neither line.
+#[test]
+fn direct_links_are_on_with_no_servers_by_default() {
+    let s = Settings::default();
+    assert!(s.direct);
+    assert!(s.ice.is_empty());
+    let text = s.to_text();
+    assert!(
+        !text.contains("direct=") && !text.contains("ice="),
+        "{text}"
+    );
+    let off = Settings::from_text("version=1\ndirect=0\nice= stun:a:1  \n");
+    assert!(!off.direct);
+    assert_eq!(off.ice, "stun:a:1");
+    assert!(Settings::from_text("direct=yes").direct);
 }
 
 #[test]

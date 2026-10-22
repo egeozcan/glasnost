@@ -37,7 +37,10 @@ use glasnost_net::lobby::{
     normalise_code,
 };
 use glasnost_net::rejoin::{self, Assembler, Transfer};
-use glasnost_net::{Config, Event as NetEvent, Field, Phase, Session as Lockstep, StartInfo, Tick};
+use glasnost_net::start::SlotKind as StartKind;
+use glasnost_net::{
+    Config, Event as NetEvent, Field, Paths, Phase, Session as Lockstep, StartInfo, Tick, Via,
+};
 use glasnost_sim::world::HouseId;
 use glasnost_ui::chat::Line;
 use glasnost_ui::draw::{DrawList, colour};
@@ -47,9 +50,27 @@ use glasnost_ui::setup::{MAX_SLOTS, MapEntry, RoomFrame, Setup, SetupHit, SlotKi
 use glasnost_ui::shell::Screen;
 
 use super::{Client, Job};
+use crate::game::direct::{Direct, Ice, Mesh, PairStats};
 use crate::game::link::{Link, LinkState};
 use crate::mapview::live::period_ms;
 use crate::settings::Rejoin;
+
+/// One other person's pair, as [`Client::direct_stats`] gives it (N7).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PairReport {
+    /// The other person's slot.
+    pub slot: u8,
+    /// Whether this client makes direct links at all.
+    pub enabled: bool,
+    /// Whether the pair's link is open now.
+    pub open: bool,
+    /// The link's numbers.
+    pub stats: PairStats,
+    /// How the slot's frames came.
+    pub paths: Option<Paths>,
+    /// The session's round-trip estimate to the slot, in milliseconds.
+    pub rtt_ms: Option<u32>,
+}
 
 /// The build a client names in a room and in the lockstep handshake.
 pub const BUILD: &str = concat!("glasnost ", env!("CARGO_PKG_VERSION"));
@@ -100,6 +121,11 @@ const AHEAD_STRETCH: i64 = 1;
 /// older ones go first.
 // nocite: our own netcode (a few minutes of checkpoints at any game speed)
 const CHECKPOINTS_KEPT: usize = 4096;
+
+/// How often a client in a game pings the relay, in milliseconds (M9 N7:
+/// the relay path's round trip, beside the direct links').
+// nocite: our own netcode (once a second, well inside the relay's message rate)
+const RELAY_PING_MS: u64 = 1_000;
 
 /// What the person asked the relay for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -169,6 +195,16 @@ pub(super) struct Net {
     pub(super) refused: Option<String>,
     /// Why the link closed, once it did.
     pub(super) closed: Option<String>,
+    /// How this client makes direct links in its game (M9 N7).
+    direct: Option<Direct>,
+    /// The direct links, once the game's session runs.
+    mesh: Option<Mesh>,
+    /// The relay's round trip, smoothed, and its range, in milliseconds.
+    relay_rtt: Option<u32>,
+    relay_rtt_range: Option<(u32, u32)>,
+    next_relay_ping: u64,
+    /// Slots whose two copies of a frame differed (each told once).
+    conflicted: BTreeSet<u8>,
 }
 
 impl Net {
@@ -202,6 +238,12 @@ impl Net {
             waiting: None,
             refused: None,
             closed: None,
+            direct: None,
+            mesh: None,
+            relay_rtt: None,
+            relay_rtt_range: None,
+            next_relay_ping: 0,
+            conflicted: BTreeSet::new(),
         }
     }
 
@@ -271,13 +313,65 @@ impl Net {
         }
     }
 
-    /// Sends what the lockstep session has to send.
+    /// Sends what the lockstep session has to send: everything to the
+    /// relay, and this peer's frames also on its open direct links (N7).
     fn flush(&mut self, now: u64) {
         if let Some(ls) = self.lockstep.as_mut() {
             for b in ls.poll(now) {
+                if let Some(m) = self.mesh.as_mut() {
+                    m.send_frames(ls, &b);
+                }
                 self.link.send(b);
             }
         }
+    }
+
+    /// The direct links (N7): set up once the session exists, then their
+    /// frames go to the session (which takes only the link's own slot's
+    /// frames) and their signals to the relay. A game pings the relay too.
+    fn pump_direct(&mut self, now: u64) {
+        let Some(ls) = self.lockstep.as_mut() else {
+            return;
+        };
+        let mesh = self.mesh.get_or_insert_with(|| {
+            let persons: Vec<u8> = ls
+                .info()
+                .slots
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.kind == StartKind::Human)
+                .map(|(i, _)| i as u8)
+                .collect();
+            let direct = self.direct.clone().unwrap_or_else(Direct::off);
+            if direct.open.is_none() {
+                log::info!("direct links: off; the relay carries every message");
+            }
+            Mesh::new(ls.me(), &persons, direct)
+        });
+        for (slot, bytes) in mesh.update(now, ls) {
+            ls.receive_via(now, &bytes, Via::Direct(slot));
+        }
+        for m in mesh.take_signals() {
+            self.link.send(lobby_wire::encode(&m));
+        }
+        if now >= self.next_relay_ping {
+            self.next_relay_ping = now + RELAY_PING_MS;
+            self.send(&ToRelay::Ping { stamp: now as u32 });
+        }
+    }
+
+    /// The relay's answer to a ping.
+    fn pong(&mut self, now: u64, stamp: u32) {
+        let rtt = (now as u32).wrapping_sub(stamp);
+        // An answer older than a minute is not a round trip of this game.
+        if rtt > 60_000 {
+            return; // nocite: our own netcode (a minute)
+        }
+        self.relay_rtt = Some(self.relay_rtt.map_or(rtt, |old| (old * 7 + rtt) / 8)); // nocite: our own netcode (the usual one-eighth smoothing)
+        self.relay_rtt_range = Some(
+            self.relay_rtt_range
+                .map_or((rtt, rtt), |(lo, hi)| (lo.min(rtt), hi.max(rtt))),
+        );
     }
 
     /// Keeps a tick's checkpoint hash, if it has one.
@@ -477,10 +571,32 @@ impl Client {
         };
         let link = connect(&relay);
         let mut net = Net::new(link, intent);
+        net.direct = Some(self.direct_setup());
         net.send(&first);
         self.net = Some(net);
         self.netform.focus = None;
         self.net_status = ("Connecting to the relay...".into(), false);
+    }
+
+    /// How this client's next game makes direct links (N7): the settings'
+    /// switch and servers, unless a command-line or URL option set them.
+    fn direct_setup(&self) -> Direct {
+        let open = if self.settings.direct {
+            self.direct.clone()
+        } else {
+            None
+        };
+        let ice = if self.ice.urls.is_empty() {
+            Ice::from_urls(&self.settings.ice)
+        } else {
+            self.ice.clone()
+        };
+        Direct {
+            open,
+            ice,
+            shape: self.direct_shape,
+            timeouts: self.direct_timeouts,
+        }
     }
 
     /// Leaves the room or the game and closes the link.
@@ -530,6 +646,9 @@ impl Client {
                     true,
                 ),
             }
+        }
+        if let Some(net) = self.net.as_mut() {
+            net.pump_direct(now);
         }
         self.net_events(now_ms);
         self.net_serve(now_ms);
@@ -716,8 +835,20 @@ impl Client {
                 NetEvent::BadMessage { reason } => {
                     log::warn!("a lockstep message was refused: {reason}");
                 }
+                // A peer sent two different copies of a frame, one the
+                // short way: the first ran; the hashes tell whether the
+                // others ran the same (N7).
                 NetEvent::Conflicting { slot, frame } => {
                     log::warn!("two copies of slot {slot}'s frame {frame} differ");
+                    if net.conflicted.insert(slot) {
+                        let who = net.slot_name(slot);
+                        net.line(
+                            now_ms,
+                            "",
+                            &format!("{who}'s orders came twice and differed (frame {frame})."),
+                            true,
+                        );
+                    }
                 }
                 NetEvent::Started
                 | NetEvent::Closing { .. }
@@ -866,7 +997,17 @@ impl Client {
             }
             FromRelay::Chat(c) => net.line(now_ms, &c.name, &c.text, false),
             // Direct links' signalling and the relay's ping (N7).
-            FromRelay::Signal { .. } | FromRelay::Pong { .. } => {}
+            FromRelay::Signal {
+                from,
+                attempt,
+                signal,
+            } => {
+                let now = now_ms.max(0) as u64;
+                if let (Some(m), Some(ls)) = (net.mesh.as_mut(), net.lockstep.as_ref()) {
+                    m.signal_in(now, ls, from, attempt, signal);
+                }
+            }
+            FromRelay::Pong { stamp } => net.pong(now_ms.max(0) as u64, stamp),
         }
     }
 
@@ -1486,6 +1627,38 @@ impl Client {
     pub fn set_test(&mut self, perturb: Option<Perturb>) {
         self.build = test_build();
         self.perturb = perturb;
+    }
+
+    /// The direct links' numbers (N7): per other person, whether its link
+    /// is open now, the link's numbers, how its frames came and the
+    /// session's round-trip estimate. Empty before the game runs.
+    pub fn direct_stats(&self) -> Vec<PairReport> {
+        let Some(net) = self.net.as_ref() else {
+            return Vec::new();
+        };
+        let (Some(mesh), Some(ls)) = (net.mesh.as_ref(), net.lockstep.as_ref()) else {
+            return Vec::new();
+        };
+        let now = self.clock.max(0) as u64;
+        mesh.stats(now)
+            .into_iter()
+            .map(|(slot, open, stats)| PairReport {
+                slot,
+                enabled: mesh.enabled(),
+                open,
+                stats,
+                paths: ls.paths(slot),
+                rtt_ms: ls.rtt(slot),
+            })
+            .collect()
+    }
+
+    /// The relay's round trip, smoothed, and its range, in milliseconds
+    /// (N7).
+    pub fn relay_rtt(&self) -> (Option<u32>, Option<(u32, u32)>) {
+        self.net
+            .as_ref()
+            .map_or((None, None), |n| (n.relay_rtt, n.relay_rtt_range))
     }
 
     /// The network game's desync evidence, once the game runs.

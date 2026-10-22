@@ -124,6 +124,8 @@ fn install() -> Install {
 
 fn client(relay: &Relay, name: &str) -> Client {
     let mut c = Client::new();
+    // The relay only, unless a test gives fake direct links (N7).
+    c.direct = None;
     c.cpu_map = false;
     c.done(Done::Prepared(Vfs::default(), Ok(Box::new(install()))));
     c.netform.relay = format!("ws://{}/", relay.addr);
@@ -850,3 +852,7 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
     }
     relay.stop();
 }
+
+/// Direct links (M9 N7), with this file's helpers.
+#[path = "client_direct_tests.rs"]
+mod direct;

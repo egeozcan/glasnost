@@ -34,6 +34,7 @@ use glasnost_ui::widget::{Focus, Nav, Targets};
 use glasnost_vfs::{FileRef, PickedFile, Vfs};
 
 use super::captions::Captions;
+use super::direct::{Ice, OpenPair, Shape, Timeouts, platform_direct};
 use super::install::{self, Install};
 use super::link::{Connect, DEFAULT_RELAY, platform_connect};
 use super::paint::Painter;
@@ -228,6 +229,16 @@ pub struct Client {
     pub netform: NetForm,
     /// How the client opens a link to a relay (`None`: no network here).
     pub connect: Option<Connect>,
+    /// How the client opens a direct link to another peer of its game
+    /// (M9 N7; `None`: the relay carries everything).
+    pub direct: Option<OpenPair>,
+    /// The direct links' ICE servers when set here (a command-line or URL
+    /// option); else the settings' (none by default).
+    pub ice: Ice,
+    /// A bad network on the direct path (the soak, M9 N7).
+    pub direct_shape: Option<Shape>,
+    /// The direct links' timeouts (the defaults but in tests).
+    pub direct_timeouts: Timeouts,
     /// The build this client names in a room ([`BUILD`]).
     pub build: String,
     /// How the client stores a desync report (`None`: it cannot here).
@@ -312,6 +323,10 @@ impl Client {
             cpu_images: BTreeMap::new(),
             netform: NetForm::new(DEFAULT_RELAY),
             connect: platform_connect(),
+            direct: platform_direct(),
+            ice: Ice::default(),
+            direct_shape: None,
+            direct_timeouts: Timeouts::default(),
             build: net::BUILD.into(),
             save_report: platform_save(),
             save_path_report: super::capture::platform_save(),
@@ -1252,7 +1267,7 @@ mod net;
 #[path = "client_settings.rs"]
 mod settings_screen;
 
-pub use net::{BUILD, test_build};
+pub use net::{BUILD, PairReport, test_build};
 
 #[cfg(test)]
 #[path = "client_tests.rs"]
