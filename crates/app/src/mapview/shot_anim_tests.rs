@@ -389,9 +389,9 @@ fn p10_moves_between_muzzle_heights() {
             .into_iter()
             .map(|h| run(level, h, 0, false))
             .collect();
-        for i in 0..runs[0].len() {
-            assert_eq!(runs[0][i].0, runs[2][i].0);
-            let [h0, h40, h105] = [runs[0][i].1, runs[1][i].1, runs[2][i].1];
+        for ((s0, s40), s105) in runs[0].iter().zip(&runs[1]).zip(&runs[2]) {
+            assert_eq!((s0.0, s40.0), (s105.0, s105.0), "the same step and counter");
+            let [h0, h40, h105] = [s0.1, s40.1, s105.1];
             assert_eq!(diff(h40, h0), (0, -6), "level {level}: H0 to H40");
             assert_eq!(diff(h105, h0), (0, -15), "level {level}: H0 to H105");
             assert_eq!(diff(h105, h40), (0, -9), "level {level}: H40 to H105");
