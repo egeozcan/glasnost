@@ -9,7 +9,10 @@
 //! `--rows` runs only some of the four rows here; the others run in another
 //! soak elsewhere, with the room code passed between the two (`--code`,
 //! `--code-in`, `--code-out`). [`compare`] then puts the halves' hash logs
-//! together and applies the same pass rule to all four rows.
+//! together and applies the same pass rule to all four rows. The room seats
+//! each joiner in the next free row, so the parts must join in row order:
+//! `--code-out` is written only once this soak's rows are seated, and with
+//! more than two parts each one waits for the previous one's file.
 //!
 //! The host makes the room (four persons, rows 0 to 3); the others join one
 //! at a time, so that the rows follow the order of the joins. Rows 0 and 2
