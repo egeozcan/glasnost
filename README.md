@@ -91,6 +91,7 @@ When a unit takes a strange route or gets stuck, press **M** (mark) as it happen
 - [PLAN.md](PLAN.md): architecture, milestones and decisions.
 - [PROVENANCE.md](PROVENANCE.md): how behaviour specs are produced and how they reach the code (the two-team process).
 - [CONTRIBUTING.md](CONTRIBUTING.md): workflow, determinism rules, data rules and commit sign-off.
+- [docs/multiplayer.md](docs/multiplayer.md): run the relay, host and join a network game, direct links, reconnecting, desync reports, and the cross-network exit run.
 - [docs/development.md](docs/development.md): workspace layout, repository checks, CI. [docs/web.md](docs/web.md): the web build and browser tests.
 - [spec/](spec/README.md): behaviour specs. [measurements/](measurements/README.md): measurement records from the original game.
 
