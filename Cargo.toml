@@ -16,6 +16,7 @@ members = [
     "crates/net",
     "crates/relay",
     "crates/rtc",
+    "crates/netlab",
     "crates/app",
     "crates/platform-native",
     "crates/platform-web",

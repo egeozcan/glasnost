@@ -1,0 +1,24 @@
+[package]
+name = "glasnost-netlab"
+description = "Glasnost's network lab (M9 N8c): a test-only STUN and TURN server and a NAT probe, on webrtc-rs's turn and stun crates; never part of the game client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Native only, test only: `cargo xtask deps` keeps every client crate, the
+# lockstep crate, the direct links' crate and the relay from reaching it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+async-trait = "0.1"
+stun = "0.17"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+turn = "0.17"
+util = { package = "webrtc-util", version = "0.17", default-features = false, features = ["conn", "vnet"] }
+
+[[bin]]
+name = "glasnost-turn"
+path = "src/main.rs"
+
+[lints]
+workspace = true
