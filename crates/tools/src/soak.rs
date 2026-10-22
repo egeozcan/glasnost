@@ -11,6 +11,14 @@
 //! Every client runs in its own folder under the output folder, where its
 //! log, hash log, report, settings and any desync report go. Counts and
 //! timings only. Our own harness; no spec applies.
+//!
+//! The transport (M9 N7): `--transport relay` (the default, N6's soak)
+//! keeps every client on the relay (`--relay-only`); `--transport rtc`
+//! lets the native clients make direct links to each other on loopback,
+//! each with the same bad network on its direct path as on its relay path
+//! (`--direct-shape`, its own draws), so that a pair's direct path and its
+//! relay path cross the same two bad links. The wasm client under node has
+//! no RTCPeerConnection: its pairs stay on the relay.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -76,6 +84,15 @@ impl Program {
     }
 }
 
+/// How the clients reach each other (M9 N7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Transport {
+    /// Everything through the relay.
+    Relay,
+    /// Direct links beside the relay.
+    Rtc,
+}
+
 /// What happens to a client mid-game.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trouble {
@@ -111,6 +128,8 @@ pub struct Soak {
     pub seed: u64,
     /// More options for every client (`--client-arg`).
     pub client_args: Vec<String>,
+    /// The transport.
+    pub transport: Transport,
 }
 
 /// One client's run.
@@ -164,7 +183,7 @@ impl SoakRun {
         let mut s = String::new();
         let _ = writeln!(
             s,
-            "soak: {} persons, {} install, limit {} min / {} ticks, map index {}",
+            "soak: {} persons, {} install, limit {} min / {} ticks, map index {}, transport {}",
             PERSONS,
             if soak.game_dir.is_some() {
                 "real"
@@ -173,7 +192,11 @@ impl SoakRun {
             },
             soak.minutes,
             soak.ticks,
-            soak.map
+            soak.map,
+            match soak.transport {
+                Transport::Relay => "relay",
+                Transport::Rtc => "rtc",
+            }
         );
         for (i, n) in soak.netem.iter().enumerate() {
             let _ = writeln!(s, "row {i} network: {}", n.describe());
@@ -200,6 +223,15 @@ impl SoakRun {
         if let Some(first) = self.mismatches.first() {
             let _ = writeln!(s, "first mismatch tick {first}");
         }
+        // The agreed delay: the lowest and highest it was, and the tick
+        // share at each value (from the delay changes `TICK:DELAY`).
+        for (i, c) in self.clients.iter().enumerate() {
+            if let Some(d) = c.report.get("delay")
+                && let Some(t) = c.report.get("ticks").and_then(|t| t.parse::<u32>().ok())
+            {
+                let _ = writeln!(s, "row {i} delay: {}", delay_line(d, t));
+            }
+        }
         for (i, c) in self.clients.iter().enumerate() {
             let _ = writeln!(
                 s,
@@ -214,8 +246,16 @@ impl SoakRun {
                 c.proxy.3,
                 c.self_mismatch
             );
-            let line: Vec<String> = c.report.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            let line: Vec<String> = c
+                .report
+                .iter()
+                .filter(|(k, _)| !k.starts_with("pair") && *k != "delay")
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
             let _ = writeln!(s, "row {i} report: {}", line.join(" "));
+            for (k, v) in c.report.iter().filter(|(k, _)| k.starts_with("pair")) {
+                let _ = writeln!(s, "row {i} {k}: {v}");
+            }
         }
         for f in &self.failures {
             let _ = writeln!(s, "failure: {f}");
@@ -223,6 +263,33 @@ impl SoakRun {
         let _ = writeln!(s, "result {}", if self.passed() { "pass" } else { "FAIL" });
         s
     }
+}
+
+/// A delay summary from a report's `TICK:DELAY,...` changes and its last
+/// tick: `lo-hi`, then each value's share of the ticks in percent.
+pub fn delay_line(changes: &str, ticks: u32) -> String {
+    let steps: Vec<(u32, u32)> = changes
+        .split(',')
+        .filter_map(|p| p.split_once(':'))
+        .filter_map(|(t, d)| Some((t.parse().ok()?, d.parse().ok()?)))
+        .collect();
+    if steps.is_empty() {
+        return "-".into();
+    }
+    let mut share: BTreeMap<u32, u64> = BTreeMap::new();
+    for (i, &(t, d)) in steps.iter().enumerate() {
+        let end = steps.get(i + 1).map_or(ticks.max(t), |n| n.0);
+        *share.entry(d).or_default() += u64::from(end.saturating_sub(t));
+    }
+    let total: u64 = share.values().sum::<u64>().max(1);
+    let lo = share.keys().next().copied().unwrap_or(0);
+    let hi = share.keys().next_back().copied().unwrap_or(0);
+    let parts: Vec<String> = share
+        .iter()
+        .filter(|(_, n)| **n > 0)
+        .map(|(d, n)| format!("{d}:{}%", n * 100 / total)) // nocite: our own harness (percent)
+        .collect();
+    format!("{lo}-{hi} ({})", parts.join(" "))
 }
 
 /// A child process, killed when dropped.
@@ -322,6 +389,27 @@ fn spawn(
     }
     if soak.ticks > 0 {
         cmd.args(["--ticks", &soak.ticks.to_string()]);
+    }
+    match soak.transport {
+        Transport::Relay => {
+            cmd.arg("--relay-only");
+        }
+        Transport::Rtc => {
+            let n = &soak.netem[row];
+            cmd.args([
+                "--direct-shape",
+                &format!(
+                    "{},{},{},{},{},{},{}",
+                    n.latency_ms,
+                    n.jitter_ms,
+                    n.loss_permille,
+                    n.stall_every_ms.0,
+                    n.stall_every_ms.1,
+                    n.stall_ms.0,
+                    n.stall_ms.1
+                ),
+            ]);
+        }
     }
     cmd.args(&soak.client_args);
     if resume {
@@ -606,7 +694,7 @@ pub fn run(soak: &Soak) -> Result<SoakRun, String> {
 
 /// The usage line of `glasnost-headless soak`.
 pub const USAGE: &str = "soak --headless BIN [--out DIR] [--minutes M | --ticks N] [--map M] [--seed S] \
-[--clean] [--latency MS] [--jitter MS] [--loss PERMILLE] [--no-stalls] [--client-arg ARG ...] [--wasm-row R --node NODE --script FILE] [--no-trouble | --trouble S:ROW:cut|kill,...] [--game-dir DIR | --synthetic]";
+[--transport relay|rtc] [--clean] [--latency MS] [--jitter MS] [--loss PERMILLE] [--no-stalls] [--client-arg ARG ...] [--wasm-row R --node NODE --script FILE] [--no-trouble | --trouble S:ROW:cut|kill,...] [--game-dir DIR | --synthetic]";
 
 /// The default trouble of a soak of about `secs` wall seconds: a link cut
 /// at a sixth of the way for row 1, at two sixths for row 3, row 2's
@@ -640,6 +728,7 @@ pub fn parse(args: &[String]) -> Result<Soak, String> {
     let mut script = None;
     let mut trouble = true;
     let mut custom = None;
+    let mut transport = Transport::Relay;
     let mut game_dir = std::env::var_os(crate::local_lane::GAME_DIR_VAR).map(PathBuf::from);
     let mut it = args.iter();
     let num = |v: Option<&String>, what: &str| -> Result<u64, String> {
@@ -655,6 +744,13 @@ pub fn parse(args: &[String]) -> Result<Soak, String> {
             "--map" => map = num(it.next(), "--map")? as usize,
             "--seed" => seed = num(it.next(), "--seed")?,
             "--clean" => clean = true,
+            "--transport" => {
+                transport = match it.next().map(String::as_str) {
+                    Some("relay") => Transport::Relay,
+                    Some("rtc") => Transport::Rtc,
+                    _ => return Err("--transport needs relay or rtc".into()),
+                }
+            }
             "--latency" => latency = Some(num(it.next(), "--latency")?),
             "--jitter" => jitter = Some(num(it.next(), "--jitter")?),
             "--loss" => loss = Some(num(it.next(), "--loss")? as u32),
@@ -752,5 +848,6 @@ pub fn parse(args: &[String]) -> Result<Soak, String> {
         trouble: t,
         seed,
         client_args,
+        transport,
     })
 }

@@ -12,7 +12,10 @@
 //! report, and a desync report under `desync-reports/` of the working
 //! directory. On the install of `--game-dir` (or `GLASNOST_GAME_DIR`), or on
 //! the synthetic install. The options and the loop around the bot are the
-//! wasm client's too (`glasnost_app::game::bot::{parse, Driver}`). Our own
+//! wasm client's too (`glasnost_app::game::bot::{parse, Driver}`). Since
+//! M9 N7 it tries direct links to the other persons (`--relay-only` keeps
+//! it on the relay; `--direct-shape` puts a bad network on the direct
+//! path) and its report gains a `pairN` line per other person. Our own
 //! harness; no spec applies.
 
 use std::fs::OpenOptions;
@@ -153,6 +156,7 @@ pub fn run(opts: &Options) -> Result<BotStats, String> {
     let dir = opts.game_dir.as_deref().map(Path::new);
     let t = Instant::now();
     let mut c = client(dir)?;
+    opts.apply(&mut c);
     println!("mounted {} ms", t.elapsed().as_millis());
     if let Some(p) = &opts.settings {
         c.attach_store(Box::new(glasnost_app::settings::FileStore(p.into())));

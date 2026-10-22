@@ -169,6 +169,10 @@ mod node {
             };
             c.connect = Some(glasnost_platform_web::socket::connect);
             c.save_report = Some(save);
+            // Node has no RTCPeerConnection: this client stays on the
+            // relay (no direct links; it answers no offer).
+            opts.apply(&mut c);
+            c.direct = None;
             let d = Driver::new(opts.bot.clone());
             Ok(NetClient { c, d, opts })
         }

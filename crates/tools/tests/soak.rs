@@ -3,7 +3,10 @@
 //! rules and map), each behind its own bad network (`netem`), played by
 //! our AI as persons in a 2v2 for a few hundred ticks; one client's link is
 //! cut mid-game and it rejoins. Every checkpoint hash of every client must
-//! agree and none may notice a desync.
+//! agree and none may notice a desync. It runs twice: on the relay alone,
+//! and with direct links (M9 N7) on an in-process fake network with the
+//! same bad network on the direct path, where most frames must come the
+//! direct way first.
 //!
 //! The long soak (`#[ignore]`, local lane) is `glasnost_tools::soak`: four
 //! `glasnost-headless net-client` processes and the relay binary, on the
@@ -11,7 +14,9 @@
 //! `GLASNOST_SOAK_MINUTES` minutes of game time (default 30) or to a
 //! winner, with links cut and a process killed and started again; one
 //! client is the wasm build under node when `GLASNOST_SOAK_WASM` names its
-//! driver script. It writes to the git-ignored `local-lane/m9/n6/`.
+//! driver script. It writes to the git-ignored `local-lane/m9/n6/`
+//! (`GLASNOST_LANE_OUT` elsewhere), over `GLASNOST_SOAK_TRANSPORT`
+//! (`relay`, the default, or `rtc`: real direct links on loopback).
 //! Run with `cargo test --release -p glasnost-tools --test soak --
 //! --ignored --nocapture`. Our own harness; no spec applies.
 
@@ -19,6 +24,8 @@ use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use glasnost_app::game::bot::{Bot, BotConfig, Role, synthetic};
+use glasnost_app::game::direct::Shape;
+use glasnost_app::game::direct::fake::FakeNet;
 use glasnost_relay::{Entropy, Limits, Relay};
 use glasnost_tools::netem::{Netem, Proxy};
 use glasnost_tools::soak;
@@ -67,12 +74,55 @@ fn bad(seed: u64) -> Netem {
     n
 }
 
+/// The same bad network on the direct path.
+fn shape(n: &Netem) -> Shape {
+    Shape {
+        latency_ms: n.latency_ms,
+        jitter_ms: n.jitter_ms,
+        loss_permille: n.loss_permille,
+        stall_every_ms: n.stall_every_ms,
+        stall_ms: n.stall_ms,
+        seed: n.seed ^ 0xD1EC,
+    }
+}
+
 /// Four AI persons in a 2v2 behind bad networks play the synthetic game for
 /// a few hundred ticks; row 1's link is cut and it rejoins. Every client's
 /// checkpoint hashes agree, none notices a desync, and the numbers are kept.
 #[test]
 fn four_ai_persons_play_a_2v2_over_bad_links_and_one_rejoins() {
-    let (_rt, relay) = relay(66);
+    two_v_two(66, None);
+}
+
+/// The same with direct links between the four, on a fake network behind
+/// the same bad networks: the game agrees, row 1's rejoin links again, and
+/// frames come the direct way first.
+#[test]
+fn four_ai_persons_play_a_2v2_over_direct_links_beside_the_relay() {
+    let net = FakeNet::new(30);
+    let bots = two_v_two(67, Some(&net));
+    for b in &bots {
+        assert_eq!(b.stats.pairs.len(), soak::PERSONS - 1, "{}", b.cfg.name);
+        let first: u64 = b
+            .stats
+            .pairs
+            .iter()
+            .map(|p| p.paths.unwrap_or_default().direct_first)
+            .sum();
+        assert!(
+            first > 100,
+            "{}: {first} frames came direct first",
+            b.cfg.name
+        );
+        for p in &b.stats.pairs {
+            assert!(p.stats.opened >= 1, "{}: {p:?}", b.cfg.name);
+            assert_eq!(p.paths.unwrap_or_default().conflicts, 0);
+        }
+    }
+}
+
+fn two_v_two(seed: u64, direct: Option<&FakeNet>) -> Vec<Bot> {
+    let (_rt, relay) = relay(seed);
     let proxies: Vec<Proxy> = (0..soak::PERSONS)
         .map(|i| Proxy::start(relay.addr, bad(40 + i as u64)).expect("a proxy"))
         .collect();
@@ -96,7 +146,12 @@ fn four_ai_persons_play_a_2v2_over_bad_links_and_one_rejoins() {
         cfg.row = Some(row);
         cfg.max_ticks = TICKS;
         cfg.reconnect_after_ms = 500;
-        clients.push(synthetic::client());
+        let mut c = synthetic::client();
+        c.direct = direct.map(FakeNet::opener);
+        if direct.is_some() {
+            c.direct_shape = Some(shape(&bad(40 + row as u64)));
+        }
+        clients.push(c);
         bots.push(Bot::new(cfg));
     }
     // The host first, then the guests one at a time (rows follow joins).
@@ -122,8 +177,13 @@ fn four_ai_persons_play_a_2v2_over_bad_links_and_one_rejoins() {
             cut = true;
             proxies[1].cut();
         }
-        for b in &bots {
+        for (b, c) in bots.iter_mut().zip(&clients) {
             assert!(b.failure().is_none(), "{}: {:?}", b.cfg.name, b.failure());
+            let pairs = c.direct_stats();
+            if !pairs.is_empty() {
+                b.stats.pairs = pairs;
+                b.stats.relay_rtt = c.relay_rtt();
+            }
         }
         if bots.iter().all(Bot::done) {
             break;
@@ -183,6 +243,7 @@ fn four_ai_persons_play_a_2v2_over_bad_links_and_one_rejoins() {
             .load(std::sync::atomic::Ordering::Relaxed)
             >= 2
     );
+    bots
 }
 
 /// The long soak (local lane): see the module comment.
@@ -203,6 +264,9 @@ fn long_soak_2v2() {
         "--minutes".into(),
         minutes,
     ];
+    if let Ok(t) = std::env::var("GLASNOST_SOAK_TRANSPORT") {
+        args.extend(["--transport".into(), t]);
+    }
     if let Ok(script) = std::env::var("GLASNOST_SOAK_WASM") {
         // Relative to the repository root (a test runs in its crate's folder).
         let script = root.join(script).display().to_string();
