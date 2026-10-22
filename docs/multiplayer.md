@@ -111,7 +111,7 @@ What decides whether a pair links:
   - If either player of a pair is behind a symmetric NAT (a new port for every destination), STUN is not enough. That pair links only through a TURN server, in about 2 seconds. Without TURN it stays on the relay.
   - With UDP blocked altogether, no pair links, and TURN does not help (it runs over UDP here). The game plays on the relay, correctly, just with more input delay on a bad network.
   - A pair that loses its link (UDP cut for a while) falls back to the relay and links again at the next attempt after UDP is back: the attempts come 15 seconds after the fallback, then 30, doubling up to 2 minutes apart.
-  - Without any ICE server, players on different networks never link.
+  - Without any ICE server, in the lab where every player was behind a NAT, no pair linked.
 - **No STUN or TURN server is configured by default**, on purpose. Without one, a pair across the internet will often fail to link and use the relay. The client contacts only the relay and the other players of its game. If you name a server, that server learns the player's addresses; use one you run (for example coturn) or one you trust. We do not recommend or supply one.
 
 To name servers, give every player the same kind of setting:
@@ -122,7 +122,7 @@ To name servers, give every player the same kind of setting:
 | Native, kept | A line in the settings file, `~/.config/glasnost/settings.txt`: `ice=stun:HOST:3478` or `ice=turn:HOST:3478 username=NAME credential=WORD` (space-separated; the password is kept as typed). The command line wins for that run. |
 | Browser | `?ice=stun:HOST:3478` in the page address (space-separated URLs, `%20` for the space), with the same `username=` and `credential=` words. |
 
-**Running your own TURN server.** Use a real one, such as coturn; the repository's `glasnost-turn` is a test tool for the lab and is not meant to be deployed. A TURN server needs its listening port open for UDP (usually 3478) and its whole range of relay ports open for UDP too. Each player's client allocates a relay port for each pair it tries, even a pair that then links directly, so allow about three ports per player for each game at once. The TURN login is shared by every player who names the server.
+**Running your own TURN server.** Use a real one, such as coturn; the repository's `glasnost-turn` is a test tool for the lab and is not meant to be deployed. A TURN server needs its listening port open for UDP (usually 3478) and its whole range of relay ports open for UDP too. Each player's client allocates a relay port for every attempt at a link, even one that then links directly, and again for every retry; a port stays taken until the allocation's lifetime runs out (10 minutes by default). So the range needs room for every attempt of the last ten minutes, across all the games using the server: in the runs, three 4-player games inside ten minutes held 35 ports at once. The TURN login is shared by every player who names the server.
 
 **Relay-only switch.** To keep a player entirely on the relay: `--relay-only` (native), `?direct=off` (browser), or the settings line `direct=0`. Use it to rule direct links out when you suspect them.
 
