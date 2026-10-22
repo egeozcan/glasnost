@@ -33,6 +33,8 @@ The lead played the native build. Answers to the triage questions:
 - Note 5: the harriers were the computer player's, and they circled over their target, which was
   the lead's base. The lead has not built harriers. Traced on real data in the same triage (dock
   types as imported, whether the computer player had pads).
+  The lead adds, unsure: in the original an aircraft with nowhere to land crashes. Filed as
+  Q-1775 (no spec gives a crash; no change until it is answered).
 - Note 6: the spinning particles looked like debris. This matches the premise of Q-1762 (a sprite
   debris piece played in place with no motion and no landing).
 - Note 1: details will come as a pathing report (M8 A4 capture: a key saves a snapshot from about
