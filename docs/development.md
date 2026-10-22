@@ -2348,6 +2348,90 @@ It writes counts, timings and both clients' screens to `local-lane/m9/n5/`. Run 
 - N6 (soak): rejoins under load and long games, where the transfer and the catch-up are longer.
 - N7 (WebRTC): `Serve`, `Resume`, `Dropped` and the marker checks must stay on the relay's channel; a data channel must never carry them.
 
+### The soak (N6)
+
+A windowless client plays our AI as a person in a network game, and four of them play a 2v2 over the relay on loopback, behind bad networks, with links cut and a process killed mid-game. Everything here is our own harness (`// nocite: our own harness`); the simulation crates do not change. Code: `crates/app/src/game/bot.rs` (the bot, its options and its loop), `crates/tools/src/net_client.rs` (`glasnost-headless net-client`), `crates/tools/src/netem.rs` (the bad network), `crates/tools/src/soak.rs` (`glasnost-headless soak`), `crates/headless-web` (the wasm client) and `crates/tools/tests/soak.rs`.
+
+**The bot** (`glasnost_app::game::bot::Bot`). It drives a real `game::client::Client` through the screens a person uses, by laying out a frame and clicking the client's own targets: **Multiplayer**, then **Host** or **Join** with a room code. In the room, the host steps to the first map (from `--map` on) with a start for every person, sets that many rows to person and closes the rest; every bot picks its own row's team and says ready; the host presses **Start** once every person is in and ready. In the game, a `glasnost_ai::brain::Brain` for the bot's house thinks once per tick the client ran, on the client's world, and its orders go through `Play::issue` into the outbox and the lockstep session, the same path as a person's clicks. When the client loses its game (its link closed), the bot presses **Reconnect** after `reconnect_after_ms` (2 s, plus up to 1 s of seeded jitter so that peers cut together do not come back on one frame) and plays on with a new brain once readmitted. A refused rejoin (`Rejoining`) is tried again after the same wait. With `--resume`, a client started on a settings file that names a game rejoins it (a killed process started again).
+
+Two things differ from a skirmish, both kept in the bot:
+
+- *Orders in flight.* In a network game an order runs a delay after it is given, and the brain, made for orders that run at once, sees no effect and gives the same order again on the next ticks. The bot drops an order equal to one the brain gave at one of the last delay + 2 ticks (`BotConfig::dedupe`, on by default; `--no-dedupe` turns it off). Orders given twice in the same tick pass. In a two-minute trial on the install, the four bots dropped 2 507 repeats and gave 990 orders.
+- *A new brain after a rejoin.* The brain is the bot's own, not part of the game, so it is not in the transfer; a rejoined bot starts a new one on the game as it stands.
+
+**The numbers** (`BotStats`, counts and timings only): ticks run and game time, stalls (a tick that came more than `STALL_MS` = 100 ms after its paced period) and the longest gap between two ticks, times the client showed "Waiting for ...", the agreed delay at every change, losses, presses of **Reconnect** and how long each rejoin took from the loss to the readmission, the bytes of game sent to rejoining peers and received, the most `Evidence::bytes_held` reached, the orders given, dropped as repeats and taken (from the replay), the first desync, the winners, the bot's player allies, and every checkpoint hash the client ran. The client keeps its checkpoints for `Client::take_checkpoints` (at most `CHECKPOINTS_KEPT` = 4096 until taken), in the catch-up and in normal play.
+
+**`glasnost-headless net-client`.** Options: `--relay ws://HOST:PORT/`, `--host N` (N persons) with `--map M`, or `--join CODE`; `--name`, `--team T`, `--slot ROW` (the row the client expects: the room gives the first open row, so the rows follow the order of the joins, and a client given another row leaves and fails), `--seed S` (the reconnect jitter), `--ticks N` or `--minutes M` (game time; otherwise until the game ends), `--hash-log FILE` (one `TICK HASH` line per checkpoint, appended as they come), `--report FILE`, `--code-file FILE` (the room code once the room is set up), `--settings FILE` (the settings store, where the rejoin is kept), `--resume`, `--no-ai`, `--no-dedupe`, and `--game-dir DIR` (default `GLASNOST_GAME_DIR`) or `--synthetic` (the synthetic install, `bot::synthetic`). It prints status lines on standard output: `mounted MS ms`, `room CODE row R`, `game slot S house H`, `lost N at tick T`, `readmitted N at tick T after MS ms`, a progress line every 30 s, and `done ticks T desync D` or `failed WHY`. Its log goes to standard error (`GLASNOST_LOG=debug` for more). A desync report goes to `desync-reports/` in the working folder (N4). When the bot is done, the client runs on for `LINGER_MS` (3 s) so that its peers have its frames for their last ticks. Exit code 0 when it finished, 1 when it gave up.
+
+**The bad network** (`netem::Proxy`). A TCP proxy on loopback in front of the relay, one per client, seeded. A WebSocket runs over TCP, which never loses or reorders bytes, so loss is modelled as late delivery and order is always kept:
+
+| What | Default | Constant |
+|---|---|---|
+| One-way latency | 40 ms | `LATENCY_MS` |
+| Jitter, added to each chunk | 0 to 30 ms | `JITTER_MS` |
+| Chance a chunk is "lost" | 20 in 1000 | `LOSS_PERMILLE` |
+| A lost chunk's resend, and everything behind it waits | +200 ms | `RETRANSMIT_MS` |
+| Time between two stalls of one direction | 45 to 150 s | `STALL_EVERY_MS` |
+| A stall: nothing delivered, reading goes on | 0.5 to 2.5 s | `STALL_MS` |
+
+Each chunk is delivered at the later of its own time and the time of the chunk ahead of it (head-of-line blocking, as on TCP). The proxy keeps reading while it holds data back, so a stall never pushes back on the sender. Stalls stay well under the session's 5 s silence notice and the relay's 15 s silence limit. `Proxy::cut` closes every connection through the proxy, as a dropped link does. The proxy counts bytes each way, connections, lost chunks and stalls. `Netem::clean` passes bytes on untouched.
+
+**`glasnost-headless soak`.** It starts the relay (`cargo run --release -p glasnost-relay`) on a free port and a proxy per client, then the host (`--host 4`) and the three guests one at a time (each waits for the one before it to have its row), on rows 0 to 3: rows 0 and 2 are team 1, rows 1 and 3 team 2 (`soak::TEAMS`). Each client runs in its own folder `rowN/` under the output folder (default `local-lane/m9/n6/`, git-ignored), with its log, hash log, report, settings file and any desync report. The default trouble (`soak::default_trouble`), for a soak of about S seconds: row 1's link cut at S/6, row 3's at 2S/6, row 2's process killed (SIGKILL) and started again with `--resume` at S/2, the host's link cut at 4S/6. `--trouble 30:1:cut,90:2:kill` sets other trouble, `--no-trouble` none, `--clean` a perfect network; `--latency MS`, `--jitter MS`, `--loss PERMILLE` and `--no-stalls` change one knob of the bad network; `--client-arg ARG` passes an option to every client. `--wasm-row R --script crates/headless-web/node/net-client.mjs` makes row R the wasm client (it is cut, never killed, since it keeps no settings file). At the end it compares every client's checkpoint hashes tick by tick (a rejoined client logs again the ticks it ran again; they must agree too), and writes `soak.txt`. It passes when every client exited with 0, every client saw the game end or reached the limit, none noticed a desync, no two hashes of a tick differ, and the four share checkpoints.
+
+**The wasm client** (`crates/headless-web`, package `glasnost-headless-web`). The same `Client`, bot and options, compiled to `wasm32-unknown-unknown` and bound with `wasm-bindgen --target nodejs`. It reaches the relay through the browser's WebSocket link (`glasnost_platform_web::socket`, the crate without its page entry point: the new default feature `start`), which works under node because node's `WebSocket` is the browser's API. `node/net-client.mjs` runs it: it lists the install folder, reads archive bytes for the client through `globalThis.glasnostReadAt` (synchronous file reads, so the client's jobs finish on the first poll), stores desync reports through `globalThis.glasnostSaveReport`, gives it the clock, and writes the same status lines, hash log, report and code file as the native client. It is the wasm32 build of the client's lockstep, simulation, AI, desync evidence, rejoin and web link; it is not a browser (no page, drawing, audio or folder picker).
+
+Build and run, from the repository root:
+
+```
+cargo build --release -p glasnost-tools --bin glasnost-headless
+cargo build --release -p glasnost-relay
+cargo build --release --target wasm32-unknown-unknown -p glasnost-headless-web
+wasm-bindgen --target nodejs --out-dir target/headless-web \
+  target/wasm32-unknown-unknown/release/glasnost_headless_web.wasm
+GLASNOST_GAME_DIR=<install> target/release/glasnost-headless soak \
+  --headless target/release/glasnost-headless --minutes 30 \
+  --wasm-row 3 --script crates/headless-web/node/net-client.mjs
+```
+
+The ignored test `long_soak_2v2` in `crates/tools/tests/soak.rs` runs the same soak: `GLASNOST_SOAK_MINUTES` (default 30), `GLASNOST_SOAK_WASM=crates/headless-web/node/net-client.mjs` for the wasm row, `GLASNOST_LANE_OUT` for the folder. Run it with `cargo test --release -p glasnost-tools --test soak -- --ignored --nocapture`.
+
+**Tests.**
+
+- `crates/tools/tests/soak.rs`: `four_ai_persons_play_a_2v2_over_bad_links_and_one_rejoins`, in CI. A relay in the test process, four bots on the synthetic install behind bad networks (stalls every 1.5 to 4 s), 450 ticks; row 1's link is cut at tick 150 and it rejoins. Every checkpoint agrees, none notices a desync, each house has one ally, and the rejoined client was sent the game.
+- `crates/tools/src/netem.rs`: `bytes_pass_in_order_and_late`, `a_cut_closes_and_a_new_connection_passes`.
+- `crates/app/src/game/bot.rs`: `options_parse`, `bad_options_are_refused`.
+
+**The 30-minute soak** (local lane, on the install, 2026-10-22; counts and timings only). Four persons on map index 30 (`--map 30`; the first maps are small and the AI game there can end in a minute or two), the default bad network on every link, row 3 the wasm client under node, seven troubles: row 1 cut at 120 s and 900 s, row 3 (wasm) cut at 240 s and 1200 s, row 2 killed and restarted at 360 s and 1500 s, the host (row 0) cut at 480 s. Another session's sweep used about 14 of the machine's 32 cores the whole time.
+
+| | |
+|---|---|
+| Result | pass: 0 mismatches, no desync, every client exited with 0 |
+| Wall time | 26.5 min (1 589 s); the game ended before the 30-minute limit |
+| Ticks | 58 535 (15.6 min of game time at the room's 16 ms period), on every client |
+| Pace | 36.9 ticks/s on average against 62.5 paced: about 50 ticks/s in the first 2.5 min and most of the rest, about 16 ticks/s from tick 4 600 to 12 400, about 40 from 32 500 to 37 600 |
+| End | game over at tick 58 535; houses 0 and 2 (team 1) won |
+| Checkpoints | 1 925 every client ran, the last at tick 58 529; a rejoined client logs again the ticks it ran again, and they agree too |
+| Rejoins | 7 of 7, from the loss to the readmission: row 1 8.0 s and 9.0 s, row 3 (wasm) 10.2 s and 27.8 s, the host 13.2 s; after a kill, from the restarted client finding its game, 2 s wait included: 9.7 s and 12.1 s |
+| Games sent | 7 transfers of 2.24 to 2.32 MB; the host served 6, row 1 served the host's |
+| Delay | 3 for ticks 0 to 3, 30 at tick 4 (the first round-trip sample), then 26 to 30 for the whole game |
+| Stalls | 744 to 996 ticks per client came more than 100 ms late; the longest gap between two ticks 2.4 s (the proxy's longest stall 2.49 s); "Waiting for ..." shown about 40 times |
+| Network | per client about 30 stalls, 8 300 to 8 600 chunks "lost"; relay traffic per client 21 to 37 MB up (the host's includes the games it served) and 65 to 69 MB down, about 43 KB/s down |
+| Evidence | at most 4.64 MB held (`Evidence::bytes_held`) |
+| Orders | 3 000 (host), 1 900, 6 (row 2, its last process), 307 (wasm) given; 10 000 and 17 000 repeats dropped by the two native rows that played the whole game |
+
+Shorter runs: 3 minutes native and 3 minutes with the wasm row on the bad network passed (355 common checkpoints, 3 cuts and a kill rejoined in 5.5 to 7.8 s; the wasm client mounted in 3.5 s); 2 400 ticks on the synthetic install with the wasm row passed (4 rejoins, 61 common checkpoints). A first 30-minute try on map index 0 ended in a win at tick 5 001 (80 s), before any trouble, which is why the soak plays a larger map. A milder network (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, default trouble, all native) shows the delay move: 10 to 12 in the first ticks, down to 5 and 6, up to 30 at each rejoin and back down within about 600 ticks; from about tick 4 400 to 10 000 it stayed between 15 and 26 with no trouble, while the four clients ran 35 ticks/s against 62.5 paced, so a slow tick reads as a long round trip.
+
+**Seams and limits.**
+
+- *Orders given again.* Our AI expects an order to run in the tick it gives it; in a network game it runs a delay later, and the brain gives it again until then. The bot drops these repeats (`dedupe`); a person's client does not need it, but an AI playing in a network game for a person would.
+- *The brain is not in the transfer.* A rejoined bot starts a new brain on the game as it stands, so it plays on with a different plan than the one it had.
+- *The delay stays high on the bad network.* The first round-trip sample sets a timeout of three samples, and with 2 % of the chunks 200 ms late the estimate did not come back down in these runs: the delay sat at 26 to 30 (480 ms at the 16 ms period). On a milder network it moves both ways. Slow ticks raise it too.
+- *Pace.* Four clients on one machine ran about 37 ticks/s against 62.5 paced, slower through two spells mid-game; the cause is not isolated (another session's sweep shared the machine).
+- *Loss is per chunk.* The proxy draws loss for each 16 KiB read, not for each TCP segment, so a large message is late at most once.
+- *A checkpoint can go unlogged.* If the link closes in the same update as a checkpoint, the client may drop that checkpoint before the bot takes it; the soak compares only the ticks it has.
+- *Rejoin times after a kill* count from the restarted client finding its game, plus the 2 s wait it skips.
+- *Not a browser.* The wasm row is the wasm32 build under node, not a page: no drawing, audio, folder picker or browser download.
+
 ## M6c step ledger
 
 M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec files unchanged since 732c990 (S-0215 rev 48, S-0105 rev 19). Resume from this table; each row is updated when its step is merged to main.

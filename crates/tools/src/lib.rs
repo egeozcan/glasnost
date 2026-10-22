@@ -8,16 +8,23 @@
 //! `glasnost-headless`). **M7b** adds its arena mode ([`arena`], with the
 //! statistics of the comparison in [`stats`]). **M9 N4** adds the desync
 //! tool ([`desync`], `glasnost-headless desync`), with a field-by-field
-//! view of any serializable value in [`inspect`].
+//! view of any serializable value in [`inspect`]. **M9 N6** adds the
+//! soak: a client that plays our AI over the relay ([`net_client`],
+//! `glasnost-headless net-client`), a bad network between it and the
+//! relay ([`netem`]) and the local 2v2 of four such clients ([`soak`],
+//! `glasnost-headless soak`).
 
 pub mod arena;
 pub mod desync;
 pub mod headless;
 pub mod inspect;
 pub mod local_lane;
+pub mod net_client;
+pub mod netem;
 pub mod oracle;
 pub mod side_audit;
 pub mod skirmish_lane;
+pub mod soak;
 pub mod stats;
 pub mod trigger_lane;
 

@@ -11,6 +11,10 @@
 //! through the browser's WebSocket ([`socket`]); `?relay=ws://HOST:PORT/`
 //! fills its relay address.
 //!
+//! The page's entry point is the default feature `start`; without it (the
+//! soak's wasm client, `glasnost-headless-web`, M9 N6) the crate is only its
+//! WebSocket link and its report download.
+//!
 //! On native targets this crate is empty so that the whole workspace builds
 //! and tests with plain `cargo`.
 
@@ -19,7 +23,7 @@ pub mod download;
 #[cfg(target_arch = "wasm32")]
 pub mod socket;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "start"))]
 mod web {
     use glasnost_app::{DemoOptions, GameOptions, Status, ViewerOptions};
     use wasm_bindgen::prelude::*;

@@ -1,6 +1,6 @@
 [package]
 name = "glasnost-tools"
-description = "Glasnost developer tools: fixture writer, local lane, the headless simulation runner and the desync tool"
+description = "Glasnost developer tools: fixture writer, local lane, the headless simulation runner, the desync tool and the network soak"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -18,10 +18,17 @@ glasnost-num.workspace = true
 glasnost-sim.workspace = true
 glasnost-ai.workspace = true
 glasnost-net.workspace = true
+glasnost-app.workspace = true
+log = "0.4"
 pollster = "0.4"
 postcard = { version = "1", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
+
+# The soak's CI test (M9 N6) runs a relay in the test process.
+[dev-dependencies]
+glasnost-relay = { path = "../relay" }
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [lints]
 workspace = true
