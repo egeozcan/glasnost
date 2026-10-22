@@ -17,6 +17,14 @@
 //! among those below: graphics, the browser, what those bring, and (M9 N3)
 //! the native client's WebSocket. Never a server runtime's I/O driver, an
 //! async WebSocket or an HTTP stack.
+//!
+//! The native client's direct links (`glasnost-rtc`, M9 N7) are WebRTC
+//! through matchbox and webrtc-rs, which bring a tokio runtime, UDP sockets
+//! and, unused, matchbox's own async WebSocket. The client crates reach
+//! those only through `glasnost-rtc`: the client rule does not look past
+//! it, and `glasnost-rtc` has its own list, [`RTC_ALLOWED`]; never an HTTP
+//! stack, the relay's WebSocket server or the relay. Neither the
+//! simulation nor the lockstep crate may reach `glasnost-rtc`.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -65,10 +73,14 @@ pub const FORBIDDEN_EXTERNAL: &[&str] = &[
     "ureq",
 ];
 
-/// A dependency graph over package names.
+/// A dependency graph over packages: a package's node is its name, or
+/// `name@version` where the lock has several versions of that name (so
+/// that what one version brings is never put on another).
 #[derive(Debug, Default)]
 pub struct Graph {
     edges: BTreeMap<String, BTreeSet<String>>,
+    /// The package name of each `name@version` node.
+    names: BTreeMap<String, String>,
 }
 
 impl Graph {
@@ -80,15 +92,34 @@ impl Graph {
             .insert(to.to_owned());
     }
 
+    /// The package name of a node.
+    fn name<'a>(&'a self, node: &'a str) -> &'a str {
+        self.names.get(node).map_or(node, String::as_str)
+    }
+
     /// Builds the graph of normal and build dependencies from cargo metadata.
     pub fn from_metadata(md: &Metadata) -> Result<Self, String> {
         let resolve = md.resolve.as_ref().ok_or("cargo metadata has no resolve")?;
+        let mut versions: BTreeMap<String, usize> = BTreeMap::new();
+        for p in &md.packages {
+            *versions.entry(p.name.to_string()).or_default() += 1;
+        }
+        let mut g = Self::default();
         let name_of: BTreeMap<_, _> = md
             .packages
             .iter()
-            .map(|p| (p.id.clone(), p.name.to_string()))
+            .map(|p| {
+                let name = p.name.to_string();
+                let node = if versions[&name] > 1 {
+                    let node = format!("{name}@{}", p.version);
+                    g.names.insert(node.clone(), name);
+                    node
+                } else {
+                    name
+                };
+                (p.id.clone(), node)
+            })
             .collect();
-        let mut g = Self::default();
         for node in &resolve.nodes {
             let from = &name_of[&node.id];
             for dep in &node.deps {
@@ -108,11 +139,21 @@ impl Graph {
     }
 
     /// Shortest dependency path from `root` to each reachable package.
+    #[cfg(test)]
     fn paths_from(&self, root: &str) -> BTreeMap<String, Vec<String>> {
+        self.paths_past(root, &[])
+    }
+
+    /// [`Graph::paths_from`], not looking past the packages of `stop`
+    /// (they are reached, what they bring is not).
+    fn paths_past(&self, root: &str, stop: &[&str]) -> BTreeMap<String, Vec<String>> {
         let mut paths = BTreeMap::new();
         paths.insert(root.to_owned(), vec![root.to_owned()]);
         let mut queue = VecDeque::from([root.to_owned()]);
         while let Some(n) = queue.pop_front() {
+            if n != root && stop.contains(&self.name(&n)) {
+                continue;
+            }
             let path = paths[&n].clone();
             for next in self.edges.get(&n).into_iter().flatten() {
                 if !paths.contains_key(next) {
@@ -137,10 +178,21 @@ pub fn never_built(target: &str) -> bool {
 
 /// Every forbidden package reachable from each root, with the path.
 pub fn violations(graph: &Graph, roots: &[String], forbidden: &BTreeSet<String>) -> Vec<String> {
+    violations_past(graph, roots, forbidden, &[])
+}
+
+/// [`violations`], not looking past the packages of `stop` (which have
+/// rules of their own).
+pub fn violations_past(
+    graph: &Graph,
+    roots: &[String],
+    forbidden: &BTreeSet<String>,
+    stop: &[&str],
+) -> Vec<String> {
     let mut out = Vec::new();
     for root in roots {
-        for (pkg, path) in graph.paths_from(root) {
-            if forbidden.contains(&pkg) {
+        for (pkg, path) in graph.paths_past(root, stop) {
+            if forbidden.contains(graph.name(&pkg)) {
                 out.push(format!(
                     "{root} must not depend on {pkg} (via {})",
                     path.join(" -> ")
@@ -175,17 +227,30 @@ pub fn check(md: &Metadata) -> Result<Vec<String>, String> {
         let external: BTreeSet<String> = FORBIDDEN_EXTERNAL
             .iter()
             .map(|s| (*s).to_owned())
-            .chain([RELAY_CRATE.to_owned()])
+            .chain([RELAY_CRATE.to_owned(), RTC_CRATE.to_owned()])
             .collect();
         out.extend(violations(&graph, &[NET_CRATE.to_owned()], &external));
     }
-    // The relay is a native server, never part of the game client.
+    // The relay is a native server, never part of the game client; the
+    // direct links' stack is checked on its own, below.
     let client: Vec<String> = CLIENT_CRATES
         .iter()
         .filter(|c| graph.edges.contains_key(**c))
         .map(|c| (*c).to_owned())
         .collect();
-    out.extend(violations(&graph, &client, &client_forbidden()));
+    out.extend(violations_past(
+        &graph,
+        &client,
+        &client_forbidden(),
+        &[RTC_CRATE],
+    ));
+    if graph.edges.contains_key(RTC_CRATE) {
+        out.extend(violations(
+            &graph,
+            &[RTC_CRATE.to_owned()],
+            &rtc_forbidden(),
+        ));
+    }
     Ok(out)
 }
 
@@ -194,6 +259,9 @@ pub const NET_CRATE: &str = "glasnost-net";
 
 /// The relay and lobby server (native only).
 pub const RELAY_CRATE: &str = "glasnost-relay";
+
+/// The native client's direct links (M9 N7).
+pub const RTC_CRATE: &str = "glasnost-rtc";
 
 /// The crates of the game client, native and web.
 pub const CLIENT_CRATES: &[&str] = &[
@@ -224,7 +292,43 @@ pub const CLIENT_ALLOWED: &[&str] = &[
     "tungstenite",
     "rand",
     "getrandom",
+    // M9 N7: the in-process queues of `futures-util`'s `channel` feature,
+    // which matchbox turns on for the whole workspace (no I/O, no thread).
+    "futures-channel",
 ];
+
+/// The external crates of [`FORBIDDEN_EXTERNAL`] the direct links' crate
+/// ([`RTC_CRATE`]) may reach besides [`CLIENT_ALLOWED`] (M9 N7).
+pub const RTC_ALLOWED: &[&str] = &[
+    // WebRTC: matchbox over webrtc-rs.
+    "matchbox_socket",
+    "webrtc",
+    // webrtc-rs's runtime and UDP sockets (ICE).
+    "tokio",
+    "mio",
+    "socket2",
+    // matchbox's message loop, run on the link's own thread.
+    "futures",
+    "futures-executor",
+    // matchbox's own WebSocket signaller: compiled, never used (the relay
+    // carries the signals).
+    "async-tungstenite",
+    "async-std",
+    // The certificate of the DTLS handshake (its validity dates).
+    "time",
+];
+
+/// What [`RTC_CRATE`] must not reach: the relay, and every external crate
+/// of [`FORBIDDEN_EXTERNAL`] outside [`CLIENT_ALLOWED`] and
+/// [`RTC_ALLOWED`] (an HTTP stack, the relay's WebSocket server, ...).
+fn rtc_forbidden() -> BTreeSet<String> {
+    FORBIDDEN_EXTERNAL
+        .iter()
+        .filter(|c| !CLIENT_ALLOWED.contains(c) && !RTC_ALLOWED.contains(c))
+        .map(|c| (*c).to_owned())
+        .chain([RELAY_CRATE.to_owned()])
+        .collect()
+}
 
 /// What the client crates must not reach: the relay, and every external
 /// crate of [`FORBIDDEN_EXTERNAL`] outside [`CLIENT_ALLOWED`].
@@ -341,9 +445,13 @@ mod tests {
     fn the_client_reaches_the_socket_but_no_server_runtime() {
         let md = workspace::metadata().expect("cargo metadata");
         let graph = Graph::from_metadata(&md).expect("a graph");
-        let app = graph.paths_from("glasnost-app");
+        // What the client reaches past the direct links' crate (N7).
+        let app = graph.paths_past("glasnost-app", &[RTC_CRATE]);
         for dep in ["tungstenite", NET_CRATE] {
-            assert!(app.contains_key(dep), "the client reaches {dep}");
+            assert!(
+                app.keys().any(|n| graph.name(n) == dep),
+                "the client reaches {dep}"
+            );
         }
         let forbidden = client_forbidden();
         assert!(!app.contains_key("tokio"), "the client reaches no runtime");
@@ -358,7 +466,7 @@ mod tests {
             assert!(forbidden.contains(dep), "{dep} stays forbidden");
         }
         let client: Vec<String> = CLIENT_CRATES.iter().map(|c| (*c).to_owned()).collect();
-        let v = violations(&graph, &client, &forbidden);
+        let v = violations_past(&graph, &client, &forbidden, &[RTC_CRATE]);
         assert!(v.is_empty(), "{}", v.join("\n"));
         // The simulation and the lockstep crate are not allowed what the
         // client is.
@@ -380,6 +488,87 @@ mod tests {
                 "glasnost-app must not depend on mio (via glasnost-app -> tokio-tungstenite -> tokio -> mio)",
                 "glasnost-app must not depend on tokio (via glasnost-app -> tokio-tungstenite -> tokio)",
                 "glasnost-app must not depend on tokio-tungstenite (via glasnost-app -> tokio-tungstenite)",
+            ]
+        );
+    }
+
+    /// The direct links' stack (M9 N7) is reached by the client only
+    /// through glasnost-rtc, which reaches WebRTC and its runtime but no
+    /// HTTP stack, no server WebSocket and not the relay; the simulation
+    /// and the lockstep crate never reach it.
+    #[test]
+    fn the_direct_links_stack_stays_inside_its_crate() {
+        let md = workspace::metadata().expect("cargo metadata");
+        let graph = Graph::from_metadata(&md).expect("a graph");
+        let rtc = graph.paths_from(RTC_CRATE);
+        for dep in ["matchbox_socket", "webrtc", "tokio", NET_CRATE] {
+            assert!(rtc.contains_key(dep), "glasnost-rtc reaches {dep}");
+        }
+        let forbidden = rtc_forbidden();
+        for dep in ["hyper", "reqwest", "tokio-tungstenite", RELAY_CRATE] {
+            assert!(forbidden.contains(dep), "{dep} stays forbidden");
+        }
+        let v = violations(&graph, &[RTC_CRATE.to_owned()], &forbidden);
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        // The app reaches tokio, through glasnost-rtc only.
+        let app = graph.paths_from("glasnost-app");
+        assert!(
+            app["tokio"].contains(&RTC_CRATE.to_owned()),
+            "{:?}",
+            app["tokio"]
+        );
+        assert!(
+            !graph
+                .paths_past("glasnost-app", &[RTC_CRATE])
+                .contains_key("tokio")
+        );
+        let (det, _) = workspace::members(&md);
+        let mut roots: Vec<String> = det.into_iter().map(|(n, _)| n).collect();
+        roots.push(NET_CRATE.to_owned());
+        let v = violations(&graph, &roots, &set(&[RTC_CRATE]));
+        assert!(v.is_empty(), "{}", v.join("\n"));
+        // A client crate that reached tokio past glasnost-rtc would fail.
+        let mut g = Graph::default();
+        g.add("glasnost-app", RTC_CRATE);
+        g.add(RTC_CRATE, "tokio");
+        g.add("glasnost-app", "hyper");
+        g.add("hyper", "tokio");
+        let v = violations_past(
+            &g,
+            &["glasnost-app".into()],
+            &client_forbidden(),
+            &[RTC_CRATE],
+        );
+        assert_eq!(
+            v,
+            vec![
+                "glasnost-app must not depend on hyper (via glasnost-app -> hyper)",
+                "glasnost-app must not depend on tokio (via glasnost-app -> hyper -> tokio)",
+            ]
+        );
+    }
+
+    /// Two versions of a package are two nodes: what one brings is not put
+    /// on the other.
+    #[test]
+    fn versions_of_a_package_keep_their_own_dependencies() {
+        let mut g = Graph::default();
+        g.add("sim", "digest@0.11");
+        g.add("digest@0.11", "crypto-common@0.2");
+        g.add("webrtc", "crypto-common@0.1");
+        g.add("crypto-common@0.1", "getrandom");
+        for (node, name) in [
+            ("digest@0.11", "digest"),
+            ("crypto-common@0.2", "crypto-common"),
+            ("crypto-common@0.1", "crypto-common"),
+        ] {
+            g.names.insert(node.into(), name.into());
+        }
+        assert!(violations(&g, &["sim".into()], &set(&["getrandom"])).is_empty());
+        assert_eq!(
+            violations(&g, &["sim".into()], &set(&["crypto-common"])),
+            vec![
+                "sim must not depend on crypto-common@0.2 (via sim -> digest@0.11 -> crypto-common@0.2)"
             ]
         );
     }
