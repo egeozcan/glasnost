@@ -1,9 +1,9 @@
 ---
 id: Q-1701
 title: The electric-bolt shot: when it hits, what it hits, and how it is drawn
-status: open
+status: answered
 related: [S-0301, S-0514, S-0616, S-0102]
-answered-by: []
+answered-by: [S-0316]
 ---
 
 ## Need
