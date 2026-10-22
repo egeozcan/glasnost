@@ -2,13 +2,13 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 17
-sources-class: [decomp]
+revision: 33
+sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-22
 measurements: []
-requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570]
+requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763]
 supersedes: []
 ---
 
@@ -24,7 +24,12 @@ nuclear warhead, whose detonation waits for an animation. The area damage of a d
 the range test is S-0307, where the shot starts is S-0313 and when shots are fired is S-0301.
 Claim 27 also owns the railgun shot's direct hits and cliff-collapse chance, separately from
 its particle trail. Claims 28 to 33 give how the projectile's body is drawn: its sprite frame or
-voxel orientation, palette and brightness, its shadow and its light glow. This spec covers skirmish; network games and campaigns are out of scope.
+voxel orientation, palette and brightness, its shadow and its light glow. Claim 23 also gives
+the firing check's refusals that depend on the firer's type rather than its weapon: the
+land-targeting mode's row and the naval-targeting mode's row. The two departures under Edge
+cases that state our engine's own choice (the object numbering and the failed comparison solve)
+are design, which is why `design` is among this spec's sources. This spec covers skirmish.
+Network games and campaigns are out of scope.
 
 ## Terms
 
@@ -40,7 +45,7 @@ shot* (claim 15 there). From S-0312: the *nearby point* N(*Q*, *λ*, snap off) o
 there). From S-0303: the warhead's *electromagnetic flag* (F5 there). From S-0313: *fire point* *F*
 and the *spray attack* of a firer (claim 9 there). From S-0214: *vehicle-like building* (Terms there).
 A *radar event* is a marker of some kind that the interface specs show on the radar (S-0011, claim 32
-has the trigger action that raises one). From S-0307: *airborne*, *elevation level* of a cell, and the *subject-to-elevation* property (claim
+has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*, *elevation level* of a cell, and the *subject-to-elevation* property (claim
 6 there). From S-0211: *firestorm wall*, a house's *firestorm*, *laser-fence flag* and
 *inactive laser-fence section* (Terms there). From S-0206:
 *homing projectile* (turn-rate field not 0). In addition:
@@ -714,18 +719,162 @@ S-0501 claim 20.
       d for the end cell)
     - Confidence: high
 
-23. **Anti-air and anti-ground in the firing check.** The firing check answers *illegal* when:
+23. **Anti-air, anti-ground and targeting modes in the firing check.** The firing check answers
+    *illegal* when one of these rows holds, except against the firer's own gripped unit (see
+    below):
     - the target is airborne and the projectile is not anti-air,
     - the target is an infantry or vehicle whose render layer is not the ground layer (flying,
       jumping, falling from a transport, or digging underground) and the projectile is not anti-air,
     - the target is not an infantry, vehicle, aircraft or building (a cell, overlay or terrain
-      object), it is not airborne and the projectile is not anti-ground.
+      object), it is not airborne and the projectile is not anti-ground,
+    - the target is an infantry, vehicle, aircraft or building that is not airborne, is not on a
+      bridge and stands on a cell whose land type is water or beach, and the firer's naval-targeting
+      mode gives "none" for it (S-0308, table N: naval-targeting mode 0 against an
+      underwater target that is cloaking, cloaked or uncloaking, mode 2 against a target whose
+      type is not underwater, and mode 6 against every target),
+    - the firer's type has land-targeting mode 1 and the target is one of these:
+      - an infantry, vehicle, aircraft or building that is floor-bound (S-0307, Terms) and that is
+        on a bridge or stands on a cell whose land type is neither water nor beach,
+      - a cell whose land type is neither water nor beach.
+
+    **The firer's gripped unit.** No row of this claim refuses the firer's own gripped unit
+    (S-0607 Terms): for it every row yields, whatever the weapon, to the *rearming* answer of
+    S-0301 claim 9 (rank 4) and S-0607 claim 11, which comes ahead of every test of the target's
+    layer, height, kind or armour, subject to the precedence and exceptions that S-0301 claim 9
+    gives it. Every other airborne object asked about with a projectile that is not anti-air is
+    refused by the first row (an infantry or vehicle among them also by the second),
+    including one the firer already holds as its target: the answer is *illegal* unless an
+    answer that S-0301 claim 9 ranks above it comes first. So a firer that took a target while it
+    stood on the ground and still holds it when it lifts off is refused, and its attack drops
+    that target no later than the first check that answers *illegal* (as S-0304 claim 2 gives for
+    a target that its claim 1 makes illegal; S-0215 claim 32 for buildings). For a building the
+    drop is rated as S-0215 claim 32 rates it, and for a unit low (`unmeasured`). Whether another
+    rule can drop such a target earlier is an open question of S-0309.
+
+    The land-targeting mode is an integer of the firer's type: 0 allows land targets, 1 allows
+    no land targets on the cells and objects of the last row, and 2 allows them and makes the
+    weapon choice prefer slot 1 against them (S-0308, table P, for mode 2); any other value
+    acts as 0 here. The water and land rows depend on the
+    firer's type, not on its weapon. An overlay or terrain object target meets neither of them.
+    Neither row depends on distance.
+
+    **Rank of the water and land rows.** Both rows give their *illegal* at rank 4 of S-0301 claim
+    9, as the first three rows do. They therefore outrank *rearming* (rank 5), *out of
+    ammunition* (rank 7), *cloaked* (rank 8), the late target tests (rank 9) and *out of range*
+    (rank 10): a firer that is rearming, out of ammunition or cloaked, or that is asked with the
+    range test about a target beyond its range, is answered *illegal* against a target that one
+    of these rows refuses.
+
+    Within rank 4 the two rows come after these answers, which win when they hold as well: the
+    *impossible* answers for a hidden target, an absent weapon, a power-sensitive weapon, the
+    other weapon's live effect and a spawner weapon whose firer is under the parasite hold; the
+    *rearming* answers for a materialising firer, the firer's own gripped unit, a held temporal
+    target and a spawner weapon none of whose spawned aircraft is alive; for a vehicle, the
+    tube-transit *impossible* and launching-spawn *busy* answers that S-0301 claim 9 already puts
+    earlier; and for a building, the *impossible* of a building without power. Where the *rearming*
+    of a building's pending delayed shot (S-0301 claim 14) falls against the two rows is not
+    stated, as S-0301 claim 9 leaves its rank unstated. The magnetic-beam *rearming* of a firer whose
+    grip and live wave coexist comes after the two rows, as S-0301 claim 9 gives for the
+    target-layer and projectile tests. The order among the rank-4 *illegal* answers shows in no
+    answer.
+
+    Consequences: retaliation against such an attacker stops whatever its rearm countdown (S-0309
+    claim 18 stops on *illegal* and *impossible*); a building in *attack* that holds such a target
+    drops it (S-0215 claim 32) rather than waiting out its countdown. Separately from the rank, an
+    ordinary click offers no attack on such a target even while the firer is rearming, since
+    S-0214 claim 6(e)'s cursor query does not count rearming at all.
+
+    The answer of these two rows is *illegal*, not *impossible*. Retaliation and a building's
+    *attack* treat the two alike, but S-0214 claim 6(e) withholds an ordinary click's attack only
+    from a target that the firing rules rule illegal, so *impossible* would leave the attack
+    offered.
 
     The firing check does not test the anti-ground flag for infantry, vehicle, aircraft or building
-    targets. Automatic target choice uses both flags (S-0309); order legality is S-0214.
-    - Backing: `measurable` (scenario P16; run e for the first row)
-    - Confidence: high for the first and third rows; medium for the layer row and for the absence of
-      the anti-ground test
+    targets. So the firing check does not refuse a ground object to an object whose weapons'
+    projectiles are anti-air only when its type's land-targeting mode allows land targets, and with
+    mode 1 refuses the targets that the land row describes. The firing check's other rows, S-0214's
+    order legality and the behaviour rules of S-0215 still apply. No flight or detonation rule of
+    this spec (no claim other than this one) depends on the anti-ground flag, so such a shot flies
+    and detonates by those claims as any other; whether it damages the ground unit is open (Open
+    questions). Automatic target choice uses both flags (S-0309); order legality is S-0214.
+
+    **Q-1763, question 1.** The firing check refuses no infantry, vehicle, aircraft or building
+    target by the projectile's anti-ground flag: an infantry unit, a vehicle, a building or a landed
+    aircraft is refused only by the check's other rows, among them the land and water rows,
+    which depend on the firer's targeting modes. An airborne aircraft is refused to a
+    projectile that is not anti-air (first row). Retaliation adds no flag test of its own
+    (S-0309 claim 18). This answer has this claim's backing and confidence for the missing
+    anti-ground test.
+
+    **Q-1763, question 3.** Every shot passes this firing check, whatever chose its target, except
+    the shots that S-0301 claim 9 makes without a check of their own after a checked shot (the later
+    shots of an aircraft's full burst, and a building's secondary shot or attempt in the processing
+    of its primary): a target kept from an earlier order or search, a force-fire at an object, an
+    attack named by a script or a trigger, or retaliation. No other shot is known to be fired
+    without it. So the land row with mode 1 refuses the targets that row describes on every one of
+    these routes, and the missing anti-ground test lets a firer whose type has mode 0 or 2 fire at a
+    ground object on each of them, its projectiles being anti-air only, subject to S-0214's order
+    legality and to S-0215 claim 32's rule for a building whose type has the SAM flag. A force-fire
+    at a cell is refused by the third row when the projectile is not anti-ground. A held target that
+    lifts off is refused by the first row, unless it is the firer's gripped unit. The parts of this
+    answer are rated as the rows they rest on (Confidence below): high for the first row (apart
+    from a held target that lifts off) and the third row, medium for the other rows and for the
+    answer as a whole, low for the rank of the water and land rows and for the first row as the
+    refusal of a held target that lifts off. Which routes can
+    name a ground object for such a firer is S-0214's (order legality) and S-0309's (searches); what
+    attack behaviour does with a refused target is S-0304 claim 2's for units other than buildings
+    and S-0215 claim 32's for buildings (it drops it).
+    The nuclear payload of claim 26 is not one of these shots: it is created by a trigger action
+    with no firer, so no firing check is asked for it, and the answer to question 3 does not
+    cover it.
+    - Backing: `measurable` (scenario P16; run e for the first row; part i for the first row's
+      refusal of a held target that lifts off, which shows that the firer neither shoots at it nor
+      keeps it but cannot tell the first row's refusal from an earlier drop by another rule, an open
+      question of S-0309; part f for the refusals of the water and land rows and for the absence of
+      the anti-ground test on object targets; part g for the land row's refusal being one that stops
+      retaliation; part h for the land row's answer being *illegal* and, through its mode-0 copy,
+      for the absence of the anti-ground test on object targets; its water variant for the water
+      row's answer being *illegal*; part f (4) for the land row's refusal of a cell target).
+      `unmeasured` for a unit's deadline for the drop (no later than the first *illegal* answer):
+      part i does not judge the tick of the drop. `unmeasured` for
+      the two rows' place within rank 4: no scenario combines a refused target with a hidden
+      target, a spent spawner or the other answers named there. `unmeasured` for the rank of the
+      two rows against *rearming*: S-0214 claim 6(e)'s cursor query does not count rearming, so
+      no cursor probe tells the ranks apart, and no scenario here reads the firing answer during
+      a countdown.
+      `unmeasured` for their rank against *out of ammunition*, *cloaked* and *out of range*: no
+      scenario puts an empty or cloaked firer against such a target, and the readers of part h
+      ask the check without its range test. `unmeasured` for the
+      absence of an anti-ground test in the flight and detonation claims: it is the absence of a
+      rule across this spec's other claims, whose scenarios do not vary the flag. `unmeasured` for the water
+      row's mode-0 branch: its target must be named while it is cloaking, cloaked or uncloaking, and
+      no order or script that names it in those states is established; it rests on S-0308 table N.
+      `unmeasured` for the gripped-unit exception: it rests on S-0607 claim 11 and S-0301 claim 9.
+    - Confidence:
+      - high: the first row, except its refusal of a held target that lifts off; the third row.
+      - medium: a held target that lifts off is neither shot at nor kept (part i).
+      - low: that the first row is what refuses it, rather than another rule dropping it earlier
+        (part i cannot tell the two apart, see the backing).
+      - low: a unit's deadline for that drop, no later than the first *illegal* answer
+        (`unmeasured`).
+      - medium: the gripped-unit exception, below the ratings of S-0607 claim 11 and S-0301
+        claim 9.
+      - medium: the layer row.
+      - medium: the water row's modes 2 and 6, and its answer *illegal* for mode 6 (part h's water
+        variant, through S-0214 claim 6(e)); for mode 2 that answer is `unmeasured`, since part f
+        (3) shows only whether a shot is fired.
+      - medium: the land row for an object, its stopping retaliation, and its answer *illegal*
+        (parts f, g and h, none of them run yet; part h through S-0214 claim 6(e), itself
+        medium).
+      - medium: the land row for a cell, until part f (4) runs.
+      - medium: the absence of the anti-ground test on object targets, and the answer to Q-1763
+        question 3 (part f (1) and (2) cover the force-fire and the script or trigger routes,
+        and no route without the firing check is known, but not every route was checked).
+      - low: the rank of the water and land rows against *rearming*, *out of ammunition*,
+        *cloaked* and *out of range*, and their place within rank 4 (`unmeasured`).
+      - low: the absence of an anti-ground test in the flight and detonation claims
+        (`unmeasured`).
+      - low: the water row's mode-0 branch.
 
 24. **Draws of a launch.** For a shot, the random-state recorder observes the projectile's claim 4 radius draw followed by its direction draw (inaccurate arcing only), then the claim 9 radius draw followed by its direction draw (invisible flak-scattering only). Placement takes no other draw. The recorder observes a spray-attack firer's pick (S-0313 claim 9) before these projectile draws (S-0301 claim 18). Later recorded draws belong to the projectile's turns (trailer animations, claim 16) and to its detonation (claim 21, including the draws after the last cluster detonation, and S-0303).
     - Backing: `measurable` (scenario P3 with the random-state recorder for the launch draws; P14
@@ -1653,6 +1802,8 @@ that no fix would change.
 | rules, building | `LaserFence` | laser-fence flag for T1's inactive-section exception (S-0211 claim 11) | boolean | no |
 | rules, building | `UndeploysInto` | vehicle reference used by the vehicle-like-building test, together with a 1 × 1 foundation (S-0214 Terms and Import mapping) | vehicle type name | none |
 | rules, warhead | `Wall` | wall-damaging warhead (S-0307 claim 11) | boolean | no |
+| rules, infantry, vehicle, aircraft or building type | `LandTargeting` | land-targeting mode (claim 23: 0 allows land targets, 1 allows none, 2 as 0 here and prefers slot 1 by S-0308; S-0308 owns the key) | integer, used as given | 0 |
+| rules, infantry, vehicle, aircraft or building type | `NavalTargeting` | naval-targeting mode (claim 23, water row; S-0308 owns the key) | integer, used as given | 0 |
 | rules, warhead | `EMEffect` | electromagnetic flag (claim 20 c; S-0303 F5) | boolean | no |
 
 Except for the projectile image, which is taken afresh as its row specifies, each field keeps
@@ -2230,6 +2381,83 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   (e) refused without anti-air, fired by the control.
 - Falsified if: (a) is refused, (b) fires, (c) fires without anti-air or is refused with it while
   the control fires, (d) fires with the flag off, or (e) fires without anti-air.
+- Part f (targeting modes, claim 23's water and land rows): (1) a test vehicle type whose only
+  weapon's projectile is anti-air and not anti-ground, in two copies that differ only in
+  land-targeting mode (0 and 1), each force-fired at an enemy ground vehicle on clear land in
+  range, then at the same vehicle on a bridge, then at an empty clear cell; (2) the same two
+  copies given an attack on that vehicle, on clear land and then on the bridge, by a map trigger
+  or a team script; (3) the test vehicle type of (1)
+  with land-targeting mode 0, in three copies with naval-targeting modes 0, 2 and 6 (the same
+  anti-air-only weapon, so that the water row is seen not to depend on the weapon), force-fired
+  at an enemy floor-bound (S-0307, Terms) hovering vehicle whose type is not underwater, on a water cell, then on a beach cell, then on a bridge over
+  water; (4) a test vehicle type whose only weapon's projectile is anti-ground and not anti-air,
+  in two copies with land-targeting modes 0 and 1, each force-fired at an empty clear cell in
+  range. Every copy in parts f to h is a type defined in the named test file, which sets each
+  copy's land-targeting and naval-targeting modes and nothing beyond what each part names, as in part g and
+  S-0309 scenario A5 part b. If a floor-bound hovering enemy vehicle cannot be made to stand on
+  one of (3)'s water, beach or bridge cells, the record says so, and that cell's sub-part is
+  void; the other cells are still judged.
+  Observable: whether a shot is fired within 300 ticks, 3 runs each. Expected: (1) and (2) mode 0
+  fires at the vehicle, on land and on the bridge, and in (1) is refused at the empty cell (third
+  row), mode 1 fires at none; (3) mode 0 fires everywhere; modes 2 and 6 are refused on the
+  water and beach cells and fire on the bridge; (4) mode 0 fires at the cell and mode 1 is
+  refused (the land row). Falsified if mode 0 in (1) or (2) does not fire at the
+  vehicle (the firing check then tests the anti-ground flag for object targets after all), if
+  mode 1 fires, or if the results of (3) depart from that pattern. (4) is void if its mode-0
+  copy does not fire at the cell, since another rule then refuses it.
+- Part g (the land row's refusal stops retaliation): two copies of the test vehicle type of part
+  f (1), land-targeting modes 1 and 0, each of a computer house, in *guard* on clear land, with
+  no aircraft about. Their weapon uses a test warhead with every versus value at 100%, so that
+  S-0304 claim 3 cannot refuse retaliation (as in S-0309 scenario A5 part b). The copies meet
+  S-0309 claim 18's other conditions: the test file sets their type's retaliate flag and a sight
+  range at least 2 cells above their weapon range, and each copy is armed, holds no target and
+  has not fired before. An enemy ground vehicle whose weapon outranges theirs hits each from a
+  cell beyond the copy's weapon range but within its sight limit (S + 0.5 cells, S-0215 claim
+  18).
+  Observable: whether the copy moves toward the attacker within 300
+  ticks of the first hit, 3 runs each. Expected: the mode-0 copy retaliates and approaches (S-0309
+  claim 18; its firing check without range has no refusal); the mode-1 copy stays where it is.
+  Falsified if the mode-1 copy approaches: its land-row refusal is then not one that stops
+  retaliation. If the mode-0 copy does not approach, the run is void: this part judges whether
+  the land row stops retaliation, and a mode-0 copy that does not approach means some other
+  condition stopped it, so the comparison shows nothing about the land row. Whether a mode-0
+  copy fires back at all is judged by part f and by S-0309 scenario A5 part b, where a mode-0
+  copy that does not fire falsifies the absence of the anti-ground test. If every mode-0 run is
+  void, part g backs nothing, and the land row's stopping retaliation is `unmeasured` until a
+  fixture makes the mode-0 copy approach.
+- Part h (the land row's answer is *illegal*): the two copies of part f (1), owned by the local
+  player. Select each in turn and, without force-fire, hold the cursor over an enemy ground
+  vehicle on clear land, once within the copy's weapon range and once beyond it. Observable:
+  whether the cursor offers an attack. Expected: the mode-1 copy is offered no attack at either
+  distance (S-0214 claim 6(e) withholds it for *illegal*); the mode-0 copy is offered the attack
+  at both. Falsified if the mode-1 copy is offered an attack: the answer is then not *illegal*.
+  Falsified as well if the mode-0 copy is offered no attack: the firing check would then refuse a
+  ground object to an anti-air-only weapon whatever the land-targeting mode, against the absence
+  of the anti-ground test on object targets. That reading relies on no other row of S-0214
+  withholding the attack: the copy is not berserk, melee-linked or being erased (rows G1 and
+  G2), it is not an in-place deployer and passes the deploy check (rows V3 and V5), and the
+  target's type is not immune to damage (row V6). S-0214 scenario T4 part C (e), as now written,
+  predicts no attack for a unit with such a weapon; it is amended below (Changes for other
+  specs). Water variant (the water row's answer is *illegal*): the copies of part f (3) with
+  naval-targeting modes 0 and 6, owned by the local player. Select each in turn and, without
+  force-fire, hold the cursor over an enemy floor-bound hovering vehicle on a water cell within the copy's
+  weapon range. Expected: the mode-6 copy is offered no attack; the mode-0 copy is offered it.
+  Falsified if the mode-6 copy is offered an attack (the answer is then not *illegal*). Void for
+  the water row if the mode-0 copy is offered none: another rule then withholds it. The mode-0
+  copy is only a control here; the water row's mode-0 branch is not tested by this variant. The same conditions on S-0214's other rows apply as above.
+- Part i (a held target that lifts off, claim 23's first row): an enemy aircraft of a type with
+  the landing behaviour stands landed on its pad. A test vehicle and a test building, each with a
+  weapon whose projectile is anti-ground and not anti-air, and neither able to grip a unit, are
+  ordered to attack it in range. As soon as the target recorder shows it as their target, the
+  aircraft's owner orders it to fly to a cell within their range and to stay in the air there. A
+  second enemy ground vehicle stands within both firers' range throughout. Observable, with the
+  target recorder: the firers' targets from the order until 300 ticks after lift-off, and their
+  shots. Expected: once the aircraft is airborne, neither firer shoots at it, and each drops it as
+  its target no later than the first check of its attack after lift-off, which answers *illegal*
+  (the first row's rank 4 comes ahead of *rearming*; S-0304 claim 2, S-0215 claim 32). An earlier
+  drop agrees with this part; the part does not judge the tick of the drop. Falsified if either
+  firer keeps the aircraft as its target for the 300 ticks while it stays airborne in range, or
+  shoots at it while it is airborne.
 
 **P17. Redirected shots (claim 3 a).**
 - Setup: run a: a test rules file gives a stock vehicle the spray-attack flag (S-0313 claim 9) and a
@@ -2721,7 +2949,7 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 **P41. Railgun hits and terrain (claim 27).**
 - Setup: a tiny skirmish map with a flat firing lane, a second lane crossing a ridge, and a
-  destroyable cliff. Stock railgun firer and stock targets, director and mods off, fixed game
+  destroyable cliff. Stock railgun firer and stock targets, no game modifications, fixed game
   speed and recorded seeds; run one game instance at 800×600. Put friendly and enemy vehicles
   beside the flat beam, a multi-cell building intersecting it, and a target in the firer's
   cell in a separate run. Repeat under and over a high bridge with occupants on both layers.
@@ -2775,16 +3003,16 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 **P42. Drawing a projectile (claims 28 to 33, F14 to F16; Q-1570).**
 - Setup: a tiny flat skirmish map of height level 0 with ordinary terrain, evenly lit, plus a
-  high-bridge crossing and one cell lit by a coloured building light (an ordinary stock lit
-  building is enough). Named test files: a loose art file that gives a test projectile image
-  section the fields each part names; a purpose-made test sprite of 32 image frames, each frame
-  showing its own number in large digits; a purpose-made asymmetric test voxel model (a long
-  body with a fin on one side and a coloured nose) with a one-frame motion file; a loose rules
-  file whose test weapon uses a test projectile type with that image and otherwise copies a
-  stock straight projectile type. Director and mods off, game speed index 2, 800×600, scripted
-  input, a recorder of projectile positions and velocities with the tick, and tick-labelled
-  lossless screen capture with at least one drawn frame per tick. The firer is a stock turreted
-  vehicle in the middle of the map; targets are unarmed enemy vehicles of a computer player.
+  high-bridge crossing and one cell lit by a coloured building light (an ordinary stock lit building
+  is enough). Named test files: a loose art file that gives a test projectile image section the
+  fields each part names; a purpose-made test sprite of 32 image frames, each frame showing its own
+  number in large digits; a purpose-made asymmetric test voxel model (a long body with a fin on one
+  side and a coloured nose) with a one-frame motion file; a loose rules file whose test weapon uses
+  a test projectile type with that image and otherwise copies a stock straight projectile type. No
+  game modifications other than the named test files, game speed index 2, 800×600, scripted input, a
+  recorder of projectile positions and velocities with the tick, and tick-labelled lossless screen
+  capture with at least one drawn frame per tick. The firer is a stock turreted vehicle in the
+  middle of the map; targets are unarmed enemy vehicles of a computer player.
 - **Part a, rotating sprite.** Rotating flag on, animation fields 0. Fire at targets placed in
   32 directions around the firer (one per run), and in eight extra runs at targets placed just
   either side of four sector boundaries. Observable: the number in the drawn image frame in every
@@ -2856,6 +3084,11 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 
 ## Open questions
 
+- Q-1761 question 2, beyond this spec: this spec answers it for the firing check on every route
+  and for the shot's flight and detonation (claim 23, with its answer to Q-1763 question 3). The
+  rest belongs to other specs: which orders reach the firing check is S-0214's, and S-0309 claim 5
+  keeps such a firer's automatic searches to aircraft. Whether the shot damages the ground unit
+  is not settled here.
 - Whether a detonation can remove the projectile that causes it, which would end a cluster early
   (claim 21), is not established. S-0303 leaves the same case open (its claim on the animation
   after the area damage).
@@ -2882,6 +3115,32 @@ fire point (S-0313, the fire point's height term in the test file) and check the
   not checked beyond them.
 - Whether the light-glow image of a projectile (claim 33) follows the projectile while it flies,
   and when it is removed, is not established; scenario P42 part h records it.
+
+## Changes for other specs
+
+- S-0308 claim 11 leaves open whether the original refuses a shot when the firer's naval-targeting
+  mode gives "none" (table N). Claim 23 here answers it: the firing check answers
+  *illegal* for such a target on a water or beach cell. Claim 23 rates that answer medium,
+  `measurable` by scenario P16 part h's water variant, except the water row's mode-0 branch,
+  which it rates low and `unmeasured`, so S-0308 claim 11 can point here but
+  should not treat it as measured.
+- S-0301 claim 9: the water and land rows of claim 23 here give their *illegal* at rank 4. Rank
+  4's list should name them beside the airborne and non-ground rows, and the *illegal* row of the
+  answer table should name them among the cases of S-0306 claim 23. Its closing sentence, that no
+  other precedence within rank 4 is specified, should give way to claim 23's order: the rows
+  yield to the rank-4 *impossible* and *rearming* answers that claim 23 names, and the
+  magnetic-beam *rearming* yields to them.
+- S-0309 claim 18 (revision 38, companion of this revision): retaliation is bounded by the
+  firing check and the behaviour rules of S-0215, so the land row here is what stops an object
+  whose type has land-targeting mode 1 from firing back at a ground attacker (a building whose
+  type has the SAM flag is stopped by S-0215 claim 32 instead).
+- S-0214 scenario T4 part C (e) gives an own unit "a weapon that cannot hit ground targets" and
+  expects no attack without force-fire over an enemy tank. By claim 23 the firing rules rule a
+  ground object illegal for such a unit only when its type's land-targeting mode is 1: the
+  anti-ground flag is not tested for object targets, so with mode 0 (the default) a weapon whose
+  projectile is anti-air only is offered the attack (scenario P16 part h). T4 part C (e) should
+  name the test unit's type as having land-targeting mode 1, or add that mode to its test file.
+  Its expectations then stand as written.
 
 ## Questions for the project lead
 
