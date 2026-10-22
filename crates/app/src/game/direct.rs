@@ -128,12 +128,21 @@ pub struct Ice {
 }
 
 impl Ice {
-    /// The servers of a space-separated list of URLs.
+    /// The servers of a space-separated list of URLs (`stun:HOST:PORT`,
+    /// `turn:HOST:PORT`); the words `username=NAME` and `credential=WORD`
+    /// among them give a TURN server's login.
     pub fn from_urls(text: &str) -> Self {
-        Self {
-            urls: text.split_whitespace().map(str::to_owned).collect(),
-            ..Self::default()
+        let mut ice = Self::default();
+        for word in text.split_whitespace() {
+            if let Some(u) = word.strip_prefix("username=") {
+                ice.username = Some(u.to_owned());
+            } else if let Some(c) = word.strip_prefix("credential=") {
+                ice.credential = Some(c.to_owned());
+            } else {
+                ice.urls.push(word.to_owned());
+            }
         }
+        ice
     }
 }
 
@@ -184,6 +193,9 @@ pub struct PairInfo {
 
 /// Opens one attempt.
 pub type OpenPair = Rc<dyn Fn(&PairInfo) -> Box<dyn PairLink>>;
+
+/// A platform's way of opening an attempt, as a function.
+pub type OpenPairFn = fn(&PairInfo) -> Box<dyn PairLink>;
 
 /// The platform's own direct links, where it has them built in: natively
 /// `glasnost-rtc`. The web shell passes its own.
@@ -294,6 +306,11 @@ struct Peer {
     fails: u32,
     /// Signals the current attempt sent.
     signals: u32,
+    /// Signals that came while the slot was not playing here (yet): a
+    /// rejoined peer may be readmitted on its side a moment before this
+    /// one's; they are taken once it plays, if not older than a connect
+    /// timeout. At most [`MAX_SIGNALS`].
+    early: VecDeque<(u64, u32, Signal)>,
     stats: PairStats,
 }
 
@@ -310,7 +327,39 @@ impl Peer {
             retry_at: 0,
             fails: 0,
             signals: 0,
+            early: VecDeque::new(),
             stats: PairStats::default(),
+        }
+    }
+
+    /// A signal of the peer for attempt `attempt`: an offer of a new
+    /// attempt replaces the answering end's link; a signal of another
+    /// attempt than the current one is dropped.
+    #[allow(clippy::too_many_arguments)]
+    fn signal_in(
+        &mut self,
+        now: u64,
+        open: &OpenPair,
+        direct: &Direct,
+        me: u8,
+        from: u8,
+        attempt: u32,
+        s: Signal,
+    ) {
+        if !self.offerer && matches!(s, Signal::Offer(_)) && attempt != self.attempt {
+            // A new attempt of the offering end: it replaces ours.
+            self.end(now, "the peer tried again", from, &direct.timeouts);
+            self.attempt = attempt;
+            self.since = now;
+            self.signals = 0;
+            self.stats.attempts += 1;
+            self.link = Some(self::opened(open, direct, me, from, attempt, false));
+        }
+        if attempt != self.attempt {
+            return;
+        }
+        if let Some(link) = self.link.as_mut() {
+            link.signal(s);
         }
     }
 
@@ -562,28 +611,18 @@ impl Mesh {
         let Some(open) = self.direct.open.clone() else {
             return;
         };
-        if !ls.direct_ok(from) {
-            return;
-        }
         let me = self.me;
         let Some(p) = self.peers.get_mut(&from) else {
             return;
         };
-        if !p.offerer && matches!(s, Signal::Offer(_)) && attempt != p.attempt {
-            // A new attempt of the offering end: it replaces ours.
-            p.end(now, "the peer tried again", from, &self.direct.timeouts);
-            p.attempt = attempt;
-            p.since = now;
-            p.signals = 0;
-            p.stats.attempts += 1;
-            p.link = Some(self::opened(&open, &self.direct, me, from, attempt, false));
-        }
-        if attempt != p.attempt {
+        if !ls.direct_ok(from) {
+            if p.early.len() >= MAX_SIGNALS as usize {
+                p.early.pop_front();
+            }
+            p.early.push_back((now, attempt, s));
             return;
         }
-        if let Some(link) = p.link.as_mut() {
-            link.signal(s);
-        }
+        p.signal_in(now, &open, &self.direct, me, from, attempt, s);
     }
 
     /// Looks at every link: attempts start and time out, links open and
@@ -605,7 +644,18 @@ impl Mesh {
                 }
                 p.fails = 0;
                 p.retry_at = 0;
+                // A rejoined offering end is a new process that numbers
+                // its attempts from 1 again: any attempt of it is new.
+                if !p.offerer {
+                    p.attempt = 0;
+                }
                 continue;
+            }
+            // Signals that came before the slot played here.
+            while let Some((at, attempt, s)) = p.early.pop_front() {
+                if now.saturating_sub(at) <= t.connect_ms {
+                    p.signal_in(now, &open, &self.direct, me, slot, attempt, s);
+                }
             }
             if p.link.is_none() && p.offerer && now >= p.retry_at {
                 p.attempt += 1;
@@ -1001,6 +1051,16 @@ pub mod fake {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ice_servers_read_from_a_line_of_words() {
+        assert_eq!(Ice::from_urls(""), Ice::default());
+        let ice =
+            Ice::from_urls(" stun:a.example:3478  turn:b.example:3478 username=u credential=p ");
+        assert_eq!(ice.urls, ["stun:a.example:3478", "turn:b.example:3478"]);
+        assert_eq!(ice.username.as_deref(), Some("u"));
+        assert_eq!(ice.credential.as_deref(), Some("p"));
+    }
 
     #[test]
     fn control_packets_read_back_and_nothing_else_reads_as_one() {

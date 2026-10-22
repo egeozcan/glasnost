@@ -322,20 +322,20 @@ fn a_direct_link_that_dies_mid_game_falls_back_and_is_used_again() {
         &mut [&mut a, &mut b],
         &mut hashes,
         &mut rng,
-        until + 40,
+        until + 80,
     );
     let relayed = pair(&a, &b).paths.unwrap();
     assert!(
-        relayed.relay_first > dark.relay_first + 30,
+        relayed.relay_first > dark.relay_first + 40,
         "the relay carried the frames: {relayed:?}"
     );
 
     net.light(0, 1);
-    until += 40;
+    until += 80;
     while !(pair(&a, &b).open && pair(&b, &a).open) {
         until += 10;
         play_to(&clock, &mut [&mut a, &mut b], &mut hashes, &mut rng, until);
-        assert!(until < 900, "no new link: {:?}", pair(&a, &b));
+        assert!(until < 1_000, "no new link: {:?}", pair(&a, &b));
     }
     let back = pair(&a, &b).paths.unwrap();
     play_to(
