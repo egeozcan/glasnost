@@ -14,7 +14,11 @@
 //!   with a radiation weapon in its second slot), ERAS (a temporal beam),
 //!   ZAPR (an electric charger), PLNT (plants bombs), DISA (disarms them),
 //!   KAMI (a suicide weapon), SABO (explosive charges); DECOY, an unarmed
-//!   unit of the *other* house on an islet.
+//!   unit of the *other* house on an islet, of an armour class that only
+//!   the jumpjets' own warhead (JETW, on their weapon JetRifle) affects
+//!   (M8 step B4: before, the strike aircraft killed it early, or a
+//!   radiation deployer deployed among its own army for it and irradiated
+//!   that army; seed 5 of 1 to 32 then built no jumpjet).
 //! - Vehicles: DEPT (deploys in place), FIRE (deploys to fire), DESIG (an
 //!   air-strike designator), DISV (a disarmer that deploys into a
 //!   building); STRK, the strike aircraft; HULK, an unarmed, sturdy, costly
@@ -449,8 +453,38 @@ pub fn ruleset() -> Ruleset {
         }
     }
 
-    // The decoy: an unarmed infantry unit.
-    infantry(&mut r, "DECOY", |t| t.primary = None);
+    // The decoy: an unarmed infantry unit whose armour class (special 1,
+    // index 9) only the jumpjets' warhead affects: every other warhead has
+    // a versus value of zero there, so no other weapon may fire at it
+    // (S-0304 claim 1). Neither the strike aircraft nor a deployer near the
+    // islet takes it, and no deployer deploys among its own house's army
+    // for a target it may not fire at; it waits for a jumpjet (M8 step B4).
+    infantry(&mut r, "DECOY", |t| {
+        t.primary = None;
+        t.combat.armor = Some(glasnost_rules::sim::ArmourClass::Special1);
+    });
+    let mut jetw = r.sim.warheads["SA"].clone();
+    if let Some(v) = jetw.verses.as_mut().and_then(|v| v.get_mut(9)) {
+        *v = d("1");
+    }
+    r.sim.warheads.insert("JETW".into(), jetw);
+    let mut jet_rifle = r.sim.weapons["Rifle"].clone();
+    jet_rifle.warhead = Some("JETW".into());
+    r.sim.weapons.insert("JetRifle".into(), jet_rifle);
+    for n in ["JETI", "JET2"] {
+        if let Some(t) = r.sim.infantry.get_mut(n) {
+            t.primary = Some("JetRifle".into());
+        }
+    }
+    for (n, h) in r.sim.warheads.iter_mut() {
+        if n == "JETW" {
+            continue;
+        }
+        let v = h.verses.get_or_insert_with(|| vec![d("1"); 11]);
+        if let Some(special1) = v.get_mut(9) {
+            *special1 = d("0");
+        }
+    }
 
     // The armed special types the barracks builds too (the army builder
     // takes them in turn with the rifleman), so that the abilities are used
