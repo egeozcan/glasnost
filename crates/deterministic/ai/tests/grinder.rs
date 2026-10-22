@@ -398,3 +398,44 @@ fn a_far_unit_is_moved_to_the_grinder_first() {
     }
     assert!(sent_in, "sent in once at the side");
 }
+
+// PLAN §4.7 (M8 B4): a far unit that does not take the click to the grinder's side (it stands idle where it was) is sent to another side at the next think, never the same cell again.
+#[test]
+fn a_far_unit_that_does_not_move_tries_another_side() {
+    let g = game(99);
+    let (mut w, b) = scene(&g);
+    let far = spawn(&mut w, Kind::Infantry, "WALKER", 0, 16, 6);
+    w.obj_mut(far).unwrap().health /= 5;
+    settle(&mut w);
+    let g0 = w.obj(b).unwrap().pos.cell();
+    let mut br = brain(&w);
+    let side = |orders: &[Order]| {
+        orders.iter().rev().find_map(|o| match o {
+            Order::Behaviour {
+                actor,
+                behaviour: Behaviour::Move,
+                dest: Some(Target::Cell(c)),
+                ..
+            } if *actor == far => Some(*c),
+            _ => None,
+        })
+    };
+    let start = w.obj(far).unwrap().pos.cell();
+    let mut tried: Vec<CellXY> = Vec::new();
+    for _ in 0..3 {
+        // The orders are dropped: the unit stays idle on its cell, as one
+        // whose route does not exist.
+        let orders = br.think(&w);
+        let c = side(&orders).unwrap_or_else(|| panic!("moved: {orders:?}"));
+        assert!(
+            (c.x - g0.x).abs().max((c.y - g0.y).abs()) <= 4,
+            "{c:?} by {g0:?}"
+        );
+        assert!(!tried.contains(&c), "{c:?} again after {tried:?}");
+        tried.push(c);
+        for _ in 0..15 {
+            testkit::run(&mut w, 1);
+        }
+    }
+    assert_eq!(w.obj(far).unwrap().pos.cell(), start, "it never moved");
+}
