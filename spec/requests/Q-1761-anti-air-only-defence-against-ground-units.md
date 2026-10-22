@@ -3,7 +3,7 @@ id: Q-1761
 title: An anti-air-only defence building and ground units (retaliation, orders on aircraft)
 status: open
 related: [S-0306, S-0309, S-0214, S-0304, S-0215]
-answered-by: []
+answered-by: [S-0306]
 ---
 
 ## Need
