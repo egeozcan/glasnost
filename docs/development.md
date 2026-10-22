@@ -2515,39 +2515,42 @@ A slot that leaves, or a peer that is catching up, ends its links and resets the
 - `web-tests/rtc.mjs`: in Chromium and Firefox, two attempts in one page open with no ICE server (33 to 50 ms) and carry a packet each way, and a hostile offer ends its attempt without a panic.
 - Unit tests: control packets, the shaped lane, ICE words, settings (`direct_links_are_on_with_no_servers_by_default`), `xtask deps` (`the_direct_links_stack_stays_inside_its_crate`, `versions_of_a_package_keep_their_own_dependencies`).
 
-**The soaks** (local lane, on the install, 2026-10-22; counts and timings only). All native, four persons on map index 30, `--minutes 30`, the default trouble; the bad network is N6's (40 ms, jitter 0 to 30 ms, 2 % of chunks 200 ms late, stalls of 0.5 to 2.5 s every 45 to 150 s) on every relay link and, with `--transport rtc`, on every direct path too. Another session's sweep used about 14 of the machine's 32 cores throughout. The games are AI games and end when one team wins, so the two runs played games of different lengths.
+**The soaks** (local lane, on the install, 2026-10-22; counts and timings only). All runs native, with four persons on map index 30 and `--minutes 30`. The bad network is N6's (40 ms, jitter 0 to 30 ms, 2 % of chunks 200 ms late, stalls of 0.5 to 2.5 s every 45 to 150 s). It is on every relay link and, with `--transport rtc`, on every direct path too. Another session's sweep used about 14 of the machine's 32 cores throughout.
 
-| | `--transport rtc` | `--transport relay` |
-|---|---|---|
-| Result | pass: 0 mismatches, no desync, every client exited with 0 | pass, the same |
-| Game | won at tick 19 994 (5.3 min of game time) in 8.3 min of wall time, 40 ticks/s | won at tick 98 793 (26.3 min) in 34.4 min, 48 ticks/s |
-| Trouble | row 1 cut at 300 s, back in 12.1 s (the game ended before the next) | all four: cuts back in 7.9, 9.2 and 7.9 s, the kill in 13.9 s |
-| Checkpoints | 662 common | 3 269 common |
-| Delay | 10 to 30: 8 % at 11, 30 % at 19 to 22, 12 % at 30 | 22 to 30: 87 % at 30 |
-| Round trip, peer to peer (`session_rtt_ms`, all paths) | 251 to 286 ms, median 264 | 333 to 440 ms, median 389 |
-| Round trip, client to relay | medians 201 to 279 ms | medians 178 to 241 ms |
-| Direct round trip (the link's own pings) | medians 275 to 310 ms | – |
-| Frames that came the direct way first | 158 728 of 202 003 (78 %) | – |
-| Pairs | 12 of 12 linked; 17 attempts, 0 failed; 5 fallbacks (the cut slot's links, and twice a link that went silent); every pair linked again | relay only |
-| Connect | 186 to 822 ms, median 374 | – |
-| Held back (`gated`) | 89 frames | – |
-| Late ticks (more than 100 ms) | 122 to 651 per client | 200 to 225 per client |
-| "Waiting for ..." | 0 | 38 to 67 per client |
-| Longest gap between two ticks | 487 to 620 ms | 2.4 to 3.7 s |
+The games are AI games and end when one team wins. With the default trouble (cuts at 300, 600 and 1 200 s, a kill at 900 s), the direct-link game ended after the first cut. A second direct-link run therefore moved the four troubles to 60, 120, 180 (the kill) and 240 s. Delay shares come from each client's delay timeline.
 
-On the bad network the direct path gives the peers a shorter round trip, because a lost packet costs only that frame's copy, which the relay's copy covers. The relay path runs over TCP, where a late chunk holds back every chunk after it. With direct links the delay mostly stayed between 10 and 24 and no client showed a "Waiting for" notice. On the relay alone it sat at the largest delay most of the game.
+| | rtc, default trouble | rtc, trouble at 60 to 240 s | relay, default trouble |
+|---|---|---|---|
+| Result | pass: 0 mismatches, no desync, every client exited with 0 | pass | pass |
+| Game | won at tick 19 994 (5.3 min of game time), 8.3 min wall, 40 ticks/s | won at tick 52 132 (13.9 min), 21.6 min wall, 40 ticks/s | won at tick 98 793 (26.3 min), 34.4 min wall, 48 ticks/s |
+| Rejoins | 1 cut: 12.1 s | cuts 8.4, 8.6 and 10.7 s; the kill 14.7 s | cuts 7.9, 9.2 and 7.9 s; the kill 13.9 s |
+| Checkpoints in common | 662 | 1 717 | 3 269 |
+| Delay, whole game | 10 to 30: 35 to 37 % at 10 to 18, 42 to 45 % at 19 to 24, 9 % at 25 to 29, 12 % at 30 | 10 to 30: 46 to 49 %, 37 to 38 %, 7 to 8 %, 7 % | 22 to 30: 0 %, 0 %, 12 to 13 %, 87 to 88 % |
+| Delay, ticks 0 to 11 900 (before any cut in either default run; the same on each client that covers it) | 33 %, 45 %, 6 %, 16 % | – | 0 %, 0 %, 9 %, 91 % |
+| Round trip peer to peer (`session_rtt_ms`, smoothed, all paths) | 251 to 286 ms | 238 to 287 ms | 333 to 440 ms |
+| Round trip client to relay (`relay_rtt_ms`, smoothed at the end) | 201 to 279 ms | 199 to 240 ms | 178 to 241 ms |
+| Direct link's own round trip (`rtt_ms`, smoothed at the end, over the 12 pairs) | 275 to 310 ms | 274 to 338 ms | – |
+| Frames that came the direct way first | 78 % | 76 % | – |
+| Pairs | 12 of 12 linked; 17 attempts, 0 failed; 5 fallbacks (the cut slot's links, and twice a link that went silent), every pair linked again | 12 of 12; 18 attempts, 0 failed; 6 fallbacks (the troubled slots' links), every pair linked again | relay only |
+| Connect | 186 to 822 ms, median 374 | 155 to 1 585 ms, median 408 | – |
+| Held back (`gated`) | 89 frames | 338 | – |
+| Late ticks (over 100 ms), per client | 122 to 651 | 136 to 513 | 200 to 225 |
+| "Waiting for ..." shown, per client | 0 | 1 or 2 | 38 to 67 |
+| Longest gap between two ticks | 0.5 to 0.6 s | 1.6 to 1.8 s | 2.4 to 3.7 s |
 
-*Milder network* (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, all four troubles, 11 250 ticks, both pass):
+On the bad network the direct path gives the peers a shorter round trip, because a lost packet costs only that frame's copy, which the relay's copy covers. The relay path runs over TCP, where a late chunk holds back every chunk after it. With direct links the delay mostly stayed between 10 and 24, and the players almost never saw "Waiting for". On the relay alone it sat at the largest delay, already in the first 11 900 ticks, before any trouble. Paced at the same delay, the relay-only clients ran more ticks per second (48 against 40). A lower delay leaves less room for a stall, so a stall shows as late ticks instead.
+
+*Milder network* (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, the four troubles at 30, 60, 90 (the kill) and 120 s, 11 250 ticks; both runs pass):
 
 | | rtc | relay |
 |---|---|---|
-| Delay | 5 to 18, 80 % at 6 to 8 | 5 to 24, 75 % at 6 to 8 |
+| Delay | 3 to 18; 71 to 88 % of ticks at 6 to 8, per client | 3 to 24; 67 to 78 % at 6 to 8 |
 | Rejoins | 7.2, 13.1, 11.1 (the kill) and 8.6 s | 7.5, 8.0, 9.4 (the kill) and 11.9 s |
 | Direct first | 29 % | – |
-| Round trips | session 99 to 107 ms; the direct link's pings 122 to 151 ms | session 101 to 113 ms |
-| Connect | 54 to 155 ms (6 fallbacks after the four troubles, all linked again) | – |
+| Round trips (smoothed) | session 99 to 107 ms; the direct link's own 122 to 151 ms | session 101 to 113 ms |
+| Connect | 54 to 155 ms; 6 fallbacks after the four troubles, all linked again | – |
 
-On this network the shaped direct path is slower than the relay path. That comes from the harness, not the link. The netem proxies on the relay path run on their own threads. The direct path's shape (`game::direct::Shaped`) moves packets only when the client polls it, so each shaped stage waits for the next client update: about 35 ms more per round trip at 62.5 ticks/s. The soak therefore understates what the direct path gains. Unshaped on loopback, a link opens in about 55 ms (`crates/rtc/tests/pair.rs`).
+On this network the shaped direct path is slower than the relay path. That comes from the harness, not the link. The netem proxies on the relay path run on their own threads. The direct path's shape (`game::direct::Shaped`) moves packets only when the client polls it, so each shaped stage waits for the next client update: about 35 ms more per round trip at 62.5 ticks/s. The soak therefore understates what the direct path gains. Unshaped on loopback, a link opens in about 55 ms (`crates/rtc/tests/pair.rs`). The wasm row of the soak was not run in N7 (it stays on the relay; see below).
 
 *A delay fault these soaks found* (not in the direct links; fixed in `glasnost-net`, see "The delay" above). The first long soaks pinned the delay at the largest value: 83 % of ticks at 30 with direct links, 99 % on the relay. The first milder run stuck at 30 from the host's rejoin to the end. Two causes:
 - one wait at the largest delay raised every later proposal;
@@ -2565,6 +2568,7 @@ N6's "26 to 30 for the whole game" is very likely the first cause. The numbers a
 - *TURN passwords* are kept in the settings file as typed.
 - *Client logs.* webrtc-rs logs ICE, mDNS and connection-state lines at INFO and WARN into the client's log (a few dozen per attempt); they are harmless and could be filtered by target.
 - *The soak's trouble after the end.* A trouble timed after the game ended (an AI game can end early) finds no game: a killed client restarted then cannot rejoin, and the soak fails on its exit. It happened once, in a 3-minute run whose game ended at 84 s; the harness could skip trouble once a game is over.
+- *Security advisories on an unused branch.* `cargo deny check advisories` (not run in CI) lists RUSTSEC-2025-0052 (async-std unmaintained), RUSTSEC-2025-0134 (rustls-pemfile unmaintained) and seven 2026 advisories on rustls 0.21, rustls-webpki 0.101 and webpki-roots 0.22. They all come in through matchbox_socket's WebSocket signaller (async-tungstenite, async-tls), which matchbox 0.14 compiles on native with no feature to leave it out. glasnost-rtc never builds that path: it signals over the relay. No ignores were added; a later matchbox, or a fork without the signaller, would drop them.
 
 ## M6c step ledger
 
