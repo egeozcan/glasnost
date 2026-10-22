@@ -11,7 +11,7 @@ This step takes in the drawing half of the projectile spec and the target line. 
 
 **Format.** Nothing that is saved or hashed changes. The target line travels as a presentation-only `Effect::TargetLine`, which is neither saved nor hashed, like the other effects. The importer quirk `projectile_image_afresh` lives in the art quirks, not in the ruleset. The save format (67), the AI game format (29) and the goldens do not move. Default play does not change: the simulation takes no new draw and changes no state.
 
-**Requests.** Q-1580 and Q-1570 are answered and their interim rows are retired. Q-1600 (filed in this intake, commit 6c1c878) asks where a turreted voxel vehicle's shot animation sits against its drawn barrel. Interim: none needed, the code follows the specs as they stand.
+**Requests.** Q-1580 and Q-1570 are answered and their interim rows are retired. Q-1600 (filed in this intake, commit 6c1c878) asks where a turreted voxel vehicle's shot animation sits against its drawn barrel. Interim: none needed, the code follows the specs as they stand. Q-1600 is answered by S-0313 revision 29 (claims 11 to 11e, scenario P10), taken in at M8 step A3 intake 4 ([../m8-claims/intake4-S-0313.md](../m8-claims/intake4-S-0313.md)): our engine adds no correction to the animation or the turret, so the code stands; the turret is now drawn with the simulation's δ.
 
 ## S-0306 revisions 16 and 17
 
