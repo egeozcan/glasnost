@@ -2401,7 +2401,7 @@ The ignored test `long_soak_2v2` in `crates/tools/tests/soak.rs` runs the same s
 - `crates/tools/src/netem.rs`: `bytes_pass_in_order_and_late`, `a_cut_closes_and_a_new_connection_passes`.
 - `crates/app/src/game/bot.rs`: `options_parse`, `bad_options_are_refused`.
 
-**The 30-minute soak** (local lane, on the install, 2026-10-22; counts and timings only). Four persons on map index 30 (`--map 30`; the first maps are small and the AI game there can end in a minute or two), the default bad network on every link, row 3 the wasm client under node, seven troubles: row 1 cut at 120 s and 900 s, row 3 (wasm) cut at 240 s and 1200 s, row 2 killed and restarted at 360 s and 1500 s, the host (row 0) cut at 480 s. Another session's sweep used about 14 of the machine's 32 cores the whole time.
+**The long soak** (local lane, on the install, 2026-10-22; counts and timings only). A limit of 30 minutes of game time (`--minutes 30`); the game ended in a win first, at tick 58 535 (15.6 minutes of game time, 26.5 minutes of wall time). Four persons on map index 30 (`--map 30`; the first maps are small and the AI game there can end in a minute or two), the default bad network on every link, row 3 the wasm client under node, seven troubles: row 1 cut at 120 s and 900 s, row 3 (wasm) cut at 240 s and 1200 s, row 2 killed and restarted at 360 s and 1500 s, the host (row 0) cut at 480 s. Another session's sweep used about 14 of the machine's 32 cores the whole time. It ran a build from before the last harness changes in this section (the pass rule, the network knobs, the transfer counters, the stop on a client that exits early); the lockstep, client and simulation code were the same.
 
 | | |
 |---|---|
@@ -2412,14 +2412,14 @@ The ignored test `long_soak_2v2` in `crates/tools/tests/soak.rs` runs the same s
 | End | game over at tick 58 535; houses 0 and 2 (team 1) won |
 | Checkpoints | 1 925 every client ran, the last at tick 58 529; a rejoined client logs again the ticks it ran again, and they agree too |
 | Rejoins | 7 of 7, from the loss to the readmission: row 1 8.0 s and 9.0 s, row 3 (wasm) 10.2 s and 27.8 s, the host 13.2 s; after a kill, from the restarted client finding its game, 2 s wait included: 9.7 s and 12.1 s |
-| Games sent | 7 transfers of 2.24 to 2.32 MB; the host served 6, row 1 served the host's |
+| Games sent | 7 transfers of 2.24 to 2.32 MB (from the logs); the host served 6, row 1 served the host's |
 | Delay | 3 for ticks 0 to 3, 30 at tick 4 (the first round-trip sample), then 26 to 30 for the whole game |
 | Stalls | 744 to 996 ticks per client came more than 100 ms late; the longest gap between two ticks 2.4 s (the proxy's longest stall 2.49 s); "Waiting for ..." shown about 40 times |
 | Network | per client about 30 stalls, 8 300 to 8 600 chunks "lost"; relay traffic per client 21 to 37 MB up (the host's includes the games it served) and 65 to 69 MB down, about 43 KB/s down |
 | Evidence | at most 4.64 MB held (`Evidence::bytes_held`) |
 | Orders | 3 000 (host), 1 900, 6 (row 2, its last process), 307 (wasm) given; 10 000 and 17 000 repeats dropped by the two native rows that played the whole game |
 
-Shorter runs: 3 minutes native and 3 minutes with the wasm row on the bad network passed (355 common checkpoints, 3 cuts and a kill rejoined in 5.5 to 7.8 s; the wasm client mounted in 3.5 s); 2 400 ticks on the synthetic install with the wasm row passed (4 rejoins, 61 common checkpoints). A first 30-minute try on map index 0 ended in a win at tick 5 001 (80 s), before any trouble, which is why the soak plays a larger map. A milder network (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, default trouble, all native) shows the delay move: 10 to 12 in the first ticks, down to 5 and 6, up to 30 at each rejoin and back down within about 600 ticks; from about tick 4 400 to 10 000 it stayed between 15 and 26 with no trouble, while the four clients ran 35 ticks/s against 62.5 paced, so a slow tick reads as a long round trip.
+Shorter runs: 3 minutes native and 3 minutes with the wasm row on the bad network passed (355 common checkpoints, 3 cuts and a kill rejoined in 5.5 to 7.8 s; the wasm client mounted in 3.5 s); 2 400 ticks on the synthetic install with the wasm row passed (4 rejoins, 61 common checkpoints). On the final build, `long_soak_2v2` for 2 minutes with the wasm row passed: 7 500 ticks in 150 s (50 ticks/s), 4 rejoins in 5.0 to 7.9 s, 227 common checkpoints. A first 30-minute try on map index 0 ended in a win at tick 5 001 (80 s), before any trouble, which is why the soak plays a larger map. A milder network (`--latency 20 --jitter 5 --loss 0 --no-stalls`, 3 minutes, default trouble, all native) shows the delay move: 10 to 12 in the first ticks, down to 5 and 6, up to 30 at each rejoin and back down within about 600 ticks; from about tick 4 400 to 10 000 it stayed between 15 and 26 with no trouble, while the four clients ran 35 ticks/s against 62.5 paced, so a slow tick reads as a long round trip.
 
 **Seams and limits.**
 
