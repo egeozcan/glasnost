@@ -3031,6 +3031,103 @@ N6's "26 to 30 for the whole game" is very likely the first cause. The numbers a
 - *The soak's trouble after the end.* A trouble timed after the game ended (an AI game can end early) finds no game: a killed client restarted then cannot rejoin, and the soak fails on its exit. It happened once, in a 3-minute run whose game ended at 84 s; the harness could skip trouble once a game is over.
 - *Security advisories on an unused branch.* `cargo deny check advisories` (not run in CI) lists RUSTSEC-2025-0052 (async-std unmaintained), RUSTSEC-2025-0134 (rustls-pemfile unmaintained) and seven 2026 advisories on rustls 0.21, rustls-webpki 0.101 and webpki-roots 0.22. They all come in through matchbox_socket's WebSocket signaller (async-tungstenite, async-tls), which matchbox 0.14 compiles on native with no feature to leave it out. glasnost-rtc never builds that path: it signals over the relay. No ignores were added; a later matchbox, or a fork without the signaller, would drop them. The lead accepted them as they are on 2026-10-22: re-check when a matchbox release can leave the signaller out.
 
+### Network lab (N8c)
+
+N7's links were tried only on one machine. N8c runs them behind real NATs and across the internet: a rootless lab of four homes, each behind its own NAT router, with symmetric NATs, a TURN server and blocked UDP; browser rows in the soak; and a game split between this machine and a rented server. Everything here is our own netcode (`// nocite: our own netcode`) or harness (`// nocite: our own harness`); the simulation crates do not change. Code: `crates/tools/src/soak.rs` (split soaks, external relays, browser rows, `soak compare`), `crates/netlab` (`glasnost-netlab`, the binary `glasnost-turn`), `crates/netlab/lab/nat-lab.sh`, `web-tests/net-client.mjs`, `crates/headless-web/src/lib.rs` (direct links in a page) and `crates/app/src/game/direct.rs` (`Signal::Decline`).
+
+**Split soaks.** One game, played by several soaks, each running some of the rows, on a relay none of them started. The options:
+
+- `--relay-url ws://HOST:PORT/` (or `wss://`) names the relay; `--no-proxy` sends the clients straight to it, without the bad-network proxies (so no cut trouble).
+- `--rows 0,1` names the rows this soak runs.
+- Without row 0, the soak needs the room code: `--code CODE`, or `--code-in FILE`, which it waits for (up to 10 minutes). `--code-out FILE` writes the code once this soak's rows are seated.
+- `--row-arg R:ARG` passes an option to one row's client. `--client-arg ARG` passes it to every row.
+
+The room seats a joiner in the next free row, so the parts must join in row order: each part's `--code-in` is the previous part's `--code-out`. `glasnost-headless soak compare [--minutes M | --ticks N] DIR DIR ...` reads the halves' row folders and applies the soak's pass rule to all rows together: every client exited with 0 and saw the end or the limit, no desync, no tick hashed two ways, and the rows share checkpoints.
+
+**Browser rows.** `--browser-row R:chromium` (or `firefox`) with `--browser-script web-tests/net-client.mjs` makes row R the wasm client in a real page, driven by Playwright. The page has `RTCPeerConnection`, so it opens direct links through the browser, as the web client does (N7's node row could not). The driver takes the net-client's options and writes the same status lines, hash log, report and code file. It runs synthetic only (a page has no install folder) and turns off mDNS host names, as `rtc.mjs` does. Build the page package first:
+
+```
+cargo build --release --target wasm32-unknown-unknown -p glasnost-headless-web
+wasm-bindgen --target web --out-dir target/headless-web-page \
+  target/wasm32-unknown-unknown/release/glasnost_headless_web.wasm
+```
+
+**The lab's servers.** `glasnost-turn` (crate `glasnost-netlab`, test only) is a STUN and TURN server built on webrtc-rs's `turn` crate, and a NAT probe:
+
+- `glasnost-turn serve --listen IP:PORT [--listen IP:PORT] --relay-ip IP --ports LO-HI --user NAME=PASS [--stats S]` answers STUN binding requests and TURN allocations. It relays from the port range on the relay IP and prints a counts line every S seconds: requests by kind, the allocations alive, and the packets and bytes it relayed. Those counts show whether a pair went through TURN.
+- `glasnost-turn probe --server IP:PORT --server IP:PORT` asks two server addresses for its outside address from one socket. It prints `mapping endpoint-independent` when the NAT mapped both to one address and port, and `mapping dependent` (a symmetric NAT) otherwise.
+
+`cargo xtask deps` keeps it out of the game: no client crate, the lockstep crate, the direct links' crate or the relay may depend on it (`the_lab_server_stays_out_of_the_game`). It is not a server to deploy. For a real game, use one you run (for example coturn) or trust (`docs/multiplayer.md`, section 3).
+
+**The NAT lab** (`crates/netlab/lab/nat-lab.sh SCENARIO OUT [MINUTES]`, Linux, no root). The script runs itself again under `unshare -rnm`: a user, a network and a mount namespace. Every router and player is a network namespace inside it, so nothing outside changes, and everything goes when the script ends.
+
+- *Topology.* An "internet" bridge on 203.0.113.0/24 (a documentation range) holds the server at .1 and .2 (the probe needs two addresses). The server runs the relay (:7400), `glasnost-turn` (:3478 on both addresses, relayed ports 49160 to 49200) and, for `wss`, a TLS proxy (socat, :7443) with a certificate from a lab authority made for the run. Home K is a router with WAN 203.0.113.(10+K) and LAN 10.0.K.1, and one player at 10.0.K.2.
+- *NATs.* nftables on each router's WAN side. `masquerade` keeps a socket's port for every destination: an endpoint-independent mapping with port-dependent filtering (a port-restricted cone, the common home router). `masquerade fully-random` picks a new port per destination: an endpoint-dependent mapping (a symmetric NAT). Each home's NAT is checked first with `glasnost-turn probe`.
+- *A firewall that drops unsolicited UDP.* Each router drops new inbound UDP in its input hook, as a home router does, before conntrack confirms the entry. Without that rule the lab's first run made no direct link at all: a peer's first check reached the router before the player had sent, conntrack confirmed an entry for it on the player's port, and masquerade then gave the player's own send another port. With the drop, a hole opens only by the player's own send, and two players punch through when both send.
+- *The game.* One soak per home (home 0 hosts), each with `--rows K --relay-url ... --no-proxy --transport rtc --clean --no-trouble --synthetic`, `--ice` for that scenario, and the code passed down the homes in order. Then `soak compare` over the four.
+- *Evidence.* Each router counts the UDP it forwards to each other home (`to_hJ`: that pair's direct path), to the STUN/TURN port (`turn`), to the relayed ports (`turn_ports`: a pair whose path is the other end's TURN allocation) and the TCP to the relay. It also counts the unsolicited UDP it dropped and, while UDP is blocked, the UDP blocked. With the TURN server's counts and the clients' `pairN` lines (attempts, opened, failed, fallbacks, connect time, round trip, frames first by each path), each pair's path is plain.
+- `GLASNOST_BIN` names the folder of `glasnost-headless`, `glasnost-relay` and `glasnost-turn` (default `target/release`). `all` runs every scenario. Outputs (counts and timings only) go to `local-lane/m9/n8c/lab/`.
+
+| Scenario | NATs (homes 0 to 3) | ICE servers | What happens |
+|---|---|---|---|
+| `eim-stun` | all endpoint-independent | STUN | all 12 pair-ends direct, 1 attempt each, connect about 620 ms, round trip 3 ms |
+| `sym-one-stun` | home 0 symmetric | STUN | the 3 pairs with home 0 fail 4 attempts each in 3 minutes and stay on the relay; the other 3 pairs direct |
+| `sym-both-stun` | all symmetric | STUN | every pair fails (4 attempts each) and stays on the relay |
+| `sym-turn` | homes 0 and 1 symmetric | STUN + TURN | all 12 open. Pair 2-3 direct (connect about 1 030 ms); the 5 pairs touching home 0 or 1 through TURN (connect 2 030 to 2 040 ms, round trip 3 ms), 12 allocations, 91 948 packets (13.9 MB) relayed |
+| `no-ice` | all endpoint-independent | none | no candidate but the private host address; every pair fails and stays on the relay; no UDP between homes |
+| `udp-blocked` | all endpoint-independent, UDP dropped from the start | STUN + TURN | every pair fails (4 attempts each); no allocation (TURN over UDP is blocked too); the game on the relay |
+| `udp-flap` (4 min) | all endpoint-independent | STUN | links open (about 620 ms); UDP blocked at 75 s for 40 s: each pair falls back once, the retry inside the block fails, the next opens again (3 attempts, 2 opened, 1 failed, 1 fallback per pair-end) |
+| `wss` | all endpoint-independent | STUN | the relay through the TLS proxy (`wss://`, the lab authority in `SSL_CERT_FILE`); all 12 direct; relay round trip 6 to 7 ms smoothed |
+
+Every scenario passed: 0 mismatches over 375 common checkpoints (500 for `udp-flap`), no desync, and no team won within the 3 minutes. The NAT kinds were as set in every scenario (`probe`). From `sym-turn` on, the delay stayed between 2 and 5 and the longest gap between two ticks was at most 60 ms. In `eim-stun`, which ran while a cargo build shared the machine, the delay reached 22 (71 % of ticks at 2), the longest gaps were 147 to 334 ms and each client had 2 to 4 stalls. `sym-one-stun` had delay 2 to 9 and gaps up to 141 ms. These runs used the build of the netlab commit with the harness changes beside it (`3b2d11c40+dirty`). The per-pair counters came in from `sym-turn` on. The first three scenarios counted all UDP between homes together, and their paths read from the clients' pair lines.
+
+**Browser runs** (local relay, synthetic, `--transport rtc`, the same build):
+
+- *Rows 1 Chromium and 2 Firefox, rows 0 and 3 native, 2 minutes.* Pass: 250 common checkpoints, 0 mismatches, 7 500 ticks each. All 12 pair-ends open at the first attempt; connect 16 to 265 ms; round trip 0 to 3 ms. Delay 2 to 9 (76 % at 2); longest gap 56 to 91 ms. A browser and a native client link: the mixed pairs N7 did not run.
+- *Row 0 Chromium (host), row 1 Firefox `--relay-only`, rows 2 and 3 native, 3 minutes.* Pass: 375 checkpoints, 0 mismatches. The pairs with row 1 stay on the relay; the others open in 9 to 61 ms. Delay 2 to 4. Before the fix below, row 0 made 4 failed attempts to row 1 in the 3 minutes.
+
+**A fault the runs found: offers to a relay-only peer.** A relay-only peer answered no offer, so the offering end tried on its back-off for the whole game, each attempt gathering candidates and, with TURN named, allocating: 4 failed attempts in 3 minutes, about 15 in 30. Now a peer with direct links off answers an offer with `Signal::Decline`, and the offering end makes no more attempts to that slot until the slot plays again (a rejoined process may have direct links on). The log says `direct link to slot N not made (the peer makes no direct links)`. Lobby and lockstep wire version 7. `client_direct_tests.rs`'s relay-only test plays 300 ticks and checks one attempt, one failure (it saw 3 and 3 before the fix).
+
+**Across the internet** (a rented server; synthetic; the build `f3e854041` on both ends). The server runs the relay and `glasnost-turn` on its public address, with ports open only for the runs. This machine sits behind a home router whose NAT the probe finds endpoint-independent.
+
+Rows 0 and 1 run here, rows 2 and 3 on the server, as a split soak; the clients name the server for STUN and TURN (`--ice "stun:... turn:... username=lab credential=..."`). Run (a) is four rows here on the server's relay. b-rtc's AI game was won after 5.3 minutes, so c-rtc played the 30 minutes with `--no-ai` (each client still sends its frames every tick, with no orders); b-relay ran beside it for about 5 minutes near its start. The server has 2 cores and its public address on its own interface; its two clients used about 40 % of a core each and the relay about 27 %.
+
+| | (a) 4 here, rtc, 10 min | b-rtc: 2 + 2, rtc, AI | c-rtc: 2 + 2, rtc, `--no-ai`, 30 min | b-relay: 2 + 2, relay only, AI |
+|---|---|---|---|---|
+| Result | pass, 575 common checkpoints, 0 mismatches | pass, 667, 0 | pass, 3 750, 0 | pass, 608, 0 |
+| Game | won at tick 17 259 (4.6 min) | won at tick 20 024 (5.3 min) | 112 500 ticks, the full 30 minutes | won at tick 18 265 (4.9 min) |
+| Relay round trip (smoothed, range) | 15 to 17 ms (14 to 50) | here 15 to 16 ms (14 to 178); server rows 1 ms | here 15 to 17 ms (13 to 337); server rows 1 ms | here 15 to 16 ms (14 to 51); server rows 1 ms |
+| Pairs | 12 of 12 direct, 1 attempt each, connect 26 to 67 ms, round trip 3 ms | 12 of 12, 1 attempt each, no fallback. Pairs inside one side: connect 27 to 57 ms, round trip 3 ms. Pairs across: 347 to 408 ms, 21 to 25 ms | the same: 12 of 12, no fallback in 30 minutes; across, connect 321 to 410 ms, round trip 22 to 25 ms | relay only |
+| Frames first by the direct path | over 99.8 % | inside a side: 99.8 % (here), 17 % (server); across: under 0.3 % | inside: 99.9 %, 19 %; across: under 0.3 % | – |
+| Delay | 2 to 7, 83 % at 2 | 2 to 16: 63 % at 3, 24 % at 4 | 2 to 24: 57 % at 3, 21 % at 4 | 3 to 9: 42 % at 3, 45 % at 4 |
+| Longest gap between two ticks | 39 to 47 ms | 46 to 66 ms | 157 to 188 ms (1 or 2 stalls per client) | 83 to 90 ms |
+
+The home NAT and the server's public address link with STUN at the first attempt: the server's rows answer from their host address, and the home side's checks go out through its endpoint-independent NAT. No pair needed TURN. The TURN server relayed 700 packets in all (the connectivity checks), while it held up to 35 allocations at once of its 41 ports: every attempt allocates when TURN is named, and an allocation stays until its lifetime runs out (TURN's default is 10 minutes), so three games inside ten minutes came close to the range.
+
+The direct links bring the delay down only where they are faster than the relay. With all four players far from the relay (a), the frames came the direct way (3 ms against 15 to 17 ms) and the delay sat at 2. With the relay beside the server's players, a frame between the two sides took the same internet path either way, and the relay's copy came first almost every time. The direct copy goes through the WebRTC stack on both ends; why it loses by a few milliseconds was not measured. The delay then followed the 15 to 25 ms round trip across: mostly 3 and 4, a little lower than relay only (b-relay: 3 and 4 nearly evenly, up to 9). The relay's `drops` counts in the minutes each game ended came from the clients leaving; no client lost its link (`lost=0`, `reconnects=0` everywhere).
+
+Server work: a user of its own, ports 7400/tcp, 3478 and 3479/udp and 49160 to 49200/udp opened for the runs and closed after them, remote players synthetic only, every process stopped after each run. Outputs: `local-lane/m9/n8c/server-*` (without the client logs and settings files, which hold addresses).
+
+**A 30-minute synthetic game** (local relay, 4 native, rtc, the build `d789f8c07`): 112 500 ticks on every row (the full 30 minutes of game time; no team won in this game, while the AI games across the internet were won after 4.6 to 5.3 minutes), 0 mismatches over 3 750 common checkpoints, delay 2 to 7 (86 % at 2), longest gap 49 to 82 ms, no stall.
+
+**Tests.**
+
+- `crates/tools/tests/soak.rs`: `a_game_split_in_two_halves_agrees`, in CI: two soaks of two rows on the test's relay, the second joining with the first's code; row 2 is cut and rejoins; each half passes, and the halves together agree on every checkpoint (16 in common).
+- `crates/netlab/tests/turn.rs`: a probe of two of the server's ports on loopback sees one address, and a TURN client allocates, sends a datagram through the relay to a peer and gets its answer, all counted.
+- `crates/app/src/game/client_direct_tests.rs`: the relay-only test checks the Decline (one attempt, one failure in 300 ticks). `crates/relay/tests/hub.rs`: a Decline passes between live persons like any signal.
+- `crates/tools/src/soak.rs` unit tests: `a_split_half_parses`, `split_options_are_checked`, `browser_rows_are_cut_not_killed`, `halves_compare_as_one_game`.
+- The lab, the browser rows and the server runs are local-lane: they need namespaces, browsers or a server, and stay out of CI.
+
+**Seams and limits.**
+
+- *The lab's NATs are Linux's.* Masquerade with port preservation is a good model of a cone NAT and `fully-random` of a symmetric one, but real routers vary (port-preserving symmetric NATs, hairpinning, short UDP timeouts). The lab has no IPv6 and no NAT in front of the server.
+- *TURN over UDP only.* With UDP blocked the game falls back to the relay, and TURN does not help: neither the lab server nor the client's ICE list offers TURN over TCP or TLS. A player behind a UDP-blocking firewall plays on the relay, which is correct and only slower.
+- *Allocations without need.* With TURN named, every attempt allocates, even for a pair that links directly: 12 allocations in a 4-player game, kept until they expire. The rented server's 41 ports held up to 35 at once; a TURN server's port range needs room for every attempt of the last lifetime.
+- *A relay beside some of the players* makes the direct path between those players and the others no faster than the relay's, so the frames come the relay's way first. The links still open and carry the frames; they gain only where the relay is the longer way round.
+- *The lab's own fault, fixed.* The script's background jobs were shell functions, so cleanup killed the forked subshell and left each run's relay, TURN server and TLS proxy alive in its abandoned namespaces (one set per run). The jobs now exec into `ip netns exec`, and a 1-minute run leaves nothing behind.
+- *The order counts differ by row.* In the browser runs one row gave 453 orders and another 9 in the same game; it was not looked into.
+- *A `+dirty` build id* never matches a clean one, so the halves of a split game must come from the same tree state; the lab and browser runs used one dirty build on one machine.
+
 ## M6c step ledger
 
 M6c is the last part of M6 (session of 2026-10-16). Baseline: main 2c92746, spec files unchanged since 732c990 (S-0215 rev 48, S-0105 rev 19). Resume from this table; each row is updated when its step is merged to main.

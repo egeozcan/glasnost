@@ -106,6 +106,12 @@ What decides whether a pair links:
 
 - **On one LAN or one machine** it works with no setup.
 - **Across the internet, behind home routers**, most pairs need at least a **STUN** server, which tells each player their outside address. Pairs behind symmetric NAT or a strict firewall also need a **TURN** server, which relays the traffic. Nothing is opened on a router for this: the links use outgoing UDP, and the answer comes back through the hole that opens.
+- **What the network lab and an internet run showed** (docs/development.md, "Network lab (N8c)"):
+  - Two players behind ordinary home routers (a "cone" NAT, which keeps a player's port for every destination) link with a STUN server, in under a second.
+  - If either player of a pair is behind a symmetric NAT (a new port for every destination), STUN is not enough. That pair links only through a TURN server, in about 2 seconds. Without TURN it stays on the relay.
+  - With UDP blocked altogether, no pair links, and TURN does not help (it runs over UDP here). The game plays on the relay, correctly, just with more input delay on a bad network.
+  - A pair that loses its link (UDP cut for a while) falls back to the relay and links again at the next attempt after UDP is back: the attempts come 15 seconds after the fallback, then 30, doubling up to 2 minutes apart.
+  - Without any ICE server, players on different networks never link.
 - **No STUN or TURN server is configured by default**, on purpose. Without one, a pair across the internet will often fail to link and use the relay. The client contacts only the relay and the other players of its game. If you name a server, that server learns the player's addresses; use one you run (for example coturn) or one you trust. We do not recommend or supply one.
 
 To name servers, give every player the same kind of setting:
@@ -116,6 +122,8 @@ To name servers, give every player the same kind of setting:
 | Native, kept | A line in the settings file, `~/.config/glasnost/settings.txt`: `ice=stun:HOST:3478` or `ice=turn:HOST:3478 username=NAME credential=WORD` (space-separated; the password is kept as typed). The command line wins for that run. |
 | Browser | `?ice=stun:HOST:3478` in the page address (space-separated URLs, `%20` for the space), with the same `username=` and `credential=` words. |
 
+**Running your own TURN server.** Use a real one, such as coturn; the repository's `glasnost-turn` is a test tool for the lab and is not meant to be deployed. A TURN server needs its listening port open for UDP (usually 3478) and its whole range of relay ports open for UDP too. Each player's client allocates a relay port for each pair it tries, even a pair that then links directly, so allow about three ports per player for each game at once. The TURN login is shared by every player who names the server.
+
 **Relay-only switch.** To keep a player entirely on the relay: `--relay-only` (native), `?direct=off` (browser), or the settings line `direct=0`. Use it to rule direct links out when you suspect them.
 
 **What the player sees.** Nothing on screen: there is no notice when a pair links or falls back, by design. A player who wants to look reads the client's log (native: the terminal it was started from, at the default log level; browser: the developer console). The lines are:
@@ -123,6 +131,7 @@ To name servers, give every player the same kind of setting:
 - `direct link to slot N open after MS ms`: that pair linked.
 - `direct link to slot N not made (WHY)`: the attempt failed (it gives up after 10 seconds); the offering end tries again after 15 seconds, then 30, doubling up to 2 minutes.
 - `direct link to slot N lost (WHY); the relay carries its frames`: an open link went silent for 3 seconds or closed; the pair is on the relay again and tries a new link.
+- `direct link to slot N not made (the peer makes no direct links)`: that player is relay-only. Their client turns the offer down, and no more attempts are made to them while they play.
 - `direct links: off; the relay carries every message`: relay-only is on.
 
 A fallback never causes a desync and the game never waits for a link. If two players' orders ever arrive twice and differ, the chat area shows "X's orders came twice and differed"; that is a fault to report (section 7).
