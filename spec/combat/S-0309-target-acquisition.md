@@ -2,13 +2,13 @@
 id: S-0309
 title: Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching)
 topic: combat
-revision: 23
+revision: 38
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-22
 measurements: []
-requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504]
+requests: [Q-0061, Q-0079, Q-0162, Q-1502, Q-1504, Q-1761, Q-1763]
 supersedes: []
 ---
 
@@ -38,7 +38,8 @@ slot*, *weapon number*, *weapon it would use*, *mean weapon damage*, *healer for
 *multi-weapon type*, *gattling type*, *switching type* and *airborne* (S-0308); *floor-bound* (S-0307, Terms); *expected damage* (S-0302, claim 18); *reference point* and *table square
 root* (S-0204); *movement zone* (S-0211); *firing check* and its answers *illegal*, *impossible*, *busy* and
 *out of range* (S-0301, claim 9); *tracked flying object*, *sector* and the flying-object search
-(S-0303, Terms and F7); *land-targeting mode* (S-0308, table P and Import mapping); *spray-attack
+(S-0303, Terms and F7); *land-targeting mode* (S-0308, table P and Import mapping); *naval-targeting
+mode* (S-0308, table N); *spray-attack
 type* (S-0313, Terms); *spawner weapon*, *spawned aircraft* and *launching* (S-0301, Terms),
 *slave master* and *harvesting slave* (S-0215, Terms); *vehicle thief* (glossary); *draining weapon* and *locomotor warhead*
 (S-0308, table P, rows 7 and 8); *charging mark* (S-0518 claim 15).
@@ -276,7 +277,8 @@ index 1. This is a design rule, not an additional claim about the original.
    draw from the scenario random stream. In the teleport case this is separate from the
    conditional 4-to-8-tick draw before the search (claim 1). An opportunity target for which the firing check of the
    weapon the searcher would use against it answers *illegal*, *out of range* or *impossible* is
-   dropped, and the same search may pick a new target. One exception: a searcher that controls
+   dropped, and the same search may pick a new target (whether another rule can drop it earlier
+   is open, claim 19). One exception: a searcher that controls
    spawned aircraft (a spawner type) and gets *impossible* keeps the target, but resets its
    spawn controller as S-0506 claim 11 gives. Released missiles already in flight continue to
    their fixed aim points (S-0506 claims 11–12). The answer *busy*
@@ -495,7 +497,9 @@ index 1. This is a design rule, not an additional claim about the original.
    descent, retained low target height or wobble can still put an attacking jumpjet in the
    ground layer independently of its weapon; that layer, not firing, decides eligibility here.
    These height rules inherit S-0502 claim 32's backing and confidence.
-   A hunting actor can still attack one in these ways:
+   A hunting actor can still attack one in these ways, each only with a projectile that is
+   anti-air (the firing check refuses the hovering jumpjet to any other, claim 18 and S-0306
+   claim 23):
    - it picked the jumpjet while that was in the ground layer (before lift-off, after landing,
      or while its height keeps it in the ground layer, S-0102 claim 3) and still holds it: a
      target set by a map-wide search is not an opportunity target (claim 24), so later searches
@@ -503,7 +507,7 @@ index 1. This is a design rule, not an additional claim about the original.
    - the airborne scan of a range search (claim 9) reaches tracked flying objects, hovering
      jumpjets among them (S-0303, Terms); a hunting vehicle runs such a search in place of its
      map-wide search only while it has the limited-scan mark (claim 22),
-   - retaliation (claim 18) has no render-layer test, and the disc-laser weapon makes its firer
+   - retaliation (claim 18) has no render-layer test of its own, and the disc-laser weapon makes its firer
      the attacker (S-0615, claim 16). A hunting actor retaliates only when the *hunt* behaviour
      has the retaliate property, which the user's behaviour data sets (S-0215, claim 18 and Import
      mapping), and when the owner rules of S-0215 claim 18 allow it.
@@ -790,23 +794,132 @@ index 1. This is a design rule, not an additional claim about the original.
       the artillery flag: never,
     - *X* is not the parasite attached to it (S-0614 claim 17).
 
-    No condition concerns where *X* is: retaliation has no connected-region test (claims 7 and 11)
-    and no render-layer test, so an attacker standing on a cell of no reach region of *A*'s movement
-    zone, or a hovering jumpjet, is retaliated against like any other attacker.
+    Retaliation adds no condition of its own on where *X* is (every row of the firing check
+    still applies: its water and land rows, and its first and second rows, which refuse an
+    airborne attacker, or an infantry or vehicle attacker outside the ground render layer, to a
+    projectile that is not anti-air; S-0306 claim 23): it has no connected-region test (claims 7
+    and 11) and no render-layer test of its own. So an attacker standing on a cell of no reach
+    region of *A*'s movement zone is retaliated against like any other attacker, and so is a
+    hovering jumpjet by a defender whose projectile is anti-air; a defender whose projectile is
+    not anti-air is refused the hovering jumpjet by those firing-check rows, as for any other
+    attacker outside the ground render layer.
 
     For the neutral and special houses claim 25, part h, gives the conditions that differ.
+
+    Retaliation adds no projectile-flag or search-class restriction of its own. Firing remains
+    subject to the firing check and to the actor's behaviour rules (S-0215). For a ground
+    attacker this gives three cases:
+    - an object whose type has land-targeting mode 1 never fires back at a floor-bound attacker
+      (S-0307, Terms) that is on a bridge or on a cell that is neither water nor beach (S-0306
+      claim 23's land row), and the same claim's water row likewise stops any object firing back
+      at an attacker on water or beach (not airborne and not on a bridge) when its type's
+      naval-targeting mode gives "none" for that attacker (S-0308, table N). In S-0301 claim 9,
+      *rearming* is rank 5 and the two rows are at rank 4 (S-0306 claim 23), so both rows rank
+      above the *rearming* of a running rearm countdown, and the refusal holds whatever the
+      object's rearm countdown. Their rank
+      against *out of ammunition*, *cloaked* and *out of range*, and their place within rank 4,
+      are as S-0306 claim 23 gives and rates them.
+    - a building whose type has the SAM flag (S-0215 Terms) never fires at a ground attacker
+      that is not S-0215 claim 32's suitable target (an aircraft whose world height is not 0),
+      whatever its land-targeting mode or projectiles: its *attack* processing fires only at
+      S-0215 claim 32's
+      suitable targets.
+    - any other object whose weapons' projectiles are anti-air only is refused a ground attacker
+      by none of the conditions above for that reason; each of them still applies as for any
+      other attacker. This covers a type with land-targeting mode 0 or 2 (for a building, with
+      no SAM flag) against any ground attacker that the water row does not refuse (an attacker on
+      water or beach is refused only when the type's naval-targeting mode gives "none" for it).
+      It also covers a type with mode 1 against an attacker that stands on a water or beach
+      cell, not on a bridge, when its naval-targeting mode does not give "none" for that
+      attacker: the land row covers no such cell and the water row refuses only when the mode
+      gives "none".
+
+    The firing check refuses an airborne attacker to a projectile that is not anti-air, except
+    when the attacker is the object's own gripped unit, for which it answers *rearming* unless an
+    answer that S-0301 claim 9 ranks above it comes first (S-0306 claim 23; S-0607 claim 11).
+
+    **Q-1763, question 1.** Retaliation refuses no attacker by its weapon's anti-ground or
+    anti-air flags of its own. Its flag-related refusals are two. The first is the firing
+    check's (S-0306 claim 23, with its answer to this question), the same for infantry,
+    vehicles, buildings and landed aircraft as attackers: none of them is refused by the
+    projectile's anti-ground flag, and each is refused by the land and water rows only where the
+    firer's targeting modes give a refusal for an object on its cell. The second is the SAM flag
+    of a building's type (the second case above): its *attack* processing fires only at S-0215
+    claim 32's suitable targets, whatever the attacker's kind.
+
+    **Q-1763, question 2.** Yes, there is such a case: a building of the third case above against
+    an infantry or vehicle attacker in the ground render layer (a search for aircraft does not
+    pick infantry or vehicles, claim 5, and the scan of airborne objects looks only at objects
+    outside that layer, claim 9; table C), including a building with land-targeting mode 1 against such an attacker on water or beach for
+    which its naval-targeting mode does not give "none". Its
+    automatic searches keep to aircraft (claim 5), and a person's attack order on a ground object
+    gives it nothing (S-0214 table B, row B7, which tests the anti-ground flag), yet it fires back
+    at a ground attacker. So retaliation cannot be bounded by the eligibility of the search and
+    the order. A unit of the third case is not such a case through the anti-ground flag: no order rule tests
+    that flag for it (S-0214 claim 6(e), which defers to the firing check of S-0306 claim 23), so a
+    person's order does not refuse it for that reason either (S-0306 scenario P16 part h). This
+    half of the answer needs the S-0214 T4 part C (e) amendment that S-0306 lists under Changes
+    for other specs. No other case is established beyond the third case, but the search for one
+    was not exhaustive (Open questions). The play report of Q-1763, that an anti-air-only
+    defence building never fires at a ground attacker, would follow from the first two cases if
+    the stock building's type meets one of them; that is a hypothesis, which scenario A5 part b
+    checks. Which case the stock building falls in is not established (Open questions).
+
+    **Q-1761, question 1, out of range and computer owners.** The refusals of the first two cases
+    depend neither on distance nor on owner: the land and water rows test neither, and nor does
+    the SAM-flag drop. Distance and owner enter only through the conditions that apply to every
+    attacker alike: S-0215 claim 18's behaviour list, existing-target and distance conditions
+    for a human-controlled owner, which in our engine apply to every player house, human or
+    computer-controlled (S-0215 claim 18), and claim 25 part h for the neutral and special
+    houses. (S-0215 claim 18 gives how the original treats computer-controlled houses; the first
+    two cases' refusals hold for every owner either way.) So, in our
+    engine, the answer is the same for an attacker out of range and for a
+    building of a computer-controlled player house: a building of the first two cases never fires back at a ground attacker that those
+    cases refuse (for the SAM-flag building, one that is not S-0215 claim 32's suitable target).
+    A building of the third case
+    retaliates when those common conditions let it; against an attacker beyond its weapon's
+    range it then drops the target without firing, at the first processing in *attack* at which
+    the firing check answers *out of range* (S-0215 claim 32; while its countdown runs the answer
+    is *rearming*, and it rotates).
     - Backing: `measurable` (scenario A5, including the veterancy-ability variant of the charges
-      row; scenario A11, parts j and k, for attackers on a cell of no reach region and hovering
-      jumpjets)
-    - Confidence: high (the flag, slaves, spawners, alliance, mean damage, the firing check),
-      medium (mind controllers, the charges and artillery rows, the parasite row)
+      row and part b for the targeting modes and, in its Variant 3, the drop of an attacker
+      beyond the third case's range; scenario A11, parts j and k, for attackers on a cell of no
+      reach region and hovering jumpjets against an anti-air defender; a defender without anti-air
+      projectiles is refused the hovering jumpjet by S-0306 claim 23's layer row, backed there).
+      `unmeasured` for the third case's mode-1 defender
+      against an attacker on water or beach: in A5 part b
+      and S-0306 scenario P16 the attackers or targets of mode-1 objects stand only on land and
+      bridges and are floor-bound.
+    - Confidence:
+      - high: the flag, slaves, spawners, alliance and mean damage.
+      - the firing check apart from its layer, water and land rows and the absence of its
+        anti-ground test: as S-0301 claim 9 rates each of its answers.
+      - medium: the firing check's layer row, as S-0306 claim 23 rates it.
+      - medium: no return fire on land by a type with land-targeting mode 1, as S-0306 claim 23
+        rates its land row (A5 part b and S-0306 scenario P16 parts f and g have not run).
+      - medium: the SAM-flag case, as S-0215 claim 32 rates the SAM *attack* stages.
+      - medium: mind controllers, the charges and artillery rows, and the parasite row.
+      - medium: the water case for naval-targeting modes 2 and 6.
+      - low: the third case's mode-1 defender against an attacker on water or beach
+        (`unmeasured`).
+      - low: that the land and water rows' refusal holds whatever the object's rearm countdown,
+        which rests on S-0306 claim 23's rank, rated low there against *rearming*.
+      - medium: the answer to Q-1763 question 1, which rests on S-0306 claim 23's absence of the
+        anti-ground test, rated medium there.
+      - medium: that the conditions above do not refuse a ground attacker of the third case,
+        and the answer to Q-1761 question 1, which rests on it.
+      - medium: the third case's drop of an attacker beyond its weapon's range without firing.
+      - low: the answer to Q-1763 question 2, which also rests on S-0214 table B row B7, rated
+        low there.
+      - low: the water case for naval-targeting mode 0, which S-0306 claim 23 leaves
+        `unmeasured`.
 
 ### Target switching
 
 19. **An opportunity target is replaced when it becomes unusable.** Because of claim 4, an object
     whose opportunity target becomes illegal, moves out of range or becomes a target the firing check
     answers *impossible* for drops it (unless the answer is *impossible* and it controls spawned
-    aircraft, claim 4) at its next search and picks a new target in the same search. An object whose
+    aircraft, claim 4) no later than its next search, and that search picks a new target. An object whose
     target came from an order keeps it through searches covered by claim 4, except the attack-move
     searches of claim 23 that run as for an object with no target. The charging break-off search
     has its separate replacement rule in claim 1 and S-0518 claim 15. The behaviour rules of S-0215 (claims
@@ -814,7 +927,9 @@ index 1. This is a design rule, not an additional claim about the original.
     target, the area-guard leash drops it, and some behaviours drop an opportunity target.
     - Backing: `measurable` (scenario A6: part a for a target out of range, part m for one that
       becomes illegal, part f for *impossible*)
-    - Confidence: high
+    - Confidence: high that the target is gone by the next search and that this search picks a
+      new one. Part m does not judge the tick of the drop: whether another rule drops it earlier
+      is open (Open questions, *An earlier drop*).
 
 20. **Distributed fire.** A searcher whose type has the distributed-fire flag does not pick by
     claim 17. In a map-wide search it collects no candidates and so picks nothing and empties its
@@ -1771,6 +1886,47 @@ set in the test map's override sections.
 - *Expected:* retaliation only in the plain variant and in the rookie control of the
   veterancy-ability variant.
 - *Falsified if:* any other variant retaliates, or the plain one or the rookie control does not.
+- *Part b (targeting modes):* a stock powered anti-air defence building, of the human house and,
+  as a second set, of a computer house, with no aircraft about. An enemy ground vehicle attacks
+  it on clear land from inside the building's weapon range, and in a second run enemy infantry
+  does. Choose attackers whose armour the building's warhead does not wholly fail against (a
+  versus value above τ<sub>r</sub>, S-0304 claim 3, checked in the rules file before the runs),
+  so that only the targeting mode can refuse. Check in the same file, before the runs, that the
+  stock building's type has land-targeting mode 1 or the SAM flag (S-0215 claim 32); if it has
+  neither, the stock building's runs are void and the record says so, since claim 18 then
+  predicts no refusal for it. Check as well that its type's retaliate flag is set; if it is not,
+  its runs are void. Every defender, stock or test copy, meets claim 18's other conditions and
+  S-0215 claim 18's: its type's retaliate flag is set (in the test file for the copies), it is
+  armed, it is in *guard*, it holds no target and has not fired before the first hit, and its
+  sight range is at least its weapon range, so that an attacker inside its weapon range is
+  within its sight limit. Variant 1: a test copy of that building type with
+  land-targeting mode 0 and the SAM flag off (S-0215 claim 32), whose weapon uses a test warhead
+  with every versus value at 100%, otherwise unchanged, attacked the same way. Variant 2: a test
+  vehicle type whose only weapon's projectile is anti-air only and whose warhead is that test
+  warhead, in two copies with land-targeting modes 0 and 1, attacked the same way. Control: a
+  stock anti-ground defence building of the same house. Record whether the defender fires at the
+  attacker within 300 ticks of the first hit, 5 runs each. Retaliation does not restart the
+  defender's processing timer (S-0215 claim 10), so its first processing in *attack* can wait
+  until the *guard* processing delay then running ends. Before the runs, check in the behaviour
+  data (S-0215 Import mapping) that the upper bound of that delay (S-0215 claim 6) is below 300
+  ticks; if it is not, the deadline is that bound plus 300 ticks. The defender has not fired
+  before the first hit, so no rearm countdown adds to it. *Expected:* no shot from the stock
+  building or the mode-1 vehicle copy; the mode-0 building copy of Variant 1 and the mode-0
+  vehicle copy of Variant 2 fire back; the control fires back. *Falsified if:* the stock
+  building or the mode-1 vehicle copy fires, or a mode-0 copy does not (a
+  refusal outside the firing check and S-0215 would then exist); if the control does not fire,
+  the run is void. Variant 3 (out of range): Variant 1's building copy, of the computer house,
+  attacked by an enemy ground vehicle whose weapon outranges it, with the target recorder. The
+  computer house is an ordinary player house, not a test-only house (claim 25). The copy's
+  sight range is set in the test file at least 2 cells above its weapon range, and the attacker
+  fires from a cell beyond the copy's weapon range but within its sight limit (S + 0.5 cells,
+  S-0215 claim 18). The copy has not fired before, so no rearm countdown runs. *Expected:* once the
+  copy takes the attacker as its target, it fires no shot and has dropped the target by the first
+  processing in *attack* after it took it (the answer is then *out of range*). The attacker
+  keeps hitting the copy, so retaliation may take it again at once: the recorder must show the
+  drop, with no shot, before any re-take. *Falsified if:* it fires, or the recorder shows no drop
+  of the attacker at or before that processing; the run is void if it never takes the attacker
+  as its target.
 
 **A6: keeping and replacing targets (claims 4, 19, 21, 23, 24).**
 - *Part a:* a firer whose type has the attack-friendlies flag (set in the test map), with *X* and
@@ -1900,10 +2056,11 @@ set in the test map's override sections.
   range, later than *X* in the scan order, with the target recorder. *X* is of an aircraft type
   that can stay in the air over one place. After the firer has picked *X* by itself, *X* is
   ordered to take off and to fly to a cell within the firer's range, where it stays in the air.
-  *Expected:* at the firer's next search *X* is dropped (the firing check answers *illegal*
-  against an aircraft in the air) and *Y* is picked in the same search. The part decides only if
-  *X* is in the air and within the firer's range at that search. *Falsified if:* the firer keeps
-  *X* while *X* is in the air within its range, or has no target after that search.
+  *Expected:* by the firer's next search *X* has been dropped (the firing check answers
+  *illegal* against an aircraft in the air), and that search picks *Y*. The part does not judge
+  the tick of the drop (Open questions, *An earlier drop*). It decides only if *X* is in the air
+  and within the firer's range at that search. *Falsified if:* the firer still holds *X* after
+  that search while *X* is in the air within its range, or has no target after that search.
 - *Part n (uncontested arrival, Q-0162 questions 1 to 3):* a tiny flat skirmish map, one
   human-owned ordinary armed infantry unit and one ordinary armed vehicle, tested separately,
   plus one bystander computer player kept away. Stock types, no engine add-on and no mods (the named test files of a scenario excepted), game speed
@@ -2274,7 +2431,7 @@ an excluded run. Named test data gives targets enough health to survive through 
   (3) As run 1 with the jumpjet armed with a disc-laser weapon (S-0615) and attacking the hunter,
   once with the *hunt* behaviour's retaliate property off and once with it on (test data).
   *Expected:* with it off the hunter never targets the hovering jumpjet; with it on it targets it
-  after the first hit (retaliation, no layer test). Count only hits for which the hunter is
+  after the first hit (retaliation, no layer test of its own). Count only hits for which the hunter is
   targetless, still in *hunt*, and satisfies every other retaliation condition of claim 18
   and S-0215 claim 18; absence of such a hit is inconclusive. (4) As run 1 with the hunter
   placed in *guard* by the test map and the jumpjet within its guard range and its weapon's reach. *Expected:* it picks it (airborne
@@ -2697,7 +2854,27 @@ scenario random state each tick, and identify attack processings using the proce
   to reproduce the rule as a rule on objects discovered by the acting house, or to follow table C
   as it stands.
 - The neutral and special houses (claim 25): S-0412 claim 5 establishes that their difficulty index is 1, selecting the second entry of per-difficulty lists; no difficulty row is applied to them. Scenario A15, parts c and g, avoid needing to distinguish list entries by setting every entry alike. Still open: whether the original ever makes these two houses choose a building for their engineers (part c), and whether they are allied with each other (part e).
-
+- Q-1763 question 2 beyond claim 18's third case: whether any other object fires back at an
+  attacker that both its automatic searches and a person's attack order refuse. Only the
+  projectile flags, the targeting modes and the SAM flag were compared between the search, the
+  order rules and retaliation; the other conditions of claims 5 and 18 and of S-0214 table B
+  were not compared case by case.
+- The stock anti-air-only defence building of the Q-1763 play report: whether its type falls in
+  claim 18's first case (land-targeting mode 1), its second (the SAM flag) or neither is not
+  established. Scenario A5 part b reads the stock type's flags before its runs and is void if it
+  has neither, so until it runs Q-1761 question 1 is answered per case, not for the stock
+  building.
+- An earlier drop of a target the firing check refuses. Is a held target that the firing
+  check answers *illegal* or *impossible* for dropped before the attack behaviour's own drop
+  (S-0304 claim 2, S-0215 claim 32) or the firer's next search (claim 19)? If so, on which
+  ticks, and in which behaviours? A measurement should record the tick of every such drop with
+  the target recorder, with the behaviour current at the time, to show whether the drops follow
+  a fixed cadence. Until this is established, scenario A6 part m and S-0306 scenario P16 part i
+  do not judge the tick of the drop.
+- Q-1761 question 3 (the attack action offered when a person hovers an aircraft, flying or
+  landed, with an anti-air-only building selected, with and without force-fire) is order
+  legality: S-0214 row B7, which this spec does not change. Row B7 is rated low in S-0214, so
+  Q-1761 stays only partly settled: question 3 rests on that row.
 
 ## Changes for other specs
 
@@ -2707,6 +2884,13 @@ measurement of two cells of no reach region being compared; the statement that n
 placement is known is no longer current. This is proposed backing, not a measured result.
 No change is needed to its no-link deck-region definition: claims 7 and 11 here explicitly
 omit that comparison when the searcher's own deck read has no link.
+
+S-0306 claim 23 (revision 33, companion of this revision) gains the firing check's water and
+land rows, which depend on the firer's type, and ranks them at rank 4 of S-0301 claim 9; claim
+18 here relies on the land row and on that rank. Its first
+row's *rearming* answer is limited to the firer's own gripped unit, as S-0301 claim 9 and S-0607
+claim 11 give, so scenario A6 part m here (a held target that lifts off is dropped) agrees with
+it.
 
 S-0215 claim 33 already includes the charging break-off exception and its backing through
 scenario A17 here and S-0518 scenario TC3; its F6 also excludes that search from timer resets.
