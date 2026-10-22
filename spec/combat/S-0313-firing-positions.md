@@ -1,26 +1,32 @@
 ---
 id: S-0313
-title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
+title: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position)
 topic: combat
-revision: 10
+revision: 29
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-22
 measurements: []
-requests: [Q-0601, Q-0670]
+requests: [Q-0601, Q-0670, Q-1600]
 supersedes: []
 ---
 
-# S-0313: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack)
+# S-0313: Firing positions (where a shot starts, burst alternation, garrison muzzles, spray attack, shot animation position)
 
 ## Summary
 
 The world position at which a shot starts (its *fire point*), computed from the firer's position,
 its weapon slot's muzzle position, its turret displacement and facings, and its burst counter; the
 special fire points of garrisoned buildings, buildings with pixel muzzle shifts and passengers of
-open-topped transports; and the redirected targets of spray-attack firers. The fire point is game
-state: projectiles normally start there (S-0306 claim 8), so it changes flight times and what a projectile passes.
+open-topped transports; the redirected targets of spray-attack firers; and where a turreted
+vehicle's shot animation is drawn, counted from the vehicle's unshifted draw point (Terms), and
+that in our engine no correction moves it against the drawn turret and barrel (claims 11 to 11e).
+For the original, the distance between the drawn turret and the animation, the barrel's pixels,
+whether the driving locomotor shifts the draw point and whether a constant one-pixel shift is added
+to the animation stay open.
+The fire point is game state: projectiles normally start there (S-0306 claim 8), so it changes
+flight times and what a projectile passes.
 The placement exceptions are owned by S-0306 claim 5, including dropping projectiles, which
 start at the firer's own position rather than its fire point. Disc lasers create no projectile
 (S-0615 claim 12); their rings follow the current slot-0 fire point as S-0615 claim 15 specifies.
@@ -36,6 +42,20 @@ Glossary terms are used as defined there (*lepton*, *facing*, *direction*, *refe
 composition convention (F2), the *model frame* (+x forward, +y to the left, +z up). From S-0301:
 *firer*, *shot*, *burst counter* *k*, *garrisoned building*. From S-0310: *aiming facing*. From
 S-0202: R(*a*, *b*). In addition:
+
+- *Object height lift* Λ(*z*): the number of whole screen pixels by which the original draws
+  a point at world height *z* (leptons) above where it would be drawn at height 0. Claim 11b
+  states the hypothesis that it is S-0409 F2's lift. Our engine's own lift is S-0101 claim 3's.
+- *ρ*: S-0105 F3's scale, in model units per lepton.
+- *draw point* is S-0105's term, and includes any shift a locomotor applies (S-0105 claim 25).
+- *Unshifted draw point* of a vehicle: the projection of its position to whole pixels (S-0101
+  claim 2), including the height lift of its world height *z*, with no locomotor shift. The
+  lift is Λ(*z*) in the original and S-0101 claim 3's lift in ours, 0 in both at level 0. In
+  our engine the driving locomotor adds no draw shift (claim 11), so for a vehicle on it the
+  draw point is the unshifted draw point: the turret is drawn from it, and a shot animation's
+  lift is counted from it (claim 11a, P10). For the original, this spec and P10 count from the
+  unshifted draw point; whether the original's driving locomotor adds a shift, so that its draw
+  point differs, is open (Open questions).
 
 - **Fire point.** The world position, in leptons (x, y and world height), at which a shot's
   projectile normally starts, subject to S-0306 claim 5's placement exceptions.
@@ -281,6 +301,198 @@ S-0202: R(*a*, *b*). In addition:
     that row's exact fire-point transform remains unresolved.
     - Backing: `measurable` (scenario P8)
     - Confidence: high
+
+11. **Shot animation against the drawn turret (Q-1600): scope and shared rules.** Claims 11 to
+    11e are about a vehicle with the turret flag and a voxel turret, moved by the driving
+    locomotor and standing on flat ground, neither tilted nor rocking. Shots of dropping weapons are outside them (S-0306
+    claim 5). In both the original and our engine:
+    - the shot animation starts at the shot's fire point (claim 1) and is attached there
+      (S-0301 claim 22),
+    - it is drawn as S-0109 claim 26 states: centred (S-0102 claim 19) on the projection of
+      its position, lifted by each engine's own object height lift (claims 11a and 11b),
+      then moved down by its type's vertical draw shift
+      (a tiled image follows S-0109 claim 27 instead, as claim 26 says),
+    - for a vehicle without a separate barrel model, no additional correction that depends on
+      the turret facing moves the fire point or the shot animation. For a vehicle with a
+      separate barrel model this is our engine's rule only: in the original it is open whether
+      the barrel adds a correction to the animation (claim 11d, Open questions). Vertically, P10 tests only the shot animation's net drawn position; it does
+      not establish that other kinds of objects are lifted the same way.
+
+    In our engine the driving locomotor adds no shift to the vehicle's draw point. This is our
+    engine's design: S-0105 claim 25 allows any shift a locomotor applies, and our engine
+    chooses none for the driving locomotor. P10's engine run checks it. Whether the original's
+    driving locomotor adds a shift is open (Open questions). In both engines, claims 11a to 11e
+    count every position from the vehicle's unshifted draw point (Terms).
+
+    In our engine the turret is drawn from the vehicle's draw point as S-0105 claims 4 and 8
+    state, with the same turret displacement *δ* and the same 32-step turret and body facings
+    that this spec's F2 uses for the fire point. Whether the original's turret drawing adds a
+    correction to that is open (Open questions).
+    - Backing: the start at the shot's launch point and the attachment inherit S-0301 claim
+      22's backing. The original's turret drawing, its driving locomotor's draw shift and any
+      barrel-dependent correction of its animation are `unmeasured`, open (Open questions).
+      `measurable` (P10) for the absence of a
+      facing-dependent correction of the animation's net drawn position at every turret step, at
+      body facing 0 in every variant and at every body facing in the H40 variant, for the steps
+      whose captures P10 reads (P10's Runs). P10 observes only that
+      net position, not the fire point and the animation separately. Our engine's no-shift rule
+      is our engine's choice, `measurable` by P10's engine run; our engine's turret placement inherits S-0105
+      claims 4 and 8 and their scenario MS-2.
+    - Confidence: high that no facing-dependent correction, of any size, moves the drawn
+      animation of a vehicle without a separate barrel model, standing still, at the turret steps
+      and body facings whose captures P10 reads (P10 uses only such a vehicle, and a residual
+      that changes with the turret's direction or the body facing by one pixel falsifies it).
+      Steps that P10 reports with no readable capture are not covered by this rating.
+    - That no two corrections, one of the fire point and one of the animation, cancel is
+      `unmeasured`: P10 sees only their sum. Confidence: medium, because each half has its own
+      stated rule with no facing-dependent correction, the fire point in claim 1 (F1, F2) and
+      the animation's placement in S-0109 claim 26, and a cancelling pair would need both rules
+      to be wrong by equal and opposite amounts at every turret direction.
+    - The original's turret drawing, any draw shift from the original's driving
+      locomotor and any barrel-dependent correction of the animation in the original are
+      rated low, since this spec states no rule for them (open, Open questions).
+
+11a. **The animation's draw point (Q-1600 question 1).** The answer is counted from the vehicle's
+    unshifted draw point (Terms, claim 11). Whether the original's own draw point carries a
+    locomotor shift is open, so for the original the answer holds relative to the unshifted draw
+    point. For the original it covers a vehicle without a separate barrel model. With one, whether
+    the barrel adds a correction is open (claim 11d). At each turret direction, at the moment of
+    the shot, the shot animation's draw point, counted from the unshifted draw point, is the
+    projection of the fire point's world position (the vehicle's position plus claim 1's fire point
+    displacement, F1, F2) minus the projection of the vehicle's position. Each is projected to
+    whole pixels on its own, truncated as S-0101 claim 2 states, with each engine's own lift of
+    that position's height inside the projection: S-0101 F1 with its lift *L* in our engine, and
+    the same projection with Λ in place of *L* in the original (claim 11b). The lift of the muzzle
+    above the vehicle is therefore counted once, as the difference of the two lifts (for the
+    original, under claim 11b's hypothesis). The result is then moved down by the animation's
+    vertical draw shift and centred as S-0102 claim 19 states. This is not always the projection of
+    the displacement alone: when the projected coordinates have fractional parts, the two results
+    can differ by one pixel.
+
+    For Q-1600 question 2 this partly settles: it settles that the drawn animation of a vehicle
+    standing still is not moved horizontally, in all, by two pixels or more from the animation's
+    draw point given above. S-0109 claim 26 already states, at high confidence, that there is no
+    further horizontal displacement, and this spec does not change that rule. What stays open is
+    only what P10 can tell: it cannot tell a constant one-pixel shift from S-0102 claim 19's
+    centring (Open questions). The turret half of that question is not settled either (claims 11
+    and 11c).
+    - Backing: `measurable` (P10) for a vehicle without a separate barrel model standing
+      still at level 0 or 6, at every turret step whose captures P10 reads, at body facing 0
+      in every variant and at every body facing in the H40 variant, and `unmeasured` while the
+      vehicle moves, since P10 keeps it still, and at other levels, which P10 does not capture.
+    - Confidence: high only that a vehicle without a separate barrel model standing still at level
+      0 or level 6, the two levels P10 checks, has no net horizontal shift of two pixels or more
+      from this position; the exact pixel is not rated, since a constant one-pixel shift is open.
+      Medium at other heights, `unmeasured` there: no lift enters the horizontal position and no
+      rule in claims 11 to 11b depends on height horizontally, but no capture covers another level.
+      Low for the vertical position, which rests on claim 11b's hypothesis, rated low; at levels 0
+      and 6 P10 judges the lift above the vehicle's own (claim 11b). Medium for a moving vehicle's
+      horizontal position (its vertical position is low, as above), `unmeasured`: no rule in claims
+      11a and 11b depends on movement, any draw shift the locomotor applies while moving is left
+      out by counting from the unshifted draw point, and no capture covers a moving vehicle.
+
+11b. **The original's height lift.** A height of *H* leptons in the turret's frame is *H* × *ρ*
+    model units (S-0105 F3), and the view of S-0105 F2 draws a model-frame height with its row y, z
+    entry 0.865897536, at one pixel per model unit, so it appears 0.865897536 × *ρ* × *H* pixels
+    up, about 0.1435 *H*. No cited spec gives the original's drawing-lift formula. This
+    claim states a hypothesis, which P10 tests: the original's object height lift Λ is S-0409
+    F2's lift, with the same scale constant, the same one-pixel step at 728 leptons and the same
+    rounding (add one half, then truncate). Under it, an object at a whole level from 0 to 19
+    is lifted exactly 15 pixels per level, as S-0409 states for F2, and so lines up with
+    whole-level terrain (S-0101 claim 4). At level 20 and above, and at negative levels, F2's
+    lift does not line up: S-0409's check values give 299 pixels at level 20 rather than 300,
+    and −14 at level −1 rather than −15. S-0101 claim 3 says that the original's lift visibly
+    misaligns objects with whole-level terrain, but not at which levels, so the hypothesis is
+    not shown to conflict with it. P10, which runs at levels 0 and 6 only, does not decide
+    that question (Open questions).
+    S-0409's statement that F2 is not the drawing lift of S-0101 claim 3 separates F2 from our
+    engine's drawing lift; it does not describe the original's. Every figure for the original in
+    claims 11a to 11e is a value under the hypothesis; those for levels other than 0 and 6 are
+    not tested by P10.
+
+    S-0409 F2's height constant equals the scale above to within 10⁻⁹ pixels per lepton, so
+    under the hypothesis the original lifts a muzzle *H* leptons above a vehicle at world height *z* by
+    Λ(*z* + *H*) − Λ(*z*), which differs from the voxel height only through S-0409 F2's
+    rounding and its 728-lepton correction: on flat ground at any whole level from 0 to 14 and
+    for *H* from 0 to 400 leptons, by less than one pixel, except where the muzzle reaches 728
+    leptons and the vehicle does not; there it can differ by up to 1.2 pixels. Check values:
+    without that crossing, the largest difference is about 0.968 pixel, at level 7 (*z* = 728)
+    and *H* = 49: Λ(777) − Λ(728) = 113 − 105 = 8 pixels against a voxel height of about 7.03.
+    With it, the largest is about 1.195 pixels, at level 4 (*z* = 416) and *H* = 361:
+    Λ(777) − Λ(416) = 113 − 60 = 53 against about 51.81.
+    - Backing: `measurable` at levels 0 and 6 (P10); other levels `unmeasured`. At level 0,
+      P10's absolute vertical position judges Λ(40) and
+      Λ(105). At both levels, the moves between its muzzle-height variants H0, H40 and H105 at
+      the same direction judge the lift above the vehicle's own, Λ(*z* + *H*) − Λ(*z*), for
+      *H* = 40 and 105: at level 6, under the hypothesis, Λ(664) − Λ(624) = 95 − 90 = 5 and
+      Λ(729) − Λ(624) = 106 − 90 = 16 pixels, where our lift gives 6 and 15 (claim 11e). The H0
+      variant's vertical residual at level 6 less its residual at level 0, at the same
+      direction, judges the vertical position at whole level 6, whose lift is Λ(624) = 90 under
+      the hypothesis; P10 does not tell a different lift from a vertical correction that varies
+      with height (P10). The check values are arithmetic from S-0409 F2.
+    - Confidence: low for the hypothesis, pending P10: no cited spec gives the original's
+      drawing-lift formula, and the hypothesis rests only on S-0409 F2's height constant
+      matching the voxel scale above. The vertical positions that rest on it (claims 11a and
+      11e) are rated low with it.
+
+11c. **Distance between the drawn turret and the animation.** For a vehicle whose turret has no
+    separate barrel model, the distance on screen between the turret's last drawn pixels and the
+    shot animation is set by the data: the turret model on one side, and on the other the art's
+    muzzle position, the animation type's vertical draw shift and its frame's canvas. Our engine
+    corrects no mismatch between them (our engine's choice). Whether the original shows the
+    same distance as ours is open. It depends on:
+    - whether the original's turret drawing adds a facing-dependent correction (Open questions),
+    - whether the original's driving locomotor shifts the draw point (Open questions),
+    - whether the original's animation has a constant one-pixel shift (claim 11a, Open
+      questions),
+    - S-0105's presentation-only departures, which change the original's turret image against
+      ours (for example its carry of horizontal into vertical position, S-0105 F5, which moves
+      some pixels down),
+    - the lift difference of claim 11e.
+
+    This spec neither confirms nor explains the figures Q-1600 reports for our engine, an
+    animation about 5 pixels further along and about 2 pixels lower than the barrel's last
+    pixels: P10's engine run checks the marker against the fire point, not against the drawn
+    turret or barrel.
+    - Backing: `measurable` for our engine's lack of a correction (P10's engine run for the
+      animation, S-0105 MS-2 for the turret); the original's distance is `unmeasured`, open: no
+      scenario predicts the turret's pixels (Open questions, with the capture that would settle it).
+    - Confidence: high for our engine's rule, which is our engine's choice; the original's
+      distance is rated low, since this spec states no rule for it (open).
+
+11d. **A separate barrel model.** Our engine places the barrel by S-0105 claim 10, which is a
+    departure: the original pitches its barrel about a misplaced axis that moves on screen as the
+    body and turret turn (S-0105, its list of departures). So the original's barrel tip can
+    differ from where ours is drawn, and so can the distance between the barrel tip and the shot
+    animation. This claim does not give the original's barrel pixels. The fire point is
+    unchanged by the barrel in both engines (claim 1 has no barrel term). In our engine the
+    animation's draw point is unchanged by the barrel too; in the original, whether the barrel
+    adds a correction to the animation is open, since its barrel axis moves on screen and P10
+    uses a vehicle without a separate barrel model (Open questions).
+    - Backing: claim 1's for the fire point; `measurable` for our engine's animation (P10's
+      engine run, repeated with a separate barrel model); the original's barrel pixels and any
+      barrel-dependent correction of its animation are `unmeasured`, open (Open questions).
+    - Confidence: as claim 1 for the fire point; high for our engine's animation, which our
+      engine chooses; low for the original's barrel pixels and its animation with a barrel,
+      since this spec states no rule for them.
+
+11e. **Our lift against the original's.** Under claim 11b's hypothesis, our object height lift
+    being S-0101 claim 3's departure, the animation's lift above the vehicle's unshifted draw
+    point, compared with the original's Λ(*z* + *H*) − Λ(*z*) (claim 11b) for a vehicle at world
+    height *z*, can differ from the original's by one pixel either way. On flat ground at any
+    whole level from 0 to 14 and for *H* from 0 to 400 leptons it differs by at most one pixel.
+    Check values, with *L* our lift
+    (S-0101 F2): at level 6 (*z* = 624) and *H* = 40, *L*(664) − *L*(624) = 96 − 90 = 6 pixels
+    against Λ(664) − Λ(624) = 95 − 90 = 5, so our animation is drawn one pixel higher; at
+    *H* = 105, *L*(729) − *L*(624) = 105 − 90 = 15 against Λ(729) − Λ(624) = 106 − 90 = 16, one
+    pixel lower; at level 0 and *H* = 40, *L*(40) = Λ(40) = 6. This is a consequence of the
+    confirmed departure, not a separate rule.
+    - Backing: arithmetic from S-0101 F2 and claim 11b; P10's level-6 runs compare the moves
+      from H0 to H40 and to H105 (5 and 16 in the original under the hypothesis, 6 and 15 in ours) and
+      from H40 to H105 (11 against 9).
+    - Confidence: high for our lift (S-0101 claim 3); low for the comparison, which rests on
+      claim 11b's hypothesis, rated low; at levels 0 and 6 P10's moves between muzzle heights
+      judge it.
 
 ## Formulas
 
@@ -687,10 +899,153 @@ the user, not a request to alter the game.
 - Falsified if: link starts ignore the alternate triples or instead follow the primary muzzle.
 - Runs: one six-victim acquisition per art variant, at unchanged settled facings.
 
+**P10. Shot animation against the drawn turret (Q-1600).**
+- Setup: the common setup, with a stock vehicle that has the turret flag, a voxel turret
+  without a separate barrel model, the driving locomotor and a weapon that makes a shot
+  animation. A purpose-made turret model, whose motion data has a single frame, replaces its
+  turret, so that the drawn turret does not change with the animation-frame counter (S-0105
+  claim 16). When the stock weapon's burst
+  is lower than 2, the named test rules set it to 2. Named test art gives the vehicle an
+  invented muzzle position, with distinct non-zero forward and lateral parts, and an invented
+  turret displacement. It also gives a test shot animation: one frame with an odd width and
+  height, a cross of single-pixel lines through its centre pixel whose four arms each reach
+  beyond the vehicle's drawn outline at every facing, and an invented non-zero vertical draw
+  shift. The marker's centre is read as the crossing of the two lines, each line found from its
+  visible parts on both sides of the vehicle, so that the hull or turret drawn over the middle
+  does not hide it. A capture in which no marker shows, or in which either line has no visible
+  part on one side of the vehicle, is void. The named
+  test rules give the weapon an animation list with that test animation as its only entry, so
+  that every shot at every turret direction, in the original and in the engine run, makes the
+  same test animation (entry 0 for a list of any length other than 8, S-0301 claim 20). They
+  also give the test animation a life shorter than the time between the two shots of a burst,
+  so that each capture shows only the marker of the shot on whose tick it is taken; a capture
+  showing two markers is void. The vehicle is at full health and at rest on flat ground, so
+  that it is neither rocking nor tilted
+  (claim 1 takes S-0106's tilt into the fire point); a capture in which the recorder shows a
+  tilt or rocking is void.
+- Variants: H0, H40 and H105 differ only in the muzzle height, *H* = 0, 40 and 105 leptons,
+  with the same forward and lateral parts. The muzzle variant changes the forward and lateral
+  parts only, at *H* = 40. Run every variant with
+  the vehicle on flat ground at level 0 and on a flat plateau at level 6. At each level the
+  vehicle stands at the same world position in every variant, so that the moves between muzzle
+  heights compare like with like; a variant whose recorder shows another position is repeated.
+- Procedure: keep the vehicle still with body facing 0. Place a target in the direction of each
+  of the 32 turret steps in turn (S-0105 claim 4), so that only the turret turns; a capture whose
+  recorded turret facing is drawn at another step is void. In the H40 variant, at both levels,
+  repeat this at each of the 32 body facings, turning the body between rounds and keeping it
+  still within each. Take a tick-labelled screen capture at
+  800 × 600 on the ticks of the first and second shots of each burst (even and odd burst
+  counters). The recorder logs the vehicle's position, body and turret facings, burst counter,
+  tilt and the view origin.
+- Engine run: repeat on our engine. There the drawn body must also be drawn from the unshifted
+  draw point computed from the recorded position (claim 11's no-shift rule), and every expected
+  value uses S-0101 claim 3's lift *L* in place of Λ. Repeat the engine run once more with a
+  separate barrel model added to the turret: every expected marker position is unchanged
+  (claim 11d), and a change falsifies claim 11d for our engine. In the engine runs every
+  expected position is exact: a difference of one pixel or more, in either direction, falsifies
+  claim 11a for our engine.
+- Observable: for each capture, the marker's centre pixel and the pixels of the drawn turret.
+  The marker is counted from the vehicle's unshifted draw point (Terms), computed from the recorded position and the view origin with the original's lift Λ(*z*) of
+  the vehicle's height.
+- Expected: the marker's centre, counted from the vehicle's unshifted draw point, is the whole-pixel
+  projection of the fire point's world position (the recorded vehicle position plus claim 1's
+  fire point displacement, computed with F1's single-precision arithmetic as specified, so that
+  it truncates at the same pixel boundaries) minus the whole-pixel projection of the vehicle's position, each
+  truncated as S-0101 claim 2 states and each including the original's lift of its own height,
+  Λ(*z* + *H*) for the fire point and Λ(*z*) for the vehicle (S-0409 F2, claim 11b's
+  hypothesis), so the muzzle's lift above the vehicle, Λ(*z* + *H*) − Λ(*z*), is counted once
+  (claim 11a). The lateral part is mirrored for the second shot (*σ* = −1, F1), and the marker
+  is moved down by the animation's vertical draw shift. In every variant the turret pixels are
+  unchanged; in the muzzle variant the marker moves by the change in the whole-pixel projection
+  of the fire point's world position. Between two muzzle-height variants at the same direction
+  the marker moves straight up by Λ(*z* + *H*₂) − Λ(*z* + *H*₁): from H0 to H40 by 6 pixels at
+  level 0 and 5 at level 6, from H0 to H105 by 15 and 16, and from H40 to H105 by 9 and 11,
+  under claim 11b's hypothesis. Our engine's lift gives 6, 15 and 9 at both levels
+  (claim 11e). These moves cancel the unshifted draw point, the vertical draw shift and any
+  constant centring error, so at level 6 the moves from H0 judge the lift above the vehicle's
+  own. The H0 variant's vertical residual (observed minus predicted) at level 6, less its
+  residual at level 0 at the same direction, cancels the centring, the vertical draw shift and
+  any constant one-pixel shift, and leaves the error in the predicted vertical position at whole
+  level 6, whose lift is 90 pixels under the hypothesis; P10 does not split that error between
+  the lift and a vertical correction that varies with height. It is 0 under the hypothesis and in
+  our engine.
+- Falsified if any of these holds:
+  - at either level, the marker's centre differs from the prediction by two pixels or more
+    horizontally (the horizontal prediction uses no lift, so it is the same at both levels),
+  - at level 0, a vertical difference of two pixels or more falsifies claim 11a's
+    vertical half or claim 11b's hypothesis, which P10 does not tell apart (at level 6 the
+    absolute vertical position is judged through the residual difference below),
+  - at either level, the marker's position minus the predicted position changes with the
+    turret's direction or, in the H40 variant, with the body facing,
+  - a variant moves the drawn turret (this judges only that the turret does not move with the
+    muzzle position, not where it is drawn),
+  - the odd-counter shot is not mirrored,
+  - at level 0, the moves from H0 to H40, from H0 to H105 and from H40 to H105 are not 6, 15
+    and 9 pixels,
+  - in the engine run, those moves are not 6, 15 and 9 pixels at either level,
+  - in the engine run, the body is not drawn from the unshifted draw point computed from the
+    recorded position, or the H0 residual difference between levels 6 and 0 is not 0.
+
+  At level 6 in the original, moves other than 5, 16 and 11 pixels, or an H0 residual
+  difference between levels 6 and 0 other than 0, falsify the vertical prediction that claim
+  11b's hypothesis gives, not the absence of shifts in claim 11; P10 does not tell a different
+  lift from a vertical correction that varies with height. A marker drawn *d* pixels higher than
+  predicted at level 6, in that difference, means the original draws it *d* pixels higher at
+  whole level 6 than a lift of 90 pixels gives. A
+  constant one-pixel difference in the marker's absolute position, the same in every
+  direction, is reported against both S-0102 claim 19's centring and claim 11a's open constant
+  shift; P10 does not tell them apart. P10 does not test where the turret is drawn: its turret
+  check judges only that the turret does not move between variants.
+- Runs: one burst per turret step, body facing, variant and height. Repeat any burst during
+  which the body facing changed, and repeat up to twice any burst whose captures are all void.
+  P10 reports every turret step and body facing left with no readable capture; claims 11 and
+  11a are rated only for the steps read.
+
 ## Open questions
 
+- (Q-1600 question 1, claims 11 and 11a.) Whether the original's driving locomotor shifts a
+  vehicle's draw point. This decides how far question 1's answer holds for the original: every
+  position in claims 11 to 11e and P10 is counted from the vehicle's unshifted draw point. A
+  capture that compared the drawn body with S-0105's prediction from the unshifted draw point
+  would settle it.
+- (Claim 11b.) Whether the original's drawing lift is S-0409 F2's lift. F2 lifts whole levels
+  0 to 19 by exactly 15 pixels per level and misaligns at level 20 and above and at negative
+  levels; S-0101 claim 3 says the original's lift visibly misaligns objects with whole-level
+  terrain but not at which levels. P10 tests one whole level (level 6) and two heights above
+  it, and does not decide where the original misaligns; a capture of objects standing at
+  several whole levels against the terrain, including level 20 or above, would settle the
+  rest. Under the hypothesis, S-0101 claim 3's visible misalignment would show only on slopes,
+  at level 20 and above, or at negative levels.
+- (From Q-1600's Need, which speaks of the barrel tips; not from either of its numbered
+  questions.) For a vehicle with a
+  separate barrel model, where the original
+  draws its barrel, whose pitch axis moves with the body and turret facings (S-0105 claim 10's
+  departure), and so the distance between the original's barrel tip and the shot animation,
+  and also whether the original's barrel adds a correction to the shot animation's position. Claim
+  11d does not give them. A P10 run in the original with a stock vehicle that has a separate
+  barrel model would show the last.
+- (Q-1600's Need, claim 11c.) The original's distance on screen between the drawn turret's
+  last pixels and the shot animation, for a vehicle without a separate barrel model. Q-1600
+  reports, for our engine, an animation about 5 pixels further along the turret's direction and
+  about 2 pixels lower than the barrel's last pixels; this spec neither confirms nor explains
+  those figures. A capture in the original and the same capture on our engine, with a stock
+  turreted voxel vehicle firing in each of the eight directions in turn and its own stock
+  turret model, recording both the turret's last drawn pixels and the animation's centre at the
+  tick of each shot, would settle it.
+- (Q-1600 question 2, the part left open.) What P10 can tell about a constant one-pixel shift
+  of the shot animation: S-0109 claim 26 states that there is no further horizontal
+  displacement, at high confidence, but P10 cannot tell such a shift from S-0102 claim 19's
+  centring (claim 11a).
+- (Q-1600 question 2, the turret half.) Whether the voxel turret's drawing gets a correction
+  that depends on its facing in the original. Our engine adds none (claim 11, following S-0105
+  claims 4 and 8); for the original it is `unmeasured`: S-0105 MS-2 checks the displacement and
+  the facings, and P10 does not predict the turret's pixels. A capture comparing the drawn
+  turret's outline in the eight directions with S-0105's projection of the model would settle it.
 - The fire point of a building whose barrel is a voxel model follows the barrel's elevation
   (claim 8); its rule is not yet worked out.
 - For infantry and aircraft, *D* is the locomotor's body transform; whether any of their
   locomotors adds a translation to *D* that would move the fire point (as a hover bob would) is not
   checked.
+- Claim 11 covers vehicles moved by the driving locomotor. Whether other locomotors, such as
+  hovering or jumping movement, shift a vehicle's draw point, and so its turret against its shot
+  animation, is not checked.
