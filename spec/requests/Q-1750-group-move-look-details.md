@@ -1,9 +1,9 @@
 ---
 id: Q-1750
 title: Where the members of a group move order end up when their look is cut short
-status: open
+status: answered
 related: [S-0213, S-0209, S-0212]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need

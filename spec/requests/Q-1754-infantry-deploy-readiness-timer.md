@@ -1,9 +1,9 @@
 ---
 id: Q-1754
 title: The timer after an infantry deploy that S-0214's deploy readiness names
-status: open
+status: answered
 related: [S-0214, S-0213, S-0215]
-answered-by: []
+answered-by: [S-0214]
 ---
 
 ## Need

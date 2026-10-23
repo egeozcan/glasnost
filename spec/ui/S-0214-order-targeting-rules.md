@@ -2,13 +2,13 @@
 id: S-0214
 title: Order targeting rules (what a click means for each kind of object, and group orders)
 topic: ui
-revision: 42
+revision: 49
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742]
+requests: [Q-0081, Q-0277, Q-0278, Q-0286, Q-0392, Q-0450, Q-0452, Q-0742, Q-1754]
 supersedes: []
 ---
 
@@ -165,8 +165,13 @@ member* and *loaner* are S-0215's. *Reference point* and *table square root* are
 - **Deploy readiness.** Whether an object can carry out a deploy now, by its kind. Never on a
   tunnel cell (the marked-cell or edge predicate below; S-0507 claim 7). A building never has it. An aircraft has
   it when it is not disabled and its type can carry passengers. An infantry unit has it when its
-  type deploys in place, and, if its type has an undeploy delay, when it is neither deployed nor
-  undeploying nor within the timer that follows a deploy. A vehicle has it when it is not
+  type deploys in place, and, if its type has an undeploy delay (0 or more), when all of these
+  hold: its current sequence is none of the deploy kinds (S-0107, Terms; *deploy* itself counts,
+  so a unit still deploying lacks it) and is not *undeploy*, and its rearm countdown (glossary,
+  S-0301) has ended. For a type with a negative undeploy delay neither the sequence nor the
+  countdown matters (Edge cases, *infantry deploy readiness and the rearm countdown*). A vehicle's
+  deploy readiness does not depend on whether it is deploying, deployed or undeploying (for a
+  deploy press, the consequences are S-0213, table T2's deploy rule). A vehicle has it when it is not
   disabled, not inside a tunnel, and it deploys into a building, carries passengers, deploys in
   place, sits in a tank bunker or has a deploy weapon; but not when it deploys into a building
   while a parasite is on it, not when it deploys into a construction yard while it is
@@ -1710,6 +1715,43 @@ Ordering consequences:
   line *empty first slot* tries a named test type with no weapon in its first slot. If the original
   does not let such a type fire at all, the record says so and the row stays `unmeasured` (Open
   questions).
+- **Infantry deploy readiness and the rearm countdown (Q-1754).** For an infantry type that
+  deploys in place with an undeploy delay of 0 or more, the timer in deploy readiness (Terms) is the
+  unit's rearm countdown (glossary; S-0301), not a timer of its own. Nothing about deploying starts
+  it: not the press, not the start or the end of the *deploy* sequence. The countdown is started by
+  each ordinary shot the unit makes, deployed or not (a drain attempt and a void shot leave it
+  unchanged, S-0301 Terms and claim 15), and runs for that shot's delay (S-0301 claims 1, 2 and 8,
+  which include the rate of fire, its factors and draw, and the berserk halving), not for the
+  undeploy delay and not for a sequence's frame count.
+  When a unit with explosive charges in *sabotage* reaches its target building, its countdown is
+  replaced by S-0301 claim 19's arrival delay for the unit's second weapon, whether the charge is
+  planted or refused; this is not a shot (S-0301 claim 19). The undeploy delay is a different quantity, separate from the countdown: S-0215 claims 30
+  and 31 own when the unit undeploys by itself. As a result:
+  - while the unit is deploying, deployed (any deployed sequence) or undeploying, a deploy press
+    never gives it an order, whatever the countdown says. As far as a deploy press goes, a deployed unit
+    leaves that state only by undeploying by itself (S-0215 claim 31).
+  - an undeployed unit gets no order from a deploy press while its countdown runs after a shot
+    (for example a primary shot while standing, or a shot made while deployed at the target of an
+    attack order, which the unit fires before it undeploys), and gets one again from the first
+    press after the countdown ends.
+  - for an infantry unit, only S-0301's own rules change it early (claims 1 and 19; whether a
+    temporal weapon's release does is open there). A move order, a stop order or
+    a hit on the unit does not.
+
+  For a type with a negative undeploy delay neither the sequence nor the countdown affects deploy
+  readiness, so a deploy press reaches the unit in every sequence (S-0213, table T2's deploy rule).
+  - Backing, by Scenario T24 (`measurable`): parts a, c and d for which sequences refuse the
+    press and for the refusal after a primary shot; part b for the refusal after a shot made
+    while deployed; part e for "nothing else ends it"; part g for the negative-delay rule in the
+    sequences of the unit's deploy cycle in which a press falls.
+  - Backing, by other specs: the replacement at a sabotage arrival is S-0301 claim 19's, with its
+    backing (T24 has no sabotage).
+  - `unmeasured`, each rated medium: a hit on the unit (the measurement setup has no house whose
+    unit a scenario orders to hit *D*); that the countdown does not affect a type with a negative
+    undeploy delay (T24 g need not make a shot); that a press reaches such a type in a sequence
+    outside its deploy cycle (T24 g passes only through that cycle).
+  - Confidence: medium until T24 runs, the same as S-0213's deploy rule (table T2), which reads
+    this readiness and rests on its own scenario that has not run either.
 - **Representative distance.** Formulas F1. Ties between selected objects are rare. Our engine
   computes the same value with the table square root of S-0204 (`quirks.table_root_distance`
   there).
@@ -2802,6 +2844,93 @@ or gives a selection response falsifies its corresponding type-expansion rule.
   an unsupported battlefield image. An unavailable mode or hidden radar is inconclusive
   for that sub-test, not evidence for an arrow assignment. Run each reachable mode three
   times; record any still-unreached combination explicitly for follow-up.
+
+**Scenario T24: infantry deploy readiness and the rearm countdown (Q-1754: Terms, *deploy
+readiness*, and Edge cases).**
+- *Setup:* the usual isolated test map, speed 6. A named test rules and art file defines infantry
+  type *D* that deploys in place, with an undeploy delay of 60 ticks, *deploy* and *undeploy*
+  sequences of 10 ticks each and every other sequence kind of S-0107 given at least one stage, a primary weapon *W*₁ and a deploy weapon *W*₂ (second slot), each
+  with a rate-of-fire field of 200 ticks, *W*₁'s range clearly shorter than *W*₂'s; *D* has the
+  deploy-fire flag, so that a deployed *D* fires *W*₂ (S-0308 claim 8); a stationary
+  test target with 1 hit point that a single shot of either weapon destroys, so that each
+  case has exactly one shot. In (c) to (e) the target is an enemy standing within *W*₁'s reach.
+  In (b) it stands within *W*₁'s reach, so that row I21 does not refuse the attack click on it,
+  and belongs to a house at peace with the player's (for example the map's neutral house), so
+  that no *guard* processing of *D* picks it before the order. In (g) it is an enemy standing
+  beyond *W*₁'s reach but within *W*₂'s, so only the deployed unit can fire at it.
+  Variants *D*₀ with an undeploy delay of 0 and *D*₋ with a negative undeploy
+  delay, otherwise equal. A second copy of the file sets both rate-of-fire fields to 1 tick.
+  Both copies set the rate-of-fire factor of every difficulty row and of the player's country
+  to 1, so that the player house's rate-of-fire factor *h* is 1 (S-0301 claim 3) and the delay
+  after a long-rate shot is 200 ticks plus the draw, well inside the 260-tick windows of (c)
+  and (e).
+- *Procedure:* one unit, selected alone; press the deploy key on every second tick, releasing it
+  on the ticks between (S-0213 claim 1: one input event per cycle, and a press and a release are
+  one event each), for the stated window. Tick 0 is the window's first tick, at or after tick 4
+  of the game, when orders can first be issued (S-0213 claim 1). In (a), (b) and (f) the press at
+  tick 0 is followed by no press until the recorder shows the unit's *deploy* sequence, which
+  starts in tick *s*. The presses then resume on tick *s* + 1 and go on every second tick, so that
+  no press falls after tick 0 and before the unit is in *deploy*. (a) Long rate of fire, enemy target absent, *D*: 160 ticks. (b) Long rate of
+  fire, target present, *D*: 400 ticks. Once *D* is in a deployed sequence, give it one attack
+  order on the target with force-fire held (the attack rule's condition (a), since the target is
+  not an enemy). The click takes input events of its own (the force-fire key going down, the
+  button going down and up, the key going up), one per cycle, so the presses stop for those
+  events and resume on the second tick after the last of them; the expectations below are read
+  against the presses actually made. The order is taken at once: a deployed sequence can be
+  interrupted, so the unit is ready to change behaviour (S-0215 claim 11) and *attack* replaces
+  *guard* on the next tick, with its first processing due at once rather than at the end of the
+  undeploy delay. It makes the unit fire *W*₂ while deployed
+  (S-0215 claim 23: a deployed infantry unit of a human-controlled house in *attack* runs its
+  deployed-firing rule, S-0517 claim 16). The target is destroyed by that shot, *attack* falls back
+  to rest with no target, and the unit then undeploys by itself (S-0215 claim 31). A run of (b) in
+  which the order log records no attack order for *D* while it is in a deployed sequence is void. (c) Long rate
+  of fire, target present, *D* undeployed: order one primary shot at the target, then start the
+  presses on the tick after the shot, for 260 ticks. (d) As (c) with the 1-tick rate of fire.
+  (e) As (c), but on the tick after the shot also give a move order to an adjacent cell, then a
+  stop order 20 ticks later, then
+  presses for 260 ticks. The
+  move and the stop each take their input events, and the presses resume on the
+  second tick after the last of them. A run of (e) in which *D* fires
+  a second shot is void. (f) case (a) with *D*₀: no target and no shot, since a unit with an undeploy delay of 0 may
+  undeploy as soon as its deploy ends (S-0215 claims 30 and 31), leaving no time to order a deployed
+  shot. (g) case (b) with *D*₋, without the attack order, and with (g)'s own target of the Setup
+  (an enemy beyond *W*₁'s reach), not (b)'s. The presses reach it in every sequence, so
+  it can switch back before any processing of *guard* while deployed (S-0215 claim 30), and it
+  need not make a shot. Part g therefore backs only the sequence part of the negative-delay rule,
+  for the sequences of its deploy cycle in which a press falls; other sequences, and that the countdown does not affect such a type, stay
+  `unmeasured` (Edge cases).
+- *Runs:* 3 per case. Among the random draws, the shot delay's draw of S-0301 claim 2 and the
+  standard delay's draw of S-0215 claim 6 (0 to 2 ticks each) shift the observed ticks: read them
+  with the random-state recorder, or allow those margins.
+  The test target is unarmed, and no other shooter takes part.
+- *Observable:* every tick: whether a press queued a deploy order for the unit (the recorder's
+  order log), the unit's current sequence, and the tick of each shot it makes with the sequence it
+  is in at that tick.
+- *Expected:* (a) an order at tick 0; then no order from the tick *s* on which *deploy* starts
+  until *undeploy* has ended (no press falls between tick 0 and *s*, Procedure). The unit undeploys by itself with the timing that S-0215 claims 30
+  and 31 give: the undeploy delay counts from the processing that started the deploy, so *undeploy*
+  starts at about *s* + 60 and ends about 10 ticks later. The second order comes at the first press
+  after that, at about *s* + 70 to *s* + 73 (the presses fall on every second tick), well inside the
+  window, and the cycle repeats. (b) as (a), except that the deployed shot comes within a few ticks of
+  the order's last input event, *undeploy* starts at a processing of *guard* after the target
+  is destroyed (S-0215 claim 31's first row; this case does not time it), and after *undeploy* ends no order is given until the delay
+  *R* of the deployed shot has passed
+  (S-0301 claim 2: with this test data 200 ticks, since the setup makes the house's rate-of-fire
+  factor 1, plus the draw), then an order from the first press after it. (c) no order until the primary shot's
+  delay *R* has passed, then an order. (d) as (c), with *R* a few ticks: an order on the first
+  press after that *R* has passed. (e) as (c): the move and the stop change nothing. (f) with *D*₀:
+  as (a), with the undeploy timing that S-0215 claims 30 and 31 give for an undeploy delay of 0.
+  (g) with *D*₋: an order from every press, in every sequence it passes through (the unit does not undeploy by itself
+  and each applied order switches it at the end of its current sequence, S-0213, table T2's deploy
+  rule).
+- *Falsified if:* a press gives an order while the sequence is *deploy*, a deployed sequence or
+  *undeploy* in (a) to (f); an undeployed unit is refused once its countdown has ended, or given an
+  order while it runs; the refusal after a shot lasts the undeploy delay or a sequence length
+  rather than the shot's delay; in (b), the deployed unit does not fire before its undeploy delay
+  has run out (the order was not taken while it was deployed), an order is given after *undeploy*
+  ends but before the deployed shot's delay *R* has passed, or the first press after *R* has
+  passed gives none; any event of (e) ends the refusal early; or *D*₋ is refused in
+  any sequence of (g).
 
 ## Open questions
 

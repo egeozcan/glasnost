@@ -1,9 +1,9 @@
 ---
 id: Q-1753
 title: How a deploy press treats an in-place deployer that is still deploying or undeploying
-status: open
+status: answered
 related: [S-0213, S-0214, S-0517]
-answered-by: []
+answered-by: [S-0213]
 ---
 
 ## Need
