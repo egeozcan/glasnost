@@ -1472,7 +1472,7 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_loss_leaves_sleep: bool,
-    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. The depot cycle keeps the switched-off state (`depot::locomotor_off`), which the hovering locomotor (S-0503) obeys.
+    /// A hovering vehicle whose depot is destroyed after it became settled, or sold without the vehicle receiving any destination before the depot's removal, stays settled and switched off and, once down on the ground, never moves again; off: losing contact with a depot ends its being settled, so it is switched on again and rises.
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,
