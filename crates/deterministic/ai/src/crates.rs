@@ -1,8 +1,8 @@
 //! The own AI and crates (S-0520; PLAN §4.7): a person sees a crate on the
 //! map and sends the fastest idle unit to run over it. The brain does the
 //! same: every crate on a cell the house has explored gets the fastest idle
-//! ground unit that is not an engineer or a harvester, nearest first, one
-//! unit per crate.
+//! ground unit that is not an engineer, a harvester or a vehicle that deploys
+//! into a construction yard, nearest first, one unit per crate.
 //!
 //! It reads only what a person in the house's seat sees (crates on explored
 //! cells) and gives its orders through `orders::issue`. It draws no random
@@ -81,6 +81,8 @@ impl Special {
                         && w.rules()
                             .unit(o.kind, o.type_index)
                             .is_some_and(|u| !u.harvester && !u.engineer)
+                        // nocite: our own opponent's play (a person keeps the vehicle that deploys into a construction yard for the base; sent at a crate, it was drawn back and forth between the crate and its deploy spot and never deployed, M9 rehearsal)
+                        && !scripted::deploys_into_yard(w, o.kind, o.type_index)
                         && dist2(o.pos.cell(), p.cell) <= REACH * REACH
                         && same_region(w, id, p.cell)
                         && self.memory.ok(w, id, Target::Cell(p.cell))
