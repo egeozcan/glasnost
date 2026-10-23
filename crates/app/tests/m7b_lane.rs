@@ -1531,6 +1531,10 @@ fn watch_attack(lane: &mut Lane, key: &str, b: ObjectId, attackers: &[(&str, Obj
     let mut shots = vec![0usize; attackers.len()];
     let mut air_shots = vec![0usize; attackers.len()];
     let mut first = vec![None; attackers.len()];
+    // The firing check's answers (with the range test) while held, and the
+    // ticks the attacker was airborne then (S-0307 Terms).
+    let mut answers = vec![std::collections::BTreeMap::<String, usize>::new(); attackers.len()];
+    let mut held_air = vec![0usize; attackers.len()];
     let h0 = lane.permille(b);
     let rearm = |w: &World| w.obj(b).map(|o| o.combat.rearm_until);
     let mut last = rearm(lane.world());
@@ -1548,6 +1552,11 @@ fn watch_attack(lane: &mut Lane, key: &str, b: ObjectId, attackers: &[(&str, Obj
             if target == Some(glasnost_sim::world::Target::Object(*a)) {
                 held[k] += 1;
                 first[k].get_or_insert(w.tick);
+                let answer = glasnost_sim::combat::check::check(w, b, target, 0, true);
+                *answers[k].entry(format!("{answer:?}")).or_default() += 1;
+                if glasnost_sim::combat::weapon::airborne_by_height(w, *a) {
+                    held_air[k] += 1;
+                }
             }
         }
         for p in w.projectiles.values().filter(|p| p.firer == Some(b)) {
@@ -1575,9 +1584,11 @@ fn watch_attack(lane: &mut Lane, key: &str, b: ObjectId, attackers: &[(&str, Obj
     );
     for (k, (what, a)) in attackers.iter().enumerate() {
         println!(
-            "{key}: {what}: held as target {} ticks (first tick {:?}), shots at it {}, of them while it was airborne {}, alive at the end {}",
+            "{key}: {what}: held as target {} ticks (first tick {:?}; airborne {} of them; check answers {:?}), shots at it {}, of them while it was airborne {}, alive at the end {}",
             held[k],
             first[k],
+            held_air[k],
+            answers[k],
             shots[k],
             air_shots[k],
             lane.world().obj(*a).is_some()
@@ -1662,8 +1673,16 @@ fn aa_only(lane: &mut Lane) {
                 b,
                 &[("vehicle", v), ("infantry", i)],
             );
-            // An aircraft attacker, in another place.
+            // An aircraft attacker, in a fresh lane.
             let Some(air) = air.as_deref() else { continue };
+            let mut l = Lane::start().expect("the install is set");
+            patch_rules(&mut l, |r| {
+                if let Some(p) = r.econ.power.buildings.get_mut(bi) {
+                    p.needs_power = false;
+                    p.drain = 0;
+                }
+            });
+            l.world_mut().houses[usize::from(owner.0)].human = !computer;
             let at2 = l.open_land(CellXY::new(home.x - 12, home.y + 12));
             let b2 = l.spawn(Kind::Building, &bname, owner, at2);
             let a = l.spawn(Kind::Aircraft, air, other, CellXY::new(at2.x + 10, at2.y));
