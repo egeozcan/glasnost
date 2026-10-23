@@ -1,9 +1,9 @@
 ---
 id: Q-1770
 title: Does a building's pending delayed shot outrank the water and land rows of the firing check?
-status: open
+status: answered
 related: [S-0306, S-0301, S-0215]
-answered-by: []
+answered-by: [S-0301]
 ---
 
 ## Need
