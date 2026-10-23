@@ -2,13 +2,13 @@
 id: S-0301
 title: Firing cycle (delay between shots, bursts, ammunition and reloading, the firing check)
 topic: combat
-revision: 28
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0060, Q-0798, Q-1523, Q-1580]
+requests: [Q-0060, Q-0798, Q-1523, Q-1580, Q-1770]
 supersedes: []
 ---
 
@@ -26,6 +26,10 @@ lasting effect are S-0615 claims 12 to 17. Aircraft carrying a first passenger r
 shots with drop attempts (S-0522 claim 11), outside the ordinary-shot rules below. Which shot animation a shot makes,
 where it is and what it follows are claims 20 to 23; the target line that a vehicle with the
 target-laser flag shows its owner is claim 24.
+
+This revision narrows one sentence of claim 14 as previously committed: while a building's
+delayed shot is pending, its other firing checks answer *rearming* unless one of S-0405 table
+T1's building answers holds, which comes first (claim 9).
 
 ## Terms
 
@@ -397,7 +401,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    | 1 | impossible | a vehicle that is playing its death frames (S-0102, claim 22: its death counter has started; vehicles only) |
    | 2 | busy | a vehicle that is launching spawned aircraft (S-0506 claim 10) |
    | 3 | illegal | a vehicle that is melee-linked (S-0214, Terms), whatever its target (vehicles only) |
-   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10). The specified precedence within this rank is given below |
+   | 4 | illegal, impossible, rearming | most *illegal* and *impossible* reasons (those about the firer's state, the other weapon's alive effect and most target tests), the *illegal* answer of a deactivated firer (S-0405 claims 13 and 20), for every target and weapon, the *illegal* answer of an infantry healer (S-0310, claim 11), the *illegal* answer when the firer is sinking (S-0504 claim 5) or falling (S-0511 claim 10), the *illegal* answer when the target is the building the firer drains (with any weapon), or when a draining weapon targets an object already being drained or of a type that is not drainable (S-0608 claim 3; the latter two tests do not apply to cell targets), the *illegal* answer for a berserk-causing warhead against a psionics-immune target, a bunkered vehicle or a tank bunker holding a vehicle (S-0610 claim 3), the *illegal* answer for a berserk firer against a berserk-friendly target (S-0610 claim 6), the *illegal* answer for a firing vehicle that is deploying or undeploying, or for a weapon whose warhead carries its target with a locomotor against a target vehicle that is deploying or undeploying, or is an in-place deploying type with *unload* current (S-0517 claim 11), the *impossible* hidden-target refusal defined above (S-0516 claim 24), the *impossible* answer for a spawner weapon whose mobile firer is under the parasite hold regardless of organic type (S-0506 claim 10; this precedes the organic-only *illegal* test at rank 9), and the early *rearming* cases: the firer is materialising, the asked target is its own gripped unit (with any weapon, S-0607 claim 11), it already holds this very target with a temporal weapon, a magnetic-beam weapon's firer grips a unit and has a live wave while the asked target is neither the gripped unit nor a building (S-0607 claim 11), or the weapon is a spawner weapon none of whose spawned aircraft is alive (S-0506 claim 10); and for a building, the *rearming* of its pending delayed shot (claim 14). The specified precedence within this rank is given below |
    | 5 | rearming | the rearm countdown runs, the firing-frame gate of claim 13 is closed, or the weapon's own effect is alive (claim 5) |
    | 6 | (not used) | an earlier numbering kept the weapon's own live effect here, with the same answer as rank 5; the two are one rank, and the number stays unused so that other specs' pointers to the later ranks stay valid |
    | 7 | out of ammunition | the firer's ammunition *a* is 0 |
@@ -428,6 +432,20 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    *impossible*. For vehicles, the earlier tube-transit *impossible*, launching-spawn
    *busy* and melee-link *illegal* answers still take precedence.
 
+   **A building's pending delayed shot within rank 4 (claim 14; Q-1770).** While a building's
+   delayed shot is pending, its *rearming* yields only to the building's own answers of S-0405
+   table T1: an occupiable building without occupants who can fire, a drained building, a
+   building in its *construction* or *selling* behaviour, a pulse cannon, and a building that is
+   not in operation. It outranks every other reason of this table that applies to a building and
+   gives a different answer (an own-gripped target's *rearming*, claim 9, gives the same one),
+   among them the hidden-target *impossible*, the absent-weapon and power-sensitive-weapon
+   *impossible*, the drain refusals (below: a draining weapon's refusals and the refusal against
+   the firer's own current drained building), every row of S-0306 claim 23 (the airborne, render-layer, anti-ground, water and
+   land rows) and the later ranks. So a building whose target becomes one that a row of S-0306
+   claim 23 refuses while its shot is pending gets *rearming*, not *illegal*, and its attack
+   behaviour keeps that target (S-0215 claim 32). The check made when the delay ends is not
+   refused by the pending shot itself (claim 14), so there those rows decide.
+
    **Firers being erased (S-0514 claim 17).** Ordinary firing stops during erasure.
    That inactivity does not establish a firing-check answer: ordinary processing may skip
    the attempt entirely. This spec assigns neither an answer label nor a rank to erasure,
@@ -446,14 +464,16 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      yields to the held-temporal-target, hidden-target, absent-weapon and power-sensitive-weapon
      answers. Its *illegal* outranks the other-weapon live-effect *impossible*, conditional
      magnetic-wave *rearming* and empty-spawner *rearming* answers. Rearm, ammunition,
-     cloak and the rank-9 takeover test cannot displace either drain refusal.
+     cloak and the rank-9 takeover test cannot displace either drain refusal. The one
+     exception is a building's pending delayed shot (above): while it is pending, the
+     building's *rearming* comes ahead of both drain refusals.
 
    The own-current-building refusal does not cover an earlier building stranded by relinking
    (S-0608 claim 3). A draining weapon is still refused there because it is already drained.
    Another weapon may fire if all remaining checks pass. Relative ordering of reasons that
    all give *illegal*, including the berserk and projectile refusals, is not required by
-   these rules: their answer and consequences are identical. No other precedence within
-   rank 4 is specified here.
+   these rules: their answer and consequences are identical. Apart from these rules and a
+   building's pending delayed shot (above), no other precedence within rank 4 is specified here.
 
    **Falling and the landing turn (S-0511 claim 10).** A falling firer gets *illegal*
    at rank 4. For ordinary infantry and vehicles, the fall and any landing hit precede
@@ -487,8 +507,7 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
    carrier into an ordinary armed aircraft. No switch applies.
 
    So a firer whose countdown runs gets *rearming* even when its target is out of range or it is
-   out of ammunition. The rank of *rearming* for a building's pending delayed shot (claim 14), and
-   of *busy* for a firer that is not a vehicle, is not stated.
+   out of ammunition. The rank of *busy* for a firer that is not a vehicle is not stated.
 
    Where reasons of two of ranks 1 to 4 hold at once, the answer may be that of either if
    the behaviours that respond to the answer (S-0215, S-0310) respond to the two answers
@@ -534,7 +553,9 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      rounds despite a drain attempt; also
      S-0215 scenario B36 and its extensions for the upgrade gate and ordered paired attempts
      despite the primary's rearm countdown; scenario F17 for an empty resolved secondary
-     slot and animation-delayed upgrade buildings).
+     slot and animation-delayed upgrade buildings; scenario F21 for a building's pending
+     delayed shot against the water and land rows, parts a and b, and against the render-layer row,
+     part e).
      The berserk-weapon refusals of S-0610 claim 3 are `unmeasured` here for that claim's
      reason: no proposed setup isolates the single-target firing check from the area effect.
      Exact precedence of the sinking target refusal is `unmeasured` for the reason stated by
@@ -552,12 +573,29 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
      ordinary firing inactivity.
      Rank 16 is `unmeasured`: no isolated locomotor refusal and its answer have yet been
      identified, so no scenario here can distinguish it from another refusal.
-   - Confidence: medium (the deactivated refusal, its unmeasured within-rank precedence,
+     A building's pending delayed shot against every reason other than the water, land,
+     render-layer and airborne rows of S-0306 claim 23 is `unmeasured`: F21 refuses its target
+     only by those rows, and no setup here isolates the shot's place against another reason of
+     rank 4 or a later rank (the drain refusals included), or against S-0405 table T1's answers.
+     F12 part b drops a pending shot whose target has left range or died, but compares no
+     ranks. A drain refusal during the delay would need the building's target to become drained
+     by another drainer within the delay, which no input ensures. In part e both the
+     render-layer row and the airborne row start to refuse the lifting unit at the same height,
+     208 leptons above the surface. S-0102 claim 3 keeps a unit with jumpjet movement in the
+     ground layer below that height, and S-0307 Terms makes it airborne from it. Both rows
+     answer *illegal* at rank 4, so part e cannot tell which of the two refuses the unit, and it
+     needs to tell neither.
+   - Confidence: medium (a building's pending delayed shot ahead of the water, land,
+     render-layer and airborne rows of S-0306 claim 23, until F21 runs; F21 tests it through the
+     target kept and dropped, and S-0306 claim 23 leaves this rank unstated), medium (its place against every other reason,
+     ahead of the rest of rank 4 and the later ranks and behind S-0405 table T1's answers),
+     medium (the deactivated refusal, its unmeasured within-rank precedence,
      and ordinary firing inactivity during erasure), high
      (the two grip-refusal comparisons against projectile and target-layer refusals within rank 4,
      the empty-secondary no-op and the upgrade-building paired attempts without a second firing check,
      falling refusal and the same-turn surviving-landing boundary,
-     the three drain refusals, their specified precedence and no ordinary shot from a drain attempt),
+     the three drain refusals, their specified precedence (except against a building's pending
+     delayed shot, rated with that shot's place above) and no ordinary shot from a drain attempt),
      medium (its missing countdown start and per-shot ammunition use, as S-0608 claim 1,
      and aircraft pending-round composition, as S-0608 claim 16), high (rearming before ammunition and range, facing and moving after them, and
      *must deploy* before *not facing*, and the hidden-target refusal using mean weapon damage),
@@ -695,7 +733,35 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     starts its firing animation and its delayed-fire countdown, set by the type's delayed-fire field
     *d* (ticks). The delayed shot is pending until the building's turn max(*d* − 1, 0) ticks after
     the turn that started it. (A building takes a turn in every tick. The countdown does not depend on how often its attack behaviour is processed,
-    which is every other tick while it turns towards its target or rearms, S-0215 claim 32.) In that turn the building makes its scheduled firing check again, with range; that check is not refused merely because this same delayed shot is pending. On *can fire* it fires its weapon at its current target; on any other answer the shot is dropped. Either way the shot is no longer pending. Other firing checks made while the shot is pending answer *rearming*. The rearm countdown starts only with the shot itself.
+    which is every other tick while it turns towards its target or rearms, S-0215 claim 32.) In that turn the building makes its scheduled firing check again, with range; that check is not refused merely because this same delayed shot is pending. On *can fire* it fires its weapon at its current target; on any other answer the shot is dropped. Either way the shot is no longer pending. Other firing checks made while the shot is pending answer *rearming*, unless one of the building's own answers of S-0405 table T1 holds (claim 9). The rearm countdown starts only with the shot itself.
+
+    **A target that becomes refused while the shot is pending (Q-1770).** The check and the
+    shot at the end of the delay use the building's target at that moment and the weapon slot
+    chosen when the delay started; the slot is not chosen again, even where S-0308 would now
+    choose the other one (land-targeting mode 2, for example). This is the one exception to
+    S-0308 claim 14's fresh choice of the weapon for every firing check (Changes for other
+    specs). A shot that this check refuses is
+    not made: no projectile, rearm countdown, ammunition use or draw, and the check itself
+    leaves the target as it is. An attack order that gives the building another target while the
+    shot is pending changes its target but starts no new delay, so the shot at the end of the
+    delay is made at the new target if the check admits it. While the shot is pending, the attack behaviour gets *rearming*
+    (claim 9, rank 4), so the building keeps its target and keeps turning towards it, also when
+    the target has meanwhile become one that a row of S-0306 claim 23 refuses. Examples are an
+    enemy vehicle that drives from water or beach onto clear land or a bridge for a type with
+    land-targeting mode 1, or from clear land onto water or beach for a type with
+    naval-targeting mode 6, or a jumping infantry unit that lifts off and climbs to 208 leptons
+    (two height levels) above the surface or higher. From that height it is both outside the
+    ground layer (S-0102 claim 3) and airborne (S-0307 Terms), so the render-layer row and the
+    airborne row both refuse it for a projectile that is not anti-air. Below that height neither
+    row refuses it, so for a lifting unit still below 208 leptons when the delay ends those rows
+    do not stop the shot, and it is made unless another answer of the check refuses it. In the tick that ends the delay, an attack processing that falls in
+    it while the shot is already pending comes before the end-of-delay check and still gets *rearming*. The end-of-delay check sees
+    the target as it stands at the building's turn (update order, S-0203). If a row refuses the
+    target then, the shot is dropped, and the attack behaviour's first processing after that
+    tick gets *illegal* and drops the target, queuing *guard* (S-0215 claim 32), unless the
+    target has become legal again by then. A shot that the check admits is an ordinary shot of
+    that weapon at that target, under the same rules as an undelayed shot (S-0306; claim 1 for
+    its rearm countdown, claim 9 for a draining weapon, claim 15 for a void shot).
 
     **Upgrade gate priority (Q-0798).** For a non-SAM building to which S-0215 claim 32's
     upgrade weapon gate applies, the animation-delayed-fire flag does not defer a passing
@@ -714,8 +780,31 @@ draw. From S-0205: RZ₅₃ and trunc (Formulas there). From S-0203: *turn pass*
     prism-type building recruits supporters before starting its own delayed shot. That shot
     always uses this countdown, regardless of the animation-delayed-fire flag, and both its
     final firing check and its shot use weapon slot 0 (S-0518 claims 4 and 7).
-    - Backing: `measurable` (scenarios F12 and F17; S-0518 scenarios PS1 and PS5 for prism shots)
-    - Confidence: medium (the countdown arithmetic); high (upgrade gate priority and the prism exceptions)
+    - Backing, by part:
+      - The countdown arithmetic: `measurable` (scenarios F12 and F17).
+      - Upgrade gate priority: `measurable` (scenario F17). The prism exceptions: `measurable`
+        (S-0518 scenarios PS1 and PS5).
+      - The target kept while the shot is pending, and the shot dropped at the end of the delay
+        when a row refuses the target then: `measurable` (scenario F21 parts a, b and e, with
+        part c as control).
+      - The slot chosen when the delay started: `measurable` (scenario F21 part d).
+      - An attack processing in the tick that ends the delay coming before the end-of-delay
+        check: `measurable` (scenario F21). With F21's delay field of 30 ticks, the processing
+        after the one that starts the shot comes 1 tick later and each later one 2 ticks after
+        the last (S-0215 claim 32), so one falls in the tick that ends the delay; the reverse
+        order would drop the target in that tick.
+      - The check and the shot using the building's target at the end of the delay rather than
+        the one it had at the start, and a new attack order during the delay starting no new
+        delay: `measurable` (scenario F21 part f).
+    - Confidence, by part:
+      - The countdown arithmetic: medium.
+      - Upgrade gate priority and the prism exceptions: high.
+      - The target kept, and the shot dropped at the end of the delay: medium until F21 runs.
+      - The slot chosen at the start: medium until F21 part d runs, since it departs from
+        S-0308 claim 14's high-rated fresh choice.
+      - The order within the tick that ends the delay: medium until F21 runs.
+      - The target at the end of the delay rather than at the start, and no new delay at an
+        order: medium until F21 part f runs.
 
 15. **Failed launches.** If the projectile of a shot cannot be put on the map, the shot is void:
     the rearm countdown, the burst counter, the ammunition and the garrison muzzle position (S-0313)
@@ -1055,7 +1144,8 @@ itself requires no further rounding.
 | countdown running, outside claim 13's sync tick | an attempt | answer *rearming*, unless a reason of ranks 1 to 4 gives its own answer (claim 9); either way no shot and no draw |
 | countdown running | *D* ticks have passed since the shot | ready |
 | any | the firer's target is cleared | burst counter 0; countdown unchanged |
-| building, delayed shot pending | its turn max(*d* − 1, 0) ticks after the turn that started the shot | firing check with range: a shot at the current target on *can fire*, otherwise dropped; no longer pending (claim 14) |
+| building, delayed shot pending | any other firing check, including its attack behaviour's | *rearming* unless one of S-0405 table T1's answers holds, even against a target that a row of S-0306 claim 23 now refuses; the attack keeps its target (claims 9 and 14) |
+| building, delayed shot pending | its turn max(*d* − 1, 0) ticks after the turn that started the shot | firing check with range, with the weapon slot chosen at the start: a shot at the current target on *can fire*, otherwise dropped with no projectile, countdown or draw; no longer pending (claim 14) |
 
 **Ordering consequences.**
 - The delay draw of a shot is taken in the firer's turn, after the draws of the projectile it
@@ -1069,7 +1159,8 @@ itself requires no further rounding.
   aircraft's same-tick full burst (claim 4), or an unchecked building secondary attempt
   (claim 9). So measured shot intervals are *D* ticks when the firer attempts every tick
   and uses none of those exceptions.
-- A building with a pending delayed shot reports *rearming*; under S-0215 claim 32 its attack
+- A building with a pending delayed shot reports *rearming*, unless one of S-0405 table T1's
+  answers holds (claim 9); under S-0215 claim 32 its attack
   behaviour is therefore processed every other tick (it keeps turning towards its target) until the
   shot. The delayed shot itself is timed by the building's own turns, one per tick, so its tick is
   the same whether or not a processing falls in it (claim 14).
@@ -1163,6 +1254,7 @@ itself requires no further rounding.
 | `CompEasyBonus` (rules, `General`) | the computer-easy-bonus flag of claim 3 (the original's set-up only; read by the optional handicap setting) | boolean | no |
 | `CanBeOccupied`, `CanOccupyFire` (rules, building type) | garrisoned building (Terms) | boolean | no |
 | `IsAnimDelayedFire`, `DelayedFireDelay` (art, building image) | claim 14's ordinary delayed shot; a passing upgrade gate bypasses both | boolean; integer, ticks | no; 0 |
+| `LandTargeting`, `NavalTargeting` (rules, type) | land-targeting and naval-targeting modes of the firer's type (claims 9 and 14, scenario F21); S-0308 owns the keys, S-0306 claim 23 the rows | integer, used as given | 0 |
 | `Primary`, `Secondary`, `ElitePrimary`, `EliteSecondary` (rules, type) | weapon references for slots 0 and 1 and their elite replacements; S-0308 claims 1, 2 and 12 own resolution; claim 9 here covers an empty resolved secondary | weapon type name | held value; engine default no weapon |
 | `IsChargeTurret`, `TurretCount` (rules, vehicle type) | charge turret and *N* (claim 16) | boolean; integer | no; 0 |
 | `Anim` (rules, weapon) | animation list (Terms, claim 20); its length *n* and entry order as written | list of animation type names | empty list |
@@ -1178,7 +1270,7 @@ value below −1 (Edge cases).
 
 ## Measurement scenarios
 
-Scenario labels F1 to F20 are separate from the formulas F1 to F8; the text says "scenario" or
+Scenario labels F1 to F21 are separate from the formulas F1 to F8; the text says "scenario" or
 "Formula" each time. All scenarios use stock data unless a named test rules file is listed, under the measurement setup
 (glossary), a small purpose-made skirmish map, one game speed (any; claim 1 says it does not matter),
 and the random-state recorder where draws matter. Unless a scenario states otherwise, each distinct
@@ -1275,7 +1367,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Multi-flag part: use S-0616 scenario P22 part a's named test rules with all three
   particle-effect flags on one weapon, one named system type and a durable enemy vehicle
   in range. Keep the firer stationary and all other gates satisfied, at speed index 2,
-  with no engine add-on and no mods except the named test data. In three runs, order sustained
+  with no engine add-on, the measurement harness's in-game helper off and no mods except the named test data. In three runs, order sustained
   attack and record shot ticks, emitter creation order, held places and firing-check answers
   with tick-labelled capture and a read-only recorder. Expected: the first shot makes three
   emitters of that same system type in fire, spark, railgun order; no further checked shot
@@ -1313,7 +1405,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   `quirks.shared_wave_slot` off it fires at once.
 - Magnetic control: named test map data supplies a magnetic-beam weapon with an ordinary,
   non-seizing warhead and a full delay shorter than the wave's remaining lifetime. Use a
-  stationary firer and durable target building, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
+  stationary firer and durable target building, speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted).
   Keep the target unchanged and all other firing gates satisfied. Record shot ticks, grip
   presence and live wave count with tick-labelled capture and a read-only recorder, for three
   runs. Expected: no grip; repeated shots follow their claim-2 delays while the first wave
@@ -1386,7 +1478,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   uncloaking with all other gates satisfied; (d) the vehicle re-aims.
 
 - (e) Empty passenger carrier: use the named facing-test override of S-0501 scenario
-  AC11 on a small skirmish map, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with a
+  AC11 on a small skirmish map, speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted), with a
   bystander computer player outside the test area under the glossary's void rule.
   Place a controllable non-fighter aircraft loaded, then unload every passenger. Give
   it ample ammunition and a durable enemy ground target. Compare a fresh aircraft of
@@ -1406,7 +1498,8 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
   not reached through normal orders is inconclusive, not a passing trial.
 
 - (f) Grip precedence: use S-0607 scenario L9's small skirmish map and named test data,
-  speed index 2, director and mods off except the named test data. Keep a bystander computer
+  speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods
+  except the named test data. Keep a bystander computer
   outside the test area. Give the lifter a non-magnetic weapon whose projectile cannot hit
   airborne units. While its gripped unit is airborne, retain that unit as its target as in
   L9 part f. Record target retention and the firing-check answer with tick-labelled capture
@@ -1438,7 +1531,7 @@ setup is run once; any explicitly stated repetitions or comparisons between runs
 - Starting-count part (Q-0060 question 1): a named test rules file sets a buildable vehicle,
   infantry and ungarrisoned defence building to maximum ammunition 4. Remove the initial field
   from every rules layer for those types. Use a small isolated skirmish test area, speed index 2,
-  no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), with one bystander computer player kept outside the area
+  no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted), with one bystander computer player kept outside the area
   under the glossary's void rule. Repeat with an explicit initial field of −1, 0 and 6.
   also test maximum 0 with the initial field absent, and maximum −1 with initial field 0.
   Supply a single-shot ordinary weapon and a durable stationary enemy target in range.
@@ -1616,7 +1709,7 @@ is absent (the control).
   refused although the target is in range, so the vehicle does not make an ordinary shot and
   shows the behaviour S-0215 gives to *out of range*. Falsified if it makes an ordinary shot.
 
-- (f) Hidden targets (rank 4): a named test map, speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
+- (f) Hidden targets (rank 4): a named test map, speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   one allied and one enemy bystander computer player outside the observed area under the
   glossary's void rule. Its override sections supply a self-cloaking target and an armed vehicle
   with two ordinary weapons whose signed damage-plus-ambient sums give positive, zero and
@@ -1637,8 +1730,9 @@ is absent (the control).
 
 **F15a. Erasure inactivity boundary (claim 9; S-0514 claim 17).**
 - Setup: use S-0514 scenario E11 part a's test map with moving/firing infantry,
-  vehicles, landed aircraft and armed buildings, at speed index 2, director off and no
-  engine add-on or mods except that scenario's named test data. Keep a bystander computer
+  vehicles, landed aircraft and armed buildings, at speed index 2, no
+  engine add-on, the measurement harness's in-game helper off and no mods except that
+  scenario's named test data. Keep a bystander computer
   player outside the observed area under the glossary's void rule. Give each victim a
   durable enemy target in range and establish ordinary firing before the lock.
 - Procedure: attach an erasing beam through normal attack orders and maintain it for
@@ -1685,7 +1779,7 @@ is absent (the control).
   the stated rule requires none falsifies the corresponding import rule.
 
 **F17. Upgrade pair with an empty secondary and animation delay (Q-0798).**
-- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted),
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted),
   one bystander computer player outside the test area under the glossary's void rule.
   Named map overrides supply a non-SAM, ungarrisoned host and an upgrade in position 1
   with a primary ordinary projectile weapon of burst count 2 and no secondary. Remove
@@ -1715,7 +1809,7 @@ is absent (the control).
 
 **F18. Non-shot charge-arrival delay (claim 19).**
 - Setup and procedure: use S-0519 scenario T13's named test map and override variants,
-  speed index 2, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), a bystander computer player kept outside the
+  speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods (the named test files of a scenario and the purpose-made test maps excepted), a bystander computer player kept outside the
   observed area under the glossary's void rule. Run each variant three times. Compare
   successful, protected and duplicate-countdown arrivals with an ordinary second weapon,
   first at *k* = 0 with burst count 1, then with a retained *k* at least its burst count.
@@ -1736,7 +1830,7 @@ is absent (the control).
   draw, a draw after rather than before scatter, or berserk halving at a reached arrival.
 
 **F19. Shot animations (claims 20 to 23; Q-1523).**
-- Setup: a purpose-made flat test map at speed index 2, no engine add-on and no mods (the named
+- Setup: a purpose-made flat test map at speed index 2, no engine add-on, the measurement harness's in-game helper off and no mods (the named
   test files of this scenario and the purpose-made test map excepted), a bystander computer player
   kept outside the observed area. Test art gives sixteen named test animations, T0 to T15, each a
   distinct digit picture with a long fixed rate, one pass, no random rate and no start effects.
@@ -1796,8 +1890,8 @@ is absent (the control).
   animation's creation. Falsified by an extra draw that depends on the list length.
 
 **F20. Target line (claim 24; Q-1580).**
-- Setup: a purpose-made test map at speed index 2, director off, no engine add-on and no mods
-  except this scenario's named map overrides and test art. Use flat ground except for part l,
+- Setup: a purpose-made test map at speed index 2, no engine add-on, the measurement harness's
+  in-game helper off and no mods except this scenario's named map overrides and test art. Use flat ground except for part l,
   neutral test lighting and a hi-colour display path. Test vehicle TV has the target-laser flag,
   a turret and an ordinary draw-free direct-fire weapon with a rate-of-fire field of 40 ticks
   and burst count 1. TV2 differs only in its rate-of-fire field of 5 ticks. These are invented
@@ -1893,6 +1987,110 @@ is absent (the control).
     shared projection, drawing outside the view,
     endpoint clamping, or disappearance caused solely by target invisibility falsifies the
     corresponding rule. Target clearing makes the invisibility comparison inconclusive.
+
+**F21. Delayed building shot against a target that crosses a shore (claims 9 and 14; Q-1770).**
+- Setup: tiny skirmish test map, speed index 2, 800 × 600, no engine add-on, the measurement
+  harness's in-game helper off and no mods (the named test files of a scenario and the
+  purpose-made test maps excepted), one bystander computer player outside the test area under
+  the glossary's void rule. A straight shore line
+  of clear land and water cells, no bridge in range. A test copy of a non-SAM, ungarrisoned,
+  powered building type with no upgrades, defined only in the scenario's named test rules file,
+  with its image defined only in a named test art file (both supplied through the file system,
+  no stock file changed), and owned by the human-controlled
+  house, which builds it beside the shore during the run (the starting units of S-0009 include
+  no building). Give its image, in that art file, the animation-delayed-fire flag and a delay
+  field of 30 ticks (Import mapping), and give the type one ordinary
+  projectile weapon in slot 0. That weapon has burst count 1, a non-anti-air projectile, a range
+  covering the whole path below and a rate-of-fire field longer than a run. An enemy amphibious
+  vehicle of a second computer house, durable enough to survive one shot, is moved across the
+  shore by the test map's own scripted move order. Parts:
+  - a: land-targeting mode 1, naval-targeting mode 0; the vehicle starts on water and crosses
+    onto clear land.
+  - b: land-targeting mode 0, naval-targeting mode 6; the vehicle starts on clear land and
+    crosses onto water.
+  - c: control for a and b: the same fixtures, with the vehicle staying on its starting side.
+  - d: land-targeting mode 2 and naval-targeting mode 5, with two ordinary weapons (no row 1
+    to 12 of S-0308 table P applies) that make distinguishable projectiles, have equal range and
+    have non-zero versus values against the vehicle's armour. S-0308 table P then gives slot 0
+    against the vehicle on water (row 17, table N mode 5) and slot 1 against it on land
+    (row 18), and S-0306 claim 23's water row refuses neither, since table N mode 5 gives a
+    weapon. The vehicle crosses from water onto land.
+  - e: the part a building, but with land-targeting mode 0, against an enemy jumping infantry
+    unit standing on clear land. The test map's own scripted move order sends that unit to a
+    clear land cell several cells away during the delay. A grounded unit with jumpjet movement
+    that has a movement commitment takes off (S-0502 claim 5), so it lifts off with no state
+    write. Its type, in the named test rules file, has jumpjet movement with a cruise height of
+    more than 208 leptons, so that it climbs past 208 leptons above the surface instead of levelling
+    off exactly there; any such height serves. In this part the crossing is
+    the first tick at which the unit's height above the surface is 208 leptons or more (S-0102
+    claim 3, S-0307 Terms).
+  - f: the part c fixtures, with a delay field of 150 ticks in this part, and a second enemy
+    vehicle of the same type and house standing still on the vehicle's side of the shore,
+    in range, in the cell just beyond the first vehicle on the line from the building, so that
+    the building faces both alike. Neither vehicle moves.
+- Procedure: order the building to attack the vehicle (or the infantry unit), and time the
+  scripted move so that the crossing (in part e, the tick it reaches 208 leptons) falls inside the delay. Vary the
+  move's start over 10 runs per part so that the crossing falls at different points of the
+  delay. With tick-labelled capture and a read-only recorder, record per tick the building's
+  target, its facing, its current behaviour, its delayed-shot pending state and remaining delay, its rearm
+  countdown, every projectile it creates with its weapon slot, and the target's cell, land type
+  and height above the surface in leptons. No injection or state writes are permitted. In part
+  f, order the building to attack the first vehicle; once its delayed shot is pending, order it
+  to attack the second vehicle, at a different point of the delay in each of 5 runs.
+- Expected: in parts a, b and e, the building keeps its target and its *attack* behaviour in
+  every tick of the delay, including the tick of the crossing. In the tick that ends the delay
+  it creates no projectile when the target then stands on the refused side (or, in part e, is
+  208 leptons or more above the surface). In part e, a run in which the unit is still below
+  208 leptons when the delay ends is a run whose crossing comes after the end of the delay:
+  neither row refuses the unit then, and the shot is made.
+  Where the check refuses the shot, no rearm countdown starts, an attack processing falls in the
+  tick that ends the delay (claim 14's confidence note) and keeps the target and *attack*, and at
+  its first attack processing after that tick, 2 ticks later, the building has no target and is in *guard*. A run whose crossing comes after the
+  end of the delay makes the shot. In part c every run makes the shot, and its projectile flies
+  at the vehicle as an undelayed shot's would (S-0306). In part d the shot that the end of the
+  delay makes is of slot 0, the slot chosen when the delay started (claim 14), not slot 1, which a
+  fresh choice by S-0308 claim 14 would give against the vehicle now on land. In part f the
+  building's target is the second vehicle from the order on, its delayed shot stays pending
+  with its remaining delay counting on unchanged (the order starts no new delay), and the
+  one projectile made at the end of the delay is aimed at the second vehicle.
+- Falsified by a dropped target or a change of behaviour before the end of the delay, the
+  target dropped or *guard* queued in the tick that ends the delay, a
+  projectile created at the end of the delay while the target stands on the refused side (in
+  part e, at 208 leptons or more above the surface), no projectile in part e when the unit is
+  still below 208 leptons at the end of the delay, a shot in part c that differs from an undelayed shot, a slot-1 projectile in part d (the
+  fresh choice), or, in part f, a projectile aimed at the first vehicle, no projectile at the end
+  of the delay, or a delay that starts again at the order.
+  Record as inconclusive a run of parts a, b and d whose crossing tick cannot be placed inside
+  the delay, and a run of part e whose crossing tick (the tick the unit reaches 208 leptons)
+  comes before the delay starts. A run of part e whose crossing comes after the end of the delay
+  is the control above. Record as inconclusive also a run in which the building misses a turn
+  (S-0203 claim 10) between the start of the delay and its first attack processing after the
+  tick that ends the delay. Record as inconclusive a run of part f in which the building does not
+  take the second vehicle as its target at the order, and a run in which a shot is expected at
+  the end of the delay but the building's facing then does not point at the target (a *not
+  facing* or *still turning* answer, S-0310).
+
+## Changes for other specs
+
+- **S-0306 (approved, revision 33), claim 23, "Rank of the water and land rows".** Replace "Where
+  the *rearming* of a building's pending delayed shot (S-0301 claim 14) falls against the two
+  rows is not stated, as S-0301 claim 9 leaves its rank unstated." with: "A building's pending
+  delayed shot (S-0301 claim 14) gives *rearming* ahead of the two rows and of every other row
+  of this claim; S-0301 claim 9 gives its rank." In "Consequences", after "drops it (S-0215
+  claim 32) rather than waiting out its countdown", add: "unless its delayed shot is pending.
+  It then keeps the target until the end of the delay; the end-of-delay check and the target
+  handling after it follow S-0301 claim 14".
+- **S-0308 (approved, revision 15), claim 14, "The weapon it would use is the one tested
+  everywhere".** After "asked afresh each time" add: ", except the check and shot that end a
+  building's animation-delayed shot, which use the slot chosen when the delay started (S-0301
+  claim 14)". In its Confidence line, add: "medium, not high, for the check and shot that end
+  a building's animation-delayed shot, until S-0301 scenario F21 part d runs". This spec's
+  claim 14 states that rule, rated medium until scenario F21 part d, which tells the two
+  readings apart, runs.
+- **S-0215 (approved), claim 32.** Its table already keeps the target on *rearming* and drops it
+  on *illegal*. Its sentence "one whose target leaves its weapon's range returns to *guard* at its
+  next processing" can add: "unless its animation-delayed shot is pending, when the firing check
+  answers *rearming* until the end of the delay (S-0301 claim 14)".
 
 ## Open questions
 
