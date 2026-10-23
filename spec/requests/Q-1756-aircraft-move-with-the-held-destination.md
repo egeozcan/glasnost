@@ -1,9 +1,9 @@
 ---
 id: Q-1756
 title: Whether an aircraft's move with the destination it already flies to accepts a new movement point
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
