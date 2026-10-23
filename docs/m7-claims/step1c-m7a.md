@@ -57,7 +57,7 @@ Save format: unchanged (no new state). AI game format: unchanged. Hashes: the tu
 | 15: wording of the deploy-into example | (c) | |
 | 15, *Which controlled vehicles can deploy*: not deploy-ready into a construction yard while controlled by a controller | changed | `econ::deploy::deploy_ready` reads `mind::controlled_by` (was: mind-controlled, permanent control included). `controlled_mcv_does_not_deploy_into_a_yard`. |
 | 15, the deploy command gives no order; no refusal sound or message | changed | `targeting::key_command` requires `deploy_ready` for a deploys-into vehicle. `deploy_command_skips_a_controlled_mcv`. |
-| 15, the refusal cursor (S-0214 table VD) | not built | `targeting::vehicle_deploy` has no row VD2 for a deploys-into vehicle: seam. |
+| 15, the refusal cursor (S-0214 table VD) | tested (M8 A4 round 2) | `targeting::vehicle_deploy` rows VD1 (seam: route mode does not exist, never held) and VD2; tests `claims_s0601_deploy::vd_click::*`. |
 | 15, a queued deploy does not survive the takeover's guard reset | satisfied | `queued_deploy_does_not_survive_the_takeover`. |
 | 15, deploy-ready again after release | satisfied | `released_mcv_deploys`. |
 | 15, trigger-held and permanently controlled vehicles are not refused; a dominated MCV's yard is the dominating house's | changed | as above. `dominated_mcv_deploys_for_the_dominating_house`. Trigger-held: no control record, so not refused (campaign state, no test). |

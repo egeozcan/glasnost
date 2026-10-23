@@ -127,6 +127,28 @@ pub fn deploy_ready(w: &World, id: ObjectId) -> bool {
     o.health > 0 && !crate::parasite::carries_parasite(w, id)
 }
 
+/// Whether building type `b` passes the cell test at `at` for the owner of
+/// vehicle `id`, the vehicle itself not counting as an obstacle (S-0415
+/// claim 3). The deploy attempt and the click's table VD row VD2 ask it.
+pub fn fits(w: &World, id: ObjectId, b: u32, at: CellXY) -> bool {
+    let Some(house) = w.obj(id).and_then(|o| o.owner) else {
+        return false;
+    };
+    // spec: S-0415 claim 3 (the cell test, ignoring the vehicle; the wall exceptions only for unowned walls, quirks.deploy_refuses_own_walls)
+    let walls = if w.rules().quirks.deploy_refuses_own_walls {
+        WallRule::Unowned
+    } else {
+        WallRule::Owner(house)
+    };
+    let test = Test {
+        house,
+        walls,
+        anywhere: true,
+        ignore: Some(id),
+    };
+    super::placement::cell_test(w, b, at, &test)
+}
+
 /// Rounded body facing (S-0415 F1).
 fn rounded_facing(f: Facing) -> i32 {
     // spec: S-0415 F1 (q = ⌊(f + 128) / 256⌋ mod 256)
@@ -294,23 +316,10 @@ pub(crate) fn attempt(w: &mut World, id: ObjectId, b: u32) -> Attempt {
     }
     let size = crate::econ::placement::place_type(w, b).size;
     let at = anchor(o.pos.cell(), size);
-    let owner = o.owner;
-    let Some(house) = owner else {
+    if o.owner.is_none() {
         return Attempt::NoAttempt;
-    };
-    // spec: S-0415 claim 3 (the cell test, ignoring the vehicle; the wall exceptions only for unowned walls, quirks.deploy_refuses_own_walls)
-    let walls = if w.rules().quirks.deploy_refuses_own_walls {
-        WallRule::Unowned
-    } else {
-        WallRule::Owner(house)
-    };
-    let test = Test {
-        house,
-        walls,
-        anywhere: true,
-        ignore: Some(id),
-    };
-    if !crate::econ::placement::cell_test(w, b, at, &test) {
+    }
+    if !fits(w, id, b, at) {
         refuse(w, id);
         return Attempt::Failed;
     }

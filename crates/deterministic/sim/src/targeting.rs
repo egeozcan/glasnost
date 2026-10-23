@@ -1268,6 +1268,19 @@ fn vehicle_deploy(w: &World, actor: ObjectId) -> Action {
     // spec: S-0214 Terms (deploy readiness: never on a tunnel cell, the tunnel-marked or edge predicate of S-0507 claim 7)
     let ready = !on_tunnel;
     let deploy_weapon = uflag(w, actor, |u| u.raw.deploy_fire.unwrap_or(false));
+    // spec: S-0214 table VD row VD1 (route mode held: no-deploy). Seam: route mode does not exist yet (no key binds it), so it is never held here
+    // spec: S-0214 table VD row VD2 (deploys into a building: deploy if the building could be placed where the vehicle stands, the vehicle not counting as an obstacle and a wide foundation anchored by the deploy anchor step S-0415 F3, and the vehicle has deploy readiness; else no-deploy). The placement test is the deploy order's own (econ::deploy::fits)
+    if let Some(o) = w.obj(actor)
+        && let Some(b) = crate::econ::deploy::deploys_into(w, o.kind, o.type_index)
+    {
+        let size = crate::econ::placement::place_type(w, b).size;
+        let at = crate::econ::deploy::anchor(o.pos.cell(), size);
+        return if crate::econ::deploy::fits(w, actor, b, at) && deploy_readiness(w, actor) {
+            Action::Deploy
+        } else {
+            Action::NoDeploy
+        };
+    }
     // spec: S-0214 table VD row VD3 (deploys in place)
     if uflag(w, actor, |u| u.simple_deployer) {
         return if ready {

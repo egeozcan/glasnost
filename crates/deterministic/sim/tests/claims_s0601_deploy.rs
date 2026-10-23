@@ -273,3 +273,97 @@ fn queued_deploy_does_not_survive_the_takeover() {
     assert!(w.obj(k).is_some(), "no deploy");
     assert!(buildings(&w).is_empty());
 }
+
+mod vd_click {
+    use super::*;
+    use glasnost_sim::targeting::{self, Action, ClickOn, KeyCommand, Modifiers};
+
+    fn plain(r: &Ruleset, name: &str) -> (World, ObjectId) {
+        let mut w = testkit::game_with(r, SIZE, 17);
+        testkit::run(&mut w, 4);
+        let v = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            name,
+            ALPHA,
+            c(0, 0),
+            (D * 256) as u16,
+        );
+        (w, v)
+    }
+
+    fn shown(w: &World, house: u8, v: ObjectId) -> Action {
+        targeting::cursor(
+            w,
+            HouseId(house),
+            &[v],
+            ClickOn::Object(v),
+            Modifiers::default(),
+        )
+    }
+
+    // spec: S-0214 table VD row VD2 (a vehicle that deploys into a building, where the building fits and it has deploy readiness: deploy; the click's order is the deploy key's effect)
+    #[test]
+    fn a_construction_vehicle_clicked_on_itself_deploys_where_it_fits() {
+        let r = rules();
+        for name in ["MCV", "KIT"] {
+            let (mut w, v) = plain(&r, name);
+            assert_eq!(shown(&w, ALPHA, v), Action::Deploy, "{name}");
+            let res = targeting::click(
+                &w,
+                HouseId(ALPHA),
+                &[v],
+                ClickOn::Object(v),
+                Modifiers::default(),
+            );
+            assert_eq!(res.orders.len(), 1, "{name}");
+            let key = targeting::key_command(&w, HouseId(ALPHA), &[v], KeyCommand::Deploy);
+            assert_eq!(key, vec![Order::Deploy { actor: v }]);
+            let mut w2 = w.clone();
+            for o in res.orders {
+                assert!(glasnost_sim::orders::issue(&mut w, HouseId(ALPHA), o));
+            }
+            for o in key {
+                assert!(glasnost_sim::orders::issue(&mut w2, HouseId(ALPHA), o));
+            }
+            run_until_gone(&mut w, v);
+            run_until_gone(&mut w2, v);
+            let (b1, b2) = (buildings(&w), buildings(&w2));
+            assert_eq!(b1.len(), 1);
+            assert_eq!(
+                w.obj(b1[0]).unwrap().pos.cell(),
+                w2.obj(b2[0]).unwrap().pos.cell()
+            );
+        }
+    }
+
+    // spec: S-0214 table VD row VD2 (the building cannot be placed where the vehicle stands, the vehicle itself not counting: no-deploy; a foundation wider than 2 is anchored one step up and left)
+    #[test]
+    fn no_deploy_where_the_building_does_not_fit() {
+        let r = rules();
+        let (mut w, v) = plain(&r, "MCV");
+        testkit::spawn(&mut w, Kind::Vehicle, "KIT", BETA, c(-1, -1), 0);
+        assert_eq!(shown(&w, ALPHA, v), Action::NoDeploy);
+        let res = targeting::click(
+            &w,
+            HouseId(ALPHA),
+            &[v],
+            ClickOn::Object(v),
+            Modifiers::default(),
+        );
+        assert!(res.orders.is_empty());
+        let (mut w, k) = plain(&r, "KIT");
+        testkit::spawn(&mut w, Kind::Vehicle, "KIT", BETA, c(-1, -1), 0);
+        assert_eq!(shown(&w, ALPHA, k), Action::Deploy);
+    }
+
+    // spec: S-0214 table VD row VD2 and Terms (deploy readiness fails for a controlled construction vehicle: no-deploy), S-0601 claim 15
+    #[test]
+    fn no_deploy_when_not_deploy_ready() {
+        let r = rules();
+        let (w, _ctrl, v) = setup(&r, "MCV");
+        assert_eq!(shown(&w, BETA, v), Action::NoDeploy);
+        let (w, _ctrl, k) = setup(&r, "KIT");
+        assert_eq!(shown(&w, BETA, k), Action::Deploy);
+    }
+}
