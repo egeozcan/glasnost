@@ -9,7 +9,7 @@ use glasnost_num::F32;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, CombatFields, Decimal, LocomotionClass, Locomotor, SequenceEntry, UnitType,
-    WarheadType, WeaponType,
+    VoxelAnimationType, WarheadType, WeaponType,
 };
 use glasnost_sim::combat::damage::{self, Hit, HitResult};
 use glasnost_sim::combat::death;
@@ -513,7 +513,7 @@ fn f1_debris_animations() {
     assert_eq!(w.rng, rr);
 }
 
-// spec: S-0312 F1 (voxel debris types with maxima are dealt as S-0303 F6: one raw value per turn, |raw| mod (u + 1), capped at the pieces left; at the object's position)
+// spec: S-0312 F1 (voxel debris types with maxima are dealt as S-0303 F6: one raw value per turn, |raw| mod (u + 1), capped at the pieces left; at the object's position) and claim 4 with S-0317 claims 1 and 3 (each a piece of S-0317 with the object's house, made with its creation draws as it is dealt)
 #[test]
 fn f1_voxel_debris_dealt() {
     let mut r = rules();
@@ -522,9 +522,19 @@ fn f1_voxel_debris_dealt() {
     c.max_debris = Some(7);
     c.debris_types = names(&["VX1", "VX2"]);
     c.debris_maximums = Some(vec![2, 1]);
+    for n in ["VX1", "VX2"] {
+        r.registries
+            .entry("voxel_animations".into())
+            .or_default()
+            .push(n.into());
+        r.sim
+            .voxel_animations
+            .insert(n.into(), VoxelAnimationType::default());
+    }
     let mut w = game(&r);
     let id = spawn(&mut w, Kind::Vehicle, "VICTIM", 0, 0, 0);
     let pos = w.obj(id).unwrap().pos;
+    let owner = w.obj(id).unwrap().owner;
     w.effects.clear();
     let h = half(&w);
     let mut rr = w.rng.clone();
@@ -538,12 +548,28 @@ fn f1_voxel_debris_dealt() {
         let g = (raw.wrapping_abs() % (maxima[i] + 1)).min(left);
         for _ in 0..g {
             expect.push((["VX1", "VX2"][i].to_string(), pos));
+            // The piece's creation draws (S-0317 claim 3 and F5): four raw
+            // values, then three ranged draws.
+            for _ in 0..4 {
+                rr.raw();
+            }
+            for _ in 0..3 {
+                rr.ranged(-65535, 65535, h); // spec: S-0317 F5 and Constants (R(−65535, 65535))
+            }
         }
         left -= g;
         j += 1;
     }
     kill(&mut w, id);
-    assert_eq!(anims(&w), expect);
+    let types = &w.rules().pieces.types;
+    let got: Vec<(String, Pos)> = w
+        .pieces
+        .values()
+        .map(|p| (types[p.type_index as usize].name.clone(), p.pos))
+        .collect();
+    assert_eq!(got, expect);
+    assert!(w.pieces.values().all(|p| p.house == owner));
+    assert!(anims(&w).is_empty(), "no debris animation");
     assert_eq!(w.rng, rr);
 }
 

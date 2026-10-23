@@ -6,7 +6,9 @@ use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_num::geom::root_floor;
 use glasnost_num::{F64, Rounding};
 use glasnost_rules::schema::Ruleset;
-use glasnost_rules::sim::{BuildingType, Decimal, OverlayType, UnitType, WarheadType, WeaponType};
+use glasnost_rules::sim::{
+    BuildingType, Decimal, OverlayType, UnitType, VoxelAnimationType, WarheadType, WeaponType,
+};
 use glasnost_sim::combat::area::{self, Detonation, DetonationResult};
 use glasnost_sim::combat::damage;
 use glasnost_sim::combat::data::{WarheadId, WeaponId};
@@ -218,6 +220,42 @@ fn anims(w: &World) -> Vec<(String, Pos)> {
             _ => None,
         })
         .collect()
+}
+
+/// The debris pieces in play (S-0317), in creation order: (type name,
+/// position).
+fn pieces(w: &World) -> Vec<(String, Pos)> {
+    let types = &w.rules().pieces.types;
+    w.pieces
+        .values()
+        .map(|p| (types[p.type_index as usize].name.clone(), p.pos))
+        .collect()
+}
+
+/// Lists `names` as voxel-animation types with every field at its default
+/// (falling pieces with no system), so that a debris name makes a piece of
+/// S-0317.
+fn piece_types(r: &mut Ruleset, names: &[String]) {
+    for n in names {
+        let l = r.registries.entry("voxel_animations".into()).or_default();
+        if !l.iter().any(|x| x == n) {
+            l.push(n.clone());
+        }
+        r.sim
+            .voxel_animations
+            .insert(n.clone(), VoxelAnimationType::default());
+    }
+}
+
+/// The draws one falling piece with no system takes at its creation
+/// (S-0317 claim 3 and F5): four raw values, then three ranged draws.
+fn piece_draws(rng: &mut glasnost_sim::rng::Rng, half: bool) {
+    for _ in 0..4 {
+        rng.raw();
+    }
+    for _ in 0..3 {
+        rng.ranged(-65535, 65535, half); // spec: S-0317 F5 and Constants (R(−65535, 65535))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1052,12 +1090,14 @@ fn barrel_world() -> (World, u8) {
     g.barrel_explode = Some("KegBoom".into());
     g.barrel_debris = Some(vec!["StaveA".into(), "StaveB".into(), "StaveC".into()]);
     g.barrel_particle = Some("KegSmoke".into());
+    let staves = ["StaveA", "StaveB", "StaveC"].map(String::from);
+    piece_types(&mut r, &staves);
     let w = testkit::game_with(&r, SIZE, 1);
     let keg = ov(&w, "KEG");
     (w, keg)
 }
 
-// spec: S-0303 claim 19 (an exploding overlay in the centre cell is removed, the barrel explosion appears at P, a nested detonation of the ammunition-crate damage with the demolition warhead, no source object and the outer house follows, then percent draws for the debris (first below 15) and one for the particle system; whatever the sign of D)
+// spec: S-0303 claim 19 (an exploding overlay in the centre cell is removed, the barrel explosion appears at P, a nested detonation of the ammunition-crate damage with the demolition warhead, no source object and the outer house follows, then percent draws for the debris (first below 15) and one for the particle system; whatever the sign of D) and S-0317 claim 11 (the barrel debris is a piece of S-0317, made with its creation draws)
 #[test]
 fn exploding_overlays() {
     for (seed, outer) in [(1, 10), (2, -10), (3, 10), (4, 10)] {
@@ -1069,10 +1109,13 @@ fn exploding_overlays() {
         set_overlay(&mut w, at(3, 0), keg, 0);
         let v = put(&mut w, Kind::Vehicle, "BOX", BETA, 1, 0);
         let mut rng = w.rng.clone();
-        let mut want = vec![("KegBoom".to_owned(), centre(0, 0))];
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let want = vec![("KegBoom".to_owned(), centre(0, 0))];
+        let mut stave = Vec::new();
         for name in ["StaveA", "StaveB", "StaveC"] {
             if rng.percent() < 15 {
-                want.push((name.to_owned(), centre(0, 0)));
+                stave.push((name.to_owned(), centre(0, 0)));
+                piece_draws(&mut rng, half);
                 break;
             }
         }
@@ -1094,6 +1137,7 @@ fn exploding_overlays() {
         );
         assert_eq!(w.houses[0].combat.kills, 1, "credited to the outer house");
         assert_eq!(anims(&w), want, "seed {seed}");
+        assert_eq!(pieces(&w), stave, "seed {seed}");
         assert_eq!(w.rng.taken(), rng.taken());
     }
 }
@@ -1103,7 +1147,13 @@ fn exploding_overlays() {
 // ---------------------------------------------------------------------------
 
 fn anim_world(f: impl FnOnce(&mut WarheadType)) -> (World, WeaponId) {
+    anim_world_with(f, &[])
+}
+
+/// As `anim_world`, with `pieces` listed as voxel-animation types.
+fn anim_world_with(f: impl FnOnce(&mut WarheadType), pieces: &[String]) -> (World, WeaponId) {
     let mut r = testkit::combat_ruleset();
+    piece_types(&mut r, pieces);
     warhead(&mut r, "SHOW", |h| {
         h.anim_list = Some(vec!["BoomS".into(), "BoomM".into(), "BoomL".into()]);
         f(h);
@@ -1226,13 +1276,16 @@ fn metallic_debris() {
 /// deals ran a full pass over the types that placed nothing, whether the
 /// draws taken agree).
 fn listed_debris(seed: u32) -> ([i32; 2], [i32; 2], bool, bool) {
-    let (mut w, s) = anim_world(|h| {
-        h.max_debris = Some(6);
-        h.min_debris = Some(3);
-        h.anim_list = None;
-        h.debris_types = Some(vec!["ChunkA".into(), "ChunkB".into()]);
-        h.debris_maximums = Some(vec![2, 1]);
-    });
+    let (mut w, s) = anim_world_with(
+        |h| {
+            h.max_debris = Some(6);
+            h.min_debris = Some(3);
+            h.anim_list = None;
+            h.debris_types = Some(vec!["ChunkA".into(), "ChunkB".into()]);
+            h.debris_maximums = Some(vec![2, 1]);
+        },
+        &["ChunkA".into(), "ChunkB".into()],
+    );
     for _ in 0..seed {
         w.rng.raw();
     }
@@ -1254,6 +1307,9 @@ fn listed_debris(seed: u32) -> ([i32; 2], [i32; 2], bool, bool) {
         }
         let raw = rng.raw() as i32;
         let g = (raw.wrapping_abs() % (maxima[i] + 1)).min(left);
+        for _ in 0..g {
+            piece_draws(&mut rng, half);
+        }
         counts[i] += g;
         pass_placed += g;
         left -= g;
@@ -1262,7 +1318,7 @@ fn listed_debris(seed: u32) -> ([i32; 2], [i32; 2], bool, bool) {
     w.effects.clear();
     let p = centre(0, 0);
     glasnost_sim::combat::projectile::projectile_detonation(&mut w, s, 10, p, None, None, p, false);
-    let got = anims(&w);
+    let got = pieces(&w);
     let a = got.iter().filter(|(n, _)| n == "ChunkA").count() as i32;
     let b = got.iter().filter(|(n, _)| n == "ChunkB").count() as i32;
     let same_draws = w.rng.taken() == rng.taken();
@@ -1384,13 +1440,16 @@ fn claim_24_defaults_of_bridge_and_barrel_damage() {
 /// taken agree).
 fn debris_case(maxima: &[i32], lo: i32, hi: i32, seed: u32) -> (Vec<i32>, Vec<i32>, bool) {
     let names: Vec<String> = (0..maxima.len()).map(|i| format!("Chunk{i}")).collect();
-    let (mut w, s) = anim_world(|h| {
-        h.max_debris = Some(hi + 1);
-        h.min_debris = Some(lo);
-        h.anim_list = None;
-        h.debris_types = Some(names.clone());
-        h.debris_maximums = Some(maxima.to_vec());
-    });
+    let (mut w, s) = anim_world_with(
+        |h| {
+            h.max_debris = Some(hi + 1);
+            h.min_debris = Some(lo);
+            h.anim_list = None;
+            h.debris_types = Some(names.clone());
+            h.debris_maximums = Some(maxima.to_vec());
+        },
+        &names,
+    );
     for _ in 0..seed {
         w.rng.raw();
     }
@@ -1410,6 +1469,9 @@ fn debris_case(maxima: &[i32], lo: i32, hi: i32, seed: u32) -> (Vec<i32>, Vec<i3
         let b = i64::from((maxima[i] as i64 + 1) as u32 as i32);
         let r = if b == 0 { a } else { a % b };
         let g = r.min(left);
+        for _ in 0..g.max(0) {
+            piece_draws(&mut rng, half);
+        }
         want[i] += g.max(0) as i32;
         left = i64::from((left - g) as u32 as i32);
         j += 1;
@@ -1417,7 +1479,7 @@ fn debris_case(maxima: &[i32], lo: i32, hi: i32, seed: u32) -> (Vec<i32>, Vec<i3
     w.effects.clear();
     let p = centre(0, 0);
     glasnost_sim::combat::projectile::projectile_detonation(&mut w, s, 10, p, None, None, p, false);
-    let got = anims(&w);
+    let got = pieces(&w);
     let got: Vec<i32> = names
         .iter()
         .map(|n| got.iter().filter(|(a, _)| a == n).count() as i32)
