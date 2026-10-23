@@ -26,7 +26,7 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
     ("rate_up", "RateUp", Int, "S-0609"),
     ("rate_down", "RateDown", Int, "S-0609"),
     ("is_charge_turret", "IsChargeTurret", Bool, "S-0301, S-0308"),
-    ("land_targeting", "LandTargeting", Int, "S-0308"),
+    ("land_targeting", "LandTargeting", Int, "S-0306, S-0308"),
     // spec: S-0616 Import mapping (object type NaturalParticleSystem: a particle-system name; absent none)
     (
         "natural_particle_system",
@@ -34,7 +34,7 @@ pub(super) const COMBAT_FIELDS: &[Row] = &[
         Ref(Kind::ParticleSystems),
         "S-0616",
     ),
-    ("naval_targeting", "NavalTargeting", Int, "S-0308"),
+    ("naval_targeting", "NavalTargeting", Int, "S-0306, S-0308"),
     ("underwater", "Underwater", Bool, "S-0308, S-0504"),
     ("cloakable", "Cloakable", Bool, "S-0504, S-0516"),
     ("cloak_stop", "CloakStop", Bool, "S-0516"),

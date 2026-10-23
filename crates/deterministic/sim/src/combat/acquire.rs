@@ -237,7 +237,14 @@ pub fn retaliate(w: &mut World, actor: ObjectId, attacker: ObjectId) {
         }
         // spec: S-0215 claim 18 and F7 (an actor that cannot reach the attacker overrides only within (S + 0.5) × 256)
         let reaches = crate::combat::range::in_range(w, actor, Some(weapon), Some(t), None);
-        let sight = rules.unit(o.kind, o.type_index).map_or(0, |u| u.sight);
+        // spec: S-0215 F7 and Import mapping (Sight: the actor's type's sight in cells, a building type's too; absent 0)
+        let sight = match o.kind {
+            Kind::Building => rules
+                .buildings
+                .get(o.type_index as usize)
+                .map_or(0, |b| b.raw.econ.sight.unwrap_or(0)),
+            _ => rules.unit(o.kind, o.type_index).map_or(0, |u| u.sight),
+        };
         if !reaches && rho3(w, actor, attacker) > i64::from(256 * sight + 128) {
             return;
         }

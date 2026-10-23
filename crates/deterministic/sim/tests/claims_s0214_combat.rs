@@ -372,7 +372,7 @@ fn b7_rules() -> Ruleset {
     r
 }
 
-// spec: S-0214 table B row B7 (a building with a weapon in its first slot whose projectile cannot hit ground targets: nothing, whatever the target); Q-1761 open (the answer for an airborne target is the interim reading of the row)
+// spec: S-0214 table B row B7 (a building with a weapon in its first slot whose projectile cannot hit ground targets: nothing, whatever the target); Q-1761 question 3 open after S-0306 revision 33 and S-0309 revision 38 (the answer for an airborne target is the interim reading of the row)
 #[test]
 fn row_b7_anti_air_only_building_does_nothing() {
     let r = b7_rules();

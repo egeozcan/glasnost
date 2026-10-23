@@ -1517,7 +1517,7 @@ fn building_on(w: &World, actor: ObjectId, t: ObjectId, g: Action) -> Action {
         Action::Deploy if crate::structures::absorb::count(w, actor) > 0 => Action::Deploy,
         // spec: S-0214 table B rows B4 and B6 (the gap generator's power and radius states are not modelled: nothing)
         Action::Deploy => Action::Nothing,
-        // spec: S-0214 table B row B7 (a weapon in its first slot whose projectile cannot hit ground targets, a pulse cannon, or being sold: nothing, whatever the target; Q-1761 asks about airborne targets)
+        // spec: S-0214 table B row B7 (a weapon in its first slot whose projectile cannot hit ground targets, a pulse cannon, or being sold: nothing, whatever the target; Q-1761 question 3, still open after S-0306 revision 33 and S-0309 revision 38, asks about airborne targets)
         Action::Attack if attack_refused(w, actor) => Action::Nothing,
         // spec: S-0214 table B row B8
         Action::Attack if immune(w, t) => Action::NoMove,
