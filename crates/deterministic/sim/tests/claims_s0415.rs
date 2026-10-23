@@ -715,3 +715,55 @@ fn claim_1_deploy_fire_processing_delays() {
     assert_eq!(o.pos.cell(), c(0, 0));
     assert!(buildings(&w).is_empty());
 }
+
+/// A KIT ordered to move six cells along open ground, run until it has
+/// left its first cell with path steps still stored, then given a deploy
+/// order and run for the tick that applies it; returns the vehicle.
+fn deploy_while_moving(w: &mut World) -> ObjectId {
+    let v = spawn_v(w, "KIT", c(-3, 0), facing_d());
+    order(
+        w,
+        Order::Behaviour {
+            actor: v,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(c(3, 0))),
+        },
+    );
+    until(w, 300, |w| {
+        w.obj(v)
+            .is_some_and(|o| o.pos.cell() != c(-3, 0) && o.path.steps.len() >= 2)
+    })
+    .expect("on its way with steps still stored");
+    order(w, Order::Deploy { actor: v });
+    step(w);
+    v
+}
+
+// spec: S-0213 claim 10 (the deploy order requests an empty destination) and S-0207 claim 11 (the old path steps of a cancelled destination are no continued movement: the engine drops them with it)
+#[test]
+fn claim_2_deploy_order_drops_the_stored_path() {
+    let mut w = game(&rules());
+    let v = deploy_while_moving(&mut w);
+    let o = w.obj(v).unwrap();
+    assert!(o.dest.is_none());
+    assert!(o.path.steps.is_empty(), "steps {:?}", o.path.steps);
+}
+
+// spec: S-0415 Terms (still) and claim 2 (a vehicle ordered to deploy while moving along a path finishes its current track, stands still with no destination and makes its attempt) and S-0207 claim 11 (it takes no further step of the old path)
+#[test]
+fn claim_2_deploy_order_while_moving_deploys() {
+    let mut w = game(&rules());
+    let v = deploy_while_moving(&mut w);
+    let stop = w.obj(v).unwrap().pos.cell();
+    until(&mut w, 400, |w| w.obj(v).is_none()).expect("deployed after it stopped");
+    let b = buildings(&w);
+    assert_eq!(b.len(), 1);
+    // It deployed within a cell of where it was when the order came, not at the old goal.
+    let at = w.obj(b[0]).unwrap().pos.cell();
+    assert!(
+        (at.x - stop.x).abs() <= 1 && (at.y - stop.y).abs() <= 1,
+        "at {at:?}, order at {stop:?}"
+    );
+}

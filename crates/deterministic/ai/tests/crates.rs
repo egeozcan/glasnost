@@ -228,3 +228,41 @@ fn a_crate_on_water_sends_no_walker() {
         .collect();
     assert!(walkers.is_empty(), "{orders:?}");
 }
+
+// S-0520, PLAN §4.7 (M9 rehearsal): the vehicle that deploys into a construction yard is never sent at a crate, even as the only idle unit near it: sent there it was drawn back and forth between the crate and its deploy spot and never deployed.
+#[test]
+fn a_yard_vehicle_is_not_sent_at_a_crate() {
+    let g = game();
+    let (mut w, walker, c) = scene(&g, true);
+    let mcv = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "MCV",
+        0,
+        CellXY::new(c.x - 2, c.y),
+        0,
+    );
+    // The walker is busy with a move far from the crate, so the yard
+    // vehicle is the only idle candidate near it.
+    let far = CellXY::new(c.x - 20, c.y);
+    glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: walker,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(far)),
+        },
+    );
+    testkit::run(&mut w, 1);
+    while w.tick % 15 != 0 {
+        testkit::run(&mut w, 1);
+    }
+    assert!(glasnost_sim::crates::is_crate(&w, c));
+    assert!(w.obj(mcv).is_some_and(|o| o.on_map));
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    let orders = brain.think(&w);
+    assert!(!moves(&orders, c).contains(&mcv), "{orders:?}");
+}
