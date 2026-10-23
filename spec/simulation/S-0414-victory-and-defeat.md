@@ -2,11 +2,11 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-23
 measurements: []
 requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
@@ -407,13 +407,23 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     can come later or not at all. A
     surrender order for a defeated house, or for a house whose result is pending, does nothing.
     In the original only the local player can surrender, through the options menu, and not when
-    the local player is an observer. In our engine the order is legal for every player house, human
-    or AI (S-0213); an observer's house is not a player house here, and a surrender order of it does
+    the local player is an observer, nor from the end of the game on: the original refuses the
+    options menu from then on (S-0201 claim 15), and in a skirmish no tick runs while it is open,
+    so a skirmish player cannot surrender in the end delay. The pending-result case can be given in
+    the original only in a network game, from a menu opened before the end (S-0201 scenario T8,
+    part H); in a skirmish it is a rule of our engine only. In our engine the order is legal at any
+    time for every player house, human or AI (S-0213); an observer's house is not a player house here, and a surrender order of it does
     nothing (Edge cases, *Observers*). A surrender ends the game
     only through the end test of claim 6, after the defeat it leads to: in our engine play goes on
     while a hostile pair remains, and a person who surrendered keeps watching; in the original the
     human participant's surrender ends the game at that defeat (claim 6, departure).
-    - Backing: `measurable` (scenario V8 and its part b for a pending result); the order for a
+    - Backing: `measurable` (scenario V8). The pending-result case is `measurable` in the
+      original only through S-0201 scenario T8, part H (a network game), which sees that the
+      surrender has no effect; whether the order is sent rather than dropped is `unmeasured` there
+      (S-0201 claim 15); in a skirmish it is a
+      rule of our engine and `unmeasured` against the original, since no skirmish input can give
+      it (S-0201 scenario T9 shows the menu staying closed in the end delay), and V8 part b checks
+      it in our engine only. The order for a
       defeated house is `unmeasured` (such a house has no objects, so the order has no observable
       effect); the observer's order is a rule of our engine and `unmeasured` (the original offers
       an observer no surrender, so no run can give it)
@@ -689,9 +699,12 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 
     The duration is active wall-clock time, not ticks multiplied by the game's current paced
     period and not game minutes. The original accumulates elapsed 16-ms clock units while
-    play is active, pauses that clock when the game is paused for the options menu or lost
-    focus, and stops it on leaving play for the result screen. Frozen cycles and the end delay
-    are included. It converts 60 such units to one displayed second, truncating toward zero:
+    play is active, pauses that clock while the options menu is open and while the game is frozen
+    (a timed freeze, a chrono flash's freeze), restarting it when the last freeze in force ends,
+    and stops it on leaving play for the result screen. Time without the input focus and the end
+    delay are included (S-0201 claim 18). This agrees with S-0201 claim 10, by which a timed
+    freeze's real time keeps running through a stand-still for lost focus. It converts 60 such
+    units to one displayed second, truncating toward zero:
     thus 960 ms of accumulated active time yields one displayed second, rather than 1000 ms.
     Display hours, minutes and seconds from that whole-second total, capped at 99 hours,
     59 minutes and 59 seconds. Hours, minutes and seconds are integer quantities with no
@@ -700,9 +713,18 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     This is a presentation clock only and reaches no simulation rule. Our engine may read
     active elapsed wall time for this display without changing S-0201's deterministic pacing
     or its prohibition on wall time reaching game state.
-    - Backing: `measurable` (V18 for the score and draws; V19 for duration)
+
+    In a network game, which is otherwise outside this spec, the active clock does not stop while
+    a player's options menu is open, while a window lacks the focus, or for the pause action or a
+    chrono flash; only leaving play stops it (S-0201 claim 18).
+    - Backing: `measurable` (V18 for the score and draws; V19 for duration and the skirmish's
+      menu, timed-freeze and lost-focus intervals; `unmeasured` for a chrono flash's freeze and for
+      the restart at the end of the last of overlapping freezes, which V19 does not set up; for a
+      network game, S-0201 scenario T8, part E, with S-0201 claim 18's
+      own backing)
     - Confidence: high for the bonus formula, stream, clock units and time conversion,
-      medium for paused intervals and the announcement-wait boundary
+      medium for paused intervals (the options menu, freezes and lost focus, until V19 runs) and
+      the announcement-wait boundary; the network-game clock carries S-0201 claim 18's ratings
 
 ## Formulas
 
@@ -1090,7 +1112,10 @@ objects die in tick *t* + 1, defeat in the same tick, or later only when a destr
 in play (claim 11); a defeat later with no such object falsifies it.
 - *Part b (a pending result).* The end delay is raised (0.1 in a test rules file). The human and A
   are allied against B; B is destroyed and the human surrenders in the delay. Expected: nothing
-  is destroyed, the human's result stays a win, game over at the original tick (claim 11).
+  is destroyed, the human's result stays a win, game over at the original tick (claim 11). This
+  part is a run of our engine only: in the original the options menu is refused from the end of
+  the game on (S-0201 claim 15, scenario T9), so the input cannot be given in a skirmish. The
+  original's counterpart is S-0201 scenario T8, part H, in a network game.
 
 **V9: alliance orders.** Capture the player list, message area and audio during parts a and b.
 Expected presentation: successful peace orders towards B and C each produce an alliance message.
@@ -1314,12 +1339,14 @@ Run at speed indices 2 and 6, then run with a 30-second options-menu pause, with
 loss of focus, and with a named timed-freeze trigger. Include a named lengthened end delay.
 Expected whole-second total is accumulated active 16-ms clock units divided by 60 and
 truncated, expressed as hours/minutes/seconds. The same tick count at slower speed has a
-longer duration; menu and focus pauses add none, freezes and the end delay add active time.
+longer duration; the menu pause and the frozen stretch add none; the focus loss and the end delay
+add active time (a skirmish; a network run is S-0201 scenario T8, part E).
 Record the clock's stopping point relative to the last tick and the result announcement:
 any announcement wait before leaving play is included, later result-screen waiting is not.
 An active run near 60 seconds distinguishes the 960-ms displayed second from a true wall
 second. Compare values allowing only clock-boundary sampling uncertainty, not a 4-percent
-scale change. A tick-derived total, counted menu pause or different scale falsifies the rule.
+scale change. A tick-derived total, a counted menu pause or frozen stretch, an uncounted focus
+loss or a different scale falsifies the rule.
 The 99-hour cap is checked by a read-only trace of a naturally long run if practicable.
 Short runs do not confirm that cap. No clock is altered by the recorder.
 
