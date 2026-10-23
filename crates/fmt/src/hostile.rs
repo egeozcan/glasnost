@@ -34,7 +34,7 @@ pub enum Target {
     Idx,
     /// AUD.
     Aud,
-    /// Plain PCM WAVE.
+    /// WAVE, plain PCM and IMA ADPCM, whole and a chunk at a time.
     Wav,
     /// LZO1X decompression.
     Lzo,
@@ -149,6 +149,14 @@ pub fn run(target: Target, data: &[u8]) {
         Target::Wav => {
             if let Ok(p) = crate::pcm::Pcm::from_wav(data) {
                 let _ = p.to_wav();
+            }
+            if let Ok(info) = crate::wav::WavInfo::parse(data) {
+                let _ = info.frames(data.len());
+                let mut out = Vec::new();
+                for k in 0..info.chunks(data.len()).min(64) {
+                    out.clear();
+                    let _ = info.decode_chunk(data, k, &mut out);
+                }
             }
         }
         Target::Lzo => {

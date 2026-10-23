@@ -4,9 +4,8 @@
 //! produces a [`Pcm`]. [`Pcm::to_wav`] writes a canonical 44-byte-header
 //! RIFF/WAVE file for playback and export.
 
-use crate::bytes::{PutLe, Reader};
-use crate::error::{Error, Result};
-use crate::limits::MAX_DECOMPRESSED;
+use crate::bytes::PutLe;
+use crate::error::Result;
 use crate::synth::SynthRng;
 
 /// Interleaved signed 16-bit PCM audio.
@@ -65,76 +64,17 @@ impl Pcm {
         out
     }
 
-    /// Reads a plain PCM RIFF/WAVE file: format code 1, 8-bit unsigned or
-    /// 16-bit signed samples, one or two channels. Chunks other than `fmt `
-    /// and `data` are skipped (each is padded to an even length, as RIFF
+    /// Reads a RIFF/WAVE file ([`crate::wav`]): plain PCM (format code 1,
+    /// 8-bit unsigned or 16-bit signed samples) or IMA ADPCM (format code
+    /// 0x11), one or two channels. Chunks other than `fmt `, `fact` and
+    /// `data` are skipped (each is padded to an even length, as RIFF
     /// requires); a `data` chunk that claims more bytes than the file holds
-    /// is cut to what is there, and a partial last frame is dropped.
-    /// Compressed WAVE formats are [`Error::Unsupported`].
+    /// is cut to what is there, and a partial last frame (PCM) or a last
+    /// block too short for its headers (IMA ADPCM) is dropped. A `fact`
+    /// chunk before the data caps an IMA ADPCM file's frames. Other
+    /// compressed formats are [`crate::Error::Unsupported`].
     pub fn from_wav(data: &[u8]) -> Result<Self> {
-        let mut r = Reader::new(data);
-        if r.array::<4>()? != *b"RIFF" {
-            return Err(Error::Invalid("not a RIFF file"));
-        }
-        r.skip(4)?;
-        if r.array::<4>()? != *b"WAVE" {
-            return Err(Error::Invalid("not a WAVE file"));
-        }
-        let mut format: Option<(u16, u32, u16)> = None;
-        while r.remaining() >= 8 {
-            let id = r.array::<4>()?;
-            let len = r.u32()? as usize;
-            let avail = len.min(r.remaining());
-            let body = r.bytes(avail)?;
-            match &id {
-                b"fmt " => {
-                    let mut f = Reader::new(body);
-                    let code = f.u16()?;
-                    let channels = f.u16()?;
-                    let rate = f.u32()?;
-                    f.skip(6)?;
-                    let bits = f.u16()?;
-                    if code != 1 {
-                        return Err(Error::Unsupported("compressed WAVE format"));
-                    }
-                    if !(1..=2).contains(&channels) || rate == 0 {
-                        return Err(Error::Invalid("WAVE channel count or sample rate"));
-                    }
-                    if bits != 8 && bits != 16 {
-                        return Err(Error::Unsupported("WAVE sample width"));
-                    }
-                    format = Some((channels, rate, bits));
-                }
-                b"data" => {
-                    let (channels, sample_rate, bits) =
-                        format.ok_or(Error::Invalid("WAVE data before its format"))?;
-                    if body.len() > MAX_DECOMPRESSED {
-                        return Err(Error::TooLarge("WAVE data"));
-                    }
-                    let mut samples: Vec<i16> = if bits == 8 {
-                        body.iter().map(|&b| (i16::from(b) - 128) << 8).collect()
-                    } else {
-                        body.as_chunks::<2>()
-                            .0
-                            .iter()
-                            .map(|c| i16::from_le_bytes(*c))
-                            .collect()
-                    };
-                    let whole = samples.len() - samples.len() % usize::from(channels);
-                    samples.truncate(whole);
-                    return Ok(Self {
-                        sample_rate,
-                        channels,
-                        samples,
-                    });
-                }
-                _ => {}
-            }
-            if len % 2 == 1 && r.remaining() > 0 {
-                r.skip(1)?;
-            }
-        }
-        Err(Error::Invalid("WAVE file without a data chunk"))
+        crate::wav::WavInfo::parse(data)?.decode(data)
     }
 
     /// A synthetic test signal of our own: a triangle wave of `period`
@@ -187,6 +127,7 @@ impl Pcm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::Error;
 
     #[test]
     fn wav_header_is_canonical() {
@@ -262,7 +203,8 @@ mod tests {
         let pcm = Pcm::from_wav(&wav).unwrap();
         assert_eq!(pcm.sample_rate, 8000);
         assert_eq!(pcm.samples, vec![0, 127 << 8, -128 << 8]);
-        // Compressed formats and garbage are errors, not panics.
+        // Other formats and garbage are errors, not panics (an IMA ADPCM
+        // code with 8-bit samples is not a format we read).
         let mut adpcm = wav.clone();
         adpcm[32] = 0x11;
         assert!(matches!(Pcm::from_wav(&adpcm), Err(Error::Unsupported(_))));

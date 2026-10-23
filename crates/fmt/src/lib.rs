@@ -44,5 +44,6 @@ pub mod synth;
 pub mod tmp;
 pub mod vpl;
 pub mod vxl;
+pub mod wav;
 
 pub use error::{Error, Result};
