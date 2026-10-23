@@ -217,3 +217,22 @@ fn entry_check_reference_is_the_common_cell() {
     let dests = group_move(&mut w, &[b, a], common);
     assert_eq!(dests, vec![plus(common, 1, 0), common]);
 }
+
+// spec: S-0213 claim 7 (a cell met twice uses up two of the 6 points: on a diagonal the first two points fall in one cell, so in a diagonal row the vehicle 5 out finds all 6 points taken and shares the cell of the one 4 out)
+#[test]
+fn a_cell_met_twice_uses_up_two_points() {
+    let mut w = game();
+    let at: Vec<(i32, i32)> = (-5..=5).map(|k| (k, k)).collect();
+    let ids = vehicles(&mut w, &at);
+    let common = deploy_common::at(0, 8);
+    let dests = group_move(&mut w, &ids, common);
+    assert_eq!(dests[5], common);
+    for (&(k, _), &d) in at.iter().zip(&dests) {
+        let want = match k {
+            5 => plus(common, 4, 4),
+            -5 => plus(common, -4, -4),
+            _ => plus(common, k, k),
+        };
+        assert_eq!(d, want, "member {k} out");
+    }
+}
