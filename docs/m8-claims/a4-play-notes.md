@@ -72,3 +72,51 @@ The lead played the native build. Answers to the triage questions:
 |---|---|---|---|---|---|
 | 9 | "The MCV cannot be deployed by clicking it again after selecting." (the deploy key works) | Code bug: `targeting::vehicle_deploy` had no row VD2, so a vehicle that deploys into a building fell to row VD4 and the click gave nothing | S-0214 table VD rows VD1, VD2; S-0415 claim 3 and F3; S-0601 claim 15 | none needed | Fixed. Row VD2: *deploy* if the building fits where the vehicle stands (`econ::deploy::fits`, the same cell test the deploy attempt runs, the vehicle itself ignored, a foundation wider or deeper than 2 anchored by `deploy::anchor`, the step the spec calls fixed) and `deploy_readiness` holds, else *no-deploy*. The spec's wording and the deploy order agree, so nothing departs from it. Row VD1 (route mode held) stays a seam: route mode does not exist (no key binds it), so it is never held. The click's order is the table M unload behaviour order; the key's is `Order::Deploy`; a test runs both on copies and gets the same building at the same cell. Tests `claims_s0601_deploy::vd_click::*` |
 | 10 | "Random debris after a tank got destroyed, staying in place" (a screenshot shows a dark piece left on the ground beside the wreck spot) | Recorded only, no code change. Matches a sprite debris piece with no motion and no landing (Q-1762), or a voxel debris piece (Q-1702); which one cannot be told from the screenshot | S-0109 Terms (bouncing type), claims 7, 22; S-0312 claim 4, F1 | Q-1762, Q-1702 (both open) | Waits for Q-1762 and Q-1702 |
+
+## Pathing report 1 (2026-10-23, note 1; lane `local-lane/m8/a4-path1/`)
+
+The lead's first pathing report, played on 2a334bd and replayed there to the capture's state hash.
+Two infantry units of an engineer type leave a factory and stand at its exit cell (142,71), just
+south of its foundation (141..143, 69..70). Ordered to capture, or move to, cells about 15 cells
+north, (136..139, 54..57), across a base whose buildings stand in short rows (x 135 to 142, y 60 to
+64) with open ground east of them, they never move: 19 path computations from (142,71), ticks 8897
+to 10465, each with 5 cell searches inside a corridor of 9 to 26 expansions, all failed; each time
+the unit gives up, its destination is cleared and it rests in *guard*. A 5-cell order east, to
+(147,69), succeeds; from (145,67) the capture order succeeds with a 19-step path round the east
+ends of the rows.
+
+**Cause.** The cap of 5 cell searches of S-0212 claim 13. The coarse searches see through buildings
+(claim 1), so the first level-0 corridor runs north through the factory's own cells. Hand check of
+the first retry (claim 13a): the progress cell is the exit (142,71) (no candidate in the next
+corridor sector is recorded: the factory's cells are *blocked*); its level-0 sector is the block
+(142..143, 70..71); the free part is (142,71) and (143,71); the probe cell (142 + 0, 71 + 1) =
+(142,72) lies in another sector, so the sector is *whole*, and its connections to the three
+sectors north of it, which the free part does not border, are closed. The level-1 and level-2
+corridors still hold the factory's block, so the next corridors run round the factory's west side
+into the next row (progress cells (140,65), then (139,65), then (137,61)), where the retries
+read sectors as split and close their connections onward. The level-2 corridor takes in the blocks east of the factory only at the 5th
+search, whose level-0 corridor crosses the factory's corner diagonally between two building cells
+(claim 13b's connection rule ignores buildings); it fails, and claim 13's table fails the
+computation. Claim 23 row 2 then gives up. A diagnostic build (not committed) showed that a 6th
+search still fails and the 7th finds a 17- to 19-step path, and that flipping
+`quirks.corridor_retry_no_fallback` or `quirks.corridor_split_probe` changes none of these
+computations: the fallback search of the first switch follows only a failed repeated coarse search,
+and here no coarse search fails.
+
+**Class.** No departure from the specs: the code follows S-0212 claims 1, 13, 13a, 13b and 23 and
+S-0209's *blocked* outcome for building cells, and S-0212 says so for buildings (Edge cases
+"Buildings do not separate regions" and "A short line of buildings across the route"; P12 expects a
+give-up at long walls). The note disputes the result, and it has the gameplay impact for which
+Q-1280's case got a switch, but no switch covers the cap. Filed as **Q-1771** (it takes up the
+question held as Q-1752, which was never written): does the original's unit walk out, and if not,
+should a switch lift the cap's failure. Interim: S-0212 as written, pinned by
+`crates/deterministic/sim/tests/claims_s0212_cap.rs` on a layout of our own (a 3 × 2 block, its
+exit, a row of ten 1 × 1 buildings 4 cells north, the destination behind it): 5 corridor searches,
+the computation fails and the destination is cleared at once, the same with
+`quirks.corridor_retry_no_fallback` off, and a search without a corridor finds the way round.
+
+**Tool.** The report printed every failed computation as "to no cell (the destination X was
+substituted)", although nothing was substituted (the trace has the searched-for cell only when a
+path is stored). A failed computation now reads "to X" with no substitution remark, and the totals
+count a give-up after a failed computation as well as a given-up move (the report said "0
+give-ups" for a unit that gave up 16 times).
