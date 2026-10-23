@@ -601,11 +601,15 @@ pub enum PauseHit {
     Leave,
 }
 
-/// Draws the options menu over the game. `speed` is the game-speed index.
+/// Draws the options menu over the game. `speed` is the index the speed
+/// control shows, or `None` when the menu offers no speed control (S-0201
+/// claim 17: once the local house is defeated). In a network game
+/// (`network`) the menu stops nothing (S-0201 claim 15), so its title does
+/// not say paused, and it offers no settings screen.
 pub fn pause_view(
     size: (i32, i32),
-    speed: u8,
-    settings: bool,
+    speed: Option<u8>,
+    network: bool,
     hover: Option<Point>,
 ) -> (DrawList, Targets<PauseHit>) {
     let (w, h) = size;
@@ -613,21 +617,28 @@ pub fn pause_view(
     let mut t = Targets::new();
     d.fill(Rect::new(0, 0, w, h), [0, 0, 0, 120]);
     let r = Rect::new((w - 240) / 2, (h - 186) / 2, 240, 186);
-    widget::panel(&mut d, r, Some("OPTIONS (PAUSED)"));
+    let title = if network {
+        "OPTIONS"
+    } else {
+        "OPTIONS (PAUSED)"
+    };
+    widget::panel(&mut d, r, Some(title));
     let hot = |x: Rect| hover.is_some_and(|p| x.contains(p));
-    // spec: S-0201 claim 8 (control position p sets index 6 − p)
-    let pos = 6 - speed.min(6);
-    let (a, b) = widget::choice(
-        &mut d,
-        Rect::new(r.x + 10, r.y + 26, 220, 16),
-        "Speed",
-        &format!("{} of 7", pos + 1),
-        true,
-    );
-    t.push_choice(a, PauseHit::Speed(-1), b, PauseHit::Speed(1));
+    if let Some(speed) = speed {
+        // spec: S-0201 claim 8 (control position p sets index 6 − p)
+        let pos = 6 - speed.min(6);
+        let (a, b) = widget::choice(
+            &mut d,
+            Rect::new(r.x + 10, r.y + 26, 220, 16),
+            "Speed",
+            &format!("{} of 7", pos + 1),
+            true,
+        );
+        t.push_choice(a, PauseHit::Speed(-1), b, PauseHit::Speed(1));
+    }
     let mut y = r.y + 50;
     let mut items = vec![(PauseHit::Resume, "Resume")];
-    if settings {
+    if !network {
         items.push((PauseHit::Settings, "Settings"));
     }
     items.extend([
@@ -763,17 +774,31 @@ mod tests {
         assert_eq!(step_speed(0, 1), 0);
         assert_eq!(step_speed(0, -1), 1);
         assert_eq!(step_speed(6, -1), 6);
-        let (d, t) = pause_view((800, 600), 4, true, None);
+        let (d, t) = pause_view((800, 600), Some(4), false, None);
         assert!(d.texts().contains(&"3 of 7"));
+        assert!(d.texts().contains(&"OPTIONS (PAUSED)"));
         let r = t.rect_of(&PauseHit::Resume).unwrap();
         assert_eq!(t.hit(r.centre()), Some(PauseHit::Resume));
         assert!(t.rect_of(&PauseHit::Settings).is_some());
+        let (d, t) = pause_view((800, 600), Some(4), true, None);
+        assert!(t.rect_of(&PauseHit::Settings).is_none());
         assert!(
-            pause_view((800, 600), 4, false, None)
-                .1
-                .rect_of(&PauseHit::Settings)
-                .is_none()
+            d.texts().contains(&"OPTIONS"),
+            "a network menu stops nothing"
         );
+        assert!(t.rect_of(&PauseHit::Speed(1)).is_some());
+    }
+
+    // spec: S-0201 claim 17 (no speed control once the local house is defeated: in a network game, and in our engine in a skirmish watched on)
+    #[test]
+    fn options_menu_without_the_speed_control() {
+        for network in [false, true] {
+            let (d, t) = pause_view((800, 600), None, network, None);
+            assert!(!d.texts().iter().any(|x| x.ends_with("of 7")));
+            assert!(t.rect_of(&PauseHit::Speed(1)).is_none());
+            assert!(t.rect_of(&PauseHit::Speed(-1)).is_none());
+            assert!(t.rect_of(&PauseHit::Resume).is_some());
+        }
     }
 
     #[test]

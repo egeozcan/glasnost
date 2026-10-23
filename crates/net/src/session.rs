@@ -866,6 +866,19 @@ impl Session {
         self.dirty = true;
     }
 
+    /// Changes the caller's paced tick period, after a speed order was
+    /// carried out (S-0201 claim 17): the delay is worked out in ticks of
+    /// the new length from now on. The resend interval and the other
+    /// settings stay as [`Config`] set them at the start.
+    pub fn set_tick_ms(&mut self, tick_ms: u32) {
+        self.cfg.tick_ms = tick_ms.max(1);
+    }
+
+    /// The caller's paced tick period now, in milliseconds.
+    pub fn tick_ms(&self) -> u32 {
+        self.cfg.tick_ms
+    }
+
     /// Takes the events since the last call, oldest first.
     pub fn take_events(&mut self) -> Vec<Event> {
         self.events.drain(..).collect()

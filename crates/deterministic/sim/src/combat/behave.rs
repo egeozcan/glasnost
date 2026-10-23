@@ -403,6 +403,8 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
                     let d = b.building.delayed_fire_delay;
                     if let Some(ob) = w.obj_mut(id) {
                         ob.combat.delayed_shot = Some(tick.wrapping_add((d - 1).max(0)));
+                        // spec: S-0301 claim 14 and S-0308 claim 14 (the weapon slot chosen when the delay starts is kept for the check and the shot that end it)
+                        ob.combat.delayed_slot = slot as u8;
                     }
                 } else {
                     // spec: S-0215 claim 32 (no applicable gate, or quirks.upgrade_attack_weapon_gate off with a failed gate: the ordinary selected-weapon attempt)
@@ -602,9 +604,11 @@ pub fn delayed_shot_turn(w: &mut World, id: ObjectId) {
         crate::linked::master_shot(w, id);
         return;
     }
+    // spec: S-0301 claim 14 (the check and the shot use the building's target at the end of the delay; Q-1770 answered)
     let Some(t) = o.target else { return };
-    let slot = choose_slot(w, id, Some(t));
-    // spec: S-0301 claim 14 (the firing check again, with range: a shot on can fire, else dropped)
+    // spec: S-0301 claim 14 and S-0308 claim 14 (the slot chosen when the delay started, not chosen again)
+    let slot = usize::from(o.combat.delayed_slot);
+    // spec: S-0301 claim 14 (the firing check again, with range, not refused by this shot itself, which is no longer pending: a shot on can fire, else dropped with no projectile, countdown or draw)
     if check(w, id, Some(t), slot, true) == Answer::CanFire {
         crate::combat::fire::shot(w, id, slot, t);
     }

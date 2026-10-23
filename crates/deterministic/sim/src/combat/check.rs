@@ -334,6 +334,10 @@ pub fn check(
     let kind = o.kind;
     let weapon = slot_weapon(w, firer, slot);
     let target = target.filter(|t| target_exists(w, *t));
+    // spec: S-0301 claims 9 and 14 (a building's pending delayed shot: rearming at rank 4, yielding only to the building's own answers of S-0405 table T1 and ahead of every other reason, the absent-weapon and hidden-target impossible, the drain refusals, every row of S-0306 claim 23 and the later ranks; Q-1770 answered)
+    if kind == Kind::Building && o.combat.delayed_shot.is_some() {
+        return crate::econ::power::firing_answer(w, firer).unwrap_or(Answer::Rearming);
+    }
     // Ranks 1 and 3 (a vehicle playing death frames, melee-linked) need states that no topic of our engine sets yet.
     // spec: S-0301 claim 9 rank 2 and S-0506 claim 10 (a vehicle whose launching count is above 0: busy)
     if kind == Kind::Vehicle && crate::spawn::launching_count(w, firer) > 0 {
@@ -470,7 +474,7 @@ pub fn check(
     {
         return Answer::Illegal;
     }
-    // spec: S-0306 claim 23 (the water and land rows: illegal at rank 4, after the other weapon's live-effect impossible and every earlier rank-4 answer, ahead of the magnetic-beam rearming; the rank of a building's pending delayed-shot rearming against them is unstated, interim Q-1770: that answer is not a rank-4 answer of this check, so the rows win)
+    // spec: S-0306 claim 23 (the water and land rows: illegal at rank 4, after the other weapon's live-effect impossible and every earlier rank-4 answer, ahead of the magnetic-beam rearming; a building's pending delayed shot comes ahead of them, at the top of this check: S-0301 claim 9)
     if let Some(t) = target
         && targeting_mode_illegal(w, firer, t)
     {
@@ -504,8 +508,8 @@ pub fn check(
     if slot == 0 && gate_closed(w, firer, weapon) {
         return Answer::Rearming;
     }
-    // spec: S-0301 claim 14 and S-0518 claim 6 (a pending delayed shot, or a supporter's pending beam: rearming)
-    if c.delayed_shot.is_some() || c.support_beam.is_some() {
+    // spec: S-0518 claim 6 (a supporter's pending beam: rearming; a building's pending delayed shot is answered at rank 4 above, S-0301 claim 9)
+    if c.support_beam.is_some() {
         return Answer::Rearming;
     }
     // spec: S-0301 claim 9 rank 7 (ammunition 0)

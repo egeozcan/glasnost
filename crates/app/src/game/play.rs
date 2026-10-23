@@ -762,6 +762,12 @@ impl Play {
         self.issue(vec![Order::Surrender]);
     }
 
+    /// The options menu's speed change, as an order of the local house
+    /// (S-0201 claims 8 and 17); returns whether it was taken or sent.
+    pub fn change_speed(&mut self, speed: u8) -> bool {
+        self.give(Order::GameSpeed { speed })
+    }
+
     /// The tab shown (S-0411 claim 2).
     pub fn shown_tab(&self) -> usize {
         hud::shown_tab(&self.game.world, self.local, self.tab)

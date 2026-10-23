@@ -26,8 +26,8 @@ pub const TEAMS: u8 = 4; // spec: S-0412 claim 15 (no team and four distinct tea
 
 /// The paced period of game-speed index `speed` in milliseconds: 16 × s for
 /// s from 1 to 6, 8 at index 0 (S-0201 claims 4 and 5). The client paces
-/// its ticks by it, and the relay works out a network game's drop grace
-/// period in ticks from it (M9 N5).
+/// a single-player game's ticks by it; a network game is paced by
+/// [`net_period_ms`] (S-0201 claim 17).
 pub fn period_ms(speed: u8) -> i64 {
     match speed {
         // spec: S-0201 claim 5 (our engine paces index 0 at a fixed 8 ms)
@@ -35,6 +35,19 @@ pub fn period_ms(speed: u8) -> i64 {
         // spec: S-0201 claims 2 and 4 (s pacing units of 16 ms)
         s => 16 * i64::from(s.min(6)),
     }
+}
+
+/// The paced period of a network game's cycle at game-speed index `speed`,
+/// in milliseconds: ⌊1000 / cap(s)⌋ (S-0201 claim 17 and Formulas F5, our
+/// engine's pacing). The client paces a network game's ticks by it from the
+/// start at the room's index and from the cycle after a speed order at the
+/// new one, and the relay works out the drop grace period in ticks from it
+/// (M9 N5).
+pub fn net_period_ms(speed: u8) -> i64 {
+    // spec: S-0201 claim 17 and Constants (cap of the agreed tick rate for indices 0 to 6: 60, 45, 30, 20, 15, 12 and 10 ticks per second)
+    const CAP: [i64; 7] = [60, 45, 30, 20, 15, 12, 10];
+    // spec: S-0201 Formulas F5 (P_net = ⌊1000 / A⌋ ms, in whole milliseconds) and claim 17, Our engine (A = cap(s) for the index in force: no start at 30, no 256-tick schedule, no slowest-machine rate C)
+    1000 / CAP[usize::from(speed.min(6))]
 }
 
 /// The values and ranges the screen offers, read from the rules by the
@@ -799,6 +812,16 @@ pub fn game_setup(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // spec: S-0201 Formulas F5 table and claim 17 (a network game's period ⌊1000 / cap(s)⌋: 16, 22, 33, 50, 66, 83 and 100 ms for indices 0 to 6, against the single-player 8 and 16 × s)
+    #[test]
+    fn network_pacing_follows_the_cap_table() {
+        let net: Vec<i64> = (0..=6).map(net_period_ms).collect();
+        assert_eq!(net, [16, 22, 33, 50, 66, 83, 100]);
+        let single: Vec<i64> = (0..=6).map(period_ms).collect();
+        assert_eq!(single, [8, 16, 32, 48, 64, 80, 96]);
+        assert_eq!(net_period_ms(9), 100, "out of range: the slowest");
+    }
 
     fn rules() -> SetupRules {
         SetupRules {

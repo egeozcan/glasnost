@@ -838,7 +838,9 @@ impl Client {
             return;
         };
         match bound_with(&self.settings.bindings, k) {
-            Some(Bound::Options) => s.open_options(),
+            Some(Bound::Options) => {
+                s.open_options();
+            }
             Some(Bound::Command(c)) => s.key(c),
             Some(Bound::Cheer) if !s.paused => s.play.cheer(),
             Some(Bound::PathReport) => {
@@ -1021,17 +1023,18 @@ impl Client {
             return;
         };
         s.clock_ms = now_ms;
+        s.focused = self.focused;
         // spec: S-0213 claim 25 (status lines expire at display updates, also while paused or unfocused)
         s.play.update_messages(now_ms);
         // spec: S-0213 Edge cases (Unfittable status text: an importer warning for the offending text)
         for p in s.play.status_problems.drain(..) {
             log::warn!("status text: {p}");
         }
-        // spec: S-0414 claim 23 (the active clock pauses for the options menu and lost focus); Q-1806 (interim: not in a network game, whose ticks go on)
-        let active = networked || (!s.paused && self.focused);
+        // spec: S-0414 claim 23 (revision 16: in a skirmish the active clock pauses while the options menu is open and while the game is frozen, and time without the input focus counts; our engine has no freeze in the client loop) and S-0201 claim 18 (in a network game it stops for neither the menu nor lost focus)
+        let active = networked || !s.paused;
         s.play.clock(now_ms, active);
         let ticked = if networked {
-            // Q-1806 (interim: in a network game neither the options menu nor lost focus stops the ticks; the lockstep paces them)
+            // spec: S-0201 claims 15 and 16 (in a network game neither the options menu nor lost focus stops the ticks; the lockstep paces them, and lost focus slows no one, our engine's departure)
             self.net_tick(now_ms)
         } else if !s.ticking() || !self.focused {
             // spec: S-0201 claims 8 and 9 (no cycle runs while the options menu is open or without focus)

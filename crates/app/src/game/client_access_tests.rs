@@ -11,6 +11,7 @@ use glasnost_ai::fixture;
 use glasnost_convert::find::Listing;
 use glasnost_fmt::mix::MixEntry;
 use glasnost_map::CellXY;
+use glasnost_sim::orders::Order;
 use glasnost_sim::rules::Kind;
 use glasnost_sim::world::ObjectId;
 use glasnost_ui::draw::Prim;
@@ -502,11 +503,14 @@ fn the_options_menu_is_played_by_keyboard() {
     while !matches!(session(&c).pause_focus(), Some(PauseHit::Speed(_))) {
         key(&mut c, Key::Tab);
     }
+    // spec: S-0201 claims 8 and 17 (the control starts at the index in force; the change is sent when the menu closes)
     let speed = session(&c).speed;
+    assert_eq!(session(&c).menu_speed(), speed);
     key(&mut c, Key::Left);
-    assert_ne!(session(&c).speed, speed);
+    assert_ne!(session(&c).menu_speed(), speed);
+    assert_eq!(session(&c).speed, speed, "not before the menu closes");
     key(&mut c, Key::Right);
-    assert_eq!(session(&c).speed, speed);
+    assert_eq!(session(&c).menu_speed(), speed);
     // An arrow's press on the open menu is still the arrow's (S-0213
     // claim 23); its release ends it.
     c.key(Key::Up, true);
@@ -828,4 +832,134 @@ fn the_mark_and_report_keys_save_a_pathing_report() {
     assert_eq!(b.marks, vec![marked]);
     assert_eq!(b.look.selection, vec![mcv.0]);
     assert_eq!(b.capture_hash, session(&c).play.game.state_hash());
+}
+
+/// Presses a control of the open options menu.
+fn press_pause(c: &mut Client, hit: PauseHit) {
+    let _ = c.frame();
+    let r = session(c)
+        .pause_targets()
+        .rect_of(&hit)
+        .unwrap_or_else(|| panic!("{hit:?} on the options menu"));
+    click(c, r);
+}
+
+/// The local house's pending orders.
+fn pending(c: &Client) -> Vec<Order> {
+    let p = &session(c).play;
+    p.world().houses[usize::from(p.local.0)].pending.clone()
+}
+
+/// A skirmish's speed control: closing the menu with the index in force
+/// sends nothing; closing it with another index sends the speed order,
+/// which the next tick carries out, and the paced index holds from the
+/// next cycle.
+/// spec: S-0201 claim 8 (the control's step; the new paced period from the next cycle) and claim 17 (sent when the menu closes; setting the index already in force sends nothing; the order sets the game-speed index when carried out)
+#[test]
+fn a_skirmish_speed_change_is_sent_when_the_menu_closes() {
+    let mut c = client((1024, 768), 100);
+    start_by_keyboard(&mut c);
+    let speed = session(&c).speed;
+    let game = session(&c).play.world().game_speed;
+    key(&mut c, Key::Escape);
+    assert!(session(&c).paused);
+    press_pause(&mut c, PauseHit::Speed(1));
+    press_pause(&mut c, PauseHit::Speed(-1));
+    press_pause(&mut c, PauseHit::Resume);
+    assert!(!session(&c).paused);
+    assert!(pending(&c).is_empty(), "the index in force: nothing sent");
+    key(&mut c, Key::Escape);
+    let step = if speed == 0 { -1 } else { 1 };
+    press_pause(&mut c, PauseHit::Speed(step));
+    let want = session(&c).menu_speed();
+    assert_ne!(want, speed);
+    assert_eq!(session(&c).speed, speed, "not before the menu closes");
+    press_pause(&mut c, PauseHit::Resume);
+    assert_eq!(session(&c).speed, want);
+    assert_eq!(pending(&c), vec![Order::GameSpeed { speed: want }]);
+    assert_eq!(session(&c).play.world().game_speed, game);
+    session_mut(&mut c).step();
+    assert_eq!(session(&c).play.world().game_speed, want);
+    assert_eq!(session(&c).speed, want);
+}
+
+/// In a network game the menu's speed change goes to the lockstep outbox
+/// and the index in force changes only when the order is carried out; the
+/// menu stops no tick, says no pause and offers no settings screen.
+/// spec: S-0201 claim 15 (the menu stops no tick in a network game) and claim 17 (the change is sent at the menu's close as an order of the player; the sender's own index changes only when the order is carried out)
+#[test]
+fn a_network_speed_change_goes_through_the_lockstep_orders() {
+    let mut c = client((1024, 768), 100);
+    start_by_keyboard(&mut c);
+    {
+        let s = session_mut(&mut c);
+        s.network = true;
+        s.play.outbox = Some(Vec::new());
+    }
+    let speed = session(&c).play.world().game_speed;
+    key(&mut c, Key::Escape);
+    assert!(session(&c).paused);
+    let _ = c.frame();
+    assert!(
+        session(&c)
+            .pause_targets()
+            .rect_of(&PauseHit::Settings)
+            .is_none()
+    );
+    let tick = session(&c).play.world().tick;
+    session_mut(&mut c).step();
+    assert_eq!(session(&c).play.world().tick, tick + 1, "ticks go on");
+    let step = if speed == 0 { -1 } else { 1 };
+    press_pause(&mut c, PauseHit::Speed(step));
+    let want = session(&c).menu_speed();
+    press_pause(&mut c, PauseHit::Resume);
+    let out = session(&c).play.outbox.clone().unwrap();
+    assert_eq!(out, vec![Order::GameSpeed { speed: want }]);
+    assert!(pending(&c).is_empty());
+    assert_eq!(session(&c).play.world().game_speed, speed);
+    // Carried out (here by hand, as the lockstep session would at t+W):
+    // the paced index follows after the tick.
+    session_mut(&mut c).play.game.world.game_speed = want;
+    session_mut(&mut c).step();
+    assert_eq!(session(&c).speed, want);
+}
+
+/// The menu does not open once the game has ended, and after a surrender
+/// through the menu not again until the house is defeated; a defeated
+/// house's menu offers no speed control.
+/// spec: S-0201 claim 15 (refused from the end of the game on, S-0414 claim 6; after resigning through the menu refused until the house is defeated) and claim 17 (no speed control once the local house is defeated)
+#[test]
+fn the_menu_is_refused_after_the_end_and_after_a_surrender() {
+    let mut c = client((1024, 768), 100);
+    start_by_keyboard(&mut c);
+    key(&mut c, Key::Escape);
+    press_pause(&mut c, PauseHit::Surrender);
+    assert!(!session(&c).paused);
+    assert!(!session_mut(&mut c).open_options(), "resigned");
+    key(&mut c, Key::Escape);
+    assert!(!session(&c).paused);
+    let local = usize::from(session(&c).play.local.0);
+    session_mut(&mut c).play.game.world.houses[local]
+        .econ
+        .result
+        .defeated = true;
+    assert!(
+        session_mut(&mut c).open_options(),
+        "defeated: it opens again"
+    );
+    let _ = c.frame();
+    let t = session(&c).pause_targets();
+    assert!(t.rect_of(&PauseHit::Speed(1)).is_none());
+    assert!(t.rect_of(&PauseHit::Speed(-1)).is_none());
+    press_pause(&mut c, PauseHit::Resume);
+    assert!(
+        pending(&c)
+            .iter()
+            .all(|o| !matches!(o, Order::GameSpeed { .. }))
+    );
+    let tick = session(&c).play.world().tick;
+    session_mut(&mut c).play.game.world.econ.end.ended = Some(tick);
+    assert!(!session_mut(&mut c).open_options(), "the game has ended");
+    key(&mut c, Key::Escape);
+    assert!(!session(&c).paused);
 }

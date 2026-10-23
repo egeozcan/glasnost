@@ -27,7 +27,8 @@
 //! values; version 6 the direct links (N7): [`Body::Closing`],
 //! [`Body::Held`] and the lobby's signalling and ping; version 7 the
 //! relay-only end's answer to an offer, [`crate::lobby::Signal::Decline`]
-//! (N8c).
+//! (N8c); version 8 the speed order [`Order::GameSpeed`] in a frame's
+//! orders (S-0201 claim 17, M8 A3 intake 8).
 //!
 //! **Direct links (N7).** A peer may also copy its [`Body::Frames`]
 //! messages, and only those, onto a WebRTC data channel to another peer. The
@@ -57,7 +58,7 @@ pub const MAGIC: [u8; 2] = *b"GN";
 
 /// The wire format's version. Bump it whenever a message's layout changes.
 // nocite: our own netcode
-pub const WIRE_VERSION: u8 = 7;
+pub const WIRE_VERSION: u8 = 8;
 
 /// The sender byte of the relay's own messages. No slot table has this many
 /// slots (a game has at most eight players), so no peer has this slot.

@@ -52,7 +52,7 @@ use glasnost_ui::shell::Screen;
 use super::{Client, Job};
 use crate::game::direct::{Direct, Ice, Mesh, PairStats};
 use crate::game::link::{Link, LinkState};
-use crate::mapview::live::period_ms;
+use crate::mapview::live::net_period_ms;
 use crate::settings::Rejoin;
 
 /// One other person's pair, as [`Client::direct_stats`] gives it (N7).
@@ -724,7 +724,9 @@ impl Client {
             }
             let b = n.begin.as_ref()?;
             let speed = self.session.as_ref().map(|s| s.speed)?;
-            Some(u64::from(b.params.sane().grace_ticks) * period_ms(speed).max(1) as u64 / 1_000)
+            Some(
+                u64::from(b.params.sane().grace_ticks) * net_period_ms(speed).max(1) as u64 / 1_000,
+            )
         });
         let text = match grace_s {
             Some(s) => format!(
@@ -751,7 +753,7 @@ impl Client {
             return;
         };
         let session = self.session.as_ref();
-        let period = session.map_or(1, |s| period_ms(s.speed).max(1) as u64);
+        let period = session.map_or(1, |s| net_period_ms(s.speed).max(1) as u64);
         for e in events {
             let Some(ls) = net.lockstep.as_ref() else {
                 return;
@@ -1122,7 +1124,7 @@ impl Client {
             &s.play.game.replay().setup,
             b.params,
         );
-        let cfg = Config::new(period_ms(s.speed) as u32);
+        let cfg = Config::new(net_period_ms(s.speed) as u32);
         let evidence = Evidence::new(&self.build, &info, b.you, &s.play.game);
         match Lockstep::new(cfg, info, b.you, now) {
             Ok(mut ls) => {
@@ -1173,7 +1175,7 @@ impl Client {
             b.params,
         );
         let me = b.you;
-        let cfg = Config::new(period_ms(s.speed) as u32);
+        let cfg = Config::new(net_period_ms(s.speed) as u32);
         let loaded = Transfer::from_bytes(&bytes).and_then(|t| {
             let g = t.load(&s.play.game)?;
             Ok((t, g))
@@ -1267,18 +1269,20 @@ impl Client {
                 ls.submit(o);
             }
         }
-        let period = period_ms(s.speed).max(1) as u64;
+        let period = net_period_ms(s.speed).max(1) as u64;
         // A peer ahead of the slowest other stretches its period by half,
         // so the others catch up without a wait (our own netcode).
         let stretched = ls.ahead(now) > AHEAD_STRETCH
             && net
                 .last_tick
                 .is_some_and(|t| now.saturating_sub(t) < period + period / 2); // nocite: our own netcode (half a period more)
-        if self.pacer.remaining(now_ms, s.speed) > 0 || stretched {
+        if self.pacer.remaining_for(now_ms, period as i64) > 0 || stretched {
             return false;
         }
         let ev = &mut net.evidence;
         let kept = &mut net.checkpoints;
+        let me = ls.me();
+        let mut changed_by = Vec::new();
         let ran = s.step_by(|g| {
             if let Some(ev) = ev.as_mut() {
                 ev.before_tick(ls.ran(), g);
@@ -1290,10 +1294,23 @@ impl Client {
             if let Some(ev) = ev.as_mut() {
                 ev.after_tick(&t, g, ls.agreed());
             }
+            // spec: S-0201 claim 17 (every machine but the sender's shows a message naming the house whose player changed the speed, in the tick the order is carried out)
+            changed_by.extend(
+                t.orders
+                    .iter()
+                    .filter(|a| a.taken && a.slot != me)
+                    .filter(|a| matches!(a.order, glasnost_sim::orders::Order::GameSpeed { .. }))
+                    .map(|a| a.slot),
+            );
             true
         });
+        // spec: S-0201 claim 17, Our engine (from the cycle after a speed order is carried out, the cycles and the lockstep's delay go by the new index's period)
+        let tick_ms = net_period_ms(s.speed).max(1) as u32;
+        if ls.tick_ms() != tick_ms {
+            ls.set_tick_ms(tick_ms);
+        }
         if ran {
-            self.pacer.due(now_ms, s.speed);
+            self.pacer.due_after(now_ms, period as i64);
             net.last_tick = Some(now);
             net.stalled_since = None;
             net.waiting = None;
@@ -1307,6 +1324,10 @@ impl Client {
                     .collect();
                 net.waiting = (!names.is_empty()).then(|| names.join(", "));
             }
+        }
+        for slot in changed_by {
+            let who = net.slot_name(slot);
+            net.line(now_ms, "", &format!("{who} changed the game speed."), true);
         }
         net.flush(now);
         ran

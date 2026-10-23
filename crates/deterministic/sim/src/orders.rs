@@ -136,6 +136,13 @@ pub enum Order {
         /// The target cell.
         cell: CellXY,
     },
+    /// The options menu's speed change (S-0201 claims 8 and 17): sets the
+    /// game-speed index on every machine in the tick in which it is
+    /// carried out. A house order with no actor.
+    GameSpeed {
+        /// The new game-speed index, 0 to 6.
+        speed: u8,
+    },
 }
 
 impl Order {
@@ -162,6 +169,7 @@ impl Order {
             | Order::SellWall { .. }
             | Order::Surrender
             | Order::FireSuperweapon { .. }
+            | Order::GameSpeed { .. }
             | Order::Alliance { .. } => None,
         }
     }
@@ -194,8 +202,8 @@ pub fn issue(w: &mut World, house: HouseId, order: Order) -> bool {
             .unwrap_or(house),
         _ => house,
     };
-    // spec: S-0213 claim 1 (an order block refuses input)
-    if blocked(w) {
+    // spec: S-0213 claim 1 (an order block refuses input); a speed change is not refused: in a skirmish it is no order of the original but takes effect from the next cycle (S-0201 claim 8), and the block of S-0201 claim 14 is stated for a single-player game
+    if blocked(w) && !matches!(order, Order::GameSpeed { .. }) {
         return false;
     }
     // spec: S-0213 claim 3 and S-0404 claim 10 (a production order is judged when it is issued)
@@ -475,6 +483,13 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
         Order::Alliance { house: other } => crate::econ::victory::alliance(w, house, other),
         Order::FireSuperweapon { sw, cell } => {
             crate::superweapons::launch::fire(w, house, sw, cell)
+        }
+        Order::GameSpeed { speed } => {
+            // spec: S-0201 claim 8 (the control's seven positions give indices 0 to 6; an index outside that range, which no menu sends, is ignored)
+            if speed <= 6 {
+                // spec: S-0201 claim 17 (in the tick in which the speed order is carried out every machine sets the game-speed index to the new value, whoever sent it; the last change carried out holds; speed-normalised delays started from then on use it, glossary claim G3) and claim 8 (in a skirmish too)
+                w.game_speed = speed;
+            }
         }
         Order::Behaviour { .. } => {}
     }
@@ -802,7 +817,7 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         }
     }
     let common_level = level_of(w, common);
-    // spec: S-0213 claim 7 (the obstructed class's entry check: the reference height level is the common cell's, plus 4 on a high-bridge deck, and no connecting-step direction)
+    // spec: S-0213 claim 7 and S-0209 Terms, cell layer (revision 44: the obstructed class's entry check: the reference height level is the common cell's, plus 4 on a high-bridge deck, and no connecting-step direction, so no connecting-step height restriction)
     let reference = common_level;
     for &k in &others {
         if done[k] {

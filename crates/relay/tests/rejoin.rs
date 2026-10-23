@@ -891,11 +891,12 @@ fn three_persons_and_a_computer_drop_and_rejoin_with_identical_hashes() {
     );
 }
 
-/// The grace period of these tests: 6.4 s at the room's speed (the
-/// control at 2, index 4, 64 ms a tick) is 100 ticks.
+/// The grace period of these tests: 6.6 s at the room's speed (the
+/// control at 2, index 4, 66 ms a tick in a network game, S-0201 claim 17
+/// and F5) is 100 ticks.
 fn short_grace() -> Limits {
     Limits {
-        grace_ms: 6_400,
+        grace_ms: 6_600,
         ..Limits::default()
     }
 }
