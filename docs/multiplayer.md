@@ -167,7 +167,7 @@ or the built binary `target/release/glasnost`. `DIR` is the player's own install
 - "Waiting for NAME..." (several names are comma-separated) appears when a tick cannot run because that player's orders have not arrived for a full second. Everybody waits, since the game cannot go on without them. Usually it clears in a moment (a lost packet or a hiccup). If it stays, see the table in section 7. A player who is silent for 15 seconds is treated as dropped (section 5).
 - "Waiting for the relay..." / "Connecting to the relay..." on the Multiplayer screen: the connection is being made.
 
-**Speed.** The game speed is the room's, set by the host; nobody can pause or change speed alone in a network game, and the options menu does not stop the game.
+**Speed.** The game starts at the room's speed, set by the host. Nobody can pause a network game: the options menu does not stop it, and neither does switching to another window. Any player whose house is still in the game can change the speed in the options menu. The change is sent when the menu closes and takes effect on every machine at the same tick. The other players see "NAME changed the game speed.". The last change holds. A network game's speeds run at 60, 45, 30, 20, 15, 12 and 10 ticks per second, from the fastest setting to the slowest.
 
 **Leaving.** **Leave** in the room takes you out of it and back to the Multiplayer screen. **Leave** (shown as **End** in the game) during a game is a drop: the others see the grace-period notice and the player's house surrenders when it runs out. A player who leaves on purpose does not get a **Reconnect** button.
 
@@ -175,7 +175,7 @@ or the built binary `target/release/glasnost`. `DIR` is the player's own install
 
 If a player's connection fails (or the client is closed or killed), everyone else sees "NAME left the game; they have 60 seconds to reconnect." and the game goes on without them; their house stands idle.
 
-- **The grace period is game time**: 60 seconds of play at the room's speed by default, set with the relay's `--grace`. It is the same whatever the machines' speed.
+- **The grace period is game time**: 60 seconds of play at the room's speed by default, set with the relay's `--grace`. It is counted in ticks at the speed the game started at, the same whatever the machines' speed, and a later speed change does not change it.
 - **The dropped player** returns to the Multiplayer screen with "Reconnect within about N seconds to play on, or your house surrenders." A button **Reconnect to game CODE** is shown under **Host** and **Join**. It is also shown after restarting the client (the game's room, slot and a private ticket are kept in the settings file while a game runs), as long as the relay field is not empty and the relay is still the same one. Click it.
 - While it works the banner reads "Loading the game...", "Waiting for the game...", "Receiving the game (k of n parts)...", "Catching up with the game (tick N)...", then "You are back in the game." The other players see "NAME is reconnecting; sending them the game." (the lowest-numbered live player sends the game, a few MB) and then "NAME reconnected." Expect it to take roughly 5 to 15 seconds on a good link; the loopback runs took about 4 seconds.
 - **Past the grace period** the house surrenders on every machine on the same tick ("NAME did not come back in time: their house surrendered."), and a rejoin is refused ("too late to rejoin..."). The client then forgets the game.
