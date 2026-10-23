@@ -2,13 +2,13 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 18
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671]
+requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671, Q-1735]
 supersedes: []
 ---
 
@@ -35,7 +35,10 @@ changes, and passive new owners). The retained delayed-mode rules apply only to 
 complete replacement sequence. Q-0325 and Q-0329 remain partial answers. E3, F9, G5 and G6
 include exploratory work for deferred coverage; those parts are not backing for additional
 claims. Feature specs retain their independently stated rules. A future revision must settle
-these gaps before an implementation can claim complete audio coverage.
+these gaps before an implementation can claim complete audio coverage. Claim 26's caption
+setting is our engine's design, an accessibility addition that answers Q-1735; it is not the
+original's behaviour, which, as far as examined, shows no text for an announcement (claim 26:
+`measurable` for part T's settings, `unmeasured` beyond them).
 
 **Timing boundary.** Audio-clock durations and service opportunities below describe the
 original. They do not authorise host-dependent choices in our engine. The glossary's
@@ -559,8 +562,76 @@ normalisation N of its Formulas F3. In addition:
     no effect (quirk `quirks.announcement_volume_ignored`). The voice set is fixed when the game is
     loaded from the local player's side: the first side's set, the second side's set, any other
     side the third set.
+
+    **Announcement text (Q-1735).** In the original, only the kind, priority and per-voice-set
+    sample keys of an announcement's section have an effect; the volume key (above), the text key
+    and any other key have none. Our engine gives the text key one use, the caption below; the
+    importer reads a text key's value as the caption text itself, not as the name of an entry of
+    the game's string data.
+
+    The original's announcement data gives some entries a text key, with literal words or an
+    empty value, and gives most entries none; no text key's value is the name of an entry of the
+    game's string data. No entry of the string data is named after an announcement entry. Entries
+    named after the sound files that some announcements play exist there, but the original never
+    looks any of them up, so no string entry is tied to an announcement. What the data holds has
+    no effect on play in the original, since the original shows none of it (`unmeasured`, below).
+
+    In the original, changing or removing the text key changes nothing heard or shown. A missing
+    text key, or a missing entry of the game's string data, has no observable effect: nothing is
+    shown with an announcement either way. The original's options menu offers no setting for
+    announcement text. An announcement is only heard: playing one posts no line to the message
+    area and draws no words anywhere. So in a skirmish no option, and no combination of options,
+    shows text for an announcement (`measurable` for part T's settings, `unmeasured` beyond them,
+    below), and no text depends on the voice set. G1 part T checks this for the settings it
+    covers (each display option its listing finds that can show text, on and off, and voice
+    volume full and zero, each of these under each of the three voice sets); for every other
+    setting of a skirmish it rests on the examination of the original (`unmeasured`, below).
+    Campaign missions and network games are outside this spec (Summary).
+
+    *Announcement text* here means words shown because an announcement plays. A line that a game
+    event posts in the message area itself, such as S-0414 claim 13's break message, is outside
+    this claim: it belongs to that event's spec, and it is shown or not regardless of the
+    announcement data. Part T tells the two apart by removing the announcement's entry.
+
+    Our engine's caption setting is an accessibility addition, presentation only and never part of
+    the simulation. Its caption for an announcement that starts playing is the entry's text key when
+    that is present with a nonempty value (S-0001 claim 11), and otherwise the entry's name. It is
+    the same for every voice set. The caption keeps the whole value as read: no length limit of its
+    own applies beyond S-0001 claim 3's line length limit, which bounds every value. How long
+    captions stay, how many show at once, where they are drawn and how an over-wide caption is
+    wrapped or cut on screen are our engine's interface choices, outside the original's behaviour:
+    the original shows no caption, so nothing here constrains them. The values the engine already
+    uses (each caption shown for 4 seconds, at most 3 at once, newest last) stand as those interface
+    choices.
     - Backing: `measurable` (scenario G1)
-    - Confidence: high (keys, voice set); medium (volume ignored)
+    - Backing (text): `measurable` (scenario G1 part T) for: no options-menu setting for
+      announcement text; no text shown with an announcement with part T's options; changing or
+      removing the text key having no effect on what is heard or shown, for the announcements that
+      play both in part T's first setting and in its repeats with the changed copies. `unmeasured`
+      for: no text shown in a skirmish with options or combinations of options that part T does not
+      set, since part T samples the settings rather than covering them (the settings file can hold
+      options that the options menu does not list), so this rests on the examination of the
+      original, which finds that an announcement shows no text and posts no line when it plays,
+      whatever the options. Also `unmeasured`: the text key having no effect for entries that do not
+      play in both of those games, since an entry's key could show an effect only when that entry
+      plays; a missing entry of the game's string data having no effect, since part T does not vary
+      the string data; the section's other keys having no effect, since G1 does not vary them; what
+      the original's announcement data and string data hold (text keys with literal words, empty or
+      absent; no string entry named after an announcement entry or by a text key's value; no string
+      entry looked up for an announcement), which was read from the installed data files and from
+      the original's handling of an announcement, not observed in play, and which no scenario can
+      show since the original displays none of it. The caption rule, its length rule and its
+      interface values included, is `unmeasured` (our engine's design).
+    - Confidence: high for the kind, priority and per-voice-set sample keys and for the voice set's
+      fixing at load (scenario G1). Medium for every part-T claim while part T is unrun: no
+      options-menu setting for announcement text, no text shown with part T's options, no text
+      depending on the voice set, and the text key without effect for the announcements that play in
+      both of those games; part T also watches only the battlefield, the message area and the
+      sidebar, so an effect elsewhere would escape it. Medium, as `unmeasured`: no text shown with
+      other options of a skirmish, the text key without effect for entries that do not play in both
+      of those games, a missing string entry without effect, the section's other keys without
+      effect, what the announcement data and string data hold, and the caption rule. Medium also:
+      volume ignored.
 
 27. **One at a time, with a gap.** Announcements play one at a time, separate from the 16
     channels. The following queue rules cover unmuted playback. A request for the announcement
@@ -1193,6 +1264,7 @@ Announcement data file:
 | `Priority` | announcement priority | `LOW`, `NORMAL`, `IMPORTANT`, `CRITICAL`, any case | `NORMAL` |
 | `Allied`, `Russian`, `Yuri` | sample per voice set | file name, first 8 characters, extension added | empty (silent) |
 | `Volume` | ignored (claim 26) | floating point | 1 |
+| `Text` | caption text of our engine's caption setting (claim 26), spelled exactly so (S-0001 claim 13); the value is read as the caption text itself; the original shows it nowhere (claim 26 gives the backing) | string, no length limit beyond S-0001 claim 3; an empty value (S-0001 claim 11) counts as absent | absent or empty: the entry's name |
 
 Announcement requests (claim 36): literal INI section headers in the player's announcement
 data file, also named by values in its announcement list. The square brackets below denote
@@ -1932,6 +2004,39 @@ announcement requests and starts: expect no announcement-choice draw. *Falsified
 truncated name fails when its corresponding sample exists, defaults/re-read change queue
 behaviour, or an announcement adds a random choice.
 
+*Part T (Q-1735).* Settings: a skirmish on a small map against one computer player, played once
+as a country of each of the three voice sets, with no helper that changes rules, houses or
+computer players during the game active. A test map trigger shows a message of its own once,
+early in each game, as the control that the recording captures the message area. First open the
+game's options and list every setting it offers. *Expected:* none concerns announcement text.
+Then play with every display option the listing finds that can show text on, at full voice
+volume; then again with all of them off; then, when the listing finds more than one, once with each of
+them on alone; then once with voice volume zero. If the listing finds no such display option,
+play one game with voice volume full and one with voice volume zero. Each game of these sweeps
+is played once under each of the three voice sets, so every display-option and volume setting
+is seen with every voice set. In each game build a structure
+and watch the battlefield, the message area and the sidebar when the construction-complete
+announcement plays, and likewise for two other announcements (for example low power and unit
+ready). *Expected:* the control message appears, and no text appears with any of the three
+announcements, in any of these settings (with voice volume zero, nothing is heard and still
+nothing is shown). If a line does appear when one of them plays, repeat that game with a named
+announcement test copy that removes that announcement's entry: a line that still appears is the
+event's own (claim 26) and that announcement is replaced by another for part T; a line that no
+longer appears is announcement text. Repeat the first setting with a named announcement test
+copy that changes the text key of every listed entry to distinct words, adding it where it is
+absent, and removes it from one of the three watched entries, chosen where possible as one that
+carries a nonempty text key in the stock data; that entry is compared with itself in the first
+setting and with the other two watched entries of the same copy: *expected* the same
+announcements, heard the same, and still no text, with the three watched ones and with any other
+announcement that plays during the game. Repeat the first setting once more with a second named
+copy that sets the text key of every listed entry to the name of an existing entry of the game's
+string data, a different entry for each announcement, so that a lookup of the value as a
+string-entry name would find words to show: *expected* the same, still no text. *Void if:* the
+control message does not appear. *Falsified if:* an option for announcement text exists, text
+that the entry removal shows to be announcement text appears in any setting (in particular only
+with one display option on, or only with the voice muted), or either text-key copy has any
+effect.
+
 **G2. Announcement queue.** Named announcement test data gives distinct normal game events
 (for example low power, construction complete, unit ready and sidebar feedback) short identifiable
 samples and the kinds/priorities needed for each test. While a long current line plays, use
@@ -2161,6 +2266,22 @@ group, the crowded level lowers an announcement, or the credit-tick difference i
 within one F4 step.
 
 ## Open questions
+
+Q-1735 is answered by claim 26 and G1 part T. Question 1: an entry's written text, where it has
+one, is its text key (Import mapping), and the importer reads that key's value as the caption
+text itself, not as the name of an entry of the game's string data. In the original's data some
+announcement entries carry that key, with literal words or empty, and most carry none; no string
+entry is tied to an announcement by name, and the original looks none up (claim 26, `unmeasured`,
+medium). In the original a missing text key or a missing string entry has no observable effect,
+since the original shows no announcement text at all. Question 2: in a skirmish the original never shows the text of an
+announcement, with any option. Playing an announcement shows no words, and the original
+offers no option for announcement text (claim 26: `measurable` with part T's
+settings; `unmeasured`, medium, for the other settings, for the reason given there). So where,
+for how long and how many in a row do not arise in the original; for our engine's caption they
+are interface choices, and the engine's current values (4 seconds, at most 3 at once, newest
+last) stand as those choices (claim 26). Campaign missions and network games lie outside the question's
+skirmish scope and outside this spec. Question 3: nothing shown depends on the voice set. The
+caption rule is our engine's design.
 
 The Summary's deferred coverage is not a collection of provisional implementation rules.
 E3, F9 and G5/G6 preserve exploratory scenarios for later revisions; they do not close
