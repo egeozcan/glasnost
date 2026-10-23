@@ -480,6 +480,8 @@ fn default_spark_system_absent_warns() {
     );
     assert_eq!(s.general.default_spark_system, None);
     assert!(warned(&w, "DefaultSparkSystem is absent"), "{w:?}");
+    // spec: S-0316 claim 6 (no electric-bolt sparks either; the warning names them)
+    assert!(warned(&w, "electric-bolt"), "{w:?}");
     let (s, w) = sim(
         "[ParticleSystems]\n0=Fizz\n[Fizz]\nBehavesLike=Spark\n[CombatDamage]\nDefaultSparkSystem=Fizz\n",
         "",

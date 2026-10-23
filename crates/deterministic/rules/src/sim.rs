@@ -2822,6 +2822,22 @@ pub struct WeaponType {
     /// `IsMagBeam` (S-0301 claim 5).
     #[serde(default)]
     pub is_mag_beam: Option<bool>,
+    /// `IsElectricBolt`, the electric-bolt flag (S-0316 claims 1 to 13);
+    /// absent: no.
+    #[serde(default)]
+    pub is_electric_bolt: Option<bool>,
+    /// `IsAlternateColor`, the alternate-colour flag that only picks the
+    /// colour of a bolt's side strands (S-0316 claim 10); absent: no.
+    #[serde(default)]
+    pub is_alternate_color: Option<bool>,
+    /// `IsLaser`, the laser flag that wins over the electric-bolt flag
+    /// (S-0316 claim 2, S-0514 claim 23); absent: no.
+    #[serde(default)]
+    pub is_laser: Option<bool>,
+    /// `IsRadBeam`, the radiation-beam flag that the electric-bolt flag
+    /// wins over (S-0316 claim 2, S-0514 claim 23); absent: no.
+    #[serde(default)]
+    pub is_rad_beam: Option<bool>,
     /// `Spawner` (S-0301 claim 9).
     #[serde(default)]
     pub spawner: Option<bool>,

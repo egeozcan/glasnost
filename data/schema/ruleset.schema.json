@@ -13675,6 +13675,22 @@
           ],
           "default": null
         },
+        "is_alternate_color": {
+          "description": "`IsAlternateColor`, the alternate-colour flag that only picks the\ncolour of a bolt's side strands (S-0316 claim 10); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_electric_bolt": {
+          "description": "`IsElectricBolt`, the electric-bolt flag (S-0316 claims 1 to 13);\nabsent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "is_house_color": {
           "description": "`IsHouseColor`, the house-colour flag (S-0615 claim 15); absent:\nno.",
           "type": [
@@ -13683,8 +13699,24 @@
           ],
           "default": null
         },
+        "is_laser": {
+          "description": "`IsLaser`, the laser flag that wins over the electric-bolt flag\n(S-0316 claim 2, S-0514 claim 23); absent: no.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
         "is_mag_beam": {
           "description": "`IsMagBeam` (S-0301 claim 5).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_rad_beam": {
+          "description": "`IsRadBeam`, the radiation-beam flag that the electric-bolt flag\nwins over (S-0316 claim 2, S-0514 claim 23); absent: no.",
           "type": [
             "boolean",
             "null"
