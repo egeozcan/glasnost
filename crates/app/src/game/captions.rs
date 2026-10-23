@@ -1,20 +1,21 @@
 //! Captions for announcements (M8 step C3): each announcement the sound
 //! side starts (S-0701 claims 26 and 27) is shown as a line of text for a
 //! few seconds, so that a player who cannot hear it still reads it. The
-//! timing and the look are our own; the text is interim (Q-1735): no spec
-//! yet says which text goes with which announcement, so the caption shows
-//! the announcement's name from the player's own speech data.
+//! text is S-0701 claim 26's (answering Q-1735): the entry's text key in the
+//! player's own announcement data when present with a nonempty value, else
+//! the entry's name. The timing and the look are our own interface choices,
+//! which claim 26 lets stand (4 s, at most 3 at once, newest last).
 
 use glasnost_ui::draw::{DrawList, colour};
 use glasnost_ui::font;
 use glasnost_ui::geom::Rect;
 
 /// How long a caption stays, host milliseconds.
-// nocite: our own client setting (caption time)
+// spec: S-0701 claim 26 (each caption shown for 4 seconds: our interface choice, which the claim lets stand)
 pub const CAPTION_MS: i64 = 4000;
 
 /// The most captions shown at once (newest at the bottom).
-// nocite: our own client setting (caption lines)
+// spec: S-0701 claim 26 (at most 3 at once, newest last: our interface choice, which the claim lets stand)
 pub const CAPTION_LINES: usize = 3;
 
 /// The captions on screen.

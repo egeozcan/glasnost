@@ -114,6 +114,10 @@ pub struct HoverState {
     /// kept until another assignment, stopping, completion or failure
     /// (claim 18).
     pub held: Option<Pos>,
+    /// Switched off (claim 10): by the disabling of S-0405 claim 13 or by a
+    /// repair depot (S-0314 claim 21), until switched on again.
+    #[serde(default)]
+    pub off: bool,
 }
 
 impl HoverState {
@@ -141,6 +145,7 @@ impl HoverState {
             bomb_mark: false,
             retained: None,
             held: None,
+            off: false,
         }
     }
 }
@@ -158,10 +163,11 @@ pub fn is_hover(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| o.hover.is_some())
 }
 
-/// Whether the vehicle is switched off (claim 10): disabled by the loss of
-/// its control centre (S-0405 claim 13).
+/// Whether the vehicle is switched off (claim 10): by the disabling of
+/// S-0405 claim 13, or by a repair depot (S-0314 claim 21), until it is
+/// switched on again.
 pub fn switched_off(w: &World, id: ObjectId) -> bool {
-    is_hover(w, id) && crate::econ::power::unit_disabled(w, id)
+    state(w, id).is_some_and(|h| h.off)
 }
 
 /// The surface the vehicle stands on or over, plus [`DECK`] on a deck.
@@ -383,8 +389,9 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
     };
     take(w, id, false);
     let before = (o.pos.x, o.pos.y);
-    // spec: S-0503 State and ordering (not moving: no travel; height and spin still update); S-0314 claim 22 (a hovering vehicle whose locomotor a depot switched off cannot move, `quirks.depot_loss_strands_hover`)
-    if moving(w, id) && !crate::depot::locomotor_off(w, id) {
+    // spec: S-0503 State and ordering (not moving: no travel; height and spin still update); S-0314 Terms and claim 22 (a settled hovering vehicle that is down on the ground cannot move while it stays settled, `quirks.depot_loss_strands_hover`)
+    let stuck = crate::depot::settled(w, id) && hover_height(w, id) <= 0;
+    if moving(w, id) && !stuck {
         travel_turn(w, id, &u);
     }
     if w.obj(id).is_none() {
@@ -1224,11 +1231,18 @@ fn height(w: &mut World, id: ObjectId) -> bool {
     off && new_h == 0
 }
 
-/// Switching a hovering vehicle off or on (claim 10), from the disabling
-/// and re-enabling of S-0405 claim 13. `off`: the new state. Called after
-/// the vehicle's disabled flag changed.
-pub fn switched(w: &mut World, id: ObjectId, off: bool, was_powered: bool) {
-    if !off || !is_hover(w, id) {
+/// Switching a hovering vehicle off or on (claim 10): by the disabling and
+/// re-enabling of S-0405 claim 13, and by a repair depot (S-0314 claim 21
+/// and Changes for other specs). `off`: the new state. Each switch-off
+/// meets the claim's conditions on its own, so a repeated one of a vehicle
+/// still powered takes the draws again.
+pub fn switched(w: &mut World, id: ObjectId, off: bool) {
+    if !is_hover(w, id) {
+        return;
+    }
+    let was_powered = powered(w, id);
+    with(w, id, |h| h.off = off);
+    if !off {
         // spec: S-0503 claim 10 (switched on: the lift returns; an active spin is not cancelled)
         return;
     }

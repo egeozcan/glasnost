@@ -296,6 +296,12 @@ pub struct Projectile {
     /// weapon of their own and leave no radiation (S-0525 claim 1).
     #[serde(default)]
     pub airburst_child: bool,
+    /// The chain level of S-0318 Terms: 0 for a projectile that is not a
+    /// fragment, d + 1 for a fragment launched by a projectile of level d.
+    /// A fragment carries no weapon of its own and leaves no radiation
+    /// (S-0318 claim 5).
+    #[serde(default)]
+    pub chain: u8,
 }
 
 /// The unscaled damage multiplier of a projectile, ×1 in 1/256 (S-0518

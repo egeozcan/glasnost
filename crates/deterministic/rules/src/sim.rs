@@ -3006,6 +3006,12 @@ pub struct ProjectileType {
     /// `AirburstWeapon` (S-0306 claim 21).
     #[serde(default)]
     pub airburst_weapon: Option<String>,
+    /// `ShrapnelWeapon`, the fragment weapon (S-0318 Import mapping).
+    #[serde(default)]
+    pub shrapnel_weapon: Option<String>,
+    /// `ShrapnelCount`, the fragment count c (S-0318 Import mapping).
+    #[serde(default)]
+    pub shrapnel_count: Option<i32>,
     /// `Trailer`, an animation name (S-0306 claim 16).
     #[serde(default)]
     pub trailer: Option<String>,

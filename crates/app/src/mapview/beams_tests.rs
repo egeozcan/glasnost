@@ -94,6 +94,24 @@ fn beam_parameters_by_source() {
         Look::House { width: 1, .. }
     ));
     assert!(matches!(house(Source::Unit), Look::House { width: 2, .. }));
+    // spec: S-0318 claim 8 (a fragment's beam has thickness 1 whatever the attacker; without the flag the fragment weapon's colours)
+    assert_eq!(
+        house(Source::Fragment),
+        Look::House {
+            colour: l,
+            width: 1,
+            supported: false
+        }
+    );
+    assert_eq!(
+        weapon_look(Source::Fragment, colours, false, l),
+        Look::Ordinary {
+            inner: [1, 2, 3],
+            outer: [4, 5, 6],
+            spread: [7, 8, 9],
+            blink: false
+        }
+    );
     assert_eq!(
         weapon_look(Source::Unit, colours, false, l),
         Look::Ordinary {

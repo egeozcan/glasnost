@@ -9,9 +9,9 @@
 //! holds, valid only while the vehicle's contact is that depot, and the
 //! tether of the completed entry exchange), [`DepotState::queued`] (a
 //! queued entry, claim 23), [`DepotState::entering`] (the remembered
-//! depot, claim 23) and [`DepotState::loco_off`] (claim 22). The
-//! depot side is its *repair* behaviour's progress count (the phase) and
-//! [`DepotState::serviced`].
+//! depot, claim 23) and [`DepotState::settled`] (Terms, claims 21 and
+//! 22). The depot side is its *repair* behaviour's progress count (the
+//! phase), [`DepotState::serviced`] and [`DepotState::due`].
 //!
 //! Tether (claim 17): only the repeated entry request at a depot with the
 //! pad flag tethers a vehicle ([`pad_exchange`]); an ordinary depot's
@@ -49,9 +49,11 @@ pub struct DepotState {
     pub link: Option<Link>,
     /// A vehicle's queued entry for a depot (S-0314 claim 23).
     pub queued: Option<ObjectId>,
-    /// A vehicle's locomotor switched off by a settling step (S-0314
-    /// claims 21 and 22).
-    pub loco_off: bool,
+    /// A settled vehicle (S-0314 Terms, claims 21 and 22): made settled by
+    /// its movement arrival, a settling processing or a disabling; it can
+    /// outlast the contact.
+    #[serde(alias = "loco_off")]
+    pub settled: bool,
     /// A depot's serviced vehicle at its last repair processing (S-0314
     /// Edge cases, several contact places: a change restarts the phases).
     pub serviced: Option<ObjectId>,
@@ -67,11 +69,11 @@ pub struct DepotState {
     /// its modelled slots.
     #[serde(default)]
     pub slot_damaged: bool,
-    /// A depot's service ended with a step that sent the vehicle away
-    /// (S-0108 claim 20: the slot changes happened at that step), so its
-    /// next processing without contact makes no second change (Q-1620).
+    /// A working depot's tick at which its next repair step falls due
+    /// (S-0314 claim 6: the working phase is processed every tick, the steps
+    /// spaced by the step count).
     #[serde(default)]
-    pub sent_away: bool,
+    pub due: i32,
 }
 
 /// The phases of a depot's repair, kept in its *repair* behaviour's
@@ -115,7 +117,8 @@ pub fn is_depot(w: &World, k: ObjectId) -> bool {
 }
 
 /// A repair depot's slot that the simulation models (S-0108 claim 20,
-/// Terms: the building's animation slots; S-0314 claims 6 and 22).
+/// Terms: the building's animation slots; S-0314 claims 6 and 22),
+/// declared in S-0108 claim 12's restart order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DepotSlot {
     /// The *production* slot: while it runs, settling takes no step
@@ -341,16 +344,66 @@ pub(crate) fn release(w: &mut World, id: ObjectId) {
 /// Ends vehicle `id`'s depot contact; its queued entry stays.
 fn end_contact(w: &mut World, id: ObjectId) {
     let strand = w.rules().quirks.depot_loss_strands_hover;
+    let mut had = false;
     if let Some(o) = w.obj_mut(id) {
+        had = o.depot.link.is_some();
         if o.depot.link.is_some_and(|l| o.contact == Some(l.depot)) {
             o.contact = None;
         }
         o.depot.link = None;
-        if !strand {
-            // spec: S-0314 Edge cases (quirks.depot_loss_strands_hover off: losing depot contact switches the locomotor on)
-            o.depot.loco_off = false;
-        }
     }
+    if had && !strand {
+        // spec: S-0314 Edge cases and Terms (quirks.depot_loss_strands_hover off: losing contact with a depot ends being settled, and the vehicle is switched on again)
+        unsettle(w, id);
+    }
+}
+
+/// Makes vehicle `id` settled (S-0314 Terms, claim 21): a hovering vehicle
+/// is switched off in S-0503 claim 10's sense, its two draws taken when
+/// that claim's conditions hold. Also the repeated switch-off of a settled
+/// vehicle not yet down.
+fn settle(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id) {
+        o.depot.settled = true;
+    }
+    // spec: S-0314 claim 21 and Changes for other specs (S-0503 claim 10: switched off when it becomes settled and at each later settling processing that finds it within 200 leptons, settled, standing still and not yet down; each switch-off meets claim 10's conditions on its own)
+    crate::hover::switched(w, id, true);
+}
+
+/// Ends vehicle `id`'s being settled (S-0314 Terms): a hovering vehicle is
+/// switched on again, also while it is still disabled (claim 21).
+fn unsettle(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj_mut(id) else { return };
+    if !o.depot.settled {
+        return;
+    }
+    o.depot.settled = false;
+    // spec: S-0314 Terms and claim 21 (at every end of being settled a hovering vehicle is switched on again, with no exception for the disabled state)
+    crate::hover::switched(w, id, false);
+}
+
+/// The disabling of S-0405 claim 20 made the vehicle settled with its
+/// switch-off (S-0314 Terms, claim 21: whether or not it was settled or
+/// switched on before). The caller has already switched it off.
+pub(crate) fn disabled(w: &mut World, id: ObjectId) {
+    if let Some(o) = w.obj_mut(id)
+        && o.kind == Kind::Vehicle
+    {
+        // spec: S-0314 Terms and claim 21 (the switch-off of a disabling of S-0405 claim 20 makes the vehicle settled)
+        o.depot.settled = true;
+    }
+}
+
+/// The enabling of S-0405 claim 20 ends the vehicle's being settled
+/// (S-0314 Terms, claim 21).
+pub(crate) fn enabled(w: &mut World, id: ObjectId) {
+    // spec: S-0314 Terms and claim 21 (an enabling switches a settled vehicle on again and ends its being settled)
+    unsettle(w, id);
+}
+
+/// Whether vehicle `id` is settled (S-0314 Terms).
+pub fn settled(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| o.depot.settled)
 }
 
 /// Whether `k` has the obsolete-unloading flag: S-0314 claim 18 and S-0504
@@ -409,8 +462,8 @@ pub fn entering_depot(w: &World, id: ObjectId) -> bool {
     matches!(o.dest, Some(Target::Object(k)) if is_depot(w, k))
 }
 
-/// Whether the vehicle stands still: not moving and not turning (S-0504
-/// claim 8; S-0314 claim 6).
+/// Whether the vehicle stands still: not moving and not turning, for the
+/// early start of claim 17.
 fn still(w: &World, id: ObjectId) -> bool {
     !crate::occupancy::in_progress(w, id) && w.obj(id).is_some_and(|o| !o.body.turning(w.tick))
 }
@@ -483,7 +536,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
 /// (S-0207 claim 25), or its heading point, the track target, is present
 /// and differs horizontally from its position. Hovering: S-0503 claim 5's
 /// *is moving*.
-fn moving_destination(w: &World, id: ObjectId) -> bool {
+pub(crate) fn moving_destination(w: &World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0314 Terms (an order-level movement destination is needed in every row)
     if o.dest.is_none() {
@@ -573,6 +626,8 @@ pub fn movement_arrival(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.beh.queue(Some(Behaviour::Sleep));
     }
+    // spec: S-0314 Terms and claim 21 (the movement arrival in the docking-point cell makes the vehicle settled, whatever its state before; a hovering vehicle is switched off, with no draws since its behaviour is then enter)
+    settle(w, id);
     // spec: S-0314 claim 17 (revision 29, Q-1162 answered: arrival itself requests no map-east body turn, even for a tethered vehicle, and schedules none for a later enter processing; an existing driving turn holds sleep only under S-0215 claim 11's ordinary readiness test)
 }
 
@@ -597,8 +652,38 @@ fn serviced(w: &World, k: ObjectId) -> Option<ObjectId> {
     contacts(w, k).first().map(|&(_, v)| v)
 }
 
+/// The locomotor's movement report alone (S-0314 Terms, *moving
+/// destination*, and claim 21): the moving-destination test without its
+/// order-level destination. What decides, within 200 leptons of the
+/// docking point, whether a vehicle that is not settled, or hovering not
+/// down, stands still.
+fn movement_report(w: &World, id: ObjectId) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    if o.hover.is_some() {
+        // spec: S-0314 claims 17 and 21 (hovering: S-0503 claim 5's is moving)
+        return crate::hover::moving(w, id);
+    }
+    if let Some(d) = o.drive.as_ref() {
+        // spec: S-0314 claims 17 and 21 (driving or ship: the locomotor destination point present, or the heading point present and differing from the current horizontal position)
+        let heading = d
+            .track
+            .as_ref()
+            .is_some_and(|t| t.target != (o.pos.x, o.pos.y));
+        return crate::drive::goal_present(w, id) || heading;
+    }
+    // Other locomotors: their own movement test.
+    crate::occupancy::in_progress(w, id)
+}
+
+/// Whether a hovering vehicle is down on the ground (S-0314 Terms: S-0503
+/// claim 10's coming down to height 0); a vehicle that does not hover
+/// counts as down.
+fn down(w: &World, id: ObjectId) -> bool {
+    !crate::hover::is_hover(w, id) || crate::hover::hover_height(w, id) <= 0
+}
+
 /// A depot's *repair* processing (S-0314 claims 6, 21 and 22; S-0504 claim
-/// 8). Returns the delay.
+/// 8). Returns the delay, by claim 6's processing spacing table.
 pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
@@ -610,15 +695,12 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
         return d;
     }
     let Some(v) = serviced(w, k) else {
-        // Q-1610 interim: the lost contact is noticed at this scheduled processing (the next working step's due tick or settling retry); no processing is brought forward (S-0108 claim 20 says the same or the next tick).
+        // spec: S-0314 claims 6 and 22 (a lost contact is met at the processing already scheduled: the loss neither brings it forward nor puts it back; the working phase is processed every tick)
         let stage = w.obj(k).map_or(phase::WAITING, |b| b.beh.progress);
-        let sent = w
-            .obj_mut(k)
-            .is_some_and(|b| std::mem::take(&mut b.depot.sent_away));
-        // spec: S-0108 claim 20 (no longer in contact in waiting or working, or in settling with production or special-2 running: production and special-2 stop, special-3 and active-1 start; when the depot sent the vehicle away these changes came at that step, Q-1620 interim: none again here)
+        // spec: S-0108 claim 20 (no longer in contact in waiting or working, or in settling with production or special-2 running: production and special-2 stop, special-3 and active-1 start); S-0314 claim 22 (after a send-away the depot is already in settling, so that processing follows the settling row)
         let ended = match stage {
             phase::SETTLING => crate::depot_anim::production_or_special2(w, k),
-            _ => !sent,
+            _ => true,
         };
         if ended {
             crate::depot_anim::service_ended(w, k);
@@ -631,20 +713,16 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
             return 1;
         }
         if stage == phase::SETTLING && slot_running(w, k, DepotSlot::Special3) {
-            // spec: S-0314 claim 22 (revision 31: a settling depot with no contact stays in its repair behaviour, checking every tick, while its special-3 slot animation runs)
+            // spec: S-0314 claims 6 and 22 (settling, no contact, special-3 running after this processing's slot changes: the no-contact settling hold, 1 tick later)
             return 1;
         }
-        // spec: S-0314 claim 22 (revision 31: in waiting, or settling once special-3 no longer runs, a depot left without any contact returns to guard at that processing, without an animation wait); S-0108 claim 20 (in waiting the depot leaves its repair behaviour)
+        // spec: S-0314 claims 6 and 22 (in waiting, or settling with no special-3 running, a depot left without any contact returns to guard at that processing, without an animation wait); S-0108 claim 20 (in waiting the depot leaves its repair behaviour)
         if let Some(b) = w.obj_mut(k) {
             b.depot.serviced = None;
             b.beh.queue_and_start_at_once(Behaviour::Guard, t, stale);
         }
         return 1;
     };
-    if let Some(b) = w.obj_mut(k) {
-        // A contact again: a send-away's slot changes no longer stand for a contact loss (Q-1620 interim).
-        b.depot.sent_away = false;
-    }
     if w.obj(k).is_some_and(|b| b.depot.serviced != Some(v))
         && let Some(b) = w.obj_mut(k)
     {
@@ -663,85 +741,87 @@ pub fn process_repair(w: &mut World, k: ObjectId) -> i32 {
     };
     match stage {
         phase::WAITING => {
-            // spec: S-0314 claim 6 and S-0504 claim 8 (waiting: standing still strictly within the starting distance of the docking point schedules settling 3 ticks later; otherwise D)
+            // spec: S-0314 claim 6 and S-0504 claim 8 (waiting: standing still strictly within the starting distance of the docking point schedules settling 3 ticks later; otherwise D); claim 21 (the depot's question whether it is moving is the moving-destination test)
             if crate::naval::waiting_gate(w, v, dock) {
                 set(w, phase::SETTLING);
                 crate::naval::SETTLING_DELAY
             } else {
+                // spec: S-0314 Terms and claim 21 (a waiting processing that does not accept the vehicle ends its being settled)
+                unsettle(w, v);
                 d
             }
         }
         phase::SETTLING => {
             if slot_running(w, k, DepotSlot::Production) {
-                // spec: S-0314 claim 6 (revision 31: while the depot's production slot animation runs, settling takes no repair step and rechecks after 1 tick; checked before claim 21's movement rules, the state table's first settling row)
+                // spec: S-0314 claims 6 and 21 (while the depot's production slot animation runs, settling takes no repair step, does not make the vehicle settled whatever its distance, and rechecks after 1 tick)
                 return 1;
             }
             let near = w
                 .obj(v)
                 .is_some_and(|o| crate::naval::depot_distance(o.pos, dock) < SETTLING_HOLD);
-            if !still(w, v) {
-                if near {
-                    // spec: S-0314 claim 21 (settling: within 200 leptons and still moving, the depot checks again on the next tick)
+            if near {
+                if !(settled(w, v) && down(w, v)) {
+                    // spec: S-0314 Terms and claim 21 (within 200 leptons, not settled or hovering not down: no step and a recheck after 1 tick, moving or not; whether it stands still is its locomotor's movement report alone; standing still, this processing makes it settled, and a settled hovering vehicle not yet down is switched off again)
+                    if !movement_report(w, v) {
+                        settle(w, v);
+                    }
                     return 1;
                 }
-                // spec: S-0314 claim 21 (settling, 200 leptons or more and moving: no step, settling and contact kept, the locomotor switched on unless ion-sensitive shutdown is in force, which is never (no ion storms are modelled), and checked again after D ticks)
                 if let Some(o) = w.obj_mut(v) {
-                    o.depot.loco_off = false;
+                    // spec: S-0314 Terms and claim 21 (a settled vehicle within 200 leptons, down if it hovers, takes its settling step at this processing, its order-level destination empty from then on; the removal is no receipt of a destination, neither stops its locomotor nor switches it on, and does not end its being settled; Open questions: so it counts as not moving)
+                    o.dest = None;
                 }
+            } else if moving_destination(w, v) {
+                // spec: S-0314 claim 21 (settling, 200 leptons or more and moving by the moving-destination test: no step, settling and contact kept, the vehicle stops being settled, and checked again after D ticks)
+                unsettle(w, v);
                 return d;
             }
-            if near {
-                // spec: S-0314 claim 21 (once it stands still within 200 leptons, the depot switches its locomotor off before stepping; a vehicle whose locomotor is already off and which has a destination has its movement stopped; at 200 leptons or more neither adjustment applies and the stationary vehicle proceeds to the repair step)
-                let off = w.obj(v).is_some_and(|o| o.depot.loco_off);
-                if off && w.obj(v).is_some_and(|o| o.dest.is_some()) {
-                    crate::drive::stop(w, v);
-                }
-                if let Some(o) = w.obj_mut(v) {
-                    o.depot.loco_off = true;
-                }
-            }
+            // spec: S-0314 claim 21 (at 200 leptons or more, being settled and being down play no part: a stationary vehicle proceeds to the settling repair step)
             match heal::repair_step(w, v) {
-                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement, also for the retries after a failed working departure; a failed departure while already settling retains that phase and retries after D ticks)
+                // spec: S-0314 claim 6 (settling, not needed: sent away at once, no announcement, also for the retries after a failed departure; sent away or not, the next processing comes D ticks later)
                 Some(StepOutcome::NotNeeded) | None => {
-                    if send_away(w, k, v) {
-                        1
-                    } else {
-                        d
-                    }
+                    let _ = send_away(w, k, v);
+                    d
                 }
                 // spec: S-0314 claim 6 (settling, cannot pay: asks again at its next processing, D ticks later)
                 Some(StepOutcome::CannotPay) => d,
-                // spec: S-0314 claim 6 (settling, more needed or done: working; the second step falls due D + K_u − 1 ticks later)
+                // spec: S-0314 claim 6 (settling, more needed or done: working; the first working processing D ticks later, the second step falling due D + K_u − 1 ticks later)
                 Some(StepOutcome::MoreNeeded | StepOutcome::Done) => {
                     set(w, phase::WORKING);
+                    if let Some(b) = w.obj_mut(k) {
+                        b.depot.due = t.wrapping_add(d).wrapping_add(ku).wrapping_sub(1);
+                    }
                     // spec: S-0108 claim 20 (entering the working phase: special-1 starts, active-1 and idle stop)
                     crate::depot_anim::working_entered(w, k);
-                    d.wrapping_add(ku).wrapping_sub(1)
+                    d
                 }
             }
         }
         _ => {
-            if !still(w, v) {
-                // spec: S-0314 claims 6 and 21 (working: a step that falls due while the vehicle is moving is taken on the first tick it stands still)
+            // spec: S-0314 claim 6 (working, every outcome: the next processing 1 tick later; the step spacing comes from K_u, not from the processings)
+            if w.obj(k).is_some_and(|b| t < b.depot.due) {
+                return 1;
+            }
+            if moving_destination(w, v) {
+                // spec: S-0314 claims 6 and 21 (working: only movement defers a step; a step that falls due while the vehicle is moving is taken on the first tick it stands still)
                 return 1;
             }
             // spec: S-0314 claim 21 and Edge cases (working: no distance test; a docked vehicle standing still anywhere receives its steps, quirks.depot_remote_repair)
             match heal::repair_step(w, v) {
                 // spec: S-0314 claim 6 (more needed: the vehicle stays; the next step K_u ticks later)
-                Some(StepOutcome::MoreNeeded) => ku,
-                // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, attempted even when the departure then fails; the vehicle is sent away)
+                Some(StepOutcome::MoreNeeded) => {
+                    if let Some(b) = w.obj_mut(k) {
+                        b.depot.due = t.wrapping_add(ku);
+                    }
+                    1
+                }
+                // spec: S-0314 claim 6 (done or not needed: the repair-complete announcement for the depot's owner, attempted even when the departure then fails; the depot is back in settling on the tick of the step, whether or not the vehicle is sent away, and its next processing comes 1 tick later)
                 Some(StepOutcome::Done | StepOutcome::NotNeeded) | None => {
                     announce(w, k, v, crate::combat::effects::Sound::UnitRepaired);
                     // spec: S-0108 claim 20 (a working step answers done or not needed: the slot changes come on the tick of that step, before the contact is released)
                     crate::depot_anim::service_ended(w, k);
-                    if send_away(w, k, v) {
-                        if let Some(b) = w.obj_mut(k) {
-                            b.depot.sent_away = true;
-                        }
-                    } else {
-                        // spec: S-0314 claim 6 (a failed departure from working leaves the vehicle in settling with a 1-tick retry)
-                        set(w, phase::SETTLING);
-                    }
+                    set(w, phase::SETTLING);
+                    let _ = send_away(w, k, v);
                     1
                 }
                 Some(StepOutcome::CannotPay) => {
@@ -815,10 +895,6 @@ fn send_away(w: &mut World, k: ObjectId, v: ObjectId) -> bool {
     };
     // spec: S-0314 claim 6 (a selected destination releases contact and tether and clears queued entry)
     release(w, v);
-    if let Some(ob) = w.obj_mut(v) {
-        // spec: S-0314 claims 21 and 22 (the locomotor is switched on when the vehicle receives a destination while a depot occupies its cell)
-        ob.depot.loco_off = false;
-    }
     // spec: S-0314 claims 6 and 21 (the destination the depot gives replaces any destination the player gave while docked)
     crate::econ::assign_destination(w, v, Some(dest));
     if let Some(ob) = w.obj_mut(v) {
@@ -1211,14 +1287,16 @@ pub fn depot_destroyed(w: &mut World, k: ObjectId, v: ObjectId) {
     }
 }
 
-/// A destination was given to vehicle `id` (S-0314 claim 22): one whose
-/// cell holds a repair depot or a tank bunker has its locomotor switched on
-/// again.
-pub fn destination_given(w: &mut World, id: ObjectId) {
-    let Some(o) = w.obj(id) else { return };
-    if !o.depot.loco_off || o.dest.is_none() {
+/// A destination assignment of vehicle `id` (S-0314 Terms, claim 22): one
+/// that takes effect (`effective`: S-0207 claim 27) while a repair depot or
+/// a tank bunker occupies the vehicle's cell ends its being settled, a
+/// cleared destination included.
+pub fn destination_given(w: &mut World, id: ObjectId, effective: bool) {
+    // spec: S-0314 Terms (only an assignment that takes effect counts: S-0207 claim 27 rejects one that leaves the destination unchanged, empty to empty included, unless a destination-refresh state is present; a rejected assignment is not a receipt)
+    if !effective || !settled(w, id) {
         return;
     }
+    let Some(o) = w.obj(id) else { return };
     let c = o.pos.cell();
     let on = w
         .cells
@@ -1233,17 +1311,8 @@ pub fn destination_given(w: &mut World, id: ObjectId) {
                         .is_some_and(|r| r.building.unit_repair || r.raw.bunker.unwrap_or(false))
             })
         });
-    if on && let Some(ob) = w.obj_mut(id) {
-        // spec: S-0314 claim 22 (the locomotor is switched on again when the vehicle receives a destination while a depot or tank bunker occupies its cell)
-        ob.depot.loco_off = false;
+    if on {
+        // spec: S-0314 Terms and claim 22 (a destination received while a depot or tank bunker occupies its cell, an empty one included, ends being settled; the vehicle is switched on again)
+        unsettle(w, id);
     }
-}
-
-/// Whether a vehicle's locomotor is switched off by a depot's settling step
-/// (S-0314 claims 21 and 22). The hovering locomotor of S-0503 asks it
-/// (`hover::tick`): a hovering vehicle with its locomotor switched off cannot move
-/// (`quirks.depot_loss_strands_hover`); no such effect was found for other
-/// land locomotors, so the driving and ship locomotors ignore it.
-pub fn locomotor_off(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.depot.loco_off)
 }

@@ -191,6 +191,7 @@ async fn smoke_async(
                         | Effect::Disc { .. }
                         | Effect::Beam { .. }
                         | Effect::Line { .. }
+                        | Effect::FragmentLine { .. }
                         | Effect::Bolt { .. }
                         | Effect::Wave { .. }
                         | Effect::RailLine { .. }

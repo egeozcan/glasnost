@@ -109,7 +109,7 @@ fn rescale(w: &World, v: [F64; 3], l: F64) -> [F64; 3] {
 /// Builds a velocity from a launch facing, a pitch facing and a start speed
 /// (S-0306 claim 7, F1).
 // spec: S-0306 F1 (three velocity components)
-fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64; 3] {
+pub(crate) fn initial_velocity(w: &World, yaw: i32, pitch: i32, s: i32) -> [F64; 3] {
     let r = w.rules();
     let mode = r.mode;
     // spec: S-0306 F1 (s₀ = s when s > 0, 100 when s = 0; quirks.zero_speed_launch)
@@ -494,6 +494,7 @@ pub fn launch(
         vehicle_scalable: o.kind == Kind::Vehicle && p.scalable,
         airburst_child: false,
         multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
+        chain: 0, // spec: S-0318 Terms (a projectile that is not a fragment has chain level 0)
     };
     w.projectiles.insert(id, proj);
     if o.kind == Kind::Vehicle
@@ -967,7 +968,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             return;
         }
         let pos = pr.pos;
-        explode(w, &mut pr, &p, pos, true);
+        explode(w, &mut pr, &p, pos, pos, true);
         remove(w, id);
         crate::parasite::carrier_ended(w, id, pr.weapon, true);
         return;
@@ -1279,7 +1280,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 .is_some_and(|u| u.jumpjet);
             let arrival = rows.arrival || (rows.passed && jumpjet);
             let reached = rows.reached;
-            let pt = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
+            let (burst, pt) = detonation_point(w, &pr, &p, point, arrival, reached, speed_start);
             // spec: S-0514 claim 20 (nuke-making is the last row: a higher selected row replaces it)
             if special_of(w, pr.weapon, pr.target) == Some(Special::NukeMake) {
                 // spec: S-0513 claim 8 (a missile-maker warhead does no damage at its burst: it is replaced by the falling missile, claim 9)
@@ -1299,7 +1300,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
                 }
             }
             pr.pos = pt;
-            explode(w, &mut pr, &p, pt, false);
+            explode(w, &mut pr, &p, pt, burst, false);
             remove(w, id);
             // spec: S-0614 claim 1 (when the projectile detonates, the parasite tries to latch on)
             crate::parasite::carrier_ended(w, id, pr.weapon, true);
@@ -1361,7 +1362,8 @@ fn proximity(w: &World, pr: &Projectile, p: Pos) -> Option<Pos> {
     (d < 128 && !excluded).then_some(o.pos)
 }
 
-/// The detonation point of S-0306 claim 20 (a) to (c).
+/// The burst point of S-0318 Terms (the point that S-0306 claim 20 (a)
+/// and (b) leave) and the detonation point of S-0306 claim 20 (a) to (c).
 fn detonation_point(
     w: &World,
     pr: &Projectile,
@@ -1370,7 +1372,7 @@ fn detonation_point(
     arrival: bool,
     reached: bool,
     speed_start: F64,
-) -> Pos {
+) -> (Pos, Pos) {
     let mode = w.rules().mode;
     let mut pt = point;
     // spec: S-0306 claim 20 (a) (a negative height above the surface is raised to 0)
@@ -1378,9 +1380,9 @@ fn detonation_point(
     if pt.z < surf {
         pt.z = surf;
     }
-    let Some(t) = pr.target else { return pt };
+    let Some(t) = pr.target else { return (pt, pt) };
     if p.inaccurate || p.airburst {
-        return pt;
+        return (pt, pt);
     }
     let rp = ref_point(w, t);
     // spec: S-0306 claim 20 (b) (arrival always; a reached row when ν′ ≤ max(2|V|, 128))
@@ -1399,6 +1401,8 @@ fn detonation_point(
     if snap {
         pt = rp;
     }
+    // spec: S-0318 Terms (the burst point is the point after S-0306 claim 20 (a) and (b); (c) moves only the detonation point)
+    let burst = pt;
     // spec: S-0306 claim 20 (c) (D_R and D_S from the point (a) and (b) leave)
     let dr = d3(w, pt, rp);
     let ds = match t {
@@ -1421,18 +1425,28 @@ fn detonation_point(
         _ => 42,
     };
     // spec: S-0306 claim 20 (c) (below the threshold and no electromagnetic flag: the target point; else D_R below 32: the reference point)
-    if !em && ds < threshold {
+    let det = if !em && ds < threshold {
         aim_target_point(w, t)
     } else if dr < 32 {
         rp
     } else {
         pt
-    }
+    };
+    (burst, det)
 }
 
 /// The detonations of a projectile (S-0306 claim 21) and their projectile
 /// effects (S-0303 claims 21 and 22).
-fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, _after_wait: bool) {
+/// `burst` is the burst point of S-0318 Terms, from which every detonation
+/// launches its fragments.
+fn explode(
+    w: &mut World,
+    pr: &mut Projectile,
+    p: &ProjectileRules,
+    point: Pos,
+    burst: Pos,
+    _after_wait: bool,
+) {
     let rules = w.rules_arc();
     let half = rules.quirks.ranged_draw_half_span;
     let wr = rules.combat.weapon(pr.weapon).clone();
@@ -1449,9 +1463,12 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     }
     if p.airburst {
         // spec: S-0525 claim 1 (the airburst projectile's own detonation leaves radiation with its own weapon; its nine children carry no weapon and leave none)
-        if !pr.airburst_child {
+        // spec: S-0318 claim 5 (a fragment carries no weapon and leaves no radiation)
+        if !pr.airburst_child && pr.chain == 0 {
             crate::radiation::detonation(w, pr.weapon, point.cell());
         }
+        // spec: S-0318 claim 1 (an airburst projectile's one detonation bursts before its area damage and its nine children)
+        crate::combat::shrapnel::burst(w, pr, p, burst, special);
         let res = detonation_inner(
             w,
             pr.weapon,
@@ -1475,9 +1492,12 @@ fn explode(w: &mut World, pr: &mut Projectile, p: &ProjectileRules, point: Pos, 
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
         // spec: S-0525 claim 1 (each detonation of a projectile with a cluster count above 1 leaves radiation at its own point; a child of an airburst leaves none)
-        if !pr.airburst_child {
+        // spec: S-0318 claim 5 (a fragment carries no weapon and leaves no radiation)
+        if !pr.airburst_child && pr.chain == 0 {
             crate::radiation::detonation(w, pr.weapon, q.cell());
         }
+        // spec: S-0318 claim 1 and State and ordering (each detonation of a cluster tests and bursts afresh from the same burst point, after the radiation and before the area damage)
+        crate::combat::shrapnel::burst(w, pr, p, burst, special);
         detonation_inner(
             w,
             pr.weapon,
@@ -1550,6 +1570,7 @@ fn airburst_children(w: &mut World, pr: &Projectile, aw: WeaponId) {
             vehicle_scalable: false,
             airburst_child: true,
             multiplier: 256, // spec: S-0518 claim 9 (every projectile starts with the multiplier 256)
+            chain: pr.chain, // spec: S-0318 Terms (only a fragment is a level below the projectile that launched it)
         };
         w.projectiles.insert(id, child);
         w.update.enter(id);

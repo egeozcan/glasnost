@@ -114,6 +114,8 @@ pub enum Source {
     Building,
     /// A vehicle's, infantry unit's or aircraft's laser weapon.
     Unit,
+    /// A shrapnel fragment's beam (S-0318 claim 8), whatever the attacker.
+    Fragment,
 }
 
 /// The look of a laser weapon's beam (S-0518 claim 18): `colours` the
@@ -137,6 +139,8 @@ pub fn weapon_look(source: Source, colours: [[u8; 3]; 3], house: bool, l: [u8; 3
         Source::Prism(_) => (5, true),
         Source::Building => (1, false),
         Source::Unit => (2, false),
+        // spec: S-0318 claim 8 (a fragment's beam has thickness 1 whatever the attacker's type)
+        Source::Fragment => (1, false),
     };
     // spec: S-0518 claim 18 (with the flag the inner colour is the firer's L; the house-colour drawing reads only it)
     Look::House {
@@ -1325,6 +1329,25 @@ impl Lines {
                     // spec: S-0316 claim 2 (the bolt wins over the radiation beam: no beam flash; the bolt is drawn from Effect::Bolt)
                     LineEffect::Bolt | LineEffect::None => {}
                 }
+            }
+            Effect::FragmentLine {
+                attacker,
+                weapon,
+                from,
+                to,
+            } => {
+                let wr = rules.combat.weapon(weapon);
+                let house = w.obj(attacker).and_then(|o| o.owner);
+                // spec: S-0318 claim 8 (the look of S-0518 claim 18 for a laser shot of the fragment weapon by the attacker, thickness 1)
+                let look = weapon_look(
+                    Source::Fragment,
+                    wr.laser_colours.map(channels),
+                    wr.house_colour,
+                    self.laser(house),
+                );
+                // spec: S-0318 claim 8 (from the burst point, a = 0 whatever the attacker; the fragment weapon's laser duration, S-0518 claim 18)
+                self.beams
+                    .push(Beam::new(from, to, 0, now, wr.laser_duration, NONE, look));
             }
             Effect::RailLine {
                 system_type,

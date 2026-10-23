@@ -420,13 +420,14 @@ impl Player {
         self.k = self.k.saturating_sub(self.step);
     }
 
-    /// Continues from image frame `frame`: the stage becomes `frame` − *a*,
-    /// so the next drawing shows that image frame (S-0108 Terms, starting
-    /// a slot that already holds an animation).
-    pub fn continue_from(&mut self, frame: i32) {
-        // spec: S-0108 Terms (the new animation continues from the old one's image frame) and
-        // S-0109 claim 1 (image frame a + k)
-        self.k = frame.saturating_sub(self.play.start);
+    /// Keeps stage `k` of the animation this one replaces (S-0108 claim
+    /// 25): the new animation's stage starts there, showing image frame
+    /// *a* + *k* of its own type, its remaining passes and step direction
+    /// its own creation values. A stage beyond its range is not limited:
+    /// it plays on from there by S-0109's ordinary rules.
+    pub fn keep_stage(&mut self, k: i32) {
+        // spec: S-0108 claim 25 (the stage is kept, not the image frame; the passes are not kept; a kept stage beyond the new type's range is not limited)
+        self.k = k;
     }
 
     /// Makes the current pass the last: the remaining passes become 0

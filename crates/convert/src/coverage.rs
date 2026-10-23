@@ -57,7 +57,12 @@ const CONVERTED: &[(&str, &str, Outcome, &str)] = &[
     ("countries", "ParentCountry", Outcome::Field, "S-0006"),
     ("vehicles", "DeploysInto", Outcome::Field, "S-0004"),
     ("projectiles", "AirburstWeapon", Outcome::Field, "S-0004"),
-    ("projectiles", "ShrapnelWeapon", Outcome::Field, "S-0004"),
+    (
+        "projectiles",
+        "ShrapnelWeapon",
+        Outcome::Field,
+        "S-0004, S-0318",
+    ),
     (
         "particle_systems",
         "HoldsWhat",

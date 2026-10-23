@@ -592,6 +592,18 @@ pub struct Quirks {
     // spec: S-0303 table T1
     #[serde(default = "on")]
     pub spread_ring_eleven: bool,
+    /// Only the first-listed object of a visited cell can take a fragment, so an own or allied object listed first blocks the cell; off: the first object in listing order that passes the test.
+    // spec: S-0318 claim 3 and Edge cases
+    #[serde(default = "on")]
+    pub shrapnel_first_listed_only: bool,
+    /// Terrain objects, which have no owning house, take fragments; off: objects without an owning house are not candidates.
+    // spec: S-0318 claim 3 and Edge cases
+    #[serde(default = "on")]
+    pub shrapnel_hits_terrain: bool,
+    /// A building takes a fragment in every visited cell where it is first-listed; off: each object takes at most one fragment from one burst's scan.
+    // spec: S-0318 claim 3 and Edge cases
+    #[serde(default = "on")]
+    pub shrapnel_building_per_cell: bool,
     /// Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.
     // spec: S-0303 claim 6
     #[serde(default = "on")]
@@ -1460,7 +1472,7 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases; S-0504 claim 14
     #[serde(default = "on")]
     pub depot_loss_leaves_sleep: bool,
-    /// A hovering vehicle whose depot is sold or destroyed after settling keeps its locomotor switched off and never moves again; off: losing contact with a depot switches its locomotor on. The depot cycle keeps the switched-off state (`depot::locomotor_off`), which the hovering locomotor (S-0503) obeys.
+    /// A hovering vehicle whose depot is destroyed after it became settled, or sold without the vehicle receiving any destination before the depot's removal, stays settled and switched off and, once down on the ground, never moves again; off: losing contact with a depot ends its being settled, so it is switched on again and rises.
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,
@@ -2068,6 +2080,9 @@ impl Default for Quirks {
             readiness_heal_over_max: true,
             area_damage_per_foundation_cell: true,
             spread_ring_eleven: true,
+            shrapnel_first_listed_only: true,
+            shrapnel_hits_terrain: true,
+            shrapnel_building_per_cell: true,
             ground_detonation_misses_aircraft: true,
             flying_search_sectors: true,
             flying_candidates_unfiltered: true,
@@ -2740,6 +2755,15 @@ impl Quirks {
                 self.area_damage_per_foundation_cell,
             ),
             ("spread_ring_eleven", self.spread_ring_eleven),
+            (
+                "shrapnel_first_listed_only",
+                self.shrapnel_first_listed_only,
+            ),
+            ("shrapnel_hits_terrain", self.shrapnel_hits_terrain),
+            (
+                "shrapnel_building_per_cell",
+                self.shrapnel_building_per_cell,
+            ),
             (
                 "ground_detonation_misses_aircraft",
                 self.ground_detonation_misses_aircraft,

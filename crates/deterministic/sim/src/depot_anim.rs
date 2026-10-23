@@ -95,9 +95,9 @@ pub fn running(w: &World, k: ObjectId, slot: DepotSlot) -> bool {
     w.obj(k).is_some_and(|o| o.depot.slots.contains_key(&slot))
 }
 
-/// Creates the animation of type `name` for depot `k`'s `slot`, continuing
-/// from image frame `from` when it replaces a running one. `None` when the
-/// name names no animation type (S-0108 Terms: nothing happens).
+/// Creates the animation of type `name` for depot `k`'s `slot`, keeping
+/// stage `from` when it replaces a running one (S-0108 claim 25). `None`
+/// when the name names no animation type (S-0108 Terms: nothing happens).
 fn create(
     w: &mut World,
     k: ObjectId,
@@ -133,9 +133,9 @@ fn create(
         &mut env,
         &AnimQuirks::default(),
     );
-    if let Some(f) = from {
-        // spec: S-0108 Terms (a running slot is replaced; the new animation continues from the old one's image frame)
-        player.continue_from(f);
+    if let Some(k) = from {
+        // spec: S-0108 claim 25 (a running slot is replaced: the new animation keeps the replaced one's stage, and takes its passes afresh)
+        player.keep_stage(k);
     }
     w.depot_anims.anims.insert(
         id,
@@ -173,7 +173,7 @@ pub fn start(w: &mut World, k: ObjectId, slot: DepotSlot) {
     let old = w.obj(k).and_then(|o| o.depot.slots.get(&slot).copied());
     let from = old
         .and_then(|a| w.depot_anims.anims.get(&a))
-        .map(|a| a.player.frame());
+        .map(|a| a.player.stage());
     let Some(id) = create(w, k, slot, &name, from) else {
         return;
     };
@@ -196,18 +196,19 @@ pub fn stop(w: &mut World, k: ObjectId, slot: DepotSlot) {
 
 /// The condition swap of S-0108 claim 12 for depot `k`'s modelled slots:
 /// the slot condition becomes `damaged`, and every running slot restarts
-/// with its name for it, continuing from its image frame; a slot whose
-/// name for it is empty keeps its animation.
+/// with its name for it, keeping its stage (claim 25), in claim 12's fixed
+/// slot order; a slot whose name for it is empty keeps its animation.
 fn swap(w: &mut World, k: ObjectId, damaged: bool) {
     let Some(o) = w.obj_mut(k) else { return };
     o.depot.slot_damaged = damaged;
     let slots: Vec<(DepotSlot, ObjectId)> = o.depot.slots.iter().map(|(s, a)| (*s, *a)).collect();
+    // spec: S-0108 claim 12 (the running slots are restarted one after another in the fixed order upgrade-1 … idle, of which production comes before special-1 to special-3: DepotSlot's order; each takes its creation draws as it is restarted)
     for (slot, old) in slots {
         // spec: S-0108 claim 12 (the damaged name when now damaged, the normal name when not; a slot whose name for the new condition is empty keeps its animation)
         let Some(name) = name_of(w, k, slot, damaged) else {
             continue;
         };
-        let from = w.depot_anims.anims.get(&old).map(|a| a.player.frame());
+        let from = w.depot_anims.anims.get(&old).map(|a| a.player.stage());
         if let Some(id) = create(w, k, slot, &name, from) {
             remove(w, old);
             if let Some(o) = w.obj_mut(k) {

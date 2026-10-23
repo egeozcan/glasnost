@@ -918,9 +918,13 @@ pub fn tethered_in_own_cell(w: &World, id: ObjectId) -> bool {
 /// deactivation sound only for one that was enabled.
 fn disable(w: &mut World, id: ObjectId) {
     let was = unit_disabled(w, id);
-    apply_disabled(w, id, true);
-    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling, the guard reset of S-0215 claim 9, removal from the selection, the locomotor switched off; the 1-to-0 transition does this also to a vehicle already disabled)
+    set_flag(w, id, true);
+    // spec: S-0405 claim 20 (revision 20, Q-1503 answered: at disabling, the guard reset of S-0215 claim 9, removal from the selection, the locomotor switched off, in that order; the 1-to-0 transition does this also to a vehicle already disabled)
     guard_reset(w, id);
+    // spec: S-0405 claim 20 and S-0503 claim 10 (the locomotor switched off after the guard reset, whose cleared destination can first have switched a settled vehicle on, S-0314 claim 21; powered is judged then)
+    crate::hover::switched(w, id, true);
+    // spec: S-0314 Terms and claim 21 (the disabling's switch-off makes the vehicle settled, whether or not it was settled or switched on before)
+    crate::depot::disabled(w, id);
     w.effects
         .push(crate::combat::effects::Effect::Deactivated { unit: id });
     if !was {
@@ -934,9 +938,12 @@ fn disable(w: &mut World, id: ObjectId) {
 /// sound only for one that was disabled.
 fn enable(w: &mut World, id: ObjectId) {
     let was = unit_disabled(w, id);
-    apply_disabled(w, id, false);
+    set_flag(w, id, false);
     // spec: S-0405 claim 20 (at enabling, each vehicle claim 13 enables gets the guard reset and its locomotor switched on again, whether or not it was disabled)
     guard_reset(w, id);
+    crate::hover::switched(w, id, false);
+    // spec: S-0314 Terms and claim 21 (an enabling ends a vehicle's being settled)
+    crate::depot::enabled(w, id);
     if was {
         // spec: S-0405 claim 20 (a disabled vehicle that becomes enabled plays its type's activation sound)
         activation_sound(w, id, crate::combat::effects::Sound::Activate);
@@ -970,18 +977,19 @@ pub(crate) fn guard_reset(w: &mut World, id: ObjectId) {
     super::assign_destination(w, id, None);
 }
 
-/// Sets a vehicle's disabled flag. A hovering vehicle is switched off when
-/// the flag becomes set (S-0503 claim 10).
-pub fn apply_disabled(w: &mut World, id: ObjectId, disabled: bool) {
-    let was = unit_disabled(w, id);
-    let was_powered = crate::hover::powered(w, id);
+/// Sets a vehicle's disabled flag.
+fn set_flag(w: &mut World, id: ObjectId, disabled: bool) {
     if let Some(o) = w.obj_mut(id) {
         o.econ.building.unit_disabled = disabled;
     }
-    if disabled && !was {
-        // spec: S-0503 claim 10 (a hovering vehicle is switched off by the disabling of S-0405 claim 13)
-        crate::hover::switched(w, id, true, was_powered);
-    }
+}
+
+/// Sets a vehicle's disabled flag and switches a hovering vehicle off or
+/// on with it (S-0503 claim 10), without claim 20's other effects.
+pub fn apply_disabled(w: &mut World, id: ObjectId, disabled: bool) {
+    set_flag(w, id, disabled);
+    // spec: S-0503 claim 10 (a hovering vehicle is switched off by the disabling of S-0405 claim 13, and switched on again by its re-enabling)
+    crate::hover::switched(w, id, disabled);
 }
 
 /// Whether a vehicle is disabled by the loss of its control centre

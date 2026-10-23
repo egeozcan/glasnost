@@ -109,7 +109,7 @@ pairings, before this step, with what our games show:
 | rank | record, pairing | ours (all six seeds of each side) | candidate cause |
 |---|---|---|---|
 | 1 | M-0001 LTNK against ROBO | the ROBO are disabled (no shots) and the LTNK destroy all of them in every game; in the stock games a seed-dependent part survives | Q-1710 |
-| 2 | M-0001 YTNK against SREF | YTNK win by the first sample at full value; the SREF fire few shots; the front column of YTNK all take equal damage | Q-1714 |
+| 2 | M-0001 YTNK against SREF | YTNK win by the first sample at full value; the SREF fire few shots; the front column of YTNK all take equal damage | Q-1714; since M8 A3 intake 6 S-0318's shrapnel fragments answer it in part and the pairing passes (ours 9/3 against stock 8/4; row left 0.183 against 0.122) |
 | 3 | M-0001 MIND against E2 | the column side wins every game | the open mind-control item of *Arena mode (M7b)*; Q-1713 for E2 on side A |
 | 4 | M-0001 YTNK against E2 | side B ends `none` in every game | Q-1713 |
 | 5 | M-0001 TELE against BFRT | the BFRT take no target and fire no shot in 6080 frames; the TELE fire thousands of shots at one BFRT with no effect; both shares stay 1 | Q-1712, and the magnetron item of *Arena mode (M7b)* |
@@ -155,7 +155,7 @@ added (a corpse is an ordinary animation), so the save and AI formats stay as th
 | [Q-1711](../../spec/requests/Q-1711-variation-at-the-start-of-an-arena-game.md) | what varies from seed to seed before first contact (first move, search and shot, facings, the infantry standing point, paths, whether the harness used the map's entries) | the records' *Setup* as read; infantry at the cell's centre point |
 | [Q-1712](../../spec/requests/Q-1712-battle-fortress-group-in-the-arena.md) | what a BFRT group without passengers does (TELE and CAOS against BFRT) | the built rules |
 | [Q-1713](../../spec/requests/Q-1713-infantry-on-cliff-cells-after-q1502.md) | how the games with infantry on the cliff cells end, after Q-1502 | S-0309 revision 21 and S-0208 revision 34 as built |
-| [Q-1714](../../spec/requests/Q-1714-ytnk-against-sref-opening.md) | how YTNK against SREF unfolds | the built rules |
+| [Q-1714](../../spec/requests/Q-1714-ytnk-against-sref-opening.md) | how YTNK against SREF unfolds | answered in part by S-0318 (shrapnel fragments), built at M8 step A3 intake 6: the pairing passes, [intake 6 ledger](intake6-S-0318-S-0314-S-0108-S-0701.md) |
 | [Q-1715](../../spec/requests/Q-1715-none-entries-in-corpse-and-death-animation-lists.md) | what a no-type entry does in a corpse list or a death-animation list (S-0107 claim 17, built at this step) | answered by S-0107 revision 22 (spec 98bcb77), built at M8 step A3 intake 5: no-type and empty items are left out of both lists |
 
 ## Arena and sweeps, before and after

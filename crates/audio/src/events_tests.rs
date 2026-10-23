@@ -1204,6 +1204,32 @@ fn started_announcements_are_named_for_captions() {
     assert_eq!(mute.take_started(), ["Mute"]);
 }
 
+// spec: S-0701 claim 26 (the caption of a started announcement is its entry's text key when present with a nonempty value, otherwise the entry's name)
+#[test]
+fn started_announcement_captions_come_from_the_text_key() {
+    let w = world();
+    let mut a = audio(&w, &[]);
+    let mut s = SpeechCatalog::default();
+    for (n, text) in [("Bld", Some("Made-up words")), ("Hold", None)] {
+        s.insert(Line {
+            name: n.into(),
+            text: text.map(Into::into),
+            ..Line::default()
+        });
+    }
+    let mut names = SoundNames::default();
+    names.set_announcement(Announcement::Building, "Bld");
+    names.set_announcement(Announcement::OnHold, "Hold");
+    a.set_speech(s);
+    a.set_names(names);
+    a.cue(UiCue::BuildStarted { infantry: false });
+    a.service(1000, &mut Rng::new(1));
+    assert_eq!(a.take_started(), ["Made-up words"]);
+    a.cue(UiCue::BuildHeld);
+    a.service(1501, &mut Rng::new(1));
+    assert_eq!(a.take_started(), ["Hold"], "no text key: the entry's name");
+}
+
 fn base_names(a: &mut Audio) {
     let mut n = SoundNames::default();
     for (r, s) in [

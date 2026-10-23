@@ -182,7 +182,7 @@ pub struct Audio {
     low_funds_after: Option<i32>,
     low_power: bool,
     now_ms: i64,
-    /// The names of the announcements started since the client last took
+    /// The captions of the announcements started since the client last took
     /// them, oldest first (for its captions, M8 step C3).
     started: Vec<String>,
     /// The music player (S-0703), when the install has a music database.
@@ -430,7 +430,8 @@ impl Audio {
         if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
             // Kept for captions whether or not its file plays: a player
             // without sound still reads it.
-            self.started.push(self.speech.line(id).name.clone());
+            // spec: S-0701 claim 26 (the caption: the entry's text key when nonempty, otherwise its name)
+            self.started.push(self.speech.line(id).caption().to_owned());
             // Nobody may take them (offline rendering): keep the newest few.
             if self.started.len() > 16 {
                 self.started.remove(0);
@@ -466,9 +467,10 @@ impl Audio {
         }
     }
 
-    /// The names of the announcements started (S-0701 claim 27's one at a
-    /// time) since the last call, oldest first: the announcement data's
-    /// entry names. Announcements whose file is missing count too.
+    /// The captions of the announcements started (S-0701 claim 27's one at
+    /// a time) since the last call, oldest first: each entry's text key when
+    /// nonempty, otherwise its name (claim 26). Announcements whose file is
+    /// missing count too.
     pub fn take_started(&mut self) -> Vec<String> {
         std::mem::take(&mut self.started)
     }
@@ -875,6 +877,8 @@ impl Audio {
             Effect::Beam { .. } => {}
             // spec: S-0518 claim 18 and S-0514 claim 25 (beams and beam flashes are drawing only; the shot's report comes with Effect::Shot)
             Effect::Line { .. } => {}
+            // spec: S-0318 claim 8 (a fragment's beam is drawing only)
+            Effect::FragmentLine { .. } => {}
             // spec: S-0316 claim 7 (a bolt plays no sound of its own, and neither do its sparks)
             Effect::Bolt { .. } => {}
             // spec: S-0607 claim 25 (the wave picture is presentation only)

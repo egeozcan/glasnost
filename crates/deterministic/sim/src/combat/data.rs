@@ -216,6 +216,10 @@ pub struct ProjectileRules {
     pub cluster: i32,
     /// The airburst weapon.
     pub airburst_weapon: Option<WeaponId>,
+    /// The fragment weapon (S-0318 Terms).
+    pub shrapnel_weapon: Option<WeaponId>,
+    /// The fragment count c (S-0318 claim 2).
+    pub shrapnel_count: i32,
     /// Trailer animation name.
     pub trailer: Option<String>,
     /// Spawn delay field, ticks.
@@ -1219,6 +1223,12 @@ pub fn tables(
                 .airburst_weapon
                 .as_ref()
                 .and_then(|w| w_index.get(w).copied()),
+            // spec: S-0318 Import mapping (ShrapnelWeapon absent: no fragments)
+            shrapnel_weapon: p
+                .shrapnel_weapon
+                .as_ref()
+                .and_then(|w| w_index.get(w).copied()),
+            shrapnel_count: p.shrapnel_count.unwrap_or(0), // spec: S-0318 Import mapping (ShrapnelCount absent: 0)
             trailer: p.trailer.clone(),
             spawn_delay: p.spawn_delay.unwrap_or(3), // spec: S-0306 Constants (spawn delay 3)
             voxel: b(p.voxel),

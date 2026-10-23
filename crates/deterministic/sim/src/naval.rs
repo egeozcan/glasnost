@@ -291,7 +291,8 @@ pub fn waiting_gate(w: &World, vehicle: ObjectId, dock: Pos) -> bool {
     let Some(o) = w.obj(vehicle) else {
         return false;
     };
-    let still = !crate::occupancy::in_progress(w, vehicle) && !o.body.turning(w.tick);
+    // spec: S-0314 Terms and claim 21 (in the waiting phase the depot's question whether the vehicle is moving is the moving-destination test)
+    let still = !crate::depot::moving_destination(w, vehicle);
     // spec: S-0504 claim 8 (stands still and is closer than the starting distance, strictly)
     still && depot_distance(o.pos, dock) < starting_distance(w, vehicle)
 }

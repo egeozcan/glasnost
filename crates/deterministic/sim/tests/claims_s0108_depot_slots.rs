@@ -148,7 +148,12 @@ fn reports(w: &World, k: ObjectId) -> Vec<(bool, bool)> {
 /// A damaged truck sent into a fresh depot of type `name`, run until the
 /// depot is in its repair behaviour with the truck in contact.
 fn scene(name: &str, health_at: i32) -> (World, ObjectId, ObjectId) {
-    let mut w = game(&rules());
+    scene_with(&rules(), name, health_at)
+}
+
+/// [`scene`] on the given rules.
+fn scene_with(r: &Ruleset, name: &str, health_at: i32) -> (World, ObjectId, ObjectId) {
+    let mut w = game(r);
     let k = spawn(&mut w, Kind::Building, name, 0, 0);
     let v = spawn(&mut w, Kind::Vehicle, "TRUCK", 6, 1);
     w.obj_mut(v).unwrap().health = health_at;
@@ -212,7 +217,7 @@ fn claim_20_special_1_ends_into_special_2() {
     assert_eq!(beh(&w, k), (Some(Behaviour::Repair), 2));
 }
 
-// spec: S-0108 claim 20 (a working step that answers done: production and special-2 stop, special-3 and active-1 start on the tick of that step, before the contact is released; special-3 finishing on its own starts idle; the next processing without contact changes no slot again, Q-1620 interim)
+// spec: S-0108 claim 20 (a working step that answers done: production and special-2 stop, special-3 and active-1 start on the tick of that step, before the contact is released; special-3 finishing on its own starts idle; After a send-away, Q-1620 answered: the next processing, 1 tick later, finds no contact in settling with neither production nor special-2 running, so it changes no slot)
 #[test]
 fn claim_20_done_ends_the_service() {
     let (mut w, k, v) = scene("DEPOT", 560);
@@ -311,13 +316,15 @@ fn claim_20_every_tick_row_and_the_naval_exception() {
     }
 }
 
-// spec: S-0108 claim 12 (the damaged state differs from the slot condition: every running slot restarts with its damaged name, continuing from its image frame)
+// spec: S-0108 claims 12 and 25 (the damaged state differs from the slot condition: every running slot restarts with its damaged name, keeping its stage, not its image frame: the new animation shows its own start field plus that stage)
 #[test]
 fn claim_12_condition_swap_restarts_the_modelled_slots() {
-    let (mut w, k, _) = scene("DEPOT", 300);
+    let mut r = rules();
+    r.sim.animations.get_mut("SP2D").unwrap().start = Some(2);
+    let (mut w, k, _) = scene_with(&r, "DEPOT", 300);
     to_working(&mut w, k);
-    assert!(run_until(&mut w, 200, |w| runs(w, k, DepotSlot::Special2)));
-    step(&mut w);
+    assert!(run_until(&mut w, 200, |w| runs(w, k, DepotSlot::Special2)
+        && depot_anim::draws(w, k)[0].stage > 0));
     let before = depot_anim::draws(&w, k);
     assert_eq!(before[0].name, "SP2");
     w.obj_mut(k).unwrap().health = 100;
@@ -326,10 +333,32 @@ fn claim_12_condition_swap_restarts_the_modelled_slots() {
     assert_eq!(after[0].slot, DepotSlot::Special2);
     assert_eq!(after[0].name, "SP2D");
     // The swap comes in the depot's turn, before the old animation's turn of that tick, and the new one's first update makes no advance (S-0109 claim 5).
+    assert_eq!(after[0].stage, before[0].stage, "the stage is kept");
     assert_eq!(
-        after[0].frame, before[0].frame,
-        "continuing from its image frame"
+        after[0].frame,
+        2 + before[0].stage,
+        "its own start field plus the stage"
     );
+}
+
+// spec: S-0108 claim 25 (a start replacing a running animation of the same type: the stage is kept and the passes take their creation value, the replaced one's completed passes not carried over)
+#[test]
+fn claim_25_a_replacing_start_counts_its_passes_afresh() {
+    let mut r = rules();
+    r.sim.animations.get_mut("SP3").unwrap().loop_count = Some(3);
+    let (mut w, k, _) = scene_with(&r, "DEPOT", 300);
+    depot_anim::start_for_test(&mut w, k, DepotSlot::Special3);
+    let passes = |w: &World| {
+        let id = w.obj(k).unwrap().depot.slots[&DepotSlot::Special3];
+        w.depot_anims.anims[&id].player.remaining_passes()
+    };
+    assert_eq!(passes(&w), Some(3));
+    assert!(run_until(&mut w, 400, |w| passes(w) == Some(2)
+        && depot_anim::draws(w, k)[0].stage > 0));
+    let stage = depot_anim::draws(&w, k)[0].stage;
+    depot_anim::start_for_test(&mut w, k, DepotSlot::Special3);
+    assert_eq!(passes(&w), Some(3), "the passes afresh");
+    assert_eq!(depot_anim::draws(&w, k)[0].stage, stage, "the stage kept");
 }
 
 // spec: S-0109 claims 28 and 29 and S-0202 claim 10 (a slot animation's creation takes its draws on the scenario stream at the creation: one ranged draw for a type with a random rate)
@@ -372,4 +401,69 @@ fn depot_slots_survive_a_save_and_load() {
     }
     assert_eq!(save::state_hash(&w2), save::state_hash(&w));
     assert_eq!(depot_anim::draws(&w2, k), depot_anim::draws(&w, k));
+}
+
+// spec: S-0108 claim 20 (After a send-away, Q-1620 answered: after a failed departure special-1 ends in contact and starts special-2; the later settling step that sends the vehicle away changes no slot; the following no-contact processing, D ticks later, finds special-2 running and so stops it and starts special-3 and active-1); S-0314 claim 6 (a settling send-away is followed D ticks later)
+#[test]
+fn claim_20_special_2_after_a_failed_departure() {
+    let mut r = rules();
+    // A special-1 long enough to outlast the working phase.
+    r.sim.animations.get_mut("SP1").unwrap().frame_count = Some(160);
+    let (mut w, k, v) = scene_with(&r, "DEPOT", 590);
+    let list = glasnost_sim::econ::release::exit_list(3, 3, false, true);
+    let mut blockers = Vec::new();
+    for &(a, b) in &list {
+        let c = testkit::mid(SIZE, a, b);
+        if w.cells.footprint().is_legal(c)
+            && !blockers
+                .iter()
+                .any(|&x: &ObjectId| w.obj(x).unwrap().pos.cell() == c)
+        {
+            blockers.push(spawn(&mut w, Kind::Vehicle, "TRUCK", a, b));
+        }
+    }
+    to_working(&mut w, k);
+    assert!(
+        run_until(&mut w, 600, |w| beh(w, k).1 == 1),
+        "the working step answers not needed and the departure fails"
+    );
+    assert_eq!(w.obj(v).unwrap().contact, Some(k), "contact kept");
+    assert!(
+        runs(&w, k, DepotSlot::Special1),
+        "special-1 outlasts working"
+    );
+    assert!(
+        run_until(&mut w, 900, |w| runs(w, k, DepotSlot::Special2)),
+        "special-1 ends in contact: special-2"
+    );
+    assert_eq!(w.obj(v).unwrap().contact, Some(k));
+    glasnost_sim::objects::remove(&mut w, blockers[0]);
+    let mut sent = None;
+    for _ in 0..200 {
+        step(&mut w);
+        if w.obj(v).unwrap().contact.is_none() {
+            sent = Some(w.tick - 1);
+            break;
+        }
+    }
+    let sent = sent.expect("a later settling step sends it away");
+    assert!(
+        reports(&w, k).is_empty(),
+        "the settling send-away changes no slot"
+    );
+    assert!(runs(&w, k, DepotSlot::Special2));
+    let dd = w.rules().behaviour(Behaviour::Repair).rate_delay.max(1);
+    let mut changed = None;
+    for _ in 0..dd + 2 {
+        step(&mut w);
+        if !reports(&w, k).is_empty() {
+            changed = Some((w.tick - 1, reports(&w, k)));
+            break;
+        }
+    }
+    let (t, rep) = changed.expect("the no-contact processing changes the slots");
+    assert_eq!(t - sent, dd, "D ticks after the send-away");
+    assert_eq!(rep, vec![(true, true)], "active-1 starts");
+    assert!(!runs(&w, k, DepotSlot::Special2));
+    assert!(runs(&w, k, DepotSlot::Special3));
 }

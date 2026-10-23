@@ -835,10 +835,8 @@ fn release_track(w: &mut World, k: ObjectId, v: ObjectId) {
     let c = w.reference_point(k);
     // spec: S-0606 F4 (the reference point plus (−128, +128, 0), at the reference point's height)
     let target = Pos::new(c.x + RELEASE.0, c.y + RELEASE.1, c.z);
-    if let Some(o) = w.obj_mut(v) {
-        // spec: S-0606 claims 12 and 13 (after switching its locomotion back on if it was off; no pulse check)
-        o.depot.loco_off = false;
-    }
+    // spec: S-0606 claims 12 and 13 (after switching its locomotion back on if it was off; no pulse check); S-0314 claim 22 (leaving a tank bunker switches a vehicle on but is no end of its being settled)
+    crate::hover::switched(w, v, false);
     // spec: S-0606 claims 12 and 13 (the release track, table T2, ρₜ = ρ = 1.0)
     crate::drive::begin_bunker_track(w, v, BunkerTrack::Release, target);
 }

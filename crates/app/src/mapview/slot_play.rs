@@ -46,6 +46,24 @@ pub enum Slot {
 }
 
 impl Slot {
+    /// This module's slots in S-0108 claim 12's restart order: *active-1*
+    /// to *active-4*, *production*, *special-1* to *special-4*, then
+    /// *idle* (the upgrade, pre-production, turret, super and low-power
+    /// slots of that order are not played here).
+    // spec: S-0108 claim 12 (the running slots are restarted one after another in the fixed order upgrade-1 to upgrade-3, active-1 to active-4, pre-production, production, turret, special-1 to special-4, super-1 to super-4, idle, low-power, super-low-power)
+    pub const RESTART: [Slot; 10] = [
+        Slot::Active1,
+        Slot::Active2,
+        Slot::Active3,
+        Slot::Active4,
+        Slot::Production,
+        Slot::Special1,
+        Slot::Special2,
+        Slot::Special3,
+        Slot::Special4,
+        Slot::Idle,
+    ];
+
     /// Every slot of this module, in our own order (also the drawing
     /// order of a building's slot animations: our placeholder).
     pub const ALL: [Slot; 10] = [
@@ -136,9 +154,9 @@ pub struct State {
 
 /// Makes a slot's animation of a type name.
 pub trait Make<A> {
-    /// A new animation of type `name`, continuing from the image frame of
-    /// `from` when it replaces one; `None` when the name names no
-    /// animation type.
+    /// A new animation of type `name`, keeping the stage of `from` when it
+    /// replaces one, with its own passes (S-0108 claim 25); `None` when
+    /// the name names no animation type.
     fn make(&mut self, name: &[u8], from: Option<&A>) -> Option<A>;
 }
 
@@ -213,7 +231,7 @@ impl<A> Slots<A> {
             return;
         }
         let from = self.running.get(&slot).map(|r| &r.anim);
-        // spec: S-0108 Terms (a running slot is replaced; the new one continues from its image frame)
+        // spec: S-0108 Terms and claim 25 (a running slot is replaced; the new one keeps its stage and takes its passes afresh)
         if let Some(anim) = mk.make(&name, from) {
             self.running.insert(slot, Running { name, anim });
         }
@@ -238,12 +256,16 @@ impl<A> Slots<A> {
     }
 
     /// The condition swap of S-0108 claim 12: the slot condition becomes
-    /// `damaged` and every running slot restarts with the name for it,
-    /// keeping its image frame; a slot whose name for it is empty keeps its
-    /// animation.
+    /// `damaged` and every running slot restarts with the name for it, in
+    /// [`Slot::RESTART`]'s order, keeping its stage (claim 25); a slot
+    /// whose name for it is empty keeps its animation.
     fn swap(&mut self, damaged: bool, defs: &Defs, mk: &mut dyn Make<A>) {
         self.condition_damaged = damaged;
-        let slots: Vec<Slot> = self.running.keys().copied().collect();
+        // spec: S-0108 claim 12 (the restarts come one after another in the fixed slot order, each taking its creation draws as it is restarted)
+        let slots: Vec<Slot> = Slot::RESTART
+            .into_iter()
+            .filter(|s| self.running.contains_key(s))
+            .collect();
         for slot in slots {
             let Some(def) = defs.get(&slot) else {
                 continue;
@@ -418,23 +440,33 @@ pub fn held_size(sizes: &[glasnost_num::F64], mode: glasnost_num::Rounding) -> i
 mod tests {
     use super::*;
 
-    /// A test animation: its name and image frame.
+    /// A test animation: its name and stage.
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct Fake {
         name: Vec<u8>,
-        frame: i32,
+        stage: i32,
     }
 
-    /// Makes every name except `MISSING`; a new animation starts at frame 0
-    /// or continues from the replaced one's frame.
+    /// Makes every name except `MISSING`; a new animation starts at stage 0
+    /// or keeps the replaced one's stage.
     struct Maker;
 
     impl Make<Fake> for Maker {
         fn make(&mut self, name: &[u8], from: Option<&Fake>) -> Option<Fake> {
             (name != b"MISSING").then(|| Fake {
                 name: name.to_vec(),
-                frame: from.map_or(0, |f| f.frame),
+                stage: from.map_or(0, |f| f.stage),
             })
+        }
+    }
+
+    /// Records the names it makes, in order.
+    struct Recorder(Vec<String>);
+
+    impl Make<Fake> for Recorder {
+        fn make(&mut self, name: &[u8], from: Option<&Fake>) -> Option<Fake> {
+            self.0.push(String::from_utf8(name.to_vec()).unwrap());
+            Maker.make(name, from)
         }
     }
 
@@ -509,8 +541,8 @@ mod tests {
         assert!(!s.runs(Slot::Active3));
     }
 
-    /// spec: S-0108 claim 12 (damage swaps every running slot to its damaged name keeping its
-    /// image frame, repair back to the normal name; the occupied variant is dropped; a slot whose
+    /// spec: S-0108 claims 12 and 25 (damage swaps every running slot to its damaged name keeping
+    /// its stage, repair back to the normal name; the occupied variant is dropped; a slot whose
     /// name for the new condition is empty keeps its animation)
     #[test]
     fn damage_swaps_the_variants() {
@@ -522,18 +554,14 @@ mod tests {
             ..done()
         };
         s.update(&TypeKind::default(), &d, &st, &mut Maker);
-        s.running.get_mut(&Slot::Idle).unwrap().anim.frame = 5;
+        s.running.get_mut(&Slot::Idle).unwrap().anim.stage = 5;
         let hurt = State {
             damaged: true,
             ..st
         };
         s.update(&TypeKind::default(), &d, &hurt, &mut Maker);
         assert_eq!(names(&s), ["ID", "A1D", "A2D", "A3D", "A4"]);
-        assert_eq!(
-            s.running[&Slot::Idle].anim.frame,
-            5,
-            "the image frame is kept"
-        );
+        assert_eq!(s.running[&Slot::Idle].anim.stage, 5, "the stage is kept");
         s.update(&TypeKind::default(), &d, &st, &mut Maker);
         assert_eq!(
             names(&s),
@@ -543,18 +571,25 @@ mod tests {
     }
 
     /// spec: S-0108 claim 12 (a start in the opposite condition swaps every running slot on the
-    /// tick of the start; the started slot shows its own chosen variant)
+    /// tick of the start, in the fixed restart order with idle after the active and special
+    /// slots, and the started slot's own animation is created after the swap; a started slot
+    /// already running is restarted by the swap and replaced again, keeping its stage both times)
     #[test]
     fn opposite_condition_start_swaps() {
         let d = defs();
         let mut s = Slots::default();
         s.update(&TypeKind::default(), &d, &done(), &mut Maker);
-        s.start_variant(Slot::Special1, &d, true, &mut Maker);
+        s.start_variant(Slot::Special1, &d, false, &mut Maker);
+        s.running.get_mut(&Slot::Special1).unwrap().anim.stage = 3;
+        let mut rec = Recorder(Vec::new());
+        s.start_variant(Slot::Special1, &d, true, &mut rec);
         assert_eq!(names(&s), ["ID", "A1D", "A2D", "A3D", "A4D", "S1D"]);
+        assert_eq!(rec.0, ["A1D", "A2D", "A3D", "A4D", "S1D", "ID", "S1D"]);
+        assert_eq!(s.running[&Slot::Special1].anim.stage, 3);
     }
 
-    /// spec: S-0108 Terms (starting a slot: nothing happens when the name is empty or names no
-    /// animation type; a running slot is replaced and the new one continues from its image frame)
+    /// spec: S-0108 Terms and claim 25 (starting a slot: nothing happens when the name is empty or
+    /// names no animation type; a running slot is replaced and the new one keeps its stage)
     #[test]
     fn starting_a_slot() {
         let mut d = defs();
@@ -565,9 +600,9 @@ mod tests {
         s.start_variant(Slot::Special2, &d, false, &mut Maker);
         assert!(s.running.is_empty());
         s.start_variant(Slot::Special3, &d, false, &mut Maker);
-        s.running.get_mut(&Slot::Special3).unwrap().anim.frame = 7;
+        s.running.get_mut(&Slot::Special3).unwrap().anim.stage = 7;
         s.start_variant(Slot::Special3, &d, false, &mut Maker);
-        assert_eq!(s.running[&Slot::Special3].anim.frame, 7);
+        assert_eq!(s.running[&Slot::Special3].anim.stage, 7);
     }
 
     /// spec: S-0108 claim 17 (T < 1: active-1 and not active-2; T ≥ 1: active-2 and not active-1;

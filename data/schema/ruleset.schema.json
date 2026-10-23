@@ -8332,6 +8332,23 @@
           ],
           "default": null
         },
+        "shrapnel_count": {
+          "description": "`ShrapnelCount`, the fragment count c (S-0318 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "shrapnel_weapon": {
+          "description": "`ShrapnelWeapon`, the fragment weapon (S-0318 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "spawn_delay": {
           "description": "`SpawnDelay`, ticks (S-0306 claim 16).",
           "type": [
@@ -10176,6 +10193,21 @@
         },
         "shot_distance_wrap": {
           "description": "The shot-speed distance's sum of squares wraps in 32-bit arithmetic.",
+          "type": "boolean",
+          "default": true
+        },
+        "shrapnel_building_per_cell": {
+          "description": "A building takes a fragment in every visited cell where it is first-listed; off: each object takes at most one fragment from one burst's scan.",
+          "type": "boolean",
+          "default": true
+        },
+        "shrapnel_first_listed_only": {
+          "description": "Only the first-listed object of a visited cell can take a fragment, so an own or allied object listed first blocks the cell; off: the first object in listing order that passes the test.",
+          "type": "boolean",
+          "default": true
+        },
+        "shrapnel_hits_terrain": {
+          "description": "Terrain objects, which have no owning house, take fragments; off: objects without an owning house are not candidates.",
           "type": "boolean",
           "default": true
         },

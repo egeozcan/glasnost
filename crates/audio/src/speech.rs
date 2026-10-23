@@ -54,6 +54,19 @@ pub struct Line {
     /// The volume key, a fraction (read; used only with
     /// `quirks.announcement_volume_ignored` off).
     pub volume: Option<f64>,
+    /// The text key's value, read as the caption text itself; `None` when
+    /// the key is absent or its value empty (S-0701 claim 26).
+    pub text: Option<String>,
+}
+
+impl Line {
+    /// Our caption for this announcement (S-0701 claim 26): the text key
+    /// when present with a nonempty value, otherwise the entry's name; the
+    /// same for every voice set, with the whole value as read.
+    pub fn caption(&self) -> &str {
+        // spec: S-0701 claim 26 (the caption is the text key when present with a nonempty value, otherwise the entry's name; the same for every voice set)
+        self.text.as_deref().unwrap_or(&self.name)
+    }
 }
 
 /// An announcement, by position.
@@ -123,6 +136,10 @@ impl SpeechCatalog {
                     let t = value::text(v, SAMPLE_NAME);
                     line.samples[i] = text(t);
                 }
+            }
+            // spec: S-0701 claim 26 and Import mapping (the key spelled exactly `Text`, S-0001 claim 13; its value is the caption text itself, no length limit beyond S-0001 claim 3's line limit; an empty value counts as absent, S-0001 claim 11)
+            if let Some(v) = s.value(b"Text").filter(|v| !v.is_empty()) {
+                line.text = Some(text(v));
             }
             if let Some(v) = s.value(b"Volume")
                 && let value::Decimal::Value { value, .. } =
@@ -342,6 +359,30 @@ mod tests {
             [voice_set(0), voice_set(1), voice_set(2), voice_set(5)],
             [0, 1, 2, 2]
         );
+    }
+
+    // spec: S-0701 claim 26 and Import mapping (the caption: the `Text` key's value as read, spelled exactly so; an empty value or a differently spelled key counts as absent and the entry's name is the caption; the same for every voice set)
+    #[test]
+    fn claim_26_caption_from_the_text_key() {
+        let long = "w".repeat(300);
+        let t = format!(
+            "[DialogList]\n0=Lit\n1=Empty\n2=None\n3=Lower\n4=Long\n\n\
+             [Lit]\nText=Some made-up words, with a comma\nAllied=a\nRussian=b\n\n\
+             [Empty]\nText=\n\n[None]\nType=QUEUE\n\n[Lower]\ntext=lower case key\n\n\
+             [Long]\nText={long}\n"
+        );
+        let c = SpeechCatalog::from_ini(&Document::parse(
+            t.as_bytes(),
+            Quirks::default(),
+            &mut Vec::new(),
+        ));
+        let cap = |n| c.line(c.resolve(n).unwrap()).caption().to_owned();
+        assert_eq!(cap("Lit"), "Some made-up words, with a comma");
+        assert_eq!(c.line(c.resolve("Empty").unwrap()).text, None);
+        assert_eq!(cap("Empty"), "Empty", "an empty value counts as absent");
+        assert_eq!(cap("None"), "None", "absent: the entry's name");
+        assert_eq!(cap("Lower"), "Lower", "the key is spelled exactly `Text`");
+        assert_eq!(cap("Long"), long, "no length limit of its own");
     }
 
     // spec: S-0701 claim 27 (one at a time; more than 500 ms from the previous start; the standard place; lists in order)

@@ -247,3 +247,22 @@ fn claim_13_tethered_pad_customer_is_passed_over() {
     assert!(!on_depot(&w, v, d), "in a cell without a building");
     let _ = far;
 }
+
+// spec: S-0405 claim 20 and S-0314 Terms (a disabling's switch-off makes the vehicle settled, also after the guard reset's cleared destination; an enabling ends its being settled)
+#[test]
+fn claim_20_disabling_settles_and_enabling_ends_it() {
+    let (mut w, k, d, v) = scene("DEPOT");
+    click_enter(&mut w, v, d);
+    serviced(&mut w, v, d);
+    w.obj_mut(v).unwrap().depot.settled = false;
+    centre_off(&mut w, k);
+    assert!(power::unit_disabled(&w, v));
+    assert!(depot::settled(&w, v), "the disabling settles it");
+    round_trip(&w);
+    assert!(orders::issue(&mut w, A, Order::PowerOn { actor: k }));
+    assert!(
+        run_until(&mut w, 30, |w| !power::unit_disabled(w, v)),
+        "enabled when the centre runs again"
+    );
+    assert!(!depot::settled(&w, v), "the enabling ends being settled");
+}

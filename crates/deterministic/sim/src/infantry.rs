@@ -277,12 +277,14 @@ pub(crate) fn substitute(w: &World, id: ObjectId, q: Seq) -> Seq {
 /// or the same object). A first or different destination and a cleared one
 /// make no request. The request is not saved when refused.
 pub fn destination_assigned(w: &mut World, id: ObjectId, before: Option<Target>) {
+    // spec: S-0207 claim 27 (an assignment takes effect when it changes the order-level destination or a destination-refresh state is present)
+    let effective = w.obj(id).is_some_and(|o| o.dest != before) || crate::refresh::pending(w, id);
     // spec: S-0207 claim 27 (a vehicle's effective assignment runs the dock test before the locomotors take the destination)
     let token = crate::refresh::begin(w, id, before);
     // spec: S-0207 claim 20 (a) (the teleporting locomotor takes a destination at once)
     crate::teleport::take_destination(w, id);
-    // spec: S-0314 claim 22 (a destination given while a depot or tank bunker occupies the cell switches the locomotor on)
-    crate::depot::destination_given(w, id);
+    // spec: S-0314 Terms and claim 22 (a destination that takes effect while a depot or tank bunker occupies the cell ends being settled)
+    crate::depot::destination_given(w, id, effective);
     // spec: S-0503 claim 4 (the hovering locomotor takes a move: ρ = 1 when powered and not moving now)
     crate::hover::take_destination(w, id);
     // spec: S-0502 claim 16 (the jumpjet locomotor takes a destination point: the nearby-cell search, the move state and the re-ascent of a descending one)
