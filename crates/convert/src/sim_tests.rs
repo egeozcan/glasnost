@@ -1005,27 +1005,41 @@ fn voice_select_keeps_every_entry() {
     );
 }
 
-/// spec: S-0107 Import mapping (DeadBodies of an infantry type and of [General]: corpse lists of animation names; DeathAnims: death animations indexed by death kind, every entry kept in its position; absent: empty)
+/// spec: S-0107 Import mapping and claim 17 (revision 22, Q-1715 answered: DeadBodies of an infantry type and of [General] and DeathAnims are lists of animation names; no-type and empty items are left out and later entries move down; an unknown name keeps its place; absent: empty)
 #[test]
 fn corpse_and_death_animation_lists() {
-    let base = "[InfantryTypes]\n1=Walker\n2=Plain\n[Animations]\n1=Ba\n2=Bb\n\
-                [General]\nDeadBodies=Ba,Bb\n\
-                [Walker]\nDeadBodies=Bb\nDeathAnims=Ba,none,Bb\n[Plain]\nStrength=5\n";
+    let base = "[InfantryTypes]\n1=Walker\n2=Plain\n3=Odd\n[Animations]\n1=Ba\n2=Bb\n\
+                [General]\nDeadBodies=Ba,none,Bb\n\
+                [Walker]\nDeadBodies=<none>,Bb\nDeathAnims=Ba,none,Bb\n[Plain]\nStrength=5\n\
+                [Odd]\nDeathAnims=Zz,,Ba\n";
     let (s, _) = sim(base, "", "");
-    assert_eq!(
-        s.general.dead_bodies,
-        Some(vec!["Ba".to_string(), "Bb".to_string()])
-    );
-    assert_eq!(
-        s.infantry["Walker"].dead_bodies,
-        Some(vec!["Bb".to_string()])
-    );
-    assert_eq!(
-        s.infantry["Walker"].death_anims,
-        Some(vec!["Ba".to_string(), "none".to_string(), "Bb".to_string()])
-    );
+    let names = |v: &[&str]| Some(v.iter().map(|x| x.to_string()).collect::<Vec<_>>());
+    assert_eq!(s.general.dead_bodies, names(&["Ba", "Bb"]));
+    assert_eq!(s.infantry["Walker"].dead_bodies, names(&["Bb"]));
+    assert_eq!(s.infantry["Walker"].death_anims, names(&["Ba", "Bb"]));
+    assert_eq!(s.infantry["Odd"].death_anims, names(&["Zz", "Ba"]));
     assert_eq!(s.infantry["Plain"].dead_bodies, None);
     assert_eq!(s.infantry["Plain"].death_anims, None);
+}
+
+/// spec: S-0107 claim 17 (revision 22: a list of only no-type items has no entries but still replaces an earlier layer's list; an empty value cannot clear it) and Import mapping (DeathAnims, DeadBodies)
+#[test]
+fn death_animation_lists_cleared_by_a_later_layer() {
+    let base = "[InfantryTypes]\n1=Walker\n2=Keeper\n[Animations]\n1=Ba\n\
+                [Walker]\nDeathAnims=Ba\nDeadBodies=Ba\n[Keeper]\nDeathAnims=Ba\nDeadBodies=Ba\n";
+    let later = "[Walker]\nDeathAnims=none\nDeadBodies=none,<none>\n\
+                 [Keeper]\nDeathAnims=\nDeadBodies=\n";
+    let (s, _) = sim(base, later, "");
+    assert_eq!(s.infantry["Walker"].death_anims, Some(Vec::new()));
+    assert_eq!(s.infantry["Walker"].dead_bodies, Some(Vec::new()));
+    assert_eq!(
+        s.infantry["Keeper"].death_anims,
+        Some(vec!["Ba".to_string()])
+    );
+    assert_eq!(
+        s.infantry["Keeper"].dead_bodies,
+        Some(vec!["Ba".to_string()])
+    );
 }
 
 /// spec: S-0215 Edge cases (the importer warns for a turreted building type whose turn-rate field is outside 0 to 127, quirks.turret_snap_bound_wraps)

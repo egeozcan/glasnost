@@ -512,9 +512,9 @@ const UNIT_FIELDS: &[(&str, &str, Form)] = &[
     ("cyborg", "Cyborg", Bool),
     ("fearless", "Fearless", Bool),
     ("not_human", "NotHuman", Bool),
-    // spec: S-0107 Import mapping (DeadBodies: the type's corpse list; DeathAnims: death animations indexed by death kind; lists of animation names, absent empty); interim rule of Q-1715: DeadBodies leaves no-type items out, DeathAnims keeps every entry in its position
+    // spec: S-0107 Import mapping and claim 17 (DeadBodies: the type's corpse list; DeathAnims: death animations indexed by death kind; lists of animation names, absent empty; no-type and empty items are left out and later entries move down; a list of only those has no entries and still replaces an earlier layer's list)
     ("dead_bodies", "DeadBodies", Refs(Kind::Animations)),
-    ("death_anims", "DeathAnims", Texts),
+    ("death_anims", "DeathAnims", Refs(Kind::Animations)),
     ("vehicle_thief", "VehicleThief", Bool),
     ("engineer", "Engineer", Bool),
     ("occupier", "Occupier", Bool),
