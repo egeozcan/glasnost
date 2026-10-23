@@ -747,8 +747,9 @@ fn dist(w: &World, a: Pos, b: Pos) -> u64 {
     )
 }
 
-/// Spreads one run over cells (S-0213 claim 7 with our engine's interim
-/// rules). Returns (order index, cell) for every member placed.
+/// Spreads one run over cells (S-0213 claim 7). Returns (order index, cell)
+/// for every member given a destination here (the leader keeps its order's,
+/// the common cell).
 fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usize, CellXY)> {
     let mode = w.rules().mode;
     // spec: S-0213 claim 7 (members: the mobile actors of the run; the spreading checks no validity)
@@ -780,13 +781,22 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
     }
     let lpos = members[leader].2;
     let lcell = lpos.cell();
-    // spec: S-0213 claim 7 (others placed by increasing distance from the leader, ties in run order)
+    // spec: S-0213 claim 7 (destination priority: nearer to the leader first, the earlier member in the run on equal distances)
     let mut others: Vec<usize> = (0..members.len()).filter(|&k| k != leader).collect();
     others.sort_by_key(|&k| (dist(w, members[k].2, lpos), k));
-    let mut given: Vec<CellXY> = Vec::new();
+    let mut given: Vec<CellXY> = vec![common];
     let mut done: Vec<bool> = vec![false; members.len()];
     let mut out = Vec::new();
+    // spec: S-0213 claim 7 (shared cells: the leader comes first and keeps the common cell, so every member standing in the leader's cell gets the common cell through it, with no look of its own)
+    for &k in &others {
+        if members[k].2.cell() == lcell {
+            done[k] = true;
+            out.push((members[k].0, common));
+        }
+    }
     let common_level = level_of(w, common);
+    // spec: S-0213 claim 7 (the obstructed class's entry check: the reference height level is the common cell's, plus 4 on a high-bridge deck, and no connecting-step direction)
+    let reference = common_level;
     for &k in &others {
         if done[k] {
             continue;
@@ -800,7 +810,7 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         let common_reach = zone.map(|z| regions::reach(w, common, z));
         let vx = mcell.x - lcell.x;
         let vy = mcell.y - lcell.y;
-        // spec: S-0213 Formulas (u = v / √̃(vx² + vy²); u = (0, 0) when v = 0, interim rule)
+        // spec: S-0213 Formulas (u = v / √̃(vx² + vy²); v = 0 does not arise: a member in the leader's cell already has the common cell)
         let (ux, uy) = if (vx, vy) == (0, 0) {
             (F64::ZERO, F64::ZERO)
         } else {
@@ -815,11 +825,10 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
             )
         };
         let half = crate::consts::HALF;
-        let reference = occupancy::reference_level(w, id);
         let mut fallback: Option<CellXY> = None;
         let mut result: Option<CellXY> = None;
         let mut spoiled = false;
-        // spec: S-0213 claim 7 (interim: j = 1 to 6, each step one cell length from the common cell's centre)
+        // spec: S-0213 claim 7 and Formulas (look line: j = 1 to 6 for each member on its own, one cell length per point from the common cell's centre, the first one cell out; a cell met twice uses up two points)
         for j in 1..=6 {
             let jj = F64::from_i64(j, mode);
             let qx = F64::from_i64(i64::from(common.x), mode)
@@ -859,12 +868,12 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
                 Class::OtherRegion | Class::Obstructed => spoiled = true,
             }
         }
-        // spec: S-0213 claim 7 (a look that is not spoiled and ends open: the end cell; otherwise the fallback cell)
+        // spec: S-0213 claim 7 (a look that is not spoiled and ends open: the end cell; otherwise the fallback cell, with no further search, quirks.group_spread_no_detour)
         let cell = result.unwrap_or(fallback.unwrap_or(common));
         given.push(cell);
         done[k] = true;
         out.push((n, cell));
-        // spec: S-0213 claim 7 (shared cells: unplaced members in the same cell get the same destination)
+        // spec: S-0213 claim 7 (shared cells: every member later in destination priority with no destination yet that stands in the same cell gets the same one and keeps it)
         for &k2 in &others {
             if !done[k2] && members[k2].2.cell() == mcell {
                 done[k2] = true;

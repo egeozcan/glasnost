@@ -716,6 +716,26 @@ fn deploy_state(w: &World, id: ObjectId) -> Option<DeployState> {
     }
 }
 
+/// How a deploy press sorts an in-place deployer (S-0213, *Deployed, for
+/// the deploy rule*): `Some(true)` when it counts as deployed, `Some(false)`
+/// when it counts as not deployed, `None` for any other object. A deployer
+/// part-way through a transition counts by the side it is heading to.
+fn press_counts_deployed(w: &World, id: ObjectId) -> Option<bool> {
+    if !in_place_deployer(w, id) {
+        return None;
+    }
+    match kind(w, id) {
+        // spec: S-0213 *Deployed, for the deploy rule* (infantry: deployed when its current sequence is one of the deploy kinds of S-0107 Terms, deploy itself included; any other sequence, undeploy included, is not deployed)
+        Some(Kind::Infantry) => Some(seq(w, id).is_some_and(Seq::is_deploy)),
+        // spec: S-0213 *Deployed, for the deploy rule* (vehicle: deployed when deploying, S-0517 claim 4, or deployed and not undeploying; not deployed when undeploying or undeployed)
+        Some(Kind::Vehicle) => Some(matches!(
+            crate::econ::inplace::form(w, id),
+            crate::econ::inplace::Form::Deploying { .. } | crate::econ::inplace::Form::Deployed
+        )),
+        _ => None,
+    }
+}
+
 /// An in-place deployer in its deployed state (S-0214 Terms), infantry or
 /// vehicle (`econ::inplace::deployed`).
 fn deployed_ipd(w: &World, id: ObjectId) -> bool {
@@ -751,12 +771,18 @@ pub fn deploy_readiness(w: &World, id: ObjectId) -> bool {
             if !uflag(w, id, |u| u.deployer) {
                 return false;
             }
-            // spec: S-0214 Terms (with an undeploy delay: neither deployed nor undeploying; the timer that follows a deploy is not modelled, Q-1754 interim)
-            !has_undeploy_delay(w, id)
-                || !(deployed_ipd(w, id) || seq(w, id) == Some(Seq::Undeploy))
+            // spec: S-0214 Terms and Edge cases (infantry deploy readiness and the rearm countdown; Q-1754): a negative undeploy delay: neither the sequence nor the countdown matters
+            if !has_undeploy_delay(w, id) {
+                return true;
+            }
+            // spec: S-0214 Terms (an undeploy delay of 0 or more: the current sequence is none of the deploy kinds, deploy itself included, and is not undeploy)
+            let s = seq(w, id);
+            let in_cycle = s.is_some_and(Seq::is_deploy) || s == Some(Seq::Undeploy);
+            // spec: S-0214 Terms and Edge cases (and the rearm countdown has ended, S-0301 claim 1: it runs while the tick is below its end; nothing about deploying starts it)
+            !in_cycle && w.tick >= o.combat.rearm_until
         }
         Kind::Vehicle => {
-            // spec: S-0214 Terms (a vehicle: not disabled and not inside a tunnel)
+            // spec: S-0214 Terms (a vehicle: not disabled and not inside a tunnel; its readiness does not depend on whether it is deploying, deployed or undeploying)
             if disabled(w, id) || crate::transport::in_tube(w, id) {
                 return false;
             }
@@ -2342,14 +2368,15 @@ fn deploy_command(w: &World, house: HouseId, selection: &[ObjectId]) -> Vec<Orde
     {
         return vec![Order::Deploy { actor: first }];
     }
-    // spec: S-0213 the deploy rule (a selection holding both deployed in-place deployers and ones that are not: the deployed ones get no order); Q-1753 interim (only fully deployed and fully undeployed members count; one still deploying or undeploying is left to the deploy check and deploy readiness)
-    let states: Vec<Option<DeployState>> =
-        selection.iter().map(|&id| deploy_state(w, id)).collect();
-    let mixed = states.contains(&Some(DeployState::Deployed))
-        && states.contains(&Some(DeployState::Undeployed));
+    // spec: S-0213 the deploy rule (a selection holding both deployed in-place deployers and ones that are not: the deployed ones get no order) and *Deployed, for the deploy rule* (Q-1753: every selected in-place deployer is sorted at the press, one that then fails another condition included)
+    let sorted: Vec<Option<bool>> = selection
+        .iter()
+        .map(|&id| press_counts_deployed(w, id))
+        .collect();
+    let mixed = sorted.contains(&Some(true)) && sorted.contains(&Some(false));
     let mut out = Vec::new();
-    for (&id, state) in selection.iter().zip(states) {
-        if mixed && state == Some(DeployState::Deployed) {
+    for (&id, deployed) in selection.iter().zip(sorted) {
+        if mixed && deployed == Some(true) {
             continue;
         }
         // spec: S-0213 the deploy rule (a unit or building, movable or able to fire, not berserk, passing the deploy check and deploy readiness of S-0214; S-0601 claim 15: no refusal sound or message)
