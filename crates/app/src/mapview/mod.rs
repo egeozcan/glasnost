@@ -6,6 +6,8 @@ pub mod anims;
 pub mod beams;
 pub mod bolts;
 pub mod build;
+#[cfg(test)]
+mod capture_tests;
 pub mod combat;
 pub mod cover;
 pub mod credits;
