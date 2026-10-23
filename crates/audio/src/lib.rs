@@ -35,6 +35,7 @@ pub mod catalog;
 pub mod events;
 pub mod mixer;
 pub mod music;
+pub mod music_files;
 pub mod names;
 pub mod output;
 #[cfg(all(not(target_arch = "wasm32"), feature = "native-output"))]
