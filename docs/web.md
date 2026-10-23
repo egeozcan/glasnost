@@ -66,7 +66,7 @@ cargo run -p glasnost-platform-native -- --frames 120    # close after 120 frame
 
 ## Browser lane (tests)
 
-`web-tests/smoke.mjs` serves `dist/web`, opens it in a Playwright browser with a forced backend, waits for the app to report its first presented frame (`data-glasnost-status` on `<body>`), and checks the canvas pixels. Chromium uses SwiftShader, so no GPU is needed.
+`web-tests/smoke.mjs` serves `dist/web`, opens it in a Playwright browser with a forced backend, waits for the app to report its first presented frame (`data-glasnost-status` on `<body>`), and checks the canvas pixels. Chromium uses SwiftShader, so no GPU is needed. Firefox needs `--headed`: a headless Playwright Firefox creates no WebGL context, while a headed one gets Mesa's software renderer (llvmpipe) when there is no GPU, so CI runs it under `xvfb-run -a`.
 
 ```sh
 cargo xtask web
@@ -74,7 +74,7 @@ cd web-tests
 npm ci
 npx playwright install chromium firefox     # once; add --with-deps on Debian/Ubuntu
 node smoke.mjs --browser chromium --backend webgl2
-node smoke.mjs --browser firefox --backend webgl2
+node smoke.mjs --browser firefox --backend webgl2 --headed   # under xvfb-run -a without a display
 node smoke.mjs --browser chromium --backend webgpu   # optional lane: forced WebGPU
 node smoke.mjs --browser chromium --backend auto --webgpu --expect WebGPU   # runtime choice
 node smoke.mjs --browser chromium --backend webgl2 --viewer   # viewer: imports the synthetic MIX fixtures
