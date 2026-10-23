@@ -304,6 +304,10 @@ pub struct Live {
     /// The map's gates ([`Built::objects`] indices), drawn with the game's
     /// own buildings so that their door shows (S-0108 claim 4).
     live_gates: BTreeSet<u32>,
+    /// The owner and health of each of the map's buildings
+    /// ([`Built::objects`] indices) as the game started: what the cell
+    /// pass drew it with.
+    map_start: BTreeMap<u32, (Option<HouseId>, i32)>,
     /// Each cell's static overlay objects ([`Built::objects`] indices).
     overlay_codes: BTreeMap<CellXY, Vec<u32>>,
     /// Each cell's overlay and overlay data value when the game started, by
@@ -847,6 +851,10 @@ impl Live {
             })
             .map(|(code, _)| *code)
             .collect();
+        let map_start: BTreeMap<u32, (Option<HouseId>, i32)> = building_ids
+            .iter()
+            .filter_map(|(code, id)| Some((*code, world.obj(*id).map(|o| (o.owner, o.health))?)))
+            .collect();
         let mut overlay_codes: BTreeMap<CellXY, Vec<u32>> = BTreeMap::new();
         for (i, info) in built.objects.iter().enumerate() {
             if info.kind == "overlay" {
@@ -966,6 +974,7 @@ impl Live {
             ),
             gone: BTreeSet::new(),
             live_gates,
+            map_start,
             overlay_codes,
             start_overlays,
             changed_overlays: BTreeMap::new(),
@@ -2547,6 +2556,40 @@ impl Live {
             .map(|(code, _)| *code)
             .collect();
         gone.extend(protected_map.iter().copied());
+        // The map's buildings that no longer look as the cell pass drew
+        // them are drawn live too (our placeholder order, as for the
+        // gates): one whose owner changed, so that it shows its owner's
+        // house colour (S-0103 claim 8; an engineer capture's ownership
+        // change, S-0509 claim 8), one whose health changed, so that its
+        // body frame follows its damage (S-0108 claim 2), and one with a
+        // running slot animation, so that the animation plays (S-0108
+        // claim 11, S-0109 claims 1 and 5) instead of standing at its
+        // first image frame. Whether the slots of a building that needs an
+        // engineer run before it is manned (S-0405 claims 8 and 9, S-0515
+        // claim 2) is open (Q-1772): such a building keeps its cell-pass
+        // drawing until its owner or health changes.
+        let power = &self.rules.econ.power.buildings;
+        let changed_map: BTreeSet<u32> = self
+            .building_ids
+            .iter()
+            .filter(|(code, id)| {
+                self.world.obj(**id).is_some_and(|o| {
+                    let unmanned_tech = power
+                        .get(o.type_index as usize)
+                        .is_some_and(|t| t.needs_engineer)
+                        && !o.econ.building.manned;
+                    o.on_map
+                        && (self.map_start.get(code) != Some(&(o.owner, o.health))
+                            || (!unmanned_tech
+                                && self
+                                    .slot_anims
+                                    .get(id)
+                                    .is_some_and(|s| !s.running.is_empty())))
+                })
+            })
+            .map(|(code, _)| *code)
+            .collect();
+        gone.extend(changed_map.iter().copied());
         // Overlays that changed during play are drawn again from the game's
         // cells (S-0112 claims 1 to 9); their static items leave the cell pass.
         let grid = &self.world.cells.grid;
@@ -2621,7 +2664,8 @@ impl Live {
         // The changed overlays follow the cell pass (our placeholder place
         // for them: the depth test orders them against the rest).
         scene.items.extend_from_slice(&self.live_overlays);
-        // The game's own buildings (deployed or placed) and the map's gates
+        // The game's own buildings (deployed or placed), the map's gates and
+        // the map's buildings drawn live (protected, changed or animated)
         // follow, in object ID order (our placeholder order; the map's
         // other buildings keep their place in the cell pass).
         // Each drawn type's slot definitions, read once (S-0108 Import mapping).
@@ -2649,6 +2693,7 @@ impl Live {
                         *id == o.id
                             && !self.live_gates.contains(code)
                             && !protected_map.contains(code)
+                            && !changed_map.contains(code)
                     })
             })
             .filter_map(|o| {
