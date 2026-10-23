@@ -10681,6 +10681,26 @@
           "type": "boolean",
           "default": true
         },
+        "voxel_debris_deck_impact_layer": {
+          "description": "A debris piece's ground impact that the deck test puts on a high-bridge deck hits the cell's ground layer (the objects under the deck); off: it hits the deck layer of that cell, as a detonation on the deck does.",
+          "type": "boolean",
+          "default": true
+        },
+        "voxel_debris_deck_over_water": {
+          "description": "A debris piece's ground impact from a high-bridge cell over water is a water impact even on the deck (no bounce animation, no hit, the piece ends in its next turn); off: an impact the deck test puts at the deck height is treated as on land.",
+          "type": "boolean",
+          "default": true
+        },
+        "voxel_debris_expiry_needs_animation": {
+          "description": "A debris piece's end deals its area damage and light flash only when its type names an expiry animation; off: also when the damage amount is not 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "voxel_debris_trailer_height": {
+          "description": "A debris piece's trailer animation is made at about 6.967 times the piece's height (F7); off: at the piece's flight point before the move.",
+          "type": "boolean",
+          "default": true
+        },
         "voxel_turret_exact_aim": {
           "description": "A building with a voxel turret must point exactly at its target.",
           "type": "boolean",
