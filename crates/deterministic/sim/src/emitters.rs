@@ -11,13 +11,13 @@
 //! and uncloak rule ([`natural_smoke`], [`natural_smoke_cloaked`],
 //! [`natural_smoke_yellow`]); the damage sparks of cyborg infantry
 //! ([`damage_sparks`]); the sparks of a deactivated vehicle
-//! ([`deactivated_sparks`]); and the two trigger actions of S-0011 codes 88
-//! and 89 ([`trigger_create`], [`trigger_mark`]). The flame sweep, swing and
-//! insertion of a fire emitter are part of the fire kind's turn
+//! ([`deactivated_sparks`]); the sparks of an electric bolt (S-0316 claim
+//! 6, [`electric_bolt_sparks`]); and the two trigger actions of S-0011
+//! codes 88 and 89 ([`trigger_create`], [`trigger_mark`]). The flame sweep,
+//! swing and insertion of a fire emitter are part of the fire kind's turn
 //! (`crate::particles::fire_turn`).
 //!
-//! Seams (no approved spec covers the owning part): [`electric_bolt_sparks`]
-//! and [`voxel_animation_system`].
+//! Seam (no approved spec covers the owning part): [`voxel_animation_system`].
 
 use glasnost_num::F64;
 
@@ -595,12 +595,16 @@ pub fn trigger_mark(w: &mut World, c: CellXY) {
     }
 }
 
-/// Seam `electric_bolt_sparks` (S-0616 claim 1, electric bolt row): each
-/// electric-bolt shot makes one system of the game-wide spark type at the
-/// bolt's end. No approved spec covers it: no approved spec owns the
-/// electric-bolt shot (S-0616 Open questions), so no weapon makes one and
-/// nothing calls this.
-pub fn electric_bolt_sparks(_w: &mut World, _end: Pos) {}
+/// The sparks of an electric bolt (S-0616 claim 1, electric bolt row;
+/// S-0316 claim 6): one system of the game-wide spark type at the bolt
+/// end `end`, with no owner object, no owner house and no first particle,
+/// made with the bolt whether or not the bolt is ever drawn. Without a
+/// listed game-wide spark type nothing is made (our engine's departure, with
+/// the importer's warning).
+pub fn electric_bolt_sparks(w: &mut World, end: Pos) {
+    // spec: S-0616 claim 1 (electric bolt: at the bolt's end, no owner object, target point unused, no first particle) and S-0316 claim 6 (absent spark type: no system, in our engine)
+    crate::particles::spark_system(w, end);
+}
 
 /// Seam `voxel_animation_system` (S-0616 claim 1, voxel-model animation
 /// row): a voxel-model animation type with an attached system makes it at

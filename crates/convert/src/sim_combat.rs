@@ -342,6 +342,11 @@ const WEAPON_COMBAT: &[Row] = &[
         "S-0616",
     ),
     ("is_mag_beam", "IsMagBeam", Bool, "S-0301"),
+    // spec: S-0316 Import mapping (IsElectricBolt, IsAlternateColor, IsLaser, IsRadBeam: booleans, absent no)
+    ("is_electric_bolt", "IsElectricBolt", Bool, "S-0316"),
+    ("is_alternate_color", "IsAlternateColor", Bool, "S-0316"),
+    ("is_laser", "IsLaser", Bool, "S-0316, S-0514"),
+    ("is_rad_beam", "IsRadBeam", Bool, "S-0316, S-0514"),
     ("spawner", "Spawner", Bool, "S-0301"),
     ("camera", "Camera", Bool, "S-0501"),
     ("disk_laser", "DiskLaser", Bool, "S-0301, S-0615"),
@@ -3889,8 +3894,8 @@ impl Builder<'_> {
         }
         let spark = self.global(COMBAT_DAMAGE, "DefaultSparkSystem");
         if spark.is_none() {
-            // spec: S-0601 Import mapping (DefaultSparkSystem absent: the overload pulse makes no spark systems and takes no spark placement draws, and the importer warns) and S-0616 Import mapping (no game-wide spark type)
-            self.warn_at(None, "[CombatDamage] DefaultSparkSystem is absent: the original's result is not established; our engine makes no overload, drone or other game-wide spark systems and takes no overload spark placement draws (S-0601 Import mapping, a design fallback)".to_owned());
+            // spec: S-0601 Import mapping (DefaultSparkSystem absent: the overload pulse makes no spark systems and takes no spark placement draws, and the importer warns), S-0616 Import mapping (no game-wide spark type) and S-0316 claim 6 (no electric-bolt sparks, and the importer warns)
+            self.warn_at(None, "[CombatDamage] DefaultSparkSystem is absent: the original's result is not established; our engine makes no overload, drone, electric-bolt or other game-wide spark systems and takes no overload spark placement draws (S-0601 Import mapping, S-0316 claim 6, a design fallback)".to_owned());
         }
         self.loading_particle_checks();
     }

@@ -446,8 +446,11 @@ impl Session {
         &mut self,
         f: impl FnOnce(&mut Live, &Inputs, &mut Scene) -> R,
     ) -> Option<R> {
+        let view = self.view();
         let (inputs, live) = self.loaded.split();
         let live = live?;
+        // spec: S-0316 claim 5 (the bolts' view test is on the battlefield view as drawn)
+        live.battlefield = Some((view.origin, view.size));
         std::mem::swap(&mut live.world, &mut self.play.game.world);
         let r = f(live, &inputs, &mut self.scene);
         std::mem::swap(&mut live.world, &mut self.play.game.world);

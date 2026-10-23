@@ -55,6 +55,13 @@
 //! lane's copy of the rules lets the building need no power; the computer
 //! run clears the owner's human-controlled flag.
 //!
+//! S-0316 (electric bolts, M8 step C5): a vehicle, an infantry unit and a
+//! building whose weapon has the electric-bolt flag (found by the flag;
+//! where no stock type of that kind carries such a weapon, the lane's copy
+//! of the rules gives one the first electric-bolt weapon), each firing at
+//! an enemy vehicle; frames while bolts are shown, with the bolt, attached
+//! bolt, pixel and spark-system counts.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -103,6 +110,9 @@ const SCENES: &[Scene] = &[
     ("shot-sprite", sprite_shots),
     ("shot-voxel", voxel_shots),
     ("aa-only", aa_only),
+    ("bolt-vehicle", |l| bolts(l, Kind::Vehicle)),
+    ("bolt-infantry", |l| bolts(l, Kind::Infantry)),
+    ("bolt-building", |l| bolts(l, Kind::Building)),
 ];
 
 #[test]
@@ -1692,6 +1702,234 @@ fn aa_only(lane: &mut Lane) {
             watch_attack(&mut l, &format!("{key} air"), b2, &[("aircraft", a)]);
         }
     }
+}
+
+/// The first weapon with the electric-bolt flag that makes a bolt (no
+/// laser flag, a projectile), by index.
+fn bolt_weapon(w: &World) -> Option<u32> {
+    let r = w.rules();
+    r.combat
+        .weapons
+        .iter()
+        .position(|x| x.electric_bolt && !x.laser && x.projectile.is_some())
+        .map(|i| i as u32)
+}
+
+/// The slots of the type `i` of `kind`.
+fn slots_of(
+    w: &World,
+    kind: Kind,
+    i: usize,
+) -> Option<[Option<glasnost_sim::combat::data::WeaponId>; glasnost_sim::combat::data::SLOTS]> {
+    let r = w.rules();
+    match kind {
+        Kind::Building => r.buildings.get(i).map(|b| b.combat.slots),
+        _ => r.unit(kind, i as u32).map(|u| u.combat.slots),
+    }
+}
+
+/// The number of types of `kind` and the name of type `i`.
+fn type_count(w: &World, kind: Kind) -> usize {
+    let r = w.rules();
+    match kind {
+        Kind::Building => r.buildings.len(),
+        Kind::Infantry => r.infantry.len(),
+        _ => r.vehicles.len(),
+    }
+}
+
+fn type_name_of(w: &World, kind: Kind, i: usize) -> String {
+    let r = w.rules();
+    match kind {
+        Kind::Building => r.buildings[i].name.clone(),
+        Kind::Infantry => r.infantry[i].name.clone(),
+        _ => r.vehicles[i].name.clone(),
+    }
+}
+
+/// An armed type of `kind` (a small, not wall building; a mobile type that
+/// is neither a harvester nor a transport nor a gunner) and its first armed
+/// slot, preferring one whose slot holds an electric-bolt weapon.
+fn bolt_firer(w: &World, kind: Kind) -> Option<(usize, usize, bool)> {
+    let r = w.rules();
+    let fits = |i: usize| match kind {
+        Kind::Building => {
+            let b = &r.buildings[i];
+            b.strength > 0
+                && b.foundation.0 <= 2
+                && b.foundation.1 <= 2
+                && !b.raw.econ.wall.unwrap_or(false)
+        }
+        _ => r.unit(kind, i as u32).is_some_and(|u| {
+            u.strength > 0 && !u.harvester && u.passengers == 0 && !u.combat.gunner
+        }),
+    };
+    let is_bolt = |x: glasnost_sim::combat::data::WeaponId| {
+        let wr = r.combat.weapon(x);
+        wr.electric_bolt && !wr.laser && wr.projectile.is_some()
+    };
+    let n = type_count(w, kind);
+    let found = (0..n).filter(|&i| fits(i)).find_map(|i| {
+        let s = slots_of(w, kind, i)?;
+        let k = s.iter().position(|x| x.is_some_and(is_bolt))?;
+        Some((i, k, true))
+    });
+    found.or_else(|| {
+        (0..n).filter(|&i| fits(i)).find_map(|i| {
+            let s = slots_of(w, kind, i)?;
+            let k = s
+                .iter()
+                .position(|x| x.is_some_and(|x| r.combat.weapon(x).projectile.is_some()))?;
+            Some((i, k, false))
+        })
+    })
+}
+
+/// The systems in play of the game-wide spark type.
+fn default_sparks(w: &World) -> usize {
+    let Some(t) = w.rules().gas.default_spark else {
+        return 0;
+    };
+    w.gas.systems.values().filter(|s| s.type_index == t).count()
+}
+
+/// S-0316 (electric bolts): a firer of `kind` whose weapon has the
+/// electric-bolt flag fires at an enemy vehicle; frames while bolts are
+/// shown, with counts.
+fn bolts(lane: &mut Lane, kind: Kind) {
+    let key = format!("bolt-{kind:?}").to_lowercase();
+    let w = lane.world();
+    let weapon = bolt_weapon(w);
+    let enemy = lane.enemy();
+    let target_type = plain_vehicle(w);
+    let found = bolt_firer(w, kind);
+    println!(
+        "{key}: electric-bolt weapons {}; a type of this kind found: {}; with the flag in the stock rules: {}",
+        lane.world()
+            .rules()
+            .combat
+            .weapons
+            .iter()
+            .filter(|x| x.electric_bolt)
+            .count(),
+        found.is_some(),
+        found.is_some_and(|f| f.2)
+    );
+    let (Some(weapon), Some((ti, slot, stock)), Some(enemy), Some(target_type)) =
+        (weapon, found, enemy, target_type)
+    else {
+        return;
+    };
+    if !stock {
+        println!(
+            "{key}: patched: the type's slot {slot} gets the electric-bolt weapon (lane copy only)"
+        );
+        patch_rules(lane, |r| match kind {
+            Kind::Building => r.buildings[ti].combat.slots[slot] = Some(weapon),
+            Kind::Infantry => r.infantry[ti].combat.slots[slot] = Some(weapon),
+            _ => r.vehicles[ti].combat.slots[slot] = Some(weapon),
+        });
+    }
+    let name = type_name_of(lane.world(), kind, ti);
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane
+        .area(CellXY::new(home.x + 8, home.y + 8), (2, 2), 3, |l| {
+            l != land::WATER && l != land::ROCK
+        })
+        .unwrap_or_else(|| lane.open_land(CellXY::new(home.x + 8, home.y + 8)));
+    let a = lane.spawn(kind, &name, local, at);
+    let t = lane.spawn(
+        Kind::Vehicle,
+        &target_type,
+        enemy,
+        CellXY::new(at.x + 4, at.y),
+    );
+    if kind == Kind::Building {
+        // Power for the building: the strongest power plant type, west of it.
+        let plant = {
+            let r = lane.world().rules();
+            (0..r.buildings.len())
+                .filter(|&p| r.buildings[p].raw.econ.power.unwrap_or(0) > 0)
+                .max_by_key(|&p| {
+                    (
+                        r.buildings[p].raw.econ.power.unwrap_or(0),
+                        std::cmp::Reverse(p),
+                    )
+                })
+                .map(|p| (r.buildings[p].name.clone(), r.buildings[p].foundation))
+        };
+        if let Some((pname, psize)) = plant
+            && let Some(p) = lane.area(CellXY::new(at.x - 5, at.y), psize, 2, |l| {
+                l != land::WATER && l != land::ROCK
+            })
+        {
+            lane.spawn(Kind::Building, &pname, local, p);
+        }
+    }
+    lane.ticks(2);
+    if kind == Kind::Building {
+        println!(
+            "{key}: building {name}; in operation {}",
+            glasnost_sim::econ::power::in_operation(lane.world(), a)
+        );
+    }
+    lane.look_at(CellXY::new(at.x + 2, at.y));
+    let n = if kind == Kind::Building {
+        lane.world_mut().obj_mut(a).unwrap().target = Some(glasnost_sim::world::Target::Object(t));
+        1
+    } else {
+        lane.order(local, a, ClickOn::Object(t))
+    };
+    println!("{key}: enemy vehicle 4 cells east; orders {n}");
+    let sparks0 = default_sparks(lane.world());
+    let mut saved = 0;
+    let mut most = (0, 0);
+    for _ in 0..600 {
+        lane.ticks(1);
+        let (shown, attached) = live_bolts(lane);
+        most = (most.0.max(shown), most.1.max(attached));
+        if shown > 0 && saved < 4 {
+            let pixels = lane
+                .c
+                .session
+                .as_ref()
+                .and_then(|s| s.loaded.live.as_ref())
+                .map_or(0, |l| l.counts.bolt_pixels);
+            println!(
+                "{key}: tick {}: bolts shown {shown}, attached {attached}, bolt pixels {pixels}, spark systems of the game-wide type {}",
+                lane.world().tick,
+                default_sparks(lane.world())
+            );
+            lane.save(&format!("{key}-{saved}"));
+            saved += 1;
+            lane.ticks(3);
+        }
+        if saved >= 4 {
+            break;
+        }
+    }
+    let made = lane
+        .c
+        .session
+        .as_ref()
+        .and_then(|s| s.loaded.live.as_ref())
+        .map_or(0, |l| l.counts.bolts);
+    println!(
+        "{key}: bolts made {made}; most shown at once {}, most attached {}; spark systems of the game-wide type before {sparks0}, now {}; frames {saved}",
+        most.0,
+        most.1,
+        default_sparks(lane.world())
+    );
+}
+
+/// The live view's bolts: shown and attached.
+fn live_bolts(lane: &Lane) -> (usize, usize) {
+    lane.c
+        .session
+        .as_ref()
+        .and_then(|s| s.loaded.live.as_ref())
+        .map_or((0, 0), |l| l.bolt_counts())
 }
 
 /// The screenshot key of a drain scene.

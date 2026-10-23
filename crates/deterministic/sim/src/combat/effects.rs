@@ -363,6 +363,31 @@ pub enum Effect {
         /// (S-0518 claim 18).
         prism: Option<i32>,
     },
+    /// An electric-bolt shot made its bolt (S-0316 claims 2 to 4): the
+    /// drawing makes the bolt, with its own draws from the unsynchronised
+    /// stream (claim 13). Its spark system is made in play
+    /// (`crate::emitters::electric_bolt_sparks`).
+    Bolt {
+        /// The firer.
+        firer: ObjectId,
+        /// The weapon fired (its alternate-colour flag, claim 10).
+        weapon: crate::combat::data::WeaponId,
+        /// The weapon slot that fired (claims 3 and 4).
+        slot: usize,
+        /// The shot's burst counter *k* (claim 3: the side of the shot's own
+        /// projectile, also in an attached bolt's later frames).
+        burst: i32,
+        /// The bolt start: the fire point of the slot that fired.
+        from: Pos,
+        /// The bolt end, fixed (Terms: S-0518 claim 20's target point).
+        to: Pos,
+        /// A building firer's position (F4: S-0518 claim 20's
+        /// building-source adjustment).
+        building: Option<Pos>,
+        /// The firer was a vehicle on the map at the shot (claim 4: only
+        /// such a bolt can be attached).
+        vehicle_on_map: bool,
+    },
     /// A magnetic wave was made (S-0607 claims 21 and 25), with the shot's
     /// firing and impact points it was made from.
     Wave {
@@ -706,6 +731,53 @@ fn anim_spawned(
         z_adjust,
         id: made.id,
     });
+}
+
+/// Whether a shot of weapon `wr` that launched a projectile makes a bolt
+/// (S-0316 claim 2): the electric-bolt flag without the laser flag, which
+/// wins over it. The caller checks that a projectile was put on the map
+/// (claims 1 and 2: a firing that launches none, and a void shot, make no
+/// bolt).
+pub fn makes_bolt(wr: &crate::combat::data::WeaponRules) -> bool {
+    // spec: S-0316 claim 2 (the laser flag wins over the electric-bolt flag: a laser and no bolt, no bolt sparks)
+    wr.electric_bolt && !wr.laser
+}
+
+/// An electric-bolt shot's bolt and its spark system (S-0316 claims 2 to
+/// 4 and 6), made in the tick of the shot, after the shot's report (claim
+/// 13, State and ordering): reports [`Effect::Bolt`] from the fire point
+/// `from` of `slot` with the shot's burst counter `burst` to the bolt end,
+/// then makes one system of the game-wide spark type at the bolt end.
+pub fn bolt(
+    w: &mut crate::world::World,
+    firer: ObjectId,
+    weapon: crate::combat::data::WeaponId,
+    slot: usize,
+    burst: i32,
+    from: Pos,
+    target: crate::world::Target,
+) {
+    let Some(o) = w.obj(firer) else {
+        return;
+    };
+    // spec: S-0316 F4 (a building firer's bolt takes S-0518 claim 20's building-source adjustment)
+    let building = (o.kind == crate::rules::Kind::Building).then_some(o.pos);
+    // spec: S-0316 claim 4 (only a vehicle on the map can have its bolt attached; a carried vehicle is off the map)
+    let vehicle_on_map = o.kind == crate::rules::Kind::Vehicle && o.on_map;
+    // spec: S-0316 Terms and claim 3 (the bolt end, fixed at the shot: the shot target's target point by S-0518 claim 20, a cell's centre at its height)
+    let to = crate::combat::range::target_point(w, target);
+    w.effects.push(Effect::Bolt {
+        firer,
+        weapon,
+        slot,
+        burst,
+        from,
+        to,
+        building,
+        vehicle_on_map,
+    });
+    // spec: S-0316 claim 6 and S-0616 claim 1 (one system of the game-wide spark type at the bolt end, made with the bolt, after the bolt's own draw, whatever the shot's outcome)
+    crate::emitters::electric_bolt_sparks(w, to);
 }
 
 /// Reports a fired shot's line-effect points ([`Effect::Line`]).

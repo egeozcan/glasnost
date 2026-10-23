@@ -224,6 +224,39 @@ fn weapon_fields_and_not_given_values() {
     assert_eq!(dec(&s.general.ballistic_scatter), Some("15e-1"));
 }
 
+/// spec: S-0316 Import mapping (IsElectricBolt, IsAlternateColor, IsLaser, IsRadBeam: weapon booleans, absent no)
+#[test]
+fn electric_bolt_weapon_fields() {
+    let base = "[Warheads]\n1=Zap\n2=Plain\n3=Boom\n4=Dart\n\
+                [Zap]\nIsElectricBolt=yes\nIsAlternateColor=yes\nIsLaser=no\nIsRadBeam=1\n\
+                Warhead=Boom\nProjectile=Dart\nDamage=10\n[Plain]\nWarhead=Boom\nProjectile=Dart\n\
+                [Boom]\nCellSpread=1\n[Dart]\nROT=0\n";
+    let (s, _) = direct(
+        &[base],
+        "",
+        &["Zap", "Plain"],
+        &["Dart"],
+        IniQuirks::default(),
+    );
+    let z = &s.weapons["Zap"];
+    assert_eq!(
+        (z.is_electric_bolt, z.is_alternate_color),
+        (Some(true), Some(true))
+    );
+    assert_eq!((z.is_laser, z.is_rad_beam), (Some(false), Some(true)));
+    let p = &s.weapons["Plain"];
+    assert_eq!(
+        (
+            p.is_electric_bolt,
+            p.is_alternate_color,
+            p.is_laser,
+            p.is_rad_beam
+        ),
+        (None, None, None, None),
+        "absent: the typed rules read no"
+    );
+}
+
 /// spec: S-0306 Import mapping (projectile fields; art Voxel of the projectile image)
 #[test]
 fn projectile_fields() {

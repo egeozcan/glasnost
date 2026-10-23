@@ -15,8 +15,8 @@ gives, it files a request and stops that part.
   file.
 - **Balance patch:** after M8. M8 has no balance step. Whenever it comes, the patch is an optional
   rules layer, off by default, and never limits the AI (D14).
-- **Specless items:** requests filed now: Q-1700 (music playback), Q-1701 (the electric-bolt shot),
-  Q-1702 (voxel animations in play).
+- **Specless items:** requests filed now: Q-1700 (music playback), Q-1701 (the electric-bolt shot,
+  answered by S-0316 and built at C5 part 1), Q-1702 (voxel animations in play).
 - **"Statistical suites green":** no nightly schedule. The oracle arena and the seed sweeps run at every
   M8 step's merge, as in M7b, and each step's ledger row gives the arena table. The oracle arena needs a
   real install, so it stays in the local lane, never in CI. CI keeps the synthetic arena.
@@ -78,7 +78,7 @@ These are our own engine and client, except where a step names a request.
 | C2 | **Settings.** A settings screen and its storage: volumes (sound, voices, music), scroll speed, the key bindings the client has, the display scale. Our own UI. No setting reaches the simulation. | Settings persist natively and on the web, and a replay's hash is the same whatever the settings. |
 | C3 | **Accessibility.** UI scale, keyboard-only play of the sidebar and menus, captions for announcements, and a colour-blind option for house colours (presentation only, off by default). The lead may add or drop items before the step starts. | Each item with a lane picture, or a test where one is possible. |
 | C4 | **Performance.** A benchmark that plays a late full-game replay with frame timing, natively and in the browser. Profile and fix the renderer and the client until the target is met. | 60 fps at 1080p on a typical Intel laptop iGPU in Firefox WebGL2 (see Decisions). |
-| C5 | **Electric bolts and voxel animations.** The electric-bolt shot, its sparks (`emitters::electric_bolt_sparks`), voxel animations in play and their particle systems (`emitters::voxel_animation_system`). | Waits for Q-1701 and Q-1702. Then a normal intake. |
+| C5 | **Electric bolts and voxel animations.** The electric-bolt shot, its sparks (`emitters::electric_bolt_sparks`), voxel animations in play and their particle systems (`emitters::voxel_animation_system`). | Part 1 (electric bolts, S-0316, answering Q-1701): built, ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md). Part 2 (voxel animations) waits for Q-1702. |
 | C6 | **Optional WebGPU extras.** Only behind the runtime check (D9), after C4. | Lowest priority; may move past M8. |
 
 ## Housekeeping (any time)
