@@ -10987,6 +10987,13 @@
             "$ref": "#/$defs/UnitType"
           }
         },
+        "voxel_animations": {
+          "description": "Voxel-animation types (debris pieces) by type name (S-0317 Import\nmapping); the registry `voxel_animations` gives their order.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/VoxelAnimationType"
+          }
+        },
         "warheads": {
           "description": "Warheads by name.",
           "type": "object",
@@ -13125,6 +13132,187 @@
               "type": "null"
             }
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "VoxelAnimationType": {
+      "description": "A voxel-animation type's fields: one piece type of S-0317 (Import\nmapping). Absent fields take the Import mapping's defaults.",
+      "type": "object",
+      "properties": {
+        "attached_system": {
+          "description": "`AttachedSystem`, a particle-system name (claim 13; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "bounce_anim": {
+          "description": "`BounceAnim`, an animation name (claim 7; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "damage": {
+          "description": "`Damage`, the impact and expiry damage amount (claims 7, 11;\nabsent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "damage_radius": {
+          "description": "`DamageRadius`, leptons (claim 7; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "duration": {
+          "description": "`Duration`, the lifetime counter at creation in piece turns\n(S-0317 claim 2; absent 30).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "elasticity": {
+          "description": "`Elasticity`, the elasticity *e*, single precision (claim 10;\nabsent 0.8).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expire_anim": {
+          "description": "`ExpireAnim`, an animation name (claim 11; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "is_meteor": {
+          "description": "`IsMeteor`, a meteor piece (claim 4; absent no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_tiberium": {
+          "description": "`IsTiberium`, the resource flag (claim 12; absent no).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "max_angular_velocity": {
+          "description": "`MaxAngularVelocity`, the upper spin limit in degrees per tick, as\nthe lower; absent here: the engine default before any reading, 10.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_xy_vel": {
+          "description": "`MaxXYVel`, the horizontal speed limit *M*, a double, leptons per\ntick (F1, F2; absent 15.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_z_vel": {
+          "description": "`MaxZVel`, the upper vertical limit *Z*ₘₐₓ, a double (absent 5.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_angular_velocity": {
+          "description": "`MinAngularVelocity`, the lower spin limit in degrees per tick as\nthe rules layers leave it (S-0006 claims 3 and 5: −1 when a section\nomits it); absent here: the engine default before any reading, 0.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_z_vel": {
+          "description": "`MinZVel`, the lower vertical limit *Z*ₘᵢₙ, a double (absent 3.5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spawn_count": {
+          "description": "`SpawnCount`, the spawn count *c* (claim 12; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawns": {
+          "description": "`Spawns`, a voxel-animation name (claim 12; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "start_sound": {
+          "description": "`StartSound`, a sound name (claim 14; absent none). The stop sound\nhas no effect (claim 14) and is not kept.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "trailer_anim": {
+          "description": "`TrailerAnim`, an animation name (claim 6; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "warhead": {
+          "description": "`Warhead`, a warhead name (absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false

@@ -1410,6 +1410,7 @@ impl Builder<'_> {
             Kind::Animations,
             Kind::Particles,
             Kind::ParticleSystems,
+            Kind::VoxelAnimations,
             Kind::Tiberiums,
             Kind::Superweapons,
         ] {
@@ -1739,6 +1740,7 @@ impl Builder<'_> {
                 Kind::Animations => self.animation(&mut rec, i, t),
                 Kind::Particles => self.particle(&mut rec, t),
                 Kind::ParticleSystems => self.particle_system(&mut rec, t),
+                Kind::VoxelAnimations => self.voxel_animation(&mut rec, t),
                 Kind::Tiberiums => self.tiberium(&mut rec, t),
                 Kind::Superweapons => self.superweapon(&mut rec, t),
                 _ => {}
@@ -1754,6 +1756,7 @@ impl Builder<'_> {
                     | Kind::Animations
                     | Kind::Particles
                     | Kind::ParticleSystems
+                    | Kind::VoxelAnimations
             );
             if always || !rec.0.is_empty() {
                 out.push((key.clone(), rec.node()));
@@ -2930,6 +2933,10 @@ pub use combat::converted_keys;
 
 #[path = "sim_econ.rs"]
 pub(crate) mod econ;
+
+#[path = "sim_pieces.rs"]
+mod pieces;
+pub use pieces::piece_keys;
 pub use econ::converted_keys as econ_converted_keys;
 
 #[cfg(test)]
@@ -2991,6 +2998,10 @@ mod crate_tests;
 #[cfg(test)]
 #[path = "sim_gas_tests.rs"]
 mod gas_tests;
+
+#[cfg(test)]
+#[path = "sim_pieces_tests.rs"]
+mod pieces_tests;
 
 #[cfg(test)]
 #[path = "sim_special_tests.rs"]

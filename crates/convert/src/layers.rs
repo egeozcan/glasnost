@@ -371,6 +371,8 @@ fn reset_keys(kind: Kind) -> &'static [&'static str] {
         Kind::Warheads => &["Verses"],
         Kind::ParticleSystems => &["HoldsWhat", "BehavesLike"],
         Kind::Particles => &["BehavesLike"],
+        // spec: S-0006 claim 5 and Import mapping (a voxel animation's angular velocities reset to −1 when absent)
+        Kind::VoxelAnimations => &["MinAngularVelocity", "MaxAngularVelocity"],
         _ => &[],
     }
 }
