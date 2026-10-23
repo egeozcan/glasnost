@@ -1001,7 +1001,7 @@ impl Client {
     pub fn update(&mut self, now_ms: i64) {
         self.clock = now_ms;
         self.net_pump(now_ms);
-        // Q-1833 (interim: music plays only while the game is played, the options menu open or not; it stops when play ends or the game is left)
+        // Q-1833 (interim: music plays only while the game is played, the options menu open or not; it stops when play ends or the game is left; our settings screen from the game keeps it, unserviced)
         let in_play = self
             .session
             .as_ref()

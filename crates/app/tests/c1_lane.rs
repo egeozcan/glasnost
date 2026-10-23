@@ -136,30 +136,40 @@ fn game(dir: &std::path::Path, music: bool, n: usize) -> Run {
     let mut starts = Vec::new();
     let mut failed = 0;
     let mut slowest = 0u128;
+    let mut slowest_start = 0u128;
     let mut clock = 0i64;
     for _ in 0..n {
         clock += 1000;
         let t = Instant::now();
         c.update(clock);
-        slowest = slowest.max(t.elapsed().as_micros());
+        let us = t.elapsed().as_micros();
         if c.shell.screen != Screen::Game {
             break;
         }
+        let mut started = false;
         if let Some(m) = c.audio.as_mut().and_then(|a| a.music_mut()) {
             for u in m.take_log() {
                 match u {
-                    Update::Started(k) => starts.push((clock, k)),
+                    Update::Started(k) => {
+                        starts.push((clock, k));
+                        started = true;
+                    }
                     Update::Failed(_) => failed += 1,
                     _ => {}
                 }
             }
+        }
+        if started {
+            slowest_start = slowest_start.max(us);
+        } else {
+            slowest = slowest.max(us);
         }
     }
     let s = c.session.as_ref().expect("the session");
     let hash = glasnost_sim::save::state_hash(&s.play.game.world);
     let _ = writeln!(
         report,
-        "{}: {n} updates, slowest {slowest} us, state hash {hash}",
+        "{}: {n} updates, slowest without a track start {slowest} us, slowest with one {slowest_start} us, state hash {hash}",
         if music { "with music" } else { "without music" }
     );
     if music {
