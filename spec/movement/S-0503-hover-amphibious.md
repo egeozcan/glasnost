@@ -2,11 +2,11 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 7
+revision: 16
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-23
 measurements: []
 requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
 supersedes: []
@@ -19,9 +19,13 @@ supersedes: []
 How a vehicle with the hovering locomotor moves: its throttle, speed, acceleration and braking,
 its straight-line steps between cell centres, its arrival at each point, its hover height, lift and
 bob, the wake it leaves over water, what it does at each entry outcome of its next cell, and what
-happens when it is switched off (it spins, settles and, over water, sinks). It also states which
+happens when it is switched off (it spins, settles and, over water, sinks), including the
+switch-offs and switch-ons by a repair depot or naval yard (claims 10 and 11). It also states which
 movement model an amphibious type uses, and how land and water affect the speed of hovering and
-amphibious vehicles. Skirmish only; network games and campaigns are out of scope.
+amphibious vehicles. Skirmish only; network games and campaigns are out of scope. Against revision 15,
+revision 16 states in claim 10 that the new draws of a repeated switch-off replace an active spin
+count, and gives claim 10's sub-claims and claim 11's depot, naval-yard and no-spin sentences their
+own backing and confidence; it moves the note on S-0314's *settled vehicle* into Terms.
 
 Pointers, not repeated here:
 - land types, locomotion classes, land multipliers, entering a cell and zones: S-0211 claims 1–3
@@ -43,6 +47,7 @@ Pointers, not repeated here:
   indefinitely for the transport. These transport rules do not change the locomotor at the shore.
 - bridge decks as surfaces: S-0511.
 - disabling by loss of a control centre: S-0405 claim 13.
+- switch-off and switch-on by a repair depot or naval yard: S-0314 Terms and claim 21.
 - death over water with the bomb mark: S-0312 claim 11.
 
 **Cross-spec corrections required at hand-off.** S-0206 claim 13's body aim must follow claim 5
@@ -100,6 +105,9 @@ New terms:
   hover height is above 0. So a switched-off vehicle still counts as powered until it has settled.
 - **Spin.** The short uncontrolled rotation initiated by switching off a hovering vehicle
   (claim 10); re-enabling does not itself end it.
+- **Settled** (S-0314's sense). S-0314's *settled vehicle*, and *being settled* at a repair depot,
+  are S-0314's own terms (S-0314 Terms). They do not mean this spec's settling down to a hover
+  height of 0 (claim 10).
 
 ## Behaviour
 
@@ -294,50 +302,116 @@ New terms:
 ### Switching off
 
 10. **Switched off: spin and settling.** A hovering vehicle is switched off by the disabling of
-    S-0405 claim 13, and switched on again by its re-enabling. When it is switched off while it is
-    powered, and its current behaviour is neither *sleep* nor *enter*:
+    S-0405 claim 13 and by each switch-off of a repair depot, the first and every repeated one.
+    It is switched on again by its re-enabling and by each switch-on of a repair depot, even when
+    it is still disabled. S-0314 (Terms and claim 21) states when a depot switches a vehicle off
+    or on; this claim does not. This claim states what a switch-off and a switch-on do to a
+    hovering vehicle. Each switch-off meets the conditions below on its own, so a repeated
+    switch-off of a vehicle that is still above the ground takes the two draws again whenever
+    those conditions hold at it (none while its current behaviour is *sleep* or *enter*).
+    When it is switched off while it is powered, and its current behaviour is neither *sleep* nor
+    *enter*:
     - it takes two ranged draws from the scenario random stream, first R(20, 30), giving the spin
       count *n*, then R(0, 99); when the second is below 50, *n* is negated.
+    - When a spin is already active, these two new draws replace its spin count *n*: the spin
+      goes on from the new count, and the old count is lost. A repeated switch-off during a spin
+      therefore restarts the spin's countdown rather than adding to it or leaving it alone.
 
     These conditions govern only the start of a spin. Whenever it is switched off, a moving
     vehicle receives a stop request, and its powered lift (claim 8) stops.
 
-    While the spin is active and the vehicle is powered, its body facing turns by *n* × 256 facing units each
-    tick, and *n* moves one step towards 0 each tick. A vehicle that settles to height 0 on this
-tick while switched off has no further spin rotation on that tick. The spin ends on the
-    first tick on which *n* reaches 0 or the vehicle is no longer powered (it has settled to a hover
-    height of 0). Without lift it sinks under gravity (claim 8) and rests on the surface. When it
-    is switched on again, the lift returns and it rises to its hover height.
+    While the spin is active and the vehicle is powered, its body facing turns by *n* × 256
+    facing units each tick, and *n* moves one step towards 0 each tick. A vehicle that settles to
+    height 0 on this tick while switched off has no further spin rotation on that tick. The spin
+    ends on the first tick on which *n* reaches 0 or the vehicle is no longer powered (it has
+    settled to a hover height of 0). Without lift it sinks under gravity (claim 8) and rests on the
+    surface. When it is switched on again, the lift returns and it rises to its hover height.
 
     The stop request clears the destination and stored path only when destination and heading
     point differ as full three-dimensional points; otherwise it leaves them. It does not itself
     zero throttle or hover speed. Thus stopping is not necessarily instantaneous horizontal rest.
+    The stop request itself never touches the order-level destination (Terms, *Destination*): the
+    stop request of a repair depot's switch-off, the first or a repeated one, leaves the vehicle's
+    destination that is the depot in place. The depot's removal of that destination is S-0314's
+    (Terms and claims 21 and 22).
 
     A vehicle not powered, or in *sleep* or *enter*, takes no draws and starts no new spin, but
     still receives that stop request and loses lift. Re-enabling restores lift without cancelling
     an already active spin, which can continue until its count reaches 0.
-    - Backing: `measurable` (scenario H7) for ordinary disabling, draws, stopping and restoration
-      of lift. The *sleep*/*enter*, equal-point and re-enable-during-spin exceptions are
-      `unmeasured`: no stock input sequence isolating these states is yet established, and
-      H7's early-restoration subtest is conditional. The settling-tick rotation cutoff is
-     measurable in H7
-    - Confidence: high for the draws and the spin; medium for the exceptions
+
+    Backing and confidence, per sub-claim:
+    - *Ordinary disabling: the draws, the spin, the settling-tick rotation cutoff, the stop
+      request and the loss and return of lift.* Backing: `measurable` (scenario H7). Confidence:
+      high.
+    - *The exceptions: sleep or enter, the equal-point stop request, and re-enabling during a
+      spin.* Backing: `unmeasured`: no stock input sequence isolating these states is yet
+      established, and H7's early-restoration subtest is conditional. Confidence: medium.
+    - *New draws replacing an active spin count.* Backing: `unmeasured`: it needs a second
+      switch-off that takes the draws while a spin is still active, and no scenario ensures one
+      (H7's early-restoration subtest is conditional, and the depot's repeated switch-offs are
+      `unmeasured` below). Confidence: medium.
+    - *A depot's first switch-off and the draws it takes.* Backing: `measurable` (S-0314 H4
+      part i run 1). Its tick, at the movement arrival and at the processing that makes the
+      vehicle settled in S-0314's sense, is `unmeasured`, as in S-0314 claim 21. Confidence:
+      medium.
+    - *The loss of lift at the depot.* Backing: `measurable` (S-0314 H4's hovering repeat, which
+      S-0314 calls an attempt). Confidence: medium until that repeat runs.
+    - *A depot's repeated switch-offs and which of them take the draws.* Backing: `unmeasured`:
+      run 1 sets up no later processing that finds the vehicle above the ground in a behaviour
+      other than *sleep* and *enter*. Confidence: medium.
+    - *A depot's switch-on of a vehicle that stops being settled by receiving a destination.*
+      Backing: `measurable` (S-0314 H18 part b's hovering repeat, in a run that has the window
+      that repeat needs). Confidence: medium.
+    - *A depot's switch-on at the other two ends of being settled* (a waiting processing that
+      does not accept the vehicle, a settling processing that finds it moving). Backing:
+      `unmeasured`, as in S-0314 claim 21. Confidence: medium.
+    - *A depot's switch-on of a still-disabled vehicle.* Backing: `unmeasured`: it needs a
+      disabled vehicle in contact to meet an end of being settled, and no scenario ensures that.
+      Confidence: medium.
+    - *The stop request of a depot's switch-off leaving the order-level destination in place.*
+      Backing: `measurable` (S-0314 H4 part a's hovering repeat, an attempt, whose recorder logs
+      the order-level destination on every tick and expects it to be the depot from the arrival
+      until the processing that takes the settling step). A repeated switch-off is covered only
+      when one falls in that window. Confidence: medium.
 
 11. **Sinking over water.** On the tick on which the spin of claim 10 ends, when the vehicle's cell
     is a water cell and its world height is less than 104 leptons (one level) above the surface,
     it is given the bomb mark and starts to fall. Upon dying within 10 leptons above the water,
     S-0312 claim 11 supplies wake and splash instead of the ordinary vehicle death effects, and
     its passengers do not get out. A vehicle whose spin ends while still at least 104 leptons
-    above the water does not start this fall. Thus ordinary switch-off over flat water leads to
-    loss after settling, whereas a vehicle settling on land or a bridge deck survives this test.
+    above the water does not start this fall. Thus a switch-off over flat water that starts a spin
+    (claim 10) leads to loss after settling, unless the spin ends at least 104 leptons above
+    the water. This applies to every switch-off of claim 10 that starts a spin, including one by
+    a repair depot or naval yard over water (S-0314 claim 21) whenever that switch-off takes the
+    draws. A switch-off that starts no spin, while no spin is active, makes no such test, and the
+    vehicle rests on the water. A vehicle settling on land or a bridge deck survives this test.
     The test belongs to the end of a spin, even if the vehicle has meanwhile been re-enabled.
-    - Backing: `measurable` (scenario H7) for ordinary low-water fall, destruction, animations
-      and land/deck survival. The exact 104-lepton boundary and a spin ending after re-enabling
-      are `unmeasured`: H7 establishes neither a spin ending near that boundary nor unconditional
-      early restoration. Passenger loss is `unmeasured` here: no stock passenger-carrying hover
-      type dependent on a control centre is established; its rule inherits S-0312 claim 12
-    - Confidence: medium (the fall's end is S-0312's; in stock play the vehicle settles before its
-      spin count runs out, so the test is made close to the surface)
+
+    Backing and confidence, per sub-claim:
+    - *The ordinary low-water fall, destruction, animations and land or deck survival.* Backing:
+      `measurable` (scenario H7). Confidence: medium (the fall's end is S-0312's; in stock play
+      the vehicle settles before its spin count runs out, so the test is made close to the
+      surface).
+    - *The exact 104-lepton boundary, and a spin ending after re-enabling.* Backing:
+      `unmeasured`: H7 establishes neither a spin ending near that boundary nor unconditional
+      early restoration. Confidence: medium.
+    - *Passenger loss.* Backing: `unmeasured` here: no stock passenger-carrying hover type
+      dependent on a control centre is established; its rule inherits S-0312 claim 12.
+      Confidence: medium.
+    - *A disabling at a naval yard while the vehicle is above the water.* Backing: `measurable`
+      (S-0314 scenario H4 part i run 6 (i), which uses a named test type and may be reported
+      unreached). Confidence: medium until that run runs.
+    - *A switch-off by the depot or yard itself during a visit.* Backing: `unmeasured` here, as in
+      S-0314 claim 21: which of those switch-offs take the draws is open there. Run 6 (ii) records
+      whether the visit's own switch-offs took draws before its cut, and any loss that follows,
+      but nothing in it ensures that one of them takes the draws, so it may show none.
+      Confidence: medium.
+    - *A switch-off that starts no spin, while no spin is active, makes no test.* Backing:
+      `measurable` (S-0314 scenario H4 part i run 6 (ii), its no-draw control: the power is cut
+      with the vehicle down on the water and already switched off, so the cut takes no draws and
+      starts no spin; a loss at the cut would show a test made without a spin). The run uses a
+      named test type and may be reported unreached, and it is inconclusive for the cut when a
+      loss before the cut follows logged draws. Confidence: medium until that run runs.
 
 ### The step check
 
@@ -623,6 +697,7 @@ The spin ends when the count reaches 0 or the vehicle is no longer powered.
 | Spin count draw | R(20, 30), sign by R(0, 99) < 50 | count | claim 10 |
 | Wake period | 10 | ticks | claim 9 |
 | Sinking height limit | 104 | leptons | claim 11 |
+| Depot's repeated switch-off distance | see S-0314 claim 21 | leptons | S-0314's constant, not this spec's: a depot's settling processing switches a hovering vehicle off again only within that distance of its docking point; claim 10 |
 | Deck-layer threshold of the new-path look | 312 | leptons | claim 12 |
 | Arrival height tolerance at the destination cell | 208 | leptons | claim 7 |
 | Absent-key defaults | see Import mapping | | engine defaults only |
@@ -638,9 +713,9 @@ The spin ends when the count reaches 0 or the vehicle is no longer powered.
 | moving, no heading point after assignment or a previous arrival/refusal | tick | ρ = 1; search may give a heading point; any travel uses the retained hover speed, without that tick's ramp (claims 3–5). This is not a mandatory delay before the immediate first choice of claim 5 |
 | moving now, over water, tick divisible by 10 | after travel | one wake (claim 9) |
 | switched off, spinning | settles to hover height 0 on this tick | spin ends without another rotation; claim 11 decides the water fall |
-| powered, not *sleep* or *enter* | switched off | two draws and a new spin; stop request and loss of lift occur regardless of these spin conditions (claim 10) |
+| powered, not *sleep* or *enter* | switched off | two draws and a new spin, whose count replaces that of any active spin; stop request and loss of lift occur regardless of these spin conditions (claim 10) |
 | spinning | *n* = 0 or no longer powered | spin ends; over water below 104 leptons, sinks (claim 11) |
-| switched off | switched on | lift resumes; an existing spin is not cancelled (claims 8 and 10) |
+| switched off | switched on (re-enabling, or the end of being settled at a repair depot) | lift resumes; an existing spin is not cancelled (claims 8 and 10) |
 
 The wake's position is the position after travel, before the height change. If the height change
 makes a settling vehicle no longer powered, its spin ends on that tick without another rotation.
