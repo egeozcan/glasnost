@@ -1328,6 +1328,10 @@ pub struct Quirks {
     // spec: S-0501 claim 42, T1, Edge cases
     #[serde(default = "on")]
     pub aircraft_zero_step_attack_stall: bool,
+    /// A bomb planted on a pad-bound aircraft that crashes at S-0501 claim 46's fall-back without going off during the fall is removed at impact with no detonation, animation or damage; off: at impact, before the death weapon, the bomb goes off by S-0519 claim 5 at the aircraft's position, with its attacker and attacking house. Not consulted yet (the fall-back crash is still started as a living crash).
+    // spec: S-0501 claim 46, Edge cases; S-0519 claim 7
+    #[serde(default = "on")]
+    pub crash_drops_planted_bomb: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2278,6 +2282,7 @@ impl Default for Quirks {
             landing_own_cell_no_result: true,
             aircraft_unit_step_stall: true,
             aircraft_zero_step_attack_stall: true,
+            crash_drops_planted_bomb: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3249,6 +3254,7 @@ impl Quirks {
                 "aircraft_zero_step_attack_stall",
                 self.aircraft_zero_step_attack_stall,
             ),
+            ("crash_drops_planted_bomb", self.crash_drops_planted_bomb),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (
