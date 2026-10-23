@@ -400,6 +400,10 @@ pub struct Quirks {
     // spec: S-0213 claim 19
     #[serde(default = "on")]
     pub cheer_memory_spans_session: bool,
+    /// No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off would search for an open, reachable cell near the end of a spoiled look; that search is not specified, so the switch is not consulted yet.
+    // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the search is a question for the project lead)
+    #[serde(default = "on")]
+    pub group_spread_no_detour: bool,
     /// The harvester-truce exception of row I15 never applies.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2032,6 +2036,7 @@ impl Default for Quirks {
             pending_order_limit: true,
             detonate_in_planter_name: true,
             cheer_memory_spans_session: true,
+            group_spread_no_detour: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
@@ -2644,6 +2649,7 @@ impl Quirks {
                 "cheer_memory_spans_session",
                 self.cheer_memory_spans_session,
             ),
+            ("group_spread_no_detour", self.group_spread_no_detour),
             (
                 "hijack_truce_harvester_check",
                 self.hijack_truce_harvester_check,

@@ -9361,6 +9361,11 @@
           "type": "boolean",
           "default": true
         },
+        "group_spread_no_detour": {
+          "description": "No further search follows a spoiled group-destination look: the member gets its fallback cell (the original). Off would search for an open, reachable cell near the end of a spoiled look; that search is not specified, so the switch is not consulted yet.",
+          "type": "boolean",
+          "default": true
+        },
         "harvester_failed_step_off_origin": {
           "description": "An idle harvester whose step-off search finds no cell gets the\noff-map destination cell (0, 0); off: its destination is cleared.",
           "type": "boolean",
