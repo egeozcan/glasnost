@@ -2,13 +2,13 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 15
+revision: 23
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-14
+approved-on: 2026-10-23
 measurements: []
-requests: []
+requests: [Q-1806]
 supersedes: []
 ---
 
@@ -22,7 +22,10 @@ no tick runs (lost focus, the options menu, a freeze) or the player cannot give 
 ticks run (the first ticks of a game, a chrono flash). It owns exception 2 of glossary claim G3,
 the game-speed dependence of a chrono flash that overlaps a freeze, and that exception's part of the
 shared switch `quirks.speed_normalised_delays`; what happens inside one tick is S-0203.
-This revision covers skirmishes only. Network games and campaigns are out of scope. Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision. Both radar-movie actions do nothing in skirmish. This revision defines no movie timeline for our engine: the earlier cycle-counted movie proposal is deferred, not an additional path from game speed to skirmish game state.
+This revision covers skirmishes. Of network games it covers four points only: what the options
+menu, lost focus and the options menu's speed control do in a network game, and whether the active
+clock stops there (claims 15 to 18, and claim 19 for games played online), with the part of the agreed tick rate that the speed control
+reaches (claim 17). The rest of network play and campaigns are out of scope (claim 13). Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision. Both radar-movie actions do nothing in skirmish. This revision defines no movie timeline for our engine: the earlier cycle-counted movie proposal is deferred, not an additional path from game speed to skirmish game state.
 
 ## Terms
 
@@ -35,18 +38,20 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
   millisecond clock, a non-negative integer. The reading advances by 1 on every 16 ms boundary.
   62.5 pacing units make one second.
 - **Cycle.** As in the glossary: the unit of real time in which the original runs a game. Cycles
-  follow one another without overlap. In a single-player game every cycle makes one drawn frame (claim 6). A cycle
+  follow one another without overlap. In a single-player game every cycle makes one drawn frame (claim 6), and a cycle
   that is not frozen takes at most one input event from the player's waiting inputs, in the order
-  they were made, and then runs one tick (S-0203). An input event is a key or mouse button going
+  they were made, and then runs one tick (S-0203). In a network game a cycle runs a tick only once
+  every player's orders for that tick have arrived (Terms, *Lockstep*). An input event is a key or mouse button going
   down or coming back up. A frozen cycle (claim 10) takes no input and runs no tick. S-0213,
   claim 1, owns the input-event limit, its confidence and its backing (scenario O9); claim 2 here
   owns pacing, not that limit. The cycle lasts at least its paced period (none at
   index 0, claim 5), measured from its start (claim 2). During a stand-still there are no cycles at
-  all.
-- **Stand-still.** A stretch of real time with no cycles, as in the glossary's *cycle* entry: the
-  game window has lost the input focus (claim 9), or the options menu is open (claim 8). "The game
-  stands still" means the same. No tick runs and no drawn frame of the game is made during it. Where
-  a rule holds for one of the two causes only, the spec names the cause.
+  all. In a network game the paced period is that of claim 17 instead.
+- **Stand-still.** A stretch of real time with no cycles, as in the glossary's *cycle* entry: in a
+  single-player game, the game window has lost the input focus (claim 9), or the options menu is
+  open (claim 8). "The game stands still" means the same. No tick runs and no drawn frame of the
+  game is made during it. Where a rule holds for one of the two causes only, the spec names the
+  cause. A network game has no stand-still: neither cause stops its cycles (claims 15 and 16).
 - **Paced period.** The shortest real time a cycle may take at a given game speed (claim 2).
 - **Freeze.** A stretch of real time during which cycles keep making drawn frames but no tick runs
   and the player cannot give orders (claim 10). A cycle during a freeze is a *frozen cycle*. A freeze
@@ -63,6 +68,35 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
   chronosphere superweapon's jump.
 - **Single-player game.** As in the glossary: a skirmish or a campaign mission, as opposed to a
   network game (LAN or online).
+- **Network game.** As in the glossary (*multiplayer game, network game*): a game played by several
+  machines together. Each player's machine runs the whole game. *Machine* means one player's
+  computer with its copy of the game; *host* keeps its meaning of claim 4, the machine's own clock,
+  sleep and speed.
+- **Lockstep.** The way the machines of a network game stay together: every machine runs the same
+  ticks with the same orders, and a machine does not run a tick before the orders of every player
+  for that tick have reached it. A machine that runs its cycles more slowly than the others
+  therefore holds every machine back to its own rate.
+- **Agreed tick rate.** *A*, in ticks per second: the rate that every machine of a network game
+  paces its cycles by (claim 17).
+- **Timing order.** In a network game, the event that changes the agreed tick rate (claim 17)
+  and the order delay.
+  What a recorder sees of it: the rate changes on every machine in the same tick; that tick
+  follows, by the order delay, a tick whose number is a multiple of 256; and the rate it sets is
+  min(cap(*s*), *C*) (claim 17), so after a speed change the rate settles there (in a game on a local network; claim 19 for an online game's first timing order). A timing order is
+  not a player's order to their objects. Besides the agreed tick rate, it changes the order delay
+  (below). Which machine sends it has no
+  observable effect, since the game-speed index it reads is the same on every machine and *C* is
+  set by the slowest machine, not by the sender (claim 17),
+  and our engine sends no timing orders (claim 17, Our engine).
+- **Order delay.** *W*, the number of ticks from the tick in which a player's order is sent to the
+  tick in which every machine carries it out, in a network game (claim 17). At any moment one
+  value applies to the orders of every player, on every machine. In the original it is not a
+  constant: it changes on every machine at once, in the tick in which a timing order is carried
+  out, so it depends on the network and can change during a game (`unmeasured`, confidence medium: scenario
+  T8 reads it in each run but varies no network condition). In our engine *W* is its own order
+  delay for a network game, which the future multiplayer spec owns (claim 13).
+- **Active clock.** The clock of elapsed time whose total S-0414 claim 23 displays at the end of a
+  game. It reaches no rule of game state.
 - **Options menu.** The in-game menu the player opens during a game, with the game-speed control
   among its settings.
 - **Terms of S-0011.** *Number slot*, *parameter kind* and *value* of a trigger action (the
@@ -92,7 +126,7 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    - **Left from the options menu.** When the player leaves the game through an options-menu choice
      that ends it at once, the game ends between two cycles and no further tick runs. The tick
      number stays at the count of ticks run, one more than the number of the last tick.
-   - Which of the menu's choices ends the game at once and which one resigns is not traced (Open
+   - Which of the menu's choices ends the game at once and which one resigns is not established (Open
      questions). Our engine reproduces both rules.
    - Backing: `measurable` (scenario T1, part A) for the start at 0 and the step of 1; `measurable`
      (scenario T1, parts C and D) for the two ways play becomes over; S-0414 claim 8 owns the
@@ -187,7 +221,7 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
      replacement; `unmeasured` for the absent-key general value 3: skirmish start replaces it,
      and no reachable outside-game speed control has been established for T2 part E or the
      historical T2 part D. That value remains a low-confidence import default, not a skirmish speed.
-   - Confidence: medium for the lobby's initial value (it is traced; whether the original keeps the
+   - Confidence: medium for the lobby's initial value (it rests on the examination of the original; whether the original keeps the
      index in range when the saved value lies outside 0 to 6 is not); low for the absent-key
      value 3, which no game in the scope of this spec uses
 
@@ -195,9 +229,13 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
    6 − *p* for control position *p* (0 slowest to 6 fastest), so the same seven indices as in the
    lobby. The new index takes effect from the next cycle. With it come the paced period of claim 2,
    the speed-normalised delays that start from then on (glossary claim G3) and, in our engine, the
-   number of frozen cycles of a timed freeze that starts from then on (claim 10). While the options
-   menu is open, no cycle runs: no tick, no drawn frame of the game. Closing it resumes the cycles
-   without catching up (claim 3).
+   number of frozen cycles of a timed freeze that starts from then on (claim 10). In a
+   single-player game, while the options menu is open, no cycle runs: no tick, no drawn frame of the
+   game. Closing it resumes the cycles without catching up (claim 3). In a network game the menu
+   stops no cycle and a speed change travels as an order (claims 15 and 17). The menu does not
+   always offer the control: in a network game it shows none once the player's own house is
+   defeated, and in our engine neither does a menu opened while the person watches a skirmish on
+   after the human player's defeat (claim 17).
    - Backing: `measurable` (scenario T5; scenario T3, part B, for the drawn frames), with
      `unmeasured` for the exact first cycle affected and for delays started after the change:
      T5 measures a sustained rate, not the transition cycle, and does not start a speed-normalised delay
@@ -206,11 +244,11 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
 9. **No ticks while the window lacks focus.** In a single-player game, while the game window does
    not have the input focus, no cycle runs and the game stands still. It resumes, without catching
    up (claim 3), when the window regains focus. Our engine also runs no cycle while its window
-   lacks focus, and a stand-still uses up no freeze (claim 10). Window focus is not part of game
-   state: no rule of game state in our engine reads real time (claim 4), so the stand-still changes
-   no result, and it is a rule of presentation.
-   - Backing: `measurable` (scenario T4) for single-player games; network games are out of
-     scope (claim 13)
+   lacks focus in a single-player game, and a stand-still uses up no freeze (claim 10). Window
+   focus is not part of game state: no rule of game state in our engine reads real time (claim 4),
+   so the stand-still changes no result, and it is a rule of presentation. Claim 16 covers network
+   games, where lost focus stops no cycle.
+   - Backing: `measurable` (scenario T4) for single-player games
    - Confidence: high
 
 10. **Freeze.** The pause action, a trigger action of the map, with a parameter of *N* seconds,
@@ -307,13 +345,21 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
     - Backing: historical finding only; not measured or measurable as a claim of this revision (the earlier proposed measurement is retained in T2, parts C and D, as historical context only)
     - Confidence: high for the recorded finding; it is outside this revision's scope
 
-13. **Network games (out of scope).** This revision covers skirmishes only. Network games are out of scope; a future multiplayer spec owns them,
-    including the agreed tick rate, the way a speed change is sent, how losing focus and the pause action behave, and the draws that network games take for the synchronisation
-    checksum (S-0202, claim 12, states the draws that those games take from the scenario random
-    stream). Nothing else in this spec holds for network games,
-    except where it says so.
-    - Backing: `unmeasured` (network games are outside the measurement setup of this revision)
-    - Confidence: low
+13. **Network games (mostly out of scope).** Of network games this revision covers only the
+    options menu (claim 15), lost focus (claim 16), the options menu's speed control with the cap
+    that the game speed puts on the agreed tick rate (claim 17) and the active clock (claim 18).
+    A future multiplayer spec owns the rest, including the full negotiation of the agreed tick rate
+    (the part that depends on the machines' speed, and when the first timing order comes), how the
+    pause action and the chrono flash behave in a network game, the drawn frames made while a
+    machine waits for the others' orders, and the draws that network games take for the
+    synchronisation checksum (S-0202, claim 12, states the draws that those games take from the
+    scenario random stream). Nothing else in this spec holds for network games, except where it
+    says so. Claim 18 makes one narrow statement about the pause action and the chrono flash in a
+    network game: neither stops the active clock. Claims 15 to 18 are stated for network
+    games played on a local network; claim 19 says how far each holds for games played online.
+    - Backing: `unmeasured` for the parts left to the future spec (they are outside the
+      measurement setup of this revision); claims 15 to 18 carry their own backing
+    - Confidence: low for the parts left to the future spec
 
 14. **No orders in the first ticks of a game.** When a single-player game starts, orders are
     blocked during the cycles of ticks 0, 1, 2 and 3. The block is released at the end of tick 3,
@@ -345,6 +391,211 @@ This revision covers skirmishes only. Network games and campaigns are out of sco
       suppression and retained state, medium for visible resumption (S-0101 claim 15), and
       high for arrow-input acceptance (S-0213 claim 23)
 
+15. **Network games: the options menu (Q-1806, question 1).** In a network game, opening the
+    options menu stops no machine's game. Every machine, the opener's included, goes on running
+    cycles and ticks at the agreed tick rate (claim 17), and the other players are not told that the
+    menu is open. While it is open, the opener's machine takes no input for the game, so that
+    player gives no orders, and it draws no new frame of the battlefield. Orders the player gave
+    before opening it are carried out as usual, and the player's objects go on acting in every
+    tick. Closing the menu brings back input and drawing; no tick was missed, so there is nothing
+    to catch up.
+    - **When the menu opens.** In a skirmish and in a network game alike, the menu does not open
+      from the end of the game on, and stays refused through the end delay. The house state this
+      rule turns on is S-0414's: the end of the game comes from its end test (S-0414 claim 6),
+      from that tick the player's own house has its result, a win that is pending or a loss
+      (S-0414 claims 7 and 9), and the end delay is S-0414 claim 8's. After the player has
+      resigned through the menu, it does not open again until the player's house is defeated; what
+      a resignation does to the house, and when the house is defeated, are S-0414's (claims 11
+      and 5). A defeated player who goes on watching a network game can open it. The refusal of
+      the menu in each of these states is this claim's rule; S-0414 does not state it. S-0414
+      covers skirmishes only; in a network game these states are those that the future
+      multiplayer spec is to define (claim 13).
+    - **A surrender during the end delay.** In a skirmish no tick runs while the menu is open
+      (claim 8), so a skirmish menu is never open when the game ends, and a skirmish player cannot
+      surrender during the end delay. In a network game ticks go on while the menu is open, so a
+      menu opened before the end can still be open during the end delay; choosing surrender in it
+      then still sends the surrender order, and S-0414 claim 11 says what that order does (nothing,
+      for a house whose result is pending). So in the original the surrender of S-0414 claim 11's
+      pending-result case can be given only in a network game (Changes for other specs).
+    - **Our engine.** Reproduces this. Q-1806's interim rule (the menu never stops the ticks)
+      agrees with it. A surrender order given by other means (S-0213) is not limited by the menu.
+    - Backing: `measurable` (scenario T8, parts A, F and H, part A also for the orders given before
+      the menu opened, the objects acting and the other players not being told; part D for a
+      defeated player opening the menu; scenario T9 for the skirmish end delay); `unmeasured` that
+      the opener's machine takes no input while the menu is open, since no part offers input to a
+      machine whose menu is open and the menu itself takes the clicks; `unmeasured`
+      that the menu is refused from the end of a network game on, since no network part tries to
+      open it then; `unmeasured` that a surrender chosen in the end delay is sent rather than dropped: part H
+      sees only that it has no effect; `unmeasured` for the menu after resigning in a skirmish:
+      in a skirmish the defeat that follows a
+      resignation is also the end of the game (S-0414 claims 6 and 11), from which the menu is
+      refused anyway, so no reopening can be seen there; only part F, a network run, shows it
+    - Confidence: medium, until part A runs, for everything part A tests: that ticks go on, for the
+      opener and the others, that the opener's machine draws no new frame of the battlefield while
+      the menu is open, the earlier orders, the objects and the notice; medium for the input
+      (unmeasured); medium for when the menu
+      opens, and for the surrender from a menu open across the end of a network game; medium for
+      the menu after resigning in a skirmish
+
+16. **Network games: lost focus (Q-1806, question 2).** In a network game a machine whose window
+    lacks the input focus goes on running cycles and ticks, so the game goes on for its player and
+    for the others; there is no stand-still. While the window lacks focus, that machine takes no
+    input for the game and makes no drawn frame. Its player's earlier orders are carried out as
+    usual.
+    - **The original slows every machine.** Each cycle of the unfocused machine takes at least
+      10 ms of real time beyond its paced period (claim 17), and more on a host whose sleep is
+      coarser. Through the lockstep that machine holds back every machine, so while any player's
+      window lacks focus the whole game runs at about 1000 / (⌊1000 / *A*⌋ + 10) ticks per second
+      or less, against 1000 / ⌊1000 / *A*⌋ with every window focused (Formulas F5). At *A* = 30
+      that is about 23 instead of 30.3 ticks per second. The other players see their own game run
+      slower, and they keep their input and drawing.
+    - **Our engine (departure).** Keeps running its cycles at its own network pacing (claim 17, Our engine) while its window
+      lacks focus in a network game, and adds no extra wait, so one player's lost focus slows no
+      one. How the client keeps its pace when the host slows a window in the background is a matter
+      of implementation; the requirement is that the ticks go on. The slowdown is real-time
+      behaviour: it changes no rule of game state, so under glossary *quirk switch* it takes no
+      switch; the project lead is asked to confirm. Q-1806's interim rule agrees.
+    - Backing: `measurable` (scenario T8, part B); `unmeasured` that the unfocused machine takes
+      no input for the game: a window without the focus gets no ordinary input from its player,
+      so part B offers it none to refuse; `unmeasured` that its player's earlier orders are carried
+      out as usual and that the other players keep their input and drawing: part B gives no order
+      and records drawn frames on machine 2 only
+    - Confidence: medium, until part B runs, that ticks go on and that the unfocused machine draws
+      nothing; medium that
+      it takes no input, that its player's earlier orders are carried out and that the other
+      players keep their input and drawing (unmeasured); medium for the slowdown of every machine; low for its size on a given host
+
+17. **Network games: the speed control and the agreed tick rate (Q-1806, question 3).**
+    - **The control is offered.** In a network game the options menu offers the speed control, at
+      the positions of claim 8, as long as the player's own house has not been defeated. Once it
+      has, the menu (claim 15) shows no speed control in a network game. In a skirmish the
+      original's menu does not open after the human player's house is defeated: that defeat ends
+      the game (S-0414 claim 6), and the menu does not open from the end of the game on (claim 15).
+      Where our engine lets the person go on watching a skirmish after that defeat, a menu opened
+      then likewise shows no speed control; this is our engine's rule, not a claim about the
+      original.
+    - **A change travels as an order.** Setting the control to a position whose index differs
+      from the index in force does not change the index on the player's own machine at once.
+      The change is sent, when the menu is closed (State and ordering), to every machine as an
+      order of that player, with the same delay as that
+      player's other orders, and is carried out in the same tick on every machine: tick *t* + *W*,
+      where *t* is the tick in which the menu closes and *W* is the order delay in force (Terms).
+      In our engine *W* is its own order delay for a network game, the one every other order of
+      the game has, so no further value is needed here; in the original *W* depends on the network
+      and has no fixed figure to reproduce (Terms), and scenario T8 reads it from each run. In that tick every machine sets the game-speed index to the new value,
+      whoever's machine sent it, and every machine but the sender's shows a message naming the
+      house whose player changed it. Every player whose menu offers the control can change the
+      speed, and the last change carried out holds. Setting the index already in force sends nothing
+      (these two points: `unmeasured`, below).
+    - **Game state follows at once.** Speed-normalised delays started after the speed order is carried
+      out use the new index (glossary claim G3, as in a
+      skirmish). This is game state, and it stays in step on every machine because every machine
+      changes the index in the same tick.
+    - **The tick rate follows later.** In a network game the paced period is not that of claim 2.
+      Each cycle lasts at least ⌊1000 / *A*⌋ ms, measured in whole milliseconds from the cycle's
+      start, with no catch-up, where *A* is the agreed tick rate (Formulas F5). *A* is 30 when a
+      game on a local network starts, whatever its speed (`unmeasured` at starting indices other
+      than 3, below). Only a timing order changes it, and it does so on
+      every machine in the tick in which the order is carried out. In a game on a local network a
+      timing order is sent only in a tick whose number is a multiple of 256, and is carried out one
+      order delay later; not every such tick sends one (which ones is left to the future multiplayer
+      spec, claim 13). The order sets *A* = min(cap(*s*), *C*). Here *s* is the game-speed index in force in the
+      tick in which the order is sent, the same on every machine, and cap(*s*) is 60, 45, 30, 20, 15, 12 and 10 ticks per
+      second for indices 0 to 6 (Constants). *C* is a rate set by the slowest
+      machine, which depends on the hosts and is left to the future multiplayer spec (claim 13).
+      So a speed change reaches the tick rate only when a timing order sent after it is carried
+      out: at the earliest from the first tick after the change whose number is a multiple of 256,
+      plus the order delay, and never above *C*. These rates
+      differ from the single-player rates of F1: index 6 gives 10 ticks per second in a network
+      game, against 10.416… in a skirmish.
+    - **Room speed.** The game speed in force when a network game starts is the one set for the
+      game before the start, the same on every machine.
+    - **Our engine.** Q-1806's interim rule (the control does nothing, every machine keeps the
+      speed set before the start) diverges from the original in game state, not only in pacing: in
+      the original the index changes on every machine, and with it the speed-normalised delays.
+      This revision proposes that our engine sends a speed change as an order and carries it out as
+      above. Its pacing is a departure with no switch, in the manner of claim 4: each cycle of a
+      network game lasts ⌊1000 / cap(*s*)⌋ ms for the index *s* in force, or as long as its work
+      and the lockstep's wait take if that is longer, from the start of the game at the index set
+      before the start, and from the cycle after a speed order is carried out at the new index.
+      At a host that keeps up this is the original's settled rate at every index (F5). The start
+      at 30, the timing order's 256-tick schedule and *C* are host behaviour, not reproduced
+      (Questions for the project lead).
+    - Backing: `measurable` (scenario T8: part C for the order, the message and the cap of index 6,
+      and for the change landing in the same tick on both machines, later than the close (part C
+      reads *W* from that change, so it does not test *t* + *W* against the delay of other orders); part D for the control hidden after defeat in a network game; part C's further runs for the caps of indices 0, 1, 2, 4 and 5; part G for the start
+      at 30 at index 3); the use of the new index by delays that start from the tick of the change is
+      `unmeasured`: no part of T8 times such a delay; that the last of several changes holds, and
+      that setting the index already in force sends nothing, are `unmeasured`: no part of T8
+      makes two changes and judges which one holds, and a change that sends nothing leaves nothing to observe on the other machine
+      beyond the absence of the message, which no part checks; that the change is sent when the menu closes, and not when the control is set, is `unmeasured`: part C sets the control and closes the menu together and reads *W* from that close; the room speed and the start at 30 are `measurable` at
+      index 3 only (part G), and at other starting indices `unmeasured`: T8 creates every game
+      at index 3; that the speed order has the same delay as the player's other orders is
+      `unmeasured`, since T8 reads *W* from the speed order itself and times no other order; the
+      hidden control in a skirmish after the human's defeat is our engine's rule (`unmeasured`:
+      the original has no such state to observe; design); the
+      original's order delay as a function of the network is `unmeasured` (Terms),
+      and the schedule's choice of which multiples of 256 carry a timing order, and *C*, are
+      `unmeasured` here (left to the future multiplayer spec, claim 13)
+    - Confidence: medium, until part C runs, that the control is offered and that a change is
+      carried out as an order on every machine; medium for the hidden control in a skirmish after defeat (our engine's rule); medium for the control hidden after defeat in a network game, until part D runs; medium for the delays' use of the new index, the cap table, the start at 30
+      and the interval of 256 ticks between the ticks that can carry a timing order, until T8 runs
+      (parts C and G see the rate change, not the send: a change seen a short time after a
+      multiple of 256 places the send at that multiple only to within the order delay in force
+      when the timing order is sent, which may differ from the run's *W*, because a timing order
+      carried out between the reading of *W* and that send changes the delay (Terms, *Order
+      delay*); so the parts show that changes come only just after multiples of 256, not the send
+      tick exactly); medium for
+      the speed order sharing the delay of the player's other orders, for the send at the menu's close, for the last change holding, for an unchanged index sending nothing, and for the room speed at
+      indices other than 3; low for which
+      multiples of 256 carry a timing order, and for *C*
+
+18. **Network games: the active clock (Q-1806, question 4).** In a network game the active clock
+    does not stop while a player's options menu is open, while a window lacks the focus, or for the
+    pause action or a chrono flash; only leaving play for the result screen stops it, as S-0414
+    claim 23 describes. Its total therefore includes every stretch of claims 15 and 16.
+    - **The clock in a skirmish.** In a skirmish the original stops the active clock while the
+      options menu is open and during every hold (a timed freeze, a chrono flash's freeze), and
+      does not stop it during a stand-still for lost focus. That differs from S-0414 claim 23 as
+      approved, which pauses it for lost focus and counts frozen cycles (Changes for other specs).
+      S-0414 owns the clock; this claim records the finding for that spec's next revision.
+    - Backing: `measurable` (scenario T8, part E, for the options menu and lost focus in a network
+      game; for the skirmish, `unmeasured` until S-0414 scenario V19 is revised as Changes for other specs
+      says, since no scenario here sets up a hold or a lost-focus stretch in a skirmish).
+      That the pause action and a chrono flash do not stop the clock in a network game is
+      `unmeasured`: T8 uses neither, and their other effects in a network game are left to the
+      future multiplayer spec (claim 13), so no scenario here sets them up
+    - Confidence: medium for the options menu and lost focus in a network game, until T8 part E
+      runs; medium for the pause action and the chrono flash in a network game, which rest on the
+      examination of the original alone; medium for the skirmish clock, until S-0414 scenario V19
+      runs as revised
+
+19. **Network games played online (Q-1806).** Claims 15 to 18 are stated for games on a local
+    network. In the original a network game played online follows the same rules, with the
+    differences below.
+    - **The same as on a local network.** The options menu (claim 15), lost focus (claim 16), the
+      speed control and its order (claim 17: offered until the player's house is defeated, carried
+      out in one tick on every machine with the message, the speed-normalised delays following at
+      once) and the active clock (claim 18) hold for an online game as stated: the original makes
+      no difference between the two kinds of network game for them.
+    - **The agreed tick rate at the start.** In an online game a timing order is sent at the start
+      of the game. It sets *A* to cap(*s*) for the game
+      speed set before the start, without the limit *C*, and is carried out one order delay later.
+      So an online game runs at 30 ticks per second only until that order is carried out, not, as
+      on a local network (scenario T8, part G), until a multiple of 256, and then at its starting
+      index's cap at a host that keeps up. Later timing orders follow claim 17's rule.
+    - **Extra waits.** An online game can also lengthen a machine's cycles while another machine
+      has fallen behind. So the slowdown of claim 16 can be larger online.
+    - **Our engine.** Makes no difference between a game on a local network and an online game:
+      the rules of claims 15 to 18, including claim 17's pacing (Our engine), apply to both. The
+      original's start rule and extra waits online are host and network behaviour, not reproduced,
+      like claim 17's start at 30 (design).
+    - Backing: `unmeasured` for every part: the original's own online service can no longer be
+      reached, so no scenario can set up an online game with the stock program; our engine's rule
+      is design
+    - Confidence: medium that claims 15, 16 and 18, and claim 17's speed control and its order,
+      hold online as stated; low for the start rule and the extra waits online
+
 ### Evidence boundaries
 
 These qualifications apply to the claims above and their restatements in Formulas, Constants,
@@ -370,6 +621,8 @@ State and ordering, Edge cases and quirks, and Import mapping.
   `unmeasured` design rules (confidence: high): the original cannot exercise our alternatives.
   F4's original equality boundary and a pause begun in the tick of the flash's own freeze are
   `unmeasured` (confidence: medium): G1–G3 do not isolate those boundary cases.
+- Claims 15 to 18 were established for network games played on a local network. Games played
+  online are claim 19's, `unmeasured` throughout (no scenario here can play online).
 - Import mapping's nonzero parameter kinds and the empty number-slot default for these actions
   are `unmeasured` (confidence: medium): T6 uses kind 0 with explicit values and supplies no
   cross-kind fixtures. Parameter-kind parsing otherwise belongs to S-0011.
@@ -444,8 +697,34 @@ second hold at 365 at index 6 (*F* = 9) and at 315 at index 1 (*F* = 59); with *
 (*F* = 119) there is one hold of 119 frozen cycles at 301.
 
 Movie freezes and movie lengths are outside this table and this revision's implementation scope.
-Both radar-movie actions do nothing in skirmish (claim 11). The former F5 movie proposal is
-withdrawn pending a campaign spec, including its fallback length and warning.
+Both radar-movie actions do nothing in skirmish (claim 11). The movie-length proposal of earlier
+revisions is withdrawn pending a campaign spec, including its fallback length and warning.
+
+**F5 Network pacing** (claims 16 and 17), for a network game played on a local network (claim 19
+for online games):
+
+> *P*<sub>net</sub> = ⌊1000 / *A*⌋ ms, *R*<sub>net</sub> = 1000 / *P*<sub>net</sub> ticks per second
+>
+> *A* = min(cap(*s*), *C*), set only when a timing order is carried out, with *s* the index in force when it was sent (claim 17); cap(0) = 60, cap(1) = 45, cap(*s*) = 60 / *s* for *s* from 2 to 6
+>
+> unfocused machine: each cycle ≥ *P*<sub>net</sub> + 10 ms
+
+Integer arithmetic: ⌊ ⌋ rounds down, and 60 / *s* is exact for *s* from 2 to 6 (30, 20, 15, 12,
+10). *A* is 30 until the first timing order is carried out. *C*, the rate that the slowest
+machine reports it can sustain, is left to the future multiplayer spec (claim 13); the table
+below assumes hosts fast enough that *C* is not the smaller term. The extra 10 ms of an
+unfocused machine is a lower bound: the host's sleep can make it longer. No floating point is
+involved.
+
+| *s* | cap(*s*) | *P*<sub>net</sub> at *A* = cap(*s*) (ms) | *R*<sub>net</sub> (ticks per second) | With one unfocused machine, at most (ticks per second) |
+|---|---|---|---|---|
+| 0 | 60 | 16 | 62.5 | 38.46… |
+| 1 | 45 | 22 | 45.45… | 31.25 |
+| 2 | 30 | 33 | 30.30… | 23.25… |
+| 3 | 20 | 50 | 20 | 16.66… |
+| 4 | 15 | 66 | 15.15… | 13.15… |
+| 5 | 12 | 83 | 12.04… | 10.75… |
+| 6 | 10 | 100 | 10 | 9.09… |
 
 ## Constants
 
@@ -465,16 +744,21 @@ withdrawn pending a campaign spec, including its fallback length and warning.
 | Ticks without orders at game start | 4 | ticks | Ticks 0 to 3 (claim 14) |
 | Absent-key default, settings file general game speed | 3 | game-speed index | Import mapping; unmeasured, claim 7 |
 | Absent-key default, rules lobby game speed | 6 | game-speed index | Import mapping |
+| Agreed tick rate at network game start (local network) | 30 | ticks per second | Claim 17, F5 |
+| Cap of the agreed tick rate, indices 0 to 6 | 60, 45, 30, 20, 15, 12, 10 | ticks per second | Claim 17, F5 |
+| Interval of timing orders | 256 | ticks | Sent only in a tick whose number is a multiple of 256, not necessarily every one (claim 17); medium confidence for the 256 (T8 parts C and G would show the rate changing only just after a multiple of 256, plus the order delay; they see the change, not the send, and the delay in force at the send may differ from the run's *W*, claim 17's confidence), low for which multiples |
+| Extra wait per cycle of an unfocused machine in a network game | at least 10 | ms | Claim 16, F5 |
 
 ## State and ordering
 
-**Whether a cycle runs a tick** (skirmish; campaign findings above impose no requirements):
+**Whether a cycle runs a tick** (skirmish; campaign findings above impose no requirements; network
+games in the second table):
 
 | State | Event | Result |
 |---|---|---|
 | Running | Cycle begins | One drawn frame and one tick; the cycle lasts at least its paced period (none at index 0, claim 5; claim 2) |
 | Running | Window loses focus | Stand-still (focus lost): no cycles (claim 9) |
-| Running | Options menu opened | Stand-still (menu open): no cycles (claim 8) |
+| Running | Options menu opened | Stand-still (menu open): no cycles (claim 8); in our engine, after the human player's defeat, the menu shows no speed control (claim 17) |
 | Stand-still (menu open) | Options menu closed | Running from the next cycle, at the index then set, with no catch-up (claims 3 and 8) |
 | Running | Pause action runs with *N* ≥ 1 | Frozen from the next cycle (claim 10) |
 | Running | Chrono flash takes its step *D* + 44 | Frozen from the next cycle, untimed (claim 11) |
@@ -484,10 +768,23 @@ withdrawn pending a campaign spec, including its fallback length and warning.
 | Frozen | Every freeze has ended | Running from the next cycle |
 | Game starts | Cycles of ticks 0 to 3 | Running, but orders blocked (claim 14) |
 
+**One machine of a network game, in the original** (claims 15 to 17; the pause action and the chrono flash are out
+of scope, claim 13):
+
+| State | Event | Result |
+|---|---|---|
+| Running | Cycle begins | Takes input, runs one tick once every player's orders for it have arrived, lasts at least ⌊1000 / *A*⌋ ms (F5) |
+| Running | Options menu opened | Menu open: cycles and ticks go on; this machine takes no input and draws no new frame of the battlefield; nothing is sent (claim 15); no speed control once this machine's house is defeated (claims 8 and 17) |
+| Menu open | Options menu closed, speed unchanged | Running |
+| Menu open | Options menu closed with a new speed | Running; a speed order is sent, and every machine sets the new index in the tick in which it is carried out (claim 17) |
+| Running or menu open | Window loses focus | Unfocused: cycles and ticks go on; no input, no drawn frame; each cycle at least 10 ms longer in the original, holding every machine back (claim 16) |
+| Unfocused | Window regains focus | Running, or menu open if it was open; no catch-up |
+| Any | Timing order carried out | *A* changes on every machine from the next cycle (claim 17); the order delay *W* changes on every machine in that tick (Terms) |
+
 **Ordering consequences.** In consecutive unfrozen cycles, the drawn frame of cycle *k* shows
 what the tick of cycle *k* − 1 left, including its orders, before tick *k* runs. During frozen
-cycles no new tick state appears, although the chrono flash can advance. The game speed set
-during cycle *k* governs the paced period from cycle *k* + 1 on. A
+cycles no new tick state appears, although the chrono flash can advance. In a single-player game, the game
+speed set during cycle *k* governs the paced period from cycle *k* + 1 on (claim 17 for a network game). A
 trigger action that starts a freeze does not stop the rest of its own tick, so the tick number
 during a freeze is one more than the number of the tick in which the action ran.
 
@@ -524,6 +821,13 @@ during a freeze is one more than the number of the tick in which the action ran.
     always two holds and the count of ticks between them is the same at every game speed (F4).
   - When the timed freeze starts in the tick of step *D* + 44, the two freezes make one hold, as
     with the switch on.
+- **One unfocused player slows a network game (departure).** In the original, a machine whose
+  window lacks the focus lengthens each of its cycles, and the lockstep passes the slowdown on to
+  every machine (claim 16, F5). Our engine keeps the agreed pace. No switch: it is real-time
+  behaviour and reaches no rule of game state.
+- **A speed change does not show on the changer's machine at once.** In a network game the
+  changer's own index changes only when the speed order is carried out (claim 17), like everyone
+  else's. Reproduced; it is what keeps the machines in step.
 - **Pause parameter below 0.** In the original such an action ends the timed freeze in force, if
   any, at the next cycle: no frozen cycle of that freeze follows, and that cycle runs a tick unless
   an untimed freeze is also in force (for example a chrono flash's freeze starting from that cycle),
@@ -568,6 +872,9 @@ during a freeze is one more than the number of the tick in which the action ran.
 | Map, trigger actions of types 100 (the plain radar-movie action) and 117 (the freezing radar-movie action) | neither action has any effect in skirmish (claim 11); campaign semantics are historical context only | integer number slot, ignored in skirmish | no effect |
 | Map, trigger action of type 1 (the win action) | used by scenario T1, part C, only, which states the assumption it relies on; its parameter is the action's number slot | integer, from the number slot as for type 110 | 0, as for type 110 |
 | Rules, section `[General]`, key `GameSpeedBias` | not a game-speed input: a movement multiplier that the movement specs own | decimal | — |
+
+No key of the user's data feeds claims 15 to 18. A network game's starting speed is the one set in
+its lobby before the start (claim 17).
 
 ## Measurement scenarios
 
@@ -822,14 +1129,150 @@ whether the vehicle's destination changes.
   missed the cycle of tick 4; such a run is repeated); setup 2 changes it at the end of tick 4 or
   earlier.
 
+**Scenario T8: a network game on a local network (claims 15 to 18).**
+- *Setup:* unlike T1 to T7, two machines on one local network, each with the stock game and the
+  recorder of the measurement setup, reading only, on both: the tick number at least once every
+  4 ms, the game-speed index once per tick, the drawn frames handed to the display path, and the
+  screen. No helper that changes rules, houses or computer players during the game is active on
+  either machine. A small purpose-made map for two human players and one computer player, each
+  player's base far from the others, no orders given unless a part says so. The game is created on
+  machine 1 at the middle position of the lobby's speed control (index 3), and machine 1's player
+  is listed first. Both windows keep the focus except where a
+  part moves it. Every run of a part is a game of its own, except that part D follows part F in
+  the same game. Parts A, B, C and F start at least 600 s of real time after the map is visible,
+  so that timing orders have been carried out; parts E, G and H follow their own timing. Both machines read their tick rate over the 30 s just
+  before the part as the *base rate* (expected 20 ticks per second, F5, unless *C* is lower).
+  *The order delay.* In the original its value depends on the network (Terms), so every run reads it as *W*, in ticks: in
+  part C, *W* = *t*₁ − *t*₀; in a run with no speed change of its own (parts A and G), once the
+  part's observation is over, machine 2's player opens the menu, sets the control one position
+  slower and closes it, and *W* is the tick at which the index changes less the tick at which
+  the menu closed. Every expectation below that names the order delay uses that run's *W*. One
+  delay applies at a time to the orders of every player on every machine (Terms), so a timing
+  order is carried out *W* ticks after it is sent unless a timing order carried
+  out in between has changed the delay; the falsifiers below do not rest on *W*, which only places
+  an expected change.
+  *Runs:* 2 per part.
+- *Part A (claim 15):* just before opening the menu, machine 2's player orders one of their
+  vehicles to move to a clear cell about 20 cells away; machine 2's player then opens the options
+  menu for 30 s and closes it. *Observable:* ticks on both machines during the 30 s; drawn frames
+  of the battlefield on machine 2 during it; the vehicle's cell, read on machine 1 once per
+  second; machine 1's screen (any message or notice). *Expected:* both tick numbers grow at the
+  base rate within 2 % throughout, and agree with each other within *W* ticks; machine 2 hands no
+  new battlefield frame to the display path; the vehicle moves towards its destination while
+  the menu is open, until it arrives; machine 1 shows no message or notice about machine 2's menu. *Falsified if:* either
+  tick number stands still for more than 1 s, or the rate on either machine falls more than 2 %
+  below its base rate, or the vehicle stops short of its destination while the menu is open, or machine 1 shows a notice
+  of the menu.
+- *Part B (claim 16):* machine 2's window is put in the background for 30 s, then brought back.
+  *Observable:* ticks on both machines during the 30 s; drawn frames on machine 2. *Expected:*
+  ticks run on both machines; on both, the rate during the 30 s is at most 1000 / (⌊1000 / *A*⌋ +
+  10) ticks per second plus 2 %, with *A* the agreed tick rate of F5 in force during the part
+  (*A* = 20 at index 3 unless *C* is lower, which gives a bound of about 16.7 ticks per second.
+  The base rate read before the part is expected to be ⌊1000 / *A*⌋ ms per tick, and a run in
+  which it is not is inconclusive), and
+  the two machines agree within 2 %; machine 2 makes no drawn frame. *Falsified if:* either tick
+  number stands still for more than 1 s (a stand-still); or the rate on either machine stays within
+  2 % of its base rate (no slowdown); or the two rates differ by more than 2 %. A rate between
+  the expected bound and 2 % below the base rate (at *A* = 20, between about 17.0 and 19.6 ticks
+  per second) shows a slowdown but an extra wait shorter than 10 ms per cycle, and falsifies
+  claim 16's 10 ms, though not the slowdown itself.
+- *Part C (claim 17):* machine 2's player opens the options menu, sets the speed control to the
+  slowest position (index 6) and closes it; the tick *t*₀ at which the menu closes is recorded on
+  machine 2. *Observable:* the tick at which the index read changes, on each machine; whether
+  machine 1 shows a message naming machine 2's house; the tick rate on both machines, tick by tick,
+  from *t*₀ until 600 ticks later. *Expected:* the index changes from 3 to 6 in the same tick *t*₁
+  on both machines, with *t*₁ > *t*₀ on machine 2 (not at once); machine 1 shows the message and
+  machine 2 does not; the rate stays at the base rate until the first tick after *t*₁ whose
+  number is a multiple of 256, plus *W* ticks, and is 10 ticks per second within 2 % from
+  then on. *Falsified if:* the index changes in different ticks on the two machines, or on
+  machine 2 in the tick of *t*₀; or the rate changes before that multiple of 256, or settles
+  anywhere but 10 ticks per second within 2 % (10.416… would be the single-player rate). A settled
+  rate below 10 is inconclusive (*C* may be the smaller term), as in the further runs below. A run in
+  which the rate first changes after a later multiple of 256 still judges the settled rate, and
+  records which multiple it was, as evidence on the schedule that claim 13 leaves open. A run in
+  which the rate has not changed 600 ticks after *t*₀ is inconclusive. A repeat
+  with machine 1 changing the speed checks that a change made on the machine listed first works
+  the same way. *Further runs (the caps):* the same, with the control set from index 3 to each of indices
+  0, 1, 2, 4 and 5 in turn, one run each, every run in a new game. *Expected:* the settled rate is
+  62.5, 45.45…, 30.30…, 15.15… and 12.04… ticks per second within 2 % (F5's table). A settled rate
+  below the expected one is inconclusive (*C* may be the smaller term); any other settled rate falsifies the
+  cap.
+- *Part D (claim 17, control hidden after defeat):* follows part F in the same run, while the
+  other two houses play on: it reads the options menu that part F's scripted input opened on
+  machine 2 after machine 2's house was defeated, and does not open another. *Observable:* whether
+  that menu shows the speed control. *Expected:* it shows no speed control.
+  *Falsified if:* the control is shown.
+- *Part E (claim 18):* a run of its own, with a test copy of the map that adds one one-time
+  trigger whose only event is an elapsed time of 600 (tick 9000) and whose action is the win action
+  with the registration index of machine 1's player's country, under the assumption that T1 part C
+  states. From 120 s after the map is visible, machine 2's menu is open for 30 s, and later its
+  window is in the background for 30 s; the game then runs on to its end and the result screen.
+  *Observable:* real time from the map becoming visible
+  to the active clock's stop on leaving play for the result screen, measured by the recorder on machine 2, and the duration machine 2 displays.
+  *Expected:* the displayed total equals that real time divided by 0.96 s, truncated, within 1 s
+  (S-0414 claim 23's 960 ms second), with both 30 s stretches counted. *Falsified if:* the displayed
+  total is short by about 31 s or 62 s (a stretch not counted). If machine 2's result screen
+  shows no duration in a network game, the part is inconclusive.
+- *Part F (claim 15, the menu after resigning):* machine 2's player resigns through the options
+  menu, and the scripted input tries to open the menu once every 100 ms until it opens.
+  *Observable:* the tick at which the menu first opens, and the tick at which machine 2's house is
+  defeated. *Expected:* the menu does not open before the defeat and opens after it. *Falsified
+  if:* it opens before the defeat, or never opens after the defeat. A run in which machine 2's house is not defeated within 120 s
+  of the resignation (S-0414 claim 11 allows a later defeat, or none) is void and repeated.
+- *Part G (claim 17, the start at 30 and the room speed):* a run of its own, at index 3.
+  *Observable:* the game-speed index read on both machines in tick 0, and both machines'
+  tick rate from the tick the map is visible, tick by tick, until tick 2048. *Expected:* index 3,
+  the lobby's value, on both machines in tick 0; about
+  30.30… ticks per second within 2 % from the start, then 20 ticks per second within 2 % from a
+  tick just after a multiple of 256 (plus *W* ticks) on. *Falsified if:* the rate is 20 from
+  the start, or changes to 20 other than just after a multiple of 256, or the index in tick 0
+  differs from 3 on either machine. A run in which the rate is
+  still 30.30… at tick 2048 is inconclusive on the schedule but still shows the start at 30.
+- *Part H (claim 15, a menu open across the end):* a run of its own, with the end delay raised by
+  a test rules file as in S-0414 scenario V8, part b. The two human players are allied in the
+  lobby and the computer player, their only enemy, has a single object left, which machine 1's
+  forces are attacking. Machine 2's player opens the options menu before that object is destroyed
+  and keeps it open; 2 s of real time after the computer player's defeat (the end of the game,
+  logged by machine 1's recorder), machine 2's player chooses surrender. *Observable:*
+  whether machine 2's objects are destroyed, machine 2's result, and the tick at which the game is
+  over. *Expected:* the surrender is offered and chosen, nothing of machine 2's is destroyed, its
+  result is a win, and the game is over at the tick it would be without the surrender (S-0414
+  claim 11's pending-result case). *Falsified if:* the menu closes at the end of the game, or its
+  surrender choice cannot be made, or machine 2's objects are destroyed.
+
+**Scenario T9: the options menu during the end delay of a skirmish (claim 15).**
+- *Setup:* a skirmish as in S-0414 scenario V8, part b: the end delay raised by a test rules file,
+  the human allied with computer player A against computer player B, and B destroyed by the human's
+  forces. No helper that changes rules, houses or computer players during the game is active. The
+  recorder reads the tick number and whether the options menu is shown.
+- *Procedure:* from the tick B is defeated, the scripted input presses the options-menu key once
+  every 100 ms until the game is over.
+- *Observable:* whether the menu is ever shown between B's defeat and the game being over.
+- *Expected:* it is never shown, so no surrender can be given in the end delay of a skirmish.
+- *Falsified if:* the menu opens in the end delay. A control run presses the key once, 5 s before
+  B is defeated, and must open the menu (otherwise the run is void); the menu stops the cycles
+  (claim 8), so the scripted input closes it again 2 s later, play resumes, and the run then goes on
+  as the main run, pressing the key from the tick of B's defeat.
+
 ## Open questions
 
-- **Network games.** Out of scope for this spec (claim 13). A future multiplayer spec should own the
-  agreed tick rate, its negotiation, the extra drawn frames made while waiting, the order that
-  changes speed and the behaviour of focus loss and of the pause action.
+- **Network games.** Beyond claims 15 to 18 they are out of scope (claim 13). A future multiplayer
+  spec should own the agreed tick rate's capability term *C* and when the first timing order comes,
+  the extra drawn frames made while waiting for the other machines, our engine's order delay *W*, the
+  original's start rule and extra waits in an online game (claim 19), and the pause
+  action and the chrono flash in a network game. Not established here, and not specified: in a
+  network game the pause action appears to block orders while ticks go on, and the block does not
+  lift by itself (confidence: low; `unmeasured`
+  here: no scenario of this spec sets up the pause action in a network game, which is left to the
+  future multiplayer spec, claim 13).
+- In a network game, a speed change is one of the player's orders (claim 17), so the limit on
+  pending orders of S-0213 claim 2 is believed to apply to it: issued while that list is full, it
+  would be dropped without notice. S-0213 claim 2 leaves open how orders enter a network game, so
+  this is not established (confidence: low; `unmeasured` here: no scenario of this spec fills the
+  list in a network game, which is left to the future multiplayer spec, claim 13).
 - Whether the original keeps the lobby's starting index in range when the saved value lies outside
-  0 to 6 is not traced (claim 7).
-- Which of the options menu's choices ends a game at once and which one resigns is not traced
+  0 to 6 is not established (claim 7).
+- Which of the options menu's choices ends a game at once and which one resigns is not established
   (claim 1); scenario T1, part D, tries each.
 - Radar-movie timing and its source in movie data are deferred to the future campaign spec.
   No fallback length or importer warning for a missing movie duration is required by this revision.
@@ -854,7 +1297,72 @@ whether the vehicle's destination changes.
   original's integers. Formulas F2 to F4 treat *N* and *D* as unbounded integers; the scenarios use
   small values only.
 
+## Changes for other specs
+
+- **S-0414 (approved, revision 15), claim 23, network games.** The duration paragraph can add: in
+  a network game the active clock does not stop while a player's options menu is open, while a
+  window lacks the focus, or for the pause action or a chrono flash; only leaving play stops it
+  (S-0201 claim 18).
+- **S-0414, claim 23, skirmish (correction).** "pauses that clock when the game is paused for the
+  options menu or lost focus … Frozen cycles and the end delay are included" disagrees with the
+  original. The original stops the clock while the options menu is open and during every hold (a
+  timed freeze, a chrono flash's freeze), and restarts it when the last freeze in force ends. A
+  stand-still for lost focus does not stop it. The sentence can read: the clock pauses while the
+  options menu is open and while the game is frozen; time without the input focus and the end
+  delay are included (S-0201 claim 18). This agrees with S-0201 claim 10, by which a timed freeze's
+  real time keeps running through a stand-still for lost focus.
+- **S-0414, claim 11 and scenario V8, part b (the surrender during the end delay).** In the
+  original the options menu is refused from the end of the game on (S-0201 claim 15), and in a
+  skirmish no tick runs while it is open, so a skirmish player cannot surrender in the end delay.
+  V8 part b's input, "the human surrenders in the delay", therefore cannot be given in a skirmish,
+  and claim 11's sentence "In the original only the local player can surrender, through the
+  options menu" can add "and not from the end of the game on (S-0201 claim 15)". The pending-result
+  case can be given in the original only in a network game, from a menu opened before the end
+  (S-0201 scenario T8, part H); in a skirmish it is a rule of our engine, where the surrender order
+  is legal at any time (S-0213), and its backing there is `unmeasured`. V8 part b can either point
+  to T8 part H or be marked as a run of our engine only; S-0201 scenario T9 shows that the
+  original's menu stays closed in the skirmish end delay.
+- **S-0414, scenario V19.** "menu and focus pauses add none, freezes and the end delay add active
+  time" can read "the menu pause and the frozen stretch add none; the focus loss and the end delay
+  add active time", for a skirmish. A network run can point to S-0201 scenario T8, part E.
+- **Glossary, *cycle*.** "While the game stands still (the game window has lost the input focus,
+  or the options menu is open) there are no cycles" can begin "In a single-player game, while …",
+  with a pointer to S-0201 claims 15 and 16 for network games, where neither stops the cycles.
+- **Glossary, *multiplayer game, network game*.** "How the original runs network games (the
+  agreed tick rate, the synchronisation draws) is left by S-0201 (claim 13) …" can add that S-0201
+  claims 15 to 19 cover the options menu, lost focus, the speed control with the cap of the agreed
+  tick rate, and the active clock in a network game.
+- **Glossary, Open questions.** The item "How game speed works in network games is left by S-0201
+  (claim 13) to a future network-game spec" can be narrowed to the agreed tick rate's capability
+  term and the timing order's schedule (S-0201 claims 13 and 17). Claim G3's speed-normalised
+  delays in a network game use the index in force, which a speed order changes on every machine in
+  one tick (S-0201 claim 17); G3 can say so, or keep its skirmish scope and point there.
+
 ## Questions for the project lead
+
+- **Scope (Q-1806).** This revision brings four points of network games into S-0201 (claims 15 to
+  18, with claim 19 for games played online) while the glossary still states that network games are out of scope. Confirm that S-0201 is
+  the place for them until a multiplayer spec exists, and that claim 17's cap table may be stated
+  now while the rest of the agreed tick rate stays deferred.
+- **Lost focus in a network game (claim 16).** The original slows every machine while any player's
+  window lacks the focus. This revision proposes that our engine does not, as a departure without a
+  switch, since it is real-time behaviour. Confirm, or ask for the slowdown to be reproduced.
+- **The speed control in a network game (claim 17).** Q-1806's interim rule ignores the control.
+  In the original a change is an order that changes the game-speed index, and with it the
+  speed-normalised delays, on every machine in one tick, so ignoring it changes game state. This
+  revision proposes reproducing the order and the index change, and pacing at ⌊1000 / cap(*s*)⌋ ms
+  from the cycle after the change, as a departure (the original follows only at the next timing
+  order, sent only in ticks whose number is a multiple of 256, capped by the slowest machine,
+  and starts every game on a local network at 30 ticks per second; online, claim 19). Our engine
+  makes no difference between a game on a local network and an online game (claim 19). Confirm.
+- **The speed control after defeat in a skirmish (claims 8 and 17).** Where our engine lets the
+  person watch a skirmish on after the human player's defeat (the original ends the game there),
+  a menu opened then shows no speed control, as the original's network-game menu does after the
+  player's defeat. This is a design decision of our engine with no original behaviour to follow.
+  Confirm it.
+- **The active clock in a skirmish (claim 18).** The original stops it while frozen and keeps it
+  running without focus, against S-0414 claim 23 as approved (Changes for other specs). Confirm
+  that S-0414 takes the correction in its next revision, with scenario V19's expectations.
 
 - **Cycle wording, for hand-off.** Terms, *Cycle*, and claim 2 incorporate S-0213 claim 1's
   limit of at most one input event per unfrozen cycle. S-0213 owns the limit and its scenario O9.
