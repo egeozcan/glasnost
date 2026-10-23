@@ -21,6 +21,7 @@ use glasnost_sim::rng::Rng;
 use glasnost_sim::world::Pos;
 
 use crate::catalog::{EntryId, FULL, Priority, SoundEntry};
+use crate::music::MusicVoice;
 
 /// Channels that sound instances play on (S-0701 Constants).
 pub const CHANNELS: usize = 16; // spec: S-0701 claim 9 and Constants (16 channels)
@@ -405,6 +406,10 @@ pub struct Mixer {
     /// The player's voice volume option, 0 … 16384 (announcements).
     voice_option: i32,
     speech: Option<Speech>,
+    /// The music track playing (S-0703), and our own music volume,
+    /// 0 … 16384.
+    music: Option<MusicVoice>,
+    music_option: i32,
     acc: Vec<i64>,
 }
 
@@ -431,6 +436,9 @@ impl Mixer {
             // spec: S-0701 claim 35 (the voice option is at full unless the player sets it)
             voice_option: FULL,
             speech: None,
+            music: None,
+            // nocite: our own UI (the music volume is at full unless the person sets it)
+            music_option: FULL,
             acc: Vec::new(),
         }
     }
@@ -475,6 +483,29 @@ impl Mixer {
     /// (S-0701 claim 35 keeps it at full by default).
     pub fn set_voice_volume(&mut self, o: i32) {
         self.voice_option = o.clamp(0, FULL);
+    }
+
+    /// Sets our own music volume, 0 … 16384 (S-0703 leaves the original's
+    /// scaling open). At 0 the track still plays, silently (S-0703 claim
+    /// 3).
+    pub fn set_music_volume(&mut self, o: i32) {
+        self.music_option = o.clamp(0, FULL);
+    }
+
+    /// The music volume.
+    pub fn music_volume(&self) -> i32 {
+        self.music_option
+    }
+
+    /// Starts a music track on the music voice, replacing any, or stops the
+    /// music (`None`).
+    pub fn set_music(&mut self, v: Option<MusicVoice>) {
+        self.music = v;
+    }
+
+    /// Whether a music track is sounding.
+    pub fn has_music(&self) -> bool {
+        self.music.is_some()
     }
 
     /// The master level g of F3.
@@ -643,11 +674,12 @@ impl Mixer {
         }
     }
 
-    /// Stops every instance and the announcement.
+    /// Stops every instance, the announcement and the music.
     pub fn clear(&mut self) {
         self.instances.clear();
         self.channels = [None; CHANNELS];
         self.speech = None;
+        self.music = None;
     }
 
     /// Places a follow-placed or attached instance again (claim 7).
@@ -1099,6 +1131,13 @@ impl Mixer {
             mix(&mut s.voice, &mut self.acc, 0, frames, g, g);
             if (s.voice.pos >> 32) as usize >= s.voice.clip.frames() {
                 self.speech = None;
+            }
+        }
+        if let Some(m) = self.music.as_mut() {
+            // nocite: our own UI (music skips the master level and the sound option; only our music volume scales it, Q-1700 question 5 open)
+            m.mix(&mut self.acc, crate::music::music_gain(self.music_option));
+            if m.finished() {
+                self.music = None;
             }
         }
         for (o, a) in out.iter_mut().zip(&self.acc) {

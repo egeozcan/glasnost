@@ -416,6 +416,7 @@ impl Client {
             let m = a.mixer_mut();
             m.set_volume(Settings::mixer_level(st.sound));
             m.set_voice_volume(Settings::mixer_level(st.voices));
+            m.set_music_volume(Settings::mixer_level(st.music));
         }
         let scale = self.ui_scale();
         if !self.settings.captions {
@@ -524,7 +525,25 @@ impl Client {
         audio.set_bank(install.bank.clone());
         audio.set_voices(voices);
         audio.set_names(install.names.clone());
+        // spec: S-0703 claim 2 (the side restriction is matched against the sides as built for this game, S-0004 claim 1)
+        let sides = s.loaded.import.outcome.sides.iter();
+        audio.set_sides(
+            sides
+                .map(|r| r.name.iter().map(|&b| char::from(b)).collect())
+                .collect(),
+        );
+        audio.set_music(
+            install
+                .music
+                .as_ref()
+                .map(|m| m.player_with(super::music_share::track_source(&m.files))),
+        );
         audio.start(w, Some(s.play.local));
+        if let Some(m) = audio.music() {
+            for warning in m.warnings() {
+                log::warn!("{warning}");
+            }
+        }
         self.apply_settings();
     }
 
@@ -982,6 +1001,16 @@ impl Client {
     pub fn update(&mut self, now_ms: i64) {
         self.clock = now_ms;
         self.net_pump(now_ms);
+        // Q-1833 (interim: music plays only while the game is played, the options menu open or not; it stops when play ends or the game is left; our settings screen from the game keeps it, unserviced)
+        let in_play = self
+            .session
+            .as_ref()
+            .is_some_and(|s| s.play.end().is_none())
+            && (self.shell.screen == Screen::Game
+                || (self.shell.screen == Screen::Settings && self.settings_from_game));
+        if !in_play && let Some(a) = self.audio.as_mut() {
+            a.stop_music();
+        }
         if self.shell.screen != Screen::Game {
             return;
         }

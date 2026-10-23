@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use glasnost_audio::bank::{self, SoundBank};
+use glasnost_audio::music_files::InstallMusic;
 use glasnost_audio::names::SoundNames;
 use glasnost_convert::find::Listing;
 use glasnost_ini::Document;
@@ -36,6 +37,10 @@ pub struct Install {
     pub speech: Option<Document>,
     /// The samples found.
     pub bank: SoundBank,
+    /// The music (S-0703): the music database, the shuffle and repeat
+    /// settings and the track files found, or none when the music database
+    /// does not resolve.
+    pub music: Option<InstallMusic>,
     /// The cursor palette as the session keeps it (S-0111 claim 19a),
     /// read here, before any game, when the switch keeps it.
     pub cursor_palette: super::session::CursorPaletteKeep,
@@ -203,13 +208,28 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
     let sounds = database(vfs, "soundmd.ini").await;
     let speech = database(vfs, "evamd.ini").await;
     let (bank, report) = bank::discover(vfs).await;
+    // spec: S-0703 claim 8 (the track files are found once, when the program starts, through the mounted archives and loose files)
+    let music = InstallMusic::read(vfs).await;
+    if let Some(m) = music.as_ref() {
+        // spec: S-0703 Edge cases (outside a game the side restrictions are checked against the sides of the rules data)
+        let sides: Vec<String> = resolved
+            .ruleset
+            .sides
+            .iter()
+            .map(|s| s.name.clone())
+            .collect();
+        for w in m.db.side_warnings(&sides) {
+            log::warn!("{w}");
+        }
+    }
     // spec: S-0111 claim 19a (with quirks.art_cache_never_invalidated on, the cursor palette is read once when the program starts, before any game)
     let cursor_palette = super::session::CursorPaletteKeep::at_program_start(vfs).await;
     let summary = format!(
-        "{} maps, {} countries, {} samples",
+        "{} maps, {} countries, {} samples, {} music tracks",
         maps.len(),
         setup.countries.len(),
-        report.samples
+        report.samples,
+        music.as_ref().map_or(0, InstallMusic::present_count)
     );
     Ok(Install {
         setup,
@@ -220,6 +240,7 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         sounds,
         speech,
         bank,
+        music,
         cursor_palette,
         summary,
     })

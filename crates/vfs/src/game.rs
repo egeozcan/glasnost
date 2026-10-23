@@ -618,6 +618,14 @@ impl Vfs {
         self.loose_top(name)
     }
 
+    /// A file that is only ever read as a loose file of the game directory,
+    /// whatever the mod layer (S-0005 claim 5: the settings file); `None`
+    /// when there is none, never an archived copy.
+    pub fn loose_only(&self, name: &str) -> Option<Resolved> {
+        // spec: S-0005 claim 5 (the settings file is read only as a loose file; a missing one means defaults, never an archived copy)
+        self.loose_top(name)
+    }
+
     fn loose_top(&self, name: &str) -> Option<Resolved> {
         let top = self.top.get(name.to_ascii_uppercase().as_bytes())?;
         Some(Resolved::Loose {

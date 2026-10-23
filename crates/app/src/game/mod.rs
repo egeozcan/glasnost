@@ -26,6 +26,7 @@ pub mod cursor;
 pub mod direct;
 pub mod install;
 pub mod link;
+pub mod music_share;
 pub mod paint;
 pub mod play;
 pub mod report;

@@ -160,7 +160,7 @@ pub struct Settings {
     pub sound: u8,
     /// Announcement volume, 0 … 100 percent.
     pub voices: u8,
-    /// Music volume, 0 … 100 percent (stored; no music output yet, step C1).
+    /// Music volume, 0 … 100 percent (scales the music, S-0703; our own setting).
     pub music: u8,
     /// Scroll-speed index, [`SCROLL_RANGE`].
     pub scroll_index: i32,
