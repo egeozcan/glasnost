@@ -181,6 +181,7 @@ fn fragment(
     ));
     // spec: S-0318 claim 6 and Constants (a fixed elevation of about an eighth of a turn, π/4)
     let (c1, _) = direction_constants();
+    // spec: S-0318 claim 6 and Constants (π/4: half of S-0204 F3's c₁ = π/2)
     let pitch = angle_facing(c1.div(F64::from_i64(2, mode), mode), mode);
     // spec: S-0318 claim 5 (the speed is the fragment weapon's weapon speed S_w of S-0306 claim 1, without the shot speed or its cap) and claim 6 (length S_w, 100 at a speed of 0)
     let speed = wr.speed;
@@ -204,6 +205,7 @@ fn fragment(
             }
             None => stored,
         };
+        // spec: S-0318 claim 6 and S-0306 claim 9 (moved at once: no velocity in any of the three axes)
         vel = [F64::ZERO; 3];
     }
     let id = w.new_id();
