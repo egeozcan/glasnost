@@ -30,7 +30,7 @@ Figures at main 1c7527e:
 | M8 A3 (spec intakes) | Recurring. Intakes 1 to 3 are merged (S-0202 r33, S-0616 r16, S-0111 r19, S-0513 r30, S-0519 r15). |
 | M8 B5 (tempo after expansion), C3 (accessibility) | Running. |
 | M8 B4, C4, C6 | Planned. B4 starts after B5. C4's exit needs the lead's run on an Intel laptop iGPU. |
-| M8 C1 (music), C5 (electric bolts, voxel animations) | Wait for Q-1700, and for Q-1701 and Q-1702. |
+| M8 C1 (music), C5 part 2 (voxel animations) | Wait for Q-1700, and for Q-1702. C5 part 1 (electric bolts, S-0316 answering Q-1701) is built. |
 | M8 A4 (movement feel) | Waits for the lead's play notes or oracle records. |
 | M9 N1, N2, N3 | Merged. The web client builds but has not yet been tried in a browser. |
 | M9 N4 (desync reports) | Running. |
@@ -48,7 +48,7 @@ request names its interim rule, and docs/development.md lists the interim rules.
 - **Repair depot:** Q-1610 and Q-1620.
 - **M8 plan:**
   - Q-1700: music (blocks C1);
-  - Q-1701 and Q-1702: electric bolts and voxel animations (block C5);
+  - Q-1702: voxel animations (blocks C5 part 2; Q-1701, electric bolts, is answered by S-0316);
   - Q-1703: the oracle measurement round.
 - **Arena spread (A1):**
   - Q-1710 to Q-1712;
