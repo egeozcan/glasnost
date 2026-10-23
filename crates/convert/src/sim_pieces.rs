@@ -3,8 +3,8 @@
 
 use glasnost_num::{F64, Rounding};
 
-use super::*;
 use super::combat::{bool_of, int_of, key, last_set};
+use super::*;
 
 /// The keys of a voxel-animation type that change play (S-0317 Import
 /// mapping): our field name, the INI key and its form. The two angular
@@ -28,7 +28,11 @@ const VOXEL_ANIMATION_FIELDS: &[(&str, &str, Form)] = &[
     ("spawns", "Spawns", Ref(Kind::VoxelAnimations)),
     ("spawn_count", "SpawnCount", Int),
     ("is_tiberium", "IsTiberium", Bool),
-    ("attached_system", "AttachedSystem", Ref(Kind::ParticleSystems)),
+    (
+        "attached_system",
+        "AttachedSystem",
+        Ref(Kind::ParticleSystems),
+    ),
     ("start_sound", "StartSound", Text),
 ];
 
@@ -112,7 +116,8 @@ impl Builder<'_> {
         let m = Rounding::TowardZero;
         let name = show(&t.name);
         let num = |s: &str| {
-            glasnost_num::decimal::parse(s, glasnost_num::decimal::Field::Decimal, m).unwrap_or_default()
+            glasnost_num::decimal::parse(s, glasnost_num::decimal::Field::Decimal, m)
+                .unwrap_or_default()
         };
         // spec: S-0317 Import mapping (MaxXYVel 15.0, MinZVel 3.5, MaxZVel 5.0 when absent)
         let big_m = decimal_value(t, "MaxXYVel", m).unwrap_or_else(|| num("15.0"));

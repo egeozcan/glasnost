@@ -1549,7 +1549,9 @@ impl Audio {
         for id in pieces {
             match w.pieces.get(&id) {
                 // spec: S-0317 claim 14 (the start sound moves with the piece in each of its turns)
-                Some(p) => self.mixer.move_anchor(PIECE_ANCHOR | u64::from(id.0), p.pos),
+                Some(p) => self
+                    .mixer
+                    .move_anchor(PIECE_ANCHOR | u64::from(id.0), p.pos),
                 // The piece plays no sound when it ends (S-0317 claim 14): its start sound plays on where it was.
                 None => {
                     self.pieces.remove(&id);

@@ -2936,8 +2936,8 @@ pub(crate) mod econ;
 
 #[path = "sim_pieces.rs"]
 mod pieces;
-pub use pieces::piece_keys;
 pub use econ::converted_keys as econ_converted_keys;
+pub use pieces::piece_keys;
 
 #[cfg(test)]
 #[path = "sim_tests.rs"]

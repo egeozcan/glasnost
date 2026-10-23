@@ -1,7 +1,7 @@
 //! Claim tests for debris pieces with voxel models (S-0317) on synthetic
 //! data: invented piece types, animations, a smoke system and a resource,
 //! every name and number our own. The drawing side is `glasnost-app`'s
-//! `mapview::pieces`; the ledger is `docs/m8-claims/c5-S-0317.md`.
+//! `mapview::piece_tests`; the ledger is `docs/m8-claims/c5-S-0317.md`.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -147,7 +147,9 @@ fn resource_rules() -> Ruleset {
             ..Default::default()
         },
     );
-    r.sim.land_types.insert(LandType::Tiberium, LandRow::default());
+    r.sim
+        .land_types
+        .insert(LandType::Tiberium, LandRow::default());
     for i in 0..128 {
         let n = format!("OV{i:03}");
         register(&mut r, "overlays", &n);
@@ -272,7 +274,10 @@ fn claim_3_falling_piece_creation() {
     let a1 = probe.ranged(-65535, 65535, half);
     let a2 = probe.ranged(-65535, 65535, half);
     let a3 = probe.ranged(-65535, 65535, half);
-    assert_eq!(w.rng, probe, "exactly four raw values and three ranged draws");
+    assert_eq!(
+        w.rng, probe,
+        "exactly four raw values and three ranged draws"
+    );
     let p = piece(&w, id);
     // The defaults: M 15 (S_xy 30), Z 3.5 to 5.0 (S_z 2), A 0 to 10 degrees (S_a 1).
     let mm = s("15.0");
@@ -316,7 +321,10 @@ fn claim_4_meteor_piece_creation() {
         }
         let vz = s("-10");
         assert_eq!(p.velocity, [vx.to_f32(m), vy.to_f32(m), vz.to_f32(m)]);
-        assert!(vx.add(vy, m).ge(d(0, m)), "the sum of the horizontal speeds is never negative");
+        assert!(
+            vx.add(vy, m).ge(d(0, m)),
+            "the sum of the horizontal speeds is never negative"
+        );
         let cut = glasnost_num::int::rem(q3 as i32, 20).abs();
         assert_eq!(p.counter, 30 - cut);
         let t = d(i64::from(30 - cut), m);
@@ -425,7 +433,10 @@ fn claim_6_f7_trailer() {
         } else {
             fp[2].to_f64().to_i32_common()
         };
-        assert_eq!(anims(&w), vec![("Trail".to_owned(), Pos::new(at.x, at.y, z))]);
+        assert_eq!(
+            anims(&w),
+            vec![("Trail".to_owned(), Pos::new(at.x, at.y, z))]
+        );
         assert_eq!(z, if quirk { 2160 } else { 310 });
         w.tick = 11;
         w.effects.clear();
@@ -455,8 +466,14 @@ fn claim_7_ground_impact() {
     let vz = s("-10").to_f32(m).to_f64().sub(g(), m).to_f32(m);
     let e = s("0.5").to_f32(m).to_f64();
     assert_eq!(p.velocity[2], vz.to_f64().negated().mul(e, m).to_f32(m));
-    assert_eq!(anims(&w), vec![("Bump".to_owned(), Pos::new(at.x + 120, at.y, 5))]);
-    assert!(health(&w, near) < h0, "the object of the impact cell is hit");
+    assert_eq!(
+        anims(&w),
+        vec![("Bump".to_owned(), Pos::new(at.x + 120, at.y, 5))]
+    );
+    assert!(
+        health(&w, near) < h0,
+        "the object of the impact cell is hit"
+    );
     assert_eq!(health(&w, next), h1, "the neighbouring cell is not");
     // Out of the radius in the same cell: no hit.
     let far = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, mid(0, 3), 0);
@@ -464,7 +481,11 @@ fn claim_7_ground_impact() {
     let at = centre(mid(0, 3), 0);
     set(&mut w, id, [at.x - 127, at.y - 100, 5], ["0", "0", "-10"]);
     pieces::turn(&mut w, id);
-    assert_eq!(health(&w, far), hf, "a sum of 227 is beyond the radius of 200");
+    assert_eq!(
+        health(&w, far),
+        hf,
+        "a sum of 227 is beyond the radius of 200"
+    );
 }
 
 /// spec: S-0317 claim 8 (a contact whose position before the move is in a water cell: no animation and no hit; the counter 0) and claim 11 (a falling piece's end on water: the wake at the position, the first splash 10 leptons higher)
@@ -502,16 +523,32 @@ fn claim_11_meteor_on_water() {
     let c = mid(0, 0);
     set_land(&mut w, c, land::WATER);
     let id = make(&mut w, "STAR", centre(c, 0));
-    set(&mut w, id, [centre(c, 0).x, centre(c, 0).y, 3], ["0", "0", "0"]);
+    set(
+        &mut w,
+        id,
+        [centre(c, 0).x, centre(c, 0).y, 3],
+        ["0", "0", "0"],
+    );
     w.pieces.get_mut(&id).unwrap().counter = 1;
     w.effects.clear();
     let mut probe = w.rng.clone();
     pieces::turn(&mut w, id);
-    assert_eq!(anims(&w), vec![("Spl3".to_owned(), Pos::new(c.x * 256 + 128, c.y * 256 + 128, 8))]);
+    assert_eq!(
+        anims(&w),
+        vec![(
+            "Spl3".to_owned(),
+            Pos::new(c.x * 256 + 128, c.y * 256 + 128, 8)
+        )]
+    );
     assert_eq!(w.rng.raw(), probe.raw(), "no spawn draws on water");
     // At deck height (416 above the ground) over water: the land row, with its spawns.
     let id = make(&mut w, "STAR", centre(c, 0));
-    set(&mut w, id, [centre(c, 0).x, centre(c, 0).y, 416], ["0", "0", "0"]);
+    set(
+        &mut w,
+        id,
+        [centre(c, 0).x, centre(c, 0).y, 416],
+        ["0", "0", "0"],
+    );
     w.pieces.get_mut(&id).unwrap().counter = 1;
     let before = w.pieces.len();
     let mut probe = w.rng.clone();
@@ -520,7 +557,11 @@ fn claim_11_meteor_on_water() {
     w.effects.clear();
     pieces::turn(&mut w, id);
     assert!(anims(&w).is_empty(), "no splash at deck height");
-    assert_eq!(w.pieces.len(), before - 1 + n as usize, "the spawns of the land row");
+    assert_eq!(
+        w.pieces.len(),
+        before - 1 + n as usize,
+        "the spawns of the land row"
+    );
 }
 
 /// spec: S-0317 claim 9 and F6 (a contact that leaves S ≤ 2 is a stop: the counter 0, the rebound made, no bounce animation and no hit)
@@ -571,7 +612,11 @@ fn claim_10_high_bridge_deck() {
     assert_eq!(piece(&w, id).flight[2], d(416, m).to_f32(m), "on the deck");
     set(&mut w, id, [at.x, at.y, 410], ["0", "0", "20"]);
     pieces::turn(&mut w, id);
-    assert_eq!(piece(&w, id).flight[2], d(396, m).to_f32(m), "under the deck");
+    assert_eq!(
+        piece(&w, id).flight[2],
+        d(396, m).to_f32(m),
+        "under the deck"
+    );
 }
 
 /// spec: S-0317 claim 10 (a new height 100 leptons or more below the ground is left where it is; a height from the ground up to 150 above it in a cell that holds a building is a contact at the ground height)
@@ -592,7 +637,11 @@ fn claim_10_deep_move_and_building_cell() {
     let at = centre(b, 0);
     set(&mut w, id, [at.x, at.y, 120], ["0", "0", "0"]);
     pieces::turn(&mut w, id);
-    assert_eq!(piece(&w, id).flight[2], d(0, m).to_f32(m), "a building contact");
+    assert_eq!(
+        piece(&w, id).flight[2],
+        d(0, m).to_f32(m),
+        "a building contact"
+    );
 }
 
 /// spec: S-0317 claim 10 (the cliff test: a contact in a cell at least 2 height levels above the old cell that would put a descending piece higher than it was is undone: the flight position and velocity of the start of the turn, the hits at the position before the move)
@@ -616,8 +665,14 @@ fn claim_10_cliff_undone() {
     let p = piece(&w, id);
     assert_eq!(p.flight, before.flight, "the move is undone");
     assert_eq!(p.pos.cell(), low);
-    assert!(p.velocity[0].to_f64().lt(d(0, w.rules().mode)), "turned off the face (interim, Q-1834)");
-    assert!(health(&w, near) < h0, "the hits at the position before the move");
+    assert!(
+        p.velocity[0].to_f64().lt(d(0, w.rules().mode)),
+        "turned off the face (interim, Q-1834)"
+    );
+    assert!(
+        health(&w, near) < h0,
+        "the hits at the position before the move"
+    );
 }
 
 /// spec: S-0317 claim 11 (not on water: the expiry animation at the flight point, then area damage there with the type's damage and warhead) and Edge cases (quirks.voxel_debris_expiry_needs_animation: no expiry animation, no area damage; with the switch off a nonzero damage deals it)
@@ -688,16 +743,27 @@ fn claim_12_resources() {
     let id = make(&mut w, "ORE1", centre(c, 0));
     w.pieces.get_mut(&id).unwrap().counter = 1;
     pieces::turn(&mut w, id);
-    assert_eq!(glasnost_sim::econ::resource::resource_at(&w, c), Some((0, 0)));
+    assert_eq!(
+        glasnost_sim::econ::resource::resource_at(&w, c),
+        Some((0, 0))
+    );
     let c = mid(5, 5);
     let id = make(&mut w, "OREM", centre(c, 0));
-    set(&mut w, id, [centre(c, 0).x, centre(c, 0).y, 0], ["0", "0", "0"]);
+    set(
+        &mut w,
+        id,
+        [centre(c, 0).x, centre(c, 0).y, 0],
+        ["0", "0", "0"],
+    );
     w.pieces.get_mut(&id).unwrap().counter = 1;
     pieces::turn(&mut w, id);
     assert_eq!(glasnost_sim::econ::resource::resource_at(&w, c), None);
     for (dx, dy) in glasnost_sim::regions::STEPS {
         let n = CellXY::new(c.x + dx, c.y + dy);
-        assert_eq!(glasnost_sim::econ::resource::resource_at(&w, n), Some((0, 0)));
+        assert_eq!(
+            glasnost_sim::econ::resource::resource_at(&w, n),
+            Some((0, 0))
+        );
     }
     // Without overlay position 127: no cell and no draws.
     let r = rules();
@@ -746,11 +812,19 @@ fn claim_13_14_system_and_sound() {
         .values()
         .find(|s| s.owner_object == Some(id))
         .unwrap();
-    assert_eq!(sys.owner_offset, [at.x - start.x, at.y - start.y, at.z - start.z]);
+    assert_eq!(
+        sys.owner_offset,
+        [at.x - start.x, at.y - start.y, at.z - start.z]
+    );
     // The end marks the system.
     w.pieces.get_mut(&id).unwrap().counter = 1;
     pieces::turn(&mut w, id);
-    assert!(w.gas.systems.values().any(|s| s.ending && s.owner_object.is_none()));
+    assert!(
+        w.gas
+            .systems
+            .values()
+            .any(|s| s.ending && s.owner_object.is_none())
+    );
 }
 
 /// spec: S-0317 Changes for other specs (S-0303 claim 22, S-0312 claim 4: the debris types are dealt as pieces, created with claim 3's draws)
@@ -768,7 +842,10 @@ fn producers_make_pieces() {
         Some(glasnost_sim::world::HouseId(1)),
     );
     assert!(!w.pieces.is_empty());
-    assert!(w.pieces.values().all(|p| p.pos == at
-        && p.house == Some(glasnost_sim::world::HouseId(1))));
+    assert!(
+        w.pieces
+            .values()
+            .all(|p| p.pos == at && p.house == Some(glasnost_sim::world::HouseId(1)))
+    );
     round_trip(&w);
 }

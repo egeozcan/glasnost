@@ -68,8 +68,14 @@ fn piece_fields_present_and_absent() {
     assert_eq!(c.is_tiberium, Some(false));
     assert_eq!(c.attached_system.as_deref(), Some("Smk"));
     assert_eq!(c.start_sound.as_deref(), Some("Whoosh"));
-    assert_eq!(c.min_angular_velocity.as_ref().map(|d| d.0.as_str()), Some("2"));
-    assert_eq!(c.max_angular_velocity.as_ref().map(|d| d.0.as_str()), Some("6"));
+    assert_eq!(
+        c.min_angular_velocity.as_ref().map(|d| d.0.as_str()),
+        Some("2")
+    );
+    assert_eq!(
+        c.max_angular_velocity.as_ref().map(|d| d.0.as_str()),
+        Some("6")
+    );
     let b = &s.voxel_animations["Bare"];
     assert_eq!(b.duration, None);
     assert_eq!(b.warhead, None);

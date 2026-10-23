@@ -265,7 +265,11 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
         let counter = t.duration.wrapping_sub(cut);
         let tt = d(i64::from(counter));
         // spec: S-0317 F2 (start = trunc(c − T·v) per axis, formed in double precision from T, the stored speeds and the creation point)
-        let back = |c: i32, v: F32| d(i64::from(c)).sub(tt.mul(v.to_f64(), mode), mode).to_i32_common();
+        let back = |c: i32, v: F32| {
+            d(i64::from(c))
+                .sub(tt.mul(v.to_f64(), mode), mode)
+                .to_i32_common()
+        };
         let start = Pos::new(back(at.x, vx), back(at.y, vy), back(at.z, vz));
         let flight = [start.x, start.y, start.z].map(|c| d(i64::from(c)).to_f32(mode));
         // spec: S-0317 claim 6 (a meteor piece is at its start position until its first turn)
@@ -391,7 +395,11 @@ pub fn turn(w: &mut World, id: ObjectId) {
     if w.tick.rem_euclid(2) == 0
         && let Some(name) = t.trailer.clone()
     {
-        let at = trailer_point(&pc, w.rules().quirks.voxel_debris_trailer_height, rules.mode);
+        let at = trailer_point(
+            &pc,
+            w.rules().quirks.voxel_debris_trailer_height,
+            rules.mode,
+        );
         // spec: S-0317 claim 6 (an initial loop delay of 1 update, repeat factor 1, no reverse request: S-0109 claim 29's projectile trailer)
         crate::combat::effects::trailer(w, &name, at);
     }
@@ -469,8 +477,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
         }
         contact = Contact::Ground;
     } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode))
-        && w
-            .cells
+        && w.cells
             .occ(nc, Layer::Ground)
             .is_some_and(|o| o.buildings > 0)
     {
@@ -574,12 +581,12 @@ fn land_impact(w: &mut World, t: &PieceType, old: Pos, cell: CellXY, at: Pos, on
         crate::combat::effects::anim(w, &a, old);
     }
     // spec: S-0317 claim 7 and Edge cases (the ground layer whatever the height; quirks.voxel_debris_deck_impact_layer off: an impact the deck test puts on a high-bridge deck hits the deck layer)
-    let layer = if on_deck && !w.rules().quirks.voxel_debris_deck_impact_layer && w.high_bridge(cell)
-    {
-        Layer::Deck
-    } else {
-        Layer::Ground
-    };
+    let layer =
+        if on_deck && !w.rules().quirks.voxel_debris_deck_impact_layer && w.high_bridge(cell) {
+            Layer::Deck
+        } else {
+            Layer::Ground
+        };
     let mode = w.rules().mode;
     // spec: S-0317 claim 7 and S-0209 claim 13 (the objects listed in the cell's layer, in listing order; the list as it stands when the hits begin)
     let list: Vec<ObjectId> = w.cells.list(cell, layer).to_vec();
