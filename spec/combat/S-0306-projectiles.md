@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 33
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-22
+approved-on: 2026-10-23
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763]
 supersedes: []
@@ -30,6 +30,12 @@ land-targeting mode's row and the naval-targeting mode's row. The two departures
 cases that state our engine's own choice (the object numbering and the failed comparison solve)
 are design, which is why `design` is among this spec's sources. This spec covers skirmish.
 Network games and campaigns are out of scope.
+
+This revision changes claim 23 of the committed text in two places. It states the rank of a
+building's pending delayed shot, which the committed text left unstated: its *rearming* comes ahead
+of the two rows and of every other row of the claim (S-0301 claims 9 and 14). And a building in
+*attack* that holds such a target keeps it until the end of a pending delayed shot instead of
+dropping it at once (S-0301 claim 14).
 
 ## Terms
 
@@ -771,16 +777,18 @@ S-0501 claim 20.
     *rearming* answers for a materialising firer, the firer's own gripped unit, a held temporal
     target and a spawner weapon none of whose spawned aircraft is alive; for a vehicle, the
     tube-transit *impossible* and launching-spawn *busy* answers that S-0301 claim 9 already puts
-    earlier; and for a building, the *impossible* of a building without power. Where the *rearming*
-    of a building's pending delayed shot (S-0301 claim 14) falls against the two rows is not
-    stated, as S-0301 claim 9 leaves its rank unstated. The magnetic-beam *rearming* of a firer whose
+    earlier; and for a building, the *impossible* of a building without power. A building's pending
+    delayed shot (S-0301 claim 14) gives *rearming* ahead of the two rows and of every other row
+    of this claim; S-0301 claim 9 gives its rank. The magnetic-beam *rearming* of a firer whose
     grip and live wave coexist comes after the two rows, as S-0301 claim 9 gives for the
     target-layer and projectile tests. The order among the rank-4 *illegal* answers shows in no
     answer.
 
     Consequences: retaliation against such an attacker stops whatever its rearm countdown (S-0309
     claim 18 stops on *illegal* and *impossible*); a building in *attack* that holds such a target
-    drops it (S-0215 claim 32) rather than waiting out its countdown. Separately from the rank, an
+    drops it (S-0215 claim 32) rather than waiting out its countdown, unless its delayed shot is
+    pending. It then keeps the target until the end of the delay; the end-of-delay check and the
+    target handling after it follow S-0301 claim 14. Separately from the rank, an
     ordinary click offers no attack on such a target even while the firer is rearming, since
     S-0214 claim 6(e)'s cursor query does not count rearming at all.
 
@@ -838,8 +846,10 @@ S-0501 claim 20.
       `unmeasured` for a unit's deadline for the drop (no later than the first *illegal* answer):
       part i does not judge the tick of the drop. `unmeasured` for
       the two rows' place within rank 4: no scenario combines a refused target with a hidden
-      target, a spent spawner or the other answers named there. `unmeasured` for the rank of the
-      two rows against *rearming*: S-0214 claim 6(e)'s cursor query does not count rearming, so
+      target, a spent spawner or the other answers named there, except a building's pending
+      delayed shot, which S-0301 scenario F21 sets against the water and land rows (parts a and
+      b) through the target kept and dropped. `unmeasured` for the rank of the
+      two rows against a rearm countdown's *rearming*: S-0214 claim 6(e)'s cursor query does not count rearming, so
       no cursor probe tells the ranks apart, and no scenario here reads the firing answer during
       a countdown.
       `unmeasured` for their rank against *out of ammunition*, *cloaked* and *out of range*: no
@@ -860,6 +870,8 @@ S-0501 claim 20.
       - medium: the gripped-unit exception, below the ratings of S-0607 claim 11 and S-0301
         claim 9.
       - medium: the layer row.
+      - medium: a building's pending delayed shot ahead of the two rows, and the target kept until
+        the end of the delay, as S-0301 claim 9 rates it, until S-0301 scenario F21 runs.
       - medium: the water row's modes 2 and 6, and its answer *illegal* for mode 6 (part h's water
         variant, through S-0214 claim 6(e)); for mode 2 that answer is `unmeasured`, since part f
         (3) shows only whether a shot is fired.
@@ -870,7 +882,7 @@ S-0501 claim 20.
       - medium: the absence of the anti-ground test on object targets, and the answer to Q-1763
         question 3 (part f (1) and (2) cover the force-fire and the script or trigger routes,
         and no route without the firing check is known, but not every route was checked).
-      - low: the rank of the water and land rows against *rearming*, *out of ammunition*,
+      - low: the rank of the water and land rows against a rearm countdown's *rearming*, *out of ammunition*,
         *cloaked* and *out of range*, and their place within rank 4 (`unmeasured`).
       - low: the absence of an anti-ground test in the flight and detonation claims
         (`unmeasured`).

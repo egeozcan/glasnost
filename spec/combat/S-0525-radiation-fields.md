@@ -2,11 +2,11 @@
 id: S-0525
 title: Radiation fields
 topic: combat
-revision: 3
+revision: 4
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-23
 measurements: []
 requests: []
 supersedes: []
@@ -44,6 +44,10 @@ This spec builds on, and does not restate:
 - **Number domains:** S-0205 claims 3 to 7 (integer division by zero, double precision, the
   round-toward-zero mode, conversions to integers) and S-0204 claim 5 with F1 (the table square
   root).
+
+This revision states explicitly what the committed text did not say: the fragments of S-0318
+leave no radiation, since they carry no weapon, so a fragment weapon's radiation level has no
+effect (claim 1; S-0318 claim 5).
 
 ## Terms
 
@@ -102,15 +106,19 @@ radiation field, never a data setting. In addition:
    warhead (S-0306 claim 25) leave radiation too, and so does a detonation over water, on a bridge
    or on a cliff. Nothing about the detonation's targets or damage matters. Area damage that does
    not come from a projectile carrying a weapon leaves none: planted bombs, storm bolts, crashing
-   aircraft without a death weapon, animations and trigger damage (S-0303 producers), and the
-   nine children of an airburst projectile, which carry no weapon (S-0306 claim 21). The
-   airburst projectile's own detonation follows the rule with its own weapon.
+   aircraft without a death weapon, animations and trigger damage (S-0303 producers), the
+   nine children of an airburst projectile, which carry no weapon (S-0306 claim 21), and the
+   fragments of a shrapnel weapon, which carry none either, so a fragment weapon's radiation
+   level has no effect (S-0318 claim 5). The airburst projectile's own detonation follows the
+   rule with its own weapon.
    The spread of the new radiation is *s* = trunc(*S*<sub>w</sub>), the warhead's cell spread
    truncated toward zero to whole cells.
    - Backing: `measurable` (scenario RF1 for a fired shot; RF9 for cluster detonations, airburst
-     children and a death weapon; RF4 part e for immediate own-cell detonation timing)
-   - Confidence: high for fired shots, death weapons and the payload; medium for cluster
-     detonations and airburst children
+     children and a death weapon; RF4 part e for immediate own-cell detonation timing; S-0318 scenario SH1 part n, run 4, for
+     the fragments of a shrapnel weapon)
+   - Confidence: high for fired shots, death weapons and the payload, and for fragments, as
+     S-0318 claim 5 rates the absence of their radiation; medium for cluster detonations and
+     airburst children
 
 2. **New field or added radiation.** When the detonation cell is the centre cell of a field that
    still exists, the radiation is added to that field (claim 4), whatever spread the new

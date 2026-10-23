@@ -2,11 +2,11 @@
 id: S-0308
 title: Weapon choice (primary or secondary per target, elite weapons, multi-weapon types, deployed, passenger and garrison weapons)
 topic: combat
-revision: 15
+revision: 16
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-23
 measurements: []
 requests: [Q-0083, Q-0970]
 supersedes: []
@@ -24,6 +24,10 @@ the elite replacement, the precedence, the rules for gattling, gunner and garris
 mean weapon damage that other rules use. Whether the chosen weapon may fire is the firing check of
 S-0301; S-0215 claim 32 also controls buildings' firing attempts, including the upgrade weapon
 gate. Its range is S-0307's.
+
+This revision corrects claim 14 of the committed text: the check and shot that end a building's
+animation-delayed shot use the slot chosen when the delay started, not the weapon asked afresh
+(S-0301 claim 14).
 
 ## Terms
 
@@ -346,7 +350,8 @@ This spec covers skirmish combat and import. Network games and campaigns are out
 14. **The weapon it would use is the one tested everywhere.** The firing check (S-0301), the
     versus bands of S-0304, the threat scoring and candidate tests of S-0309 and the attack rule of
     S-0214 all look at the weapon this spec chooses against the object concerned, asked afresh each
-    time.
+    time, except the check and shot that end a building's animation-delayed shot, which use the
+    slot chosen when the delay started (S-0301 claim 14).
     - Backing: `measurable` (for the firing check, scenario W8 parts a and d, where the chosen
       slot's firing legality determines whether a shot is refused or made; for the versus choice,
       S-0304 scenario V2, where the non-zero-versus weapon is selected and the zero-versus weapon
@@ -354,8 +359,11 @@ This spec covers skirmish combat and import. Network games and campaigns are out
       stated weapon-dependent candidate/score result determines which target is selected, and A8,
       where expected-health preference determines the selected target; for the attack rule,
       S-0214 scenario T4, where the target's legality for the weapon it would use determines the
-      attack result)
-    - Confidence: high
+      attack result); for the shot that ends a building's animation-delayed shot, S-0301
+      scenario F21 part d. `unmeasured` for the slot that the end-of-delay check tests: both
+      weapons of F21 part d pass that check, so the part tells only the shot's slot
+    - Confidence: high; medium, not high, for the check and shot that end a building's
+      animation-delayed shot, until S-0301 scenario F21 part d runs
 
 15. **Mean weapon damage.** Some rules (S-0309: who heals and who retaliates) use an object's *mean
     weapon damage* *M*, which does not depend on a target:
