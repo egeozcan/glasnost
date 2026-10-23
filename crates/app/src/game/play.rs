@@ -213,8 +213,10 @@ impl Play {
     }
 
     /// Advances the result duration's active clock to host time `now_ms`
-    /// (S-0414 claim 23): `active` is false while the game is paused for the
-    /// options menu or has lost focus. The clock stops when play stops.
+    /// (S-0414 claim 23, revision 16): `active` is false while a skirmish's
+    /// options menu is open; time without the input focus counts, and in a
+    /// network game nothing but leaving play stops the clock (S-0201 claim
+    /// 18). The clock stops when play stops.
     pub fn clock(&mut self, now_ms: i64, active: bool) {
         if !active || !self.running() {
             self.clock_last = None;

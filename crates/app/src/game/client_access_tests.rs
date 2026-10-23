@@ -963,3 +963,27 @@ fn the_menu_is_refused_after_the_end_and_after_a_surrender() {
     key(&mut c, Key::Escape);
     assert!(!session(&c).paused);
 }
+
+/// A skirmish's active clock counts time without the input focus, in
+/// which no tick runs, and not the time the options menu is open.
+/// spec: S-0414 claim 23 (revision 16: in a skirmish the clock pauses while the options menu is open; time without the input focus counts) and S-0201 claim 9 (no cycle runs without focus)
+#[test]
+fn a_skirmish_clock_counts_lost_focus_but_not_the_menu() {
+    let mut c = client((1024, 768), 100);
+    start_by_keyboard(&mut c);
+    let units = |c: &Client| session(c).play.clock_units;
+    c.update(1_000);
+    c.focus(false);
+    let (tick, before) = (session(&c).play.world().tick, units(&c));
+    c.update(1_160);
+    c.update(1_320);
+    assert_eq!(session(&c).play.world().tick, tick, "no tick without focus");
+    assert_eq!(units(&c) - before, 20, "lost focus counts");
+    c.focus(true);
+    key(&mut c, Key::Escape);
+    assert!(session(&c).paused);
+    let before = units(&c);
+    c.update(1_480);
+    c.update(1_640);
+    assert_eq!(units(&c), before, "the open menu does not count");
+}
