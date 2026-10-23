@@ -1,9 +1,9 @@
 ---
 id: Q-1715
 title: What a no-type entry does in a corpse list or a death-animation list
-status: open
+status: answered
 related: [S-0107, S-0003]
-answered-by: []
+answered-by: [S-0107]
 ---
 
 ## Need

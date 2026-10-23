@@ -2,13 +2,13 @@
 id: S-0107
 title: Infantry sprite sequences
 topic: rendering
-revision: 19
+revision: 22
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0087, Q-0212, Q-1525]
+requests: [Q-0087, Q-0212, Q-1525, Q-1715]
 supersedes: []
 ---
 
@@ -576,7 +576,7 @@ used by this spec only:
     |---|---|---|
     | 1 | The unit's height above the surface (Terms) is less than 11 leptons, the land type of its cell is water (beach does not count), and a further per-object condition holds that has not been identified | Splash animations; no sequence |
     | 2 | Its type is a cyborg and it is prone, or its type is a jumpjet type (whatever its current locomotor) | A general death animation (rules data, another spec); no sequence |
-    | 3 | Its type has its own list of death animations | Entry *w* of that list, where *w* is the death kind below (entry 0 when *w* is outside the list or entry *w* is empty); no sequence |
+    | 3 | Its type has its own list of death animations with at least one entry | Entry *w* of that list, where *w* is the death kind below (entry 0 when *w* is negative or not less than the list's length); no sequence |
     | 4 | Its type is marked "not human" | A forced request for *die-1*, whatever the death kind *w* (0, 3, 5 and 8 included). When *w* = 8, the extra virus-death animation and particle delivery of S-0613 claim 3 follow that request (S-0615 claim 1). A parachutist instead gets only the earlier virus effect described below |
     | 5 | Any other case, with *w* = 1 | A forced request for *die-1* |
     | 6 | Any other case, with *w* = 2 | A forced request for *die-2* |
@@ -651,10 +651,42 @@ used by this spec only:
     number and reduced modulo the list length. When *wet-die-1*, *wet-die-2* or *air-death-end*
     complete, the unit is removed with no corpse. Because of the water case above, a wet death
     sequence may in practice be seen only on beach cells.
+
+    **What the two lists hold (Q-1715).** A type's death-animation list and both corpse lists
+    hold only animation types, in item order. An empty item (S-0003 claim 12) and an item that
+    means "no type" (S-0003 claim 14) are not entries at all: they are left out when the list is
+    read (S-0004 claim 13), so they do not count towards a corpse list's length, and in a
+    death-animation list the entries after them move down by one position each. So a
+    death-animation list written as *A*, no type, *B* has two entries: death kind 1 shows *B*,
+    and death kind 2, being outside the list, shows entry 0, *A*. Every entry is therefore an
+    animation type, apart from a general corpse list left over from an earlier game (Import
+    mapping), whose entries name types that no longer exist.
+
+    **A list whose every item is left out.** A list written only as no-type or empty items (for
+    example a single no-type item, or two of them) has no entries. It is still a value that is
+    neither absent nor empty, so it replaces any earlier definition of that list (Import
+    mapping): a later rules layer can clear a list this way, while an empty value cannot. A type
+    whose death-animation list has no entries does not have a list for row 3, so the later rows
+    decide exactly as for a type that never had one. Whenever row 3 applies, it therefore shows
+    an animation type. A type corpse list with no entries is empty, so the corpse comes from the
+    general list as above (or there is none, for a type marked "not human"). A general corpse
+    list with no entries gives no corpse and takes no corpse-pick draw.
+
+    **Unknown names.** An item that names an animation type the rules do not list is an entry
+    like any other: it counts towards a corpse list's length and keeps its death-animation
+    position. When it is chosen, an animation is started as for any other entry. If no sprite
+    resolves for it, it draws nothing and ends as S-0109's edge case for an unknown follow-up or
+    missing type says (S-0109, Edge cases; also its sprite-missing case). A corpse pick that
+    chooses it still takes its draw, and the unit is removed as usual. Such an item creates an
+    animation type of that name (S-0004 claim 13), which later references to the name find as
+    S-0004 claims 8 and 13 say.
     - Backing: `measurable` (scenario M10: part (a) for the tested death kinds and falling
       paratroopers, part (b) for the switch's default, part (c) for the removal of a cyborg killed by
-      damage that ignores defences, part (d) for corpse-list precedence and the raw draw,
-      part (e) for the type's death-animation list, part (f) for virus-effect ordering and count, and
+      damage that ignores defences, part (d) for corpse-list precedence and the raw draw, for
+      no-type items in a corpse list, for a corpse list whose every item is left out and for the
+      place an unknown item keeps in it, part (e) for the type's death-animation list, for its
+      no-type, empty and unknown items and for a list whose every item is left out, part (f) for
+      virus-effect ordering and count, and
       S-0615 claim 3's scenario DK1 for the crash exception in the ordinary-human no-animation
       cases, and S-0611 claim 7's scenario MU13 for row 7's successful replacement during a crash,
       its retained standing mark and independent conversion animation); `unmeasured` (the crash
@@ -666,10 +698,17 @@ used by this spec only:
       set it up, and M10 only records the water-cell outcome to help identify it; and a general
       corpse list left over from an earlier game, Import mapping: the original's result is
       unspecified, and our engine's result is a design choice with nothing to compare it with)
+    - Backing of the last sentence of "Unknown names", that the item creates an animation
+      type: `unmeasured`. Parts (d) and (e) show the place the item keeps and that it draws
+      nothing, but a created type without a sprite and an empty place that draws nothing look
+      the same, so no scenario here tells them apart. It rests on S-0004 claim 13.
     - Confidence: high (the die-1/die-2 choice, the completion behaviour, the corpse pick, the
+      list contents: no-type and empty items left out, unknown names keeping their place, a list
+      whose every item is left out counting as empty and replacing an earlier definition, the
       precedence of the laser-fence replacement, the refusal of a falling parachutist's death
       request), medium (the order of the special cases, the extra animations for kind 8, the
-      removal in the no-sequence rows and its crash-flag exception, the cyborg paragraph), low (the
+      removal in the no-sequence rows and its crash-flag exception, the cyborg paragraph, the
+      creation of a type by an unknown name), low (the
       water case and its unidentified condition)
 
 18. **Sound cues.** A cue can play only on a tick on which the unit's stage advanced. On such a
@@ -1214,8 +1253,8 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   | `JumpJetTurn` | infantry type | boolean | false | allows jumpjet turning (claim 12) |
   | `EnterWaterSound`, `LeaveWaterSound` | infantry type | sound name | none (no sound) | water side effect (claim 7) |
   | `VoiceComment` | infantry type | list of sound names | empty | idle comment, first entry only (claim 14) |
-  | `DeadBodies` | infantry type | list of animation names | empty | the type's corpse list (claim 17) |
-  | `DeathAnims` | infantry type | list of animation names | empty | death animations indexed by death kind (claim 17) |
+  | `DeadBodies` | infantry type | list of animation names | empty | the type's corpse list (claim 17); no-type and empty items are left out, an unknown name creates an animation type (claim 17, Q-1715) |
+  | `DeathAnims` | infantry type | list of animation names | empty | death animations indexed by death kind (claim 17); no-type and empty items are left out, an unknown name creates an animation type (claim 17, Q-1715) |
   | `JumpJet` | any unit type | boolean | false | jumpjet type (claims 10, 11, 12, 17) |
   | `NoShadow` | any unit type | boolean | false | suppresses the body-sprite shadow only (claim 19 a); the generic shadow is drawn regardless (claim 19 c) |
   | `MovementZone` | any unit type | movement zone name | `Normal` | the amphibious-destroyer value enables the water substitutions (claim 7) |
@@ -1223,7 +1262,7 @@ by S-0007; "the type's art section" below means that section. Kind names map to 
   | `Strength` | any object type | integer | 0 | the strength of F5; the importer warns when it is 0 or below for an infantry type (F5) |
   | `Crashable` | any unit type | boolean | false | crash flag (Terms, claim 17) |
   | `DeploySound`, `UndeploySound` | any unit type | sound name | none (no sound) | played when *deploy* and *undeploy* start (claim 21) |
-  | `DeadBodies` | `[General]` | list of animation names | empty | the general corpse list (claim 17) |
+  | `DeadBodies` | `[General]` | list of animation names | empty | the general corpse list (claim 17); no-type and empty items are left out, an unknown name creates an animation type (claim 17, Q-1715) |
   | `IdleActionFrequency` | `[AudioVisual]` | decimal, game minutes | the double nearest to 0.083 | *R* in F4 |
   | `ConditionYellow` | `[AudioVisual]` | decimal with optional `%` (S-0003 claims 6 to 8) | 0.5 | *yellow* in F5 |
   | `ConditionRed` | `[AudioVisual]` | decimal with optional `%` (S-0003 claims 6 to 8) | 0.5 | *red* in F5 |
@@ -1267,8 +1306,9 @@ rules; hidden removal and the no-recipient damage path make no such request. A s
 transfer without the request, or a release cheer request on either excluded path, falsifies
 this claim. A refused request need not produce a visible cheer.
 
-Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, director off, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and the glossary's measurement setup (an unmodified install with stock data, no loose
-override files and no engine add-ons), a tiny flat map with clear terrain and one water and beach
+Common setup: skirmish, game speed 6 unless a part varies it, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted), and the glossary's measurement setup (an unmodified install with stock data, no loose
+override files and no engine add-ons; no helper that changes rules, houses or computer players
+during the game is active, and no scenario here needs one), a tiny flat map with clear terrain and one water and beach
 strip, and a fixed game speed unless stated otherwise. Include one distant bystander computer
 player unless a part already includes a computer-controlled test owner. The observed area contains
 only that part's named test objects; apply the glossary's bystander void rule. Image frame numbers are read from a
@@ -1673,15 +1713,38 @@ whose …") means any stock type with that property; the property is a precondit
     type's list empty and the same three entries in the general list; then with both lists
     empty. Expected: the general list supplies the first variant's pick when the type's
     list is empty; with both empty, no corpse and no corpse-pick draw. Any different pick,
-    extra raw draw or failure to remove falsifies the claim. Runs: ten kills per variant.
+    extra raw draw or failure to remove falsifies the claim. Then give the type's list as *A*,
+    no type, *B* (written once as the bare and once as the angle-bracketed no-type spelling),
+    with *A* and *B* visibly distinct: expect entry *x* mod 2, so *A* or *B* every time and a
+    corpse at every death; a death with no corpse falsifies the claim that the no-type item is
+    left out. Then give it as *A*, *U*, *B*, where *U* names an animation type the rules do
+    not list and no sprite exists for: expect entry *x* mod 3, with no visible corpse when the
+    middle entry is chosen, one raw draw at every death and removal on the completion tick.
+    Then give the type's list only as one no-type item, and again as two, with the three
+    entries above in the general list: expect the general list's pick, entry *x* mod 3, at every
+    death. Finally give the type a three-entry list in one test rules file and only a no-type
+    item for the same type's list in a later layer (a test map's rules), with the general list
+    as before: expect the general list's pick, since the later value clears the type's list.
+    Any pick from the type's list in these variants, or a death without a corpse, falsifies
+    the rule for a list whose every item is left out. Runs: ten kills per variant.
   - (e) Type death animations. Named test rules give the soldier above a list with distinct
     entries for kinds 0, 1 and 2. Kill it with kinds 1, 2 and an integer outside that list.
     Expected: the indexed animation for 1 and 2, entry 0 for the outside kind, no body death
     sequence and removal on the death tick. Repeat after marking the type not human:
     the list still takes precedence over *die-1*. Any body death sequence, different list
-    entry or delayed removal falsifies this rule. Repeat with an empty entry at an in-range
-    death-kind index: expect entry 0, not a body sequence or no animation. A different
-    outcome also falsifies the rule. Runs: three per variant.
+    entry or delayed removal falsifies this rule. Repeat with the list written as *A*, no type,
+    *B*, and again as *A*, an empty item, *B* (*A* and *B* distinct): expect *B* for kind 1 and *A*
+    for kind 2 in both, since the left-out item moves *B* to position 1 and kind 2 is then
+    outside the list. *A* for kind 1, or no animation for kind 1 or 2, falsifies the claim. Repeat
+    with the list written as *A*, *U*, *B*, where *U* names an animation type the rules do not
+    list and no sprite exists for: expect *A* for kind 0, nothing visible for kind 1 with no body
+    death sequence and removal on the death tick, and *B* for kind 2. *B* for kind 1 (the
+    item left out), *A* for kind 2, or a body death sequence for kind 1 falsifies the place
+    the unknown item keeps. Then write the list only as one no-type item, and again as two:
+    expect what a type with no list shows (rows 4 to 6): *die-1* for kind 1 and *die-2* for
+    kind 2, and *die-1* for both when the type is marked not human. Removal on the death tick with no body
+    death sequence falsifies the rule that such a list is empty for row 3. Runs: three per
+    variant.
   - (f) Virus-effect ordering and count. Use the common setup and the named test data of
     S-0615 scenario DK3, with a read-only recorder of both random streams and animation,
     particle and sequence-start events. Kill a parachuting ordinary soldier with a kind-8
