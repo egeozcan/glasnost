@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 17
+revision: 60
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0540, Q-1550]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620]
 supersedes: []
 ---
 
@@ -21,7 +21,10 @@ damaged, occupied, gate stages, selling, unloading), where the body is anchored 
 foundation, the shadow, the bib and the door image, and the slot animations attached to a building. For the slot
 animations it covers the slots, the damaged and occupied variants, the power behaviour, and the
 building-specific rules that start and swap them (refinery and silo fill, infantry absorption,
-superweapon charge, turret, repair depot). This spec covers skirmish only; network games and campaigns
+superweapon charge, turret, repair depot). When a slot is started while it already holds an
+animation, the new animation keeps the replaced one's stage and takes its own passes afresh
+(claim 25); that the stage, not the image frame, is what carries over when the two types' start
+fields differ is unmeasured and rated medium there. This spec covers skirmish only; network games and campaigns
 are out of scope.
 
 ## Terms
@@ -64,7 +67,8 @@ are out of scope.
   y-sort value (both used by S-0102), and four power flags: **freeze-unpowered**,
   **light-unpowered**, **effect-unpowered** and **special-outage**.
 - **Starting a slot** with a variant: create the animation named by the chosen variant. If the slot
-  already holds an animation, it is replaced, and the new one continues from the old one's image frame.
+  already holds an animation, it is replaced. Claim 25 says what the new animation keeps from the
+  replaced one (its stage) and what it does not (its count of passes).
   Nothing happens when the chosen name is empty, or when it names no animation type. **Stopping a
   slot:** remove its animation.
 - **Variant choice** at a start: the name used depends on the building and on the start.
@@ -93,7 +97,9 @@ are out of scope.
   power and its power field is negative (it consumes power).
 - **Door sprite:** an optional shape file the type's art names, drawn while the building unloads
   (claim 23). **Door-stage count** *D*: the type's imported door-stage field, an integer.
-  **Damaged-door type:** a type whose art is marked as having damaged door frames.
+- **Depot processing delay** *D*<sub>p</sub>: the repair depot's processing delay, the *D* of
+  S-0314 claim 6 (claim 20 and scenario B18). It is unrelated to the door-stage count.
+- **Damaged-door type:** a type whose art is marked as having damaged door frames.
 - **Door state:** the state of the building's door, one of *closed*, *opening*, *open* and
   *closing*. Factory door movement, timing and unloading behaviour belong to S-0417
   (structures); the door-image rules remain here. **Door progress** *q*: the completed fraction of the door's current movement,
@@ -111,8 +117,10 @@ are out of scope.
    - Backing: `measurable` (B1 for sprite choice and invisible body, bib and shadow).
      `unmeasured` for missing sprites (no construction setup with a missing build-up is established)
      and invisible unloading/door images (B1 does not unload from the invisible test building).
-   - Confidence: high (the sprite choice, invisible types), medium (the missing-sprite case; whether
-     such a building ever enters the *construction* state belongs to the production spec)
+   - Confidence: high (the sprite choice; an invisible type's missing body, bib and shadow), medium
+     (the missing-sprite case, `unmeasured`; whether such a building ever enters the *construction*
+     state belongs to the production spec), medium (an invisible type's missing unloading, under-door
+     and door images, `unmeasured`)
 
 2. **The body frame.** The image-frame index *f* is an integer. These situations are mutually
    exclusive: construction takes precedence over type properties. Outside construction the
@@ -142,7 +150,9 @@ are out of scope.
      tested against this spec, not the original. The non-idle damaged maximum and overlapping type
      properties are `unmeasured`: no scenario here establishes those states. The exclusion of
      *full* shares that limitation.
-   - Confidence: high
+   - Confidence: high for the rows that B1, B2, B3 and B13 test; medium for the non-idle damaged
+     maximum, the exclusion of *full* and the precedence between overlapping type properties
+     (`unmeasured`)
 
 3. **Image-frame clamp at draw time.** For a sprite with at least one body frame, the body frame
    actually drawn is min(*f*, ⌊N/2⌋ − 1), where *N* is the image-frame count of the sprite in use.
@@ -229,7 +239,7 @@ are out of scope.
      stage-23 sale completion). Failed reload retaining the range
      is `unmeasured` (B19 supplies the file; a missing sprite hides its range).
    - Confidence: high (the delay), medium (the exact tick of the switch to the body sprite and the
-     theater-flag rule)
+     theater-flag rule), medium (a failed reload keeping the range, `unmeasured`)
 
 6. **Body animation ranges and game speed.** A state change is either *immediate* or *deferred*.
    It is immediate when the building has no state yet, when the new state is *construction*, or
@@ -271,8 +281,9 @@ are out of scope.
      timing and turret no-wrap: B11 establishes no event path selecting those cases. The
      original's unspecified *full* range is `unmeasured`: no skirmish event entering it is
      established and no repeatable range can be predicted. Our *full* range is a defined departure.
-   - Confidence: high (the two entry rules and the wrap rule), medium (the turret case and the
-     last-request-wins rule)
+   - Confidence: high (deferred entry into the idle range and ordinary wrapping of the idle range,
+     the two rules B11 covers), medium (`unmeasured`: the other entry rows, repeated-state requests,
+     cancellation, the last-request-wins rule and the turret case)
 
 7. **Bib.** When the type has a bib sprite, the bib is drawn whenever the building is not in the
    *construction* state, so never during build-up or selling. It is also not drawn with the
@@ -284,7 +295,9 @@ are out of scope.
      S-0513 claim 29b and its SW10 part i for protection appearance).
      The unclamped index is `unmeasured`: B4 never requests an index above the body clamp.
      Special-gate-image suppression shares claim 4's limitation.
-   - Confidence: high
+   - Confidence: high for the bib's visibility, its default damaged frame and the protection
+     appearance; medium for the unclamped index (`unmeasured`) and for the special-gate-image
+     suppression, rated as claim 4 rates it
 
 8. **Anchor of the image.** The body, build-up, bib and shadow frames are drawn centred on the
    screen projection of the foundation's top corner, its topmost point on the screen. That
@@ -305,7 +318,8 @@ are out of scope.
      shadows of clamped body frames are tested against this spec as a departure, not the original).
      The assertion of no global option is `unmeasured`: the scenario tests the type flag,
      not every possible setting.
-   - Confidence: high (the shadow frame), medium (no shadow past the sprite)
+   - Confidence: high (the shadow frame), medium (no shadow past the sprite), medium (no global
+     option, `unmeasured`)
 
 10. **Slot animation placement.** A slot animation is created at the image anchor of claim 8 (the
     foundation's top corner), moved by the slot's screen displacement (*x*, *y*) in pixels, which
@@ -352,25 +366,48 @@ are out of scope.
       body-state changes beyond the placement's idle entry (no input path selecting each
       additional set-up state is established). Unknown-name starts and empty
       upgrade names are also `unmeasured`: no start path for those slots is established here.
-    - Confidence: high
+    - Confidence: high for the unoccupied completion starts, the set-up slot presence, the turret
+      case, the queued *guard* and the free unit; medium for the occupied grand-opening variants,
+      the below-15-tick charge case, repeated set-up body-state changes, unknown-name starts and
+      empty upgrade names (`unmeasured`)
 
 12. **Damage swaps the variants.** Whenever the building's health changes through damage or repair
     and its damaged state then differs from its slot condition, the slot condition takes the new
-    value and every running slot is restarted, keeping its image frame, with the damaged name when now
+    value and every running slot is restarted, keeping its stage (claim 25), with the damaged name when now
     damaged and the normal name when not. A slot whose name for the new condition is empty keeps
     its current animation. The occupied variant is never chosen by this swap
     (`quirks.damage_swap_drops_occupied`). The swap takes effect on the tick of the damage or
     repair. Starting a slot in the condition opposite to the slot condition triggers the same swap
     of every running slot, on the tick of the start, and the started slot shows the variant chosen
-    for that start. After a condition swap, existing slots show normal or damaged art, except a slot with an
+    for that start. The running slots are restarted one after another in this fixed order:
+    *upgrade-1* to *upgrade-3*, *active-1* to *active-4*, *pre-production*, *production*,
+    *turret*, *special-1* to *special-4*, *super-1* to *super-4*, *idle*, *low-power*,
+    *super-low-power*. Each new animation takes its creation draws (S-0109 claim 3) as its slot is
+    restarted, so the draws of one swap come in that slot order. The order shows in which
+    creation draws each restarted slot takes and in the order in which the new animations enter
+    play (S-0203 claim 3). When a start in the opposite
+    condition triggers the swap, the swap of every running slot comes first and the started
+    slot's own new animation is created after it. A started slot that was already running, and
+    whose name for the new condition is not empty, is therefore restarted by the swap and then
+    replaced again by the start, keeping the same stage
+    both times, and with a random rate it takes the creation draws twice. After a condition swap, existing slots show normal or damaged art, except a slot with an
     empty name for that condition, which keeps its old art until something restarts it. A slot
     started with an occupied variant still shows that variant until a later restart or swap:
     counting it as the normal slot condition does not replace its occupied art.
     - Backing: `measurable` (B2 for damage/repair swaps and occupied art being dropped,
       B6 for the turret start's opposite-condition swap). Empty-condition upgrade slots are
       `unmeasured`: B2's ordinary empty damaged name is filled with the normal name at import,
-      so it cannot test retaining an old variant on an empty-name swap.
-    - Confidence: high
+      so it cannot test retaining an old variant on an empty-name swap. The order of the restarts
+      and of their creation draws, and the started slot's second creation, are `unmeasured`: no
+      scenario here gives two restarted slots a random rate, and the order shows only in the
+      random state. What a restarted slot keeps (its stage) and counts afresh (its passes) is
+      claim 25, with its own backing.
+    - Confidence: high for the swap itself and its timing; medium for a slot with an empty name
+      for the new condition keeping its current animation (`unmeasured`), and for the order of
+      the restarts, their draws and the started slot's second creation (`unmeasured`). What the restarted
+      slot keeps takes claim 25's ratings: high where the two variants share a start field,
+      medium (`unmeasured`) for keeping the stage rather than the image frame where they
+      differ.
 
 13. **Power.** For each slot only the first of its power flags in the order *freeze-unpowered*,
     *light-unpowered*, *effect-unpowered* counts. *freeze-unpowered* is on for every slot unless the
@@ -427,18 +464,22 @@ are out of scope.
       claim 12, S-0408 claim 10); harvesting pays credits directly. This includes the original's
       zero-capacity failure and negative-capacity result. Our zero-capacity result and warning
       are defined departures.
-    - Confidence: high (*S* > 0), medium (*S* < 0)
+    - Confidence: high (empty storage, *m* = 0); medium (all nonempty storage, `unmeasured`)
 
 16. **Silo fill.** For a type marked to show silo fill, the level is
     *L* = trunc(4·*m* / *S* + 0.5), clamped to 0 … 3 (Formulas F5). It is 0 when *S* ≤ 0. At level 0
     the *special-1* slot is stopped. Otherwise *special-1* is started if absent (normal or damaged
     variant), and its displayed image frame is forced to *L* on every tick. The animation's own timing
     does not move it.
-    - Backing: `measurable` (B8 for empty storage stopping the slot).
+    - Backing: `measurable` (B8 for *special-1* absent with empty storage). That level 0 stops a
+      running *special-1* is `unmeasured`: B8 never makes the slot run first, so it cannot tell
+      stopping from never starting. Claim 13's power-return row could start it on art that sets
+      the matching flag, but no scenario here sets that up.
       `unmeasured` for positive fill, its rounding and forced image frames: no known skirmish
       path fills building storage. The missing-animation failure under Edge cases shares this
       limitation; our safe result and warning are defined departures.
-    - Confidence: high
+    - Confidence: high (*special-1* absent with empty storage); medium (level 0 stopping a running
+      *special-1*, and positive fill, its rounding and forced image frames, `unmeasured`)
 
 17. **Infantry absorption.** For a type that absorbs infantry and gives a positive extra power per
     held infantry, once the building has completed and is not in the *construction* state, this is
@@ -454,14 +495,15 @@ are out of scope.
       voluntary release using S-0605 claims 11 to 13).
       `unmeasured` for occupied variants (held infantry do not garrison) and negative sizes
       (their ordering is not characterised; Open questions).
-    - Confidence: high
+    - Confidence: high (non-negative sizes and release); medium (occupied variants and negative
+      sizes, `unmeasured`)
 
 18. **Superweapon charge cycle.** For a building with a superweapon (its first superweapon only),
     this is checked every tick while it is not being built or sold. The check runs only when the
     type's charged-animation time *t_c* (game minutes, a single-precision floating-point field) is
     at most 990. Let *t_r* be the weapon's remaining charge time in game minutes, computed as remaining
     ticks × *κ*, where *κ* is the single-precision constant nearest 0.0011111111 (exactly
-    2386093 / 2³¹) (Formulas F6).
+    2 386 093 / 2³¹) (Formulas F6).
     - When *t_c* < *t_r* and *super-3* is running: *super-3* stops and *super-4* starts.
     - When *t_c* ≥ *t_r* and *super-1* is running: *super-1* stops and *super-2* starts.
     - When *super-2* finishes on its own, *super-3* starts. When *super-4* finishes on its own,
@@ -472,7 +514,8 @@ are out of scope.
     - Backing: `measurable` (B9 for the four-slot cycle and its threshold).
       `unmeasured` for the 990-minute cutoff and ignoring a second superweapon: B9 supplies
       neither a cutoff comparison nor a two-superweapon building.
-    - Confidence: high
+    - Confidence: high (the four-slot cycle and its threshold); medium (the 990-minute cutoff and
+      ignoring a second superweapon, `unmeasured`)
 
 19. **Turret slot animation.** For a building with a turret, the *turret* slot animation does not
     advance on its own. Every tick its image frame is set to (28 − *j*) mod 32, a value from 0 to 31,
@@ -497,7 +540,7 @@ are out of scope.
 
     | Building | Event | Result |
     |---|---|---|
-    | Repair depot | it enters the working phase: its settling step answers *more needed* or *done* | *special-1* starts (a running one is replaced, Terms); *active-1* and *idle* stop |
+    | Repair depot | it enters the working phase: its settling step answers *more needed* or *done* | *special-1* starts (a running one is replaced, claim 25); *active-1* and *idle* stop |
     | Repair depot in the working phase | a step answers *done*, *not needed* or *cannot pay*, or the depot is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
     | Repair depot in the waiting phase | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start; the depot leaves its repair behaviour |
     | Repair depot in the settling phase, with *production* or *special-2* running | it is no longer in contact | *production* and *special-2* stop; *special-3* and *active-1* start |
@@ -511,13 +554,50 @@ are out of scope.
     Stopping or replacing the slot does not trigger that follow-up. Claim 13's power rules,
     claim 12's condition swaps (which restart a running slot) and removal of the building can
     also affect it.
-    When the depot sends the vehicle away, the slot changes happen on the tick of that step,
-    before the contact is released. When contact ends without a step (the vehicle is destroyed,
-    or leaves as S-0314 claims 20 to 22 say), the depot reacts at its next processing: on the
-    same or the next tick in the working and settling phases, at the waiting phase's own spacing
-    otherwise. A settling depot with no contact stays in its repair behaviour, checking every
-    tick, until *special-3* is no longer running, and only then returns to *guard*
-    (S-0314 claim 22 owns that return; the required companion amendment is listed under
+    When a working step sends the vehicle away (the working-phase row of the table above), the
+    slot changes happen on the tick of that step. A settling
+    step that sends the vehicle away changes no slot of its own (*After a send-away* below).
+    When contact ends without a step, because the vehicle is destroyed or leaves as S-0314
+    claims 20 to 22 say, the depot reacts at the processing that S-0314
+    claim 6's spacing table had already scheduled; the loss does not bring it forward (Q-1610,
+    answered in part through S-0314, whose claim 22 answers its third question for a depot back in
+    *guard*; the rest of that question stays open).
+    In the working phase this is the same or the next tick when the depot misses no turn in
+    between (S-0203 claim 10), except during the *D*<sub>p</sub> ticks after the
+    settling step that started working; in the settling and waiting phases it is the pending
+    processing of S-0314 claim 6's table. S-0314 claim 22 gives the cases, and owns the cases for
+    a vehicle that takes contact later (Q-1610's third question), including its unresolved
+    settling-hold case. These timings, and the no-contact hold below, are for a depot that is
+    not also a vehicle bunker, as S-0314 claim 6's table is; for that type they are open (Open
+    questions).
+    *After a send-away (Q-1620).* A working step that sends the vehicle away has already made its
+    changes and put the depot in settling. If the depot's next processing, 1 tick later when the
+    depot misses no turn (S-0314 claim 6's table), finds no contact,
+    only the settling row above can apply, and it acts only if *production* or *special-2* is
+    running at that processing:
+    - after a working step that answers *done* or *not needed* and sends the vehicle away, both
+      were stopped by that step if they were running, and nothing in the repair cycle restarts them without a contact.
+      Unless something outside the repair cycle starts one of them before that processing (see
+      *What else starts these slots at a depot* below), it makes no second change: the running
+      *special-3* is not replaced, and *active-1* is not started again: the processing itself
+      starts no slot. A slot animation that ends on its own on that tick can still start a slot
+      under its own row (a *special-1* ending out of contact starts *idle*, which part h run 3
+      relies on).
+    - after a departure that fails (contact kept, the depot in settling), *special-1* can end
+      while the vehicle is still in contact and so start *special-2* (row below). A later settling
+      step that answers *not needed* sends the vehicle away without any slot change of its own.
+      If *special-2* is then running at the following no-contact processing (*D*<sub>p</sub> ticks later),
+      that processing stops *production* and *special-2* and starts *special-3* and *active-1*,
+      replacing a running *special-3* and a running *active-1* (each start makes a new animation
+      that keeps the replaced one's stage, with its passes counted afresh, claim 25).
+      If neither *production* nor *special-2* is running, it makes
+      no change.
+
+    The rule depends only on which slots are running at that processing, not on whether the
+    previous step sent a vehicle away. A settling depot with no contact stays in its repair
+    behaviour from its first no-contact processing, the one already scheduled, checking every
+    tick from then on, until *special-3* is no longer running, and only then returns to *guard*
+    (S-0314 claim 22 owns that return; its companion revision is listed under
     Changes for other specs). The simulation models the slot animation's duration
     from the art data as deterministic simulation state; this wait does not depend on drawing
     frames or whether the building is visible.
@@ -535,43 +615,112 @@ are out of scope.
 
     No building other than the kinds listed reacts to *special-1* or *special-3* ending.
 
-    *What else starts these slots at a depot.* Apart from the repair cycle, only claim 13 (a
-    *light-unpowered* slot on power return) and claim 14 (a *special-outage* slot) can start a
-    depot's *special-1* to *special-3*, and only when the art sets those flags; roles the type may
-    combine with the repair flag (delayed fire, silo fill, recycling, vehicle bunker of S-0606) add
-    their own starts. Nothing in the repair cycle starts *production*: only the construction-yard,
+    *What else starts these slots at a depot.* Apart from the repair cycle, other claims can start
+    a depot's *special-1* to *special-3* when the art sets the matching flags, for example claim
+    13 (its *light-unpowered* and *effect-unpowered* rows on power return) and claim 14 (a
+    *special-outage* slot); roles the type may combine with the repair flag (delayed fire, silo
+    fill, recycling, vehicle bunker of S-0606) add their own starts. Nothing in the repair cycle starts *production*: only the construction-yard,
     vehicle-factory unloading and refinery-docking roles do, under their own specs. The rows that
     stop *production* therefore matter only for a type that combines one of those roles with the
     repair flag.
-    - Backing: `measurable` (B18 parts a to e for the repair-cycle rows, the working-entry tick,
-      *active-1* and *idle* stopping, the *cannot pay* restart, a destroyed vehicle, the naval
-      yard and *production* never appearing; B18 parts a, c and e for natural completion during
-      repair or after contact loss, and part f for delayed fire; B18 part g for the settling
-      hold and return to *guard*; S-0603 claim 12 and scenario G10 for recycling-building
-      natural completion).
+    - Backing: `measurable`, by these scenarios:
+      - B18 parts a to c and e: the repair-cycle rows other than the waiting-phase loss and the
+        settling contact-loss row; the working-entry tick, *active-1* and *idle* stopping, the
+        *cannot pay* restart, a destroyed vehicle, the naval yard, and *production* never
+        appearing at a depot without a role that starts it.
+      - B18 parts a, c and e: natural completion during repair or after contact loss; part f:
+        delayed fire.
+      - B18 part g: the settling hold and the return to *guard*.
+      - B18 part h: the processing after a send-away, and the settling contact-loss row with
+        *special-2* running.
+      - B18 part i: the every-tick row with *special-2* running, and its exclusion of the naval
+        yard; part i run 3: the processing after a working send-away with *special-2* started
+        from outside the repair cycle before it.
+      - B18 part j: stopping *production*, the every-tick row with *production* running, and the
+        settling contact-loss row with *production* running.
+      - B18 part k: the exclusion of occupied variants.
+      - S-0314 H4 part h: the reaction timing after a loss.
+      - S-0603 claim 12 and scenario G10: recycling-building natural completion.
       Recycling-building restart after external removal is `unmeasured`: no data-only fixture
       establishes removal without the building itself stopping or replacing the slot animation.
       Restart with the selected *active-1* variant absent is also `unmeasured`: no setup establishes
       that absence at completion while allowing *active-1* to run at consumption and start
       *special-1* (S-0603 claim 12).
-      `unmeasured` for repair-depot non-natural removal of *special-1*: B18 establishes no such
-      event. Stopping *production* and the every-tick row outside repair are `unmeasured`:
-      B18's pure depots never start *production* or establish a running *special-2* outside
-      repair. The settling contact-loss row with *production* or *special-2* still running is
-      likewise `unmeasured`: part g loses contact after working has already stopped those slots.
-      Excluding occupied variants is `unmeasured`: B18 establishes no garrisoned depot.
-      The exhaustive other-types and other-starters assertions are `unmeasured`: a finite
-      set of types cannot establish them.
-    - Confidence: high (which slots each repair-cycle event starts and stops, the variants, and
-      that the cycle never starts *production* or stops *special-1*); medium (the event timing,
-      which inherits S-0314 claim 6's phases, and the settling hold while *special-3* runs)
+      What a replacing start keeps and counts afresh is claim 25, with its own backing (B18
+      part h run 2 is one of its scenarios).
+      Repair-depot non-natural removal of *special-1* is `unmeasured`: no event in play is known
+      that removes a running *special-1* other than the building itself stopping or replacing it
+      (claim 12's condition swaps replace it), so no setup can produce the case.
+      The waiting-phase loss row is `measurable` (B18 part d), with the set-up that S-0314
+      claim 6 gives for its waiting row with no contact (H4 part h run 7): the docked vehicle,
+      ordered away while the depot waits, keeps its contact outside the starting distance.
+      The exhaustive list of *production* starters (only the construction-yard, vehicle-factory
+      unloading and refinery-docking roles; nothing in the repair cycle) is `unmeasured`: a
+      finite set of types cannot establish it. That no building other than the kinds listed
+      reacts to *special-1* or *special-3* ending is `unmeasured` for the same reason. That the
+      repair cycle never stops *special-1* is `unmeasured` for the same reason too: B18 parts a
+      to c, in their repeats with the longer *special-1* art, and part h run 4 (a working step's
+      *not needed* answer) show that the events they exercise leave it running, but no finite set of runs
+      shows that no other event of the cycle stops it. So is the
+      statement that roles the type may combine with the repair flag add their own starts of
+      *special-1* to *special-3*: it belongs to the same exhaustive family, and no scenario here
+      combines such a role with the repair flag. It is rated low.
+      That *production* running at the processing after a send-away makes the same change as
+      *special-2* running there is `unmeasured`: no run has *production* running at that
+      processing. It is the settling contact-loss row that part j run 2 tests with *production*
+      running, and that row depends only on which slots are running.
+    - Confidence (the backing of each item is given in the list above):
+      - high: the slot starts and stops of the working-phase entry, natural completion of
+        *special-1* during contact and of *special-3*, leaving the working phase, the *cannot
+        pay* restart, a destroyed vehicle, the naval yard and delayed fire; the normal and
+        damaged variants; that a working step's *done* answer and send-away (part a) and the
+        vehicle's destruction (part c) leave *special-1* running, each judged in its repeat with
+        the longer *special-1* art. The two loss rows of the
+        cycle's table take their own ratings below: the waiting-phase loss row medium
+        until part d runs, and the settling contact-loss row medium until part h runs. That the
+        cycle never stops *special-1* and never starts *production* are exhaustive negatives,
+        rated with the others below.
+      - medium until part b's repeat with the longer *special-1* art runs: that the *cannot
+        pay* failing step and restart (part b) leave *special-1* running. That restart's
+        replacing of a running *special-1* is medium as claim 25 rates it.
+      - medium until B18 parts i to k run, which use named test types that no stock type
+        matches and may be reported unreached: stopping *production*; the every-tick row with
+        *production* or *special-2* running; the settling contact-loss row with *production*
+        running; the processing after a working send-away with *special-2* started from outside
+        the repair cycle; the exclusion of occupied variants; and, until B18 part h runs, that a
+        replacing start counts its passes afresh.
+      - medium, `unmeasured` for the reason given with each item above: the recycling-building
+        restart after external removal; the restart with the selected *active-1* variant
+        absent; the repair depot's non-natural removal of *special-1*; the exhaustive list of
+        *production* starters; that no other building kind reacts to *special-1* or *special-3*
+        ending; that the repair cycle never stops *special-1*; that *production* running at the
+        processing after a send-away makes the same change (no run has *production* running
+        there; it is the settling row that part j run 2 tests with *production* running, and
+        that row depends only on which slots are running). Each of these except the three
+        exhaustive negatives is one rule that the cited rows state for every case, with no known
+        exception. The three exhaustive negatives (the list of *production* starters, that no
+        other building kind reacts to *special-1* or *special-3* ending, and that the repair
+        cycle never stops *special-1*) are rated medium
+        because they rest on a listing of every start of these slots that the original makes,
+        not on a sample of types; they stay `unmeasured` because no finite set of runs can show
+        that no other start exists.
+      - medium until part h runs: that a working step's *not needed* answer leaves
+        *special-1* running (part h run 4); the settling contact-loss row with *special-2* running; that
+        the processing after a working send-away makes no second change when neither
+        *production* nor *special-2* is running; the change after a failed departure and a
+        settling send-away with *special-2* running.
+      - low, `unmeasured`: that roles the type may combine with the repair flag add their own
+        starts of *special-1* to *special-3* (the reason is given in the list above).
+      - medium, resting on another rule: the event timing, which inherits S-0314 claim 6's
+        phases, and the settling hold while *special-3* runs; recycling-building natural
+        completion, which inherits S-0603 claim 12's rating of the restart.
 
 21. **Parsed but without effect.** The type's extra-damage-stage flag has no effect on how a
     building is drawn or behaves.
     - Backing: `measurable` (B11 for recorded rendering differences of the toggled type).
       No effect on any behaviour is `unmeasured`: a finite rendering test cannot establish
       absence of every possible gameplay effect.
-    - Confidence: high
+    - Confidence: high (no drawing difference, B11); medium (no behavioural effect, `unmeasured`)
 
 22. **Unloading sprites.** While a building is unloading a unit (factory unloading belongs to
     S-0417), the sprite depends on the unit being unloaded.
@@ -642,6 +791,61 @@ are out of scope.
     - Backing: `measurable` (B10, B20 and B21)
     - Confidence: high
 
+25. **Replacing a running slot animation.** When a slot is started while it already holds an
+    animation (any start of this spec, including claim 12's condition swaps and claim 20's repair
+    cycle), the old animation is removed and the new one is created as any new animation is
+    (S-0109 claims 5 to 7), except for its stage. The symbols *a*, *k*, *E*, λ<sub>e</sub>, *N*
+    and the step σ are those of S-0109's Terms; *e* is defined below:
+    - **The stage is kept.** The new animation's stage *k* starts at the replaced one's stage, not
+      at the stage a new animation starts at. It shows image frame *a* + *k*, where *a* is its own
+      type's start field (S-0109 claim 1). It therefore shows the replaced one's image frame only
+      when the two types have the same start field. That the stage, not the image frame, is what
+      carries over when the two types' start fields differ is `unmeasured` and rated medium
+      (backing below); B2 cannot tell the two apart.
+    - **The passes are not kept.** Its remaining passes take their creation value, so the
+      replaced one's completed passes do not carry over.
+    - **The partial pass is a whole pass.** From the kept stage it plays by S-0109 claims 6 to 10,
+      and the pass it starts in uses up one of its remaining passes like any other pass, although
+      it is partial.
+    - **A kept stage beyond the new type's range.** The kept stage is not limited to the new
+      type's range. The new animation plays on from it by S-0109 claims 1 and 6 to 10, with its own
+      step direction σ: −1 when the new type is reversed (S-0109 claim 8), +1 otherwise. An image
+      frame *a* + *k* of *N* or more draws nothing (S-0109 claim 1). So, with *e* the end limit of
+      the pass it starts in (S-0109 claim 6; for a shadow type that is not reversed, the last
+      pass's end limit is the smaller of *E* and λ<sub>e</sub> − *a*, since its last pass also ends
+      at λ<sub>e</sub> − *a*, S-0109 claim 10):
+      - a forward type that is not ping-pong shows image frame *a* + *k* until its first advance
+        when *k* ≥ *e*, and that advance ends the pass, using up one remaining pass,
+      - a reversed type that is not ping-pong counts down from the kept stage (a reversed
+        ping-pong type follows S-0109 claim 9); when *k* ≥ *e* + 1 its first advance still
+        leaves the stage at or above *e*, so that advance ends the pass; when *k* = *e* it plays down
+        through the range as a reversed pass does,
+      - a forward ping-pong type that is not a shadow type (a shadow type follows S-0109 claims 9
+        and 10) turns on its first advance (stage *k* + 1, at or above *e*) and
+        turns again on the next (stage *k*, still at or above *e*), so it alternates between stages
+        *k* and *k* + 1 and never comes back into its range, never ends a pass, and stays until the
+        slot is started again or the building's animations are removed.
+
+      None of this is special to replacement: it is S-0109's ordinary play from a stage that the
+      replacement put beyond the range.
+
+    A start whose chosen name is empty or names no animation type does nothing (Terms), so it
+    neither removes nor replaces the running animation.
+    - Backing: `measurable`: B2 for the kept stage across a damage swap whose two types have the
+      same start field; B18 part h run 2 for the passes taking their creation value and the partial
+      pass counting as whole, judged on a *special-3* that replaces a running one of the same type.
+      The kept stage when the two types' start fields differ is `unmeasured`: no scenario here
+      gives the two types different start fields. A kept stage beyond the new type's range is
+      `unmeasured` too: no scenario here replaces a running animation by a type with a shorter
+      range, and the consequences follow from S-0109's approved play rules, not from a run.
+    - Confidence: high for the kept stage across a damage swap between two types with the same
+      start field (B2); medium for the kept stage in the other starts of this spec, such as claim
+      20's repair cycle (`unmeasured`: B18 part h run 2 predicts from the restart frame, so it
+      does not test the kept stage),
+      for the passes taking their creation value and the partial pass counting as whole, until
+      B18 part h runs (as claim 20 rates them), for the kept stage across types with different
+      start fields (`unmeasured`), and for a kept stage beyond the new type's range (`unmeasured`)
+
 ## Formulas
 
 Where a formula below says that a floating-point result is rounded toward zero, that is the
@@ -688,7 +892,7 @@ m = trunc(stored amount) and 4m are integers, the division and the addition are 
 rounded toward zero, and trunc truncates toward zero.
 
 **F6 Remaining charge in game minutes:** t_r = r × κ, with r the remaining ticks (integer) and
-κ = 2386093 / 2³¹ ≈ 0.00111111114, the single-precision value nearest 0.0011111111, which
+κ = 2 386 093 / 2³¹ ≈ 0.00111111114, the single-precision value nearest 0.0011111111, which
 approximates 1/900. The product is formed in binary64 (53-bit significand), rounded toward zero,
 and compared with the single-precision field t_c widened exactly to binary64. The "charged" branch
 is taken when t_c ≥ t_r.
@@ -719,7 +923,7 @@ infantry. For sizes of 0 or more this equals the sum of the sizes each truncated
 | Anchor displacement | 128, 128 | leptons | From the top-left cell centre toward the foundation's top corner |
 | Grand-opening "charged" test | 15 | ticks | Remaining charge below this starts *super-3* |
 | Charged-animation time limit | 990 | game minutes | Above it, claim 18 is disabled |
-| Charge time scale *κ* | 2386093 / 2³¹ | game minutes per tick | Single-precision constant, F6 |
+| Charge time scale *κ* | 2 386 093 / 2³¹ | game minutes per tick | Single-precision constant, F6 |
 | Unloading depth adjustment | −20, −40 | depth units | Deploying sprite, roof-deploying sprite (claim 22) |
 | Refinery levels | 0 … 3 | level | 3 covers every quotient of 3 or more |
 | Silo levels | 0 … 3 | level | Level 0 hides the slot animation |
@@ -988,24 +1192,31 @@ expected numbers are computed from the type's own fields at measurement time.
     any body, bib or shadow or hides its named slot. Record placement, the first report and
     the restart separately. The test does not by itself discriminate arithmetic rounding unless
     the imported *B* and sprite count give different integer delays under the two modes.
-- **B2 (claims 2, 12).**
+- **B2 (claims 2, 12, 25).**
   - Setup: one building with slot animations that have damaged names, one occupiable building with
     occupied-variant slot animations, a weapon of known damage, and repair available.
   - Procedure: damage the first building in steps that approach the yellow ratio from above, then
     hit it exactly at the ratio. Repair it past the ratio. Garrison the occupiable building, damage
     it past the yellow ratio, then repair it. Repeat the first part with test data: a copy of the
     first type whose art leaves the damaged name of one slot empty.
-  - Observable: the tick of each body-frame change and slot-variant change.
+  - Condition: in the first building, at least one slot animation whose normal and damaged types
+    have the same start field, and a stage delay of at least 2 ticks (test data if the stock types
+    differ).
+  - Observable: the tick of each body-frame change and slot-variant change, and for each slot
+    animation of the first building, per tick, its type, its stage and the image frame it shows.
   - Runs: one per building.
   - Expected: the body frame changes to the damaged frame at *h* = yellow exactly, not one step
-    later, and the slot animations switch to their damaged art on the same tick, keeping their image
-    frame.
+    later, and the slot animations switch to their damaged art on the same tick, keeping their stage
+    (claim 25). For the same-start-field slot, the stage recorded on the swap tick is the stage of
+    the tick before (or the stage its playback moves to under S-0109 claims 6 to 10, if the animation advances on that tick), never the stage a new
+    animation starts at, and the image frame is the damaged type's start field plus that stage. A run in which that slot is at the starting stage when the swap happens is void for
+    this reading and is repeated with the hit at a different tick.
     Repair restores the normal art on the tick the threshold is crossed. The garrisoned building
     shows normal art, not occupied art, after the repair. In the copy, the imported damaged name
     has been filled with the normal name, so that slot shows normal art when damaged. This is not
     a test of an empty-name swap retaining its old animation.
-  - Falsified if: a switch comes one damage step early or late, a slot animation restarts from image
-    frame 0, the repaired garrisoned building shows occupied art, or the slot without a damaged name
+  - Falsified if: a switch comes one damage step early or late, the same-start-field slot animation
+    restarts at the starting stage or at any stage other than its kept one, the repaired garrisoned building shows occupied art, or the slot without a damaged name
     vanishes when the copy is damaged.
 - **B3 (claim 2).** The occupied, hurt tech-level-−1 frame is a departure tested against
   this spec on our engine, not against the original; the remaining threshold and frame tests
@@ -1101,7 +1312,8 @@ expected numbers are computed from the type's own fields at measurement time.
   - Observable: stored amount, the refinery's active slots and the silo's *special-1* slot.
   - Runs: one per building.
   - Expected: while its recorded amount stays 0, the refinery has *active-1* only among its
-    fill-selected active slots, and the silo's *special-1* is absent.
+    fill-selected active slots, and the silo's *special-1* is absent. Nothing here makes
+    *special-1* run first, so the run shows its absence, not its stopping.
   - Falsified if: another refinery fill slot shows or silo *special-1* persists with stored amount 0.
     This scenario supplies no backing for positive fill or fill thresholds. Those remain unmeasured
     until a skirmish path filling the building's own storage is found.
@@ -1267,16 +1479,18 @@ expected numbers are computed from the type's own fields at measurement time.
     (*j* = 8) turret frame 20.
   - Falsified if: any recorded turret image frame differs from (28 − *j*) mod 32 using the
     recorded facing and claim 19's rounding, including at a bin boundary.
-- **B18 (claim 20).**
+- **B18 (claims 20, 25).**
   - Setup: a land repair depot whose art names distinct test animations for *idle*, *active-1*,
-    *production* and *special-1* to *special-3* (non-looping *special-1* and *special-3*), with
+    *production* and *special-1* to *special-3* (non-looping *special-1* and *special-3* in parts a
+    to g; part h replaces this art with its own, given there), with
     *freeze-unpowered* left on and the owner powered. Damaged vehicles of a house with ample
     credits and of a house with 0 credits. A naval yard with the repair flag and the same test
     art, with a damaged vessel. A delayed-fire type with *special-1* and *active-1* slot
     animations (test data if no stock type has the mark). Use a read-only recorder for the
     repair phase and processing ticks. Choose enough missing vehicle health and a short enough
-    *special-1* duration to observe its natural end during funded repair. Repeat a and c with
-    longer named *special-1* art so it also survives the departure or contact loss. Repeat a
+    *special-1* duration to observe its natural end during funded repair. Repeat a, b and c with
+    longer named *special-1* art so it also survives the departure or contact loss, and, in b,
+    the working step on which the funds run out. Repeat a
     with the depot damaged past the yellow ratio and distinct damaged slot variants.
   - Procedure and parts, each recording the depot's slot animations, its repair phase,
     the vehicle's health and the paying house's credits per tick, from the
@@ -1286,50 +1500,208 @@ expected numbers are computed from the type's own fields at measurement time.
       credits. Then, with a house whose credits pay for only a few steps, let the funds run out
       during the working phase and restore them after some retries.
     - c. As a, but destroy the vehicle during the working phase.
-    - d. Order a vehicle onto the depot and destroy it after the depot has entered its repair
-      behaviour (the vehicle at its docking point, the depot waiting) and before the first paid
-      step.
+    - d. Order a vehicle onto the depot and hold it in waiting away from the docking point as
+      S-0314 scenario H4 part h run 7 does: on the first tick after its movement arrival on
+      which the recorder shows it docked, its contact held and the depot waiting, order it 6
+      cells away; destroy it once it stands still there and the recorder shows a waiting
+      processing after the order that did not accept it, with the contact still held. A repeat
+      in which the depot leaves waiting before the order, or the order releases the contact, is
+      inconclusive and is run again, from a different starting cell. A loss after
+      that acceptance, in settling before the first paid step, is S-0314 scenario H4 part h,
+      run 5.
     - e. As a, at the naval yard with the vessel.
     - f. Let the delayed-fire type fire.
     - g. Let a funded vehicle enter working, then exhaust its owner's credits so the next
-      repair step returns the depot to settling and starts *special-3*. Destroy the vehicle
-      while that animation still runs. Use named test art with a deterministic *special-3*
-      duration long enough to cover the loss and several later ticks. Repeat with the view
+      repair step returns the depot to settling and starts *special-3*. The depot's first
+      settling retry follows 1 tick after that failing step and answers *cannot pay*, so its next
+      processing is scheduled *D*<sub>p</sub> ticks after that retry (S-0314 claim 6's table; use a depot
+      processing delay *D*<sub>p</sub> of at least 10 ticks). Destroy the vehicle 5 ticks after that retry,
+      well inside the gap. Use named test art with a deterministic *special-3* duration that
+      outlasts the scheduled processing by at least 10 ticks, and a non-looping *special-1*
+      whose duration outlasts the run from the first paid step to the depot's return to
+      *guard*, so that no *special-2* starts while the vehicle is in contact. Repeat with the view
       scrolled away from the depot during the wait, keeping the recorder active.
+    - h. (Q-1620) Named test art with a *special-3* of several passes (a positive loop count).
+      Its *idle*, *active-1* and *production* animations are the setup's, unchanged; only
+      *special-1* to *special-3* are given per run below.
+      *Run 1:* as a, with a rally point and a *special-1* that ends during working; the last
+      working step answers *done* and sends the vehicle away. *Run 2:* a vehicle one step short
+      of full health, no rally point and every exit cell blocked. The settling step then answers
+      *done*, the depot starts working, and its first working step answers *not needed*; that
+      step's departure fails and the vehicle stays in contact in settling. Use a *special-1*
+      that outlasts the working phase but ends during this blocked wait, so that *special-2*
+      starts. Free one exit cell *W* ticks after the failed working step, with *W* fixed in
+      advance and long enough that the recorder shows *special-2* started before the freeing.
+      *W* is also at least the length of one pass of *special-3*, so that the *special-3* the
+      later restart replaces has finished at least one pass by then. Record the ticks of the
+      freeing and of the send-away, the passes the replaced *special-3* has finished at the
+      restart, and the image frame the new *special-3* shows at the end of the restart tick.
+      The next settling processing
+      after the freeing, at most *D*<sub>p</sub> ticks later, reports *not needed* and sends the
+      vehicle away, and the processing after it follows *D*<sub>p</sub> ticks after that. The
+      send-away tick depends on the retry phase after the exit is freed, as in run 3, so the
+      passes below are set from a pilot run of the same set-up that records it; a run in which
+      *special-2* has ended before the processing after the send-away is inconclusive. So give
+      *special-2* enough passes to run for at least 2 *D*<sub>p</sub> + 5 ticks after the freeing,
+      and *special-3* enough passes that the one started by the failed working step runs for at
+      least *W* + 2 *D*<sub>p</sub> + 5 ticks. *Run 3:* as run 2, but with a *special-1* that still
+      runs at that send-away and ends before the processing *D*<sub>p</sub> ticks after it. The
+      send-away tick depends on the retry phase after the exit is freed, so the *special-1*
+      duration is set from a pilot run of the same set-up that records that tick; a run in which
+      *special-1* has ended by the send-away, or still runs at the next processing, is
+      inconclusive. Run 2's requirement that *special-2* has started before the freeing does not
+      apply. *Run 4:* a working send-away on *not needed*,
+      with a vehicle one step short of full health, a rally point and no blocked exit, so that the
+      settling step answers *done*, the depot starts working, and its first working step answers
+      *not needed* and sends the vehicle away. Its art: a non-looping *special-1* that still runs
+      at that send-away, so that no *special-2* starts while the vehicle is in contact, and a
+      *special-3* with enough passes that the one started at that working send-away still runs
+      at the next processing, which comes 1 tick later (a working step's outcome is followed 1
+      tick later, S-0314 claim 6's table). Run 4 has no blocked wait, so *special-2* does not start before its
+      send-away; it shows only that *special-3* does not restart, not the
+      *special-2* row. *Run 5 (naval yard):* runs 1 to 4 at the naval
+      yard with the vessel, with every water exit cell blocked in runs 2 and 3.
+    - i. *special-2* started from outside the repair cycle. Named test art for the depot sets
+      *freeze-unpowered* off and *light-unpowered* on for *special-2* only (claim 13), and the
+      depot type needs and draws power. *Run 1:* with no vehicle at the depot and the depot in
+      *guard*, take the owner's power below its demand and then restore it. *Run 2:* run 1 at
+      the naval yard, given the same art and power need. *Run 3:* run 4 of part h with this art,
+      with the owner's power taken below demand before the working send-away and restored at
+      the tick of that send-away, set from a pilot run of the same set-up. Run 3 is an attempt.
+      The recorder reads the slots once per tick, after every object's turn in that tick, so it
+      cannot order two events of one tick by itself. The working step that sends the vehicle
+      away stops a running *special-2* (claim 20), so a *special-2* that the power return starts
+      before that step on the send-away tick is gone by that tick's reading. A *special-2* shown
+      running in the reading of the send-away tick was therefore started after the working step.
+      The run backs the row only in that case; when *special-2* first shows in a later reading,
+      or not at all, the run is inconclusive and backs nothing. Because a building reacts to a
+      power change on the tick of the change or the next one (claim 13), the slots that stay on
+      across the power return (*special-3* and *special-1*, which have *freeze-unpowered* on)
+      may resume on either tick; the run records the start tick of every slot event after the
+      power return, including theirs, and the pilot run records the same, so that a one-tick
+      shift in their resumption is not read as a change made by the processing.
+    - j. *production* at a combined-role depot. The named non-stock test type of S-0314 H23: a
+      repair depot that also has a role starting its *production* slot, with a finite
+      *production* duration. Use the refinery-docking role: in every run the role starts
+      *production* when one of the owner's harvesters, docked at the building to unload, has
+      emptied its load. Time the harvester's return so that it empties in the state each run
+      names. *Run 1:* with no vehicle at the depot for repair and the depot in *guard*, make
+      the role start *production*. *Run 2:* as S-0314 H23 part a, with *production* started by the role
+      just before the vehicle docks, by H23's input sequence, so that it still runs in the
+      depot's settling phase; destroy the vehicle in settling while *production* runs. *Run 3:* as part a, and make the role start *production*
+      during the working phase, before the step that answers *done*. If the combined roles
+      cannot start *production* in these states through that input (for example because the
+      repaired vehicle and the harvester cannot both be in contact), the run is reported
+      unreached, not confirmed.
+    - k. Occupied variants. A named test depot type that infantry can occupy, with distinct
+      occupied variants of its slot art; occupy it, then run part a. If the type cannot be
+      occupied, the part is reported unreached.
   - Observable: the tick of each slot start and stop, the tick of the first health gain or credit
     deduction, and the delayed-fire building's slot animations. In g, also record contact,
-    the depot's current behaviour and processing ticks, and *special-3*'s lifetime.
-  - Runs: one per part and named art or health variant; g has one visible and one offscreen run.
+    the depot's current behaviour and processing ticks, and *special-3*'s lifetime. In h, also
+    record the depot's phase at each processing, so that the processing after each send-away is
+    seen to be in settling (S-0314 claim 22).
+  - Runs: one per part and named art or health variant; g has one visible and one offscreen run,
+    h has its eight runs (run 5 repeats runs 1 to 4 at the naval yard), i and j have their three runs each, and k has one run.
   - Expected: in a, c and e, *special-1* appears on the tick of the first paid repair step, not
     on docking, and *active-1* and *idle* disappear on that tick; *special-2* follows *special-1*'s
     natural end while the vehicle is in contact. On the step that sends the vehicle away (a, e) or
-    the depot's first processing after it is destroyed, on the same or the next tick (c), *special-2* disappears and *special-3* and *active-1*
+    the depot's first processing after it is destroyed, the one S-0314 claim 6's table had
+    already scheduled (c), *special-2* disappears and *special-3* and *active-1*
     appear; *special-1*, if still running, runs to its end and *idle* follows it, and *idle*
     follows *special-3*'s end. In b, *special-1* does not appear during *cannot pay* settling and
     appears on the first paid step after credits arrive. When funds run out during working,
     *special-2* stops and *special-3* and *active-1* start on the failing step; on the first paid
-    step after the credits return, *special-1* starts again and *active-1* and *idle* stop. In d, the recorded phase is waiting, *special-1* never appears, and
-    *special-3* and *active-1* appear when the depot finds no contact. *Production* never appears.
+    step after the credits return, *special-1* starts again and *active-1* and *idle* stop. In
+    b's repeat with the longer *special-1* art, *special-1* is still running after the failing
+    step: that step starts *special-3* and *active-1* and does not stop *special-1*, and the first
+    paid step after the credits return starts *special-1* again, replacing the running one
+    (claim 25). In d, when the recorder shows waiting at the loss (otherwise the part is
+    inconclusive), *special-1* never appears, and *special-3* and *active-1* appear when the
+    depot finds no contact. Outside part j, *production* never appears.
     Every depot start uses the normal variant while undamaged and the damaged variant in
     the damaged repeat. In f, the delayed-fire building restarts *active-1* when *special-1*
     finishes on its own.
-    In g, after contact is lost the depot remains in repair, rechecking every tick while
+    In g, the first processing after contact is lost is the one S-0314 claim 6's table had
+    already scheduled; from then on the depot remains in repair, rechecking every tick while
     *special-3* runs, and returns to *guard* at its first processing with that slot no longer
     running. The art-derived lifetime and this return are unchanged when scrolled offscreen.
+    In h, *special-3*'s passes are counted from the step that sends the vehicle away in run 1, and
+    from the working step whose departure failed in runs 2 and 3, and from the working step that
+    sends the vehicle away in run 4: the processing after the run 1 and run 4 send-aways, 1 tick
+    after each, and, in run 3, the processing after the settling send-away, *D*<sub>p</sub> ticks
+    after it, restart nothing: no *special-3* start and no *active-1* start occurs at that
+    processing. Those start events are what part h judges. In run 2, where the restart replaces a
+    running *special-3*, its end tick is judged too. The replaced *special-3* is removed during the
+    restart tick, so its own frame on that tick is not read. As in B2's swap-tick reading, the
+    recorder logs the image frame the new *special-3* shows at the end of the restart tick and the
+    ticks of its later advances; that frame less the type's start field is the kept stage, or the stage it advances to if an advance falls
+    on that tick, and the prediction starts from it, with the new animation's advances spaced by
+    its stage delay. Both are of the same type, so the kept stage shows the frame the replaced one
+    showed. The test *special-3* plays forward,
+    neither reversed nor ping-pong, so the new *special-3* runs from that frame to the end of its
+    first pass, which counts as one whole pass, then plays the rest of its creation-time passes (claim 25,
+    S-0109 claims 5 to 7). It ends within one
+    tick of that predicted tick (the tolerance allows for a restart moving its end by a tick). A
+    count carried over from the replaced animation would end it a whole pass or more earlier; not
+    counting the partial first pass would end it a whole pass later. The prediction starts from
+    the new animation's own logged frame, so this run does not test whether the stage is kept. A
+    run in which the
+    replaced *special-3* has finished no pass by the restart is void for the carried-over
+    reading: a carried-over count of zero would end it at the same tick as a fresh count. A run
+    whose frame logged at the end of the restart tick is the first frame of a pass is void for the
+    partial-pass reading: with no partial first pass, counting it or not gives
+    the same end.
+    Elsewhere *special-3*'s end tick is recorded only. In run 3, *special-1* ends
+    after the settling send-away and before that processing, with the depot out of contact, so
+    *idle* starts at that end by the out-of-contact *special-1* row below, while *special-3* may
+    still run; that start is the row's, not a change made by the depot's processing. In run 2,
+    *special-2* runs until the first processing after the settling send-away, *D*<sub>p</sub> ticks
+    later. That processing stops it, starts *active-1* again, replacing the one still running from
+    the failed working step if it runs (the recorder logs a start event either way), and restarts
+    *special-3* (a start event, judged with the others). Run 5 gives at the naval yard the
+    results of runs 1 to 4. In i run 1, *special-2* starts when power returns, and on that tick or
+    the next (the every-tick row) it stops and *special-3* starts; in run 2, at the naval yard,
+    *special-2* keeps running. A run 1 or run 2 in which *special-2* has already ended on its own
+    before the every-tick check is inconclusive and is repeated with more passes. In i run
+    3, the processing 1 tick after the send-away stops *special-2* and starts *special-3* and
+    *active-1*. In j run 1, *production* stops and *special-3* starts on the tick it starts or the
+    next; in run 2, the first processing after the loss stops *production* and starts *special-3*
+    and *active-1*; in run 3, the step that answers *done* stops *production*. A j run 2 or run 3 in which
+    *production* has already ended on its own before that processing or step is inconclusive and
+    is repeated with a longer *production* duration. In k every start
+    uses the normal or damaged variant, never an occupied one.
   - Falsified if: *special-1* appears on docking or on any tick other than a working-phase entry,
     *active-1* or *idle* survives the entry, *special-2* does not follow natural *special-1*
     completion during contact, *special-3* and *active-1* do not start on leaving the working
-    phase, the naval yard differs from the land depot in these rows, *production* appears, *idle*
+    phase, the naval yard differs from the land depot in these rows, *production* appears outside part j, *idle*
     does not follow natural *special-3* completion, or the delayed-fire building fails to
     restart *active-1*. Part b is also falsified by *special-1* starting during unpaid settling,
     failing to restart on re-entry into working, or *active-1* or *idle* surviving that entry.
-    Part d is falsified if the waiting depot starts *special-1*, fails to start *special-3* and
+    Part d, when the recorder shows waiting at the loss (otherwise it is inconclusive and
+    backs nothing), is falsified if the waiting depot starts *special-1*, fails to start *special-3* and
     *active-1* at its first no-contact processing, or stays in repair after that processing.
     Any wrong normal/damaged variant, or premature stopping of the long *special-1* at
-    departure or contact loss, also falsifies the corresponding part.
-    Part g is falsified by a return to *guard* while *special-3* still runs,
-    a recheck interval other than 1 tick during the hold, failure to return at the first
+    departure, at contact loss or at b's failing step, also falsifies the corresponding part.
+    Part g is falsified by any depot processing between the loss and the processing *D*<sub>p</sub> ticks
+    after the retry, by a first no-contact processing on any other tick while the depot misses
+    no turn, by a return to *guard*
+    while *special-3* still runs,
+    a recheck interval other than 1 tick after that first no-contact processing, failure to return at the first
     processing after the slot is no longer running, or a lifetime or return changed by visibility.
+    Part h is falsified if *special-3* restarts, or *active-1* starts, at the
+    processing after the send-away in run 1, run 3 or run 4; if run 2 shows no such restart while
+    *special-2* runs, or a replacing *special-3* there that ends more than one tick before or after
+    the predicted tick; if the settling send-away step itself changes any slot; or if run 5 differs
+    at the naval yard from runs 1 to 4; or if, in run 3, *idle* does not start when *special-1*
+    ends. A run 2 in which *special-2* has already ended before that processing is inconclusive
+    and is repeated with more passes. Run 2 is also falsified if that processing shows no
+    *active-1* start event. The stop of *special-2* and the start of *active-1* there
+    are judged whether or not *special-3* still runs, and that start event whether or not it
+    replaces a running *active-1*; only the replacement of a running
+    *special-3* is judged just when it still runs at that processing, and is otherwise
+    inconclusive. Parts i to k are falsified by any result other than the one expected for
+    them, including a naval yard that stops *special-2* in i run 2.
 
 - **B19 (claim 5, theater-flag rule).** Clamped displayed frames are a departure tested
   against this spec on our engine, not against the original; the range and stage delay still
@@ -1413,17 +1785,31 @@ specified here.
 
 ## Changes for other specs
 
-- **S-0314 claim 22 — required companion amendment.** Its approved no-contact outcome says
-  that the depot plays idle animations and returns to *guard*, without the phase-dependent
-  wait. It must instead distinguish waiting (return at the next repair processing), working
-  (enter settling and recheck after 1 tick), and settling (recheck every tick while *special-3*
-  runs, return at the first processing when it no longer runs), as claim 20 specifies.
-  The art-derived slot lifetime is deterministic simulation state, independent of visibility
-  and drawing cadence. Delegate the slot starts and natural-end follow-ups to claim 20 rather
-  than promising immediate idle art. Update the corresponding state table and measurement
-  expectations, using B18 part g for the settling hold. The current S-0314 draft already
-  carries this correction; hand off that amendment with this spec, not the conflicting
-  approved wording alone.
+- **S-0314 claims 6 and 22 — companion revision (Q-1610).** The companion revision of S-0314 adds the
+  per-phase processing spacing to claim 6. In claim 22 it keeps approved revision 31's "A depot
+  left without any contact reacts at its next repair processing", which does not say when that
+  processing comes, and adds that it is the processing claim 6's spacing table had already
+  scheduled and that a settling depot's every-tick checks start at it. The older claim 22 wording that this
+  spec's approved revision 17 asked to replace ("plays idle animations and returns to
+  *guard*") is already absent from S-0314 revision 31. S-0108 claim 20's timing sentence relies
+  on S-0314 claim 6's processing-spacing table and claim 22 as that companion revision states
+  them. Hand off this revision of S-0108 and that companion revision of S-0314 together.
+- **S-0109 claim 1, cross-reference.** S-0109 claim 1 says that a new animation starts with
+  *k* = 0. A start that replaces a running slot animation of this spec instead keeps the old
+  one's stage (claim 25). S-0109 claim 28 already says that a building replacing a slot
+  animation creates another animation under this spec's claims 12 and 13. Add to S-0109 claim 1
+  a reference to this spec's claim 25 for the kept-stage exception.
+- **S-0109 claims 6 and 8, cross-reference.** S-0109 claim 6 starts the first pass at *k* = 0, and
+  claim 8 starts a reversed animation at *k* = λ<sub>e</sub> − 1. Both are starting stages that
+  claim 25 here replaces for a start that replaces a running slot animation: the new animation
+  starts at the kept stage instead, and then plays by claims 6 to 10 from there (claim 25 states
+  the result, including a kept stage beyond the new type's range). Add to each of S-0109 claims 6
+  and 8 the same reference to this spec's claim 25 as for claim 1. No other rule of those claims
+  changes: the end limits, the pass count and the step direction stay as S-0109 states them.
+- **S-0504 claim 8, backing.** Its sentence "Animation-slot rules inherit S-0108 claim 20's
+  backings, including B18's naval-yard control and the unmeasured limitation for the every-tick
+  row outside repair" should read "... including B18's naval-yard control; the every-tick row
+  outside repair is `measurable` by B18 part i", since B18 part i now tests that row.
 
 ## Open questions
 
@@ -1441,6 +1827,20 @@ specified here.
   delay in the same rules layer is open. A building with the new-theater flag gets the final value at the
   theater refresh either way.
 - Turret-slot art selection for wall-tower-style upgrades remains outside this spec's coverage.
+- (Q-1610 question 3, the part left open; S-0314's Open questions hold the entry.) A vehicle that takes the freed contact place before the depot's pending processing
+  after a loss in waiting, working or settling (S-0314 claim 22: the loss neither brings that
+  processing forward nor puts it back; S-0314 claim 23 lets a queued vehicle take the place at
+  its first eligible retry after the first leaves). After a loss in working or settling: whether that
+  processing's step schedule restarts for the new vehicle or carries over from the lost one.
+  After a loss in waiting: whether the pending waiting processing checks the new vehicle's
+  stillness and starting distance as for any vehicle, or finds no contact and returns the depot
+  to *guard*. Likewise for a vehicle that arrives at a depot still in its no-contact settling
+  hold: whether the settling checks apply to it directly, skipping waiting. The slot changes of
+  claim 20 for such a vehicle follow from those answers and are open with them.
+- (Q-1610 questions 1 and 2, S-0314's Open questions hold the entry.) For a depot type that is
+  also a vehicle bunker, when its processings come after a vehicle's contact ends, and so when
+  claim 20's slot changes for that loss happen, is open: S-0606 claim 20 gives only that its
+  processing delay is the depot's.
 - B1 tests the delay from the imported value. Single-first input conversion is S-0003's, not
   a fresh binary64 conversion. No specific test fixture combining a sprite count and imported value
   that distinguish F1's arithmetic rounding modes is established here; that discrimination is unmeasured.
