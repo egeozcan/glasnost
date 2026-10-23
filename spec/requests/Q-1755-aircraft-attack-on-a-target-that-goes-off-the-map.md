@@ -3,7 +3,7 @@ id: Q-1755
 title: What an attacking aircraft does when its target goes off the map
 status: open
 related: [S-0501, S-0215, S-0301, S-0507, S-0508]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

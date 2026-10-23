@@ -3,7 +3,7 @@ id: Q-1776
 title: What an armed aircraft with no dock types does after its run, landable or not (and a correction to Q-1756)
 status: open
 related: [S-0501, Q-1756, Q-1775]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

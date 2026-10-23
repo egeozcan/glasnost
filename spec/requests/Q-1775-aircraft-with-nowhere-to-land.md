@@ -1,9 +1,9 @@
 ---
 id: Q-1775
 title: The lead's play report: an aircraft with nowhere to land crashes
-status: open
+status: answered
 related: [S-0501, Q-1756, Q-1755]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need

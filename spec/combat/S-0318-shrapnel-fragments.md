@@ -2,13 +2,13 @@
 id: S-0318
 title: Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go)
 topic: combat
-revision: 10
+revision: 13
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-23
 measurements: []
-requests: [Q-1714]
+requests: [Q-1714, Q-1825]
 supersedes: []
 ---
 
@@ -23,10 +23,19 @@ burst that the firer's house does not ally (enemy, neutral, civilian and terrain
 nearest ring first, each to the object listed first in its cell. Fragments that find
 no such target go to random cells near the burst, whatever stands there. So a shot that detonates once and is not an airburst projectile (S-0306 claim 21), whose
 warhead and fragment warhead each damage a single object, with fragments that do not burst again
-(claim 7), each detonate once and are not airburst projectiles, can damage its own target and up to *n* further objects, with the timing
+(claim 7), that each detonate once and that are not airburst projectiles, can damage its own target and up to *n* further objects, with the timing
 of claim 5 when the fragments are invisible. Here *n* is the fragment count when
 that is 0 or more; for a negative count it is at most the larger of its magnitude and 3 (claim 2). A fragment carries
 the fragment weapon's damage field unscaled, and the projectile's attacker as its own.
+Against the committed revision 10, this text corrects one behaviour: revision 10 expected every
+fragment hit of a burst in the tick of the burst, but with the update order's removal skip
+(S-0203 claim 10) the bursting projectile's removal and each fragment's own removal cost
+following objects their turns, so the hits of one burst are spread over several ticks (claim 5).
+State and ordering and the scenarios that time the hits (SH1 part a with its readings and its
+second run, SH4, SH6) change with it. Against revision 12, revision 13 changes no behaviour: it
+says which run of SH1 part a decides the fragments' place in the update order, drops the
+S-0525 entry that the committed S-0525 already carries, applies SH1 part a's void rule to SH4
+part a, and states every reading SH1 takes.
 
 This spec gives the rules that decide how many objects one shot's fragments damage, which bears
 on Q-1714; the count for the pairing that Q-1714 names is open (Open questions). It owns the
@@ -219,13 +228,34 @@ and S-0316; this spec says which fragments make one (claim 8).
    a radiation level: S-0525 claim 1 leaves radiation only where the detonating projectile carries
    a radiation weapon, as for the nine children of an airburst projectile.
 
-   It is placed at the burst point and enters play at once (S-0306 claim 8), so it takes its
-   first turn in the tick of the burst unless an earlier removal costs it that turn. An invisible
-   fragment (S-0306 claim 9) whose projectile type has an arm time of 0 (S-0306 claim 9: the arm
-   field's absent-key default) and that takes that turn therefore detonates in the tick of the
-   burst, after the area damage of the projectile that launched it. With a positive arm field,
-   when it detonates follows S-0306's arm-time rows, which this spec does not restate.
-   - Backing: `measurable` (scenario SH4: part a for the damage and timing, part c for the
+   It is placed at the burst point and enters play at once (S-0306 claim 8): it joins the end of
+   the update order during the bursting projectile's turn, the fragments of one burst in launch
+   order (State and ordering), so it is eligible for a turn later in the same turn pass. That
+   projectile then does its area damage and leaves play in the same turn, which is one counting
+   removal of S-0203 claim 10: the object that directly follows it at the end of that turn
+   misses its turn in this tick. When nothing entered play after the projectile before its
+   fragments, that object is the first fragment. An invisible fragment (S-0306
+   claim 9) whose projectile type has an arm time of 0 (S-0306 claim 9: the arm field's
+   absent-key default) detonates in its first turn (S-0306, State and ordering) and leaves play
+   in it, which is again one counting removal, so the fragment that directly follows it misses
+   its turn in that tick too. With S-0203's removal skip (`quirks.update_order_removal_skip`,
+   on by default) and nothing else entering or leaving play, the fragments of one burst therefore
+   detonate as follows, counted in launch order:
+   - in the tick of the burst, the 2nd, 4th, 6th … fragments, and
+   - in each later tick, of the fragments still waiting, the 1st, 3rd, 5th … in launch order,
+     each one's removal costing the next waiting fragment its turn.
+
+   So with 3 such fragments, the 2nd detonates in the tick of the burst, the 1st one tick later
+   and the 3rd two ticks later; with 8, the last detonates three ticks after the burst. Every one
+   of these detonations comes after the area damage of the projectile that launched them. When
+   another object directly follows the projectile (a shot animation that entered play after it,
+   S-0109 claim 29), that object misses the turn instead and the pattern starts one place later:
+   the 1st, 3rd, 5th … fragments detonate in the tick of the burst. A kill by a fragment, or any
+   other counting removal in a fragment's turn, costs further turns by S-0203 claim 10, which
+   decides every case not listed here. With the removal skip off, every such fragment detonates
+   in the tick of the burst, in launch order. With a positive arm field, when it detonates
+   follows S-0306's arm-time rows, which this spec does not restate.
+   - Backing: `measurable` (scenario SH1 part a, both runs, for the timing; SH4: part a for the damage, part c for the
      fragment weapon's warhead, part b for the credit to the attacker's house). `unmeasured` for
      the brightness flag (an invisible fragment draws nothing, and no scenario captures a visible
      fragment's brightness), for the attacker object as distinct from its house (SH4 part b
@@ -233,8 +263,14 @@ and S-0316; this spec says which fragments make one (claim 8).
      effect, and SH7 judges only the horizontal direction); `measurable` for the absence of
      radiation (scenario SH1 part n, run 4)
    - Confidence: high for the damage, the warhead and the credit to the attacker's house; medium
-     for the timing, which rests on S-0306 claim 8, and for the brightness flag and the attacker
-     object; high for the absence of radiation; low for the speed, as in claim 6
+     for the place in the update order until SH1 part a runs (its run 1 alone gives the same result
+     for a place right after the bursting projectile when that projectile is last; run 2, whose
+     shot animation directly follows the projectile, tells the two places apart, since fragments
+     placed before the animation would give run 1's ticks), which follows S-0203 claim 4 as S-0109 claim 29 does for
+     an animation that enters play in a projectile's turn; medium for the turn that the bursting
+     projectile's removal costs, as S-0203 claim 10 rates its causes; medium for the resulting ticks until SH1 part a runs,
+     since they also rest on the first-turn detonation of S-0306; medium for the brightness flag
+     and the attacker object; high for the absence of radiation; low for the speed, as in claim 6
 
 6. **Launch direction.** A fragment is launched from the burst point towards its aim point's
    reference point, climbing at a fixed elevation of about an eighth of a turn (45°), not at the
@@ -364,16 +400,22 @@ follow it (Changes for other specs). Backing: `measurable` (scenario SH1 parts c
 part c for an airburst, with the random-state recorder). Confidence: high for their place after
 the fragment draws; the draws themselves keep the ratings that S-0303 and S-0306 give them.
 
-Each fragment then takes its turns as an ordinary projectile, later in the same turn pass
-(claim 5). So for invisible fragments, the projectile's area damage comes first, then each
-fragment's detonation in launch order. Fragment detonation timing follows claim 5: with an arm time
-of 0, each fragment that an earlier removal does not cost its first turn detonates in the tick of
-the burst. That all of these hits fall in the tick of the
-burst is `measurable` (SH1 part a, SH4 part a). Their order within that tick is `unmeasured`:
-the recorder reads health once per tick, so it sees the hits of one tick together, and the order
-shows only where an earlier hit's consequence changes a later one, for example a kill whose
-removal costs a later fragment its first turn, which no part sets up. Confidence: high for the
-tick; medium for the order within it.
+Each fragment then takes its turns as an ordinary projectile: the fragments join the end of the
+update order in launch order during the bursting projectile's turn, and they are eligible for
+turns later in the same turn pass (claim 5). So for invisible fragments whose projectile type has an arm
+time of 0 (claim 5), the projectile's area damage comes first, and each fragment detonates in its first actual turn. With S-0203's removal
+skip on, those turns are spread over several ticks: the bursting projectile's own removal costs
+the object directly after it its turn, and each fragment's removal costs the next fragment its
+turn, so with nothing else entering or leaving play the 2nd, 4th, 6th … fragments detonate in
+the tick of the burst and the others in later ticks, in the pattern of claim 5 (for 3 fragments:
+the 2nd in the tick of the burst, the 1st one tick later, the 3rd two ticks later). With the
+switch off, all of them detonate in the tick of the burst, in launch order. The ticks of the
+hits are `measurable` (SH1 part a, both runs; SH4 parts a and b). The order of the hits that
+fall in one tick is `unmeasured`: SH1 part a's ordered log records it, but no part states an
+expected order or is falsified by another. Confidence: medium that the hits are spread in this way rather than all falling in the
+tick of the burst, which follows S-0203 claim 10, whose causes it rates medium, and S-0306's
+first-turn detonation; medium for
+the exact ticks until SH1 part a runs; medium for the order within a tick.
 
 ## Edge cases and quirks
 
@@ -415,8 +457,7 @@ tick; medium for the order within it.
   with ring 11 as S-0303 table T1 lists it.
 - **A fragment weapon that names itself.** When a fragment weapon's projectile names the same
   fragment weapon, directly or through a chain, every fragment that passes claim 1 bursts again.
-  With invisible fragments every level can run within the tick of the first burst (claim 5, with
-  its first-turn exception), so the
+  With invisible fragments each level bursts in the ticks that claim 5 gives, and the
   chain ends only when no detonation of it passes claim 1, for example when the objects it hits
   are destroyed and leave burst cells with no first-listed object. No limit on the number
   of levels is known; whether anything bounds such a chain, for example
@@ -462,8 +503,8 @@ changing only the fields named) supplied before each run and removed after it. A
 reads every object's health and cell at the start of every tick, and the random-state recorder
 reads the scenario random stream where stated. The *test weapon* is a copy of an existing direct-fire
 weapon, changed so that its warhead damages a single object (no area spread), it has neither the
-laser flag nor the electric-bolt flag, and its projectile is a test projectile type that is
-invisible and names a *test fragment weapon*. The test weapon's warhead and the test fragment
+laser flag nor the electric-bolt flag, it names no shot animation (except in SH1 part a run 2),
+and its projectile is a test projectile type that is invisible and names a *test fragment weapon*. The test weapon's warhead and the test fragment
 weapon's warhead are test warheads that name no explosion animation and throw no debris, so that
 rows 4 and 5 of S-0303's order table take no draw among the draws that the parts count (SH1 parts
 c, l, o, p and s, SH5 part c). The test fragment weapon has an invisible test
@@ -503,12 +544,30 @@ the run is void.
   the surrounding enemies are unarmed test copies of a vehicle type, given no orders, so that
   they neither fire nor move; if the recorder shows any of them off its cell at the shot, the run
   is void.
-- Procedure: order the test vehicle to attack *T* and let it fire one shot; record health on the
-  tick of the shot and the next 2 ticks.
+- Procedure: order the test vehicle to attack *T* and let it fire one shot; record health at the
+  start of the tick of the shot and at the start of each of the 5 ticks after it, which covers the
+  tick of the shot and the next 4 ticks (enough for the latest fragment hit of claim 5 with the
+  largest fragment count that any part uses). Each tick's reading is taken at the start of the
+  following tick, after every object's turn in that tick, so a loss in tick 3 after the shot shows
+  in the reading taken at the start of tick 4; "a loss in tick *k*" in the parts below means the
+  change between the readings taken at the starts of ticks *k* and *k* + 1.
 - Part a. *Expected:* *T* loses the test weapon's damage after its warhead, and exactly the first 3
-  of the surrounding vehicles in T1 order lose the fragment's damage after its warhead, in the
-  same tick; the others are unhurt. *Falsified by:* any other set of damaged vehicles, or damage
-  in a later tick.
+  of the surrounding vehicles in T1 order lose the fragment's damage after its warhead; the
+  others are unhurt. The losses fall in these ticks (claim 5): *T*'s and the vehicle at (1, 0)'s
+  in the tick of the shot, the vehicle at (0, −1)'s one tick later and the vehicle at (0, 2)'s
+  two ticks later. *Falsified by:* any other set of damaged vehicles, or any loss in another
+  tick; in particular, all four losses in the tick of the shot, which the removal skip of
+  S-0203 claim 10 switched off would give. Run 2: the named test file also gives the test weapon
+  a shot animation, an existing sprite animation type, so that the animation enters play directly
+  after the projectile (S-0109 claim 29). *Expected:* the same set of losses, with *T*'s and the
+  vehicles at (0, −1) and (0, 2) in the tick of the shot and the vehicle at (1, 0)'s one tick
+  later. *Falsified by:* the ticks of the first run, or any other ticks. In this part the
+  recorder also logs, in the order they happen, every object entering or leaving play and every
+  health change. If the recorder shows any
+  object other than the projectile, the fragments and (in run 2) the shot animation entering or
+  leaving play from the shot to the last expected loss, the run is void; run 2 is also void if
+  the shot animation leaves play before the vehicle at (1, 0) loses health, since its removal
+  would cost the waiting fragment its turn (S-0203 claim 10).
 - Part b. As a, but *T* is replaced by an enemy building of one-cell foundation, of a type whose art
   gives it no aim shift (S-0306 Terms, *target point*). *Expected:* only the building is damaged. *Falsified by:* any surrounding vehicle losing health.
 - Part c. As a with fragment count 8 (more than the 5 candidates), with the random-state
@@ -618,11 +677,11 @@ the run is void.
   a positive radiation level instead, and health is recorded for twice S-0525's application
   delay in the rules in use after the shot. In run 4 the surrounding vehicles are of a type that
   is not immune to radiation (S-0525 claim 8). *Expected:* in runs 1 and 2 the
-  fragments go as in part a, in the tick of the shot. In run 2 a radiation loss is told from a
+  fragments go as in part a, in the ticks of part a. In run 2 a radiation loss is told from a
   fragment's by its amount and by S-0525's timing. In run 3 planting is selected, does no area
   damage and, since the firer is not an infantry unit, plants no bomb (S-0519 claim 2): no
   vehicle loses health, and no draw R(−2, 2) is taken. In run 4 the three vehicles hit by
-  fragments lose the fragment's damage once, in the tick of the shot, and no health after it
+  fragments lose the fragment's damage once, in the tick that part a gives each, and no health after it
   (claim 5: a fragment leaves no radiation). *Falsified by:* no fragment damage in run 1
   or run 2, any fragment damage in run 3, or in run 4 a later loss of health of a vehicle hit by
   a fragment on a tick of S-0525's application cadence (claim 9 there). If the test vehicle does not fire in run 3, that run
@@ -718,13 +777,16 @@ the run is void.
 - Part a. Setup: as SH1 part a, with the test vehicle at the elite veterancy rank and holding a
   firepower bonus from a firepower crate it collected before the shot. *Expected:* *T*'s loss
   scaled by S-0302 claim 2's factors; each fragment's target loses exactly the unscaled fragment
-  damage after its warhead; all in the tick of the shot. *Falsified by:* a scaled fragment loss, or
-  fragment damage a tick later.
+  damage after its warhead; each loss in the tick that SH1 part a gives it. SH1 part a's void rule
+  applies: the run is void if the recorder shows any object other than the projectile and the
+  fragments entering or leaving play from the shot to the last expected loss. *Falsified by:* a
+  scaled fragment loss, or a loss in another tick.
 - Part b. Setup: as SH1 part a, with the vehicle at (0, −1) given health no greater than the
   fragment's damage after its warhead, so that its fragment destroys it, and *T* given health
   above the test weapon's damage. The read-only recorder reads each house's count of enemy units
   it has destroyed (the count the end-of-game score shows). *Expected:* house A's count rises by
-  one in the tick of the shot, and no other house's count changes. A repeat as SH3 part a, with the
+  one in the tick after the shot, when the first fragment detonates (claim 5), and no other
+  house's count changes. A repeat as SH3 part a, with the
   doomed vehicle standing in a cell that a recorded draw pair gives, credits no house. *Falsified
   by:* no rise for house A in the first run, or a rise for house A in the repeat.
 - Part c. Setup: as SH1 part a, with named test rules giving the test fragment weapon its own test
@@ -751,8 +813,8 @@ the run is void.
   projectile is airburst (S-0306 claim 21) and names a test airburst weapon, whose damage field
   differs from both test weapons', with a single-target warhead and a projectile that names no
   fragment weapon. The test airburst weapon is also carried by a second test vehicle type, so
-  that it is read. *Expected:* the 5 surrounding vehicles each take one fragment in the tick of
-  the shot; at the burst the 6 ranged draws R(−2, 2) come first, then the draws that follow the
+  that it is read. *Expected:* the 5 surrounding vehicles each take one fragment, in the tick of
+  the shot or a later recorded tick (claim 5); at the burst the 6 ranged draws R(−2, 2) come first, then the draws that follow the
   area damage within the detonation (S-0303 order table), then the nine draws R(0, 32) of the
   airburst children, and no draw R(256, 512). *Falsified by:* no fragment damage, or the draws
   R(0, 32) before the fragment draws. The airburst and invisible flags are independent (S-0306
@@ -764,10 +826,11 @@ Q-1714, watched for the first 600 frames, record for each tick the number of sho
 that detonate and the number of objects of each side whose health drops. Counting detonations
 needs a reading that the general setup's recorder does not take: for this scenario the read-only
 recorder also logs each detonation of a projectile as it happens, with its tick and the side
-whose object fired it (an invisible projectile detonates within the tick it is placed, so a
-reading taken only at the start of a tick would miss it). Only shots count: the detonation of a
-projectile launched by a burst (claim 1) rather than fired by an object is a fragment's and is
-left out. The recorder tells the two apart by projectile type, so the run is void if, in the
+whose object fired it (an invisible projectile detonates between two start-of-tick readings, so
+a reading taken only at the start of a tick would miss it). A shot is a projectile fired by an
+object; the detonation of a projectile launched by a burst (claim 1) is a fragment's, and the
+recorder logs it apart, with its tick and the side of its attacker (claim 5). The recorder tells
+the two apart by projectile type, so the run is void if, in the
 files in use, a fragment weapon's projectile type is also the projectile of a weapon that either
 group fires. Before the run, record
 from the rules files in use which group's weapons (ordinary and elite) have projectiles that
@@ -779,16 +842,21 @@ warhead and fragment warhead have an area spread, and whether its fragment proje
 fragment weapon of their own and are invisible (claim 5), and whether the fragment side's
 projectiles and its fragment projectiles detonate once and are not airburst projectiles (S-0306 claim 21). Two shots that detonate in the same tick cannot be told apart, so
 the run counts objects per tick, not per shot. Only *counted ticks* are judged: ticks before the
-first object of either side is destroyed (so no death explosion adds damage), in which no shot of
-the other side detonates. *Expected:* counted ticks in which more objects of the other side lose
+first object of either side is destroyed (so no death explosion adds damage), in which no shot
+and no fragment of the other side detonates. A fragment need not detonate in the tick of its
+burst (claim 5), so a counted tick can hold fragment hits of a shot that detonated earlier. *Expected:* counted ticks in which more objects of the other side lose
 health than shots of the fragment side detonate, when the targets stand within the fragment range
 of each other. Where the recorded fields give no area spread to either warhead and no fragment
 weapon to the fragment projectiles, the fragment projectiles are invisible, and the fragment side's
-projectiles and its fragment projectiles detonate once and are not airburst projectiles, every counted tick with exactly one detonating shot of the
-fragment side has at most 1 + *n*ₘₐₓ objects of the other side losing health. A run with no counted tick in which more objects of the other side lose health than shots of
+projectiles and its fragment projectiles detonate once and are not airburst projectiles, two
+upper bounds are judged: every counted tick has at most *s* + *f* objects of the other side
+losing health, where *s* and *f* are the fragment side's shots and fragments logged as
+detonating in that tick; and over the whole run the fragment side's logged fragment
+detonations number at most *n*ₘₐₓ times its logged shot detonations. A run with no counted tick in which more objects of the other side lose health than shots of
 the fragment side detonate is inconclusive, since claim 1 may have stopped every burst. *Falsified
-by:* where the upper bound is judged, a counted tick with one detonating
-shot of the fragment side and more than 1 + *n*ₘₐₓ objects of the other side losing health.
+by:* where the upper bounds are judged, a counted tick with more than *s* + *f* objects of the
+other side losing health, or more than *n*ₘₐₓ fragment detonations per shot detonation of the
+fragment side over the run.
 
 **SH7. Launch direction (claim 6).** As SH1 part a, but the test fragment weapon's projectile is a
 slow straight, not invisible, projectile, and the recorder reads every projectile's position in
@@ -838,7 +906,7 @@ with the random-state recorder, except as it says.
 
 ## Changes for other specs
 
-- **S-0306 (approved, revision 33), claim 21.** "A projectile with a shrapnel weapon also launches
+- **S-0306 (approved, revision 34), claim 21.** "A projectile with a shrapnel weapon also launches
   fragments (Open questions)" can point to S-0318 instead of its Open questions.
 - **S-0306, Open questions.** The item on "the selection of targets, the draws and the flight of
   the fragments of a shrapnel weapon" is answered by S-0318 for the selection, the draws and the
@@ -855,15 +923,21 @@ with the random-state recorder, except as it says.
 - **S-0306, claim 20.** The point that (a) and (b) leave is also the burst point of S-0318 (Terms):
   (c) moves the detonation point of the projectile's own area damage and explosion, not the point
   from which its fragments burst (S-0318 claim 1).
+- **S-0203 (approved, revision 39), claim 5.** "unless a removal costs it that turn (claim 10),
+  in which case its first turn is in tick *n* + 1" can allow a later tick in the same way: its
+  first turn is in the first tick in which no removal costs it the turn, which for the third of
+  three fragments is tick *n* + 2 (S-0318 claim 5). Claim 10 itself needs no change: its
+  objects that entered play during the turn already include fragments.
+- **S-0306, State and ordering, *Ordering*.** "in which case its first turn is in tick *n* + 1"
+  can allow a later tick: a removal in tick *n* + 1 can cost the projectile that turn as well,
+  as it does for the third of three fragments (S-0318 claim 5), so its first turn is in the
+  first tick in which no such removal costs it the turn.
 - **S-0306, claims 1, 2 and 6.** A fragment is not a shot: its speed is the fragment weapon's
   weapon speed *S*<sub>w</sub> of claim 1, without claim 1's shot speed or claim 2's cap, and it
   is launched in its own direction rather than at the pitch of claim 6, believed to be a fixed
   elevation of about an eighth of a turn (S-0318 claims 5 and 6; the elevation is rated low
   there and is not measured). Claim 6's "Every projectile, whatever its kind" can except fragments,
   pointing to S-0318.
-- **S-0525 (approved, revision 3), claim 1.** The list of detonations that leave no radiation
-  can add the fragments of S-0318, which carry no weapon, like the nine children of an airburst
-  projectile, so a fragment weapon's radiation level has no effect (S-0318 claim 5).
 - **S-0316 (approved, revision 27), claim 8 and Open questions.** "the fragment rules, which have
   no owner yet (S-0306 Open questions)" can point to S-0318. Whether a fragment launched after
   the projectile's firer has gone still makes a bolt is answered by S-0318 claim 8: it makes none.

@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 19
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776]
 supersedes: []
 ---
 
@@ -20,6 +20,10 @@ How fixed-wing and rotor aircraft fly: their height, horizontal speed, landing a
 an armed aircraft carries out an attack run and spends its ammunition; how it finds, reserves,
 lands on and is serviced at a pad; how the number of pad-bound aircraft a house may build follows
 from its pads; and the flight and return of non-missile aircraft launched from a carrier.
+Every run that does not go straight into another run gives the aircraft a destination on its
+house's map edge, with that choice's draws (claim 17). What an armed aircraft with no dock types
+then does depends on its house and on whether it must return to a pad (claim 45); an
+aircraft that must return to a pad and has none to go to crashes (claim 46).
 The shared spawn-controller cycle, including replacement, reload and release, belongs to
 S-0506 claims 1 to 9 and 11 to 13; missile flight also belongs to S-0506. The spy plane's dispatch and reveal are S-0513 claims 43 to 45 and the
 delivery of paratroopers and cargo is S-0522 claims 1 to 16; only their flight is covered here.
@@ -30,6 +34,46 @@ search, stopped polling and replacement around map waypoint 700. That claim uses
 claim 21 for dock selection, claim 41 for its landing-spot fallback and claim 40 for the
 replacement-cell search; entering an unload phase is not itself a descent command.
 Aircraft cloaking and hidden-target loss are S-0516 claims 17 and 25.
+Requests answered here, besides those named in claim headings: Q-1756 in full, by claims 40 and
+45. Its questions 1 and 2 are claim 45's: no fixed delay before the descent after a run: the delay is the length
+of the flight from the firing spot to the replacement cell, which AC29 part b's per-tick positions
+record, and no landing at the firing spot: a human-controlled aircraft lands
+on a replacement cell near its house's computed edge, and a computer-controlled one never
+rests, except in claim 45's north-edge case; and the same edge destination when the target is lost before the
+aircraft fires (AC29 part d). Its question 3 is claim 40's: the first processing of every
+ordinary *move* applies claim 40's selection to its destination, whether or not the aircraft
+already flies to it, and the aircraft's own earlier choice does not count against it, so the
+destination is kept when F7 and the flight-reservation test accept it and replaced otherwise
+(AC29 part b, the case after a run). Q-1755 in part, by claim 32 and AC19's Q-1755 parts:
+(1) an aircraft does not keep a target that boards a transport or goes into a building: it loses
+it at that moment, in that tick, and its run ends by claim 17 at the processing after its next
+one, with no round spent; a tank bunker keeps the vehicle on the map, so the target is kept
+(medium). (2) The target is not kept, so no hold, no new firing spots and no rounds spent; the
+re-approach flag plays no part. (3) The run does not resume when the object comes back. (4) A
+ground attacker loses the target by the same rule (Changes for other specs, S-0309); what it does
+next is S-0215's and S-0309's. Q-1755's harvester dock and the suicide shot inside a burst stay
+open (Open questions 23 and 24).
+Against the committed text, these rows of tables T1 and T2 change. In T1: the *approaching* row
+with no target or no ammunition goes to *done* after 1 tick, not after the standard delay (claim
+32, AC19 parts a and j); the spend of a pending round with the run lock turned off is stated
+above the table as coming first at every processing of *approaching*, whatever it then finds, a
+strafer's after its fifth pass included (the committed wording put it among that row's
+conditions); the *firing* row with no target or no ammunition now states its delay, 1 tick; and a
+*refiring* row with no target, going to *done* after 1 tick, is new. In T2: the in-flight, armed
+*guard* row keeps the destination and names *area guard* for an armed aircraft of a
+computer-controlled house outside a team (claim 18); the in-flight, pad-bound crash row points to
+claim 46; the after-the-row entry for a pad-bound aircraft whose new pad search finds none no
+longer reads only "crash": the row's next behaviour is not given and the current behaviour stays,
+and the aircraft crashes in flight (claim 46) but not on the ground (claim 9); and a paragraph
+after T2 states that the after-the-row entries follow every row from the fourth on, the visiting
+rows included, so a pad-bound visiting aircraft in flight with no ammunition and no contact
+crashes when its pad search finds none, instead of taking its row's *retreat*.
+Revision 38 changes no behaviour relative to revision 37: it names the landing rules that decide claim 45's north-edge fall-back cell, says that claim 35 covers the carrier slot aircraft claim 45 excludes, and moves the answers to Q-1756 and Q-1755 from the open questions into this Summary.
+Revision 39 changes no behaviour relative to revision 38: it adds claim 37's target-loss draw to AC29 parts c and g (2), states claim 45's computer case by its result, says in the Summary that the aircraft does not land at its firing spot, and says why Open question 16 leaves Q-1756's answer unaffected.
+Against revision 39, revision 40 changes no behaviour: the Summary lists every row of tables T1
+and T2 that changes against the committed text, gives the delay before claim 45's descent as the
+flight's length with a pointer to AC29 part b's per-tick positions, and AC29 part c says the type
+is made pad-bound by the test rules.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -65,15 +109,17 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   test, not either sense of the glossary's *airborne*. Two other tests appear and are named where
   used: *h* > 0 (claim 37), and the aircraft's **in-the-air answer**, which is S-0307's *airborne*
   (height above the surface at least 208 leptons) for every aircraft except the game-wide
-  V3-rocket and dreadnought-missile types, which use their locomotor's own answer (S-0506 claim 22; claim 18 here uses that answer).
-  The in-the-air answer is the exact test that S-0308's *airborne* leaves to this spec for
-  aircraft.
+  V3-rocket and dreadnought-missile types, which use their locomotor's own answer (S-0506 claim
+  22, and claim 18 here uses that answer). The in-the-air answer is the exact test that S-0308's
+  *airborne* leaves to this spec for aircraft.
 - **strike aircraft**: an aircraft linked to a strike (S-0519 claims 17 and 20), not every
   visiting aircraft or every aircraft dispatched from outside the map.
 - **visiting aircraft**: an aircraft marked as not meant to stay on the map. Successful placement
   sets this mark when the type is not both selectable and landable, or its primary weapon is a
   camera weapon. It does not clear an existing mark. A dispatch can mark an aircraft before
   placement. Placement height uses the mark already present, not the type test made afterward.
+  A carrier's launch of a slot aircraft is such a placement (claim 35), so the same type test
+  decides whether a slot aircraft is visiting.
 - **pad**: a building whose type is one of the aircraft type's dock types. In this spec *dock
   types* means only the aircraft type's own list of building types it docks at (glossary,
   *refinery, dock types*: the aircraft sense of S-0404 claim 2). A **helipad building** is a
@@ -291,13 +337,16 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    waypoint planning of the order specs), it does not land but queues *wait* and goes on to that
    waypoint. A pad-bound aircraft whose cell
    holds no building it is in contact with does not land: it falls back to rest instead
-   (claim 18), which sends it to a pad or makes it crash. A landing sets the held height to the
-   landing height. There is also a close-approach trigger: below 128 leptons, with ordinary
-   slowing permitted, no holding-height mark and current fraction strictly below 0.05,
-   guidance requests landing without waiting for the exact-cell and zero-target-fraction test.
+   (claim 18), which sends it to a pad or makes it crash, except for claim 45's pad-bound type
+   with no dock types and ammunition left, which keeps its cell and stays above it. A landing
+   sets the held height to the landing height. There is also a close-approach trigger: below
+   128 leptons, with ordinary slowing permitted, no holding-height mark and current fraction
+   strictly below 0.05, guidance requests landing without waiting for the exact-cell and
+   zero-target-fraction test.
    Both triggers still obey the planned-route and pad-bound restrictions.
    - Backing: `measurable` (scenario AC4)
-   - Confidence: high (the triggers); medium (the 120-lepton rule, the planned-route exception)
+   - Confidence: high (the triggers); medium (the 120-lepton rule, the planned-route exception,
+     and claim 45's pad-bound exception, as claim 45 rates it)
 
 7. **Landing and touchdown.** Landing sets the target speed fraction to 0; descent follows
    claim 3. The ground render layer applies exactly when height above the surface is at most
@@ -329,16 +378,20 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    downward contribution of *k* leptons (Formula F5). If that contribution brings height below
    1, impact occurs before ordinary movement or altitude adjustment can lift it again:
    on the ground, a dead aircraft's impact effects and removal follow S-0312 claim 16, and a living one
-   is destroyed by S-0312 claim 16's crash-without-kill rule. If no impact occurred and
+   is destroyed by S-0312 claim 16's crash-without-kill rule. The fall-back crash of a pad-bound
+   aircraft (claim 46) is not a crash without a kill: it starts at health 0 and falls as a dead
+   aircraft. If no impact occurred and
    ordinary movement remains active, horizontal motion and the ordinary altitude rules still
    apply. Thus the net drop need not be the counter alone; a moving dead aircraft also gets
    F2's descent, and a living aircraft can get F1's climb or F2's descent. An aircraft that is sinking in water instead sinks by 5 leptons per tick
    and is removed when its height is below −400 leptons (claim 37 gives its draws).
-   - Backing: `measurable` for dead crash flight (AC5). The living switched-off crash and
+   - Backing: `measurable` for dead crash flight (AC5) and for the fall-back crash of claim 46
+     starting at health 0 (AC29 part f). The living switched-off crash and
      sinking branches are `unmeasured`: AC5 has no established normal-input effect that reaches
      them without killing immediately or using a different movement mode. Its exploratory
      variants cannot yet confirm those branches.
-   - Confidence: high (the counter); medium (which switched-off states start a crash)
+   - Confidence: high (the counter); medium (which switched-off states start a crash, and the
+     fall-back crash of claim 46 starting at health 0, until AC29 part f runs)
 
 10. **Leaving the map.** An aircraft **may leave the map now** when all of these hold: it is a
     visiting aircraft (for an aircraft in a team, the team's own rule decides instead: out of
@@ -464,27 +517,68 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       departure, checked only on our engine by AC28
     - Confidence: high
 
-17. **End of the run.** A run ends when the aircraft has no target or no ammunition left. Then:
+17. **End of the run.** A run ends when the aircraft has no target or no ammunition left
+    (claim 32 says when a target is lost during a run). Then:
     - with no ammunition, a visiting aircraft or an aircraft of a human-controlled house forgets
       its target,
     - a strike aircraft that still has ammunition queues *retreat*,
     - every other aircraft falls back to rest (claim 18), which normally sends it to a pad.
 
     An aircraft that still has ammunition and a target when its run ends goes straight into its
-    next run. Separately, a strike cancellation queues *retreat* for the affected strike aircraft
+    next run. Every other run end also gives the aircraft a new destination, after the target
+    is forgotten and before *retreat* is queued or the fall-back is made: a cell on its house's
+    computed edge (S-0522 claim 5), whatever edge the house's map section names, selected as in
+    S-0522 claim 4 with that claim's draws (claim 37). The aircraft's flight follows this
+    destination at once, whatever its behaviour (claim 5), until something replaces it:
+    - wherever table T2 reaches its pad rows (claim 18), the fall-back replaces it with the pad
+      or an F8 landing spot, or makes the aircraft crash, so the aircraft does not head for the
+      edge,
+    - T2's *guard* row keeps it; for an armed aircraft with no dock types this is claim 45, where
+      the *move* that *guard* queues for a human-controlled house replaces it (claim 40),
+    - a visiting aircraft without ammunition forgets it (T2), and its *retreat* chooses an edge
+      cell again (claim 34), on its house's arrival edge, which can differ from the computed
+      edge of the first choice; a pad-bound one with no pad found crashes instead (claim 45),
+    - a visiting aircraft with ammunition left that is not in a team keeps it in *hunt* (T2).
+      While its hunt finds no target, the fall-back gives it *hunt* again, so it heads for the
+      edge cell, where claim 10 can remove it,
+    - a strike aircraft with ammunition left that queues *retreat* keeps it (claim 34),
+    - a carrier slot aircraft that is not visiting falls back by its own type's rows of T2
+      (claim 35). With no dock types it keeps the edge cell itself as destination through that
+      fall-back, and its flight follows that cell, or claim 40's replacement for it once the
+      *move* that *guard* queues for a human-controlled house has replaced it, until its next
+      launch pass, where T4's attacking rows decide what it does next (claim 35); a visiting
+      one takes the visiting rows above until that pass (claim 35).
+
+    So each such run end takes S-0522 claim 4's draws, one or two, whether or not the cell is
+    then used. Separately, a strike cancellation queues *retreat* for the affected strike aircraft
     under S-0519 claim 19, without waiting for the run to end. Cancellation does not itself
     unlink them; their later fall-back and retreat follow claims 18 and 34 here.
-    - Backing: `measurable` (scenario AC8; S-0519 claim 19's cancellation scenario)
-    - Confidence: high
+    - Backing: `measurable` (scenario AC8; S-0519 claim 19's cancellation scenario; AC29
+      parts a and e for the edge destination and its draws). `unmeasured` for ignoring an edge
+      that the house's map section names, which inherits S-0522 claim 5's unresolved loading of
+      that edge, as claim 34 says. The interval in which a carrier
+      slot aircraft heads for the edge before its next launch pass is `unmeasured`: AC21 does
+      not record the slot's destination between its run end and that pass (claim 35, Open
+      questions). The two visiting
+      bullets are `measurable` through AC29 part g (claim 45's type that is not landable).
+    - Confidence: high, except that the outcomes the bullets take from claims 18, 34, 35, 40 and
+      45 and from T2 have those claims' confidence; medium for the carrier slot aircraft's interval and for the strike
+      aircraft's kept cell, which claim 34 leaves `unmeasured`; low for ignoring a map-section
+      edge, as S-0522 claim 5 rates whether a player house reads one
 
 18. **Falling back to rest (aircraft).** When one of the first three situations in table T2 (State and ordering) applies, the aircraft has that row's stated outcome and S-0215 claim 13's common effects do not occur. In all other cases the common effects apply, and the aircraft's next behaviour is the result specified by the applicable remaining situation in table T2. In flight, an armed aircraft
     with dock types looks for a pad (claim 21) and asks it for contact. When the pad grants it, it
     gets the pad as destination and queues *enter*. Otherwise a pad-bound aircraft crashes
-    (claim 9), and any other aircraft gets a landing spot near its house's buildings (Formula F8)
-    and queues *move*. On the ground it queues *guard*, or *area guard* for a computer-controlled
-    house's aircraft outside a team. A visiting aircraft without passengers queues *retreat*.
-    Whatever the table chose, an aircraft without ammunition that has no contact looks for a pad
-    once more, and an aircraft that holds any contact queues *enter*. If the aircraft is ready to
+    (claim 46 gives how that crash starts, claim 9 its fall), and any other aircraft gets a landing spot near its house's buildings (Formula F8)
+    and queues *move*. On the ground it forgets its target and destination and queues *guard*, or
+    *area guard* for a computer-controlled house's aircraft outside a team. A visiting aircraft
+    without passengers queues *retreat*. Whatever the table chose, an armed aircraft without
+    ammunition that has no contact looks for a pad once more. If it finds one, it gets the pad as
+    destination, forgets its target and queues *enter*. If it finds none and is pad-bound, the
+    behaviour the table chose is not queued: in flight it crashes (claim 46); on the ground it
+    does not, since a crash starts only above the ground (claim 9), and it keeps its current
+    behaviour, with its target and destination as the row left them (forgotten, for the ground
+    row above). An aircraft that holds any contact queues *enter*. If the aircraft is ready to
     change (claim 31) the queued behaviour becomes current at once. This is the aircraft part
     that S-0215 claim 13 leaves to this spec.
     - Backing: `measurable` for human-owned, non-team rest outcomes (AC10). The original's
@@ -492,13 +586,15 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       cannot require those owners or teams to perform a specified rest transition. The restored
       overridden behaviour and the two other early-exit rows are also `unmeasured`: AC10 has
       not established normal inputs that isolate a fall-back invocation in those states.
-      The computer and team cases are context, not extra rules for our AI houses.
+      The computer and team cases are context, not extra rules for our AI houses. This includes
+      the in-flight *guard* row's *area guard* for a computer-controlled house (claim 45).
       F8's other-object fallback and equal-distance object preference are covered by claim 41
       and AC23; footprint qualification and candidate choice are S-0212 claim 25a.
-    The pad-search rows need the in-the-air answer (Terms); the other rows use the on-the-ground
-    test.
+    The in-flight rows' own pad search needs the in-the-air answer (Terms); the other rows use
+    the on-the-ground test, and the search after the row needs neither.
     - Confidence: high (the in-flight and pad rows); medium (the ground rows and the computer
-      house's choice)
+      house's choice on the ground); low (the in-flight *guard* row's *area guard* for a
+      computer-controlled house, `unmeasured`)
 
 19. **Firing check additions.** For an aircraft the firing check of S-0301 claim 9 has two more
     refusals after every general answer has been passed:
@@ -667,7 +763,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 29. **Guard below cruise height.** An armed aircraft in *guard* below its cruise height that has
     less than full ammunition and no contact looks for a pad (claim 21); if it finds one it queues
     *enter* toward it and forgets its target. An aircraft in *guard* at cruise height with a
-    destination queues *move*; an armed one without destination falls back to rest (claim 18),
+    destination queues *move* if it is not pad-bound (claim 33); an armed one without destination falls back to rest (claim 18),
     an unarmed one is given its own cell and *move*, so it lands. Other outcomes of *guard* on the
     ground use the standard delay, or 45 ticks for an unarmed aircraft and for an aircraft on the
     ground with no contact.
@@ -718,15 +814,83 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     contacts only within the distance threshold of S-0312 claim 17. A surviving approaching
     aircraft whose contact or destination is lost falls back to rest, looking for another pad.
     A pad-bound one crashes if none can be obtained. Sale and a refusal during approach must
-    not be treated as equivalent to destruction. An aircraft in *attack* whose target is gone
+    not be treated as equivalent to destruction: they destroy no aircraft by themselves; the fall-back that follows is claim 46's. A sale leaves an
+    approaching aircraft without the pad as its destination when it falls back; a refusal does so
+    when no behaviour is queued for the aircraft (claim 46; Open question 19 otherwise). An aircraft in *attack* whose target is gone
     ends its run (claim 17). Before processing, an aircraft also clears a target whose
     in-the-air answer is yes, even when that target is still alive. A fully cloaked ground
     target is also cleared before processing when it is not allied with the aircraft and
     the aircraft's house does not sense it (S-0516 claim 25). An allied or sensed ground
     target is not cleared by this additional cloak test.
-    - Backing: `measurable` (scenario AC19)
-    - Confidence: high (destruction); medium (recovery after a lost contact and hidden-target
-      clearing)
+
+    **A target that leaves the map (Q-1755).** Apart from those tests before processing, an
+    aircraft loses an object as its target at the moment the object is killed (at the hit that
+    takes its last health), leaves the map or is removed. The loss happens wherever in the tick
+    that event falls, also during another object's turn, so from then on in that tick the
+    aircraft holds no target, unless a revert brings that object back (below). Leaving the map includes boarding any transport, open-topped or not
+    (S-0507 claim 6), and going into a building as an occupant (S-0508 claim 5). For these events
+    no owner, alliance or sensor exception applies. This is the loss every actor has (Changes for
+    other specs, S-0309). S-0215 claim 10 lists the same events as revert causes, so an aircraft
+    whose behaviour has been overridden is also reverted at that moment, right after the loss.
+    That claim's revert brings back the target the override put aside, even when it is the very
+    object that left the map. If the
+    aircraft's targeting timer (S-0215, Terms) has more than 10 integer ticks left at the loss,
+    one draw restarts it first (claim 37). A vehicle that enters a tank bunker stays on the map
+    (S-0606), so it is not lost that way: the aircraft keeps it as its target, and what the firing
+    check answers for it belongs to the firing and bunker specs. A harvester docked at a refinery
+    is not known to leave the map, so it is not known to be lost either (Open question 23).
+
+    After the loss, unless a revert brings the object back (above), the aircraft keeps flying in its current T1 stage until its next *attack*
+    processing, which comes when the delay set by its previous processing has run out; the loss
+    does not bring it forward. That processing takes the stage's no-target row to *done*. Every
+    stage of T1 has such a row, *refiring* included. A strafer whose target is killed by one of its
+    five strafing shots is in a strafe pass or, after the fifth, in *approaching*, and takes that
+    stage's row (T1). Its delay is 1 tick, except from *choosing*,
+    which takes the standard delay. The processing of *done* then ends the run as claim 17 says.
+    When the loss falls while the aircraft is already in *done*, its next processing ends the run.
+
+    A loss of these kinds never falls inside a full burst, except through a drain attempt (claim 12, *Drain
+    continuation*). The *B* shots of a full burst are made one after another within the
+    aircraft's own processing, and no ordinary shot's hit lands before that processing has
+    ended. So none of these losses cuts a full burst short, even when its first hit then kills the target, and the
+    run spends its one pending round (claim 15) whichever hit kills. This holds for weapons without the
+    suicide flag. A suicide shot (S-0519 claim 11) makes no projectile: its hit on the firer itself
+    lands at once, inside the aircraft's processing, and is the one hit that can. So an aircraft
+    whose weapon has the suicide flag takes its own hit at its burst's first shot, and dies of it
+    unless it survives as S-0519's edge case of a suicide firer that survives its own hit allows; what
+    its further attempts then do, and whether its death's detonation can reach the target before
+    the burst ends, is not established (Open questions). A death weapon fired inside a burst can
+    only be that firer's own, since no other hit lands there. A target killed by a hit
+    while the aircraft waits in *refiring* is lost as above, and *refiring*'s no-target row then
+    ends the run with no further shot. Apart from a revert (above), the original does not keep the
+    object as target while it is inside, so the aircraft neither waits at its firing spot nor chooses new firing spots
+    for it. It fires nothing more. A loss before the run's admitted initial firing pass leaves no
+    round pending, so it keeps all its ammunition. A round already pending is spent as claim 15
+    says. The
+    re-approach flag plays no part, since the rows that read it need a target. With ammunition
+    left, claim 17 and T2 then decide what it does. An aircraft with dock types whose pad grants
+    contact takes the run end's edge-cell draws, then gets the pad as destination and *enter*.
+    When the object comes back on the map (it is unloaded, or leaves the building), the aircraft
+    does not get it back as target and its run does not resume. Only an order or a target search
+    (S-0309, claim 33) gives it a target again.
+    - Backing: `measurable` (scenario AC19, including its Q-1755 parts, where the target is the
+      test house's own unit, attacked by force-fire, since the loss has no owner exception).
+      The no-target rows' delays and the full burst before a kill: `measurable` (AC19, Q-1755
+      parts a and i; part j for a strafer's *approaching* after its fifth pass, with no target and
+      with no ammunition). `unmeasured` for the 1-tick delays of the *firing* and *start* rows: *start*
+      and *firing* each hold the aircraft for one tick at a time (T1), so no scenario here can
+      place the loss of the target or of the ammunition in either. `unmeasured` for a suicide shot inside a burst, which no scenario here gives an
+      aircraft; it rests on S-0519 claim 11 and its edge case of a suicide firer that survives its
+      own hit.
+    - Confidence: high for destruction, and for the loss when a target boards a transport or goes
+      into a building, its moment, the run end that follows with no round spent when the loss
+      comes before firing (AC19), and no
+      resumption. Medium for the full burst made in full before a killing hit and the run end
+      from *refiring* (AC19 part i, until it runs), for a strafer's run end after its fifth pass
+      (AC19 part j, until it runs), and for the *firing* and *start* rows' delays and the suicide shot's
+      hit inside the burst (`unmeasured`). Medium (recovery after a lost contact and hidden-target clearing; the tank-bunker case,
+      which rests on S-0606's statement that the vehicle stays on the map); low (the refinery
+      dock, which no trace here confirms stays on the map)
 
 ### Other behaviours
 
@@ -747,7 +911,16 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
 34. **Retreat and the spy plane's flight.** In *retreat* an aircraft with no destination takes a
     cell on its house's arrival edge (S-0522 claim 5), selected as in S-0522 claim 4, as destination.
-    It is removed when it leaves the usable area (claim 10).
+    It is removed when it leaves the usable area (claim 10). A strike aircraft that queues
+    *retreat* at the end of its run with ammunition left already has claim 17's edge cell, on
+    its house's computed edge, so its *retreat* makes no choice of its own and takes no draw.
+    This differs from a strike cancelled before its run ends, whose aircraft have no target or
+    destination when *retreat* is queued (S-0519 claim 19); whether their run end or their
+    *retreat* then picks the edge cell is open (Open question 17).
+    An aircraft that is not a strike aircraft and is in *retreat*, *paradrop approach*, *paradrop
+    overfly*, *spy-plane approach* or *spy-plane overfly* accepts a queued behaviour only when it
+    is one of those five; a request to queue any other, such as *move* or *attack*, is ignored
+    entirely, with no start, and its current behaviour goes on (Changes for other specs).
     In *spy-plane approach* an aircraft flies at its target. When its ground distance
     (S-0204 claim 6) to the target is below 769 leptons it queues *spy-plane overfly*, holds the
     run lock and chooses an exit destination. With no target it also ends that processing with
@@ -759,11 +932,18 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     Approach processing has the game-wide spy-plane camera frame count as its delay; overfly
     and retreat processing each have a delay of 3 ticks. Queued changes follow claim 31.
     Dispatch, camera sight and reveal are S-0513 claims 43 to 45.
-    - Backing: `measurable` for ordinary flight, exit destinations and cadence (AC20).
+    - Backing: `measurable` for ordinary flight, exit destinations and cadence (AC20). The
+      strike aircraft's kept cell is `unmeasured`: a strike's run ends with ammunition left only
+      when its target is lost, and the loss of a strike's target cancels the strike first
+      (S-0519 claim 19), which no fixture here separates from the run end (Open questions).
       The targetless approach is `unmeasured`: dispatch targets a map cell, and no normal-input
       way to remove that target during approach has been established. The map-section edge
-      contrast inherits S-0522 claim 5's unresolved skirmish loading limitation
-    - Confidence: high (targetless outcome, computed exit edge and delays); medium (flight)
+      contrast inherits S-0522 claim 5's unresolved skirmish loading limitation. The dropped
+      queued behaviour is `measurable` (scenario AC29 part h) for a visiting carrier slot aircraft in
+      *retreat*; for the other four behaviours and the strike-aircraft exception it is
+      `unmeasured`, since no scenario here queues a behaviour for an aircraft in them
+    - Confidence: high (targetless outcome, computed exit edge and delays); medium (flight, the
+      strike aircraft's kept cell and the dropped queued behaviour)
 
 35. **Carrier slot aircraft flight.** S-0506 claims 1 to 9 and 11 to 13 own the shared slot
     cycle; table T4 supplies only the preparing, attacking and returning flight of a carrier
@@ -775,6 +955,33 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     is present, its destination is replaced by the step-direction-4 neighbour of the spawner's
     cell at that pass, with *move* queued again. No arrival at the direction-0 neighbour is
     required. With no controller target, such a preparing slot instead returns (T4).
+    Between an attack run's end (claim 17) and the next launch pass, at most 10 ticks later
+    (S-0506 claim 2), a slot aircraft is not driven by T4. Whether it is visiting follows the
+    Terms' type test, applied at its launch placement. One that is not visiting has claim 17's
+    edge cell as destination and falls back to rest by T2's rows for its own type, as any armed
+    aircraft in flight does: the fall-back sets apart missile slot types (S-0506), not other
+    slot aircraft, so its dock types and pad-bound field decide as for any aircraft (claim 18).
+    Unless an earlier row of T2 applies, with no dock types this is T2's *guard* row: *guard*, with
+    claim 33's *move* for a human-controlled house, or *area guard* for a computer-controlled
+    one, so it turns toward that cell or toward claim 40's replacement for it, as in claim 45.
+    A slot type with dock types instead, again unless an earlier row applies, looks for a pad (claim 21), and a pad-bound one that no
+    pad grants contact crashes (claim 46), within the same interval.
+    At the next pass, for a slot aircraft that has not crashed, T4's attacking rows decide: with no ammunition or no controller target it
+    gets its spawner as destination with *move*; otherwise it receives the controller target and
+    queues *attack* again. Whether
+    it can land on a replacement cell within that interval is not established (Open questions).
+    This interval is `unmeasured`, as claim 17's backing says, and rated medium; the slot type
+    with dock types is part of it, since AC21's carrier set-up uses a type without them.
+    A visiting slot aircraft instead takes T2's visiting rows at its run end, as any visiting
+    aircraft does (claims 17 and 45). With its ammunition spent it forgets its target and
+    destination and is in *retreat*, unless an earlier row of T2 applies or it is pad-bound (T2's after-the-row entry, claim 45). With ammunition left after its target is lost it is in
+    *hunt*, and the next pass's *move* or *attack* applies to it as above. An aircraft in
+    *retreat* does not accept that pass's *move* or *attack* (claim 34). So for one in *retreat*
+    the pass clears its target and makes its spawner its destination, but no *move* is queued and
+    it stays in *retreat*. Its *retreat* chooses an edge cell only when it has no destination
+    (claim 34): it takes that second choice's draws only if a *retreat* processing comes before
+    the pass, and it keeps the spawner as destination after it. What it does once it reaches its
+    spawner, and whether it is still in *retreat* on its next sortie, is open (Open question 22).
     Release into attacking follows S-0506 claim 8 and can occur in the launch pass itself.
     An aircraft released in that pass has no later preparing pass for that sortie and need
     not receive a direction-4 destination. Its attack runs follow claims 12 to 17.
@@ -786,8 +993,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     A ship's launch movement hold is S-0504 claim 3: a positive launching count prevents the
     next step, not completion of a step already begun. Use S-0506's launching count, not its
     controller state: preparing non-missile aircraft do not by themselves raise that count.
-    - Backing: `measurable` (scenario AC21)
-    - Confidence: high
+    - Backing: `measurable` (scenario AC21); `unmeasured` for the interval between a run end and
+      the next launch pass of a slot aircraft that is not visiting, which AC21 does not record
+      (Open question 20); `measurable` for a visiting slot aircraft's run end, its *retreat* and
+      that pass (scenario AC29 part h)
+    - Confidence: high; medium for that interval and for the visiting slot aircraft's rows
 
 36. **Loss of a slot aircraft.** S-0506 claim 9 owns loss notification and regeneration.
     A notification for a slot aircraft with health below 1 or already released empties its slot
@@ -823,19 +1033,31 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       shifts the splash in x.
     - **Processing delays.** The standard delay of S-0215 claim 6 takes its own draw wherever
       claims 12, 29 and 33 use it.
-    - **Edge cells.** A paradrop plane's arrival cell and a retreating aircraft's destination
-      use S-0522 claim 4's no-reference edge-cell selection: one ranged draw, or two for south,
-      with that claim's ranges and order. Spy-plane arrival uses the same selection (S-0513
+    - **Edge cells.** A paradrop plane's arrival cell, a retreating aircraft's destination and
+      the destination given at the end of a run (claim 17) use S-0522 claim 4's no-reference
+      edge-cell selection: one ranged draw, or two for south, with that claim's ranges and
+      order. A visiting aircraft that ends its run without ammunition therefore takes these
+      draws twice: at the run end, and again when its *retreat* chooses (claim 34), except a pad-bound one, which crashes or gets a pad at the run end's fall-back instead of retreating (claim 45), and a carrier slot aircraft whose next
+      launch pass gives it its spawner as destination before a *retreat* processing (claim 35).
+      Spy-plane arrival uses the same selection (S-0513
       claim 43), as do the spy exit destinations of claim 34 on their computed opposite edge.
       Choosing the edge itself takes no draw (S-0522 claim 5).
+    - **Target loss.** When an aircraft loses its target object by claim 32's events (killed,
+      off the map, removed) and its targeting timer has more than 10 integer ticks left, one
+      *U*(4, 8) draw restarts that timer with the drawn number of ticks, before the target is
+      cleared, except while the scenario is being set up. With at most 10 ticks left there is
+      no draw. The draw is taken in the turn in
+      which the event happens, which may be another object's. It is the loss every actor has
+      (Changes for other specs, S-0309).
 
     Flight-destination substitution takes one *U*(0, 7) per examined radius (claim 40).
     The failed edge push-back takes one raw draw only when its random fallback is attempted
     (claim 4). These are not an exhaustive flight draw inventory. Pad selection and the service steps
     themselves take no random draw. The crash tumble draws are S-0312 claim 16's.
     - Backing: `measurable` for smoke, firing-spot and processing-delay draws, and pad/service
-      draw absence (AC22, with the permitted random-state recorder); edge-cell draws are
-      `measurable` through AC20, AC22 and S-0522 scenario P3. Sinking splash draws are
+      draw absence (AC22, with the permitted random-state recorder); the target-loss draw
+      through AC19's Q-1755 part a with the same recorder; edge-cell draws are
+      `measurable` through AC20, AC22, AC29 and S-0522 scenario P3. Sinking splash draws are
       `unmeasured`: AC5 and AC22 have no established normal-input witness for aircraft sinking.
       The smoke switch-off alternative is `unmeasured`, a design rule of our engine
       rather than an outcome of the original
@@ -893,7 +1115,11 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     position and the flight-reservation test of claim 39 accepts the cell of its heading
     point. In this initial F7 use, its competing-aircraft destination comparison is against
     the original destination object, not always against a cell object. Here the reservation
-    test excludes the searching aircraft itself. The heading
+    test excludes the searching aircraft itself. This selection runs at the first processing of
+    every such *move*, also one that starts with the destination the aircraft already flies
+    to, such as the *move* that *guard* queues after a run (claim 45). The aircraft's own
+    earlier choice of the cell does not count against it, so such a destination is kept
+    whenever these same tests accept it, and replaced as below otherwise (Q-1756 question 3). The heading
     point is S-0506 claim 14's destination heading point, evaluated with no requesting actor
     for this initial test. Otherwise, outside initial map loading, it seeks a replacement
     cell around the destination's current-position cell.
@@ -936,9 +1162,13 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     flight is unfinished (claim 42). A positive fraction whose forward step truncates to 0 does
     not count as stopped there under the default of `quirks.aircraft_zero_step_attack_stall`.
     Claim 42 gives its attack-only alternative.
-    - Backing: `measurable` (scenarios AC23 and AC24)
+    - Backing: `measurable` (scenarios AC23 and AC24; AC29 part b for a *move* that starts
+      with the destination the aircraft already flies to, a destination that F7 refuses). The
+      aircraft's own earlier choice not counting against a destination that passes both tests is
+      `unmeasured`: AC29 part b's destination fails F7 whichever way that choice counts
     - Confidence: high for destination selection, draws and the stopped test; medium for
-      unusual object heading-point cases inherited from S-0506 claim 14
+      unusual object heading-point cases inherited from S-0506 claim 14, and for the selection
+      on a destination already flown to, until AC29 part b runs
 
 41. **Landing-search settings and fallback (Q-0634).** F8's search near a house building
     uses locomotion class *foot*, movement zone *normal*, the building cell's ground reach
@@ -1127,6 +1357,225 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` (scenario AC27, occupancy and vehicle variants)
     - Confidence: high for marking, clearing and vehicle flag exclusion; medium for
       the combined ordinary deck-take-off and vehicle-entry consequences
+
+### After the run
+
+45. **Armed aircraft with no dock types after the run (Q-1756, Q-1776).** An armed aircraft
+    with no dock types that is neither visiting nor a carrier slot aircraft, and carries no
+    passengers (T2's passenger rows come first), keeps claim 17's
+    edge destination through its fall-back (table T2's *guard* row). That cell lies outside the
+    usable area (S-0522 claim 4), except in that claim's no-acceptable-candidate case, which
+    arises only on the north edge when every cell of the local area's top row lies below the
+    negative height level that claim names. Its fall-back cell can then be usable: if claim 40's
+    retention tests accept it, a human-owned aircraft keeps it with no replacement search and no
+    draws.
+    Whether it lands there is decided by claims 6 and 7 alone, as for any destination cell. Every
+    aircraft this claim covers is of a landable type (a type that is not landable is visiting,
+    Terms), so one that is not pad-bound lands there, unless claim 5's hover stops it
+    short, and rests in its T2 resting behaviour, whatever its owner; a pad-bound one does not land, by claim 6's pad-bound rule, and behaves
+    as the pad-bound exception below says (this case is `unmeasured` and low, as S-0522 claim
+    4's fall-back is: no set-up here makes every cell of that top row lie below that level). In every other case the cell is
+    outside, and the rest of this claim describes that case. A carrier slot aircraft that is not
+    visiting is excluded here only because claim 35 owns its flight; between its run's end and
+    its next launch pass claim 35 applies this claim's rule to it. The aircraft's flight follows the
+    cell at once (claim 17). The
+    aircraft therefore neither lands at nor holds above its last firing spot or its target after
+    its run: it heads for its house's edge. This holds whether its ammunition is spent or its
+    target was lost before it fired with ammunition left, since both end the run (claims 17 and
+    32). During a strafing run its destination is its target itself (table T1's strafe passes and
+    claim 39), so no firing spot survives the run either. What follows depends on its owner:
+    - **Human-controlled house.** It is in *guard*, which queues *move* toward that destination
+      (claim 33). That *move*'s first processing applies claim 40 to the edge cell. F7 refuses
+      the cell, since it is outside the usable area, so the *move* replaces it with the first
+      accepted cell of claim 40's search around it, taking one *U*(0, 7) draw for each radius
+      examined, from radius 0 up to the radius where a cell is accepted. The edge cell lies just
+      beyond the usable area's border (S-0522 claim 4), so the replacement is normally a usable
+      cell a few cells from it, toward the inside of the map. The aircraft flies toward that cell
+      and, unless claim 5's hover stops it short, lands there by claim 6's landing trigger, since
+      it has no target or no ammunition, with claim 7's cell test. It then rests on the ground in
+      *guard* (T2's ground row). So its descent comes at no fixed delay after its last round
+      (Q-1756 question 1): it first turns toward the edge cell, then toward the replacement cell,
+      and its descent starts when one of claim 6's landing triggers holds for that cell (claims 6
+      and 7), after a flight whose length depends on where it fired. Should claim
+      40's search accept no cell, the edge cell is kept, and the aircraft behaves at it as in the
+      computer case below.
+    - **Computer-controlled house, outside a team.** It is in *area guard* (T2). An aircraft's
+      *area guard* follows S-0215 claim 26 only in part, by height. At exactly its flight height
+      each processing is this spec's fall-back to rest (claim 18) instead of claim 26's rows, and
+      ends with a delay of 1 tick: claim 26's delay, with its factor *k* = 2 for aircraft, does
+      not apply there. Below its flight height, an armed aircraft with its ammunition spent and
+      no contact shows at each processing the same fall-back to rest as at its flight height, and
+      in addition: if it holds a target, it has *attack* queued after that processing and its
+      next processing comes 1 tick later; if it has no target, the processing also has the result
+      of claim 26's rows and table, and the next one comes after claim 26's delay, with *k* = 2. T2's in-flight row for an
+      armed aircraft with no dock types keeps the destination and *area guard* (Changes for
+      other specs). Claim 26's leash needs an actor with no destination, so it does not hold
+      while the edge cell is the destination. Observably, it keeps the edge cell as destination,
+      stays in *area guard* and queues no *move* (rated in claim 18), so no replacement is
+      sought and its destination alone moves it, unless claim 26's search below its flight
+      height gives it a target; what such a target then leads to was not traced (Open
+      questions). It flies past the
+      usable area's border to the edge cell, since it may not leave the map now (claims 4 and
+      10), unless claim 5's hover stops it short. In that cell the landing trigger of claim 6 starts a landing, and claim 7's cell test
+      refuses every touchdown there, because F7 accepts no cell outside the usable area. Each
+      refusal makes it rise by 10 leptons and start to take off again (claim 7). It is still in
+      its destination cell with no target or no ammunition, so a new landing starts. Unless that hover stops it, it never
+      comes to rest: it repeats the descent and the refused touchdown above the edge cell for as
+      long as it keeps that destination.
+    - **A visiting aircraft**, such as one of a type that is not both selectable and landable
+      (Terms), does not reach the rules above: T2's visiting rows apply to it (Q-1776 questions
+      2 and 3). The owner changes neither case below. A visiting carrier slot aircraft takes the
+      same rows; its next launch pass makes its spawner its destination (claim 35).
+      - With its ammunition spent, it forgets its target (claim 17) and its destination and
+        queues *retreat* (T2), whose first processing chooses an edge cell again with S-0522
+        claim 4's draws (claims 34 and 37). It flies there and is removed, without dying, as
+        soon as its position is outside the usable area (claim 10). Neither flight flag changes
+        this, since that removal ignores them. A pad-bound visiting type is the exception: T2's
+        after-the-row entry follows the visiting row as it follows every row, its pad search
+        finds no pad (it has no dock types), and the aircraft crashes at this fall-back (claim
+        46) instead of retreating.
+      - With ammunition left, the after-the-row entry does not apply (it needs no ammunition),
+        so a pad-bound visiting type is treated as any other visiting type here.
+      - With ammunition left after its target is lost, outside a team, it is in *hunt* (T2) and
+        keeps claim 17's edge destination while its hunt finds no target, so it flies toward
+        that cell; a target that the hunt finds starts a new run. With neither flight flag it is
+        removed, without dying, when its position leaves the usable area on the way, provided
+        it has entered the usable area at least once since it appeared, since it may then leave
+        the map now (claim 10); one that has never entered it is not removed there. With the fly-by or the fly-back flag it is not removed
+        at that border, only if its position leaves the map; what it does once it reaches the
+        edge cell is open (Open questions).
+
+      Where it is removed at that border, the time to its removal is its flight from where its
+      run ended to the border; no fixed delay applies.
+    - An aircraft that is not visiting is not removed: claim 10 removes only visiting aircraft and aircraft in
+      *retreat* for leaving the usable area. The fly-by flag changes nothing here. It fixes the
+      speed only while the aircraft holds its height (claim 5), and after its run this aircraft
+      does not (claim 6): it has no target or no ammunition, and its destination point lies at
+      the surface. The fly-back flag acts only on an aircraft that may leave the map now (claims
+      4 and 10).
+    - A pad-bound type with no dock types that is not visiting is the exception (the visiting
+      case is above). With its ammunition spent it crashes at this fall-back, by T2's after-the-row entry, since no pad can be found (claim
+      46). With ammunition left it keeps the edge cell in T2's resting behaviour for it (*guard*,
+      or *area guard* for a computer-controlled house outside a team) without a *move*, because
+      claim 33 queues *move* only for an aircraft that is not pad-bound. It flies to the edge
+      cell, does not land there (claim 6's pad-bound rule), falls back to rest again with the
+      same result, and stays above the cell.
+    - Backing: `measurable` (scenario AC29 parts b to d, human owner; T1's backing for the
+      strafer's destination; AC29 part g for a type that is not landable, except its hunt case
+      with a flight flag, and its part (3) for a pad-bound visiting type). The computer owner's *area guard* in flight, its queueing no *move*,
+      and its refused landings are `unmeasured`, as for T2's other computer rows (claim 18). The
+      hunt case of a type that is not landable with a flight flag, beyond the border, is
+      `unmeasured`.
+    - Confidence: medium for the replacement cell and its draws, the landing there, the
+      pad-bound exception and the crash of a pad-bound type without ammunition that it leads to,
+      the crash of a pad-bound visiting type without ammunition instead of its retreat, and a
+      type that is not landable, until AC29 runs; low for the computer case's repeated
+      landings (its *area guard* is rated in claim 18) and for the flagged hunt case beyond the
+      border.
+      High for no removal of an aircraft that is not visiting.
+
+46. **Nowhere to land (Q-1775).** An armed aircraft in flight that must return to a pad (pad-bound)
+    and that ends its run, or loses its pad, with no pad granting it contact crashes at that
+    fall-back, without first waiting in the air or landing elsewhere. Table T2 decides the
+    cases: one whose in-the-air answer is *no* (Terms) skips the row's own pad search, keeps its
+    destination and gets *guard* (*area guard* for a computer-controlled house outside a team).
+    With ammunition left, or while it holds a contact, it does not crash then. With its
+    ammunition spent and no contact, T2's after-the-row entry still makes a new pad search, as
+    after every row (claim 18): it then gets a pad it finds as destination, with *enter*, and
+    crashes when it finds none, like any other pad-bound aircraft in flight. By the same entry a
+    pad-bound type with no dock types crashes only with its ammunition spent (claim 45). The
+    crash comes:
+    - when its house has no building of any of its dock types (claims 18 and 21, T2),
+    - when every such building has no free contact place or does not accept it (claims 21 and
+      22): a pad that frees up later does not matter, since the crash has already begun,
+    - when the pad it flies to is sold during its approach, or ends its contact by a refusal then
+      (a case for which no set-up is known, and which with a behaviour queued at the refusal is
+      open, Open question 19), and no other pad grants contact (claim 32), with or without
+      ammunition left. A sale removes the
+      pad as the aircraft's destination, and a refusal that ends the contact clears the
+      destination when no behaviour is queued for it, both before the aircraft falls back to rest.
+      So T2's row for an aircraft already flying to its *enter* destination, which needs that
+      destination, does not keep it in *guard*: the pad search decides.
+
+    A helipad's destruction destroys every aircraft in contact with it instead, whether still
+    approaching or settled on it (claim 32). A destroyed pad that is not a helipad destroys only
+    contacts within claim 32's distance threshold; a surviving approaching aircraft has lost its
+    pad (T3's "pad is gone" row) and falls back as after a sale, so it crashes here when no other
+    pad grants contact.
+
+    Provisionally (medium until AC29 part f runs, as the confidence says), the crash begins with
+    the aircraft's destruction, without a hit: no damage is dealt and its health is set to 0.
+    That destruction is credited to nobody. It comes from no hit, so S-0302 claim 14, which
+    credits the hit that takes the last health, has no hit to credit; it is treated as a
+    destruction with neither an attacker nor an attacking house (S-0414 claim 21 for the
+    loss), so no house's count of units destroyed, score or
+    experience changes, while it counts once in all among its own house's units lost, as the
+    score screen shows them after the crash, unless its type is not scored (S-0414 claim 21).
+    The score screen's totals do not show at which moment of the crash that loss is counted, and
+    this spec does not fix it. A tag on the aircraft is expected to be raised then, as for
+    other destructions (destroyed-by-anything); S-0011 claim 19 does not list this destruction,
+    so this is unconfirmed. The crash has S-0312 claim 16's crash-start effects: its passengers are lost and three
+    tumbling draws are taken. As no hit kills it, it takes none of the effects that S-0312 gives
+    a killing hit (the shared death effects, such as debris, and claim 16's explosion-list
+    pick), neither at the start nor at impact. That includes a planted bomb (S-0519), which an
+    aircraft can carry from a planting while it stood on the ground: this destruction does not
+    set it off, unlike the detonation at the end of the shared effects (S-0312 claim 7). The bomb
+    stays attached, with its timer, while the aircraft falls on the map, so its timer (S-0519
+    claim 4) and the detonate order (S-0519 claim 9) can still set it off during the fall, by
+    S-0519 claim 5 at the aircraft's position at that moment. The timer test comes before the
+    aircraft's movement in its turn, so a bomb due in the tick of impact goes off before the
+    impact. A bomb that has not gone off by the impact is removed then, with no detonation, no
+    animation and no damage, as for a carrier removed other than by death (S-0519 claim 7),
+    under `quirks.crash_drops_planted_bomb`. It then falls as a dead aircraft, its fall counter
+    growing by 1 per tick (claim 9), and at impact its death weapon goes off and it leaves play, as
+    for an aircraft shot down (S-0312 claim 16), with nothing counted again. S-0312 claim 16's
+    demolition damage for a crash started without a kill does not apply to it: its health is
+    already 0 when it falls, so it is a shot-down aircraft in that claim's sense (Changes for
+    other specs). An aircraft with dock types that is
+    not pad-bound gets an F8 landing spot instead (T2), and one with no dock types follows claim
+    45. The owner being human- or computer-controlled changes none of these outcomes: it changes
+    only whether the target is forgotten (claim 17) and *guard* against *area guard* (T2).
+
+    An aircraft standing on its pad when the pad is sold is on the ground, so it does not crash.
+    T2's ground row makes it forget its target and destination and selects *guard* (*area guard*
+    in the computer case). With ammunition left that *guard* is queued. With none, T2's
+    after-the-row entry makes a new pad search first. When it finds a pad, the aircraft is given that pad and *enter*. When
+    it finds none and the type is pad-bound, the aircraft stays on the ground as it is: it does
+    not crash, since a crash starts only above the ground (claim 9). The ground row's forgetting
+    of target and destination stands, its *guard* is not queued, and its current behaviour does
+    not change (claim 18).
+    - Backing: `measurable` (scenario AC19 for a lost pad, its sale run for a crash with
+      ammunition left; AC29 part f for no pad from the start,
+      every contact place taken, the crash's health, fall and impact, a sale while it stands on
+      the pad with ammunition, the score screen's counts of units lost and destroyed, and the
+      absence of debris and of the explosion-list animation, each where the type has them).
+      `unmeasured` for an aircraft in flight whose in-the-air answer is *no* when it falls back
+      with its ammunition spent (a new pad search, and the crash when none is found): no set-up
+      here ends a pad-bound aircraft's run below that height. `unmeasured` for the tag raised at
+      the crash start, which no fixture here records, for a
+      refusal that ends the contact without a sale or a
+      destruction, since no set-up is known that makes a pad do that during an approach, and for
+      the case with a behaviour queued at that refusal, which is open (Open questions).
+      `unmeasured` for a sale while it stands on the pad without ammunition: its first service
+      step can come in its touchdown tick (claim 26), so no normal input sells the pad before
+      that step. `measurable` (AC29 part i) for a planted bomb kept through the crash start,
+      removed without effect at impact, and set off by a detonate order during the fall.
+      `unmeasured` for a bomb whose timer comes due during the fall, and for its order against
+      the impact in the impact tick: no normal input places the crash start against the bomb's
+      due tick.
+    - Confidence: high for the crash itself (T2's crash row, as committed, and AC19's lost-pad
+      runs), for a type that has dock types, with no building
+      of its dock types, with every such building full or not accepting, and after a sale of its
+      pad without ammunition left; a pad-bound type with no dock types is rated in claim 45. How
+      the crash starts and what it counts are not part of that high. Medium for health 0 at the start and the dead fall,
+      until AC29 part f runs, for the counts and the absent killing-hit effects, for the impact, as
+      S-0312 claim 16 rates its non-rocket impact rules, for the sale while it stands on the pad,
+      for its unchanged behaviour without ammunition, for the in-flight case whose in-the-air
+      answer is *no* (`unmeasured`), and for the crash with ammunition left after a sale, until
+      AC19's sale run runs. Low for the tag raised at the crash start and
+      for the crash and the destination cleared at a refusal without a sale (both `unmeasured`).
+      Medium for the planted bomb's handling, until AC29 part i runs, and for its timer during
+      the fall (`unmeasured`)
 
 ## Formulas
 
@@ -1341,7 +1790,9 @@ which decide the direction of travel. Firing attempts in this table use claim 20
 first passenger exists, rather than ordinary-shot effects; the run-level pending round and
 processing delays are unchanged. Drain attempts use S-0608 claims 1 and 16 instead of
 ordinary-shot effects. Claim 12's target-clearing departure overrides every firing row:
-no remaining burst attempts or scatter, *done*, 1 tick; any pending round is retained.
+no remaining burst attempts or scatter, *done*, 1 tick; any pending round is retained. Every
+processing of *approaching* first spends a pending round and turns the run lock off, whatever
+else it then finds; its rows below apply after that.
 
 | State | Event | Result |
 |---|---|---|
@@ -1349,18 +1800,19 @@ no remaining burst attempts or scatter, *done*, 1 tick; any pending round is ret
 | start | no target | *done*; 1 tick |
 | *choosing* | run lock off; the pending round is spent; target and ammunition left | the firing spot becomes the destination; *approaching* when it exists, else *done*; standard delay |
 | *choosing* | no target or no ammunition | *done*; standard delay |
-| *approaching* | pending round spent, run lock off; no target or no ammunition | *done*; standard delay |
+| *approaching* | no target or no ammunition, after the spend above (a strafer arriving from *strafe pass 5* included) | *done*; 1 tick |
 | *approaching* | strafer, target at or beyond weapon range | keep flying at the destination (row "steer") |
 | *approaching* | strafer, target within range; or fighter; or other aircraft whose current speed fraction is exactly 0 (claim 42; its zero-step switch-off alternative also applies here) | *firing*, the destination kept; 1 tick |
 | *approaching* (steer) | no destination | *choosing* |
 | *approaching* (steer) | distance to destination ≥ 512 | request the aiming facing toward the destination; 1 tick |
 | *approaching* (steer) | distance < 512 | request the aiming facing toward the target (the body is not turned); if distance ≥ 16, 1 tick; else the destination is cleared, the flight point kept, and *firing*; 1 tick |
-| *firing* | no target or no ammunition | *done* |
+| *firing* | no target or no ammunition | *done*; 1 tick |
 | *firing* | non-strafer requests body and aiming facing toward the target (claim 42 decides which request lasts); the firing check answers *ready* | full burst fired, a round becomes pending, scatter. Strafer: *strafe pass 2*, run lock on, one rate of fire. Otherwise fighter: run lock on, *choosing* (or *done* with no ammunition), one rate of fire. Other: *refiring*, 1 tick |
 | *firing* | answer *not facing* | no ammunition: *done*. Strafer or not close enough: *choosing*. Else fighter: *firing*; other: *choosing* with the re-approach flag on, *firing* with it off. 45 ticks for a strafer, else 1 |
 | *firing* | answer *rearming* | 1 tick |
 | *firing* | answer *cloaked* | uncloak; 1 tick |
 | *firing* | any other answer | no ammunition: *done*; strafer: 1 tick; other: *refiring* |
+| *refiring* | no target | *done*; 1 tick |
 | *refiring* | answer *ready* | one shot, scatter; ammunition left: *choosing* (flag on) or *firing* (flag off); else *done*; standard delay |
 | *refiring* | answer *cloaked* or *rearming* | uncloak when cloaked; standard delay |
 | *refiring* | any other answer | no ammunition: *done*; otherwise not close enough: *choosing*; otherwise *choosing* with the re-approach flag on, *firing* with it off. A strafer's *not facing* answer always chooses again and waits 45 ticks; all other cases use the standard delay |
@@ -1385,19 +1837,25 @@ no remaining burst attempts or scatter, *done*, 1 tick; any pending round is ret
 | in flight, armed, visiting, no ammunition | forgets target and destination; *retreat* |
 | in flight, armed, visiting, ammunition left, not in a team | *hunt* |
 | in flight, armed, and either *attack* is queued, or *attack* is current with ammunition left and a target | *attack* |
-| in flight, armed, and the in-the-air answer is no, or it is already flying to its *enter* destination, or it has no dock types, or it is outside the usable area in a team | *guard* |
+| in flight, armed, and the in-the-air answer is no, or it is already flying to its *enter* destination, or it has no dock types, or it is outside the usable area in a team | destination kept; *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team) |
 | in flight, armed, a pad is found and grants contact | destination: the pad; *enter* |
-| in flight, armed, no pad, pad-bound | crash |
+| in flight, armed, no pad, pad-bound | crash (claim 46) |
 | in flight, otherwise | destination: landing spot F8; *move* |
-| after the row: no ammunition, armed, no contact | a new pad search; found: destination the pad, target forgotten, *enter*; none and pad-bound: crash |
+| after the row: no ammunition, armed, no contact | a new pad search; found: destination the pad, target forgotten, *enter*; none and pad-bound: the row's next behaviour is not given and the current behaviour stays (target and destination stay as the row left them); in flight the aircraft crashes (claim 46), on the ground it does not (claim 9) |
 | after the row: holds a contact | *enter* |
+
+Claim 18 rates the computer-controlled *area guard* that T2's rows name. The after-the-row
+entries follow every row from the fourth on, the visiting rows included. So a pad-bound
+visiting aircraft in flight with no ammunition and no contact crashes when its pad search finds
+no pad, instead of taking the *retreat* that its row names (claims 45 and 46); with a pad found
+it gets that pad and *enter*.
 
 **T3. Pad servicing.** See claim 26. Aircraft events on the pad:
 
 | Aircraft state | Event | Result |
 |---|---|---|
 | flying to the pad (*enter*) | pad accepts, contact held | lands, put on its docking position; *sleep*, *guard* queued |
-| flying to the pad | pad refuses or is gone | falls back to rest |
+| flying to the pad | pad refuses or is gone | destination cleared and falls back to rest (claim 46): always when the pad is gone; on a refusal, when no behaviour is queued, Open question 19 otherwise |
 | settled in *sleep* | service step, ammunition not full | +1 round (with a target: none once at ⌊*A*/2⌋) |
 | settled in *sleep* | service step, full, damaged, house can pay, no target | repair step |
 | settled in *sleep* | service step, target held, ammunition at least ⌊*A*/2⌋ | no round, no repair, no release |
@@ -1409,6 +1867,9 @@ The state in the first column is the slot's state entering that pass. Thus the l
 an already-preparing row do not both apply to the same slot in its launch pass. The shared
 release decision of S-0506 claim 8 can still make a newly launched or already-preparing slot
 attacking in that same pass; it does not require either neighbour to have been reached.
+Between an attack run's end and the next pass, the slot aircraft's flight is claim 35's
+interval, not a row of this table. A visiting slot aircraft in *retreat* drops the *move* and
+*attack* that these rows queue, keeping their target and destination changes (claims 34 and 35).
 
 | Slot state | Event | Next state | Flight effect |
 |---|---|---|---|
@@ -1495,6 +1956,13 @@ attacking in that same pass; it does not require either neighbour to have been r
   change neither coordinate moves 1 lepton along the axis of its larger component, in that
   component's direction, x on equal magnitudes (F3); every other step is unchanged. This
   alternative is a design rule, not an oracle measurement.
+- **A crash drops a planted bomb** (`quirks.crash_drops_planted_bomb`, default on = original).
+  A bomb planted on a pad-bound aircraft that crashes at claim 46's fall-back without going off
+  during the fall is removed at impact with no effect, so its damage is lost. Off: at impact, in
+  the impact processing and before the death weapon, the bomb goes off by S-0519 claim 5 at the
+  aircraft's position, with its attacker and attacking house as S-0519 claim 5 gives them.
+  Nothing else in the crash changes. This alternative is a design rule, not an oracle
+  measurement.
 - **Damage smoke consumes game-state randomness** (`quirks.aircraft_smoke_scenario_draw`,
   default on = original). Claim 37's damage-smoke chance uses the scenario stream, including
   updates that show no smoke. This can change later game-state random outcomes, so it is not
@@ -1810,7 +2278,12 @@ listed in Open questions are not claimed confirmed by these scenarios.
   reserved but far away in approach. Expected: both aircraft are destroyed by S-0312 claim 17's
   contact damage, not retargeted to another pad. In separate runs sell a pad or lose a contact
   without destroying the aircraft; survivors seek another pad or crash if pad-bound and none
-  is obtainable. Record target destruction during a run: the run ends and a pending round is
+  is obtainable. Sale run with ammunition left: a pad-bound aircraft of a human-controlled
+  house with some but not all of its rounds is ordered onto its pad, the house's only pad, and
+  the pad is sold while the aircraft is still at least 10 cells from it. Record its behaviour,
+  destination and health each tick. Expected: at its fall-back it crashes (health 0, falling),
+  as claim 46 gives with ammunition left. Falsified if it rests in *guard* or keeps the pad's
+  cell as its destination. Record target destruction during a run: the run ends and a pending round is
   spent once. Use the named airborne-target test-map override to give the attacker a legal
   anti-air weapon, then assign an airborne target: expect the target to clear before processing
   despite its being alive and otherwise attackable. These outcomes distinguish contact destruction
@@ -1824,6 +2297,81 @@ listed in Open questions are not claimed confirmed by these scenarios.
   target. Clearing before full cloak, retaining an unsensed fully cloaked enemy, or clearing
   solely for cloak while allied or sensed falsifies the respective rule. Keep the target
   alive, on the ground and otherwise valid to isolate this test from the airborne rule.
+  **Q-1755 parts (a target that leaves the map).** Skirmish on open flat ground, human-controlled
+  test house, measurement harness with the random-state recorder. Named test rules: an armed,
+  landable aircraft type with dock types, neither strafer nor fighter, ammunition 2; the test
+  house has one free pad of its dock types. The test house also has an infantry unit 12 cells
+  from the aircraft and a closed transport next to that unit. An enemy house far away keeps the
+  game going and takes no part. Order the aircraft, by force-fire, to attack the test house's own
+  infantry unit. When the aircraft is two cells from its firing spot (its destination in T1's
+  *approaching*), order the infantry unit into the transport. Every order is the test house's
+  normal input to its own units. The target is the test house's own unit because the loss has
+  no owner, alliance or sensor exception (claim 32), so it stands for any target here. Record per tick for 600 ticks the
+  aircraft's target, behaviour, queued behaviour, destination, position, height and ammunition,
+  every shot, the tick in which the infantry unit leaves the map, and each draw with the object
+  it is attributed to; record the aircraft's targeting timer where the harness can read it.
+  - a. The game-wide re-approach flag off (named test rules). Expected: the
+    aircraft's target is empty from the tick in which the infantry unit leaves the map, in that
+    same tick. In that tick one *U*(4, 8) draw restarts the aircraft's targeting timer when that
+    timer had more than 10 ticks left, and none otherwise (when the timer cannot be read, only the
+    count of 0 or 1 is recorded and the condition is not judged). No shot, ammunition 2 throughout.
+    At the aircraft's next *attack* processing *done*, and 1 tick later, at the processing after
+    it, the run end:
+    the edge-cell draws of claim 17, then the pad as destination and *enter*, and a landing on the
+    pad. No firing-spot draw after the boarding. Any other movement of the aircraft between the
+    boarding and the run end is recorded. Falsified by: the target still held after the boarding
+    tick, a hold at the firing spot, a new firing spot chosen for the unit, a round spent or a shot.
+  - b. Part a with the game-wide re-approach flag on (named test rules). Expected: the same as part
+    a. Falsified by any difference from part a's result.
+  - c. Part a with the transport ordered to unload 100 ticks after the boarding. Expected: when the
+    unit is back on the map the aircraft does not hold it as target; it is already falling back by
+    part a's result (flying to its pad, or resting on it) and no *attack* starts against the
+    unit. Falsified by the unit becoming its target again, or a run against it.
+  - d. Part a with an open-topped transport. Expected: the same as part a. Falsified as part a.
+  - e. Part a with the test house's infantry unit of a type that can occupy buildings, and a
+    garrisonable neutral building next to it instead of a transport, the unit ordered to occupy it. Expected: the same as part a, from the tick in which the unit goes
+    inside. Falsified as part a.
+  - f. Part a with a vehicle of the test house, of a type a tank bunker accepts, as the target
+    (force-fire) and an empty tank bunker of the test house next to it, the vehicle ordered into
+    the bunker. Expected: the aircraft still holds
+    the vehicle as target after it is bunkered; the firing check's answers and the shots are
+    recorded, and only the retention is judged. Falsified by the target
+    being lost when the vehicle is bunkered.
+  - g. Part a with a harvester of the test house as the target (force-fire), ordered to dock at the
+    test house's refinery when the aircraft is two cells from its firing spot. Expected: the target is kept while the harvester
+    is docked (low: claim 32 and Open question 23). A loss at docking would show that a docked
+    harvester is off the map; either result settles that question.
+  - h. Part a without the aircraft: a ground vehicle of the test house, armed against infantry, is
+    ordered by force-fire to attack the unit from 12 cells away, and the unit is ordered into the transport
+    when the vehicle is 2 cells short of its weapon's range. Expected: the vehicle's target is empty from the boarding
+    tick, with part a's draw condition. What it does next is S-0215's and S-0309's, and is not
+    judged here. Falsified by the target still held after the boarding tick.
+  - i. A kill while the aircraft waits in *refiring* (claims 12, 15 and 32). Part a's aircraft
+    type, with a named test weapon whose burst is 3, whose projectile flies for at least 3 ticks
+    to the target, and whose rate of fire is longer than that flight. The target is the test
+    house's own infantry unit, of a named test type whose health is below one shot's damage,
+    attacked by force-fire; no transport is used. Record what part a records, plus each
+    projectile's creation tick and each hit. Expected: three shots in the firing tick, all
+    before the first hit; the target killed by the first hit while the aircraft is in
+    *refiring* (its firing check answering *rearming*); at the aircraft's next *attack*
+    processing *done*, and 1 tick later the run end; ammunition 2 then 1 (one round spent), no
+    shot after the kill. Falsified by fewer than three shots in the firing tick, a shot after
+    the kill, a spent amount other than one round, or a delay other than 1 tick between the
+    processing that gives *done* and the run end.
+  - j. A strafer's run after its fifth shot (claim 32, T1). Part a's set-up with a named test
+    aircraft type whose weapon strafes and whose projectile reaches the target in fewer ticks than
+    F6 gives for that type. The target is a vehicle of the test house, attacked by force-fire, of
+    a named test type; no transport is used. Record what part a records, plus each shot and hit.
+    Run 1: ammunition 2 and a target whose health only the fifth shot's hit takes away. Run 2:
+    ammunition 1 and a target that survives all five shots. Run 3: ammunition 2 and a target that
+    survives all five. A run in which the target dies at another shot is recorded and not judged.
+    Expected: in every run, F6 ticks after the fifth shot, the aircraft's ammunition drops by one
+    (the run's round spent). In runs 1 and 2, 1 tick later the run end of part a (the edge-cell
+    draws, then the pad as destination and *enter*), with no sixth shot and no new firing spot. In
+    run 3 the run goes on (it flies at the target, or fires again when within range), with no run
+    end in that tick. Falsified by: no ammunition drop at that tick, a drop other than one round,
+    a sixth shot or a new firing spot in runs 1 or 2, a delay other than 1 tick between the drop
+    and the run end in runs 1 or 2, or a run end in run 3 at that tick.
 - **AC20 Retreat and spy flight (claim 34).** Dispatch a spy plane and record ground target
   distance, behaviour, run lock, edge destination, processing ticks and exit. Expected: overfly
   begins below 769 leptons, approach cadence is the imported camera-frame count, and retreat
@@ -2161,6 +2709,154 @@ listed in Open questions are not claimed confirmed by these scenarios.
   and likewise reaches *done* after 1 tick without scatter. This constructed engine state
   is not an allowed way to prepare an oracle measurement.
 
+- **AC29 After the run (claims 17, 34, 35, 37, 45 and 46; Q-1756, Q-1775, Q-1776).** Skirmish on
+  open flat ground, human-controlled test house, measurement harness with the random-state
+  recorder. Record per tick each aircraft's behaviour, queued behaviour, destination, position,
+  height, ammunition, health and whether it exists, and attribute each draw.
+  - a. A stock armed, pad-bound aircraft type with one pad of its dock types attacks a durable
+    enemy vehicle 16 cells away until its ammunition is spent. Expected: in the processing that
+    ends the run, S-0522 claim 4's draws for one cell on the house's computed edge (two when that
+    edge is south), then the pad as destination and *enter*; the aircraft does not turn toward
+    the edge. Repeat with the house's construction yard placed so that its computed edge is
+    south. Falsified by: no such draws, a different count, or a flight toward the edge.
+  - b. Named test rules: an armed, landable aircraft type with no dock types, not pad-bound,
+    ammunition 1, with a converted speed of at least 20 so that claim 5's hover cannot stop it
+    short, produced or placed for the test house (selectable and landable, so not visiting). Order
+    the same attack. Record until 1500 ticks after its last round, 5 runs. Expected: at the run
+    end the draws of part a and a destination outside the usable area on the computed edge (on
+    flat ground S-0522 claim 4's no-acceptable-candidate case does not arise),
+    then *guard* and *move*; at that *move*'s first processing one *U*(0, 7) draw per radius from
+    radius 0 up to the first radius with an accepted cell, and that usable cell, a few cells
+    from the edge cell, as destination; flight to it, a landing there and rest in *guard*; not
+    removed, no crash, no hold above the target or the firing spot. Falsified by: no
+    replacement (a flight to the edge cell itself), a different draw count, a landing at or a
+    hold above the firing spot or the target, a removal or a crash.
+  - c. Part b once with the fly-by and fly-back flags on, and once with part b's named test
+    type also made pad-bound by the test rules, with its dock-types list left
+    empty, placed by the map for the test house. Expected: with the flags, the same
+    result as part b. Pad-bound, with its ammunition spent: a crash in the processing that ends its
+    run (as in part f). Pad-bound, with the vehicle destroyed by another unit before it fires:
+    claim 37's target-loss draw when the aircraft's targeting timer has more than 10 ticks left
+    at the kill, the edge cell kept, no *move* queued, a flight to the edge cell, no landing and
+    a hold above it for the rest of the record. Falsified by: a result that differs between flags off and on, or, for the pad-bound
+    type, a replacement cell, a landing or no crash as stated.
+  - d. Part b with the vehicle destroyed by another unit while the aircraft approaches, before
+    it fires. Expected: the same edge destination, edge-cell draws, replacement, flight and
+    landing as part b, with its ammunition unspent, and in addition claim 37's target-loss draw
+    when the aircraft's targeting timer has more than 10 ticks left at the kill.
+  - e. A stock strike called under S-0519 whose aircraft spends all its ammunition. Expected:
+    part a's draws at its run end and again at its first *retreat* processing. A different
+    count or order of edge draws falsifies claims 34 and 37. A strike whose target is destroyed
+    before its aircraft fire is not used: that loss cancels the strike (S-0519 claim 19).
+  - f. Part a's aircraft: (1) with its only pad sold during its run; (2) with every contact
+    place of its only pad taken by other aircraft of the type standing on it; (3) placed by
+    the map for a house with no pad; (4) standing on its pad with full ammunition when the pad
+    is sold. Expected: in (1) to
+    (3) the crash fall (claim 9) begins in the processing that ends its run, with health 0 on
+    its first tick, a fall counter growing by 1 per tick, and at impact its death weapon and no
+    demolition detonation; none of the debris of its type's own debris counts (S-0312 claim 4,
+    checked when the type has a positive maximum) and no explosion-list animation (checked when
+    the type's explosion list is not empty, S-0312 claim 16), at the crash
+    start or at impact. At the game's end the score screen shows the test house's units lost raised
+    by one for each crashed aircraft and no other house's units destroyed raised for them. In (4)
+    no crash, and *guard* on the ground. Falsified
+    by: waiting in the air, a landing elsewhere, positive health during the fall, a fall of 3 per
+    tick, a demolition detonation at impact, debris of its type's own debris counts, a crash not
+    counted as the test house's loss or counted as another house's kill, or a crash in (4).
+  - g. Part b's type made not landable (so visiting, Terms), with an enemy house that has no other
+    object its weapon can target: (1) ammunition spent on the vehicle; (2) the vehicle destroyed
+    by another unit before it fires; each once with no flight flag and once with the fly-by and
+    fly-back flags. Expected: in (1) the run-end draws, then *retreat* with a second set of edge
+    draws, a flight to that edge cell and removal without dying in the tick its position leaves
+    the usable area, with and without the flags; in (2) claim 37's target-loss draw when the
+    aircraft's targeting timer has more than 10 ticks left at the kill, *hunt* and a flight toward the run end's
+    edge cell, with and without the flags, and, without the flags, removal in the tick its
+    position leaves the usable area. With the flags, (2) predicts nothing once the aircraft
+    reaches the edge cell (claim 45, Open question 18): the run records its position and
+    behaviour each tick from then on, and that record judges nothing here. Falsified by: a
+    landing, a hold above the target or the firing spot, a crash, no flight toward the edge cell,
+    or no removal in (1) or in (2) without the flags. (3) Cases (1) and (2) again, with no flight
+    flag and part g's type also made pad-bound (named test rules). Expected: in (1) a crash
+    (health 0, falling) at the run end's fall-back, after the run-end draws, with no *retreat*
+    and no flight to a second edge cell; in (2) part (2)'s result, with no crash. Falsified by a
+    *retreat* or a removal in (1), or a crash in (2). If the
+    enemy house is defeated before the aircraft's run ends, the part is void.
+  - h. AC21's carrier set-up, on water well inside the usable area so that no slot aircraft
+    leaves it before a launch pass (claim 10), with named test rules: the carrier's slot type is
+    made not selectable (so its slot aircraft are visiting, Terms), otherwise unchanged. The
+    carrier attacks a durable enemy vehicle in range; then the same with the vehicle destroyed
+    by another unit while a slot aircraft approaches it. Record each slot aircraft per tick,
+    with the launch passes (S-0506 claim 2).
+    Expected: at a run end with its ammunition spent, the run-end draws, then *retreat* with
+    target and destination forgotten; a second set of edge draws only when a *retreat*
+    processing comes before the next pass; at that pass the spawner as destination, no target,
+    no *move* queued and *retreat* still current (claims 34 and 35). With the target lost and
+    ammunition left: *hunt*, and at the next pass T4's *move* toward the spawner. From then on
+    the record judges nothing (Open question 22). Falsified by: *guard*, *area guard* or a *move*
+    toward a replacement cell after a run end, or *move* current after the pass while the
+    aircraft was in *retreat*.
+  - i. Part f (1)'s set-up with named test rules: the timed-bomb detonate permission on, a
+    game-wide bomb delay longer than the whole record, and a game-wide bomb damage that differs
+    from the aircraft's death-weapon damage. A durable test vehicle of the test house stands
+    beside the expected impact cell, and its health is recorded per tick. While the aircraft
+    stands on its pad before the attack, a bomb planter of the test house plants a bomb on it,
+    as S-0519 scenario T9 plants on an own object. Record per tick whether the bomb is attached,
+    its icon, the ticking sound and every detonation with its position. (1) Let the crash run
+    to impact. (2) Repeat, giving the detonate order during the fall; this is an attempt, and
+    the run is reported unreached if the order does not land between the crash start and the
+    impact. Expected: in (1) the bomb stays attached and ticking from the crash start through
+    the fall, no bomb detonation at the crash start, during the fall or at impact, and at impact
+    the bomb, its icon and its sound end with no bomb damage to the test vehicle (only the death
+    weapon's); in (2) one bomb detonation at the aircraft's position in the air in the order's
+    tick, then the impact as in part f. Falsified by: a bomb detonation at the crash start, a
+    bomb detonation or bomb damage at impact in (1), the bomb gone before the impact in (1), or
+    no detonation in (2) when the order landed during the fall.
+
+## Changes for other specs
+
+- **S-0215 claim 7.** Its queueing table has no row for this aircraft rule: an aircraft that is
+  not a strike aircraft and is in *retreat*, *paradrop approach*, *paradrop overfly*,
+  *spy-plane approach* or *spy-plane overfly* ignores entirely a request to queue any behaviour
+  outside those five (claim 34). Claim 7 could add it as a first row for aircraft.
+
+- **S-0215 claim 26.** Its rows, its table and its delay, with *k* = 2 for aircraft (scenario
+  B10, case i, an aircraft standing landed), reach an aircraft's *area guard* only below the
+  aircraft's flight height and only when no held target makes it queue *attack* (1 tick).
+  At exactly its flight height an aircraft's *area guard* processing is instead this spec's
+  fall-back to rest, with a delay of 1 tick; below that height an armed aircraft with its
+  ammunition spent and no contact makes the same fall-back first, in the same processing
+  (claims 18 and 45, table T2). S-0215 claim 26 should say so.
+- **S-0309, holding a target.** No approved spec states the plain loss of a target object for an
+  actor whose behaviour is not overridden. Every actor (vehicle, infantry, aircraft, building)
+  holds no target from the moment its target object is killed (at the killing hit), leaves the
+  map (any transport, a building as occupant) or is removed, wherever in the tick that falls,
+  also during another object's turn, with no owner, alliance or sensor exception. When the object
+  starts to cloak or goes underground, the same loss applies with S-0215 claim 10's own-house
+  and sensor exceptions. At the loss, if the actor's targeting timer has more than 10 integer
+  ticks left, one *U*(4, 8) scenario-stream draw restarts it first, except while the scenario is
+  being set up; it is the same draw S-0309 gives at the phasing-in end. S-0215 claim 10's
+  revert follows in the same moment, and S-0615 claim 14 and S-0207 claim 20 e list the same
+  events for their own losses. A unit in a tank bunker stays on the map and is not lost (S-0606).
+  S-0309 could state this as its target-holding rule; claim 32 and AC19's Q-1755 part h use it.
+  What this spec backs: the loss for an aircraft (claim 32, AC19) and for a ground vehicle (AC19
+  part h), at a boarding, an occupation and a kill. The same loss for infantry and buildings, and
+  the cloak and underground losses, are `unmeasured` here: no scenario of this spec sets them up.
+  They are taken to follow the same loss, with no difference by the actor's kind, and are
+  rated medium; S-0309's revision would back them itself.
+- **S-0312 claim 16.** Its demolition damage for "a crash started without a kill" does not reach
+  the fall-back crash of claim 46 here: that crash sets the aircraft's health to 0 at its start
+  without a hit, so the aircraft falls and strikes the ground as one shot down. Its destruction is
+  credited to nobody and counted among its house's losses, and it takes no
+  killing-hit effects. Claim 16 could name this crash among those that start dead.
+- **S-0519 claims 5 to 7 and its state table, and S-0312 claim 7.** A carrier destroyed without a
+  hit, as by claim 46's fall-back crash here, has no shared death effects, so its planted bomb
+  does not detonate at the destruction. The bomb stays attached while the carrier stays on the
+  map: during the aircraft's fall its timer and the detonate order still set it off by S-0519
+  claim 5. If it has not gone off by the impact, it is removed then with no effect, as in the
+  row "carrier removed other than by death" (`quirks.crash_drops_planted_bomb` here). S-0519's
+  row "carrier dies on the map" could say "dies from a killing hit", with this case as a separate
+  row. Backed by AC29 part i here.
+
 ## Open questions
 
 1. Q-0630 is answered by claims 12 and 39; no firing-spot geometry question remains.
@@ -2172,7 +2868,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
    claim 42's aiming request. Do not infer height stages from the take-off rules.
 5. Q-0634 is answered by claim 41 and F8 with S-0212 claim 25a for footprint qualification,
    unchanged result cells and candidate choice. Equal-distance fallback objects favour
-   earliest creation; map-edge destinations are claims 34 and 37 with S-0522 claims 4 and 5.
+   earliest creation; map-edge destinations are claims 17, 34 and 37 with S-0522 claims 4 and 5.
 6. Q-0633 is answered by claim 4.
 7. The landing test's selection among multiple ground-layer occupants remains unresolved
    (F7). Single-occupant outcomes are specified.
@@ -2209,3 +2905,41 @@ listed in Open questions are not claimed confirmed by these scenarios.
     29778 with a side distance near 47 from a 5120-lepton start; facing 32076 and side
     distance 11 are the result with `quirks.chop_rounding` off. AC26 measures the drift
     directly.
+16. For a *move* accepted while the aircraft has a target and ammunition left, whether claim 6's
+    height replacement then differs from claim 40's earlier acceptance of the destination was not
+    traced. It does not affect Q-1756's settled answer: that answer is about which destination
+    cell is kept or replaced (claim 40), and claim 6's replacement changes only the height of the
+    flight point held over that cell, not the cell.
+17. Whether a strike aircraft's run can end with ammunition left without its strike being
+    cancelled first (claim 34), and, for a cancelled strike, whether its aircraft's run end or
+    its *retreat* picks the edge cell.
+18. Q-1776 questions 2 and 3 for an aircraft that is not landable, in *hunt* with ammunition
+    left and a flight flag (claim 45): what it does once it reaches claim 17's edge cell, and
+    whether it then leaves the map; and, for question 3, the computer-controlled owner's case of
+    claim 45, whose *area guard* and repeated landings are `unmeasured` (claim 45).
+19. A pad that ends an approaching aircraft's contact by a refusal while a behaviour is queued for
+    the aircraft (claim 46): whether the destination is kept and the queued behaviour starts
+    instead of the fall-back to rest. No set-up is known that makes a pad refuse an approaching
+    aircraft in this way.
+20. A carrier slot aircraft that is not visiting, between its attack run's end and the next
+    launch pass (claims 17 and 35): whether a slot type with no dock types can reach and land on
+    claim 40's replacement cell before that pass (T4), and how a slot type with dock types
+    fares in that interval. The interval is
+    at most 10 ticks, and AC21 does not record the slot's destination in it.
+21. A computer-controlled house's armed aircraft with no dock types, outside a team, in *area
+    guard* below its flight height (claim 45): S-0215 claim 26's search there can give it a
+    target, and a later processing below that height that finds it still holding the target
+    queues *attack*; whether it keeps that target, and what that *attack* does with
+    the edge cell as destination, and with its ammunition spent, was not traced.
+22. A visiting carrier slot aircraft that stays in *retreat* with its spawner as destination
+    (claim 35): whether it lands on its spawner and is taken off the map as T4's returning rows
+    describe, and whether its *retreat* persists into its next sortie, where it would drop T4's
+    *move* and *attack* as well. Not traced; AC29 part h records it.
+23. Q-1755, the part left open (the Summary lists what claim 32 answers): whether a harvester
+    docked at a refinery stays on the map, which no trace here confirms (claim 32, low; AC19's
+    Q-1755 part g).
+24. An aircraft whose weapon has the suicide flag takes its own hit at the first shot of its
+    burst, and dies of it unless S-0519's edge case of a suicide firer that survives its own hit
+    applies (claim 32). What its further burst attempts and the scatter then do, and whether
+    its death's detonation can reach the target before the burst ends, was not traced. No
+    scenario here gives an aircraft a suicide weapon.
