@@ -1622,7 +1622,35 @@ fn bolts(lane: &mut Lane, kind: Kind) {
         enemy,
         CellXY::new(at.x + 4, at.y),
     );
+    if kind == Kind::Building {
+        // Power for the building: the strongest power plant type, west of it.
+        let plant = {
+            let r = lane.world().rules();
+            (0..r.buildings.len())
+                .filter(|&p| r.buildings[p].raw.econ.power.unwrap_or(0) > 0)
+                .max_by_key(|&p| {
+                    (
+                        r.buildings[p].raw.econ.power.unwrap_or(0),
+                        std::cmp::Reverse(p),
+                    )
+                })
+                .map(|p| (r.buildings[p].name.clone(), r.buildings[p].foundation))
+        };
+        if let Some((pname, psize)) = plant
+            && let Some(p) = lane.area(CellXY::new(at.x - 5, at.y), psize, 2, |l| {
+                l != land::WATER && l != land::ROCK
+            })
+        {
+            lane.spawn(Kind::Building, &pname, local, p);
+        }
+    }
     lane.ticks(2);
+    if kind == Kind::Building {
+        println!(
+            "{key}: building {name}; in operation {}",
+            glasnost_sim::econ::power::in_operation(lane.world(), a)
+        );
+    }
     lane.look_at(CellXY::new(at.x + 2, at.y));
     let n = if kind == Kind::Building {
         lane.world_mut().obj_mut(a).unwrap().target = Some(glasnost_sim::world::Target::Object(t));
