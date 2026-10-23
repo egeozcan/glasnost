@@ -10179,6 +10179,21 @@
           "type": "boolean",
           "default": true
         },
+        "shrapnel_building_per_cell": {
+          "description": "A building takes a fragment in every visited cell where it is first-listed; off: each object takes at most one fragment from one burst's scan.",
+          "type": "boolean",
+          "default": true
+        },
+        "shrapnel_first_listed_only": {
+          "description": "Only the first-listed object of a visited cell can take a fragment, so an own or allied object listed first blocks the cell; off: the first object in listing order that passes the test.",
+          "type": "boolean",
+          "default": true
+        },
+        "shrapnel_hits_terrain": {
+          "description": "Terrain objects, which have no owning house, take fragments; off: objects without an owning house are not candidates.",
+          "type": "boolean",
+          "default": true
+        },
         "shroud_negative_odd_pair": {
           "description": "An odd negative height count in the shroud point test reads the cell pair one cell toward map north-west (k = (u + 3)/2); off: k = (u + 1)/2 for every odd u. No effect while the renderer's shroud_on_flat_grid is off, which the simulation never models.",
           "type": "boolean",
