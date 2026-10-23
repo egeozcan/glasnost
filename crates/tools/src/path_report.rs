@@ -842,7 +842,8 @@ pub fn analyse(b: &Bundle, inputs: &Inputs, o: &Options) -> Result<Analysis, Ref
                     ..
                 }
             )),
-            count(&|w| matches!(w, What::GaveUp)),
+            // A give-up of a move and one after a failed computation.
+            count(&|w| matches!(w, What::GaveUp | What::Failed { gave_up: true, .. })),
             count(&|w| matches!(w, What::AskedRoom { .. })),
             count(&|w| matches!(w, What::Asked { .. })),
         );
@@ -940,13 +941,16 @@ fn event_text(n: &Noted, _samples: &[Sample]) -> String {
             {
                 let _ = write!(s, ", run as {m:?}");
             }
+            // The trace has the cell searched for only when a path was
+            // stored; a failed computation names the destination asked for,
+            // and nothing is said about substitution.
             let _ = write!(
                 s,
                 ") from {} to {}",
                 cell_text(*from),
-                to.map_or_else(|| "no cell".into(), cell_text)
+                to.or(*goal).map_or_else(|| "no cell".into(), cell_text)
             );
-            if goal.is_some() && goal != to {
+            if to.is_some() && goal.is_some() && goal != to {
                 let _ = write!(
                     s,
                     " (the destination {} was substituted)",
@@ -1483,4 +1487,53 @@ fn picture(
         y += line_h;
     }
     glasnost_app::mapview::png::png(width as u32, height as u32, &cv.rgba)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use glasnost_sim::path::Mode;
+
+    fn search_event(goal: CellXY, to: Option<CellXY>, result: Search) -> Noted {
+        Noted {
+            event: Event {
+                tick: 1,
+                unit: ObjectId(1),
+                what: What::Search {
+                    asked: Mode::Fresh,
+                    mode: Some(Mode::Fresh),
+                    from: CellXY::new(1, 1),
+                    goal: Some(goal),
+                    to,
+                    congested: Vec::new(),
+                    corridor: Some(true),
+                    searches: Vec::new(),
+                    result,
+                    steps: if to.is_some() { vec![2] } else { Vec::new() },
+                },
+            },
+            blockers: Vec::new(),
+        }
+    }
+
+    // A failed computation names the destination asked for and says nothing
+    // of substitution (pathing report 1 read "to no cell (the destination
+    // ... was substituted)" for every failure).
+    #[test]
+    fn a_failed_computation_names_its_destination() {
+        let t = event_text(
+            &search_event(CellXY::new(5, 6), None, Search::SearchFailed),
+            &[],
+        );
+        assert!(t.contains("from (1,1) to (5,6): "), "{t}");
+        assert!(!t.contains("substituted"), "{t}");
+        let t = event_text(
+            &search_event(CellXY::new(5, 6), Some(CellXY::new(4, 6)), Search::Found),
+            &[],
+        );
+        assert!(
+            t.contains("to (4,6) (the destination (5,6) was substituted)"),
+            "{t}"
+        );
+    }
 }
