@@ -287,7 +287,10 @@ pub fn native_files(dir: &std::path::Path) -> Result<Vec<PickedFile>, String> {
             .rsplit_once('.')
             .map(|(_, x)| x.to_ascii_lowercase())
             .unwrap_or_default();
-        let source: Rc<dyn ByteSource> = if archive_ext.contains(&ext) {
+        // The settings file is opened too: it is read only as a loose file
+        // (S-0005 claim 5), for the music's shuffle and repeat (S-0703).
+        let settings = name.eq_ignore_ascii_case(glasnost_audio::music_files::SETTINGS_FILE);
+        let source: Rc<dyn ByteSource> = if archive_ext.contains(&ext) || settings {
             match FileSource::open(&e.path()) {
                 Ok(f) => Rc::new(f),
                 Err(_) => continue,

@@ -50,7 +50,7 @@ glasnost-rtc.workspace = true
 js-sys = "0.3"
 wasm-bindgen = "=0.2.129"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Document", "DomStringMap", "Element", "File", "FileList", "HtmlElement", "HtmlInputElement", "Performance", "Storage", "Window"] }
+web-sys = { version = "0.3", features = ["Blob", "Document", "DomStringMap", "Element", "File", "FileList", "FileSystemDirectoryHandle", "FileSystemFileHandle", "FileSystemGetDirectoryOptions", "FileSystemGetFileOptions", "FileSystemHandle", "FileSystemWritableFileStream", "HtmlElement", "HtmlInputElement", "Navigator", "Performance", "Storage", "StorageManager", "Window", "WritableStream"] }
 
 [lints]
 workspace = true
