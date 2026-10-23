@@ -1,4 +1,4 @@
-//! Audio: sound effects, voices and announcements (M5b), and the asset
+//! Audio: sound effects, voices and announcements (M5b), music (M8), and the asset
 //! viewer's previews (M1).
 //!
 //! The pipeline, front to back:
@@ -19,7 +19,10 @@
 //! 5. [`output::Output`]: streams the mix to a device: WebAudio on wasm32,
 //!    a command-line player's pipe natively with feature `native-output`,
 //!    or nothing.
-//! 6. [`Audio`]: what the game client calls every frame
+//! 6. [`music::Music`]: the music database's track list and the
+//!    next-track rule of S-0703, streaming the picked track to the mixer's
+//!    music voice.
+//! 7. [`Audio`]: what the game client calls every frame
 //!    ([`Audio::tick`], [`Audio::selected`], [`Audio::ordered`],
 //!    [`Audio::key`], [`Audio::cue`], [`Audio::set_view`],
 //!    [`Audio::frame`], [`Audio::resume`]).
@@ -31,6 +34,7 @@ pub mod bank;
 pub mod catalog;
 pub mod events;
 pub mod mixer;
+pub mod music;
 pub mod names;
 pub mod output;
 #[cfg(all(not(target_arch = "wasm32"), feature = "native-output"))]

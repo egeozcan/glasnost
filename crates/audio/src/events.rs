@@ -27,6 +27,7 @@ use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 use crate::bank::SoundBank;
 use crate::catalog::{EntryId, FULL, SoundCatalog};
 use crate::mixer::{InstanceId, MixQuirks, Mixer, Prepared, View, Where};
+use crate::music::Music;
 use crate::names::{Announcement, SoundNames, TypeSounds};
 use crate::output::{Output, OutputState};
 use crate::speech::{Announcer, Requested, SpeechCatalog, voice_set};
@@ -184,6 +185,27 @@ pub struct Audio {
     /// The names of the announcements started since the client last took
     /// them, oldest first (for its captions, M8 step C3).
     started: Vec<String>,
+    /// The music player (S-0703), when the install has a music database.
+    music: Option<Music>,
+    /// The game's side names (S-0004 claim 1), for the music's side
+    /// restrictions (S-0703 claim 2).
+    sides: Vec<String>,
+}
+
+/// The side of the local player's country (S-0004 claim 9), by index.
+pub fn local_side(w: &World, local: Option<HouseId>) -> Option<usize> {
+    local
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .and_then(|h| {
+            w.rules()
+                .econ
+                .tech
+                .country_side
+                .get(h.country as usize)
+                .copied()
+                .flatten()
+        })
+        .and_then(|s| usize::try_from(s).ok())
 }
 
 /// The voice set of the local player's house (0 Allied, 1 Soviet, 2 Yuri;
@@ -240,6 +262,8 @@ impl Audio {
             low_power: false,
             now_ms: 0,
             started: Vec::new(),
+            music: None,
+            sides: Vec::new(),
         }
     }
 
@@ -303,6 +327,37 @@ impl Audio {
         self.mixer = Mixer::new(self.output.rate(), 1, mix_quirks(&q));
     }
 
+    /// Sets the music player (S-0703), or none.
+    pub fn set_music(&mut self, music: Option<Music>) {
+        self.music = music;
+        self.mixer.set_music(None);
+    }
+
+    /// The music player.
+    pub fn music(&self) -> Option<&Music> {
+        self.music.as_ref()
+    }
+
+    /// The music player, to change it.
+    pub fn music_mut(&mut self) -> Option<&mut Music> {
+        self.music.as_mut()
+    }
+
+    /// Sets the side names of the next game (S-0004 claim 1: the sides as
+    /// built for that game), which the music's side restrictions are
+    /// matched against (S-0703 claim 2).
+    pub fn set_sides(&mut self, sides: Vec<String>) {
+        self.sides = sides;
+    }
+
+    /// Stops the music (the game is left; Q-1833).
+    pub fn stop_music(&mut self) {
+        if let Some(m) = self.music.as_mut() {
+            m.stop();
+        }
+        self.mixer.set_music(None);
+    }
+
     /// The mixer (offline rendering, tests, volume).
     pub fn mixer_mut(&mut self) -> &mut Mixer {
         &mut self.mixer
@@ -327,6 +382,10 @@ impl Audio {
         self.radar_map = minimap::grid(w).map(|g| (g, minimap::image(&g)));
         self.low_funds_after = None;
         self.low_power = false;
+        let side = local_side(w, local);
+        if let Some(m) = self.music.as_mut() {
+            m.start_game(&self.sides, side);
+        }
     }
 
     /// The voice set in use (0 Allied, 1 Soviet, 2 Yuri).
@@ -367,7 +426,7 @@ impl Audio {
 
     fn serve(&mut self, now_ms: i64) {
         self.now_ms = now_ms;
-        self.mixer.service(now_ms);
+        let pass = self.mixer.service(now_ms);
         if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
             // Kept for captions whether or not its file plays: a player
             // without sound still reads it.
@@ -383,6 +442,26 @@ impl Audio {
             // spec: S-0701 claim 35 (neither the master level nor the sound volume option applies; the voice option is at full: our engine has no options screen)
             if let Some(clip) = self.voices.clip(&file).filter(|c| c.frames() > 0) {
                 self.mixer.speak(clip);
+            }
+        }
+        self.serve_music(pass, now_ms);
+    }
+
+    /// The music: a read that finished starts its track; at a pass, the
+    /// music update (S-0703 claim 10).
+    fn serve_music(&mut self, pass: bool, now_ms: i64) {
+        let Some(m) = self.music.as_mut() else {
+            return;
+        };
+        let rate = self.mixer.output_rate();
+        if let Some(v) = m.poll(rate) {
+            self.mixer.set_music(Some(v));
+        }
+        // spec: S-0703 claim 10 (one music update at the end of every audio pass, after that pass's sound choices; its draws take the same unsynchronised stream)
+        if pass {
+            let half_span = self.quirks.ranged_draw_half_span;
+            if let Some(v) = m.update(now_ms, self.mixer.rng_mut(), half_span, rate) {
+                self.mixer.set_music(v);
             }
         }
     }
