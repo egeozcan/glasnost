@@ -13,7 +13,8 @@ score screen) and when the person leaves the game is open (S-0703 Open questions
 6 and 7). The client switches to its end screen as soon as play ends.
 
 Code: `crates/app/src/game/client.rs` (`Client::update`, which services the audio only on the game
-screen) and `crates/audio/src/events.rs` (`Audio::start`).
+screen and stops the music when play ends or the game is left) and `crates/audio/src/events.rs`
+(`Audio::start`, `Audio::stop_music`).
 
 ## Questions
 1. When a skirmish is won or lost, does the playing track go on, stop, or give way to another
@@ -29,7 +30,8 @@ through the score screen; then leave a second skirmish from the options menu whi
 then open the options menu just before a track ends and wait there for one track length.
 
 ## Current workaround
-Music is heard only on the client's game screen: when play ends or the person leaves, the audio is
-no longer serviced, so the track stops and no pick is made; the next game starts afresh
-(Q-1830). With the options menu open the audio is serviced as for sound, so the track plays on
-and picks go on. Marked `// Q-1833 (interim: ...)`.
+Music is heard only while the game is played: when play ends or the person leaves, the client
+stops the music and no pick is made; the next game starts afresh (Q-1830). With the options menu
+open the audio is serviced as for sound, so the track plays on and picks go on. On our own
+settings screen opened from the game the audio is not serviced, as for sound: the playing track
+sounds to its end and the next pick waits for the return to the game. Marked `// Q-1833 (interim: ...)`.

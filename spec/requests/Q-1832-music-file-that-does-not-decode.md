@@ -14,7 +14,7 @@ sound file name that already ends in the extension (claim 1a, Q-1700 question 3)
 decide what a pick of such an entry does.
 
 Code: `crates/audio/src/music.rs` (`Music::update`, `Music::loaded`) and
-`crates/app/src/game/install.rs` (`music_files`).
+`crates/audio/src/music_files.rs` (`VfsTracks::find`).
 
 ## Questions
 1. A track entry whose sound file is found but is not a sound file the game can play (a damaged

@@ -12,8 +12,8 @@ S-0703 reads the shuffle and repeat settings from the settings file's `[Audio]` 
 absent (Open questions, Q-1700 question 4). S-0005 claim 5 says a missing settings file means
 defaults. The client must play with some value of each.
 
-Code: `crates/app/src/game/install.rs` (`music_settings`) and `crates/audio/src/music.rs`
-(`MusicSettings`).
+Code: `crates/audio/src/music_files.rs` (`InstallMusic::read`, with `Vfs::loose_only` in
+`crates/vfs/src/game.rs`) and `crates/audio/src/music.rs` (`MusicSettings`).
 
 ## Questions
 1. With no settings file, or a settings file without `[Audio]` `IsScoreShuffle`, is the next track
