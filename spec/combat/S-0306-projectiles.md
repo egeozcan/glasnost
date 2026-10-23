@@ -2,11 +2,11 @@
 id: S-0306
 title: Projectiles (launch, flight, homing, scatter, detonation)
 topic: combat
-revision: 34
+revision: 38
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0071, Q-0077, Q-0078, Q-0083, Q-0160, Q-1405, Q-1570, Q-1761, Q-1763]
 supersedes: []
@@ -36,6 +36,21 @@ building's pending delayed shot, which the committed text left unstated: its *re
 of the two rows and of every other row of the claim (S-0301 claims 9 and 14). And a building in
 *attack* that holds such a target keeps it until the end of a pending delayed shot instead of
 dropping it at once (S-0301 claim 14).
+
+This revision also takes up the shrapnel fragments of S-0318. A fragment is not a shot: claim 1's
+shot speed, claim 2's cap and claim 6's pitch do not apply to it, which narrows the committed
+claim 6's "every projectile, whatever its kind" (S-0318 claims 5 and 6). Claim 20's (c) does not
+move the point from which a burst's fragments leave (S-0318 claim 1). Against revision 35, revision 36 changes no
+behaviour: it excepts fragments from claims 5, 7 and 8 as well, says which part of the launch
+S-0318 claim 6 replaces, and rests claim 20's burst-point bullet on S-0318.
+Against revision 36, revision 37 changes no behaviour: claim 3 points to claim 5's fragment
+exception, claim 2 and Open questions list a steering or vertical fragment's start speed as open,
+and claim 20's burst-point sentence becomes a note on (c).
+Against revision 37, revision 38 changes no behaviour of a shot: State and ordering's first turn of
+a projectile whose first turn a removal costs is now in tick *n* + 1 or later, since a fragment that
+loses its first turns to removals has its first turn at *n* + 2 or later (S-0318 claim 5), where the
+committed text had tick *n* + 1 only. Claim 6 opens with "every projectile except a fragment", and
+claim 1's fragment sentence moves from the bullets into the claim's text.
 
 ## Terms
 
@@ -93,8 +108,9 @@ has the trigger action that raises one). From S-0307: *airborne*, *floor-bound*,
   speed.
 - **Weapon speed** *S*_w. The weapon's speed field as it stands once the rules are loaded: the
   imported field (Import mapping), except for a weapon whose projectile has ρ = 0, where it is the
-  arc speed *v*(*R*₀, *g*) of claim 1, with *g*_f in place of *g* for a floater projectile. It matters in two places only: the top speed of a steering or vertical
-  projectile (claims 2, 11, 12) and the speed of the children of an airburst (claim 21).
+  arc speed *v*(*R*₀, *g*) of claim 1, with *g*_f in place of *g* for a floater projectile. It matters in three places only: the top speed of a steering or vertical
+  projectile (claims 2, 11, 12), the speed of the children of an airburst (claim 21) and the
+  speed of a fragment of S-0318 (claim 1).
 - **Arc speed** *v*(*L*, *g*). trunc(*r*(RZ₅₃(RZ₅₃(*L* × *g*) × 1.2))) leptons per tick (F2). It is the
   launch speed that lets an arc reach a little more than *L* on flat ground.
 - **Reachability test.** Whether a projectile launched at speed *v* under gravity *g* can reach a
@@ -202,24 +218,30 @@ S-0501 claim 20.
    for example Δ = (51200, 0), 200 cells along the map *x* axis, gives *n* = −1673527296 and
    *d* = 40908 instead of 51200. The gravity is *g*_f for a floater projectile, else *g*. The
    imported speed field plays no part. With ρ ≠ 0 (steering, or a negative ρ) the shot speed is the
-   weapon's speed field.
+   weapon's speed field. A fragment of S-0318 is not a shot: its speed is the fragment weapon's
+   weapon speed *S*_w below, without this claim's shot speed or claim 2's cap (S-0318 claim 5).
    - **Weapon speed.** For a weapon whose projectile has ρ = 0 the weapon speed *S*_w of Terms is
      *v*(*R*₀, *g*), *R*₀ being the weapon range of S-0307 and *g* as above (*g*_f for a floater
      projectile), both as they stand once every rules layer has been applied. No speed value that
      any rules layer gave such a weapon has any effect. *S*_w matters only for the
      top speed of a vertical projectile (which has ρ = 0 unless the data gives it a negative turn
-     rate, since a positive one makes it steering, Terms; claims 2 and 11) and the speed of airburst children (claim 21). A steering projectile has
+     rate, since a positive one makes it steering, Terms; claims 2 and 11), the speed of airburst children (claim 21) and the speed of a fragment (below; S-0318 claim 5). A steering projectile has
      ρ > 0, so its top speed is the imported field (claim 12).
    - Backing: `measurable` (scenario P1; run d for a floater projectile; the replacement through P8
      run c; P39 for the wrapping sum, on a purpose-made map more than 200 cells long with a weapon of
-     unlimited range)
-   - Confidence: high; medium for the wrapped distance (the conversion of the wrapped sum to |*n*|)
+     unlimited range). The fragment sentence is not backed here: it rests on S-0318 claim 5, which
+     has a fragment's speed `unmeasured` (an invisible fragment's speed has no effect)
+   - Confidence: high; medium for the wrapped distance (the conversion of the wrapped sum to |*n*|); low
+     for a fragment's speed, which rests on S-0318 claim 5 and is rated low there
 
 2. **Launch speed limits.** The shot speed is capped at half the spatial distance to the impact
    point: the capped speed is min(*s*₁, trunc(*d*₃(*F*, *Q*) / 2)), *d*₃ (Terms) being taken from the
    fire point *F* to the impact point *Q*. The *start speed* (Terms) is this capped speed, except
    that a steering or vertical projectile whose firer type has no radial fire segments (Import
-   mapping) starts at 1; with radial fire segments it keeps the capped speed. In the claims and
+   mapping) starts at 1; with radial fire segments it keeps the capped speed. A fragment of S-0318
+   is not capped (claim 1; S-0318 claim 5). Whether a fragment whose projectile type is steering or
+   vertical starts at 1 is not established: it is part of a fragment's launch velocity, which
+   S-0318 leaves open (Open questions). In the claims and
    formulas *s* denotes the start speed: it is the length of the first velocity (claim 7,
    F1; a start speed of 0 gives a length of 100 instead) and the speed that the launch elevation
    uses (claim 6, F4). A steering projectile's speed
@@ -229,11 +251,16 @@ S-0501 claim 20.
    (claim 1).
    - Backing: `measurable` (scenario P1, run c for the cap; P8 run a and P20 variant b for the
      start speed 1 of a vertical projectile and the radial-segment exception; P20 variant c for a
-     steering projectile)
-   - Confidence: high
+     steering projectile). A fragment not being capped is not backed here: it rests on S-0318
+     claim 5, which has a fragment's speed `unmeasured`
+   - Confidence: high; low for a fragment not being capped, which rests on S-0318 claim 5, where
+     a fragment's speed is rated low
 
 3. **Aim point and lead.** The launch direction, elevation and scatter are computed towards the
-   aim point: the reference point of the *firer's* target, without a building's aim shift. When
+   aim point: the reference point of the *firer's* target, without a building's aim shift. A
+   fragment of S-0318 is excepted: its direction and elevation are not computed towards this aim
+   point (claim 5; S-0318 claim 6), and whether its launch takes the scatter of claims 4 and 9 is
+   open (S-0318 Open questions). When
    the firer's target is a vehicle whose locomotor is moving it (S-0206, Terms: *locomotor moving
    the vehicle*), the aim point leads it: with *u* the vehicle's speed estimate (below), *D*₃ the spatial distance from firer to
    target and *w* the shot speed that claim 1 would give the firer's *lead weapon* at distance
@@ -286,9 +313,10 @@ S-0501 claim 20.
      setup is known that makes a vehicle carry a flag). The empty lead-weapon slot is `unmeasured`: such a firer is not *armed* in S-0214's
      sense (its test is the same slot), so it cannot be ordered to attack, and no case is
      established in which it fires anyway (automatic targeting by a deploy-fire firer, S-0309,
-     would be the only candidate).
+     would be the only candidate). The fragment exception is not backed here: it rests on S-0318
+     claim 6.
    - Confidence: medium (the lead weapon; the redirected case (a); the aim without a target),
-     high for the speed estimate *u*
+     high for the speed estimate *u*; low for the fragment exception, as S-0318 claim 6 rates it
 
 4. **Scatter of inaccurate arcing projectiles.** Only a projectile that is both arcing and
    inaccurate scatters at launch. The impact point is the aim point moved by a radius *σ* in a
@@ -317,14 +345,19 @@ S-0501 claim 20.
    vertical) is launched in the direction (S-0204 claim 8, F3) from the fire point towards the
    impact point. A projectile with ρ ≠ 0 (steering, or a negative ρ) and a dropping projectile
    start in the firer's aiming facing (S-0310). Only a dropping projectile starts from the firer's
-   own position instead of the fire point; a steering projectile starts at the fire point.
+   own position instead of the fire point; a steering projectile starts at the fire point. A
+   fragment of S-0318 is excepted: it starts at the burst point and is aimed at the reference point
+   of its aim point in S-0318's sense (S-0318 claim 6), not at this spec's aim point.
    - Backing: `measurable` (scenario P4; its variant g for the aiming facing of a projectile with
      ρ ≠ 0; P21 for a dropping projectile; P9 run a for the start of a steering projectile at the
-     fire point)
-   - Confidence: high
+     fire point). The fragment exception is not backed here: it rests on S-0318 claim 6 (S-0318
+     scenario SH7 for the horizontal direction)
+   - Confidence: high; low for the fragment exception, as S-0318 claim 6 rates it
 
-6. **Launch elevation.** Every projectile, whatever its kind, takes its pitch from the first of
-   (a) to (c) that fits its flags (Terms, "Flags and kinds").
+6. **Launch elevation.** Every projectile except a fragment of S-0318 takes its pitch from the
+   first of (a) to (c) that fits its flags (Terms, "Flags and kinds"). (a) to (c) do not apply to a
+   fragment: it climbs at S-0318 claim 6's fixed elevation instead, while its
+   horizontal direction is claim 5's exception for fragments (S-0318 claims 5 and 6).
    - (a) **Arcing flag.** The pitch is the solution of F4 for the start speed *s* (claim 2), the planar distance
      *d*′ to the impact point, the height difference Δ*z* = *Q*.z − *F*.z and gravity. When the
      impact point is higher than the fire point (Δ*z* > 0) the projectile is always launched at
@@ -363,9 +396,12 @@ S-0501 claim 20.
    - Backing: `measurable` (scenario P5, runs a to c for case (a), run f for the arcing flag on a
      steering type, run d for the void shot and run
      e for the height-based lob test; P37 for zero planar distance; S-0204 scenario C4 for the exception index 1024 of F13; P4 for cases (b) and (c), its
-     variant f for the building term; P8 runs a and d and P9 run h for case (d))
+     variant f for the building term; P8 runs a and d and P9 run h for case (d)). The fragment
+     exception is not backed here: it rests on S-0318 claims 5 and 6 (S-0318 scenario SH7 for the
+     horizontal direction; the elevation `unmeasured` there)
    - Confidence: high in case (a) except the height-based lob test and zero planar distance
-     (medium); medium in cases (b) and (c) and (d)
+     (medium); medium in cases (b) and (c) and (d); low for the fragment exception, which rests
+     on S-0318 claims 5 and 6, where a fragment's launch direction is rated low
 
 7. **Initial velocity.** The velocity is built with table trigonometry (F1) from the start speed
    *s* of claim 2 (so its length is 1 for a steering or vertical projectile whose firer type has no
@@ -376,7 +412,9 @@ S-0501 claim 20.
    anticlockwise on the map, against the growth of facings (F1). So shot *k* = 0 leaves a quarter
    turn clockwise of the body facing (the body facing plus 16384 facing units), and each later *k*
    turns π / *n* further anticlockwise. A start speed of 0 gives a
-   horizontal speed of 100 (F1, Edge cases).
+   horizontal speed of 100 (F1, Edge cases). A fragment of S-0318 is excepted: its start point,
+   direction and elevation are S-0318 claim 6's, and how its velocity is formed is left open
+   there.
    - **Aircraft velocity exceptions.** For a shot from an aircraft, S-0501 claim 20 overrides the
      general launch velocity: with ρ = 0 the projectile takes the aircraft's body heading,
      pitch and current ground speed. With ρ = 1 it is aimed towards the target in three
@@ -384,14 +422,17 @@ S-0501 claim 20.
      These exceptions replace the velocity left by the general launch and placement rules,
      including the steering rescaling of claim 9. Other turn rates keep the general rules.
    - Backing: `measurable` (scenario P4; P20 for radial segments; P28 for the zero speed, and
-     S-0501 scenario AC12 for the aircraft exceptions)
-   - Confidence: high for the construction; medium for radial segments and the aircraft exceptions
+     S-0501 scenario AC12 for the aircraft exceptions). The fragment exception is not backed here:
+     it rests on S-0318 claim 6, where the velocity's forming is `unmeasured`
+   - Confidence: high for the construction; medium for radial segments and the aircraft
+     exceptions; low for the fragment exception, as S-0318 claim 6 rates it
 
-8. **Placement.** The projectile is placed at the fire point (claim 5 for dropping ones) and enters
+8. **Placement.** The projectile is placed at the fire point (claim 5 for dropping ones and fragments) and enters
    play (S-0203 claim 4). Its first turn is in the same tick unless an earlier removal in the
    turn pass costs it that turn (State and ordering).
-   - Backing: `measurable` through S-0203 scenario O1
-   - Confidence: high
+   - Backing: `measurable` through S-0203 scenario O1. A fragment's placement at the burst point
+     is not backed here: it rests on S-0318 claim 5
+   - Confidence: high; medium for a fragment's placement, which rests on S-0318 claim 5
 
 9. **Stored target point, arming and invisible projectiles.** At placement the projectile stores
    *K*, the target's reference point at that moment (quirk `quirks.stored_target_point`), and an
@@ -644,8 +685,14 @@ S-0501 claim 20.
 
       All comparisons are strict. Inaccurate and airburst projectiles are not snapped by (b) or
       (c); the raise of (a) still applies.
-    - Backing: `measurable` (scenario P13; P24 for the raise of (a))
-    - Confidence: medium
+
+      Note on (c): the point that (a) and (b) leave is also the burst point of S-0318 (Terms), so
+      (c) moves the detonation point of the projectile's own area damage and explosion, not the
+      point from which its fragments burst (S-0318 claim 1).
+    - Backing: `measurable` (scenario P13; P24 for the raise of (a)). The note on (c) is
+      not backed here, since neither P13 nor P24 tells the burst point from the detonation point:
+      it rests on S-0318 claim 1 and S-0318 scenario SH1 part r
+    - Confidence: medium, the note on (c) included until S-0318 scenario SH1 part r runs
 
 21. **Several detonations.** Ordinary detonation damage is S-0303's area damage at the detonation
     point. A projectile whose warhead has the parasite flag is an exception (S-0303 claim 2):
@@ -683,7 +730,7 @@ S-0501 claim 20.
     weapon's speed *S*_w (integer division, truncated, with *S*_w as claim 1 gives it). Each child
     takes one draw R(0, 32) when it is made; that draw has no other observable consequence, because
     the children fall vertically. A projectile with a shrapnel weapon also launches fragments
-    (Open questions).
+    (S-0318).
     - Backing: `measurable` (scenario P14 for the cluster count, the chain, the nine children and
       the draw of each; P14 variant d, with the random-state recorder, for the ranged draw and raw
       value after every detonation, the last included, for a cluster count of 1 and of 3, and for
@@ -1595,9 +1642,10 @@ After the outcome, in every case, claim 20 (a), (b), (c) and then claim 21 apply
 
 **Ordering.** All rows are evaluated in the projectile's own turn. A projectile fired in tick *n*
 takes its first turn in tick *n* (S-0203 claims 4 and 5), unless a removal earlier in the turn pass
-costs it that turn, in which case its first turn is in tick *n* + 1 (S-0203 claims 5 b and 10). So
-an invisible projectile at a ground target detonates in the tick it is fired, unless such a removal
-delays its first turn by one tick; scenario P6 has a single firer and nothing else leaving play in
+costs it that turn, in which case its first turn is in tick *n* + 1 or later (S-0203 claims 5 b
+and 10): a fragment of S-0318 that loses its first turns to removals has its first turn at *n* + 2
+or later (S-0318 claim 5). So an invisible projectile at a ground target detonates in the tick it is
+fired, unless such a removal delays its first turn; scenario P6 has a single firer and nothing else leaving play in
 that turn pass. In a turn in which a projectile both creates a trailer animation and detonates, the
 animation stands at the projectile's start-of-turn position (claim 16) and the draws of its creation
 come before those of the detonation. The draws of a shot come in the order of claim 24.
@@ -1647,7 +1695,7 @@ that no fix would change.
   detonates by the speed row of T1. The start speed is 0 whenever the capped speed of claim 2 is 0
   and the projectile keeps it: a shot speed of 0 (ρ = 0 with a planar shot distance of 0, a
   wrapped shot distance of 0 (claim 1) or a gravity of 0; ρ ≠ 0 with a speed field of 0) or an impact point at most 1 lepton from the fire
-  point. Every projectile keeps it except a steering or vertical one whose firer type has no
+  point. Every projectile of a shot keeps it except a steering or vertical one whose firer type has no
   radial fire segments, which starts at 1 instead; so a steering or vertical projectile fired by
   a firer type with radial fire segments meets this case too, for example a steering one whose
   weapon has a speed field of 0.
@@ -1821,8 +1869,8 @@ that no fix would change.
 Except for the projectile image, which is taken afresh as its row specifies, each field keeps
 its value in force when a layer omits its key or skips the field's read (S-0006). The combat-damage section is
 written by role. The original also reads a projectile
-elasticity and a shrapnel weapon and count; none of them has an effect this spec specifies (Edge
-cases, Open questions), so they are not imported here. The image's flat flag is S-0102's and its
+elasticity, which has no effect this spec specifies (Edge cases, Open questions), so it is not
+imported here. The shrapnel weapon and count are imported by S-0318. The image's flat flag is S-0102's and its
 translucent sprite S-0007's (claim 23).
 
 ## Measurement scenarios
@@ -3104,9 +3152,11 @@ fire point (S-0313, the fire point's height term in the test file) and check the
 - Whether a detonation can remove the projectile that causes it, which would end a cluster early
   (claim 21), is not established. S-0303 leaves the same case open (its claim on the animation
   after the area damage).
-- The selection of targets, the draws and the flight of the fragments of a shrapnel weapon, which
-  a projectile with one launches before its area damage, are not established, so the random stream
-  after such a detonation is not specified. The falling of dropping projectiles (T1), with the
+- The launch velocity of a fragment of a shrapnel weapon that is not invisible is not
+  established (S-0318 Open questions), including whether a fragment whose projectile type is
+  steering or vertical starts at speed 1 (claim 2). The selection of a burst's targets, its draws and the
+  launch of its fragments, which a projectile with a shrapnel weapon makes before its area damage,
+  are S-0318's (claims 1 to 6 and its order table). The falling of dropping projectiles (T1), with the
   outcome when only the dropping row applies (T2), is not established either; a later revision
   should cover it. (The original also deflects an arcing projectile that has no firer when it
   hits the ground, but it detonates in that same turn, so nothing of the deflection is observable,
