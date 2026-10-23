@@ -414,6 +414,9 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
             }
             // spec: S-0213 claim 10 and S-0502 claim 28 (deploy makes one destination-clear request, while the target is still present, and no retry after the target is cleared: a balloon-hover vehicle can keep a nonempty destination and end with no target)
             let rejected = crate::jump::clear_rejected(w, actor);
+            // spec: S-0215 claim 11 (a driving vehicle: a vehicle whose current locomotor is the driving one)
+            let driving = w.obj(actor).is_some_and(|o| o.kind == Kind::Vehicle)
+                && crate::lift::current_locomotor(w, actor) == Some(crate::rules::Locomotor::Drive);
             if let Some(ob) = w.obj_mut(actor) {
                 // spec: S-0213 claim 10 (contact broken off, target and destination nothing, unload queued) and S-0606 claim 17 (a bunkered vehicle's contact with its bunker ends too; the bunker link holds)
                 ob.contact = None;
@@ -422,6 +425,10 @@ fn apply_other(w: &mut World, house: HouseId, o: &Order) {
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
                 if !rejected {
                     ob.dest = None;
+                    // spec: S-0207 claim 11 (a driving vehicle's cancelled destination leaves old path steps that are no continued movement; ours are dropped with it, as the stop and behaviour orders drop them) and S-0415 Terms and claim 2 (a vehicle standing with no destination is still and makes its deploy attempt). Only a driving vehicle (S-0207's scope): a hover keeps its stored path (S-0503 claim 16 names only the stop order; Q-1773), and so do other movers.
+                    if driving {
+                        ob.path.steps.clear();
+                    }
                 }
                 ob.beh.queue(Some(Behaviour::Unload));
                 // spec: S-0415 claim 2 (each deploy order begins a new deploy: its first attempt is still to come)
