@@ -2,13 +2,13 @@
 id: S-0213
 title: Human orders (the order set, when orders apply, and what each order changes)
 topic: simulation
-revision: 37
+revision: 46
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-23
 measurements: []
-requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530]
+requests: [Q-0072, Q-0087, Q-0277, Q-0282, Q-0286, Q-0391, Q-0393, Q-0501, Q-0530, Q-1750, Q-1753]
 supersedes: []
 ---
 
@@ -352,12 +352,16 @@ Terms).
    - **Leader.** The *centre* of the members is the mean of their positions, per axis in leptons,
      each sum divided by the number of members and truncated toward zero (integers). The *leader* is
      the member whose distance to the centre is smallest; among equal distances the member latest in
-     the run wins. The leader keeps the common cell.
-   - **Destination priority.** For deciding which look cells count as *taken*, members nearer to the leader have priority; equal distances are resolved by run order. A cell assigned to a higher-priority member counts as taken when determining the destinations of lower-priority members. The leader keeps the common cell.
+     the run wins.
+   - **Destination priority.** For deciding which look cells count as *taken*, members nearer to the leader have priority; among equal distances the earlier member in the run has priority. A cell assigned to a higher-priority member counts as taken when determining the destinations of lower-priority members. The leader keeps the common cell.
    - **Placement.** Each member's destination is determined from its *look*: the cells met along
      the line that starts at the centre of the common cell and runs in the direction from the
-     leader's cell to the member's own cell, in steps of one cell length, up to a limit of a few
-     steps (Formulas, *look line*). Each cell of a member's look belongs to the first class of this
+     leader's cell to the member's own cell, in steps of one cell length (Formulas, *look
+     line*). The first point lies one cell length from the centre of the common cell, so the
+     common cell itself is never on a member's look. A look has at most 6 points, and the limit
+     is counted for each member on its own: every member's look starts afresh, whatever the looks
+     of the members placed before it. A cell met twice (on a near-diagonal line two consecutive
+     points can fall in one cell) uses up two of the 6 points; this is the original's rule, `unmeasured` and rated medium (Backing). Each cell of a member's look belongs to the first class of this
      table that fits it, judged using the higher-priority members' assigned cells as *taken*.
 
      | Class | Cell of the look |
@@ -369,8 +373,19 @@ Terms).
      | *obstructed* | The member's entry outcome (S-0209) for it is friendly obstacle, enemy obstacle or blocked |
      | *open* | Any other cell |
 
+     So a cell that fits none of the first four classes, and whose entry outcome for the
+     member is anything other than friendly obstacle, enemy obstacle or blocked, is open and
+     can be given (Q-1750 question 3). A cell that friendly units occupy is one of these where S-0209
+     gives it *moving blocker* or *stationary friendly* for the member.
+
+     The entry check of the *obstructed* class is made with these inputs, which S-0209 leaves to
+     the situation: its reference height level is the common cell's height level, plus 4 when the
+     common cell is on a high-bridge deck, and it has no connecting-step direction, so no
+     connecting-step height restriction applies (the *too steep* class has already set the height
+     limit). This is the original's rule, `unmeasured` and rated medium (Backing).
+
      The *end* of the look is its first cell that is off-area, too steep or open; a look may have
-     no end within the step limit. The look is *spoiled* if an other-region or obstructed cell comes
+     no end within its 6 points. The look is *spoiled* if an other-region or obstructed cell comes
      before its end, or anywhere in it if it has no end. The member's cell follows from its look:
 
      | The look | Cell the member gets |
@@ -378,17 +393,17 @@ Terms).
      | Not spoiled, and its end is open | The end cell |
      | Any other look | Its *fallback cell*: the last taken cell before the end (or in the whole look, if it has no end), or the common cell if there is no such taken cell |
 
-     Whether a further search replaces the fallback after a spoiled look is not
-     settled. So two members can end with the same cell.
-   - **Shared cells.** When a member is placed, every other member that is not yet placed and
-     stands in the same cell as it gets the same destination. Several infantry units of one cell
-     therefore get one cell between them, and the walk-in rules of the movement specs place them
-     inside it. Two points are not settled in the original (Open questions). Our engine's interim
-     rule: a member that received a shared destination is not placed again, so it keeps that
-     destination and has no look of its own; and the leader is never given a shared destination,
-     since it is not placed. A member that stands in the leader's cell gets the common cell by its
-     own look (interim rule below), so under the interim rule the result is the same whether the
-     leader counts as "not yet placed" or not.
+     No further search follows a spoiled look: the member gets its fallback cell even when an
+     open cell lies beyond the obstacle that a path around it could reach (Edge cases: a switch
+     for a search is deferred to the project lead). So two members can
+     end with the same cell, and a member can be sent to the common cell itself.
+   - **Shared cells.** Members are given their destinations in destination priority, the
+     leader first. As soon as a member has its destination, every member later in that priority
+     that has none yet and stands in the same cell as it gets the same destination. Such a member
+     keeps it: it is not placed again and has no look of its own. A member standing in the
+     leader's cell therefore gets the common cell, through the leader. Several infantry units of
+     one cell get one cell between them, and the walk-in rules of the movement specs place them
+     inside it. The leader is never given a shared destination, since it comes first.
 
    Distances here are straight-line distances in leptons, computed in floating point with the
    approximate square root of S-0204 and then converted to integers. The line of a placement is
@@ -403,35 +418,68 @@ Terms).
    objects (S-0214, claims 2 and 11) coincide, which is typical for a group of one movement zone
    moved onto a usable cell; a mixed group whose members get different nearby cells forms several
    shorter runs, or none.
-   - Interim rule for our engine, where the original is not settled (Open questions): each
-     member's look has at most 6 steps of its own, whatever the looks of the members placed before
-     it, the first one landing one cell length from the centre of the common cell; a spoiled look gives the fallback cell,
-     with no further search; the direction is the zero vector when the member stands in the
-     leader's cell, so every step tests the common cell. This is a design choice that measurement
-     may revise.
+   - **How often destinations are shared.** On open, flat ground with free cells around the
+     common cell, a compact block of vehicles one per cell, each at its cell's centre, reproduces its own shape around the
+     common cell: each vehicle's destination is the common cell plus its cell displacement from
+     the leader, for blocks up to 4 × 3 and straight rows of up to 13 along a map axis (Scenario
+     O10, main part and part f). Vehicles in cells of their own share a destination only when one of them gets
+     its fallback cell from its look, typically next to water, cliffs, buildings or other cells of the refused classes
+     around the common cell, or, in a row along a map axis, 7 or more cells out along one line
+     from the leader, where all 6 points are taken. On a line off the axes a cell met twice uses
+     up two points (`unmeasured`, Backing), so a look there can run out of points closer to the leader. Infantry share by the shared-cell rule:
+     the members of one starting cell get one destination between them, and members of different
+     starting cells can still end with the same cell, as above. A scattered selection of one type, such as loosely
+     placed units gathered by a box, follows the same rules: its destinations are decided member by
+     member as above, and members share a cell only where a member gets its fallback cell (its look is spoiled,
+     ends at an off-area or too steep cell, or has all 6 points taken) or where they start in one
+     cell. These rules settle Q-1750 question 6 for any
+     selection. For compact vehicle blocks and rows and for the infantry of one starting cell they
+     give the exact counts above; for any other layout the count follows from the same rules and
+     depends on where each member stands, so no single number holds for every scattered selection.
+     On open ground, meaning that no cell that a member's look reaches is off-area,
+     of another region, too steep or obstructed, no look is spoiled and none ends at an
+     off-area or too steep cell, so members standing in different cells share a destination only
+     where a member's look has all 6 of its points taken: at least 6 higher-priority members
+     already placed along its line, or fewer on a line off the map axes where a cell met twice
+     uses up two points. With no such line, every member standing in a cell of its own gets a
+     cell of its own, and only members that start in one cell share. This open-ground rule has
+     the backing and confidence of the look limit and the shared-cell rule below (Scenario O10,
+     main part and parts b and f).
    - Backing: `measurable` (Scenario O10, main part) for the existence of the spreading, the
-     leader keeping the common cell and the outward direction of the other cells,
-     `measurable` (Scenario O10, part b) for the shared-cell rule; `measurable` (Scenario O10,
-     part c) for the leader tie-break (equal distances to the centre); `measurable` (Scenario
-     O10, part d) for the look classes: that no member is given a cell of a class that the
-     table refuses (off-area, other region, too steep, obstructed), that a look cut short by such a
-     cell gives the common cell or a cell already given to another member, and the 3-level limit; and `measurable` (Scenario O10, part e) for the spreading of a run of attack-move orders.
-     The exact step limit, the first step of the look and what replaces a spoiled look are recorded
-     there as evidence for the Open questions, not tested. The following are `unmeasured`: the
-     order of placement as such, because it shows only through which cells count as *taken* and the
-     recorder sees only the final cells (part d records them as evidence); that the spreading
-     tests no validity (a member off the map still takes part), because input cannot select an
-     object that is off the map; and the run identity of attack-move orders, because one input event
-     issues one kind of behaviour order (claim 1), so no input makes a run that mixes attack-move
-     orders and plain ones. The mean of the positions (the centre) is not recorded directly; the
-     leader that follows from it is (part c). The exact priority among overlapping look
-     classes, the nearest-member destination priority and the last-taken-cell fallback
-     are `unmeasured`: O10 d records final cells but does not isolate those alternatives
-     with a setup having a unique predicted assignment. They remain low-confidence
-     placement details, not claims that O10 d can independently confirm.
+     leader keeping the common cell and each vehicle's destination being the common cell plus its
+     cell displacement from the leader. `measurable` (Scenario O10, part b) for the shared-cell
+     rule, and (part c) for the leader tie-break (equal distances to the centre). `measurable`
+     (Scenario O10, part d) for the classes other region, too steep and obstructed, the
+     3-level limit, the fallback to the common cell and the absence of a further search, by comparing
+     every vehicle's destination with the one this claim predicts from the recorded start cells,
+     and (part f, the 14-vehicle row) for the destination priority of nearer members and a
+     fallback to the last taken cell. `unmeasured`: the off-area class, since no part has a look
+     that leaves the usable area; the order of the classes where a cell fits more
+     than one, since in no part does a look meet a cell that fits two classes with different
+     outcomes, and the run-order tie-break of the destination priority. In part d's 3 × 3 block
+     each vehicle's look runs in its own direction from the common cell, so no look meets another
+     vehicle's cell, and no part has two members at equal distances whose looks meet.
+     `measurable` (Scenario O10, part e) for the spreading of a run of attack-move orders, and
+     (part f) for the limit of 6 points for each member, the first
+     point one cell out and how often destinations are shared. That a cell met twice uses up two
+     of the 6 points is `unmeasured`: part f's rows run along a map axis, where no cell is met
+     twice. The inputs of the entry check (its reference height level and the absence of a
+     connecting-step direction) are `unmeasured`: no part of O10 puts the common cell on a
+     high-bridge deck or has a look meet a cell whose outcome depends on the step direction. That a
+     cell whose entry outcome is *moving blocker*, *stationary friendly*, *cloaked blocker* or
+     *closed friendly gate* is open is `unmeasured`: no part of O10 sets out to have a look meet
+     such a cell. The following are `unmeasured`:
+     that the spreading tests no validity (a member off the map still takes part), because input
+     cannot select an object that is off the map; and the run identity of attack-move orders,
+     because one input event issues one kind of behaviour order (claim 1), so no input makes a run
+     that mixes attack-move orders and plain ones. The mean of the positions (the centre) is not
+     recorded directly; the leader that follows from it is (part c).
    - Confidence: medium that spreading happens, that only runs of identical consecutive orders with
-     a cell destination are spread, and for the leader and the placement order; low for the
-     placement details and for the shared-cell rule
+     a cell destination are spread, and for the leader, the placement order, the look limit, the
+     first point, the fallback, the absence of a further search and the shared-cell rule, all
+     pending Scenario O10; medium for the off-area class, the order of the classes, the run-order
+     tie-break, a cell met twice using up two of the 6 points, the inputs of the entry check and
+     the open class for a cell that units occupy (`unmeasured`, as the backing says)
 
 8. **Stop order.** The order acts only on an actor that is live, on the map, not tethered, not
    under construction and not being sold (outside its construction state, for a building), and not
@@ -1175,12 +1223,12 @@ Terms).
 > Look line (claim 7). Cells are written as integer pairs (*X*, *Y*) of cell coordinates. For a
 > member in cell *m* and the leader in cell *ℓ*, let *v* = *m* − *ℓ* (integers) and *u* = *v* /
 > √(*v*ₓ² + *v*ᵧ²), in floating point with the approximate square root of S-0204; *u* = (0, 0) when
-> *v* = (0, 0) (our engine's interim rule, claim 7). With the common cell *k* = (*k*ₓ, *k*ᵧ), the look's *j*-th point is
+> *v* = (0, 0), a case that does not arise, since a member in the leader's cell is given the
+> shared destination before any look (claim 7). With the common cell *k* = (*k*ₓ, *k*ᵧ), the look's *j*-th point is
 > *q*ⱼ = (*k*ₓ + ½ + *j*·*u*ₓ, *k*ᵧ + ½ + *j*·*u*ᵧ), in cell lengths, floating point, and its cell is
 > (trunc(*q*ⱼ,ₓ), trunc(*q*ⱼ,ᵧ)), each conversion truncating toward zero in every rounding mode
-> (S-0205, claim 7). The look is the cells of *j* = *j*₀, *j*₀ + 1, … up to the step limit. In the
-> original the first index *j*₀ and the limit are not settled (Open questions); our engine's
-> interim rule is *j* = 1 to 6 (claim 7). Confidence: low, as for the other placement details.
+> (S-0205, claim 7). The look is the cells of *j* = 1, 2, …, 6, examined in that order, for each
+> member separately. Confidence: medium, as for the other placement details.
 
 For claim 25, an ordinary character's text advance is its imported glyph width
 plus 1 pixel, including a trailing character. A tab at advance *a* gives
@@ -1201,7 +1249,7 @@ pixels. No floating-point arithmetic is used.
 | Input events taken per unfrozen cycle | at most 1 | events | Claim 1; frozen cycles take none |
 | Smallest spread group | 2 | orders | Claim 7 |
 | Largest level difference of a spread cell | 2 | levels | Claim 7: fewer than 3 levels from the common cell |
-| Steps of a spread look (our engine, interim) | 6 | steps of one cell length | Claim 7, design choice |
+| Points of a spread look, for each member | 6 | steps of one cell length, the first one cell out | Claim 7 |
 
 ## State and ordering
 
@@ -1281,6 +1329,84 @@ for in-place deployers (S-0214, Terms): if the selection holds both in-place dep
 deployed and in-place deployers that are not, the deployed ones get no order. So one press deploys
 the rest of a mixed group instead of undeploying the deployed members.
 
+**Deployed, for the deploy rule (Q-1753).** The press sorts the selected in-place deployers into
+deployed and not deployed by their state at the press, and the sorting counts a deployer that is
+part-way through a transition by the side it is heading to:
+
+| In-place deployer | Counts as deployed | Counts as not deployed |
+|---|---|---|
+| Infantry | its current sequence is one of the deploy kinds (S-0107, Terms), *deploy* itself included, so a unit in its *deploy* sequence | any other sequence, *undeploy* included, so a unit in its *undeploy* sequence |
+| Vehicle | it is deploying (the deploying state of S-0517 claim 4), or it is deployed and not undeploying | it is undeploying, or it is undeployed |
+
+This sorting, including how it counts a deployer that is part-way through a transition, is the
+original's rule; S-0107 and S-0517 only name the sequences and states it reads, and this spec
+states how the press reads them. The sorting looks at every selected in-place deployer, including one that then
+fails another condition of the rule and gets no order, so such a member can still make the
+selection mixed. A press never interrupts a transition that is under way. What a member that is
+mid-transition does with an order follows from the rules this order meets on the way:
+
+- **Infantry whose type's undeploy delay is 0 or more** lacks deploy readiness during *deploy*,
+  every deployed sequence and *undeploy*, so it gets no order. This reads S-0214's *deploy
+  readiness* (Terms) with "deployed" covering every deploy kind of sequence, *deploy* itself
+  included, and "the timer that follows a deploy" being the unit's rearm countdown; S-0214's
+  committed wording says neither outright, and Changes for other specs gives it the wording. A
+  deployed one undeploys later by itself (S-0215 claim 31).
+- **Infantry whose type's undeploy delay is negative** has readiness whatever its sequence, and gets
+  the order unless it counts as deployed in a mixed selection. The order queues *unload*
+  (claim 10), but *deploy* and *undeploy* are not interruptible (S-0107, table T1), so the unit is
+  not ready to change (S-0215 claim 11) until its sequence ends. It finishes the transition it is
+  in, and then *unload* starts the opposite one (S-0215 claim 30): a unit that was deploying
+  finishes deploying and then undeploys, and one that was undeploying finishes and then deploys
+  again.
+- **A vehicle** that deploys in place has deploy readiness whatever its transition state (S-0214,
+  Terms: none of its conditions for a vehicle names a transition state), so it gets the order unless it counts as deployed in a mixed selection.
+  During an uninterrupted transition its current behaviour is *unload* (S-0517 claim 3: the transition
+  advances only in the processing of *unload*, every tick until it finishes), and queueing
+  the current behaviour with nothing queued changes nothing (S-0215 claim 7). The transition
+  carries on to its end, and completion gives *guard* as usual, so the vehicle does not go the
+  other way afterwards. A behaviour forced on the vehicle mid-transition is left to S-0517's
+  Edge cases. The order's other effects (contact, target and destination, claim 10)
+  still happen. If some other behaviour is queued at the press, the order replaces it with
+  *unload*, and completion discards that too under S-0517 claim 8's
+  `quirks.deploy_transition_discards_orders` (default original); with that switch off, the
+  vehicle would go the other way after completing.
+
+So, for two members of one type:
+
+In the next table, a member *in its deploy sequence* is an infantry unit whose current sequence is *deploy*, or a vehicle in the deploying state of S-0517 claim 4; *in its undeploy sequence* likewise means the *undeploy* sequence or the undeploying state.
+
+| Selection at the press | Infantry, undeploy delay negative | Infantry, undeploy delay 0 or more | Vehicle |
+|---|---|---|---|
+| one deployed, one in its deploy sequence | not mixed: both get the order; the deployed one undeploys; the other finishes deploying, then undeploys | neither gets an order | not mixed: both get the order; the deployed one undeploys; the other finishes deploying and stays deployed |
+| one in its undeploy sequence, one undeployed | not mixed: both get the order; the undeployed one deploys; the other finishes undeploying, then deploys | only the undeployed one can get an order: it gets one only if it has readiness (its rearm countdown has ended, as read above), and then deploys | not mixed: both get the order; the undeployed one deploys; the other finishes undeploying and stays undeployed |
+| one in its deploy sequence, one in its undeploy sequence | mixed: the one in its deploy sequence gets no order and stays deployed; the other finishes undeploying, then deploys | neither gets an order | mixed: the one in its deploy sequence gets no order; the other gets the order; each finishes its own transition |
+| both in their deploy sequence | not mixed: both get the order; each finishes deploying, then undeploys | neither gets an order | not mixed: both get the order; each finishes deploying and stays deployed |
+| both in their undeploy sequence | not mixed: both get the order; each finishes undeploying, then deploys | neither gets an order | not mixed: both get the order; each finishes undeploying and stays undeployed |
+
+Infantry and vehicles therefore differ (Q-1753 question 4). A press can make an infantry unit with
+a negative undeploy delay go back after its transition, and refuses one with a delay of 0 or more
+outright. It reaches a vehicle without changing the transition's result. The selection is sorted at
+the press, while the order is applied later (claim 3) and *unload* reads the unit's sequence or
+state when it starts. The rows for a member in its deploy or undeploy sequence hold while its
+transition is still under way when the order is applied. A member whose transition ends in the
+tick of the press, before the order is applied, meets the order as a deployed or undeployed member
+does, so a vehicle among them that gets the order then makes the opposite transition (S-0517
+claim 3).
+- Backing: `measurable` (Scenario O6 part B, cases a to e), except for three parts that are
+  `unmeasured`:
+  - that the sorting counts a member that then fails another condition of the rule, since no
+    case of O6 part B has such a member in a selection whose sorting it could change,
+  - sorting at the press rather than when the order is applied, and the course of a member whose
+    transition ends in the tick of the press, since O6 part B keeps each press clear of every
+    transition's end,
+  - the sorting for infantry whose type's undeploy delay is 0 or more: such a member lacks deploy
+    readiness whenever it is deploying, deployed or undeploying, so whichever side it is counted
+    on, no two-member selection of that type gets a different outcome, and no case can tell the
+    sorting apart.
+- Confidence: medium. The sorting, the readiness and the course of each transition are
+  `measurable` by O6 part B and stay medium until it runs; the three `unmeasured` parts are
+  medium.
+
 **Table T3: effects of a behaviour order (claim 5).** The actor is valid, and the order's target
 and destination pass claim 4. If part (a) holds, the order is ignored (claim 17 still applies)
 and parts (b) to (h) do not apply. Otherwise every part from (b) to (h) whose condition holds
@@ -1324,6 +1450,11 @@ only when they actually assign a destination.
 
 ## Edge cases and quirks
 
+- **No further search after a spoiled look** (claim 7): the original gives a member its fallback
+  cell without searching beyond the obstacle, so members can share a cell next to water, cliffs
+  or buildings. This spec states that rule and adopts no switch. Whether our engine should also offer
+  a search, as `quirks.group_spread_no_detour` (default on: the original), is a question for the
+  project lead (Questions for the project lead).
 - **Repeated-destination get-up** (claim 21): S-0107 claim 15 owns
   `quirks.prone_get_up_repeated_destination`, default YR behaviour. With it off, every non-empty
   destination assignment requests get-up for an otherwise eligible prone unit, not only a
@@ -1641,6 +1772,76 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 - *Note:* the click on the vehicle in step 2 tests S-0214's input rule (no sell order is made for
   a vehicle), not claim 12's vehicle rule, which stays unmeasured.
 
+**Scenario O6 part B: mid-transition members of a deploy press (the deploy rule of table T2,
+Q-1753).**
+- *Setup:* the usual isolated test map, speed 6, no enemy. A named test rules and art file defines
+  three in-place deployer types, two of each placed side by side on open ground: infantry type *P*
+  with a negative undeploy delay; infantry type *Q* with an undeploy delay of 300 ticks; vehicle
+  type *V* that deploys in place. The deploy and
+  undeploy sequences of *P* and *Q* last at least 40 ticks each, and *V*'s deploying and undeploying
+  presentations at least 60 ticks each, so that the selection and the press fit inside the
+  transitions (below). No deploy weapon, so no shot sets a
+  rearm countdown.
+- *Procedure:* for each type, five cases, each from a fresh start. A member is put into a
+  transition by a deploy press with it selected alone. For *P* and *V* in (a), deploy the first
+  member with a press with it selected alone and wait until it is deployed; then select the second
+  alone with a click and press to start its deploy; then add the first with a *toggle select*
+  click (S-0214 claim 3) and make the measured press within 20 ticks of the second member's press.
+  For *P* and *V* in (b), deploy the first member alone as in (a) and wait until it is deployed,
+  then, with it still selected alone, press to start its undeploy; then add the undeployed second member
+  with a *toggle select* click and make the measured press within 20 ticks of that undeploy press.
+  For *Q*, whose deployed members have no
+  deploy readiness, the undeploying member is instead one that undeploys by itself after its delay
+  (S-0215 claims 30 and 31: about 300 ticks after the processing that started its deploy), and the
+  other presses are timed around that. Selecting both members and pressing takes several input
+  events, one per cycle (claim 1), so the measured press is made no later than 20 ticks after the
+  last transition began. A run in which a transition ends before the measured press's order is
+  carried out is void. The
+  measured press is a single deploy press with both members selected: (a) one deployed and one
+  deploying; (b) one undeploying and one undeployed; (c) one deploying and one undeploying; (d)
+  both deploying; (e) both undeploying. For *P* in (c), start the first member's undeploy with it
+  selected alone; then select the second alone with a click and press to start its deploy, as
+  soon as those input events allow (one per cycle, so a few ticks later); then add the first with
+  a *toggle select* click (S-0214 claim 3) and make the measured press. For *P* and *V* in (d),
+  select both undeployed members, press once to start both deploying, and make the measured
+  press within 20 ticks of that. For *P* and *V* in (e), deploy both with one press with both selected, wait until both are deployed,
+  press once to start both undeploying, and make the measured press within 20 ticks of that. For
+  *Q* the measured presses are timed as follows, with *t*₀ the tick the first member's deploy
+  begins: (a) the second member is deployed alone at *t*₀ + 100, while the first is still
+  deployed; (b) the measured press comes within 20 ticks of the first member beginning to undeploy
+  by itself, near *t*₀ + 300; (c) with the second member already selected alone, its deploy
+  press comes 2 ticks after the first begins to undeploy by itself, the first is then added with
+  a *toggle select* click, and the measured press follows within 20 ticks; (d) both are deployed
+  by one press at *t*₀, and the measured press follows within 20 ticks of it; (e) the pair of (d)
+  undeploys by itself together near *t*₀ + 300, and the measured press comes within 20 ticks of
+  that. A vehicle playing its
+  deploying or undeploying presentation supplies no ordinary candidate for a click or a band
+  (S-0214 claim 24), so for *V* the member in a transition stays selected from its own press and
+  the other is added with a *toggle select* click (S-0214 claim 3); in (d) both start with one
+  press with both selected, and in (e) both stay selected from the press that started their
+  undeploy. For *V*, case (c) is reached from case (a): (a)'s measured press leaves the deployed
+  member in its undeploy sequence and the other in its deploy sequence, both still selected, and a second press within
+  20 ticks of the first is (c)'s measured press, with at least 20 ticks of each presentation still
+  to run.
+- *Runs:* 3 per case and type. No random draw affects the observables.
+- *Observable:* from the measured press, every tick for 150 ticks: each member's sequence (infantry) or
+  deployed, deploying and undeploying state (vehicle), read by the read-only recorder; whether the
+  press queued a deploy order for each member (the recorder's order log); and whether the
+  acknowledgement plays.
+- *Expected:* the rows of the deploy rule's table for two members. Orders: for *P* and *V*, both
+  members get one in (a), (b), (d) and (e), and for *P* and *V* in (c) only the undeploying member
+  does; for *Q*, no
+  member gets one in (a), (c), (d) and (e), so no acknowledgement plays, and in (b) only the undeployed
+  member does. States: *P* finishes any transition in progress and then goes the other way when it
+  got an order; a *Q* member that got an order deploys; *V* in every case finishes the transition
+  in progress and then stays as it ended, while a deployed or undeployed *V* member that got an
+  order changes once.
+- *Falsified if:* any transition under way is cut short or reversed before it ends; a
+  mid-transition *P* or *V* member in a selection that is not mixed gets no order; for *P* or *V*,
+  in (c) the deploying member gets an order, or the undeploying one does not; a *Q* member that is deploying,
+  deployed or undeploying gets an order; *P*'s member that got an order does not go the other way
+  after finishing; or a *V* member that was mid-transition goes the other way after finishing.
+
 **Scenario O7: cheer rate (claim 19).**
 - *Setup:* fresh program start; a skirmish with infantry of the player's. A named test rules file
   sets the general rules' maximum-cheer-rate field to *R* = 450 ticks, so that the expected values
@@ -1709,19 +1910,20 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
 
 **Scenario O10: group destinations (claim 7).**
 - *Setup:* 9 identical vehicles of the player's in a 3 × 3 block on open ground, all selected, so
-  that the click gives all of them the same destination cell before the spreading.
+  that the click gives all of them the same destination cell before the spreading. In this part
+  and in parts d and f, every vehicle stands at its cell's centre at the click, as the recorder
+  shows (claim 7's statement for compact blocks); a run in which one does not is void.
 - *Procedure:* one move click to an empty cell 10 cells away. Repeat 5 times from the same start.
-- *Observable:* the destination cell of each vehicle after the click, relative to the clicked cell
-  and to the vehicle's place in the block.
-- *Expected:* the destinations are spread around the clicked cell; the centre vehicle of the block
-  (the leader) gets the clicked cell; every other vehicle's cell lies on the side of the clicked
-  cell that matches its place in the block (the map north-west vehicle map north-west of it, and so on),
-  within a few cells. On open ground all 9 cells are expected to differ.
+- *Observable:* in every part of this scenario, the start cell and the destination cell of every
+  selected unit after the click, read by the read-only recorder, with the issue order of the
+  click's orders.
+- *Expected:* the centre vehicle of the block (the leader) gets the clicked cell, and every other
+  vehicle gets the clicked cell plus its own cell displacement from the centre vehicle, so the 9
+  destinations repeat the 3 × 3 block around the clicked cell, all different.
 - *Falsified if:* all 9 vehicles keep the clicked cell (no spreading), the centre vehicle does not
-  get the clicked cell, or a vehicle's cell lies on the opposite side of the clicked cell from its
-  place in the block. Two vehicles sharing a cell do not falsify the medium-confidence parts (the
-  fallback of claim 7 allows it); any such case is recorded as evidence on the look's open
-  details.
+  get the clicked cell, or any vehicle's destination differs from the clicked cell plus its
+  displacement. A vehicle one cell out on a diagonal given a cell two out falsifies the first point
+  of the look.
 - *Part (b), shared cells:* 3 infantry of one stock type standing in one cell and 3 more standing
   one per cell in a row 3 cells away, all selected; one move click to an empty cell 10 cells
   away; 3 runs. Expected: the 3 infantry that started in one cell get one destination cell
@@ -1747,15 +1949,33 @@ limitations as S-0502 rather than injecting state or claiming measurements have 
   more levels from *k*; in (i) and (iii) the vehicles whose look would cross the obstacle get the
   clicked cell or a cell that another vehicle already got; in (ii) with the 3-level cliff the
   same holds for the vehicles whose look reaches the cliff, and with the 2-level cliff the cells
-  on top of it may be given. Falsified if any vehicle gets a cell of a refused class. Whether a
-  vehicle whose look is spoiled gets a different open cell beyond the obstacle (a further
-  search), the largest number of steps a look takes, and which cell a vehicle that
-  stands in the leader's own cell gets are recorded as evidence for the Open questions and falsify
-  nothing.
+  on top of it may be given. Each vehicle's destination is also compared with the one claim 7
+  predicts from the recorded start cells, issue order and map. Falsified if any vehicle gets a cell
+  of a refused class, if a vehicle whose look is spoiled gets an open cell beyond the obstacle
+  rather than its fallback cell (a further search), or if any destination differs from the
+  prediction.
 - *Part (e), attack-move group:* the 9 vehicles of the main part, each of an attack-move-eligible
   type, one attack-move click to the same cell, 3 runs. Expected: the destinations are spread as in
   the main part. This shows that a run of attack-move orders spreads like one of plain orders.
   Falsified if all 9 vehicles keep the clicked cell.
+- *Part (f), larger groups:* on the open ground of the main part, each block selected alone, one
+  move click to an empty cell 10 cells away, 5 runs each: (i) 12 identical vehicles in a 4 × 3
+  block; (ii) 13 and then 14 identical vehicles in one straight row of adjacent cells along a map
+  axis; (iii) 12 infantry of one stock type, 3 per cell in a 2 × 2 block of cells. Expected for
+  the vehicles, in runs in which every vehicle starts at its cell's centre: in
+  (i), and with 13 vehicles in (ii), every vehicle's destination is the clicked cell plus its
+  displacement from the leader, so no two share. With 14, the one vehicle 7 cells from the
+  leader shares the cell of the vehicle 6 cells out on its side (its 6 points all meet taken
+  cells), and no other two share. Expected for the infantry in (iii), in every run whatever
+  their positions inside their cells: each starting cell's 3 infantry share one destination,
+  4 destinations in all. Their positions inside the cells decide only which unit leads; the
+  leader's cell gets the clicked cell, and the other three starting cells, which lie in three
+  different directions from it, each get the cell next to the clicked cell in their own
+  direction, since a look runs from the leader's cell to the member's cell. The number of units sharing a
+  destination is counted per run. Falsified if, in such a run, a 13-vehicle row or the 4 × 3 block has two
+  vehicles with one destination, if the vehicle 7 cells from the leader gets a cell 7 cells out
+  (a longer look), or
+  if infantry of one starting cell get different destinations.
 
 **Scenario O11: detonation of a bomb planted by a computer house (claims 3 and 11).**
 - *Setup:* a named test rules file that lets the player set off that kind of bomb; a computer
@@ -2261,18 +2481,32 @@ extension is a design rule and has no oracle measurement.
   The refinery case remains exploratory (Scenario O4 iv). Factory release does not yet
   identify an order-time untethered-contact interval or isolate deploy's tether refusal
   (claims 5 and 10).
-- Claim 7: how many steps a member's look takes (the limit of the look line in Formulas), whether
-  that limit applies to each member's look separately or to the run as a whole, what a member gets
-  after a spoiled look, which direction the look of a member standing in the leader's own cell
-  takes, and the first
-  index *j*₀ of the look line, that is, whether the first step tests the common cell itself,
-  whether a member that received a shared destination is still placed with a look of its own, and
-  whether the leader counts as a member that is not yet placed when destinations are shared.
-  Our engine's interim rule is stated in claim 7.
+
+## Changes for other specs
+
+- **S-0214, Terms, *deploy readiness*.** The infantry clause should say that "deployed" covers
+  every deploy kind of sequence (S-0107, Terms), *deploy* itself included, and that "the timer
+  that follows a deploy" is the unit's rearm countdown (S-0301), which shots start and deploying
+  does not. The vehicle clause should say that readiness does not depend on the vehicle's
+  transition state. Table T2's deploy rule here (Q-1753) uses that reading. The same wording is
+  submitted with S-0214's Q-1754 answer; the two go together.
+- **S-0209, entry check inputs.** S-0209's list of reference height levels gives order
+  targeting (S-0213, S-0214) as not established (Open questions). Claim 7 here fixes it for the
+  *obstructed* class of a group destination look: the reference height level is the common cell's height level, plus 4
+  when the common cell is on a high-bridge deck, and there is no connecting-step direction, so no
+  connecting-step height restriction applies (`unmeasured`, medium). S-0209 may add that case
+  to its list, pointing to S-0213 claim 7.
 
 ## Questions for the project lead
 
-No decision is pending. The project lead's decisions of 2026-10-09 (AI houses,
+- **Claim 7, no further search.** After a spoiled look the original gives the fallback cell
+  even when an open cell beyond the obstacle could be reached around it, so groups moved next to
+  water, cliffs or buildings send several members to one cell, where they jostle. The default is
+  the original's rule. Should our engine also offer a search for an open, reachable cell near the end
+  of a spoiled look, as `quirks.group_spread_no_detour` (default on: the original)? If so, the search's rules are
+  specified before it is built.
+
+No other decision is pending. The project lead's decisions of 2026-10-09 (AI houses,
 scripted input, the click marker) are applied. The surrender, alliance and power rows of
 table T1 defer to S-0414 (claims 11 to 14) and S-0405 (claim 10); the game-end decision of
 2026-10-11 (play to the last side) is S-0414's. Items to confirm against the versions handed
