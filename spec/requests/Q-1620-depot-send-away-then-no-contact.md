@@ -1,9 +1,9 @@
 ---
 id: Q-1620
 title: Does a depot's processing after a send-away repeat the contact-loss slot changes
-status: open
+status: answered
 related: [S-0108, S-0314]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need
