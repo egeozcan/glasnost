@@ -2755,9 +2755,15 @@ impl Quirks {
                 self.area_damage_per_foundation_cell,
             ),
             ("spread_ring_eleven", self.spread_ring_eleven),
-            ("shrapnel_first_listed_only", self.shrapnel_first_listed_only),
+            (
+                "shrapnel_first_listed_only",
+                self.shrapnel_first_listed_only,
+            ),
             ("shrapnel_hits_terrain", self.shrapnel_hits_terrain),
-            ("shrapnel_building_per_cell", self.shrapnel_building_per_cell),
+            (
+                "shrapnel_building_per_cell",
+                self.shrapnel_building_per_cell,
+            ),
             (
                 "ground_detonation_misses_aircraft",
                 self.ground_detonation_misses_aircraft,

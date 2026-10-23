@@ -875,6 +875,8 @@ impl Audio {
             Effect::Beam { .. } => {}
             // spec: S-0518 claim 18 and S-0514 claim 25 (beams and beam flashes are drawing only; the shot's report comes with Effect::Shot)
             Effect::Line { .. } => {}
+            // spec: S-0318 claim 8 (a fragment's beam is drawing only)
+            Effect::FragmentLine { .. } => {}
             // spec: S-0316 claim 7 (a bolt plays no sound of its own, and neither do its sparks)
             Effect::Bolt { .. } => {}
             // spec: S-0607 claim 25 (the wave picture is presentation only)

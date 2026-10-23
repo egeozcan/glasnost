@@ -309,6 +309,29 @@ fn projectile_fields() {
     assert_eq!(p.voxel, Some(true));
 }
 
+/// spec: S-0318 Import mapping (ShrapnelWeapon, a weapon reference; ShrapnelCount, an integer; both absent when the keys are)
+#[test]
+fn projectile_shrapnel_fields() {
+    let base = "[Warheads]\n1=Dart\n2=Zap\n3=Plain\n\
+                [Dart]\nShrapnelWeapon=zap\nShrapnelCount=-6\n[Plain]\nROT=1\n";
+    let (s, _) = direct(
+        &[base],
+        "",
+        &["Zap"],
+        &["Dart", "Plain"],
+        IniQuirks::default(),
+    );
+    let p = &s.projectiles["Dart"];
+    // spec: S-0003 claim 14 (a type name resolves to the type's key whatever its letter case)
+    assert_eq!(p.shrapnel_weapon.as_deref(), Some("Zap"));
+    assert_eq!(p.shrapnel_count, Some(-6));
+    let q = &s.projectiles["Plain"];
+    assert_eq!(
+        (q.shrapnel_weapon.as_deref(), q.shrapnel_count),
+        (None, None)
+    );
+}
+
 /// spec: S-0301 Edge cases, S-0302 Edge cases, S-0303 Edge cases, S-0306 Edge cases, S-0307 Edge cases (importer warnings of weapons and projectiles)
 #[test]
 fn weapon_and_projectile_warnings() {

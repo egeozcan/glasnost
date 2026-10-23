@@ -32,6 +32,7 @@ pub mod projectile;
 pub mod railgun;
 pub mod range;
 pub mod shotanim;
+pub mod shrapnel;
 pub mod state;
 pub mod veterancy;
 pub mod weapon;

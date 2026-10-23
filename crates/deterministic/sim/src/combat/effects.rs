@@ -363,6 +363,22 @@ pub enum Effect {
         /// (S-0518 claim 18).
         prism: Option<i32>,
     },
+    /// A shrapnel fragment of a laser fragment weapon was launched while
+    /// the projectile still had its attacker (S-0318 claim 8): a beam from
+    /// the burst point to the fragment's target with the fragment weapon's
+    /// laser look, thickness 1 and no building-source adjustment.
+    FragmentLine {
+        /// The projectile's attacker, whose house gives a house-colour
+        /// beam its inner colour.
+        attacker: ObjectId,
+        /// The fragment weapon.
+        weapon: crate::combat::data::WeaponId,
+        /// The burst point.
+        from: Pos,
+        /// The fragment target's target point, or the target cell's centre
+        /// at its height.
+        to: Pos,
+    },
     /// An electric-bolt shot made its bolt (S-0316 claims 2 to 4): the
     /// drawing makes the bolt, with its own draws from the unsynchronised
     /// stream (claim 13). Its spark system is made in play

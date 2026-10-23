@@ -8332,6 +8332,23 @@
           ],
           "default": null
         },
+        "shrapnel_count": {
+          "description": "`ShrapnelCount`, the fragment count c (S-0318 Import mapping).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "shrapnel_weapon": {
+          "description": "`ShrapnelWeapon`, the fragment weapon (S-0318 Import mapping).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "spawn_delay": {
           "description": "`SpawnDelay`, ticks (S-0306 claim 16).",
           "type": [

@@ -429,6 +429,13 @@ const PROJECTILE_COMBAT: &[Row] = &[
         Ref(Kind::Weapons),
         "S-0306",
     ),
+    (
+        "shrapnel_weapon",
+        "ShrapnelWeapon",
+        Ref(Kind::Weapons),
+        "S-0318",
+    ),
+    ("shrapnel_count", "ShrapnelCount", Int, "S-0318"),
 ];
 
 /// Combat fields of warheads (`Verses` has its own reading).
