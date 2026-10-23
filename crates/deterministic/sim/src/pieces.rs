@@ -296,8 +296,8 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
     };
     // spec: S-0317 F5 and Constants (three ranged draws R(−65535, 65535); the axis is (a₃, a₂, a₁))
     let a1 = w.rng.ranged(-65535, 65535, half);
-    let a2 = w.rng.ranged(-65535, 65535, half);
-    let a3 = w.rng.ranged(-65535, 65535, half);
+    let a2 = w.rng.ranged(-65535, 65535, half); // spec: S-0317 F5 and Constants (R(−65535, 65535))
+    let a3 = w.rng.ranged(-65535, 65535, half); // spec: S-0317 F5 and Constants (R(−65535, 65535))
     // spec: S-0317 F5 (spin rate = (|u| rem S_a) + A_min, kept in double precision)
     let spin = d(mag_rem(u, t.sa, ov)).add(t.amin, mode);
     let id = w.new_id();
@@ -445,7 +445,8 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
     // spec: S-0317 claim 5 and F3 (v′ = (v_x, v_y, RZ₂₄(v_z − g)), p′ = p + v′ per axis, each stored in single precision)
     let vz = single(u.sub(g, mode), mode);
     let mut v = [v0[0], v0[1], vz];
-    let mut p = [0, 1, 2].map(|i| single(p0[i].to_f64().add(v[i].to_f64(), mode), mode));
+    let mut p = [0, 1, 2].map(|i| single(p0[i].to_f64().add(v[i].to_f64(), mode), mode)); // nocite: vector and matrix dimensions (three axes)
+    // nocite: vector and matrix dimensions (three axes)
     let trunc = |p: &[F32; 3]| {
         let [x, y, z] = p.map(|c| c.to_f64().to_i32_common());
         Pos::new(x, y, z)
@@ -454,8 +455,8 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
     let (oc, nc) = (old.cell(), new.cell());
     let f = ground(w, new);
     let fd = F64::from_i64(i64::from(f), mode);
-    let z0f = p0[2].to_f64();
-    let z1f = p[2].to_f64();
+    let z0f = p0[2].to_f64(); // nocite: vector and matrix dimensions (three axes)
+    let z1f = p[2].to_f64(); // nocite: vector and matrix dimensions (three axes)
     let at = |h: i32| F64::from_i64(i64::from(h), mode).to_f32(mode);
     let mut contact = Contact::None;
     // spec: S-0317 claim 10 (the deck height: the ground height plus 416 leptons at the new position)
@@ -476,7 +477,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
             p[2] = at(f);
         }
         contact = Contact::Ground;
-    } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode))
+    } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode)) // spec: S-0317 claim 10 (less than 150 leptons above the ground height)
         && w.cells
             .occ(nc, Layer::Ground)
             .is_some_and(|o| o.buildings > 0)
@@ -488,7 +489,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
     let mut impact_at = new;
     let mut undone = false;
     if contact != Contact::None {
-        let z1 = p[2].to_f64();
+        let z1 = p[2].to_f64(); // nocite: vector and matrix dimensions (three axes)
         let z0 = F64::from_i64(i64::from(old.z), mode);
         let one = F64::from_i64(1, mode);
         // spec: S-0317 claim 10 (the cliff test: the new cell at least 2 height levels above the old one; undone when u < 0 and z₁ > z₀, or u > 0 and z₁ > z₀ + u + 1)
@@ -546,6 +547,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
 }
 
 /// F6: whether the piece stops.
+// nocite: vector and matrix dimensions (three axes)
 fn stopped(w: &World, p: &[F32; 3], v: &[F32; 3], g: F64, mode: Rounding, table: bool) -> bool {
     let fp = {
         let [x, y, z] = p.map(|c| c.to_f64().to_i32_common());
@@ -564,7 +566,7 @@ fn stopped(w: &World, p: &[F32; 3], v: &[F32; 3], g: F64, mode: Rounding, table:
     let c = i64::from(
         F64::from_i64(i64::from(h), mode)
             .mul(g, mode)
-            .add(v[2].to_f64(), mode)
+            .add(v[2].to_f64(), mode) // nocite: vector and matrix dimensions (three axes)
             .to_i32_common(),
     );
     let sum = (a * a) as u64 + (b * b) as u64 + (c * c) as u64;
