@@ -1,9 +1,9 @@
 ---
 id: Q-1735
 title: The text that goes with a spoken announcement
-status: open
+status: answered
 related: [S-0701]
-answered-by: []
+answered-by: [S-0701]
 ---
 
 ## Need
