@@ -1833,7 +1833,7 @@ pub(super) fn exact_text(b: &Binary) -> String {
 }
 
 /// The layer and line of the last value a layer gave the key.
-fn last_set(state: Option<&KeyState>) -> (usize, u32) {
+pub(super) fn last_set(state: Option<&KeyState>) -> (usize, u32) {
     state
         .and_then(|s| {
             s.history.iter().rev().find_map(|e| match e.what {
@@ -1856,11 +1856,11 @@ fn sets(state: Option<&KeyState>) -> Vec<(Vec<u8>, usize, u32)> {
         .collect()
 }
 
-fn int_of(state: Option<&KeyState>) -> Option<i32> {
+pub(super) fn int_of(state: Option<&KeyState>) -> Option<i32> {
     fold(state, None, |v, _| value::integer(v))
 }
 
-fn bool_of(state: Option<&KeyState>) -> Option<bool> {
+pub(super) fn bool_of(state: Option<&KeyState>) -> Option<bool> {
     fold(state, None, |v, _| value::boolean(v))
 }
 
@@ -1887,7 +1887,7 @@ fn list_of(state: Option<&KeyState>, untrimmed: bool) -> Option<Vec<Vec<u8>>> {
     })
 }
 
-fn key<'a>(t: &'a TypeRec, k: &str) -> Option<&'a KeyState> {
+pub(super) fn key<'a>(t: &'a TypeRec, k: &str) -> Option<&'a KeyState> {
     t.keys.get(k.as_bytes())
 }
 
@@ -2056,6 +2056,8 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
         "S-0616",
     );
     keyed(&TYPES, &s(&["NaturalParticleLocation"]), "S-0616");
+    // spec: S-0317 Import mapping (the voxel-animation keys of a debris piece)
+    keyed(&["voxel_animations"], &super::piece_keys(), "S-0317");
     keyed(&TYPES, &s(&["DestroySmokeOffset"]), "S-0312");
     keyed(&["buildings"], &s(&REFINERY_SMOKE_POINTS), "S-0616");
     let crews: Vec<String> = CREWS.iter().map(|c| c.1.to_owned()).collect();
@@ -3710,8 +3712,8 @@ impl Builder<'_> {
             .unwrap_or_default()
             .is_empty()
         {
-            // spec: S-0312 Edge cases (an empty splash list: no splash, a departure; the importer warns)
-            self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure)".to_owned());
+            // spec: S-0312 Edge cases and S-0317 claim 11 (an empty splash list: no splash, a departure; the importer warns)
+            self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure), and neither does a debris piece that ends in water (S-0317 claim 11, a departure)".to_owned());
         }
         let gravity = self.global(AUDIO_VISUAL, "Gravity");
         // spec: S-0306 Edge cases (the importer warns about a gravity of 0)

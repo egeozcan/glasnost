@@ -59,7 +59,8 @@ fn debris(w: &mut World, id: ObjectId) {
     // spec: S-0312 F1 (debris animations raised by 20 leptons)
     let raised = Pos::new(o.pos.x, o.pos.y, o.pos.z + 20);
     if !tc.debris_types.is_empty() {
-        deal_debris(w, n, &tc.debris_types, &tc.debris_maximums, o.pos);
+        // spec: S-0312 claim 4 (the pieces of a destroyed object get that object's house)
+        deal_debris(w, n, &tc.debris_types, &tc.debris_maximums, o.pos, o.owner);
     } else if !tc.debris_anims.is_empty() {
         let c = tc.debris_anims.len() as i32;
         for _ in 0..n.max(0) {
@@ -79,8 +80,16 @@ fn debris(w: &mut World, id: ObjectId) {
     }
 }
 
-/// Deals N pieces of debris to the listed types (S-0303 F6).
-pub fn deal_debris(w: &mut World, n: i32, types: &[String], maxima: &[i32], at: Pos) {
+/// Deals N pieces of debris to the listed types (S-0303 F6): each a piece
+/// of S-0317 at `at` with the house `house`.
+pub fn deal_debris(
+    w: &mut World,
+    n: i32,
+    types: &[String],
+    maxima: &[i32],
+    at: Pos,
+    house: Option<crate::world::HouseId>,
+) {
     let m = types.len();
     // spec: S-0303 F6 (a non-positive total creates no pieces and takes no allocation draws)
     if m == 0 || n <= 0 {
@@ -113,7 +122,8 @@ pub fn deal_debris(w: &mut World, n: i32, types: &[String], maxima: &[i32], at: 
             glasnost_num::int::rem(raw.wrapping_abs(), b).min(left)
         };
         for _ in 0..g.max(0) {
-            effects::anim(w, &types[i], at);
+            // spec: S-0317 Changes for other specs (S-0303 claim 22 and S-0312 claim 4: the debris pieces are objects of play, created with the draws of S-0317 claims 3 and 4)
+            crate::pieces::create_named(w, &types[i], at, house);
         }
         // spec: S-0303 F6 (ℓⱼ₊₁ = wrap(ℓⱼ − gⱼ): a negative allocation raises the remaining count)
         left = left.wrapping_sub(g);

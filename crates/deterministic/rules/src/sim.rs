@@ -214,6 +214,10 @@ pub struct SimData {
     /// registry `particle_systems` gives their order.
     #[serde(default)]
     pub particle_systems: BTreeMap<String, ParticleSystemType>,
+    /// Voxel-animation types (debris pieces) by type name (S-0317 Import
+    /// mapping); the registry `voxel_animations` gives their order.
+    #[serde(default)]
+    pub voxel_animations: BTreeMap<String, VoxelAnimationType>,
     /// The difficulty rows by our name (`easy`, `normal`, `difficult`;
     /// S-0302 Terms, glossary *difficulty skill block*).
     #[serde(default)]
@@ -616,6 +620,78 @@ pub struct ParticleSystemType {
     /// (S-0616 Import mapping; absent 0.1).
     #[serde(default)]
     pub particles_per_coord: Option<Decimal>,
+}
+
+/// A voxel-animation type's fields: one piece type of S-0317 (Import
+/// mapping). Absent fields take the Import mapping's defaults.
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct VoxelAnimationType {
+    /// `Duration`, the lifetime counter at creation in piece turns
+    /// (S-0317 claim 2; absent 30).
+    #[serde(default)]
+    pub duration: Option<i32>,
+    /// `IsMeteor`, a meteor piece (claim 4; absent no).
+    #[serde(default)]
+    pub is_meteor: Option<bool>,
+    /// `MaxXYVel`, the horizontal speed limit *M*, a double, leptons per
+    /// tick (F1, F2; absent 15.0).
+    #[serde(default)]
+    pub max_xy_vel: Option<Decimal>,
+    /// `MinZVel`, the lower vertical limit *Z*ₘᵢₙ, a double (absent 3.5).
+    #[serde(default)]
+    pub min_z_vel: Option<Decimal>,
+    /// `MaxZVel`, the upper vertical limit *Z*ₘₐₓ, a double (absent 5.0).
+    #[serde(default)]
+    pub max_z_vel: Option<Decimal>,
+    /// `Elasticity`, the elasticity *e*, single precision (claim 10;
+    /// absent 0.8).
+    #[serde(default)]
+    pub elasticity: Option<Decimal>,
+    /// `MinAngularVelocity`, the lower spin limit in degrees per tick as
+    /// the rules layers leave it (S-0006 claims 3 and 5: −1 when a section
+    /// omits it); absent here: the engine default before any reading, 0.
+    #[serde(default)]
+    pub min_angular_velocity: Option<Decimal>,
+    /// `MaxAngularVelocity`, the upper spin limit in degrees per tick, as
+    /// the lower; absent here: the engine default before any reading, 10.
+    #[serde(default)]
+    pub max_angular_velocity: Option<Decimal>,
+    /// `Damage`, the impact and expiry damage amount (claims 7, 11;
+    /// absent 0).
+    #[serde(default)]
+    pub damage: Option<i32>,
+    /// `DamageRadius`, leptons (claim 7; absent 0).
+    #[serde(default)]
+    pub damage_radius: Option<i32>,
+    /// `Warhead`, a warhead name (absent none).
+    #[serde(default)]
+    pub warhead: Option<String>,
+    /// `BounceAnim`, an animation name (claim 7; absent none).
+    #[serde(default)]
+    pub bounce_anim: Option<String>,
+    /// `ExpireAnim`, an animation name (claim 11; absent none).
+    #[serde(default)]
+    pub expire_anim: Option<String>,
+    /// `TrailerAnim`, an animation name (claim 6; absent none).
+    #[serde(default)]
+    pub trailer_anim: Option<String>,
+    /// `Spawns`, a voxel-animation name (claim 12; absent none).
+    #[serde(default)]
+    pub spawns: Option<String>,
+    /// `SpawnCount`, the spawn count *c* (claim 12; absent 0).
+    #[serde(default)]
+    pub spawn_count: Option<i32>,
+    /// `IsTiberium`, the resource flag (claim 12; absent no).
+    #[serde(default)]
+    pub is_tiberium: Option<bool>,
+    /// `AttachedSystem`, a particle-system name (claim 13; absent none).
+    #[serde(default)]
+    pub attached_system: Option<String>,
+    /// `StartSound`, a sound name (claim 14; absent none). The stop sound
+    /// has no effect (claim 14) and is not kept.
+    #[serde(default)]
+    pub start_sound: Option<String>,
 }
 
 /// Game-wide values (keys of `[General]`, `[AI]`, `[IQ]`, `[AudioVisual]`,

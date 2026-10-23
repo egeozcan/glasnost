@@ -484,6 +484,7 @@ pub fn new_game(
         radiation: Default::default(),
         gas: Default::default(),
         waves: Default::default(),
+        pieces: Default::default(),
         discs: Vec::new(),
         walkers: Default::default(),
         mutation: Default::default(),

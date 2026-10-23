@@ -173,6 +173,8 @@ pub enum Entrant {
     Particle(ObjectId),
     /// A projectile in flight (S-0306 claim 28), by its object number.
     Projectile(ObjectId),
+    /// A debris piece in play (S-0317), by its object number.
+    Piece(ObjectId),
 }
 
 /// The object pass's ground layer: a list fully sorted by sort key for
@@ -376,6 +378,12 @@ pub struct Live {
     projectile_table: Vec<Option<(usize, glasnost_convert::art::ProjectileLook)>>,
     /// The projectiles that drew items in the last redraw.
     projectiles_drawn: BTreeSet<ObjectId>,
+    /// Every debris-piece type of the simulation's rules, by its index:
+    /// its import registration index as a voxel animation, `None` for a
+    /// name the import does not list.
+    piece_table: Vec<Option<usize>>,
+    /// The debris pieces that drew items in the last redraw.
+    pieces_drawn: BTreeSet<ObjectId>,
     /// Each vehicle's target-line timer: the tick number *t*₀ of its latest
     /// starting shot (S-0301 claim 24 b).
     target_lines: BTreeMap<ObjectId, i32>,
@@ -922,6 +930,25 @@ impl Live {
                 })
             })
             .collect();
+        let mut piece_index: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
+        if let Some(reg) = inputs.import.outcome.registries.get(&Kind::VoxelAnimations) {
+            for (idx, t) in reg.iter().enumerate() {
+                // spec: S-0003 claim 14 (names match with ASCII case folding; the first registered wins)
+                piece_index
+                    .entry(t.name.to_ascii_uppercase())
+                    .or_insert(idx);
+            }
+        }
+        let piece_table = rules
+            .pieces
+            .types
+            .iter()
+            .map(|t| {
+                piece_index
+                    .get(&name_bytes(&t.name).to_ascii_uppercase())
+                    .copied()
+            })
+            .collect();
         // Our own choice: the cosmetic stream takes the game's seed, like the
         // unsynchronised stream of S-0202 claim 8.
         let cosmetic = glasnost_sim::rng::Rng::new(setup.seed);
@@ -1002,6 +1029,8 @@ impl Live {
             particle_table,
             projectile_table,
             projectiles_drawn: BTreeSet::new(),
+            piece_table,
+            pieces_drawn: BTreeSet::new(),
             target_lines: BTreeMap::new(),
             cosmetic,
             battlefield: None,
@@ -1198,10 +1227,13 @@ impl Live {
             })
             .collect();
         let in_play: BTreeSet<ObjectId> = projectiles.iter().map(|(id, _)| *id).collect();
+        let pieces: Vec<ObjectId> = self.world.pieces.keys().copied().collect();
+        let world = &self.world;
         self.layers.retain(|e| match e {
             Entrant::Anim(s) => anims.get(&s).is_some_and(|l| *l != Layer::Ground),
             Entrant::Particle(id) => particles.contains(&id),
             Entrant::Projectile(id) => in_play.contains(&id),
+            Entrant::Piece(id) => world.pieces.contains_key(&id),
             _ => true,
         });
         for (serial, layer) in anims {
@@ -1221,6 +1253,12 @@ impl Live {
                 // spec: S-0102 claims 3, 4 and 7 (a projectile is in the air layer, or the surface layer when its image is flat; placed at the layer's end)
                 let layer = if flat { Layer::Surface } else { Layer::Air };
                 self.layers.place(Entrant::Projectile(id), layer);
+            }
+        }
+        for id in pieces {
+            if !self.layers.contains(Entrant::Piece(id)) {
+                // spec: S-0102 claims 3, 4 and 7 (a voxel animation is in the air layer; placed at the layer's end)
+                self.layers.place(Entrant::Piece(id), Layer::Air);
             }
         }
     }
@@ -2201,6 +2239,7 @@ impl Live {
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
+                | Effect::PieceSound { .. }
                 | Effect::Superweapon { .. }
                 | Effect::SupportBeam { .. }
                 | Effect::Captured { .. }
@@ -2788,6 +2827,7 @@ impl Live {
         self.counts.most_anims_drawn = self.counts.most_anims_drawn.max(anim_items.len());
         let mut particle_items = self.particle_items(inputs, scene);
         particle_items.extend(self.projectile_items(inputs, scene));
+        particle_items.extend(self.piece_items(inputs, scene));
         scene.spots.clear();
         let waves = self.lines.wave_spots(self.shown_tick(), self.rules.mode);
         // spec: S-0102 claims 1 and 7 (underground and surface before the ground layer, air and
@@ -2819,7 +2859,10 @@ impl Live {
                         scene.items.extend(g.items);
                     }
                 }
-                Entrant::Layered(_) | Entrant::Particle(_) | Entrant::Projectile(_) => {}
+                Entrant::Layered(_)
+                | Entrant::Particle(_)
+                | Entrant::Projectile(_)
+                | Entrant::Piece(_) => {}
             }
         }
         self.draw_layers(
@@ -3012,6 +3055,53 @@ impl Live {
         ids.into_iter().zip(drawn).collect()
     }
 
+    /// The items of every debris piece in play (S-0317 claim 15; drawing
+    /// interim of Q-1835), by object number; empty for one that draws
+    /// nothing.
+    fn piece_items(&mut self, inputs: &Inputs, scene: &mut Scene) -> BTreeMap<ObjectId, Vec<Item>> {
+        use super::build::PieceDraw;
+        let now = self.shown_tick();
+        let mut list = Vec::new();
+        let mut ids = Vec::new();
+        for (id, p) in &self.world.pieces {
+            let Some(idx) = self
+                .piece_table
+                .get(p.type_index as usize)
+                .copied()
+                .flatten()
+            else {
+                continue;
+            };
+            let owner = p
+                .house
+                .and_then(|h| self.world.houses.get(usize::from(h.0)))
+                .map(|h| h.name.as_bytes().to_vec())
+                .unwrap_or_default();
+            list.push(PieceDraw {
+                idx,
+                pos: (p.pos.x, p.pos.y, p.pos.z),
+                pose: piece_pose(p.axis, f64::from_bits(p.spin.0), now.saturating_sub(p.born)),
+                owner,
+            });
+            ids.push(*id);
+        }
+        let (drawn, notes) = self.painter.pieces(inputs, scene, &list);
+        self.notes.extend(notes);
+        self.pieces_drawn = ids
+            .iter()
+            .zip(&drawn)
+            .filter(|(_, i)| !i.is_empty())
+            .map(|(id, _)| *id)
+            .collect();
+        ids.into_iter().zip(drawn).collect()
+    }
+
+    /// For the lanes: the debris pieces in play and those that drew a
+    /// model in the last frame.
+    pub fn piece_counts(&self) -> (usize, usize) {
+        (self.world.pieces.len(), self.pieces_drawn.len())
+    }
+
     /// For the lanes: the electric bolts still shown and how many of them
     /// are attached (S-0316 claims 4 and 5).
     pub fn bolt_counts(&self) -> (usize, usize) {
@@ -3107,6 +3197,10 @@ impl Live {
                 i64::from(p.pos.x) + i64::from(p.pos.y),
             );
         }
+        for (id, p) in &self.world.pieces {
+            // spec: S-0102 claim 5 (X + Y of the position)
+            keys.insert(Entrant::Piece(*id), i64::from(p.pos.x) + i64::from(p.pos.y));
+        }
         for (i, (_, g)) in self.static_layered.iter().enumerate() {
             keys.insert(Entrant::Layered(i), g.key);
         }
@@ -3172,7 +3266,7 @@ impl Live {
                             scene.items.extend_from_slice(items);
                         }
                     }
-                    Entrant::Particle(id) | Entrant::Projectile(id) => {
+                    Entrant::Particle(id) | Entrant::Projectile(id) | Entrant::Piece(id) => {
                         if let Some(items) = particles.get(&id) {
                             scene.items.extend_from_slice(items);
                         }
@@ -3705,4 +3799,31 @@ pub(super) fn generic_shadow(w: &World, o: &Object) -> Option<i32> {
     };
     // spec: S-0107 claim 19 (c) (drawn exactly when hₛ > 0; nothing while h < 0)
     (h > 0 && hs > 0).then_some(hs)
+}
+
+/// A debris piece's drawn pose (S-0317 claim 15: the spin rate turns the
+/// drawn model each tick about the spin axis), in our interim of Q-1835:
+/// the model axis is the axis of the spin axis's largest component (the
+/// first of equal ones; none for a zero axis), and the angle reached after
+/// `elapsed` ticks, spin rate × ticks radians with the sign of that
+/// component, is taken in whole 32-step facing steps of π/16, modulo 32.
+pub fn piece_pose(axis: [i32; 3], spin: f64, elapsed: i32) -> (u8, u8) {
+    let Some((k, c)) = axis
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| **c != 0)
+        .max_by(|a, b| {
+            a.1.unsigned_abs()
+                .cmp(&b.1.unsigned_abs())
+                .then(b.0.cmp(&a.0))
+        })
+        .map(|(k, c)| (k, *c))
+    else {
+        return (3, 0); // nocite: our interim's "no turn" axis code (Q-1835)
+    };
+    let angle = spin * f64::from(elapsed) * f64::from(c.signum());
+    let steps = (angle / super::build::PIECE_STEP).floor();
+    // Our interim (Q-1835): whole steps modulo the 32 facing steps of S-0105.
+    let step = (steps.rem_euclid(32.0)) as u8; // nocite: 32 facing steps (S-0105 Constants)
+    (k as u8, step)
 }

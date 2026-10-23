@@ -12,12 +12,11 @@
 //! [`natural_smoke_yellow`]); the damage sparks of cyborg infantry
 //! ([`damage_sparks`]); the sparks of a deactivated vehicle
 //! ([`deactivated_sparks`]); the sparks of an electric bolt (S-0316 claim
-//! 6, [`electric_bolt_sparks`]); and the two trigger actions of S-0011
-//! codes 88 and 89 ([`trigger_create`], [`trigger_mark`]). The flame sweep,
+//! 6, [`electric_bolt_sparks`]); the attached system of a debris piece
+//! (S-0317 claim 13, [`voxel_animation_system`]); and the two trigger
+//! actions of S-0011 codes 88 and 89 ([`trigger_create`], [`trigger_mark`]). The flame sweep,
 //! swing and insertion of a fire emitter are part of the fire kind's turn
 //! (`crate::particles::fire_turn`).
-//!
-//! Seam (no approved spec covers the owning part): [`voxel_animation_system`].
 
 use glasnost_num::F64;
 
@@ -606,14 +605,29 @@ pub fn electric_bolt_sparks(w: &mut World, end: Pos) {
     crate::particles::spark_system(w, end);
 }
 
-/// Seam `voxel_animation_system` (S-0616 claim 1, voxel-model animation
-/// row): a voxel-model animation type with an attached system makes it at
-/// the animation's start position and marks it when the animation is
-/// removed. No approved spec covers it: voxel animations are not objects
-/// of play in our engine (`crate::combat::effects`), no approved spec
-/// gives their lifetime and removal, and no import key is given for the
-/// attached system, so nothing calls this.
-pub fn voxel_animation_system(_w: &mut World, _start: Pos) {}
+/// The attached system of a debris piece (S-0616 claim 1, voxel-model
+/// animation row; S-0317 claim 13): a system of type `ti` at the piece's
+/// creation point `at`, with the piece `piece` as its owner object and no
+/// owner house, keeping the displacement from the piece's position `pos`
+/// that it has at creation (zero for a falling piece; the whole flight for
+/// a meteor piece). It is entered in the update order directly after its
+/// piece (S-0317 Open questions: our engine's design). It is marked when
+/// the piece leaves play (`crate::pieces`, S-0616 claim 4).
+pub fn voxel_animation_system(w: &mut World, ti: u32, piece: ObjectId, at: Pos, pos: Pos) {
+    // spec: S-0317 claim 13 (made at the creation point, not the start position, after the piece's own draws; no draw; no owner house)
+    let Some(sys) = crate::particles::create(w, ti, at, None) else {
+        return;
+    };
+    if let Some(s) = w.gas.systems.get_mut(&sys) {
+        // spec: S-0317 claim 13 and S-0616 claim 5 (the piece is the owner object; the displacement from the piece at creation is kept)
+        s.owner_object = Some(piece);
+        s.owner_offset = [
+            at.x.wrapping_sub(pos.x),
+            at.y.wrapping_sub(pos.y),
+            at.z.wrapping_sub(pos.z), // nocite: vector and matrix dimensions (three axes)
+        ];
+    }
+}
 
 #[cfg(test)]
 mod tests {

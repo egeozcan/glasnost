@@ -580,6 +580,12 @@ pub fn thin_around_waypoint(w: &mut World, wp: CellXY) {
 }
 
 /// A germinable cell becomes a resource cell of tiberium `t` at stage `a`
+/// (S-0401 claim 11), for the producers of other specs (S-0317 claim 12).
+pub fn add_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
+    new_resource_cell(w, c, t, a);
+}
+
+/// A germinable cell becomes a resource cell of tiberium `t` at stage `a`
 /// (S-0401 claim 11).
 fn new_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
     let Some(tib) = w.rules().econ.resource.tiberiums.get(t).cloned() else {

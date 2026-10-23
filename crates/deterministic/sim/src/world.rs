@@ -427,6 +427,10 @@ pub struct World {
     /// claim 21).
     #[serde(default)]
     pub waves: BTreeMap<ObjectId, crate::lift::Wave>,
+    /// The debris pieces in play by their number in the update order
+    /// (S-0317 claims 1 and 6).
+    #[serde(default)]
+    pub pieces: BTreeMap<ObjectId, crate::pieces::Piece>,
     /// Disc lasers in play, the most recently fired first (S-0615 claim 12,
     /// S-0203 row 12).
     #[serde(default)]

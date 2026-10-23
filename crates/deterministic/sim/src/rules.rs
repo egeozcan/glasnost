@@ -1042,6 +1042,8 @@ pub struct SimRules {
     /// Particle and particle-system types, the shared gas system and the
     /// wind (S-0613).
     pub gas: crate::gas::GasRules,
+    /// The debris-piece types (S-0317).
+    pub pieces: crate::pieces::PieceRules,
     /// The resource-glint animation type, if one is configured (S-0202
     /// claim 14).
     pub ore_twinkle: Option<String>,
@@ -1526,6 +1528,7 @@ impl SimRules {
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, &animations, mode);
         let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
+        let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
         Self {
             crates,
             superweapons,
@@ -1540,6 +1543,7 @@ impl SimRules {
             general,
             animations,
             gas,
+            pieces,
             // spec: S-0202 Import mapping (OreTwinkle: no animation at database creation)
             ore_twinkle: g.ore_twinkle.clone(),
             // spec: S-0207 Import mapping (WarpOut: with none in force, no animation is played)

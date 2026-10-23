@@ -2810,6 +2810,16 @@ pub enum ImageKey {
         /// The 32-step pitch facing *e*.
         pitch: u8,
     },
+    /// A debris piece's model (S-0317 claim 15) in our interim pose
+    /// (Q-1835): the model axis it turns about and the 32-step angle
+    /// reached. Ours: the pose is quantised so that a type's images stay
+    /// few.
+    Piece {
+        /// The model axis: 0, 1, 2 for x, y, z; 3 for no turn.
+        axis: u8,
+        /// The 32-step angle about that axis.
+        step: u8,
+    },
 }
 
 /// A vehicle body's image key: ramp state, 32-step body facing,

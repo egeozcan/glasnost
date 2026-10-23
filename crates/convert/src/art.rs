@@ -446,6 +446,17 @@ pub fn lookup(
         let a = projectile(&mut ctx, t, &outcome.colours);
         out.insert((Kind::Projectiles, i), a);
     }
+    // spec: S-0007 claim 30 (a voxel animation's model)
+    for (i, t) in outcome
+        .registries
+        .get(&Kind::VoxelAnimations)
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
+        let a = voxel_animation(&mut ctx, t);
+        out.insert((Kind::VoxelAnimations, i), a);
+    }
     (out, ctx.warnings)
 }
 
@@ -469,8 +480,8 @@ pub(crate) struct ImageWalk {
     pub(crate) image: Vec<u8>,
     flags: Flags,
     arctic_prev: bool,
-    /// The kind reads the voxel flag: infantry, vehicles, aircraft and
-    /// particles.
+    /// The kind reads the voxel flag: infantry, vehicles, aircraft,
+    /// particles and voxel animations.
     reads_voxel: bool,
     snow: bool,
     on_turning_on: bool,
@@ -484,9 +495,14 @@ impl ImageWalk {
             image: t.name.clone(),
             flags: Flags::default(),
             arctic_prev: false,
+            // spec: S-0007 claims 4, 28 and 30 (the kinds whose art section's voxel flag counts)
             reads_voxel: matches!(
                 kind,
-                Kind::Infantry | Kind::Vehicles | Kind::Aircraft | Kind::Particles
+                Kind::Infantry
+                    | Kind::Vehicles
+                    | Kind::Aircraft
+                    | Kind::Particles
+                    | Kind::VoxelAnimations
             ),
             snow,
             on_turning_on: q.arctic_suffix_on_flag_turning_on,
@@ -505,7 +521,7 @@ impl ImageWalk {
         f.theater = section_bool(pre, "Theater").unwrap_or(f.theater);
         f.new_theater = section_bool(pre, "NewTheater").unwrap_or(f.new_theater);
         if self.reads_voxel {
-            // spec: S-0007 claims 4 and 28 (the voxel flag, for infantry, vehicles, aircraft and particles)
+            // spec: S-0007 claims 4, 28 and 30 (the voxel flag, for infantry, vehicles, aircraft, particles and voxel animations)
             f.voxel = section_bool(pre, "Voxel").unwrap_or(f.voxel);
         }
         let arctic = bool_as_of(t, "AlternateArcticArt", r, false);
@@ -1019,6 +1035,72 @@ fn projectile(ctx: &mut Ctx, t: &TypeRec, colours: &[crate::layers::ColourDef]) 
     a
 }
 
+/// The share flags of a voxel animation (S-0007 claim 30), in their
+/// priority order.
+// spec: S-0007 Import mapping (ShareBodyData, ShareTurretData, ShareBarrelData)
+const SHARE_FLAGS: [&str; 3] = ["ShareBodyData", "ShareTurretData", "ShareBarrelData"];
+
+/// A voxel animation's model (S-0007 claim 30): its image name walked as
+/// claim 1 says, with the arctic suffix only when its art section does not
+/// set the voxel flag, and its own model I ‖ .vxl as role `body`, which
+/// loads no motion file. A type read that sets a share flag shows a part
+/// of its share source instead: that is not built here (a seam), and such
+/// a type has no model.
+fn voxel_animation(ctx: &mut Ctx, t: &TypeRec) -> TypeArt {
+    let mut a = TypeArt {
+        image: t.name.clone(),
+        ..TypeArt::default()
+    };
+    if t.reads.is_empty() {
+        a.notes
+            .push("no type read: no art is built (S-0007 Terms, type read)".into());
+        return a;
+    }
+    let snow = ctx.theater == Theater::Snow;
+    let mut walk = ImageWalk::new(t, Kind::VoxelAnimations, snow, &ctx.q);
+    for &r in &t.reads {
+        // spec: S-0007 claims 1, 9, 10 and 30 (the image name of each read; the A only without the voxel flag)
+        walk.step(ctx.art, t, r);
+    }
+    a.image.clone_from(&walk.image);
+    let last = *t.reads.last().unwrap_or(&0);
+    // spec: S-0007 claim 30 (the share flags are read afresh at every type read: the last read decides)
+    let shared = SHARE_FLAGS
+        .iter()
+        .any(|k| given_at(t, k, last).and_then(boolean).unwrap_or(false));
+    if shared {
+        // Seam: the shared part of S-0007 claim 30 (a part of the share source with its motion file) is not built.
+        a.notes.push(
+            "shares a part of another type (S-0007 claim 30): not built here, nothing is drawn"
+                .into(),
+        );
+        ctx.warnings.push(format!(
+            "voxel animation {}: its section sets a share flag; the shared part is not built yet, so it draws nothing (S-0007 claim 30)",
+            show(&t.name)
+        ));
+        return a;
+    }
+    // spec: S-0007 claim 30 (the own model I ‖ .vxl, no motion file, no other parts, no theater handling, no fallback)
+    let model = with_ext(&a.image, "vxl");
+    if ctx.files.exists(&model) && ctx.files.valid(&model) {
+        a.voxels.insert("body".into(), model);
+    } else {
+        // spec: S-0007 claim 30, Departures (an unresolved or invalid model: our engine draws nothing and the importer warns)
+        a.notes.push(
+            "the model does not resolve or is invalid: nothing is drawn (S-0007 claim 30)".into(),
+        );
+        ctx.warnings.push(format!(
+            "voxel animation {}: the model {} does not resolve or is invalid; it draws nothing (S-0007 claim 30)",
+            show(&t.name),
+            show(&model)
+        ));
+    }
+    if walk.flags.voxel {
+        a.flags.push("voxel");
+    }
+    a
+}
+
 fn animation(ctx: &mut Ctx, t: &TypeRec) -> TypeArt {
     let mut a = TypeArt {
         image: t.name.clone(),
@@ -1147,6 +1229,34 @@ mod tests {
     use glasnost_ini::Quirks;
 
     use super::*;
+    /// spec: S-0007 claim 30 (a voxel animation's own model I ‖ .vxl with no
+    /// motion file; the arctic suffix only without the voxel flag; an
+    /// unresolved model draws nothing; a share flag is our seam)
+    #[test]
+    fn voxel_animation_models() {
+        let rules = "[VoxelAnims]\n1=Chunk\n2=Cold\n3=Iced\n4=Gone\n5=Borrow\n\
+                     [Chunk]\nImage=Bit\n[Cold]\nAlternateArcticArt=yes\n\
+                     [Iced]\nAlternateArcticArt=yes\n[Gone]\nX=1\n[Borrow]\nShareBodyData=yes\n";
+        let art = "[Iced]\nVoxel=yes\n";
+        let f = files(&["Bit.vxl", "ColdA.vxl", "Cold.vxl", "Iced.vxl", "Borrow.vxl"]);
+        let (o, a) = run(&[(rules, Role::Base)], art, Theater::Snow, &f);
+        let body = |n: &str| {
+            s(&get(&o, &a, Kind::VoxelAnimations, n)
+                .voxels
+                .get("body")
+                .cloned())
+        };
+        // The image key names the model; no motion file is needed.
+        assert_eq!(body("Chunk").as_deref(), Some("Bit.vxl"));
+        // On snow, the A without the voxel flag; never with it.
+        assert_eq!(body("Cold").as_deref(), Some("ColdA.vxl"));
+        assert_eq!(body("Iced").as_deref(), Some("Iced.vxl"));
+        // No model file: no model.
+        assert_eq!(body("Gone"), None);
+        // A share flag: no own model (the shared part is a seam).
+        assert_eq!(body("Borrow"), None);
+    }
+
     use crate::layers::{self, GameKind, Layer, LayerQuirks, Role};
 
     struct Files(BTreeSet<Vec<u8>>);

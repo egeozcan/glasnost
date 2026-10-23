@@ -581,7 +581,8 @@ fn exploding_overlay(w: &mut World, centre: CellXY, det: &Detonation) {
     let debris = g.barrel_debris.clone();
     for name in &debris {
         if w.rng.percent() < 15 {
-            crate::combat::effects::anim(w, name, det.point);
+            // spec: S-0317 claim 11 (claim 19's barrel debris is a piece of S-0317) and claim 1 (a detonation's pieces have no house)
+            crate::pieces::create_named(w, name, det.point, None);
             break;
         }
     }

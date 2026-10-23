@@ -1126,7 +1126,7 @@ S-0616 (revision 4, taken in at M7a step 1h, [step1h-m7a.md](m7-claims/step1h-m7
 - **Kinds (claims 5 to 19, F1 to F4, F8 to F13).** Smoke: update newest first, removal pass with successors (claim 8, F3), move with the smoke wind table and the deck stop (F2), emission and the timer's cut-off (claim 9, F4). Fire: update and step (F8), move, hits on the objects of the cell (F9) with no attacking house. Spark: the burst (F10) and the motion and contact with double gravity (F11). Railgun: the line (F12) once, then marked. The normalised stage-advance value (F13) is formed at creation. Every listed draw is taken, the drawn-only ones included. Single and double precision run in `glasnost_num`.
 - **Quirks.** `fire_particle_no_house`, `smoke_ignores_particle_cap`, `spark_double_gravity`, `smoke_deck_extra_update` (each tested both ways) and `flame_sweep_facing` (at M7a a seam that changed nothing; wired at M7b step 3.1, below).
 
-Seams at M7a (all but `electric_bolt_sparks` and `voxel_animation_system` filled at M7b step 3.1, see *Simulation (M7b: particle systems)*): `effect_weapon_emitter` (fire, spark and railgun emitters of effect weapons, the let-go events, S-0301 claim 5's live-effect gate, the flame sweep F5, the swing F6, the insertion F7, a system's target object), `barrel_particle_system` (S-0303 claim 19 takes its draw only), `destruction_smoke`, `refinery_smoke`, `natural_smoke` (with S-0516's cloak removal and uncloak rule), `electric_bolt_sparks`, `damage_sparks`, `deactivated_sparks`, `voxel_animation_system`, the trigger actions (S-0011 codes 88 and 89), and the drawing of every kind. No object is inside a tunnel, so claim 9's tunnel test always passes. No interim rule is waiting (Q-1155 answered by revision 6, step 1j). Gate (step 1h, after merging main with S-0603, seeds 1 to 16): every minimum and median is the same as on main before the merge (berserk orders 9/19, units made berserk 27/47, sensor orders 2/2, the known exception, intent ticks 1 869/3 316, reveal orders 6/11, reveals fired 6/11, slave-miner buildings 3/5, slave ticks 1 274/7 193, gattling stage rises 6/14, top-stage ticks 448/2 373, takeover orders 3/14, takeovers 7/15, gas clouds 26/147, gas hits 39/487, absorber entry orders 6/15, infantry absorbed 5/8, grinder entry orders 4/8, units ground 4/8); the duel's seed stays 3 (12 000 ticks). The goldens were regenerated.
+Seams at M7a (all but `electric_bolt_sparks` and `voxel_animation_system` filled at M7b step 3.1, see *Simulation (M7b: particle systems)*; those two at M8 step C5 parts 1 and 2): `effect_weapon_emitter` (fire, spark and railgun emitters of effect weapons, the let-go events, S-0301 claim 5's live-effect gate, the flame sweep F5, the swing F6, the insertion F7, a system's target object), `barrel_particle_system` (S-0303 claim 19 takes its draw only), `destruction_smoke`, `refinery_smoke`, `natural_smoke` (with S-0516's cloak removal and uncloak rule), `electric_bolt_sparks`, `damage_sparks`, `deactivated_sparks`, `voxel_animation_system`, the trigger actions (S-0011 codes 88 and 89), and the drawing of every kind. No object is inside a tunnel, so claim 9's tunnel test always passes. No interim rule is waiting (Q-1155 answered by revision 6, step 1j). Gate (step 1h, after merging main with S-0603, seeds 1 to 16): every minimum and median is the same as on main before the merge (berserk orders 9/19, units made berserk 27/47, sensor orders 2/2, the known exception, intent ticks 1 869/3 316, reveal orders 6/11, reveals fired 6/11, slave-miner buildings 3/5, slave ticks 1 274/7 193, gattling stage rises 6/14, top-stage ticks 448/2 373, takeover orders 3/14, takeovers 7/15, gas clouds 26/147, gas hits 39/487, absorber entry orders 6/15, infantry absorbed 5/8, grinder entry orders 4/8, units ground 4/8); the duel's seed stays 3 (12 000 ticks). The goldens were regenerated.
 
 ## Simulation (M7a: Infantry absorber)
 
@@ -1261,7 +1261,7 @@ M7b step 3.1 builds the rest of S-0616 (revision 7; revision 8 taken in at step 
 - **Sparks in the turn (claim 1, Q-1404 answered).** `deactivated_sparks` runs first in the living branch of `tick::object_turn`, before the warp, the expected-health bookkeeping and the tint draw (a deactivated vehicle is one disabled by S-0405 claim 13, nothing else). `damage_sparks` (on-map cyborg infantry only) runs after the behaviour processing (`process::turn` or `tail`), so after the overload and self-healing, and before the radiation hit, which now follows it (an erasing turn still takes the radiation hit before it returns), the movement, the parasite step and the infantry firing.
 - **Healing marks of damage smoke (claim 1, S-0314 claims 9 and 10).** After the object's own self-healing gain, and after a non-organic vehicle's house-wide gain, `heal::turn` marks its damage smoke when the health ratio is strictly above yellow or the object is more than 10 leptons below the surface. Infantry and organic vehicles healed house-wide take no test.
 - **Spark turns of 0 or less (claim 20).** A spark system of such a type (absent `SparkSpawnFrames` included) is marked in its first turn with no burst and no draw, so an emitter leaves then and frees the spark place; the importer warns.
-- **Seams left.** `emitters::electric_bolt_sparks` and `emitters::voxel_animation_system`: no approved spec covers their owning parts (the electric-bolt shot; voxel animations as objects of play). `electric_bolt_sparks` was filled at M8 step C5 part 1 (S-0316; section *Electric bolts (M8 step C5 part 1)*).
+- **Seams left.** `emitters::electric_bolt_sparks` and `emitters::voxel_animation_system`: no approved spec covers their owning parts (the electric-bolt shot; voxel animations as objects of play). `electric_bolt_sparks` was filled at M8 step C5 part 1 (S-0316; section *Electric bolts (M8 step C5 part 1)*), `voxel_animation_system` at M8 step C5 part 2 (S-0317; section *Debris pieces with voxel models (M8 step C5 part 2)*).
 - **State.** `ParticleSystem.target_object`; the four places on `CombatState` (`#[serde(default)]`). Save format 59; 60 at step 1b, which drops the natural smoke's `yellowed` mark.
 - **Import.** Weapons `AttachedParticleSystem`; buildings `NaturalParticleSystem`, `NaturalParticleLocation`, `RefinerySmokeParticleSystem`, `RefinerySmokeOffsetOne` … `Four`; types `DestroySmokeOffset` (S-0312); `[General] RefinerySmokeFrames` (absent 25), `ConditionRedSparkingProbability` (0.02), `ConditionYellowSparkingProbability` (0.01); the spark-kind entries of `DamageParticleSystems`; at step 1b `[CombatDamage] railgundamageradius` (128) and `CollapseChance` (100) for S-0306 claim 27, and the warning for a spark-kind type whose `SparkSpawnFrames` is absent, 0 or negative. `data/schema/ruleset.schema.json` regenerated.
 - **Q-1405 (answered by S-0616 revision 10 and S-0306 revision 15, M7b step 1c).** δ is the fixed 10956549 / 536870912; every *t*ᵢ, *t*₄₉ included, follows the rounding mode, so under round-toward-zero *s*₄₉ can fall one cell short of *Q* while the no-stop end point stays the exact *Q*. The line distance of S-0306 claim 27 follows its mixed precision (`railgun::line_distance`); a distance that is not a number (exact collinearity, a zero-length beam) qualifies under `quirks.railgun_collinear_hits` (default on; off: the finite Euclidean distance, to the start for a zero-length beam). Q-1400 to Q-1404 are answered by S-0616 revision 8 (step 1b). No interim is left.
@@ -2316,6 +2316,52 @@ S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-cla
 - **Interim rules.** One drawn frame per tick (frame *n* is the bolt's age in ticks; a second redraw within a tick redraws frame *n* with new draws). Interior pixels are the beam flash's nearest-integer line, with the piece's leftmost end's unclipped bias. The bolt draws come from the view's cosmetic stream, which sound does not share, so claim 13's orders against the sound draws hold trivially.
 - **Shrapnel fragments.** Claim 8's fragment bolts come since M8 A3 intake 6: S-0318 bursts a detonation into fragments, and an electric fragment calls `combat::effects::bolt` (`claims_s0318::sh1m_bolts`).
 - **Checks.** The sim-gate goldens did not move (synthetic data has no electric-bolt weapon), and the M6c, M7a and M7b seed sweeps (seeds 1 to 16) print the same counters before and after. Oracle arena: M-0001 33 of 96 pairings failing before and after, side-wise unanimous stock outcomes reproduced 151 of 172 before and 150 after (one pairing against the stock electric-bolt tank goes from 12 draws to 2 row wins and 10 draws; attributed, not isolated, to the bolt's spark systems taking scenario draws, S-0616 claim 2); M-0002 13 of 24 and 43 of 47, M-0003 3 of 35 and 61 of 64, unchanged. Lane (`m7b_lane` scenes `bolt-vehicle`, `bolt-infantry`, `bolt-building`; pictures in `local-lane/m8/c5/`): ten stock weapons carry the flag; a stock vehicle and a stock infantry type with one fire at an enemy vehicle, each bolt drawn with 225 to 436 pixels per frame and one spark system at its end, the vehicle's bolt attached; the stock building type, given a power plant beside it and a target, fires at tick 48, its bolt drawn with 530 to 559 pixels per frame and one spark system at its end (without the power plant it is not in operation and never fires).
+
+## Debris pieces with voxel models (M8 step C5 part 2)
+
+S-0317 revision 34 (answers Q-1702). Ledger [docs/m8-claims/c5-S-0317.md](m8-claims/c5-S-0317.md).
+
+- **Play.** `glasnost_sim::pieces` holds the pieces in `World::pieces`. A piece is game state:
+  saved, hashed and entered in the update order.
+  - **Creation.** `pieces::create` takes claims 3 and 4's draws. It makes the attached system
+    directly after the piece (`emitters::voxel_animation_system`, the S-0616 seam, now filled) and
+    reports `Effect::PieceSound`.
+  - **Turns.** `pieces::turn` runs from `tick::object_turn`: the count-down, the trailer on even
+    ticks (F7), the flight with its deck, ground, building and cliff contacts and the rebound, the
+    stop test (F6), and the bounce animation and one-cell hits of a ground impact.
+  - **End.** Claim 11's rows, claim 12's further pieces and new resource, then the removal and
+    the marking of the system.
+  - **Producers.** A death (`combat::death::deal_debris`, with the object's house), a warhead's
+    debris and an exploding overlay's barrel debris (no house) all make pieces through
+    `pieces::create_named`.
+  - **Formats.** Save format 72, AI game format 33.
+- **Switches.** New: `quirks.voxel_debris_deck_impact_layer`, `voxel_debris_deck_over_water`,
+  `voxel_debris_trailer_height` and `voxel_debris_expiry_needs_animation`. Wired:
+  `chop_rounding`, `random_magnitude_overflow`, `update_order_removal_skip` and
+  `table_root_distance`.
+- **Import.** `convert::sim_pieces` reads the voxel-animation sections, and warns for zero spans,
+  SpawnCount 2147483647, a resource flag without a resource overlay at 127, and an empty splash
+  list. `art::voxel_animation` gives each type its own model I ‖ .vxl with no motion file (S-0007
+  claim 30).
+- **Sound.** The start sound plays at the creation point and its anchor follows the piece
+  (`glasnost_audio::events`, `Effect::PieceSound`).
+- **Drawing.** `mapview::live` puts each piece in the air layer (S-0102), and
+  `build::live_piece` draws its model turned by `live::piece_pose`.
+- **Interim rules.**
+  - **Q-1834.** A sloped cell rebounds as a flat one. A cliff turn negates each horizontal
+    component whose cell coordinate changed. Any building in the cell counts, and no overlay
+    does.
+  - **Q-1835.** The pose is a turn about the model axis of the spin axis's largest component, in
+    whole π/16 steps, under the S-0105 view. The light is S-0306 F16's, and the palette the
+    piece's house colour at brightness 1000. No depth test and no shadow.
+  - **Q-1836.** Pieces are always placed and never removed off the map. Off the map: ground 0,
+    level 0, not water, no bridge.
+- **Seams.**
+  - S-0007 claim 30's shared part (a share flag draws nothing and warns), and with it
+    `quirks.voxel_anim_share_afresh`.
+  - The warhead's light flash at a piece's end, which is drawing only.
+- **Sprite debris.** The sprite path (bouncing animations, Q-1762) is unchanged. Play notes 6, 10
+  and 12: see [m8-claims/a4-play-notes.md](m8-claims/a4-play-notes.md).
 
 ## Music (M8 step C1 part 1)
 

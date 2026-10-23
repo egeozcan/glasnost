@@ -60,6 +60,7 @@ pub mod parasite;
 pub mod particles;
 pub mod passability;
 pub mod path;
+pub mod pieces;
 pub mod process;
 pub mod psychic;
 pub mod radiation;

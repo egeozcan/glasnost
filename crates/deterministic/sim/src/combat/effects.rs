@@ -497,6 +497,17 @@ pub enum Effect {
         /// The heights of a check.
         check: Option<(LayerHeights, LayerHeights)>,
     },
+    /// A debris piece's start sound (S-0317 claim 14): played at the
+    /// creation point when the piece is made; it then moves with the piece
+    /// (`World::pieces`) in each of its turns.
+    PieceSound {
+        /// The piece.
+        id: ObjectId,
+        /// The sound's name.
+        sound: String,
+        /// The creation point.
+        pos: Pos,
+    },
 }
 
 /// The two heights an object's render layer is evaluated from (S-0102

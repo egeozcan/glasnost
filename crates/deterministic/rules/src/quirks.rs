@@ -608,6 +608,22 @@ pub struct Quirks {
     // spec: S-0318 claim 3 and Edge cases
     #[serde(default = "on")]
     pub shrapnel_building_per_cell: bool,
+    /// A debris piece's ground impact that the deck test puts on a high-bridge deck hits the cell's ground layer (the objects under the deck); off: it hits the deck layer of that cell, as a detonation on the deck does.
+    // spec: S-0317 claims 7 and 10 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_deck_impact_layer: bool,
+    /// A debris piece's ground impact from a high-bridge cell over water is a water impact even on the deck (no bounce animation, no hit, the piece ends in its next turn); off: an impact the deck test puts at the deck height is treated as on land.
+    // spec: S-0317 claims 8 and 11 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_deck_over_water: bool,
+    /// A debris piece's trailer animation is made at about 6.967 times the piece's height (F7); off: at the piece's flight point before the move.
+    // spec: S-0317 claim 6, F7 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_trailer_height: bool,
+    /// A debris piece's end deals its area damage and light flash only when its type names an expiry animation; off: also when the damage amount is not 0.
+    // spec: S-0317 claim 11 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_expiry_needs_animation: bool,
     /// Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.
     // spec: S-0303 claim 6
     #[serde(default = "on")]
@@ -2088,6 +2104,10 @@ impl Default for Quirks {
             shrapnel_first_listed_only: true,
             shrapnel_hits_terrain: true,
             shrapnel_building_per_cell: true,
+            voxel_debris_deck_impact_layer: true,
+            voxel_debris_deck_over_water: true,
+            voxel_debris_trailer_height: true,
+            voxel_debris_expiry_needs_animation: true,
             ground_detonation_misses_aircraft: true,
             flying_search_sectors: true,
             flying_candidates_unfiltered: true,
@@ -2769,6 +2789,22 @@ impl Quirks {
             (
                 "shrapnel_building_per_cell",
                 self.shrapnel_building_per_cell,
+            ),
+            (
+                "voxel_debris_deck_impact_layer",
+                self.voxel_debris_deck_impact_layer,
+            ),
+            (
+                "voxel_debris_deck_over_water",
+                self.voxel_debris_deck_over_water,
+            ),
+            (
+                "voxel_debris_trailer_height",
+                self.voxel_debris_trailer_height,
+            ),
+            (
+                "voxel_debris_expiry_needs_animation",
+                self.voxel_debris_expiry_needs_animation,
             ),
             (
                 "ground_detonation_misses_aircraft",
