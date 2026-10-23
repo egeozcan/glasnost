@@ -92,6 +92,15 @@ pub struct WeaponRules {
     pub railgun: bool,
     /// Magnetic-beam weapon.
     pub mag_beam: bool,
+    /// The electric-bolt flag (S-0316 claims 1 to 13).
+    pub electric_bolt: bool,
+    /// The alternate-colour flag: a bolt's side strands in entry 5 (S-0316
+    /// claim 10).
+    pub alt_colour: bool,
+    /// The laser flag (S-0316 claim 2, S-0514 claim 23).
+    pub laser: bool,
+    /// The radiation-beam flag (S-0316 claim 2, S-0514 claim 23).
+    pub rad_beam: bool,
     /// Spawner weapon.
     pub spawner: bool,
     /// Disc laser weapon.
@@ -1336,6 +1345,11 @@ pub fn tables(
                 fire_particles: b(w.use_fire_particles),
                 railgun: b(w.is_railgun),
                 mag_beam: b(w.is_mag_beam),
+                // spec: S-0316 Import mapping (IsElectricBolt, IsAlternateColor, IsLaser, IsRadBeam: booleans, absent no)
+                electric_bolt: b(w.is_electric_bolt),
+                alt_colour: b(w.is_alternate_color),
+                laser: b(w.is_laser),
+                rad_beam: b(w.is_rad_beam),
                 spawner: b(w.spawner),
                 disk_laser: b(w.disk_laser),
                 // spec: S-0615 Import mapping (LaserDuration absent: 10 ticks)

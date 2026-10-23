@@ -379,6 +379,10 @@ pub struct Live {
     /// simulation does not take (a seam: S-0109 claim 28 puts them on the
     /// scenario stream once playback is in the simulation).
     cosmetic: glasnost_sim::rng::Rng,
+    /// The battlefield view's origin and size at the latest redraw, for the
+    /// electric bolts' view test (S-0316 claim 5); `None` (no view known):
+    /// every bolt counts as in view.
+    pub battlefield: Option<((i32, i32), (u32, u32))>,
     /// Whether our own debug markers are drawn for what has no art (the
     /// viewer); the game client draws only art.
     debug_markers: bool,
@@ -923,7 +927,13 @@ impl Live {
             .and_then(|k| k.value.as_deref())
             .map(|v| glasnost_ini::value::text(v, usize::MAX).to_vec())
             .filter(|n| !n.is_empty() && !glasnost_ini::value::is_no_type(n));
-        let lines = beams::Lines::new(beams::Settings::read(inputs.import, &rules, &house_rgb));
+        let mut settings = beams::Settings::read(inputs.import, &rules, &house_rgb);
+        // spec: S-0316 claim 10 and Import mapping (the bolt colours from the general palette, PALETTE.PAL)
+        settings.bolt = inputs
+            .assets
+            .get(combat::OVERLAY_PALETTE)
+            .and_then(super::bolts::Colours::from_palette_file);
+        let lines = beams::Lines::new(settings);
         // spec: S-0514 Import mapping (DoubleThick, building art: boolean, absent no)
         let double_thick = (0..inputs
             .import
@@ -985,6 +995,7 @@ impl Live {
             projectiles_drawn: BTreeSet::new(),
             target_lines: BTreeMap::new(),
             cosmetic,
+            battlefield: None,
             debug_markers: true,
             move_flash,
             viewer: None,
@@ -2108,6 +2119,15 @@ impl Live {
         for e in &effects {
             // spec: S-0518 claims 6 and 18, S-0615 claims 15 and 16, S-0514 claim 23, S-0607 claim 25 (the line effects of the tick)
             self.lines.take(&self.world, e, now, next_anim);
+            let quirk = self.rules.quirks.ranged_draw_half_span;
+            let cosmetic = &mut self.cosmetic;
+            // spec: S-0316 claim 13 (the bolt's draws come from the unsynchronised stream: our cosmetic stream)
+            let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
+            // spec: S-0316 claims 3 and 4 (the tick's electric bolts, made after the shot's report)
+            self.lines.take_bolt(&self.world, e, now, &mut draw);
+            if matches!(e, Effect::Bolt { .. }) {
+                self.counts.bolts += 1;
+            }
         }
         for e in effects {
             let (kind, pos) = match e {
@@ -2184,6 +2204,7 @@ impl Live {
                 | Effect::Disc { .. }
                 | Effect::Beam { .. }
                 | Effect::Line { .. }
+                | Effect::Bolt { .. }
                 | Effect::Wave { .. }
                 | Effect::RailLine { .. }
                 | Effect::Drain { .. }
@@ -2787,7 +2808,17 @@ impl Live {
         // spec: S-0518 claim 21 (spread draws from the unsynchronised stream: our cosmetic stream)
         let mut draw = |a: i32, b: i32| cosmetic.ranged(a, b, quirk);
         let (beams, flashes) = self.lines.spots(now, detail, self.rules.mode, &mut draw);
-        for spots in [beams, flashes] {
+        // spec: S-0316 claims 12 and 13 (the bolts after the lasers' draws and before the beam flashes)
+        let bolts = self.lines.bolt_spots(
+            now,
+            self.battlefield,
+            self.rules.quirks.table_root_distance,
+            self.rules.mode,
+            &mut draw,
+        );
+        self.counts.bolt_pixels = bolts.len();
+        // spec: S-0316 claim 12 (in the effects group after lasers, before trails and beam flashes)
+        for spots in [beams, bolts, flashes] {
             if !spots.is_empty() {
                 // spec: S-0102 claim 2 (beam effects after all five layers and after the status extras)
                 scene.spots.push(SpotGroup {
@@ -2933,6 +2964,13 @@ impl Live {
             .map(|(id, _)| *id)
             .collect();
         ids.into_iter().zip(drawn).collect()
+    }
+
+    /// For the lanes: the electric bolts still shown and how many of them
+    /// are attached (S-0316 claims 4 and 5).
+    pub fn bolt_counts(&self) -> (usize, usize) {
+        let b = &self.lines.bolts;
+        (b.len(), b.iter().filter(|b| b.attached).count())
     }
 
     /// For the lanes: the projectiles that drew a body in the last frame and

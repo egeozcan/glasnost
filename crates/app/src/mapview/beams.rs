@@ -161,7 +161,8 @@ pub fn support_look(l: [u8; 3]) -> Look {
 pub enum LineEffect {
     /// A laser beam (S-0518).
     Laser,
-    /// An electric bolt (no spec draws it yet).
+    /// An electric bolt (S-0316: drawn from its own report,
+    /// `Effect::Bolt`, by `super::bolts`).
     Bolt,
     /// A beam flash (S-0514 claims 23 to 26).
     Flash,
@@ -783,7 +784,7 @@ const DEGREE: F64 = F64(0x3F91_DF46_A252_9D39); // spec: S-0514 F6 (c, the doubl
 
 /// The pixels of a nearest-integer 8-connected line from `a` to `b`, both
 /// ends included (our interim, S-0514 Open questions).
-fn segment_pixels(a: (i32, i32), b: (i32, i32)) -> Vec<(i32, i32)> {
+pub(crate) fn segment_pixels(a: (i32, i32), b: (i32, i32)) -> Vec<(i32, i32)> {
     let (dx, dy) = (i64::from(b.0 - a.0), i64::from(b.1 - a.1));
     let h = dx.abs().max(dy.abs());
     if h == 0 {
@@ -1080,6 +1081,9 @@ pub struct Settings {
     /// Each particle-system type's laser colour when it has the laser
     /// flag, by simulation system-type index (S-0616 claim 31).
     pub rails: Vec<Option<[u8; 3]>>,
+    /// The electric bolts' colours from the general palette (S-0316 claim
+    /// 10), when the palette file is there.
+    pub bolt: Option<super::bolts::Colours>,
 }
 
 impl Settings {
@@ -1158,6 +1162,7 @@ impl Settings {
             // spec: S-0518 claim 17 (each house's L from its display colour, S-0103 claim 15)
             house_laser: house_rgb.iter().map(|&c| laser_colour(c)).collect(),
             rails,
+            bolt: None,
         }
     }
 }
@@ -1187,6 +1192,8 @@ pub struct Lines {
     pub beams: Vec<Beam>,
     /// Beam flashes still shown, in creation order.
     pub flashes: Vec<Flash>,
+    /// Electric bolts still shown, in creation order (S-0316).
+    pub bolts: Vec<super::bolts::Bolt>,
     /// The magnetic waves' pictures, by wave.
     pub waves: std::collections::BTreeMap<glasnost_sim::world::ObjectId, Wave>,
     /// The activity test's state (S-0518 claim 22).
@@ -1315,7 +1322,7 @@ impl Lines {
                             born: now,
                         });
                     }
-                    // No spec draws an electric bolt yet.
+                    // spec: S-0316 claim 2 (the bolt wins over the radiation beam: no beam flash; the bolt is drawn from Effect::Bolt)
                     LineEffect::Bolt | LineEffect::None => {}
                 }
             }
@@ -1404,6 +1411,96 @@ impl Lines {
         self.beams.retain(|b| now - b.born < b.duration);
         // spec: S-0514 claim 24 (gone from the 16th drawn frame; our engine draws one frame per tick)
         self.flashes.retain(|f| now - f.born < FLASH_FRAMES);
+        // spec: S-0316 claim 5 (gone after its 17th drawn frame; our engine draws one frame per tick)
+        self.bolts.retain(|b| b.frame(now).is_some());
+        self.follow_bolts(w);
+    }
+
+    /// Takes an electric bolt's report at tick `now` (S-0316 claims 3, 4
+    /// and 13), drawing its phase from `draw`.
+    pub fn take_bolt(
+        &mut self,
+        w: &glasnost_sim::world::World,
+        e: &glasnost_sim::combat::effects::Effect,
+        now: i32,
+        draw: &mut dyn FnMut(i32, i32) -> i32,
+    ) {
+        use glasnost_sim::combat::effects::Effect;
+        let Effect::Bolt {
+            firer,
+            weapon,
+            slot,
+            burst,
+            from,
+            to,
+            building,
+            vehicle_on_map,
+        } = *e
+        else {
+            return;
+        };
+        // spec: S-0316 claim 4 (attached only when the firer is a vehicle on the map with no bolt attached to it already)
+        let attached = vehicle_on_map
+            && !self
+                .bolts
+                .iter()
+                .any(|b| b.attached && b.firer == firer && b.frame(now).is_some());
+        // spec: S-0316 claim 10 (the weapon's alternate-colour flag)
+        let alt = w.rules().combat.weapon(weapon).alt_colour;
+        // spec: S-0316 F4 (a building firer: S-0518 claim 20's a = min(0, yₛ − yₒ); otherwise 0)
+        let a = building.map_or(0, |b| building_nearness(from, b));
+        // spec: S-0316 claim 5 (its first drawn frame is the one after the shot's tick: our shown tick)
+        self.bolts.push(super::bolts::Bolt::new(
+            firer, slot, burst, from, to, attached, now, alt, a, draw,
+        ));
+    }
+
+    /// Moves each attached bolt's start to its firer's current fire point
+    /// for the same slot and burst side (S-0316 claim 4).
+    fn follow_bolts(&mut self, w: &glasnost_sim::world::World) {
+        for b in self.bolts.iter_mut().filter(|b| b.attached) {
+            if w.obj(b.firer).is_none() {
+                // spec: S-0316 claim 4 (the firer's removal ends the attachment; the bolt keeps its last start)
+                b.attached = false;
+                continue;
+            }
+            // spec: S-0316 claim 4 (each drawn frame, before the view test, the start moves to the current fire point of the slot that fired, the shot's own side; a destroyed firer still present and one off the map keep following)
+            b.start = glasnost_sim::combat::position::fire_point(w, b.firer, b.slot, b.burst);
+        }
+    }
+
+    /// The electric bolts' spots at tick `now` (S-0316 claims 5, 9 to 13):
+    /// the newest bolt first, each out of view skipped with no draws;
+    /// `view` the battlefield view's origin and size (`None`: all in view),
+    /// `table` and `mode` the switches of the bolt length.
+    pub fn bolt_spots(
+        &self,
+        now: i32,
+        view: Option<((i32, i32), (u32, u32))>,
+        table: bool,
+        mode: Rounding,
+        draw: &mut dyn FnMut(i32, i32) -> i32,
+    ) -> Vec<Spot> {
+        use super::bolts;
+        let mut out = Vec::new();
+        // spec: S-0316 claims 12 and 13 (the newest bolt first)
+        for b in self.bolts.iter().rev() {
+            let Some(n) = b.frame(now) else {
+                continue;
+            };
+            let at = |p: Pos| project_lifted(p.x, p.y, p.z);
+            // spec: S-0316 claim 5 (a bolt whose straight screen line between its two ends lies wholly outside the battlefield view is not drawn and takes no draws)
+            if let Some((origin, size)) = view
+                && !bolts::line_in_view(at(b.start), at(b.end), origin, size)
+            {
+                continue;
+            }
+            let pieces = bolts::shape(b.start, b.end, b.phase_at(n), b.a, table, mode, draw);
+            if let Some(c) = &self.settings.bolt {
+                out.extend(bolts::spots(&pieces, b.alt, c));
+            }
+        }
+        out
     }
 
     /// The beams' spots at tick `now` (S-0518 claims 19 to 23), in creation

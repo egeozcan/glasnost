@@ -4,6 +4,7 @@
 
 pub mod anims;
 pub mod beams;
+pub mod bolts;
 pub mod build;
 pub mod combat;
 pub mod cover;

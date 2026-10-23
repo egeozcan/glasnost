@@ -189,7 +189,9 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if launched.is_none() && wr.projectile.is_some() && !wr.spawner && !wr.disk_laser {
         return false;
     }
+    // spec: S-0316 claim 2 (the electric-bolt flag wins over the magnetic-beam flag: the bolt and no magnetic wave, even with no live wave; the shot itself is fired)
     if wr.mag_beam
+        && !wr.electric_bolt
         && let Some(pid) = launched
     {
         // spec: S-0607 claim 21 and F3 (a magnetic-beam weapon's shot may create a magnetic wave, from the firing point to the impact point; claim 21 Its points: F3 is evaluated once, at creation, from the firing and impact points as computed when the shot is fired, the impact point being the projectile's stored target point)
@@ -315,6 +317,10 @@ pub fn shot(w: &mut World, firer: ObjectId, slot: usize, target: Target) -> bool
     if !wr.disk_laser {
         crate::combat::projectile::shot_effect(w, firer, weapon, fp);
         crate::combat::effects::line(w, firer, weapon, fp, shot_target);
+    }
+    // spec: S-0316 claims 1 and 2 (a shot that put its projectile on the map makes one bolt and its sparks in the tick of the shot, after the report; a firing that launches no projectile, such as a spawner's or a disc laser's, and a void shot make neither; each shot of a burst its own)
+    if launched.is_some() && crate::combat::effects::makes_bolt(&wr) {
+        crate::combat::effects::bolt(w, firer, weapon, slot, k, fp, shot_target);
     }
     // spec: S-0309 claim 15 and S-0302 claim 18 (a shot lowers the target's expected remaining health)
     if let Some((x, e)) = expected

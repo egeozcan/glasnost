@@ -604,6 +604,10 @@ pub struct Counts {
     pub gas_hits: u64,
     /// Most gas particles in the world at once (S-0613).
     pub most_gas: usize,
+    /// Electric bolts made (S-0316).
+    pub bolts: u64,
+    /// Electric-bolt pixels drawn in the last redraw (S-0316).
+    pub bolt_pixels: usize,
 }
 
 /// A decoded overlay sprite frame: image, frame offset, canvas size.
