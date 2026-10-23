@@ -231,6 +231,9 @@ const PROJECTILE_BIAS: i32 = -30; // spec: S-0102 claim 13 and Constants (projec
 /// A projectile shadow's depth bias before −*L* of the ground under it
 /// (S-0102 claim 13).
 const PROJECTILE_SHADOW_BIAS: i32 = -10; // spec: S-0102 claim 13 and Constants (projectile shadow bias −10)
+/// A debris piece's 32-step pose angle, π/16 radians (ours, the interim of
+/// Q-1835: the angle is quantised to the 32 facing steps of S-0105).
+pub const PIECE_STEP: f64 = std::f64::consts::PI / 16.0; // spec: S-0105 Constants (facing step π/16; its use for a piece's pose is the interim of Q-1835)
 /// A flat voxel projectile's final depth bias (S-0102 claim 13, S-0306
 /// claim 30): no −*L(z)* term.
 const FLAT_VOXEL_PROJECTILE_BIAS: i32 = -65; // spec: S-0306 claim 30 and S-0102 claim 13 (final bias −65, no height-lift term)
@@ -906,6 +909,12 @@ pub fn game_files(import: &Import) -> BTreeSet<Vec<u8>> {
         ) {
             art_files(import, kind, idx, &mut out);
         }
+        // spec: S-0007 claim 30 (a voxel animation's own model; no motion file is loaded for it)
+        if kind == Kind::VoxelAnimations
+            && let Some(a) = import.arts.get(&(kind, idx))
+        {
+            out.extend(a.voxels.values().map(|v| upper(v)));
+        }
         if kind == Kind::Buildings {
             slot_files(import, &art, idx, &mut out);
         }
@@ -1226,6 +1235,21 @@ pub struct ProjectileDraw {
     /// height of the ground the shadow lies on (terrain or deck); `None`
     /// without one.
     pub shadow: Option<(i32, i32)>,
+}
+
+/// A debris piece in play to draw (S-0317 claim 15; drawing interim of
+/// Q-1835).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PieceDraw {
+    /// Its type's import registration index (a voxel animation).
+    pub idx: usize,
+    /// World position in leptons.
+    pub pos: (i32, i32, i32),
+    /// The pose: the model axis it turns about (0, 1, 2 for x, y, z; 3 for
+    /// none) and the 32-step angle reached.
+    pub pose: (u8, u8),
+    /// The name of the piece's house; empty without one.
+    pub owner: Vec<u8>,
 }
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
@@ -3236,6 +3260,72 @@ impl Builder<'_> {
         }]
     }
 
+    /// A debris piece's model (S-0317 claim 15, S-0007 claim 30): its own
+    /// model, with no motion file, turned by its pose; no items when its
+    /// type has no model or the model does not parse. Every other drawing
+    /// choice is our interim of Q-1835: the view of S-0105 claim 1, the
+    /// diffuse shading of S-0306 F16, the 53-shade palette of the piece's
+    /// house (the neutral colour without one) at brightness 1000, no depth
+    /// test, no shadow.
+    fn live_piece(&mut self, d: &PieceDraw) -> Vec<Item> {
+        let Some(file) = self
+            .import
+            .arts
+            .get(&(Kind::VoxelAnimations, d.idx))
+            .and_then(|a| a.voxels.get("body").cloned())
+        else {
+            return Vec::new();
+        };
+        let q = VoxelQuirks::default();
+        let (axis, step) = d.pose;
+        let key = voxel::ImageKey::Piece { axis, step };
+        let part = self.cached_part(Kind::VoxelAnimations, d.idx, key, |b| {
+            // spec: S-0007 claim 30 (the own model loads no motion file)
+            let model = b.bare_voxel_model(&file)?;
+            let mode = model.sections.first()?.normal_mode;
+            // Interim of Q-1835: the turn about the chosen model axis, under the fixed view.
+            let angle = f64::from(step) * PIECE_STEP;
+            let turn = match axis {
+                0 => voxel::Mat34::IDENTITY.rotate_x(angle, &q),
+                1 => voxel::Mat34::IDENTITY.rotate_y(angle, &q),
+                2 => voxel::Mat34::IDENTITY.rotate_z(angle, &q),
+                _ => voxel::Mat34::IDENTITY,
+            };
+            let draw = voxel::view(&q).then(&turn);
+            let shades = voxel::projectile_shade_table(&draw, mode, &q);
+            let vpl = b.vpl();
+            let img = voxel::draw_model_shaded(&model, 0, &draw, vpl.as_ref(), &shades, &q);
+            b.limit_checked(&file, "piece", key, img)
+        });
+        let Some(part) = part else {
+            return Vec::new();
+        };
+        let hsv = if d.owner.is_empty() {
+            [0, 0, 0]
+        } else {
+            self.owner_colour(&d.owner).0
+        };
+        let row = self.house_row(hsv, PROJECTILE_BRIGHTNESS);
+        // spec: S-0101 F1 (the screen point of its position, height lift included)
+        let point = project_lifted(d.pos.0, d.pos.1, d.pos.2);
+        vec![Item {
+            image: part.0,
+            x: point.0 + part.1[0],
+            y: point.1 + part.1[1],
+            test: DepthTest::Ignore,
+            depth: ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: 0,
+                companion: None,
+            },
+            paint: Paint::Lit(row),
+            group: Group::Effects,
+            provisional: false,
+            object: None,
+            stack: None,
+        }]
+    }
+
     /// The single-shade table of a colour definition (S-0103 claim 5): one
     /// untinted row (S-0104 claim 3), added to the scene once.
     fn single_row(&mut self, hsv: [u8; 3]) -> (usize, usize) {
@@ -4262,6 +4352,22 @@ impl Builder<'_> {
                 hva.as_ref(),
                 &VoxelQuirks::default(),
             ))
+        });
+        self.p.models.insert(key, m.clone());
+        m
+    }
+
+    /// A parsed voxel model without a motion file, parsed once (a voxel
+    /// animation's own model, S-0007 claim 30).
+    fn bare_voxel_model(&mut self, file: &[u8]) -> Option<std::rc::Rc<voxel::VoxelModel>> {
+        let mut key = upper(file);
+        // Our cache key: kept apart from the same file loaded with its motion file.
+        key.extend_from_slice(b"|bare");
+        if let Some(m) = self.p.models.get(&key) {
+            return m.clone();
+        }
+        let m = Vxl::parse(self.assets.get(file)?).ok().map(|vxl| {
+            std::rc::Rc::new(voxel::VoxelModel::new(&vxl, None, &VoxelQuirks::default()))
         });
         self.p.models.insert(key, m.clone());
         m
@@ -5360,6 +5466,44 @@ impl Painter {
             live_slots: None,
         };
         let out = list.iter().map(|d| b.live_projectile(d)).collect();
+        *self = b.p;
+        *scene = b.built.scene;
+        (out, b.built.notes)
+    }
+
+    /// Draws the live game's debris pieces into `scene` (adding the images
+    /// and rows they need): for each, its items, none when its type has no
+    /// model (S-0317 claim 15, S-0007 claim 30).
+    pub fn pieces(
+        &mut self,
+        inputs: &Inputs,
+        scene: &mut Scene,
+        list: &[PieceDraw],
+    ) -> (Vec<Vec<Item>>, BTreeSet<String>) {
+        let mut b = Builder {
+            map: inputs.map,
+            rules: inputs.rules,
+            cells_loaded: inputs.cells,
+            import: inputs.import,
+            catalogue: inputs.catalogue,
+            palettes: inputs.palettes,
+            assets: inputs.assets,
+            options: inputs.options,
+            p: std::mem::replace(
+                self,
+                Painter::new(
+                    Document::empty(Default::default()),
+                    voxel::VoxelCanvas::new(),
+                ),
+            ),
+            built: Built {
+                scene: std::mem::take(scene),
+                ..Default::default()
+            },
+            live: true,
+            live_slots: None,
+        };
+        let out = list.iter().map(|d| b.live_piece(d)).collect();
         *self = b.p;
         *scene = b.built.scene;
         (out, b.built.notes)
