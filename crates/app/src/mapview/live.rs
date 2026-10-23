@@ -443,8 +443,8 @@ impl slot_play::Make<SlotAnim> for SlotMaker<'_, '_> {
             &AnimQuirks::default(),
         );
         if let Some(old) = from {
-            // spec: S-0108 Terms (the new animation continues from the old one's image frame)
-            player.continue_from(old.player.frame());
+            // spec: S-0108 claim 25 (the new animation keeps the replaced one's stage, not its image frame, and takes its passes afresh)
+            player.keep_stage(old.player.stage());
         }
         Some(SlotAnim { player, entry })
     }

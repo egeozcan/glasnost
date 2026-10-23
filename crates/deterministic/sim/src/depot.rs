@@ -117,7 +117,8 @@ pub fn is_depot(w: &World, k: ObjectId) -> bool {
 }
 
 /// A repair depot's slot that the simulation models (S-0108 claim 20,
-/// Terms: the building's animation slots; S-0314 claims 6 and 22).
+/// Terms: the building's animation slots; S-0314 claims 6 and 22),
+/// declared in S-0108 claim 12's restart order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DepotSlot {
     /// The *production* slot: while it runs, settling takes no step

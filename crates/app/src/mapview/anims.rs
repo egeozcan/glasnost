@@ -168,16 +168,67 @@ mod tests {
         out
     }
 
-    // spec: S-0108 Terms (a replacing slot animation continues from the old one's image frame) and
-    // S-0109 claim 1 (image frame a + k)
+    /// [`run`] for an animation that replaced one at stage `k` (S-0108
+    /// claim 25).
+    fn run_kept(p: Playback, k: i32, env: &mut TestEnv, limit: i32) -> Vec<Option<i32>> {
+        let q = AnimQuirks::default();
+        let mut a = Player::new(b"A", p, 0, None, env, &q);
+        a.keep_stage(k);
+        let mut out = Vec::new();
+        for t in 0..limit {
+            if a.update(t, env, &q) {
+                out.push(Some(a.frame()));
+            } else {
+                out.push(None);
+                break;
+            }
+        }
+        out
+    }
+
+    // spec: S-0108 claim 25 (the stage is kept, not the image frame: the new animation shows its own start field plus the kept stage) and S-0109 claim 1 (image frame a + k)
     #[test]
-    fn continue_from_keeps_the_image_frame() {
+    fn keep_stage_shows_its_own_start_plus_the_stage() {
         let q = AnimQuirks::default();
         let mut env = TestEnv::new();
         let mut a = Player::new(b"A", ty("Start=2", 10, (0, 0)), 0, None, &mut env, &q);
         assert_eq!(a.frame(), 2);
-        a.continue_from(6);
+        a.keep_stage(4);
         assert_eq!((a.frame(), a.stage()), (6, 4));
+    }
+
+    // spec: S-0108 claim 25 (the passes are not kept: they take their creation value; the partial pass it starts in uses up one of them like any other pass)
+    #[test]
+    fn kept_stage_partial_pass_counts_whole() {
+        let mut env = TestEnv::new();
+        let shown = run_kept(ty("LoopCount=2", 10, (0, 0)), 7, &mut env, 1000);
+        let mut want = vec![7, 8, 9];
+        want.extend(0..10);
+        assert_eq!(
+            sequence(&shown),
+            want,
+            "the partial pass, then one whole pass"
+        );
+        assert_eq!(shown.last(), Some(&None), "then it ends");
+    }
+
+    // spec: S-0108 claim 25 (a kept stage beyond the new type's range: a forward type that is not ping-pong shows a + k until its first advance, which ends the pass; a forward ping-pong type alternates between k and k + 1 and never ends a pass) and S-0109 claims 1, 6 and 9
+    #[test]
+    fn kept_stage_beyond_the_range() {
+        let mut env = TestEnv::new();
+        let shown = run_kept(ty("", 10, (0, 0)), 12, &mut env, 1000);
+        assert_eq!(shown, vec![Some(12), None], "one advance ends its one pass");
+        let shown = run_kept(
+            ty("PingPong=yes\nLoopCount=-1", 10, (0, 0)),
+            12,
+            &mut env,
+            40,
+        );
+        assert_eq!(sequence(&shown).len(), shown.len(), "a new stage each tick");
+        assert!(
+            shown.iter().all(|f| matches!(f, Some(12 | 13))),
+            "{shown:?}"
+        );
     }
 
     // spec: S-0109 claims 1, 2, 5, 6 and 16, scenario AN1 (T1: rate 100, every frame held 9 ticks,

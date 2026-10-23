@@ -316,13 +316,15 @@ fn claim_20_every_tick_row_and_the_naval_exception() {
     }
 }
 
-// spec: S-0108 claim 12 (the damaged state differs from the slot condition: every running slot restarts with its damaged name, continuing from its image frame)
+// spec: S-0108 claims 12 and 25 (the damaged state differs from the slot condition: every running slot restarts with its damaged name, keeping its stage, not its image frame: the new animation shows its own start field plus that stage)
 #[test]
 fn claim_12_condition_swap_restarts_the_modelled_slots() {
-    let (mut w, k, _) = scene("DEPOT", 300);
+    let mut r = rules();
+    r.sim.animations.get_mut("SP2D").unwrap().start = Some(2);
+    let (mut w, k, _) = scene_with(&r, "DEPOT", 300);
     to_working(&mut w, k);
-    assert!(run_until(&mut w, 200, |w| runs(w, k, DepotSlot::Special2)));
-    step(&mut w);
+    assert!(run_until(&mut w, 200, |w| runs(w, k, DepotSlot::Special2)
+        && depot_anim::draws(w, k)[0].stage > 0));
     let before = depot_anim::draws(&w, k);
     assert_eq!(before[0].name, "SP2");
     w.obj_mut(k).unwrap().health = 100;
@@ -331,10 +333,32 @@ fn claim_12_condition_swap_restarts_the_modelled_slots() {
     assert_eq!(after[0].slot, DepotSlot::Special2);
     assert_eq!(after[0].name, "SP2D");
     // The swap comes in the depot's turn, before the old animation's turn of that tick, and the new one's first update makes no advance (S-0109 claim 5).
+    assert_eq!(after[0].stage, before[0].stage, "the stage is kept");
     assert_eq!(
-        after[0].frame, before[0].frame,
-        "continuing from its image frame"
+        after[0].frame,
+        2 + before[0].stage,
+        "its own start field plus the stage"
     );
+}
+
+// spec: S-0108 claim 25 (a start replacing a running animation of the same type: the stage is kept and the passes take their creation value, the replaced one's completed passes not carried over)
+#[test]
+fn claim_25_a_replacing_start_counts_its_passes_afresh() {
+    let mut r = rules();
+    r.sim.animations.get_mut("SP3").unwrap().loop_count = Some(3);
+    let (mut w, k, _) = scene_with(&r, "DEPOT", 300);
+    depot_anim::start_for_test(&mut w, k, DepotSlot::Special3);
+    let passes = |w: &World| {
+        let id = w.obj(k).unwrap().depot.slots[&DepotSlot::Special3];
+        w.depot_anims.anims[&id].player.remaining_passes()
+    };
+    assert_eq!(passes(&w), Some(3));
+    assert!(run_until(&mut w, 400, |w| passes(w) == Some(2)
+        && depot_anim::draws(w, k)[0].stage > 0));
+    let stage = depot_anim::draws(&w, k)[0].stage;
+    depot_anim::start_for_test(&mut w, k, DepotSlot::Special3);
+    assert_eq!(passes(&w), Some(3), "the passes afresh");
+    assert_eq!(depot_anim::draws(&w, k)[0].stage, stage, "the stage kept");
 }
 
 // spec: S-0109 claims 28 and 29 and S-0202 claim 10 (a slot animation's creation takes its draws on the scenario stream at the creation: one ranged draw for a type with a random rate)
