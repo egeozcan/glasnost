@@ -281,12 +281,25 @@ mod vd_click {
     fn plain(r: &Ruleset, name: &str) -> (World, ObjectId) {
         let mut w = testkit::game_with(r, SIZE, 17);
         testkit::run(&mut w, 4);
-        let v = testkit::spawn(&mut w, Kind::Vehicle, name, ALPHA, c(0, 0), (D * 256) as u16);
+        let v = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            name,
+            ALPHA,
+            c(0, 0),
+            (D * 256) as u16,
+        );
         (w, v)
     }
 
     fn shown(w: &World, house: u8, v: ObjectId) -> Action {
-        targeting::cursor(w, HouseId(house), &[v], ClickOn::Object(v), Modifiers::default())
+        targeting::cursor(
+            w,
+            HouseId(house),
+            &[v],
+            ClickOn::Object(v),
+            Modifiers::default(),
+        )
     }
 
     // spec: S-0214 table VD row VD2 (a vehicle that deploys into a building, where the building fits and it has deploy readiness: deploy; the click's order is the deploy key's effect)
@@ -331,7 +344,13 @@ mod vd_click {
         let (mut w, v) = plain(&r, "MCV");
         testkit::spawn(&mut w, Kind::Vehicle, "KIT", BETA, c(-1, -1), 0);
         assert_eq!(shown(&w, ALPHA, v), Action::NoDeploy);
-        let res = targeting::click(&w, HouseId(ALPHA), &[v], ClickOn::Object(v), Modifiers::default());
+        let res = targeting::click(
+            &w,
+            HouseId(ALPHA),
+            &[v],
+            ClickOn::Object(v),
+            Modifiers::default(),
+        );
         assert!(res.orders.is_empty());
         let (mut w, k) = plain(&r, "KIT");
         testkit::spawn(&mut w, Kind::Vehicle, "KIT", BETA, c(-1, -1), 0);
