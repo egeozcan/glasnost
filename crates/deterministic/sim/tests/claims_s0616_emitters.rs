@@ -338,6 +338,35 @@ fn s0301_claim_5_live_effect_gate() {
     assert_eq!(ask(&w, 0), Answer::Impossible);
 }
 
+/// spec: S-0306 claim 23 (within rank 4 the other weapon's live-effect impossible comes before the water and land rows; the own kind's rearming is rank 5, below them) and S-0301 claim 5
+#[test]
+fn s0306_claim_23_other_weapons_live_effect_before_the_land_row() {
+    let mut r = rules();
+    r.sim
+        .vehicles
+        .get_mut("CART")
+        .unwrap()
+        .combat
+        .land_targeting = Some(1);
+    let (mut w, a, _) = duel(&r, 4);
+    let ask = |w: &World, slot| check(w, a, w.obj(a).unwrap().target, slot, true);
+    // No live effect: the land row refuses the ground target to both weapons.
+    assert_eq!(ask(&w, 0), Answer::Illegal);
+    assert_eq!(ask(&w, 1), Answer::Illegal);
+    // A shot made without the check leaves the primary's fire emitter alive.
+    let t = w.obj(a).unwrap().target.unwrap();
+    assert!(fire::shot(&mut w, a, 0, t));
+    w.obj_mut(a).unwrap().combat.rearm_until = 0;
+    assert_eq!(
+        ask(&w, 1),
+        Answer::Impossible,
+        "the other weapon's kind alive"
+    );
+    assert_eq!(ask(&w, 0), Answer::Illegal, "own kind alive: rank 5");
+    emitters::let_go_fire(&mut w, a);
+    assert_eq!(ask(&w, 1), Answer::Illegal);
+}
+
 /// spec: S-0616 claim 1 (a spark emitter is not let go by a move order; it ends by its own counter and the place empties when it leaves play) and S-0301 claim 5 (a spark weapon fires again once its emitter has left play)
 #[test]
 fn claim_1_spark_emitter_ends_by_its_counter() {

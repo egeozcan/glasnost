@@ -477,14 +477,12 @@ fn infantry_death(w: &mut World, id: ObjectId, hit: &Hit) {
     if extra {
         crate::gas::virus_death(w, o.pos, owner, true);
     }
-    // spec: S-0107 claim 17 row 3 (the type has its own list of death animations: entry w, entry 0 when w is outside the list or entry w is empty; no sequence) and S-0615 claim 1 (it precedes rows 4 to 8: no die-1 request, no virus effect of a ground "not human" type, no conversion)
+    // spec: S-0107 claim 17 row 3 (the type has its own list of death animations with at least one entry: entry w, entry 0 when w is negative or not less than the list's length; no sequence; the importer has left no-type and empty items out) and S-0615 claim 1 (it precedes rows 4 to 8: no die-1 request, no virus effect of a ground "not human" type, no conversion)
     if let Some(list) = u.raw.death_anims.as_ref().filter(|l| !l.is_empty()) {
-        // Interim rule of Q-1715: every entry keeps its position, and `none` or `<none>` counts as empty.
-        let entry = |i: usize| list.get(i).filter(|n| !no_type(n));
         let name = usize::try_from(kind)
             .ok()
-            .and_then(entry)
-            .or_else(|| entry(0))
+            .and_then(|i| list.get(i))
+            .or_else(|| list.first())
             .cloned();
         if let Some(name) = name {
             death_anim(w, &name, o.pos);
@@ -573,12 +571,6 @@ pub fn death_kind_effect(w: &mut World, kind: i32, pos: Pos) {
     death_anim(w, &name, pos);
 }
 
-/// `none` or `<none>`, in any case: an entry that names no type (S-0003
-/// claim 14).
-fn no_type(name: &str) -> bool {
-    name.eq_ignore_ascii_case("none") || name.eq_ignore_ascii_case("<none>")
-}
-
 /// One death animation of type `name` at `pos` (S-0615 claim 2): no owner,
 /// no attachment; a burning walker when its type has the flag.
 fn death_anim(w: &mut World, name: &str, pos: Pos) {
@@ -630,7 +622,7 @@ fn corpse(w: &mut World, id: ObjectId) {
     let Some(name) = usize::try_from(r).ok().and_then(|i| list.get(i)) else {
         return;
     };
-    // spec: S-0107 claim 17 (a corpse animation is left at the unit's position); interim rule of Q-1715: an entry that names no listed animation shows nothing, the draw taken
+    // spec: S-0107 claim 17 (a corpse animation is left at the unit's position; an unknown name is an animation type the importer created, S-0004 claim 13, which draws nothing without a sprite) and S-0615 claim 2 (a type that cannot be created: nothing, the draw taken)
     if rules.animation(name).is_some() {
         crate::combat::effects::anim(w, name, pos);
     }

@@ -2,6 +2,7 @@
 //! the per-attempt test whose answer says whether a shot can be made now
 //! and, if not, why.
 
+use glasnost_map::terrain::land;
 use glasnost_num::F64;
 use glasnost_num::geom::{Facing, delta, direction};
 
@@ -10,7 +11,7 @@ use crate::combat::range;
 use crate::combat::veterancy::type_combat;
 use crate::combat::weapon::{airborne_by_height, slot_weapon, versus};
 use crate::rules::Kind;
-use crate::world::{ObjectId, Pos, Target, World};
+use crate::world::{Layer, ObjectId, Pos, Target, World};
 
 /// The answers of the firing check (S-0301 claim 9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,6 +247,48 @@ fn projectile_illegal(w: &World, weapon: WeaponId, t: Target) -> bool {
     }
 }
 
+/// The water and land rows of S-0306 claim 23: whether the firer's type's
+/// naval-targeting or land-targeting mode refuses target `t`, whatever the
+/// weapon and the distance. Our engine has no overlay targets; a terrain
+/// object meets neither row.
+fn targeting_mode_illegal(w: &World, firer: ObjectId, t: Target) -> bool {
+    let tc = type_combat(w, firer);
+    // spec: S-0306 claim 23 and Import mapping (LandTargeting, NavalTargeting: absent 0; any land mode other than 1 acts as 0 here)
+    let land_mode = tc.map_or(0, |c| c.land_targeting);
+    let naval_mode = tc.map_or(0, |c| c.naval_targeting);
+    let land_of = |c| w.cells.cell(c).map_or(land::CLEAR, |x| x.land);
+    // spec: S-0306 claim 23 (a cell whose land type is water or beach)
+    let wet = |l: u8| l == land::WATER || l == land::BEACH;
+    match t {
+        // spec: S-0306 claim 23 (land row: land mode 1 and a cell whose land type is neither water nor beach)
+        Target::Cell(c) => land_mode == 1 && !wet(land_of(c)),
+        Target::Object(x) => {
+            let Some(o) = w.obj(x) else { return false };
+            // spec: S-0306 claim 23 (both rows need an infantry, vehicle, aircraft or building that is on the map and not airborne, S-0307 Terms; a terrain object meets neither)
+            if o.kind == Kind::Terrain || !o.on_map || airborne_by_height(w, x) {
+                return false;
+            }
+            let bridge = o.layer == Layer::Deck;
+            if !bridge && wet(land_of(o.pos.cell())) {
+                // spec: S-0306 claim 23 (water row: not on a bridge, on a water or beach cell, and the naval mode gives "none" by S-0308 table N)
+                let underwater = type_combat(w, x).is_some_and(|c| c.underwater);
+                match naval_mode {
+                    // spec: S-0306 claim 23 and S-0308 table N (mode 0: an underwater target that is cloaking, cloaked or uncloaking)
+                    0 => underwater && crate::cloak::not_uncloaked(w, x),
+                    // spec: S-0306 claim 23 and S-0308 table N (mode 2: a target whose type is not underwater)
+                    2 => !underwater,
+                    // spec: S-0306 claim 23 and S-0308 table N (mode 6: every target)
+                    6 => true,
+                    _ => false,
+                }
+            } else {
+                // spec: S-0306 claim 23 (land row: land mode 1 and a floor-bound object on a bridge or on a cell neither water nor beach)
+                land_mode == 1
+            }
+        }
+    }
+}
+
 /// Whether the weapon is a healing weapon (S-0310 Terms: negative damage).
 fn healing(w: &World, weapon: WeaponId) -> bool {
     w.rules().combat.weapon(weapon).damage < 0
@@ -425,6 +468,16 @@ pub fn check(
         && w.obj(x).is_some_and(|t| t.kind == Kind::Vehicle)
         && crate::econ::inplace::beam_refused(w, x)
     {
+        return Answer::Illegal;
+    }
+    // spec: S-0306 claim 23 (the water and land rows: illegal at rank 4, after the other weapon's live-effect impossible and every earlier rank-4 answer, ahead of the magnetic-beam rearming; the rank of a building's pending delayed-shot rearming against them is unstated, interim Q-1770: that answer is not a rank-4 answer of this check, so the rows win)
+    if let Some(t) = target
+        && targeting_mode_illegal(w, firer, t)
+    {
+        // spec: S-0306 claim 23 and S-0301 claim 5 (the other weapon's live effect: impossible, ahead of the two rows)
+        if crate::emitters::other_effect_alive(w, firer, slot) {
+            return Answer::Impossible;
+        }
         return Answer::Illegal;
     }
     // spec: S-0301 claim 9 rank 4 and S-0607 claims 10 and 11 (a seized firer: illegal; a magnetic-beam firer gripping a unit with a live wave against a target that is neither that unit nor a building: rearming, after the target's layer and projectile tests, so against an airborne target the beam cannot hit that refusal wins; placed last among the rank-4 answers)

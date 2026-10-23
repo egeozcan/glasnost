@@ -1618,15 +1618,15 @@ fn s0107_claim_17_refused_death_with_the_quirk_off_leaves_a_corpse() {
     assert!(w.obj(id).is_none());
 }
 
-// spec: S-0107 claim 17 row 3 (a type with its own list of death animations shows entry w, entry 0 when w is outside the list or entry w names no type, with no sequence, and is removed at once; it takes precedence over rows 4 to 8, so no die-1 request, no conversion and no game-wide death animation) and Import mapping (DeathAnims, entries kept in position)
+// spec: S-0107 claim 17 row 3 (revision 22, Q-1715 answered: a type with its own list of death animations with at least one entry shows entry w, entry 0 when w is negative or not less than the list's length, with no sequence, and is removed at once; it takes precedence over rows 4 to 8, so no die-1 request, no conversion and no game-wide death animation) and Import mapping (DeathAnims: no-type items are left out, so A, none, B imports as A, B and death kind 1 shows B)
 #[test]
 fn s0107_claim_17_row_3_own_death_animations() {
     let mut r = corpse_rules();
-    r.sim.infantry.get_mut("DYER").unwrap().death_anims =
-        Some(vec!["ROW0".into(), "none".into(), "ROW2".into()]);
+    // The imported shape of `ROW0, none, ROW2`: two entries.
+    r.sim.infantry.get_mut("DYER").unwrap().death_anims = Some(vec!["ROW0".into(), "ROW2".into()]);
     for (wh, expect) in [
-        ("DK2", "ROW2"),
-        ("DK1", "ROW0"),
+        ("DK1", "ROW2"),
+        ("DK2", "ROW0"),
         ("DK7", "ROW0"),
         ("DK9", "ROW0"),
         ("DK-1", "ROW0"),
@@ -1648,4 +1648,22 @@ fn s0107_claim_17_row_3_own_death_animations() {
     kill(&mut w, id, "DK8", None);
     assert_eq!(made(&w).0, ["ROW0"]);
     assert!(w.obj(id).is_none());
+}
+
+// spec: S-0107 claim 17 (revision 22: a death-animation list whose every item was left out has no entries, so the type has no list for row 3 and the later rows decide exactly as for a type that never had one)
+#[test]
+fn s0107_claim_17_a_list_without_entries_is_no_row_3_list() {
+    let outcome = |list: Option<Vec<String>>, wh: &str| {
+        let mut r = corpse_rules();
+        r.sim.infantry.get_mut("DYER").unwrap().death_anims = list;
+        let mut w = game(&r);
+        let id = testkit::spawn(&mut w, Kind::Infantry, "DYER", 0, c(0, 0), 0);
+        w.effects.clear();
+        kill(&mut w, id, wh, None);
+        testkit::run(&mut w, 40);
+        (made(&w).0, w.rng.clone(), w.obj(id).is_some())
+    };
+    for wh in ["DK1", "DK2", "DK8"] {
+        assert_eq!(outcome(Some(Vec::new()), wh), outcome(None, wh), "{wh}");
+    }
 }
