@@ -2,11 +2,11 @@
 id: S-0209
 title: Cell occupancy and crowding (capacity, entry outcomes, waiting, re-routing, scatter requests)
 topic: movement
-revision: 43
+revision: 44
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-23
 measurements: []
 requests: [Q-0019, Q-0020, Q-0240, Q-0310, Q-0311, Q-0356, Q-0560]
 supersedes: []
@@ -116,8 +116,13 @@ house's *firestorm*, the passability categories (*wall-like* among them) and the
     independent of the standing-position deck mode used to choose the landing point.
     S-0208 claim 19 owns this use, with `measurable` backing (its scenario W11) and medium
     confidence for the bridge consequences,
-  - in order targeting (S-0213, S-0214) and other situations not listed above: not established
-    (Open questions).
+  - for the entry check of the *obstructed* class of a group destination look (S-0213 claim 7):
+    the common cell's height level, plus 4 when the common cell is on a high-bridge deck, with
+    no connecting-step direction, so no connecting-step height restriction applies. S-0213
+    claim 7 owns this use, `unmeasured` and rated medium there. Which cell layer of a high-bridge
+    asked cell counts for this check is not established (Open questions),
+  - in other order targeting (S-0213, S-0214) and other situations not listed above: not
+    established (Open questions).
 
   **Landing-only negative-level exception.** For that teleporting-infantry entry check, a
   destination at terrain height level −6 or lower gives *clear* without testing terrain or
@@ -3262,10 +3267,11 @@ That moment is called the *window*. Common setup:
 - The underground locomotor's rule (claim 5, part 5b): which cells it makes *blocked*, the
   game-wide setting that turns it off, and the situations in which it applies belong to the specs
   of underground travel. Stock data gives no unit type that locomotor.
-- Which reference height level order targeting (S-0213, S-0214) and other situations outside the
-  walking ask, vehicle step check, path search and teleporting-infantry landing check use, and
-  so which cell layer of a high-bridge cell counts for them (Terms, *cell layer*), is not
-  established. Path-search queries use the expanded pair's height level and cell, as S-0212
+- Which reference height level order targeting (S-0213, S-0214), apart from the group look's
+  *obstructed* class (S-0213 claim 7), and other situations outside the walking ask, vehicle step
+  check, path search and teleporting-infantry landing check use, and
+  so which cell layer of a high-bridge cell counts for them and for that group look (Terms,
+  *cell layer*), is not established. Path-search queries use the expanded pair's height level and cell, as S-0212
   claims 7 and 10 give them. S-0208 claim 19 establishes the landing check's initial −1 reference
   and its effective deck reference; it does not establish those choices for other callers.
 - On a high bridge whose deck spans ground that changes by 1 height level, the objects come from the
