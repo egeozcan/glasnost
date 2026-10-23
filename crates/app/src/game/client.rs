@@ -1083,7 +1083,7 @@ impl Client {
                 project: glasnost_render::projection::project_lifted,
             });
             a.frame(now_ms, &mut self.unsync);
-            // Q-1735 (interim: an announcement's caption is the name of its entry in the person's speech data)
+            // spec: S-0701 claim 26 (each started announcement's caption: its text key when nonempty, otherwise its entry's name)
             for name in a.take_started() {
                 if self.settings.captions {
                     self.captions.push(&name, now_ms);

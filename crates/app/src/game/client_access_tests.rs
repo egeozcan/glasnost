@@ -705,8 +705,10 @@ fn backspace_is_the_right_click_of_the_keyboard() {
 }
 
 /// Captions show each announcement the sound side starts, for their time,
-/// and none when the setting is off.
-/// Q-1735 (interim: the caption is the announcement's entry name)
+/// and none when the setting is off. The caption text itself (the entry's
+/// text key, else its name) is tested in `glasnost_audio`
+/// (`claim_26_caption_from_the_text_key`).
+// spec: S-0701 claim 26 (the caption setting; 4 s, at most 3 at once, newest last stand as our interface choices)
 #[test]
 fn captions_follow_the_started_announcements() {
     let mut c = client((1024, 768), 100);
