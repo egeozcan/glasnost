@@ -3137,6 +3137,18 @@ Server work: a separate login, ports 7400/tcp, 3478 and 3479/udp and 49160 to 49
 
 **A 30-minute synthetic game** (local relay, 4 native, rtc, a build of the NAT-lab commit: `a5a8a39` on the branch, built before the rebase as `d789f8c07`): 112 500 ticks on every row (the full 30 minutes of game time; no team won in this game, while the AI games across the internet were won after 4.6 to 5.3 minutes), 0 mismatches over 3 750 common checkpoints, delay 2 to 7 (86 % at 2), longest gap 49 to 82 ms, no stall.
 
+**The M9 rehearsal** (2026-10-23, approved by the lead as a rehearsal, not the exit run; build `423cf07` on both ends; the rented server again, with a new login whose uid no running process used, ports open only for the runs, the login removed afterwards; this machine shared with two intake agents' builds and tests). Outputs, counts and timings only: `local-lane/m9/rehearsal/`.
+
+| | B: 2 here + 2 on the server, synthetic, rtc, AI | A1: 4 here on the install, relay only through the server, AI, map 30 | A2: the same, `GLASNOST_LOG=debug` |
+|---|---|---|---|
+| Result | pass, 4 371 common checkpoints, 0 mismatches | pass, 70, 0 | pass, 990, 0 |
+| Game | 131 250 ticks: the full 35 minutes of game time, no winner | over at tick 2 126 (34 s): houses 0 and 2 lost with nothing left | over at tick 29 708 (7.9 min): house 2 the last |
+| Trouble | row 3 (server) killed at 120 s, readmitted after 4.9 s; row 1 (here) killed at 180 s, readmitted after 4.5 s | kills planned at 600 s and 1 200 s; the game ended first | the same |
+| Links | 12 of 12 direct at the first attempt; across the internet about 0.5 s to open | relay only | relay only |
+| Delay | 2 to 30, 51 % at 3 | 3 to 30, mostly 10 to 17 | 3 to 30, 52 % at 4 or 5 |
+
+Finding, handed to its own step: in A1 and A2 a house never built a base and lost its starting army without seeing an enemy (A2, house 0: army 11 at tick 0, 5 at tick 1 500 with "seen enemies 0", 0 at 4 500). The clients agreed throughout, so it is no desync; a local game on the same map (no delay, or a simulated 60 ms link) showed no loss in 2 to 3 minutes.
+
 **Tests.**
 
 - `crates/tools/tests/soak.rs`: `a_game_split_in_two_halves_agrees`, in CI: two soaks of two rows on the test's relay, the second joining with the first's code; row 2 is cut and rejoins; each half passes, and the halves together agree on every checkpoint (16 in common).
