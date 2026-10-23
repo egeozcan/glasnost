@@ -210,6 +210,18 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
     let (bank, report) = bank::discover(vfs).await;
     // spec: S-0703 claim 8 (the track files are found once, when the program starts, through the mounted archives and loose files)
     let music = InstallMusic::read(vfs).await;
+    if let Some(m) = music.as_ref() {
+        // spec: S-0703 Edge cases (outside a game the side restrictions are checked against the sides of the rules data)
+        let sides: Vec<String> = resolved
+            .ruleset
+            .sides
+            .iter()
+            .map(|s| s.name.clone())
+            .collect();
+        for w in m.db.side_warnings(&sides) {
+            log::warn!("{w}");
+        }
+    }
     // spec: S-0111 claim 19a (with quirks.art_cache_never_invalidated on, the cursor palette is read once when the program starts, before any game)
     let cursor_palette = super::session::CursorPaletteKeep::at_program_start(vfs).await;
     let summary = format!(
