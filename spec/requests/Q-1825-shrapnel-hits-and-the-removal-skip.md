@@ -1,9 +1,9 @@
 ---
 id: Q-1825
 title: Do a burst's fragments all hit in the tick of the shot when the shot's own removal costs a turn
-status: open
+status: answered
 related: [S-0318, S-0203, S-0306]
-answered-by: []
+answered-by: [S-0318]
 ---
 
 ## Need
