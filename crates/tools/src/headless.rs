@@ -176,6 +176,7 @@ async fn smoke_async(
                         | Effect::Trigger { .. }
                         | Effect::Hit { .. }
                         | Effect::OverlayCrushed { .. }
+                        | Effect::PieceSound { .. }
                         | Effect::Superweapon { .. }
                         | Effect::SupportBeam { .. }
                         | Effect::Captured { .. }

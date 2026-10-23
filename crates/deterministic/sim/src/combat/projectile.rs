@@ -1701,7 +1701,15 @@ fn detonation_inner(
                 }
             }
         } else {
-            crate::combat::death::deal_debris(w, n, &wh.debris_types, &wh.debris_maximums, q);
+            // spec: S-0317 claim 1 (a detonation's pieces are taken to have no house)
+            crate::combat::death::deal_debris(
+                w,
+                n,
+                &wh.debris_types,
+                &wh.debris_maximums,
+                q,
+                None,
+            );
         }
     }
     res

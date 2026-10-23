@@ -2201,6 +2201,7 @@ impl Live {
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
                 | Effect::OverlayCrushed { .. }
+                | Effect::PieceSound { .. }
                 | Effect::Superweapon { .. }
                 | Effect::SupportBeam { .. }
                 | Effect::Captured { .. }

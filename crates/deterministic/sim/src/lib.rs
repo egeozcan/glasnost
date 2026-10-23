@@ -58,6 +58,7 @@ pub mod overlays;
 pub mod paradrop;
 pub mod parasite;
 pub mod particles;
+pub mod pieces;
 pub mod passability;
 pub mod path;
 pub mod process;

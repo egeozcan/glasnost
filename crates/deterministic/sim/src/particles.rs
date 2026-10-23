@@ -319,14 +319,17 @@ pub fn smoke_turn(w: &mut World, sys: ObjectId) {
         .systems
         .get(&sys)
         .and_then(|s| s.owner_object.map(|o| (o, s.owner_offset)));
-    if let Some((o, off)) = owner
-        && let Some(ob) = w.obj(o)
-        && ob.kind != Kind::Building
-    {
+    // spec: S-0317 claim 13 (a debris piece as owner object: the system follows the piece's position)
+    let followed = owner.and_then(|(o, off)| match w.obj(o) {
+        Some(ob) if ob.kind != Kind::Building => Some((ob.pos, off)),
+        Some(_) => None,
+        None => w.pieces.get(&o).map(|p| (p.pos, off)),
+    });
+    if let Some((op, off)) = followed {
         let at = Pos::new(
-            ob.pos.x.wrapping_add(off[0]),
-            ob.pos.y.wrapping_add(off[1]),
-            ob.pos.z.wrapping_add(off[2]), // nocite: vector and matrix dimensions (three axes)
+            op.x.wrapping_add(off[0]),
+            op.y.wrapping_add(off[1]),
+            op.z.wrapping_add(off[2]), // nocite: vector and matrix dimensions (three axes)
         );
         if let Some(s) = w.gas.systems.get_mut(&sys) {
             s.pos = at;

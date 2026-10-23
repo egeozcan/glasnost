@@ -47,6 +47,9 @@ const CREDIT_TICK_LEVEL: i32 = FULL / 2; // spec: S-0416 claim 4; S-0701 claim 3
 const TURRET_ANCHOR: u64 = 1 << 40;
 /// Anchors of gattling spin sounds (S-0609 claim 13), offset from both.
 const SPIN_ANCHOR: u64 = 1 << 41;
+/// Anchors of debris pieces' start sounds (S-0317 claim 14), offset from
+/// the others.
+const PIECE_ANCHOR: u64 = 1 << 42;
 
 /// Interface cues the client reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +179,8 @@ pub struct Audio {
     /// The gattling spin sounds (S-0609 claim 13), by object: the playing
     /// mark and the last instance started, when it was audible.
     spins: BTreeMap<ObjectId, (bool, Option<InstanceId>)>,
+    /// The debris pieces whose start sound follows them (S-0317 claim 14).
+    pieces: std::collections::BTreeSet<ObjectId>,
     ranks: BTreeMap<ObjectId, Rank>,
     radar: Vec<RadarEvent>,
     radar_map: Option<(Grid, Image)>,
@@ -255,6 +260,7 @@ impl Audio {
             motion: BTreeMap::new(),
             turrets: BTreeMap::new(),
             spins: BTreeMap::new(),
+            pieces: std::collections::BTreeSet::new(),
             ranks: BTreeMap::new(),
             radar: Vec::new(),
             radar_map: None,
@@ -932,6 +938,12 @@ impl Audio {
                 pos,
             } => self.disc(w, *firer, *weapon, event, *pos),
             Effect::Superweapon { event, sw, pos, .. } => self.superweapon(w, *event, *sw, *pos),
+            // spec: S-0317 claim 14 (a debris piece's start sound at the creation point, then moving with the piece)
+            Effect::PieceSound { id, sound, pos } => {
+                let anchor = PIECE_ANCHOR | u64::from(id.0);
+                self.play_in(w, Some(sound), Where::Attached { anchor, pos: *pos });
+                self.pieces.insert(*id);
+            }
             Effect::OverlayCrushed { overlay, pos } => {
                 let s = self
                     .names
@@ -1530,6 +1542,17 @@ impl Audio {
                 None => {
                     self.mixer.finish_anchor(SPIN_ANCHOR | u64::from(id.0));
                     self.spins.remove(&id);
+                }
+            }
+        }
+        let pieces: Vec<ObjectId> = self.pieces.iter().copied().collect();
+        for id in pieces {
+            match w.pieces.get(&id) {
+                // spec: S-0317 claim 14 (the start sound moves with the piece in each of its turns)
+                Some(p) => self.mixer.move_anchor(PIECE_ANCHOR | u64::from(id.0), p.pos),
+                // The piece plays no sound when it ends (S-0317 claim 14): its start sound plays on where it was.
+                None => {
+                    self.pieces.remove(&id);
                 }
             }
         }

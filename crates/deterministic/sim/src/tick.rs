@@ -130,6 +130,11 @@ fn object_turn(w: &mut World, id: ObjectId) {
         crate::depot_anim::anim_turn(w, id);
         return;
     }
+    if w.pieces.contains_key(&id) {
+        // spec: S-0317 claim 6 and S-0203 claim 2 (a debris piece takes its turn in the update order)
+        crate::pieces::turn(w, id);
+        return;
+    }
     if w.waves.contains_key(&id) {
         // spec: S-0607 claim 21 (a magnetic wave updates in its own turn of the update order)
         crate::lift::wave_turn(w, id);
