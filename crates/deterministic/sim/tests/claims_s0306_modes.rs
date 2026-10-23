@@ -297,9 +297,11 @@ fn claim23_water_row_by_naval_mode() {
     ] {
         let (mut w, f, t) = duel("AAV", 0, 0, "SUB", land::WATER);
         w.obj_mut(t).unwrap().cloak.state = state;
-        // A cloaked target hidden from the firer's house answers impossible first (rank 4); reveal it.
         let a = answer(&w, f, obj(t));
-        if state == CloakState::Cloaked && a == Answer::Impossible {
+        if state == CloakState::Cloaked {
+            // A fully cloaked target is hidden from the firer's house: the hidden-target impossible comes first (rank 4).
+            assert!(glasnost_sim::cloak::hidden_from(&w, t, Some(HouseId(0))));
+            assert_eq!(a, Answer::Impossible, "{state:?}");
             continue;
         }
         assert_eq!(a == Answer::Illegal, refused, "{state:?}: {a:?}");
@@ -350,9 +352,8 @@ fn claim23_rows_yield_to_earlier_rank_four_answers() {
     assert_eq!(check(&w, f, Some(obj(t)), 1, false), Answer::Impossible);
     // A cloaked target hidden from the firer's house, with mean weapon damage above 0: impossible.
     w.obj_mut(t).unwrap().cloak.state = CloakState::Cloaked;
-    if glasnost_sim::cloak::hidden_from(&w, t, Some(HouseId(0))) {
-        assert_eq!(answer(&w, f, obj(t)), Answer::Impossible);
-    }
+    assert!(glasnost_sim::cloak::hidden_from(&w, t, Some(HouseId(0))));
+    assert_eq!(answer(&w, f, obj(t)), Answer::Impossible);
 }
 
 // ---------------------------------------------------------------------------
