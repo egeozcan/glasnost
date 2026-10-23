@@ -45,6 +45,16 @@
 //! replaced in the lane's copy of the rules by one drawn as a voxel model,
 //! each clicked onto an enemy of its type; frames while the projectiles fly.
 //!
+//! S-0306 claim 23 and S-0309 claim 18 (M8 step A3 intake 5, the lead's
+//! play note 4): every building type whose weapons' projectiles are anti-air
+//! and not anti-ground, of the local (human) house and of an enemy
+//! (computer) house, attacked by an enemy ground vehicle and an enemy
+//! infantry unit from inside its range, and in a second place by an enemy
+//! aircraft: whether its type has land-targeting mode 1 or the SAM flag
+//! (counts only), and the building's targets and shots at each attacker. The
+//! lane's copy of the rules lets the building need no power; the computer
+//! run clears the owner's human-controlled flag.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -92,6 +102,7 @@ const SCENES: &[Scene] = &[
     ("dominator", dominator),
     ("shot-sprite", sprite_shots),
     ("shot-voxel", voxel_shots),
+    ("aa-only", aa_only),
 ];
 
 #[test]
@@ -1468,6 +1479,199 @@ fn shots(lane: &mut Lane, key: &str, found: Option<(String, usize)>, laser: bool
             w.obj(a).map(|o| o.target.is_some()),
             w.obj(t).is_some()
         );
+    }
+}
+
+/// The building types whose weapons in slots 0 and 1 all have projectiles
+/// that are anti-air and not anti-ground (at least one weapon), with the
+/// range of slot 0.
+fn aa_only_buildings(w: &World) -> Vec<(usize, i32)> {
+    let r = w.rules();
+    (0..r.buildings.len())
+        .filter_map(|i| {
+            let b = &r.buildings[i];
+            if b.strength <= 0 {
+                return None;
+            }
+            let ws: Vec<_> = b.combat.slots[..2].iter().flatten().collect();
+            let aa_only = !ws.is_empty()
+                && ws.iter().all(|&&x| {
+                    r.combat.weapon(x).projectile.is_some_and(|p| {
+                        r.combat.projectiles[p as usize].aa && !r.combat.projectiles[p as usize].ag
+                    })
+                });
+            let range = b.combat.slots[0].map(|x| r.combat.weapon(x).range)?;
+            aa_only.then_some((i, range))
+        })
+        .collect()
+}
+
+/// An armed aircraft type whose slot-0 projectile is anti-ground.
+fn ground_attack_aircraft(w: &World) -> Option<String> {
+    let r = w.rules();
+    (0..r.aircraft.len())
+        .find(|&i| {
+            r.unit(Kind::Aircraft, i as u32).is_some_and(|u| {
+                u.strength > 0
+                    && u.combat.slots[0]
+                        .and_then(|x| r.combat.weapon(x).projectile)
+                        .is_some_and(|p| r.combat.projectiles[p as usize].ag)
+            })
+        })
+        .map(|i| r.aircraft[i].name.clone())
+}
+
+/// One attack on building `b` for 600 ticks: per attacker, the ticks the
+/// building held it as its target, the building's shots at it (new
+/// projectiles of the building aimed at it), and the shots at it while it
+/// was airborne (S-0307 Terms).
+fn watch_attack(lane: &mut Lane, key: &str, b: ObjectId, attackers: &[(&str, ObjectId)]) {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut held = vec![0usize; attackers.len()];
+    let mut shots = vec![0usize; attackers.len()];
+    let mut air_shots = vec![0usize; attackers.len()];
+    let mut first = vec![None; attackers.len()];
+    let h0 = lane.permille(b);
+    let rearm = |w: &World| w.obj(b).map(|o| o.combat.rearm_until);
+    let mut last = rearm(lane.world());
+    let mut restarts = 0;
+    for _ in 0..600 {
+        lane.ticks(1);
+        let w = lane.world();
+        let now = rearm(w);
+        if now.is_some() && now != last {
+            restarts += 1;
+        }
+        last = now;
+        let target = w.obj(b).and_then(|o| o.target);
+        for (k, (_, a)) in attackers.iter().enumerate() {
+            if target == Some(glasnost_sim::world::Target::Object(*a)) {
+                held[k] += 1;
+                first[k].get_or_insert(w.tick);
+            }
+        }
+        for p in w.projectiles.values().filter(|p| p.firer == Some(b)) {
+            if !seen.insert(p.id) {
+                continue;
+            }
+            for (k, (_, a)) in attackers.iter().enumerate() {
+                if p.target == Some(glasnost_sim::world::Target::Object(*a)) {
+                    shots[k] += 1;
+                    if glasnost_sim::combat::weapon::airborne_by_height(w, *a) {
+                        air_shots[k] += 1;
+                    }
+                }
+            }
+        }
+        if w.obj(b).is_none() {
+            break;
+        }
+    }
+    let alive = lane.world().obj(b).is_some();
+    let h1 = if alive { lane.permille(b) } else { 0 };
+    println!(
+        "{key}: building health {h0} -> {h1} per mille, alive {alive}, building projectiles {}, rearm restarts {restarts}",
+        seen.len()
+    );
+    for (k, (what, a)) in attackers.iter().enumerate() {
+        println!(
+            "{key}: {what}: held as target {} ticks (first tick {:?}), shots at it {}, of them while it was airborne {}, alive at the end {}",
+            held[k],
+            first[k],
+            shots[k],
+            air_shots[k],
+            lane.world().obj(*a).is_some()
+        );
+    }
+}
+
+/// S-0306 claim 23 and S-0309 claim 18 on stock rules (M8 step A3 intake
+/// 5, play note 4): each anti-air-only building type, of the local house and
+/// of an enemy computer house, attacked by a ground vehicle and an infantry
+/// unit of the other house from inside its range; then, in another place, a
+/// copy attacked by an aircraft. Counts only.
+fn aa_only(lane: &mut Lane) {
+    let found = aa_only_buildings(lane.world());
+    println!("aa-only: anti-air-only building types: {}", found.len());
+    let (Some(veh), Some(inf), air) = (
+        plain_vehicle(lane.world()),
+        human_infantry(lane.world()),
+        ground_attack_aircraft(lane.world()),
+    ) else {
+        println!("aa-only: no plain vehicle or human infantry type");
+        return;
+    };
+    println!("aa-only: aircraft attacker type found: {}", air.is_some());
+    for (n, &(bi, range)) in found.iter().enumerate() {
+        {
+            let r = lane.world().rules();
+            let b = &r.buildings[bi];
+            println!(
+                "aa-only: building {n}: land-targeting mode 1: {}; SAM flag: {}; naval-targeting mode gives none on water: {}; retaliate flag: {}",
+                b.combat.land_targeting == 1,
+                b.building.sam,
+                matches!(b.combat.naval_targeting, 2 | 6),
+                b.combat.retaliate
+            );
+        }
+        for computer in [false, true] {
+            let mut l = Lane::start().expect("the install is set");
+            let Some(enemy) = l.enemy() else {
+                println!("aa-only: no enemy house");
+                return;
+            };
+            let local = l.local();
+            let (owner, other) = if computer {
+                (enemy, local)
+            } else {
+                (local, enemy)
+            };
+            let bname = l.world().rules().buildings[bi].name.clone();
+            // The lane's own copy: the building needs and draws no power
+            // (the lane's houses have no power plant), and the computer run
+            // makes the owner a test-only computer-controlled player house.
+            patch_rules(&mut l, |r| {
+                if let Some(p) = r.econ.power.buildings.get_mut(bi) {
+                    p.needs_power = false;
+                    p.drain = 0;
+                }
+            });
+            l.world_mut().houses[usize::from(owner.0)].human = !computer;
+            let home = l.home();
+            let key = format!(
+                "aa-only {n} {}",
+                if computer { "computer" } else { "human" }
+            );
+            println!(
+                "{key}: owner human {}",
+                l.world().houses[usize::from(owner.0)].human
+            );
+            // Ground attackers inside the building's range.
+            let at = l.open_land(CellXY::new(home.x + 12, home.y + 12));
+            let b = l.spawn(Kind::Building, &bname, owner, at);
+            let d = (range / 256 - 1).clamp(2, 6);
+            let v = l.spawn(Kind::Vehicle, &veh, other, CellXY::new(at.x + d, at.y + 1));
+            let i = l.spawn(Kind::Infantry, &inf, other, CellXY::new(at.x + 1, at.y + d));
+            l.ticks(2);
+            let nv = l.order(other, v, ClickOn::Object(b));
+            let ni = l.order(other, i, ClickOn::Object(b));
+            println!("{key}: ground attackers {d} cells off; orders {nv} and {ni}");
+            watch_attack(
+                &mut l,
+                &format!("{key} ground"),
+                b,
+                &[("vehicle", v), ("infantry", i)],
+            );
+            // An aircraft attacker, in another place.
+            let Some(air) = air.as_deref() else { continue };
+            let at2 = l.open_land(CellXY::new(home.x - 12, home.y + 12));
+            let b2 = l.spawn(Kind::Building, &bname, owner, at2);
+            let a = l.spawn(Kind::Aircraft, air, other, CellXY::new(at2.x + 10, at2.y));
+            l.ticks(2);
+            let na = l.order(other, a, ClickOn::Object(b2));
+            println!("{key}: aircraft 10 cells off; orders {na}");
+            watch_attack(&mut l, &format!("{key} air"), b2, &[("aircraft", a)]);
+        }
     }
 }
 
