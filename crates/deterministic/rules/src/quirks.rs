@@ -3774,6 +3774,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
         "renderer (render::light), S-0104",
     ),
     (
+        "enable_unfreezes_unpowered",
+        "renderer (mapview::quirks), S-0108 claim 13; S-0405 claim 10 names it for a switched-on building's slots (S-0405 r36)",
+    ),
+    (
         "shroud_on_flat_grid",
         "renderer (render::shroud::Quirks), S-0110 claim 8; S-0410 claim 6 names it for the radar's shroud and gap tests (S-0410 r15, not yet followed by the radar)",
     ),
