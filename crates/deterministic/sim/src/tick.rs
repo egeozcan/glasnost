@@ -172,6 +172,8 @@ fn object_turn(w: &mut World, id: ObjectId) {
             return;
         }
         if crate::air::crashing(w, id) {
+            // spec: S-0501 claim 46 and S-0519 claim 4 (a bomb on an aircraft falling from the fall-back crash stays attached: its timer test comes before the aircraft's movement in its turn)
+            crate::bomb::turn(w, id);
             // spec: S-0501 claim 9 (a crashing aircraft keeps its flying movement until it hits the ground)
             crate::air::tick(w, id);
             crate::air::end_turn(w, id);

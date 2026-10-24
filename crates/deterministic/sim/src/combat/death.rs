@@ -199,10 +199,15 @@ pub(crate) fn mark_killed(w: &mut World, id: ObjectId) {
     }
     let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
     for x in ids {
-        let Some(ob) = w.obj_mut(x) else { continue };
-        if ob.target != Some(Target::Object(id)) {
+        if !w
+            .obj(x)
+            .is_some_and(|ob| ob.target == Some(Target::Object(id)))
+        {
             continue;
         }
+        // spec: S-0501 claim 37 (an aircraft losing its target: the targeting-timer draw comes before the clear)
+        crate::air::target_loss_draw(w, x);
+        let Some(ob) = w.obj_mut(x) else { continue };
         let mut restored = None;
         if ob.beh.suspended.is_some() {
             // spec: S-0215 claim 10 (the target is destroyed: the revert comes at the killing hit)

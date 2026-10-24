@@ -1328,7 +1328,7 @@ pub struct Quirks {
     // spec: S-0501 claim 42, T1, Edge cases
     #[serde(default = "on")]
     pub aircraft_zero_step_attack_stall: bool,
-    /// A bomb planted on a pad-bound aircraft that crashes at S-0501 claim 46's fall-back without going off during the fall is removed at impact with no detonation, animation or damage; off: at impact, before the death weapon, the bomb goes off by S-0519 claim 5 at the aircraft's position, with its attacker and attacking house. Not consulted yet (the fall-back crash is still started as a living crash).
+    /// A bomb planted on a pad-bound aircraft that crashes at S-0501 claim 46's fall-back without going off during the fall is removed at impact with no detonation, animation or damage; off: at impact, before the death weapon, the bomb goes off by S-0519 claim 5 at the aircraft's position, with its attacker and attacking house.
     // spec: S-0501 claim 46, Edge cases; S-0519 claim 7
     #[serde(default = "on")]
     pub crash_drops_planted_bomb: bool,

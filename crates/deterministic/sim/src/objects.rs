@@ -446,6 +446,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     if !o.on_map {
         return;
     }
+    // spec: S-0501 claim 32 (an aircraft loses as its target an object that leaves the map, a transport or a building entered, at that moment)
+    crate::air::targeters_lose(w, id, false);
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0608 claim 17 and S-0507 claim 6 (Q-1443: successful temporary off-map storage of either party ends its drain links at once, a stranded earlier link included)
@@ -505,6 +507,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id).cloned() else {
         return;
     };
+    // spec: S-0501 claim 32 (an aircraft loses as its target an object that is removed, at that moment)
+    crate::air::targeters_lose(w, id, true);
     // spec: S-0615 claim 14 (removed or taken off the map, a transport or building entered included: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)

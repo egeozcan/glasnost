@@ -657,13 +657,17 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
     // spec: S-0213 table T3 (b) and S-0605 claim 4 (the actor forgets any building it was waiting in line to enter)
     crate::structures::absorb::order_applied(w, actor);
     let mut retained = false;
+    // spec: S-0501 claim 34 (an aircraft in one of its five exit behaviours ignores a request to queue any other, with no start)
+    let ignored = crate::air::queue_ignored(w, actor, b);
     let Some(m) = w.obj_mut(actor) else { return };
     if !keeps {
         // spec: S-0213 table T3 (b) (otherwise it breaks off any contact)
         m.contact = None;
     }
-    // spec: S-0213 table T3 (d) (the resulting behaviour is queued, S-0215 claim 12)
-    m.beh.queue(Some(b));
+    if !ignored {
+        // spec: S-0213 table T3 (d) (the resulting behaviour is queued, S-0215 claim 12)
+        m.beh.queue(Some(b));
+    }
     // spec: S-0215 claim 12 (every such order forgets what an override put aside)
     m.beh.aside = None;
     if let Some(mem) = memory {

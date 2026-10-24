@@ -1321,8 +1321,9 @@ fn process_hunt(w: &mut World, id: ObjectId) -> i32 {
     standard_delay(w, id)
 }
 
-/// Area guard (S-0215 claim 26).
-fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
+/// Area guard (S-0215 claim 26); an aircraft's below its flight height
+/// (S-0501 claim 45).
+pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     let r = w.rules_arc();
@@ -1454,8 +1455,9 @@ fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
         return NO_RULE_DELAY;
     }
     let dr = rate_delay(w, id);
-    // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 1 for every kind but aircraft)
-    let d = dr.wrapping_add(w.rng.ranged(1, 5, half));
+    // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 2 for aircraft and 1 for every other kind)
+    let k = if o.kind == Kind::Aircraft { 2 } else { 1 };
+    let d = dr.wrapping_mul(k).wrapping_add(w.rng.ranged(1, 5, half));
     // spec: S-0215 F3 (trunc(D / 6) under the close-range condition)
     if close_range(w, id) { d / 6 } else { d }
 }
