@@ -12,8 +12,9 @@ use glasnost_rules::sim::MovementZone;
 
 use crate::cells::position;
 use crate::passability;
+use crate::rules::UnitRules;
 use crate::rules::{Behaviour, Kind};
-use crate::world::{Layer, ObjectId, Target, World};
+use crate::world::{Layer, Object, ObjectId, Target, World};
 
 /// The eight entry outcomes in order of increasing severity (S-0209 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -253,18 +254,66 @@ fn wall_allied(w: &World, mover: ObjectId, c: CellXY) -> bool {
     owner.is_some() && w.obj(mover).is_some_and(|m| w.allied(m.owner, owner))
 }
 
+/// What the entry outcomes read of their mover and not of the cell, read
+/// once. A path search asks the outcome of thousands of cells for one
+/// mover on a world that does not change meanwhile; reading these once
+/// gives the same answers with less work (our tooling for speed, M8 C4
+/// part 2).
+pub struct Mover<'a> {
+    /// The mover.
+    pub id: ObjectId,
+    /// Its object.
+    pub o: &'a Object,
+    /// Its unit type.
+    unit: Option<&'a UnitRules>,
+    /// [`is_crusher`].
+    crusher: bool,
+    /// For a walker: [`walker_armed`], [`mission_target`] and its master.
+    walker: Option<(bool, Option<Target>, Option<ObjectId>)>,
+}
+
+impl<'a> Mover<'a> {
+    /// The mover `id` of `w`; none when it does not exist.
+    pub fn of(w: &'a World, id: ObjectId) -> Option<Self> {
+        let o = w.obj(id)?;
+        Some(Self {
+            id,
+            o,
+            unit: w.rules().unit(o.kind, o.type_index),
+            crusher: is_crusher(w, id),
+            walker: (o.kind == Kind::Infantry).then(|| {
+                (
+                    walker_armed(w, id),
+                    mission_target(w, id),
+                    crate::econ::slaves::master_of(w, id),
+                )
+            }),
+        })
+    }
+}
+
 /// The entry outcome of an infantry mover for cell `c` (S-0209 claim 4).
 pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -> Outcome {
-    let Some(m) = w.obj(mover) else {
-        return Outcome::Blocked;
-    };
+    Mover::of(w, mover).map_or(Outcome::Blocked, |m| {
+        infantry_outcome_of(w, &m, c, reference)
+    })
+}
+
+/// [`infantry_outcome`] for a mover read once.
+pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) -> Outcome {
+    let (mover, m) = (mv.id, mv.o);
     let r = w.rules();
     let (obj_layer, rec_layer) = layers_for(w, c, reference);
     let Some(cell) = w.cells.cell(c) else {
         return Outcome::Blocked;
     };
-    let armed = walker_armed(w, mover);
-    let mission = mission_target(w, mover);
+    let (armed, mission, master) = mv.walker.unwrap_or_else(|| {
+        (
+            walker_armed(w, mover),
+            mission_target(w, mover),
+            crate::econ::slaves::master_of(w, mover),
+        )
+    });
     // 4c: occupants, listing order; overrides.
     let mut values: Vec<(bool, Option<Outcome>)> = Vec::new();
     // 4b: overlays (index 0, ahead of every occupant).
@@ -295,7 +344,6 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
         );
     }
     let mut override_value: Option<(usize, Outcome)> = None;
-    let master = crate::econ::slaves::master_of(w, mover);
     let mut excused = false;
     for &oid in w.cells.list(c, obj_layer) {
         if oid == mover {
@@ -491,18 +539,23 @@ pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -
 /// The entry outcome of a ground-vehicle mover for cell `c` (S-0209 claim
 /// 5).
 pub fn vehicle_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -> Outcome {
-    let Some(m) = w.obj(mover) else {
-        return Outcome::Blocked;
-    };
+    Mover::of(w, mover).map_or(Outcome::Blocked, |m| {
+        vehicle_outcome_of(w, &m, c, reference)
+    })
+}
+
+/// [`vehicle_outcome`] for a mover read once.
+pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) -> Outcome {
+    let (mover, m) = (mv.id, mv.o);
     let r = w.rules();
-    let Some(u) = r.unit(m.kind, m.type_index) else {
+    let Some(u) = mv.unit else {
         return Outcome::Blocked;
     };
     let (obj_layer, rec_layer) = layers_for(w, c, reference);
     let Some(cell) = w.cells.cell(c) else {
         return Outcome::Blocked;
     };
-    let crusher = is_crusher(w, mover);
+    let crusher = mv.crusher;
     let armed = u.primary.is_some() || u.train;
     let crushes_wall =
         |crushable: bool| (crushable && crusher) || u.zone == MovementZone::CrusherAll;
