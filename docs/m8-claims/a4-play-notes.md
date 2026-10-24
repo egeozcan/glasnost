@@ -175,5 +175,13 @@ search classes leave out aircraft (its primary warhead is infantry-only; S-0309 
 also follows the specs. An empty unit of the gunner type that note 15 names has weapon number 0
 (S-0308 claim 6), so it uses slot 0, which is anti-air and anti-ground.
 
+**Open: shots that do no damage.** Vehicles 4, 7 and 15 fire at the aircraft but never damage it
+(the other types' shots do). A diagnostic pass (not committed) showed why only in part. Types 4
+and 7 launch a projectile, which detonates at the firer's own position, just above the ground, on
+the tick of the shot. Type 15's shot makes no detonation at all. Each time the aircraft flew at its
+cruise height, far above the ground, and the warhead's versus value against it was positive. S-0306 owns
+projectile flight, and it is not yet established whether these results follow from it. This is
+followed up separately.
+
 Note 7 (seen again): the lead's statement and Q-1850 are in note 7's Round 1 row; nothing more is
 filed and the code keeps to S-0417 claims 10 and 14 until Q-1850 is answered.

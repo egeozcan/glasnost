@@ -295,9 +295,10 @@ fn area_damage_reaches_an_aircraft_in_flight_at_half_distance() {
     move_to(&mut w, 1, k, 6, 0);
     let up = (0..600).any(|_| {
         glasnost_sim::tick::step(&mut w);
-        !air::on_ground(&w, k) && w.obj(k).is_some_and(|o| o.pos.z > 200)
+        // spec: S-0303 claim 10 (in the air by S-0308's test)
+        glasnost_sim::combat::weapon::in_air(&w, k)
     });
-    assert!(up && flying::tracked(&w, k), "in flight and tracked");
+    assert!(up && flying::tracked(&w, k), "in the air and tracked");
     let o = w.obj(k).unwrap();
     let (p, full) = (o.pos, o.health);
     blast(&mut w, glasnost_sim::world::Pos::new(p.x, p.y + 300, p.z));
