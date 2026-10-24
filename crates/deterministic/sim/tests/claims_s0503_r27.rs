@@ -672,3 +672,32 @@ fn claim_19_balloon_hover_retention_into_a_building() {
     assert_eq!(w.obj(id).unwrap().dest, None);
     assert!(w.obj(id).unwrap().path.steps.is_empty());
 }
+
+// spec: S-0503 claim 19 (table, the final leg with unequal heights takes the unequal row: when only P carries the 416-lepton lift of Terms, D and P differ as full three-dimensional points, so D and the path are dropped and the heading point, throttle, hover speed and rho are kept; the lift is put on P by hand, standing for a hover 312 leptons or more above the surface when the point was chosen)
+#[test]
+fn claim_19_final_leg_with_unequal_heights_takes_the_unequal_row() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", -4, 0);
+    settle(&mut w);
+    let dest = cell(0, 0);
+    go(&mut w, id, dest);
+    common::run_until(&mut w, 2000, |w| {
+        hs(w, id).point.is_some_and(|p| p.cell() == dest)
+            && (w.obj(id).unwrap().pos.x % 256 - 128).abs() > 64
+    });
+    let mut p = hs(&w, id).point.unwrap();
+    assert_eq!(p.cell(), dest, "the final leg");
+    // spec: S-0503 Terms (the 416-lepton lift of the heading point)
+    p.z += 416;
+    w.obj_mut(id).unwrap().hover.as_mut().unwrap().point = Some(p);
+    let before = hs(&w, id);
+    deploy(&mut w, id);
+    assert_eq!(w.obj(id).unwrap().dest, None);
+    assert_eq!(hs(&w, id).retained, None, "D is dropped (D and P differ)");
+    assert!(
+        w.obj(id).unwrap().path.steps.is_empty(),
+        "the path is dropped"
+    );
+    assert_eq!(hs(&w, id).point, Some(p), "the heading point is kept");
+    assert!(same(quantities(&before), quantities(&hs(&w, id))));
+}

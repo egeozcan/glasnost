@@ -503,3 +503,21 @@ fn claim23_cursor_offers_no_attack_to_mode_one() {
         }
     }
 }
+
+// spec: S-0306 claim 23 (rank of the water and land rows: rank 4 of S-0301 claim 9, ahead of cloaked (rank 8): a cloaked firer is answered illegal against a target the land row refuses, and cloaked against the same target with mode 0)
+#[test]
+fn claim23_rows_outrank_a_cloaked_firer() {
+    for state in [
+        CloakState::Cloaking,
+        CloakState::Cloaked,
+        CloakState::Uncloaking,
+    ] {
+        let (mut w, f, t) = duel("AAV", 1, 0, "TGT", land::CLEAR);
+        w.obj_mut(f).unwrap().cloak.state = state;
+        assert_eq!(answer(&w, f, obj(t)), Answer::Illegal, "{state:?}");
+        // The control: the same state with mode 0 gives the rank 8 answer.
+        let (mut w, f, t) = duel("AAV", 0, 0, "TGT", land::CLEAR);
+        w.obj_mut(f).unwrap().cloak.state = state;
+        assert_eq!(answer(&w, f, obj(t)), Answer::Cloaked, "{state:?}");
+    }
+}

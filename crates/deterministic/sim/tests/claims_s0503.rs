@@ -1162,3 +1162,100 @@ fn switched_off_hover_accepts_a_scatter_request_until_it_is_down() {
     );
     assert!(down, "it comes down");
 }
+
+// ---------------------------------------------------------------- seams sweep 1 (M8)
+
+/// Holds `id` `h` leptons above its surface and its lift still, for `n`
+/// ticks (the spin of claim 10 runs; the height is the one it ends at).
+fn hold_at(w: &mut World, id: ObjectId, h: i32, n: i32) {
+    for _ in 0..n {
+        let p = w.obj(id).unwrap().pos;
+        let s = w.surface_at(p.x, p.y);
+        let o = w.obj_mut(id).unwrap();
+        o.pos.z = s + h;
+        o.hover.as_mut().unwrap().v = F64::ZERO;
+        tick::step(w);
+    }
+}
+
+/// The world with the hover bob switched off, so that a height set before a
+/// tick is the height the tick's tests see.
+fn still_world() -> World {
+    let mut r = rules();
+    r.sim.general.hover_bob = dec("0");
+    world_with(r)
+}
+
+// spec: S-0503 claim 10 (a vehicle in sleep or enter takes no draws and starts no spin, but still loses lift)
+#[test]
+fn claim_10_sleep_takes_no_draws_and_still_loses_lift() {
+    use glasnost_sim::rules::Behaviour;
+    for b in [Behaviour::Sleep, Behaviour::Enter] {
+        let mut w = world();
+        let id = at(&mut w, "HOVER", 0, -8, 0, 0);
+        settle(&mut w);
+        let (tick_now, stale) = (w.tick, w.rules().quirks.stale_suspended_revert);
+        w.obj_mut(id).unwrap().beh.force(b, tick_now, stale);
+        let before = w.rng.taken();
+        glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+        assert_eq!(w.rng.taken(), before, "{b:?}: no draws");
+        assert_eq!(hs(&w, id).spin, 0, "{b:?}: no spin");
+        assert!(hover::switched_off(&w, id), "{b:?}: switched off");
+        common::run(&mut w, 300);
+        assert_eq!(height_of(&w, id), 0, "{b:?}: the lift is lost, it settles");
+    }
+}
+
+// spec: S-0503 claim 11 (the exact boundary: a spin ending 103 leptons above the water gives the bomb mark, one ending 104 leptons above does not)
+#[test]
+fn claim_11_the_104_lepton_boundary() {
+    for (h, marked) in [(103, true), (104, false)] {
+        let mut w = still_world();
+        let id = at(&mut w, "HOVER", 0, 0, 0, 0);
+        settle(&mut w);
+        glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+        hold_at(&mut w, id, h, 40);
+        assert_eq!(hs(&w, id).spin, 0, "the spin has ended");
+        assert_eq!(hover::bomb_mark(&w, id), marked, "height {h}");
+    }
+}
+
+// spec: S-0503 claim 11 (the test belongs to the end of a spin, even if the vehicle has meanwhile been re-enabled)
+#[test]
+fn claim_11_a_spin_ending_after_re_enabling_still_tests() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, 0, 0, 0);
+    settle(&mut w);
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    tick::step(&mut w);
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, false);
+    assert!(hs(&w, id).spin != 0, "the spin goes on");
+    assert!(hover::powered(&w, id), "re-enabled");
+    hold_at(&mut w, id, 50, 40);
+    assert_eq!(hs(&w, id).spin, 0);
+    assert!(
+        hover::bomb_mark(&w, id),
+        "the end of the spin made the test"
+    );
+}
+
+// spec: S-0503 claim 11 (a switch-off that starts no spin, while no spin is active, makes no test: the vehicle, already switched off and resting on the water, rests)
+#[test]
+fn claim_11_a_switch_off_without_a_spin_makes_no_test() {
+    let mut w = still_world();
+    let id = at(&mut w, "HOVER", 0, 0, 0, 0);
+    settle(&mut w);
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    // The spin runs out high above the water: no mark.
+    hold_at(&mut w, id, 300, 40);
+    assert_eq!(hs(&w, id).spin, 0);
+    assert!(!hover::bomb_mark(&w, id));
+    // It is then down on the water, still switched off.
+    hold_at(&mut w, id, 0, 2);
+    let before = w.rng.taken();
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    assert_eq!(w.rng.taken(), before, "the cut takes no draws");
+    assert_eq!(hs(&w, id).spin, 0, "and starts no spin");
+    common::run(&mut w, 5);
+    assert!(!hover::bomb_mark(&w, id), "no test, no mark");
+}

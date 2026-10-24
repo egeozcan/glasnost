@@ -908,3 +908,42 @@ fn producers_make_pieces() {
     );
     round_trip(&w);
 }
+
+/// spec: S-0317 claim 1 (the object of play: the hits of its impact and of its end carry no attacker and no house, even for a piece that carries its object's house; a victim they destroy credits no kill to any house, and counts one loss for its own)
+#[test]
+fn claim_1_hits_carry_no_attacker_and_no_house() {
+    use glasnost_sim::econ::stats;
+    use glasnost_sim::world::HouseId;
+    for ending in [false, true] {
+        let r = rules();
+        let mut w = world(&r);
+        let c = mid(0, 0);
+        let victim = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, c, 0);
+        w.obj_mut(victim).unwrap().health = 1;
+        let kills: Vec<i32> = (0..2).map(|h| stats::of(&w, HouseId(h)).kills).collect();
+        let losses = stats::of(&w, HouseId(1)).losses;
+        let at = centre(c, 0);
+        let t = ti(&w, "ROCK");
+        // A piece carrying house 0 (as a death's pieces carry their object's).
+        let id = pieces::create(&mut w, t, at, Some(HouseId(0))).expect("piece made");
+        if ending {
+            w.pieces.get_mut(&id).unwrap().counter = 1;
+        } else {
+            set(&mut w, id, [at.x + 20, at.y, 5], ["0", "0", "-10"]);
+        }
+        w.tick = 1;
+        pieces::turn(&mut w, id);
+        testkit::run(&mut w, 3);
+        assert!(
+            w.obj(victim).is_none_or(|o| o.health <= 0),
+            "ending {ending}: destroyed"
+        );
+        let after: Vec<i32> = (0..2).map(|h| stats::of(&w, HouseId(h)).kills).collect();
+        assert_eq!(after, kills, "ending {ending}: no kill credited");
+        assert_eq!(
+            stats::of(&w, HouseId(1)).losses,
+            losses + 1,
+            "ending {ending}: its own loss"
+        );
+    }
+}

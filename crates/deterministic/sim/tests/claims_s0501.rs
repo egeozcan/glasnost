@@ -3689,3 +3689,80 @@ fn s0312_claim_16_the_fall_back_crash_takes_no_debris_or_list_draw() {
     assert_eq!(with, plain, "no debris draw and no list pick");
     assert_eq!(a, b, "the same stream state");
 }
+
+// spec: S-0501 claim 45 (a visiting aircraft with its ammunition spent takes T2's visiting row, which queues retreat; a pad-bound visiting type is the exception: T2's after-the-row entry follows the visiting row, its pad search finds no pad since it has no dock types, and it crashes at this fall-back, claim 46, instead of retreating) and T2 (the crash row)
+#[test]
+fn pad_bound_visiting_type_crashes_instead_of_retreating() {
+    let mut r = pad_bound(None);
+    r.sim.general.economy.curley_shuffle = Some(true);
+    r.sim.aircraft.get_mut("JET1").unwrap().econ.landable = Some(false);
+    let mut w = game(&r);
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
+    assert!(st(&w, a).visiting, "marked by the type test");
+    click(&mut w, a, ClickOn::Object(v));
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).is_none_or(|o| o
+        .combat
+        .ammo
+        == 0
+        || o.health == 0)));
+    let crash = run_until(&mut w, 200, |w| w.obj(a).is_none_or(|o| o.health == 0));
+    assert!(crash, "a crash: {}", describe(&w, a));
+    assert_ne!(
+        w.obj(a).and_then(|o| o.beh.current),
+        Some(Behaviour::Retreat),
+        "not retreating"
+    );
+    crashed(&w, a);
+    falls_to_impact(&mut w, a, losses);
+}
+
+// spec: S-0501 claim 45 (at any other height, above or below the cruise height, an armed aircraft with no target takes claim 26's rows and the delay of claim 26 with k = 2, and area guard is kept; this is the case below the cruise height, Q-1837)
+// spec: S-0215 claim 26 and F0 (D = k * D_r + U(1, 5), k = 2 for aircraft)
+#[test]
+fn claim_45_below_the_cruise_height_takes_claim_26_with_k_2() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "JET", 0, 0);
+    let dr = w.rules().behaviour(Behaviour::AreaGuard).rate_delay;
+    assert!(dr > 0, "a rate delay, so that 1 tick is not claim 26's");
+    for below in [1, 40, 300] {
+        let d = area_guard_processing_at(&mut w, a, -below);
+        assert!(
+            (2 * dr + 1..=2 * dr + 5).contains(&d),
+            "claim 26's delay with k = 2 at {below} below: {d}, D_r {dr}"
+        );
+        let o = w.obj(a).unwrap();
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::AreaGuard),
+            "{}",
+            describe(&w, a)
+        );
+        assert_eq!(o.target, None);
+        assert_eq!(o.beh.queued, None, "no attack queued, no fall-back");
+    }
+}
+
+// spec: S-0501 claim 45 (below the cruise height an aircraft holding a target has attack queued after the processing and its next processing comes 1 tick later, as above it; Q-1837)
+#[test]
+fn claim_45_below_the_cruise_height_with_a_target_queues_attack() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "JET", 0, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, -10, 10);
+    force(&mut w, a, Behaviour::AreaGuard);
+    glasnost_sim::spawn::set_own_target(w.obj_mut(a).unwrap(), Some(Target::Object(v)));
+    let d = area_guard_processing_at(&mut w, a, -200);
+    assert_eq!(d, 1, "1 tick with a held target");
+    let o = w.obj(a).unwrap();
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Attack),
+        "{}",
+        describe(&w, a)
+    );
+    assert_eq!(o.target, Some(Target::Object(v)));
+}
