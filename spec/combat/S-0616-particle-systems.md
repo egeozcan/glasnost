@@ -2,11 +2,11 @@
 id: S-0616
 title: Particle systems (smoke, fire, spark, railgun)
 topic: combat
-revision: 16
+revision: 20
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-21
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-1153, Q-1155, Q-1243, Q-1400, Q-1401, Q-1402, Q-1403, Q-1404, Q-1405, Q-1520, Q-1540, Q-1590]
 supersedes: []
@@ -27,6 +27,13 @@ Damage follows the particle's own kind, including gas when kinds are mixed (clai
 Claims 23 to 31 say how every particle is drawn (presentation only): which are drawn, palette and
 brightness, image frame, translucency, placement, the pixel colours of sparks and railgun
 particles, draw order, and the lights and laser of a system.
+
+Revision 20 takes in the S-0616 entry of S-0317's Changes for other specs, and corrects claim 1
+of revision 16: the system of a voxel-model animation is made at the piece's creation point, not
+at its start position, which differs from it for meteor and falling pieces (S-0317 claims 3, 4
+and 13). It also states the displacement that a smoke system of a voxel-model animation keeps
+from its piece: zero for a falling piece, the flight from the start position to the creation point
+for a meteor piece, as S-0317 claim 13 has it.
 
 **What this spec does not restate.**
 - **The gas kind,** the shared gas system, and every system's lifetime count-down and leaving
@@ -303,20 +310,31 @@ stands alone. This spec adds the terms after them.
      another reason (an electromagnetic pulse, paralysis, travel inside a tunnel), since it comes
      before them.
    - **Animation with a voxel model.** A voxel-model animation type with an attached system makes it at the
-     animation's start position. When the animation is removed the system is marked, as for the removal of an owner object
-     (claim 4), and leaves play once it holds no particle (claim 22).
+     piece's creation point (S-0317 claim 13). That point is not the piece's start position: a
+     meteor piece starts moved back along its velocity (S-0317 claim 4), and a falling piece starts
+     10 leptons above it (S-0317 claim 3). This position rests on S-0317 claim 13 and is rated
+     medium, as there (S-0317 scenario V11 is the measurement that would settle it); scenario P1 does not record it, and the
+     high confidence below does not cover it. A smoke system then keeps claim 5's displacement from
+     its owner, as S-0317 claim 13 has it: for a falling piece the displacement is zero, since the
+     piece is at its creation point when the system is made, and for a meteor piece it is the whole
+     flight from the start position to the creation point; the two specs agree on this, and it is
+     rated medium, as there (S-0317 scenario V11). When the animation is removed the
+     system is marked, as for the removal of an owner object (claim 4), and leaves play once it
+     holds no particle (claim 22).
 
    - Backing: `measurable` (scenario P1, one run per row; P15 for the yellow factor of the
      natural-smoke row; P16 for the damage-sparks row and the damage-smoke position; P19 for
      the healing marks; P20 for refinery smoke; P21 for destruction smoke; P22 for effect
      weapons with several flags and the railgun end point; P23 for the place of both spark
-     steps in the turn)
+     steps in the turn; S-0317 scenario V11, not yet run, for the position and displacement of a
+     voxel-model animation's system)
    - Confidence: high for the creators, owners and first particles, for the refinery smoke
      events, the destruction-smoke rules, the natural-smoke factor, the effect-weapon flags and
      the place of the damage sparks in the turn. Medium for the three events
      that let a fire emitter go, for the self-healing mark of damage smoke, for the deactivated-vehicle row, for the shared gas system's position and for the natural-smoke uncloak
      rule (the displacement test). Medium for the damage-smoke position when the screen-relative
-     flag is off. The flag-on conversion is `unmeasured`: no validating scenario for that unresolved conversion is supplied here (Open questions). The below-surface self-healing mark is also `unmeasured`: no setup here isolates a healing gain below −10 leptons.
+     flag is off. Medium for the position and displacement of a voxel-model animation's system
+     (S-0317 scenario V11 is the measurement that would settle it). The flag-on conversion is `unmeasured`: no validating scenario for that unresolved conversion is supplied here (Open questions). The below-surface self-healing mark is also `unmeasured`: no setup here isolates a healing gain below −10 leptons.
 
 2. **Which kinds change play.** Every kind changes play through the draws its turns take from the
    scenario random stream (claims 6, 8, 9, 11, 12, 15, 16, 17 and 18). An extra or missing draw

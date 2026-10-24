@@ -2,11 +2,11 @@
 id: S-0203
 title: Tick order
 topic: simulation
-revision: 39
+revision: 40
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0018, Q-0412, Q-0430]
 supersedes: []
@@ -22,6 +22,13 @@ destroyed object stops acting, and the consequences, such as two units killing e
 same tick. How many ticks run per second is S-0201, and what each object does in its own turn
 (moving, firing, harvesting) belongs to the topic specs of those actions. This revision covers
 skirmishes only; network games and campaigns are out of scope.
+
+Against revision 39, revision 40 takes in the S-0203 entry of S-0318's Changes for other specs.
+Claim 5 no longer says that a projectile which loses its first turn to a removal always has that
+turn in the next tick: a removal in the next tick can cost it that turn too, so its first turn is
+in the first tick in which no removal costs it the turn. This corrects the committed text, which
+allowed only tick *n* + 1. Claim 10 is unchanged: the objects that entered play during a turn,
+which it lets miss turns, already include fragments. Nothing else changes.
 
 Within an object's turn, S-0506 claim 24 owns local launch-pass ordering: an ordinary
 vehicle or ship shot cannot supply that turn's due pass, whereas an aircraft attack-run shot
@@ -440,9 +447,11 @@ firing, cloak, spark or drain phases. Their backing, confidence and proposed mea
    object the warhead reaches. This is not a rule for damage without an in-play projectile,
    such as a death weapon, planted bomb, storm bolt or the beam and disc laser cases below.
    There is no separate damage step later in the tick. A projectile that detonates leaves play in
-   that same turn. A projectile fired in tick *n* takes its first turn in tick *n* (claim 4), unless
-   a removal costs it that turn (claim 10), in which case its first turn is in tick *n* + 1. The
-   points below follow from this, or add to it.
+   that same turn. A projectile fired in tick *n* (or launched in it, as a fragment is) takes its
+   first turn in tick *n* (claim 4), unless a removal costs it that turn (claim 10). Its first turn
+   is then in the first later tick in which no removal costs it the turn. That is usually tick
+   *n* + 1, but a removal can cost it the turn in tick *n* + 1 as well. S-0318 claim 5 owns the
+   fragment cases and their backing. The points below follow from this, or add to it.
    - **(a) Mutual fire.** Take two units already in play that fire at each other in the same tick
      *n*, with weapons whose projectiles reach the target on their first turn (one with no visible
      flight, for example). Both shots are always fired, since neither projectile acts before both

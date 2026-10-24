@@ -2,11 +2,11 @@
 id: S-0202
 title: Random streams (generator, seeding, ranged draws, which systems draw from which stream)
 topic: simulation
-revision: 33
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-21
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0018, Q-0046, Q-0101, Q-0182, Q-0217, Q-0327, Q-0711, Q-1562]
 supersedes: []
@@ -23,6 +23,22 @@ random stream and which from the unsynchronised random stream. It also states th
 no feature spec lists yet: the creation draw of an object, the draws of overlay placement (with the
 low-bridge and vein placement rules they depend on) and the creation draws of an animation
 (claim 10).
+
+Revision 34 takes in the S-0202 entry of S-0317's Changes for other specs: claim 10's
+bouncing-type row covers the sprite animations of S-0109 only, and a voxel-model debris piece's
+creation draws are S-0317's (claims 3 and 4). Only the row's scope is stated; its draws for
+sprite animations are unchanged. The scope is medium: it awaits S-0317 scenario V1 and the lead's
+question in S-0317 on it.
+
+Against revision 34, revision 35 changes no behaviour: claim 10 rates the bouncing row's
+exclusion of voxel-model debris pieces medium, gives it a backing line (S-0317 scenario V1),
+names the row's dependency in its confidence and points to S-0109's Terms without restating
+them.
+
+Against revision 35, revision 36 changes no behaviour: the bouncing row's first cell keeps only
+its condition and the exclusion of voxel-model debris pieces, whose rating stays in the backing
+table and the confidence, and claim 10 says once that *animation* in its creation-draw table means
+the sprite kind of S-0109.
 
 **Joint hand-off checks.** Claim 14 agrees with S-0009's loading-order table and
 S-0412 claim 14: game-start tile-animation draws follow starting units, crates,
@@ -587,15 +603,17 @@ original's recording modes are retained as deferred context, not implementation 
         take no draw of their own when placed; the veinhole monster that the last one creates takes
         none either. (Placing any overlay recalculates its cell, which can start that cell's tile
         animation; see the map-loading table.)
-    - **Animation creation draws.** The table gives draw allocation order from top to bottom,
-      with conditional rows omitted when inapplicable. Thus a random stage delay can change
+    - **Animation creation draws.** In this table and the paragraph after it, *animation* means an
+      animation of S-0109's sprite kind (S-0109, Terms), as distinct from the voxel-model debris
+      pieces of S-0317, whose creation draws are S-0317's (claims 3 and 4). The table gives draw
+      allocation order from top to bottom, with conditional rows omitted when inapplicable. Thus a random stage delay can change
       the starting motion, and either group can change immediate start-event outcomes.
       The resulting state determines later scenario-stream choices, including other creations.
 
       | Animation condition | Draws at creation |
       |---|---|
       | The type's random rate gives a range (S-0109, claim 3) | One ranged draw for the stage delay. |
-      | The animation is a bouncing type (S-0109, Terms) | Starting motion uses a group of three raw values and a subsequent group of three ranged draws R(−65535, 65535). Each ranged request uses the state left by the preceding request and may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
+      | The animation is a sprite animation of S-0109 of a bouncing type (S-0109, Terms); not a voxel-model debris piece | Starting motion uses a group of three raw values and a subsequent group of three ranged draws R(−65535, 65535). Each ranged request uses the state left by the preceding request and may consume more than one raw value (claim 4). What the motion does belongs to the debris and projectile specs. |
       | The animation is created with no loop delay (S-0109 claim 11) | Its start event (S-0109 claim 13) has immediate effects. When μ = 0, the resource chain reaction sees the cell and stream state left by the middle event (S-0109 claim 14), so a crater can empty the cell and suppress the reaction. The particle, smudge and chain-reaction specs own those effects' draws. |
 
       A chain reaction takes no draw and has no effect when the cell containing the animation's position holds no resource. This does not suppress any preceding middle-event draws. S-0109 claims 14 and 25 state the middle-event gates, sprite-derived μ and particle-before-choice ordering at map load and during play. Claim 15 below completes the requested particle and smudge creation draws. S-0401 claim 20 gives the resource-chain-reaction draw sequence, including conditional child-animation and detonation effects. No other draw comes with an animation's creation. A tile animation (S-0010, claim 19) and a cell animation are both created with no loop delay, so each takes the applicable draws at the moment it starts, including during map loading; nothing in loading holds animations back.
@@ -627,6 +645,7 @@ original's recording modes are retained as deferred context, not implementation 
       | What sets off a vein placement during play; the recompute draws | `unmeasured` (the recompute's triggers are bound up with other effects, such as a harvesting unit's or a veinhole monster's own draws, that no spec lists yet, and one recompute gives at most five values, each telling only its remainder modulo 3, too few to find its place in the stream the way R8 does) |
       | Animation creation: the stage-delay draw, and nothing else for a type without start-event effects | `measurable` (R8 F) |
       | Animation creation: the bouncing draws | `measurable` (R8 F, variant ii) |
+      | Animation creation: the bouncing row does not cover a voxel-model debris piece | `measurable` (S-0317 V1), medium until V1 runs and while the lead's question in S-0317 on this scope is open |
       | Cell animation position and chain-reaction cell; its creation draws precede the tile-animation draws of the same placement | `measurable` (R8 I, using S-0009 M6e) |
       | Animation creation: a chain reaction on a cell without resource takes no draw | `measurable` (R8 F, variant iii) |
       | Game-start pass: new tile animations take their creation draws in visiting order, after end-of-loading tags and before the first tick; cells that already started one in the second pass take no further creation draws | `measurable` (R10) |
@@ -642,7 +661,9 @@ original's recording modes are retained as deferred context, not implementation 
       creation-before-recalculation order; the game-start pass's draws); high (no chain-reaction
       draw on a cell without resource); medium (the animation creation draws, whose
       bouncing and start-event parts are well established, while how an animation is placed on
-      the map is only partly established)
+      the map is only partly established; medium for the bouncing row's not covering a voxel-model
+      debris piece, until S-0317 scenario V1 runs and while the lead's question in S-0317 on it is
+      open)
 
 11. **Unsynchronised random stream: presentation during play and at map load, setup values
     before play.** No draw from this stream that changes game state has been found. Its uses:
@@ -1249,7 +1270,7 @@ Thus the visible variants of later neighbours depend on which earlier neighbours
 | End-row and piece width | 3 | cells across the line | Claim 10 |
 | Partner search limit | none | cells | Ends at the first cell that is not legal (claim 10) |
 | Vein placement slope limit | 4 | slope shape index (S-0106) | Claim 10: at most 4 for the placed cell; above 4 blocks a flat placed cell's empty neighbour |
-| Animation bounce draws | 3 raw values, then 3 ranged draws over −65535 … 65535 | draws | Claim 10, bouncing types only |
+| Animation bounce draws | 3 raw values, then 3 ranged draws over −65535 … 65535 | draws | Claim 10, bouncing types of sprite animations only |
 | Visceroid placement draw | 0 … 29 | ranged-draw result (integer) | One ranged draw R(0, 29) when a vehicle of a type with either visceroid flag is placed (claim 10, map-loading table) |
 | Vein overlay position | 126 | position in the overlay type list | Claim 10; S-0009, claim 14 |
 | Vein data base, flat placed cell | 48 | overlay data value | 46 for the one raw value of `quirks.random_magnitude_overflow` |

@@ -2,13 +2,13 @@
 id: S-0513
 title: Superweapon effects
 topic: superweapons
-revision: 30
+revision: 34
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-21
+approved-on: 2026-10-24
 measurements: []
-requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529]
+requests: [Q-0742, Q-0732, Q-0733, Q-0734, Q-0735, Q-0739, Q-0740, Q-0738, Q-0741, Q-0800, Q-0850, Q-0851, Q-0870, Q-0871, Q-1527, Q-1528, Q-1529, Q-1740]
 supersedes: []
 ---
 
@@ -791,7 +791,11 @@ presentation and swept-layer rules below also apply where those specs cite them.
     masks under S-0102 claim 34's animation rule; it is normally the animation's own building
     but need not be, and with no building in that cell the animation takes no mask.
     For slot animations, a cell is *shrouded* when S-0110 claim 8's point test at the centre
-    of the cell, at its ground height, finds it shrouded for the local player. Like every row
+    of the cell, at the terrain's surface height there (S-0106 claims 2 and 3), finds it
+    shrouded for the local player, as S-0410 claim 6 gives the radar's use of the same test
+    (Q-1740). On a sloped cell this is the slope's height at the centre, not the flat height of
+    the cell's level: at level 0 and above, a valley or steep slope's centre lies a whole level
+    higher, so the test reads other cells than a flat cell of that level would. Like every row
     of the table, the slot-animation row applies only to an animation that is drawn. That
     test reads the explored state of cells (on raised ground, of a cell displaced as S-0110
     claim 8 gives). The two shroud cases are:
@@ -826,15 +830,17 @@ presentation and swept-layer rules below also apply where those specs cite them.
       translucent, cloaked, shroud-edge and slot-animation rows (the slot-animation row by parts
       i1 to i5; for a building that is only marked it rests on part i5's combined run and is
       `unmeasured`, as S-0519 claim 26 says). That the slot-animation test is made at its
-      cell's ground height, not at the animation's own height, is `unmeasured`: no part of SW10
-      varies the animation's height above that ground. The door row's engine behaviour is design,
+      cell's surface height, not at the animation's own height, is `unmeasured`: no part of
+      SW10 varies the animation's height above that surface. That on a sloped cell it is the
+      surface height at the centre, not the flat height of the cell's level, is `measurable`
+      (SW10 part i6). The door row's engine behaviour is design,
       checked by the same captures against the bib. The remembered-image row is
       `unmeasured`: fog of war is off in skirmish, as for S-0102's remembered-image rows.
     - Confidence: high for the bib, under-door, replacement-body and door rows and for
       translucent sprite drawings; medium for translucent
       and rippling voxel vehicles, for the shroud-edge rule and for the opaque slot-animation
-      row, pending SW10 part i; medium for the test's ground height and for
-      remembered images
+      row, pending SW10 part i; medium for the test's surface height, pending part i6 for a
+      sloped cell, and for remembered images
 
 ### Force shield
 
@@ -1934,11 +1940,12 @@ is not under test.
   invented distinct curtain and force-shield triples (and, for part i5, a laser-target selector
   naming a third table position, given a third invented triple, so that the three triples differ
   and the union of the force-shield and laser-target masks differs from each mask alone), three stationary subjects on flat,
-  neutrally lit ground: a factory with a bib, an under-door image and a door image releasing
+  neutrally lit ground (the slot-animation placements below give their own ground: part i4
+  raises it and part i6 slopes one cell): a factory with a bib, an under-door image and a door image releasing
   a vehicle; a building inside an own cloak field (S-0516 CS5 and CS10 set-up); a voxel vehicle
   with its own cloak (named map-layer rules giving the type the own-cloak flag, as in S-0516
   CS1, with a vehicle in place of the infantry type). The slot-animation placements below
-  (i1 to i5) add a fourth subject, a building with a test slot animation. For each
+  (i1 to i6) add a fourth subject, a building with a test slot animation. For each
   protection kind capture the bib, under-door, door and replacement-body pixels during the
   unload, the cloaking building and vehicle at each translucency step and in the ripple step
   (viewed by a non-owner) and fully cloaked (viewed by the owner), and the unprotected controls
@@ -1993,11 +2000,12 @@ is not under test.
   - **i4:** i1 and i2 again with the whole building and the cells around it raised four height
     levels above the rest of the map. i4 tests the displaced-cell reading of the shroud test on
     raised ground and that height plays no part in finding *E*. The animation stays at its
-    cell's ground, so i4 does not test ground height against the animation's own height, which
+    cell's surface height, so i4 does not test ground height against the animation's own height, which
     claim 29b leaves `unmeasured`. The raised area extends at least two cells beyond the foundation
     on every side. Every state a placement names is the result of S-0110 claim 8's point test
-    at that cell's centre, at its ground height. On this raised ground (*u* = 4) the test for
-    cell (*x*, *y*) reads the explored state of cell (*x* − 2, *y* − 2), its displaced cell. In
+    at that cell's centre, at its surface height (the raised ground is flat). On this raised
+    ground (*u* = 4) the test for cell (*x*, *y*) reads the explored state of cell
+    (*x* − 2, *y* − 2), its displaced cell. In
     i4 the named cells are *E*, *P*, the anchor cell and the two foundation corner cells next to
     the anchor. The corner opposite the anchor is left out, since its displaced cell is the
     anchor cell; its point-test result, the anchor cell's own explored state, is recorded, not
@@ -2018,6 +2026,31 @@ is not under test.
     using the distinct laser-target triple above, so that the union differs from either mask.
     Expected: i1 shows the union of the force-shield and the laser-target colours, i2 shows
     neither. A marking colour in i2 falsifies the removal of the laser-target half.
+  - **i6 (Q-1740):** a sloped cell *E*, so i6 departs from the flat ground of the other
+    placements at that one cell. The named test building is a type that may be placed
+    on sloped ground (S-0406 claim 3), and cell *E* is a valley or steep slope at level 0,
+    so its centre's surface height is one whole level (S-0106 claim 2) and the point test
+    there has *u* = 1, reading *E* and its map north-west neighbour *N* (the cell one less on
+    both axes). The flat height of level 0 would give *u* = 0 and read *E* alone. The rest of
+    the foundation is flat at level 0. With the anchor cell at (*a*, *b*), *E* is the middle
+    cell (*a* + 2, *b* + 1) of an edge that does not touch the anchor, so *N* is the foundation
+    cell (*a* + 1, *b*), the middle cell of the edge through the anchor, next to the centre cell
+    *P* = (*a* + 1, *b* + 1); the other edge that does not touch the anchor, with *E* at
+    (*a* + 1, *b* + 2), puts *N* at (*a*, *b* + 1), also inside the foundation. Revealing units
+    placed and removed before the building leave *E* not explored, and *N* and the centre cell
+    *P* explored; one unit may reveal both *N* and *P*, since both are to be explored. The
+    recorder confirms these three states before the capture, and records the other named
+    cells' states. The one-cell split above applies to i6 when these states cannot be reached,
+    with *N* as its one cell: *E* not explored and *N* explored, made by a revealing unit whose
+    footprint covers *N* but not *E*; the state of *P* is then recorded, not set, and the placement
+    is judged only when *P* is also explored, since otherwise the upper region does not show and i6
+    is inconclusive. Judge the upper region's pixels, drawn over *P*, as in i2. Under the force
+    shield, expected: they show the force-shield colour, because *N* is explored. No colour
+    falsifies the surface-height reading and points at the flat level height. A control, which is
+    no evidence for the choice of height: a variant with *E* an edge slope (centre half a level up,
+    *u* = 0 under both readings) and the same states shows no colour there; a colour falsifies the
+    reading of *u*, not the choice of height. If no pixel of the upper region shows, i6 is
+    inconclusive.
 - **SW11 — force shield (claims 30 to 32).** (a) Allied buildings with reference points at
   distances just below and at 256 × *R* from the target centre, one on raised ground; an enemy
   building inside; expected: only allied buildings strictly inside F3 protected. (b) Vehicles
@@ -2319,7 +2352,8 @@ for these two kinds.
   building-voxel and marked-building-animation cases; claim 29b settles bibs, under-door,
   replacement and door images, cloaked or translucent units and buildings, shroud edges and
   remembered images (Q-1528), and slot animations of a building at a shroud edge
-  (Q-1529). Still open: protected building slot animations whose own art
+  (Q-1529), including the height the shroud test uses on a sloped cell (Q-1740: the surface
+  height at the centre, SW10 part i6). Still open: protected building slot animations whose own art
   draws them translucent, and unusual sprite-turret accessory combinations. Do not infer
   their colour treatment from the opaque cases or from identical brightness timing.
 - Q-1527 is answered by claim 29a (original not reduced or clamped; our rule *K* = 0 plus a
@@ -2373,7 +2407,7 @@ for these two kinds.
   protected object whose centre cell is shrouded" withholds only the protection masks: for a
   protected building that is also air-strike-marked, whether its body, voxel turret and barrel
   keep the laser-target mask is open (S-0519 claim 26).
-- **S-0519 claim 26.** Carried by S-0519 revision 15, submitted in the same round: the marking
+- **S-0519 claim 26.** Carried by S-0519 revision 17, submitted in the same round: the marking
   colour on a building animation is absent while the cell holding the animation's own
   position is shrouded for the local player (S-0513 claim 29b), with S-0513 SW10 part i5
   as its scenario. S-0519 leaves open the marking colour of a marked building's body, voxel

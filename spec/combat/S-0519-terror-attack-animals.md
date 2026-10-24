@@ -2,11 +2,11 @@
 id: S-0519
 title: Terror and attack animals
 topic: combat
-revision: 15
+revision: 17
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-21
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0986, Q-1524, Q-1621]
 supersedes: []
@@ -25,6 +25,16 @@ and how a planted bomb's icon, a charged building's flash and a marked building 
 S-0214 row I18 owns the air-strike cursor and its attack order, S-0308 row 6 the choice of the
 designating weapon, and S-0501 the aircraft's flight and attack runs. Drone and grappling parasites belong to S-0614. Garrisons are S-0508, building capture is S-0509
 and deployable units are S-0517.
+
+Against revision 15, revision 16 takes in the S-0519 entry of S-0501's Changes for other specs.
+It corrects the committed text for a carrier destroyed without a hit, as by S-0501 claim 46's
+fall-back crash: such a carrier has no shared death effects, so its bomb does not detonate at the
+destruction; it stays attached during the fall, where its timer and the detonate order still set
+it off, and if it has not gone off by the impact it is removed then with no effect. Claim 7 adds
+that removal, and the state table's row "carrier dies on the map" becomes "carrier dies on the map
+from a killing hit", with the destruction without a hit and its impact as rows of their own.
+Revision 17 changes no behaviour: claim 5 now points to the falling carrier of claim 7 and says
+that a bomb set off during that fall makes one detonation.
 
 ## Terms
 
@@ -126,7 +136,8 @@ ignores defences*, *quirk switch*. Also used:
    - Backing: `measurable` (scenarios T4 and T5)
    - Confidence: high
 
-5. **Detonation and credit.** When a bomb goes off on a carrier that is on the map:
+5. **Detonation and credit.** When a bomb goes off on a carrier that is on the map, including
+   one falling after a destruction without a hit (claim 7):
    - if the detonation kills the carrier, the bomb does not detonate a second time (S-0312
      claim 7),
    - one detonation (S-0303) happens at the carrier's position, with the game-wide bomb damage as
@@ -148,7 +159,9 @@ ignores defences*, *quirk switch*. Also used:
      The absence of a separate attacking house is `unmeasured`: ordinary credit from a
      surviving planter cannot distinguish that input from its current owner
    - Confidence: high for the detonation, its amount, warhead and position; medium for the
-     credit when the planter has been removed
+     credit when the planter has been removed; medium for a bomb that goes off on a carrier
+     falling after a destruction without a hit, as claim 7 rates that case until S-0501 scenario
+     AC29 part i runs
 
 6. **Carriers off the map.** A bomb's timer cannot detonate it while its carrier is off the map
    (for example, inside a transport or a garrison). This remains true for open-topped passengers,
@@ -169,9 +182,25 @@ ignores defences*, *quirk switch*. Also used:
      suppress disarming,
    - a building changes owner and its type is not garrisonable (S-0312 claim 7, S-0509 claim 13),
    - the carrier is removed from play other than by death: sold, used up by entering a building,
-     or erased.
-   - Backing: `measurable` (scenarios T6, T9 and T24)
-   - Confidence: high
+     or erased,
+   - an aircraft carrier destroyed without a hit, as by S-0501 claim 46's fall-back crash,
+     reaches the ground with its bomb still attached: the bomb is removed at the impact
+     (`quirks.crash_drops_planted_bomb`, S-0501). Such a destruction has no shared death
+     effects (S-0312 claim 7), so it does not detonate the bomb. The bomb stays attached while
+     the carrier falls on the map, and its timer (claim 4) and the detonate order (claim 9) can
+     still set it off by claim 5 at the carrier's position; the timer test comes in the
+     carrier's turn before its movement, so a bomb due in the tick of impact goes off before the
+     impact. The falling carrier's health is already 0 (S-0501 claim 46), so the detonation
+     cannot kill it again: a bomb set off during the fall makes claim 5's one detonation and is
+     then gone.
+   - Backing: `measurable` (scenarios T6, T9 and T24; S-0501 scenario AC29 part i for the bomb
+     kept through the fall-back crash's start, removed without effect at impact, and set off by a
+     detonate order during the fall). A bomb whose timer comes due during that fall, and its order
+     against the impact in the impact tick, are `unmeasured`, as S-0501 claim 46 gives: no normal
+     input places the crash start against the bomb's due tick.
+   - Confidence: high; medium for the carrier destroyed without a hit, as S-0501 claim 46 rates
+     the planted bomb's handling until AC29 part i runs, and for its timer during the fall
+     (`unmeasured`)
 
 8. **Ownership and planter changes.** A change of owner of a unit, infantry unit or aircraft, for
    example by mind control, keeps the bomb, its timer and its planter's house. A garrisonable
@@ -814,7 +843,9 @@ S-0514 claim 20, as specified in claims 2 and 7. Ownership-change and removal di
 | attached | carrier off the map | timer cannot detonate it; no ticking sound |
 | attached | detonate order, carrier on the map | detonation (claim 5) |
 | attached | detonate order or death, carrier off the map | removed, no effect (claim 6) |
-| attached | carrier dies on the map | the bomb detonates once at the carrier's position; it does not detonate a second time as part of the carrier's death (S-0312 claim 7) |
+| attached | carrier dies on the map from a killing hit | the bomb detonates once at the carrier's position; it does not detonate a second time as part of the carrier's death (S-0312 claim 7) |
+| attached | aircraft carrier destroyed on the map without a hit (S-0501 claim 46's fall-back crash) | unchanged: no detonation; during the fall the timer and detonate-order rows above still apply |
+| attached | that carrier's impact | removed, no effect (claim 7) |
 | attached | disarm projectile detonates on the carrier | removed, no effect (claim 7) |
 | attached | non-garrisonable building changes owner | removed, no effect |
 | attached | carrier removed other than by death | removed, no effect |

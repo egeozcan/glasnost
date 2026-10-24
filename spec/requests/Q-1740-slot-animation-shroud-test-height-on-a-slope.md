@@ -1,9 +1,9 @@
 ---
 id: Q-1740
 title: Which height the slot-animation shroud test uses on a sloped cell
-status: open
+status: answered
 related: [S-0513, S-0110, S-0106, S-0410, S-0406]
-answered-by: []
+answered-by: [S-0513]
 ---
 
 ## Need
