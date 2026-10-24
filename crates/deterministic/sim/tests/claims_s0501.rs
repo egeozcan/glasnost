@@ -697,9 +697,9 @@ fn claim_9_living_crash() {
 }
 
 // spec: S-0501 claims 10 and 34 (a visiting aircraft in retreat flies to a cell on its house's arrival edge and leaves the map outside the usable area)
-#[test]
-fn claim_34_retreat_leaves_the_map() {
-    // A map whose usable area leaves a band of legal cells around it.
+/// A game of `r` on a map whose usable area leaves a band of legal cells
+/// around it, so that a position can leave the usable area on the map.
+fn banded_game(r: &Ruleset) -> World {
     let mut m = testkit::empty_map(SIZE);
     let fp = glasnost_map::Footprint::new(SIZE, SIZE, [2, 2, SIZE - 4, SIZE - 4]);
     let mut cells = glasnost_map::CellGrid::new(fp);
@@ -711,12 +711,14 @@ fn claim_34_retreat_leaves_the_map() {
     }
     m.footprint = fp;
     m.cells = cells;
-    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
-        &rules(),
-        "synthetic-test",
-    ));
-    let mut w = glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(7))
-        .expect("loads");
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(r, "synthetic-test"));
+    glasnost_sim::load::new_game(rules, &m, testkit::catalogue(), &testkit::setup(7))
+        .expect("loads")
+}
+
+#[test]
+fn claim_34_retreat_leaves_the_map() {
+    let mut w = banded_game(&rules());
     ready(&mut w);
     let s = put(&mut w, Kind::Aircraft, "SPY", 0, 4, 0);
     force(&mut w, s, Behaviour::Retreat);
@@ -2750,74 +2752,66 @@ fn lost_target_on_approach_flies_home_and_docks() {
     flies_home_and_docks(&mut w, k, a);
 }
 
-// spec: S-0501 claim 32 (an aircraft in attack whose target is gone ends its run: a target removed without a kill no longer exists and is cleared before processing) and claims 17 and 18 (it then flies home as for a kill)
+// spec: S-0501 claim 32 (Target loss: a target removed from the game is lost at that moment, its targeters' target cleared in the turn of the event) and claims 17 and 18 (it then flies home as for a kill)
 #[test]
 fn removed_target_on_approach_flies_home_and_docks() {
     let r = one_dock(|_| {});
     let (mut w, k, a) = built_with(&r, "JET1");
     lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
-    step(&mut w);
-    assert_eq!(w.obj(a).unwrap().target, None, "cleared before processing");
+    assert_eq!(w.obj(a).unwrap().target, None, "lost at that moment");
     flies_home_and_docks(&mut w, k, a);
 }
 
-// spec: S-0501 Terms (visiting aircraft: placement marks a type that is not both selectable and landable, so a non-landable aircraft built at a pad is visiting) and table T2 (in flight, armed, visiting, ammunition left, not in a team: hunt); claim 6 (a type that is not landable holds height and never lands)
+// spec: S-0501 claim 32 (Target loss: a target taken off the map, inside a transport or building, is lost as a removed one is, Q-1755 answered) and claims 17 and 18 (the run ends and it flies home with its ammunition full)
 #[test]
-fn lost_target_non_landable_hunts_at_cruise_height() {
-    let r = one_dock(|u| u.econ.landable = Some(false));
-    let (mut w, _k, a) = built_with(&r, "JET1");
-    assert!(st(&w, a).visiting, "placement marks it visiting");
-    lose_target_on_approach(&mut w, a, Loss::Kill, |_| {});
+fn target_taken_inside_is_lost_and_it_flies_home() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    let v = lose_target_on_approach(&mut w, a, Loss::Inside, |_| {});
+    assert!(w.obj(v).is_some(), "the victim still exists");
+    assert_eq!(w.obj(a).unwrap().target, None, "lost at that moment");
+    flies_home_and_docks(&mut w, k, a);
+}
+
+// spec: S-0501 claim 45's visiting case and table T2 (in flight, armed, visiting, ammunition left after its target is lost, outside a team: hunt, keeping claim 17's edge destination while its hunt finds no target; with neither flight flag it is removed, without dying, when its position leaves the usable area, having entered it since it appeared, claim 10). The aircraft is marked visiting by hand after placement, since a type that is not landable placed on the ground at a pad retreats at once (Q-1838).
+#[test]
+fn lost_target_visiting_hunts_toward_the_edge_and_is_removed_at_the_border() {
+    let r = one_dock(|_| {});
+    let mut w = banded_game(&r);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    lose_target_on_approach(&mut w, a, Loss::Remove, |w| {
+        w.obj_mut(a).unwrap().air.as_mut().unwrap().visiting = true;
+    });
     let hunts = run_until(&mut w, 100, |w| {
         w.obj(a).unwrap().beh.current == Some(Behaviour::Hunt)
     });
     assert!(hunts, "hunt: {}", describe(&w, a));
-    for _ in 0..600 {
-        step(&mut w);
-        let s = st(&w, a);
-        assert!(
-            !s.landing && !air::on_ground(&w, a),
-            "never lands: {}",
+    let e = dest_cell(&w, a).expect("a destination");
+    assert!(outside(&w, e), "claim 17's edge cell: {e:?}");
+    let mut last = None;
+    for _ in 0..3000 {
+        let Some(o) = w.obj(a) else { break };
+        assert!(o.health > 0, "alive: {}", describe(&w, a));
+        assert_eq!(
+            dest_cell(&w, a),
+            Some(e),
+            "the edge cell kept: {}",
             describe(&w, a)
         );
-        assert_eq!(s.held, CRUISE, "held height: {}", describe(&w, a));
-        assert_eq!(w.obj(a).unwrap().combat.ammo, 2);
-    }
-}
-
-// spec: S-0501 table T2 (in flight, armed, no dock types: guard, the destination kept), claims 29 and 33 (in flight in guard with a destination: move to it) and claim 6 (the held point keeps the replacement made at acceptance with a target, so it is more than 120 leptons above terrain and the aircraft holds height); Q-1756 interim (a move with the destination already held accepts no new point)
-#[test]
-fn lost_target_no_dock_types_moves_to_the_old_spot_and_holds() {
-    let r = one_dock(|u| u.econ.dock = None);
-    let mut w = game(&r);
-    ready(&mut w);
-    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
-    lose_target_on_approach(&mut w, a, Loss::Kill, |_| {});
-    let spot = w.obj(a).unwrap().dest;
-    assert!(matches!(spot, Some(Target::Cell(_))), "{}", describe(&w, a));
-    let guard = run_until(&mut w, 100, |w| {
-        w.obj(a).unwrap().beh.current == Some(Behaviour::Guard)
-    });
-    assert!(guard, "guard: {}", describe(&w, a));
-    assert_eq!(w.obj(a).unwrap().dest, spot, "destination kept");
-    let moves = run_until(&mut w, 100, |w| {
-        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
-    });
-    assert!(moves, "move: {}", describe(&w, a));
-    for _ in 0..600 {
+        assert!(!air::on_ground(&w, a), "never lands: {}", describe(&w, a));
+        last = Some(o.pos.cell());
         step(&mut w);
-        let o = w.obj(a).unwrap();
-        assert_eq!(o.dest, spot, "to the old spot: {}", describe(&w, a));
-        assert_eq!(o.contact, None);
-        assert_eq!(o.combat.ammo, 2);
-        let s = st(&w, a);
-        assert!(s.holding, "holds height: {}", describe(&w, a));
-        assert!(
-            !s.landing && !air::on_ground(&w, a),
-            "no landing: {}",
-            describe(&w, a)
-        );
     }
+    assert!(w.obj(a).is_none(), "removed on the way");
+    let at = last.unwrap();
+    assert!(
+        w.cells.usable(at),
+        "removed as it leaves the usable area: {at:?}"
+    );
+    // spec: S-0501 claim 10 (removed without dying: no loss counted)
+    assert_eq!(glasnost_sim::econ::stats::of(&w, ALPHA).losses, losses);
 }
 
 // spec: S-0501 claims 22 and 23 (a pad whose every contact place is held grants no contact) and table T2 (in flight, armed, no pad, not pad-bound: the landing spot of F8 as destination and move); claim 6 (without a target the new point is not raised: it lands there)
@@ -2850,22 +2844,6 @@ fn lost_target_every_place_reserved_lands_at_a_landing_spot() {
     assert_eq!(o.pos.cell(), spot, "at the landing spot");
     assert_eq!(o.contact, None);
     assert_eq!(o.combat.ammo, 2);
-}
-
-// Q-1755 interim (a target that goes off the map still exists and is kept; table T1's firing check answers decide the run: with the re-approach flag off the aircraft stays in attack over its firing spot, fires nothing and keeps its rounds)
-#[test]
-fn target_taken_inside_is_kept() {
-    let r = one_dock(|_| {});
-    let (mut w, _k, a) = built_with(&r, "JET1");
-    let v = lose_target_on_approach(&mut w, a, Loss::Inside, |_| {});
-    for _ in 0..600 {
-        step(&mut w);
-        let o = w.obj(a).unwrap();
-        assert_eq!(o.target, Some(Target::Object(v)), "{}", describe(&w, a));
-        assert_eq!(o.beh.current, Some(Behaviour::Attack));
-        assert_eq!(o.combat.ammo, 2);
-        assert!(w.projectiles.is_empty());
-    }
 }
 
 // spec: S-0501 claim 6 (the replacement is made when the movement point is accepted with a target and ammunition; the held point keeps it after the target goes; a destination that is not the held one reads the state now)
@@ -2908,34 +2886,561 @@ fn claim_6_held_point_height_fixed_at_acceptance() {
     );
 }
 
-// spec: S-0501 claim 17 (no ammunition: the run ends), table T2 (in flight, armed, no dock types: guard; after the row, no pad found for an aircraft that is not pad-bound), claims 29 and 33 (in flight in guard with a destination: move to it) and claim 6 (the last firing spot was accepted with a target and ammunition, so the held point stays raised and the aircraft holds height over it); Q-1756 interim (a move with the destination already held accepts no new point). The re-approach flag is on so that each run ends (claim 14).
+// ---------------------------------------------------------------------------
+// After the run (S-0501 r40: claims 17, 32, 34, 37, 40, 45 and 46)
+
+/// Whether `c` lies outside the usable area (S-0522 claim 4's edge cells).
+fn outside(w: &World, c: glasnost_map::CellXY) -> bool {
+    !w.cells.usable(c)
+}
+
+/// The aircraft's cell destination.
+fn dest_cell(w: &World, a: ObjectId) -> Option<glasnost_map::CellXY> {
+    match w.obj(a)?.dest {
+        Some(Target::Cell(c)) => Some(c),
+        _ => None,
+    }
+}
+
+/// Runs until the aircraft's destination is a cell outside the usable area
+/// and returns that cell.
+fn edge_destination(w: &mut World, a: ObjectId) -> glasnost_map::CellXY {
+    let found = run_until(w, 200, |w| dest_cell(w, a).is_some_and(|c| outside(w, c)));
+    assert!(found, "an edge destination: {}", describe(w, a));
+    dest_cell(w, a).unwrap()
+}
+
+/// After claim 45's replacement: the aircraft flies to the usable cell
+/// `c`, lands there and rests in guard, alive, with `ammo` rounds.
+fn lands_at_and_rests(w: &mut World, a: ObjectId, c: glasnost_map::CellXY, ammo: i32) {
+    let landed = run_until(w, 3000, |w| air::on_ground(w, a));
+    assert!(landed, "lands: {}", describe(w, a));
+    assert_eq!(w.obj(a).unwrap().pos.cell(), c, "at the replacement cell");
+    for _ in 0..300 {
+        step(w);
+        let o = w.obj(a).expect("not removed");
+        assert!(o.health > 0, "no crash: {}", describe(w, a));
+        assert!(air::on_ground(w, a), "rests: {}", describe(w, a));
+        assert_eq!(o.combat.ammo, ammo);
+    }
+    // spec: S-0501 T2 (on the ground: guard, for a human-controlled house)
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
+}
+
+/// Claim 45's replacement: the destination `e` outside the usable area is
+/// replaced by a usable cell near it at the first processing of the
+/// *move* that *guard* queues; returns the replacement.
+fn replaced_near(w: &mut World, a: ObjectId, e: glasnost_map::CellXY) -> glasnost_map::CellXY {
+    let moved = run_until(w, 200, |w| dest_cell(w, a) != Some(e));
+    assert!(moved, "the destination is replaced: {}", describe(w, a));
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Move));
+    let c = dest_cell(w, a).expect("a cell");
+    assert!(w.cells.usable(c), "a usable cell: {c:?}");
+    assert!(
+        cheb(c, e) <= 6,
+        "a few cells from the edge cell: {c:?} {e:?}"
+    );
+    c
+}
+
+// spec: S-0501 claims 17, 40 and 45 and table T2 (an armed, landable aircraft with no dock types of a human-controlled house whose target is lost before it fires: the run end gives it a cell on its house's computed edge outside the usable area; guard keeps it; the move that guard queues replaces it at its first processing with a usable cell near it; the aircraft lands there and rests in guard, not removed and not crashed, its ammunition unspent; Q-1756 answered)
 #[test]
-fn spent_no_dock_types_holds_over_the_last_firing_spot() {
+fn lost_target_no_dock_types_heads_for_the_edge_and_lands_near_it() {
+    let r = one_dock(|u| u.econ.dock = None);
+    let mut w = game(&r);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    let e = edge_destination(&mut w, a);
+    let guard = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Guard)
+    });
+    assert!(guard, "guard: {}", describe(&w, a));
+    let c = replaced_near(&mut w, a, e);
+    lands_at_and_rests(&mut w, a, c, 2);
+}
+
+// spec: S-0501 claims 17, 40 and 45 (an armed aircraft with no dock types whose ammunition is spent: the edge destination, its replacement near the edge, a landing there and rest in guard; it neither lands at nor holds above its last firing spot). The re-approach flag is on so that each run ends (claim 14).
+#[test]
+fn spent_no_dock_types_heads_for_the_edge_and_lands_near_it() {
     let mut r = one_dock(|u| u.econ.dock = None);
     r.sim.general.economy.curley_shuffle = Some(true);
     let mut w = game(&r);
     ready(&mut w);
-    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
-    let a = put(&mut w, Kind::Aircraft, "JET1", 0, -4, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
     click(&mut w, a, ClickOn::Object(v));
     assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
-    let moves = run_until(&mut w, 200, |w| {
-        w.obj(a).unwrap().beh.current == Some(Behaviour::Move)
-    });
-    assert!(moves, "move: {}", describe(&w, a));
-    let spot = w.obj(a).unwrap().dest;
-    assert!(matches!(spot, Some(Target::Cell(_))), "{}", describe(&w, a));
-    for _ in 0..1000 {
+    let e = edge_destination(&mut w, a);
+    let c = replaced_near(&mut w, a, e);
+    lands_at_and_rests(&mut w, a, c, 0);
+}
+
+// spec: S-0501 claims 32 and 37 (Target loss: an aircraft whose target object is killed, taken off the map or removed takes, when its targeting timer has more than 10 integer ticks left, one U(4, 8) draw that restarts the timer, before the target is cleared and in the turn of the event; with at most 10 ticks left, no draw)
+#[test]
+fn claim_37_target_loss_draw_both_ways() {
+    let r = one_dock(|_| {});
+    let (mut w, _k, a) = built_with(&r, "JET1");
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // The draw comes first in the event: the raw values and the value one
+    // U(4, 8) draw takes from the stream as it stands.
+    let mut e = w.rng.clone();
+    // spec: S-0501 claim 37 (Target loss: U(4, 8))
+    let drawn = e.ranged(4, 8, half);
+    let raws = e.taken() - w.rng.taken();
+    for loss in [Loss::Kill, Loss::Inside, Loss::Remove] {
+        let taken = |left: i32| {
+            let mut c = w.clone();
+            let tick = c.tick;
+            c.obj_mut(a).unwrap().targeting_timer = tick + left;
+            let before = c.rng.taken();
+            match loss {
+                Loss::Kill => {
+                    glasnost_sim::combat::damage::apply(&mut c, v, hit(1_000_000));
+                }
+                Loss::Inside => glasnost_sim::objects::take_inside(&mut c, v),
+                Loss::Remove => glasnost_sim::objects::remove(&mut c, v),
+            }
+            let o = c.obj(a).unwrap();
+            assert_eq!(o.target, None, "{loss:?}: lost at that moment");
+            (c.rng.taken() - before, o.targeting_timer - tick)
+        };
+        let (base, kept) = taken(10);
+        assert_eq!(kept, 10, "{loss:?}: 10 ticks left, no restart");
+        assert_eq!(taken(5), (base, 5), "{loss:?}: 5 ticks left, no draw");
+        for left in [11, 50] {
+            let (n, timer) = taken(left);
+            assert_eq!(
+                timer, drawn,
+                "{loss:?}: {left} ticks left, restarted to the draw"
+            );
+            if loss != Loss::Kill {
+                assert_eq!(n, base + raws, "{loss:?}: {left} ticks left, one draw");
+            } else {
+                assert!(n > base, "{loss:?}: {left} ticks left, the draw taken");
+            }
+        }
+    }
+}
+
+// spec: S-0501 claim 32 and T1 (the approaching row with no target: done after 1 tick, and the processing of done then ends the run 1 tick later)
+#[test]
+fn claim_32_lost_target_done_after_one_tick() {
+    let r = one_dock(|_| {});
+    let (mut w, _k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    let done = run_until(&mut w, 100, |w| st(w, a).stage == air::Stage::Done);
+    assert!(done, "done: {}", describe(&w, a));
+    let last = w.obj(a).unwrap().beh.last;
+    let (at, d) = last.expect("processed");
+    assert_eq!(d, 1, "done after 1 tick");
+    let next = run_until(&mut w, 10, |w| w.obj(a).unwrap().beh.last != last);
+    assert!(next, "processed again: {}", describe(&w, a));
+    let (then, _) = w.obj(a).unwrap().beh.last.unwrap();
+    assert_eq!(then, at + 1, "the next processing comes 1 tick later");
+    assert_ne!(st(&w, a).stage, air::Stage::Done, "it ends the run");
+}
+
+// spec: S-0501 claims 17 and 37 and scenario AC29 part a (an aircraft whose pad grants contact: the run end takes the edge-cell draws of S-0522 claim 4, then the fall-back gives it the pad as destination and enter, in the same processing, so it never heads for the edge)
+#[test]
+fn ac29a_run_end_takes_the_edge_draws_then_the_pad() {
+    let r = one_dock(|_| {});
+    let (mut w, k, a) = built_with(&r, "JET1");
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    let done = run_until(&mut w, 100, |w| st(w, a).stage == air::Stage::Done);
+    assert!(done, "done: {}", describe(&w, a));
+    let last = w.obj(a).unwrap().beh.last;
+    let mut ended = false;
+    for _ in 0..10 {
+        let before = w.rng.taken();
         step(&mut w);
         let o = w.obj(a).unwrap();
-        assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
-        assert_eq!(o.dest, spot);
-        let s = st(&w, a);
-        assert!(s.holding, "holds height: {}", describe(&w, a));
         assert!(
-            !s.landing && !air::on_ground(&w, a),
-            "no landing: {}",
+            !dest_cell(&w, a).is_some_and(|c| outside(&w, c)),
+            "never an edge destination between turns: {}",
             describe(&w, a)
         );
+        if o.beh.last != last {
+            assert!(w.rng.taken() > before, "the run end's draws");
+            assert_eq!(
+                o.dest,
+                Some(Target::Object(k)),
+                "the pad: {}",
+                describe(&w, a)
+            );
+            assert!(
+                o.beh.current == Some(Behaviour::Enter) || o.beh.queued == Some(Behaviour::Enter),
+                "enter: {}",
+                describe(&w, a)
+            );
+            ended = true;
+            break;
+        }
     }
+    assert!(ended, "the run ends: {}", describe(&w, a));
+}
+
+/// JET1 made pad-bound by the test rules, with `docks` as its dock types;
+/// APAD has a build-up sprite of 10 frames, so that it can be sold and its
+/// build-down completes (S-0408 claims 4 and 17, S-0108 claim 5).
+fn pad_bound(docks: Option<Vec<String>>) -> Ruleset {
+    let mut r = one_dock(|u| {
+        u.econ.dock = docks;
+        u.econ.airport_bound = Some(true);
+    });
+    let pad = r.sim.buildings.get_mut("APAD").unwrap();
+    pad.econ.buildup = Some(true);
+    pad.econ.buildup_frames = Some(10);
+    r
+}
+
+/// Asserts that aircraft `a` has started claim 46's fall-back crash: health
+/// 0 and a running fall counter, in flight. Returns its house's losses then.
+fn crashed(w: &World, a: ObjectId) {
+    let o = w.obj(a).expect("still falling");
+    assert_eq!(
+        o.health,
+        0,
+        "health 0 at the crash start: {}",
+        describe(w, a)
+    );
+    assert!(st(w, a).crash.is_some(), "falling: {}", describe(w, a));
+    assert!(air::height(w, a) > 0, "in flight");
+}
+
+/// Runs the crash to impact: the fall counter grows by 1 per tick and the
+/// aircraft leaves play at impact; its own house counts one loss in all
+/// and no other house a kill.
+fn falls_to_impact(w: &mut World, a: ObjectId, losses_before: i32) {
+    let stats = glasnost_sim::econ::stats::of;
+    let kills: Vec<i32> = (0..2).map(|h| stats(w, HouseId(h)).kills).collect();
+    let mut last = st(w, a).crash.unwrap();
+    for _ in 0..600 {
+        step(w);
+        let Some(o) = w.obj(a) else { break };
+        let c = st(w, a).crash.expect("still crashing");
+        // spec: S-0501 claim 9 (a dead aircraft's fall counter grows by 1 per tick)
+        assert_eq!(c, last + 1, "fall counter: {}", describe(w, a));
+        assert_eq!(o.health, 0);
+        last = c;
+    }
+    assert!(w.obj(a).is_none(), "it leaves play at impact");
+    // spec: S-0501 claim 46 and S-0414 claim 21 (credited to nobody: one loss of its own house in all, no house's kills change)
+    assert_eq!(stats(w, ALPHA).losses, losses_before + 1, "one loss");
+    let after: Vec<i32> = (0..2).map(|h| stats(w, HouseId(h)).kills).collect();
+    assert_eq!(after, kills, "no kill credited");
+}
+
+// spec: S-0501 claims 45 and 46 and T2's after-the-row entry (a pad-bound type with no dock types whose ammunition is spent crashes at the run end's fall-back: health 0 at once, a dead fall, one loss of its own house, no kill)
+#[test]
+fn pad_bound_no_dock_types_spent_crashes_at_the_run_end() {
+    let mut r = pad_bound(None);
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let mut w = game(&r);
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
+    click(&mut w, a, ClickOn::Object(v));
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let crash = run_until(&mut w, 200, |w| w.obj(a).unwrap().health == 0);
+    assert!(crash, "a crash: {}", describe(&w, a));
+    crashed(&w, a);
+    falls_to_impact(&mut w, a, losses);
+}
+
+// spec: S-0501 claim 45 (a pad-bound type with no dock types and ammunition left keeps claim 17's edge cell in guard without a move, since claim 33 queues move only for one that is not pad-bound; it does not land, by claim 6's pad-bound rule, and stays above the cell) and claim 6
+#[test]
+fn pad_bound_no_dock_types_with_ammunition_holds_over_the_edge_cell() {
+    let r = pad_bound(None);
+    let mut w = game(&r);
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    let e = edge_destination(&mut w, a);
+    for _ in 0..1500 {
+        step(&mut w);
+        let o = w.obj(a).expect("not removed");
+        assert_eq!(
+            dest_cell(&w, a),
+            Some(e),
+            "the edge cell kept: {}",
+            describe(&w, a)
+        );
+        assert_ne!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
+        assert_ne!(o.beh.queued, Some(Behaviour::Move));
+        assert!(o.health > 0, "no crash with ammunition left");
+        assert!(!air::on_ground(&w, a), "never lands: {}", describe(&w, a));
+        assert_eq!(o.combat.ammo, 2);
+    }
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.pos.cell(), e, "above the edge cell: {}", describe(&w, a));
+}
+
+// spec: S-0501 claim 46 and T2 (in flight, armed, no pad, pad-bound: a pad-bound aircraft with dock types whose house has no building of them crashes at its run end's fall-back, with its ammunition spent or with ammunition left after its target is lost)
+#[test]
+fn pad_bound_without_a_pad_crashes_at_the_run_end_both_ways() {
+    for spent in [true, false] {
+        let mut r = pad_bound(Some(vec!["APAD".into()]));
+        r.sim.general.economy.curley_shuffle = Some(true);
+        let mut w = game(&r);
+        ready(&mut w);
+        let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
+        let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+        if spent {
+            let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+            click(&mut w, a, ClickOn::Object(v));
+            assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+        } else {
+            lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+        }
+        let crash = run_until(&mut w, 200, |w| w.obj(a).unwrap().health == 0);
+        assert!(crash, "spent {spent}: a crash: {}", describe(&w, a));
+        crashed(&w, a);
+        falls_to_impact(&mut w, a, losses);
+    }
+}
+
+/// Sells building `k` of house 0 and runs until it is gone.
+fn sell(w: &mut World, k: ObjectId) {
+    open(w);
+    assert!(orders::issue(w, ALPHA, Order::Sell { actor: k }));
+    assert!(run_until(w, 600, |w| w.obj(k).is_none()), "sold");
+}
+
+// spec: S-0501 claim 46 and T3 (the pad it flies to is sold during its approach: the destination is cleared before the fall-back, no other pad grants contact, and a pad-bound aircraft in flight crashes then)
+#[test]
+fn pad_bound_pad_sold_during_the_approach_crashes() {
+    let mut r = pad_bound(Some(vec!["APAD".into()]));
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, k, a) = built_with(&r, "JET1");
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let home = run_until(&mut w, 200, |w| {
+        w.obj(a).unwrap().dest == Some(Target::Object(k))
+    });
+    assert!(home, "flies home: {}", describe(&w, a));
+    let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
+    open(&mut w);
+    assert!(orders::issue(&mut w, ALPHA, Order::Sell { actor: k }));
+    let crash = run_until(&mut w, 50, |w| w.obj(a).unwrap().health == 0);
+    assert!(crash, "a crash: {}", describe(&w, a));
+    assert!(w.obj(k).is_some(), "while the pad is being sold");
+    assert_eq!(
+        w.obj(a).unwrap().dest,
+        None,
+        "the pad is no longer its destination"
+    );
+    crashed(&w, a);
+    falls_to_impact(&mut w, a, losses);
+}
+
+// spec: S-0501 claim 46 (an aircraft standing on its pad when the pad is sold is on the ground and does not crash; T2's ground row: guard with its ammunition left)
+#[test]
+fn pad_bound_standing_on_its_pad_when_sold_does_not_crash() {
+    let r = pad_bound(Some(vec!["APAD".into()]));
+    let (mut w, k, a) = built_with(&r, "JET1");
+    assert!(air::on_ground(&w, a), "standing on its pad");
+    sell(&mut w, k);
+    for _ in 0..300 {
+        step(&mut w);
+        let o = w.obj(a).expect("not removed");
+        assert!(o.health > 0, "no crash: {}", describe(&w, a));
+        assert!(air::on_ground(&w, a));
+    }
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
+}
+
+/// The bomb rules of claim 46's planted-bomb case: a bomb warhead whose
+/// spread reaches every object near the crash, a delay longer than the
+/// record, `quirk` for `quirks.crash_drops_planted_bomb`.
+fn bomb_rules(quirk: bool) -> Ruleset {
+    let mut r = pad_bound(Some(vec!["APAD".into()]));
+    r.sim.general.economy.curley_shuffle = Some(true);
+    r.sim.warheads.insert(
+        "BigBoom".into(),
+        glasnost_rules::sim::WarheadType {
+            cell_spread: dec("12"),
+            percent_at_max: dec("1"),
+            verses: Some(vec![glasnost_rules::sim::Decimal("1".into()); 11]),
+            ..Default::default()
+        },
+    );
+    let g = &mut r.sim.general;
+    g.ivan_warhead = Some("BigBoom".into());
+    g.ivan_damage = Some(77);
+    g.ivan_timed_delay = Some(100_000);
+    r.globals.quirks.crash_drops_planted_bomb = quirk;
+    r
+}
+
+/// A pad-bound aircraft with no pad that carries a planted bomb, and an own
+/// bystander near its target; runs until claim 46's crash has started.
+/// Returns (world, aircraft, bystander, the bystander's health).
+fn bomb_crash(quirk: bool) -> (World, ObjectId, ObjectId, i32) {
+    let mut w = game(&bomb_rules(quirk));
+    ready(&mut w);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+    let by = put(&mut w, Kind::Vehicle, "VICTIM", 0, -2, 6);
+    let t = w.tick;
+    w.obj_mut(a).unwrap().combat.bomb = Some(glasnost_sim::bomb::Bomb {
+        planter: None,
+        house: Some(ALPHA),
+        planted: t,
+    });
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().health == 0));
+    crashed(&w, a);
+    let h = w.obj(by).unwrap().health;
+    (w, a, by, h)
+}
+
+// spec: S-0501 claim 46 and Edge cases (quirks.crash_drops_planted_bomb on: a destruction without a hit does not set off a planted bomb; it stays attached through the fall and is removed at impact with no detonation and no damage)
+#[test]
+fn claim_46_crash_drops_a_planted_bomb() {
+    let (mut w, a, by, h) = bomb_crash(true);
+    assert!(
+        w.obj(a).unwrap().combat.bomb.is_some(),
+        "attached at the crash start"
+    );
+    while w.obj(a).is_some() {
+        assert!(
+            w.obj(a).unwrap().combat.bomb.is_some(),
+            "attached in the fall"
+        );
+        step(&mut w);
+    }
+    assert_eq!(w.obj(by).unwrap().health, h, "no bomb damage at impact");
+}
+
+// spec: S-0501 Edge cases (quirks.crash_drops_planted_bomb off: the bomb goes off at impact by S-0519 claim 5, before the death weapon)
+#[test]
+fn claim_46_crash_sets_off_a_planted_bomb_with_the_quirk_off() {
+    let (mut w, a, by, h) = bomb_crash(false);
+    assert!(
+        w.obj(a).unwrap().combat.bomb.is_some(),
+        "attached at the crash start"
+    );
+    assert!(run_until(&mut w, 600, |w| w.obj(a).is_none()));
+    assert!(w.obj(by).unwrap().health < h, "bomb damage at impact");
+}
+
+// spec: S-0501 claim 46 (the detonate order during the fall sets the bomb off by S-0519 claim 5 at the aircraft's position then) and S-0519 claims 5 and 7 (the falling carrier's health is already 0, so the one detonation cannot kill it again: no second death, loss or credit, and the bomb is gone, so impact sets off nothing)
+#[test]
+fn claim_46_detonate_order_during_the_fall() {
+    let stats = glasnost_sim::econ::stats::of;
+    let (mut w, a, by, h) = bomb_crash(true);
+    step(&mut w);
+    assert!(w.obj(a).is_some(), "still falling");
+    let losses: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    let kills: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).kills).collect();
+    glasnost_sim::bomb::detonate_order(&mut w, a);
+    assert!(w.obj(a).unwrap().combat.bomb.is_none(), "gone off");
+    let hb = w.obj(by).expect("the bystander survives").health;
+    assert!(hb < h, "bomb damage in the order's tick");
+    crashed(&w, a);
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    assert_eq!(now, losses, "no second loss");
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).kills).collect();
+    assert_eq!(now, kills, "no credit");
+    assert!(run_until(&mut w, 600, |w| w.obj(a).is_none()));
+    assert_eq!(w.obj(by).unwrap().health, hb, "no second detonation");
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    assert_eq!(now, losses, "still one loss in all");
+}
+
+// spec: S-0501 claim 46 and S-0519 claims 4, 5 and 7 (a bomb whose timer comes due in the falling carrier's impact tick goes off in that turn, before the impact: one detonation, not the silent removal of quirks.crash_drops_planted_bomb)
+#[test]
+fn claim_46_bomb_due_in_the_impact_tick_goes_off_before_the_impact() {
+    // A first run finds the tick number of the impact tick.
+    let (mut w, a, _, _) = bomb_crash(true);
+    let mut last = w.tick;
+    while w.obj(a).is_some() {
+        last = w.tick;
+        step(&mut w);
+    }
+    // The same crash with the bomb due then.
+    let (mut w, a, by, h) = bomb_crash(true);
+    let delay = w.rules().combat.general.ivan.delay;
+    // spec: S-0519 F1 (the bomb goes off in the first tick n with n > t + D)
+    let planted = last.wrapping_sub(1).wrapping_sub(delay);
+    w.obj_mut(a).unwrap().combat.bomb.as_mut().unwrap().planted = planted;
+    while w.tick < last {
+        step(&mut w);
+        let o = w.obj(a).expect("still falling");
+        assert!(o.combat.bomb.is_some(), "not due before the impact tick");
+        assert_eq!(w.obj(by).unwrap().health, h, "no damage before");
+    }
+    step(&mut w);
+    assert!(w.obj(a).is_none(), "the impact came in this tick");
+    assert!(
+        w.obj(by).unwrap().health < h,
+        "the bomb went off in the impact tick"
+    );
+}
+
+// spec: S-0501 claim 34 (an aircraft that is not a strike aircraft, in retreat, ignores a request to queue any other behaviour entirely, with no start, and its current behaviour goes on)
+#[test]
+fn claim_34_retreat_ignores_a_move_order() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let s = put(&mut w, Kind::Aircraft, "JET", 0, 4, 0);
+    force(&mut w, s, Behaviour::Retreat);
+    step(&mut w);
+    assert_eq!(w.obj(s).unwrap().beh.current, Some(Behaviour::Retreat));
+    click(&mut w, s, ClickOn::Cell(testkit::mid(SIZE, -6, -6)));
+    let o = w.obj(s).unwrap();
+    assert_eq!(o.beh.queued, None, "the move is not queued");
+    assert_eq!(o.beh.current, Some(Behaviour::Retreat));
+    step(&mut w);
+    assert_eq!(w.obj(s).unwrap().beh.current, Some(Behaviour::Retreat));
+}
+
+// spec: S-0501 claims 18 and 45 and T2 (a computer-controlled house's armed aircraft with no dock types, outside a team, keeps the edge destination in area guard; at exactly its flight height each area-guard processing is the fall-back to rest with a delay of 1 tick, and it queues no move). The house is made computer-controlled by S-0309's test-only mark.
+#[test]
+fn claim_45_computer_area_guard_at_flight_height() {
+    let r = one_dock(|u| u.econ.dock = None);
+    let mut w = game(&r);
+    ready(&mut w);
+    w.houses[0].human = false;
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
+    let e = edge_destination(&mut w, a);
+    let guard = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::AreaGuard)
+    });
+    assert!(guard, "area guard: {}", describe(&w, a));
+    let mut seen = 0;
+    for _ in 0..200 {
+        let before = w.obj(a).unwrap().beh.last;
+        let at_height = air::height(&w, a) == CRUISE;
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(
+            dest_cell(&w, a),
+            Some(e),
+            "the edge cell kept: {}",
+            describe(&w, a)
+        );
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::AreaGuard),
+            "{}",
+            describe(&w, a)
+        );
+        assert_ne!(o.beh.queued, Some(Behaviour::Move));
+        if at_height && o.beh.last != before {
+            assert_eq!(
+                o.beh.last.unwrap().1,
+                1,
+                "a delay of 1 tick at flight height"
+            );
+            seen += 1;
+        }
+    }
+    assert!(seen > 10, "processed at flight height: {seen}");
 }

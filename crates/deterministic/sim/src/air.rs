@@ -479,9 +479,39 @@ fn start_if_ready(w: &mut World, id: ObjectId) {
 }
 
 pub(crate) fn queue(w: &mut World, id: ObjectId, b: Behaviour) {
+    if queue_ignored(w, id, b) {
+        return;
+    }
     if let Some(o) = w.obj_mut(id) {
         o.beh.queue(Some(b));
     }
+}
+
+/// The five behaviours of claim 34 that hold an aircraft that is not a
+/// strike aircraft.
+fn exit_flight(b: Option<Behaviour>) -> bool {
+    matches!(
+        b,
+        Some(
+            Behaviour::Retreat
+                | Behaviour::ParadropApproach
+                | Behaviour::ParadropOverfly
+                | Behaviour::SpyPlaneApproach
+                | Behaviour::SpyPlaneOverfly
+        )
+    )
+}
+
+/// Whether a request to queue `b` for aircraft `id` is ignored entirely
+/// (claim 34): an aircraft that is not a strike aircraft, in *retreat*,
+/// *paradrop approach*, *paradrop overfly*, *spy-plane approach* or
+/// *spy-plane overfly*, accepts only one of those five.
+pub(crate) fn queue_ignored(w: &World, id: ObjectId, b: Behaviour) -> bool {
+    // spec: S-0501 claim 34 (not a strike aircraft, in one of the five: a request to queue any other behaviour is ignored entirely, with no start, and its current behaviour goes on)
+    is_aircraft(w, id)
+        && w.obj(id).is_some_and(|o| exit_flight(o.beh.current))
+        && !exit_flight(Some(b))
+        && !crate::strike::linked(w, id)
 }
 
 pub(crate) fn forget(w: &mut World, id: ObjectId) {
@@ -1400,6 +1430,17 @@ fn impact(w: &mut World, id: ObjectId) {
     }
     let at = Pos::new(o.pos.x, o.pos.y, surface);
     if crate::combat::damage::dead(&o) {
+        if crate::bomb::carries(w, id) {
+            if w.rules().quirks.crash_drops_planted_bomb {
+                // spec: S-0501 claim 46 and Edge cases (quirks.crash_drops_planted_bomb on: a bomb that has not gone off by the impact is removed then, with no detonation, animation or damage, as S-0519 claim 7's removal other than by death)
+                if let Some(ob) = w.obj_mut(id) {
+                    ob.combat.bomb = None;
+                }
+            } else {
+                // spec: S-0501 Edge cases (quirks.crash_drops_planted_bomb off: at impact, before the death weapon, the bomb goes off by S-0519 claim 5 at the aircraft's position)
+                crate::bomb::detonate(w, id);
+            }
+        }
         // spec: S-0312 claim 16 (shot down: its death weapon goes off at the impact point, and it leaves play)
         crate::combat::death::impact_death_weapon(w, id, at);
         crate::combat::death::leave_play(w, id);
@@ -1525,25 +1566,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             || a.run_lock
             || !t.landable);
     // Claim 8: a new destination makes an aircraft on the ground (or landing) take off.
-    let mut dest = dest;
-    let mut dp = dp;
-    let mut d = d;
-    let mut dest_above = dest_above;
     let new_dest = dest.is_some() && dest != a.flying_to;
     if alive && new_dest {
-        if o.beh.current == Some(Behaviour::Move)
-            && let Some(orig) = dest
-        {
-            // spec: S-0501 claim 40 (ordinary move: the destination retained or a replacement cell sought before the movement point is accepted)
-            let sel = move_destination(w, id, orig);
-            if sel != orig {
-                set_dest(w, id, Some(sel));
-                dest = Some(sel);
-                dp = Some(flight_point(w, id, sel));
-                d = dp.map(|p| planar(w, here, p));
-                dest_above = dp.map(|p| p.z - w.surface_at(p.x, p.y));
-            }
-        }
         a.flying_to = dest;
         // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
         a.raised = raise_now(w, id);
@@ -1861,15 +1885,22 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
     // spec: S-0501 claim 6 (a further waypoint outside enter: wait is queued and it goes on)
     if o.beh.current != Some(Behaviour::Enter) && !o.queued_dests.is_empty() {
         let next = o.queued_dests[0];
+        let ignored = queue_ignored(w, id, Behaviour::Wait);
         if let Some(ob) = w.obj_mut(id) {
             ob.queued_dests.remove(0);
-            ob.beh.queue(Some(Behaviour::Wait));
+            if !ignored {
+                ob.beh.queue(Some(Behaviour::Wait));
+            }
         }
         set_dest(w, id, Some(next));
         return;
     }
     // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead)
     if t.bound && !o.contact.is_some_and(|k| pad_cell(w, k, id)) {
+        if t.docks.is_empty() && armed(w, id) && ammo_left(w, id) {
+            // spec: S-0501 claims 6 and 45 (except a pad-bound type with no dock types and ammunition left: it keeps its cell and stays above it)
+            return;
+        }
         fall_back(w, id);
         return;
     }
@@ -2491,6 +2522,67 @@ pub fn pad_turn(w: &mut World, k: ObjectId) {
 }
 
 // ---------------------------------------------------------------------------
+// Losing a target that leaves the map (claims 32 and 37)
+
+// spec: S-0501 claim 37 (Target loss: a draw only when the targeting timer has more than 10 integer ticks left)
+const LOSS_TIMER_LEFT: i32 = 10;
+// spec: S-0501 claim 37 (Target loss: one U(4, 8) draw restarts the timer with the drawn number of ticks)
+const LOSS_TIMER_DRAW: (i32, i32) = (4, 8);
+
+/// Claim 37's target-loss draw for aircraft `id` losing its target object
+/// now: with more than 10 ticks left on its targeting timer, one draw
+/// restarts it. Not an aircraft: no draw (the every-actor draw is S-0309's).
+pub(crate) fn target_loss_draw(w: &mut World, id: ObjectId) {
+    if !is_aircraft(w, id) {
+        return;
+    }
+    let tick = w.tick;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    if w.obj(id)
+        .is_some_and(|o| o.targeting_timer.wrapping_sub(tick) > LOSS_TIMER_LEFT)
+    {
+        // spec: S-0501 claim 37 (Target loss: the draw before the target is cleared, in the turn in which the event happens)
+        let v = w.rng.ranged(LOSS_TIMER_DRAW.0, LOSS_TIMER_DRAW.1, half);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.targeting_timer = tick.wrapping_add(v);
+        }
+    }
+}
+
+/// Every aircraft whose target is object `gone` loses it at once (claim
+/// 32): `gone` goes off the map (a transport, a building as occupant) or is
+/// removed. In key order, each takes claim 37's draw, holds no target, and
+/// an overridden one is reverted (S-0215 claim 10), which brings back the
+/// target put aside even when it is `gone`; `removed` then clears such a
+/// target, as the object no longer exists. A kill is
+/// [`crate::combat::death::mark_killed`]'s.
+pub(crate) fn targeters_lose(w: &mut World, gone: ObjectId, removed: bool) {
+    let ids: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Aircraft && o.target == Some(Target::Object(gone)))
+        .map(|o| o.id)
+        .collect();
+    for x in ids {
+        // spec: S-0501 claim 32 (no owner, alliance or sensor exception; the draw first, claim 37)
+        target_loss_draw(w, x);
+        let Some(ob) = w.obj_mut(x) else { continue };
+        crate::spawn::clear_own_target(ob);
+        ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+        if ob.beh.suspended.is_some()
+            && let Some((t, d)) = ob.beh.revert()
+        {
+            // spec: S-0501 claim 32 and S-0215 claim 10 (an overridden aircraft is reverted right after the loss; the revert brings back the target put aside, even the object that left the map)
+            crate::spawn::set_own_target(ob, t);
+            ob.dest = d;
+            if removed && ob.target == Some(Target::Object(gone)) {
+                crate::spawn::clear_own_target(ob);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Falling back to rest (claim 18, table T2)
 
 /// The early exits of table T2 (its first three rows): whether one applied,
@@ -2560,50 +2652,49 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
     let carrying = passengers(w, id) > 0;
     let armed = armed(w, id);
     let ammo = ammo_left(w, id);
-    if on_ground(w, id) {
+    let ground = on_ground(w, id);
+    // spec: S-0501 T2 (guard; area guard for an armed aircraft of a computer-controlled house outside a team; our engine has no teams, claim 18)
+    let resting = if armed && !human(w, id) {
+        Behaviour::AreaGuard
+    } else {
+        Behaviour::Guard
+    };
+    // The row's next behaviour, queued after the after-the-row entries.
+    let chosen = if ground {
         if a.visiting && carrying {
             // spec: S-0501 T2 (on the ground, visiting, with passengers: unload)
-            queue(w, id, Behaviour::Unload);
+            Some(Behaviour::Unload)
         } else if a.visiting {
             // spec: S-0501 T2 (on the ground, visiting, no passengers: forgets target and destination; retreat)
             forget(w, id);
-            queue(w, id, Behaviour::Retreat);
+            Some(Behaviour::Retreat)
         } else {
+            // spec: S-0501 claim 18 and T2 (on the ground otherwise: forgets its target and destination; guard, or area guard for a computer-controlled house's armed aircraft)
             forget(w, id);
-            // spec: S-0501 T2 (on the ground otherwise: guard; area guard for an armed aircraft of a computer-controlled house)
-            let b = if armed && !human(w, id) {
-                Behaviour::AreaGuard
-            } else {
-                Behaviour::Guard
-            };
-            queue(w, id, b);
+            Some(resting)
         }
     } else if carrying {
         // spec: S-0501 T2 (in flight with passengers: the landing spot; visiting: unload, else move)
         let s = landing_spot(w, id);
         set_dest(w, id, s.map(Target::Cell));
-        queue(
-            w,
-            id,
-            if a.visiting {
-                Behaviour::Unload
-            } else {
-                Behaviour::Move
-            },
-        );
+        Some(if a.visiting {
+            Behaviour::Unload
+        } else {
+            Behaviour::Move
+        })
     } else if armed && a.visiting && !ammo {
-        // spec: S-0501 T2 (in flight, armed, visiting, no ammunition: retreat)
+        // spec: S-0501 T2 (in flight, armed, visiting, no ammunition: forgets target and destination; retreat)
         forget(w, id);
-        queue(w, id, Behaviour::Retreat);
+        Some(Behaviour::Retreat)
     } else if armed && a.visiting {
-        // spec: S-0501 T2 (in flight, armed, visiting, ammunition left: hunt)
-        queue(w, id, Behaviour::Hunt);
+        // spec: S-0501 T2 (in flight, armed, visiting, ammunition left, not in a team: hunt)
+        Some(Behaviour::Hunt)
     } else if armed
         && (o.beh.queued == Some(Behaviour::Attack)
             || (o.beh.current == Some(Behaviour::Attack) && ammo && o.target.is_some()))
     {
         // spec: S-0501 T2 (in flight, armed, attack queued, or current with ammunition and a target: attack)
-        queue(w, id, Behaviour::Attack);
+        Some(Behaviour::Attack)
     } else if armed
         && (!in_the_air(w, id)
             || (o.beh.current == Some(Behaviour::Enter)
@@ -2611,53 +2702,91 @@ pub fn fall_back_rows(w: &mut World, id: ObjectId) {
                     .is_some_and(|d| Some(d) == o.contact.map(Target::Object)))
             || t.docks.is_empty())
     {
-        // spec: S-0501 T2 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: guard)
-        queue(w, id, Behaviour::Guard);
+        // spec: S-0501 T2 and claim 45 (in flight, armed: the in-the-air answer is no, already flying to its enter destination, or no dock types: the destination kept; guard, area guard for a computer-controlled house)
+        Some(resting)
     } else if armed {
         if let Some(k) = seek_pad(w, id) {
             // spec: S-0501 T2 (a pad found that grants contact: the pad as destination; enter)
             set_dest(w, id, Some(Target::Object(k)));
-            queue(w, id, Behaviour::Enter);
+            Some(Behaviour::Enter)
         } else if t.bound {
-            // spec: S-0501 T2 (no pad, pad-bound: crash)
-            start_crash(w, id, true);
+            // spec: S-0501 T2 and claim 46 (in flight, armed, no pad, pad-bound: it crashes at this fall-back)
+            crash_fall_back(w, id);
             return;
         } else {
+            // spec: S-0501 T2 (in flight, armed, no pad, not pad-bound: the landing spot of F8; move)
             let s = landing_spot(w, id);
             set_dest(w, id, s.map(Target::Cell));
-            queue(w, id, Behaviour::Move);
+            Some(Behaviour::Move)
         }
     } else {
         // spec: S-0501 T2 (in flight otherwise: the landing spot; move)
         let s = landing_spot(w, id);
         set_dest(w, id, s.map(Target::Cell));
-        queue(w, id, Behaviour::Move);
-    }
-    // spec: S-0501 T2 (after the row: no ammunition, armed, no contact: a new pad search)
-    let o2 = w.obj(id).cloned();
-    if let Some(o2) = o2
-        && armed
-        && !ammo_left(w, id)
-        && o2.contact.is_none()
-    {
+        Some(Behaviour::Move)
+    };
+    let mut chosen = chosen;
+    // spec: S-0501 T2 and its note (after every row from the fourth on, the visiting rows included: no ammunition, armed, no contact: a new pad search, which needs neither height test, claim 18)
+    if armed && !ammo_left(w, id) && w.obj(id).is_some_and(|x| x.contact.is_none()) {
         if let Some(k) = seek_pad(w, id) {
+            // spec: S-0501 claim 18 and T2 (found: the pad as destination, the target forgotten, enter)
             set_dest(w, id, Some(Target::Object(k)));
             if let Some(ob) = w.obj_mut(id) {
                 crate::spawn::clear_own_target(ob);
                 ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
             }
-            queue(w, id, Behaviour::Enter);
-        } else if t.bound && !on_ground(w, id) {
-            start_crash(w, id, true);
-            return;
+            chosen = Some(Behaviour::Enter);
+        } else if t.bound {
+            // spec: S-0501 claim 18 and T2 (none and pad-bound: the row's next behaviour is not queued and the current behaviour stays, target and destination as the row left them)
+            chosen = None;
+            if !ground {
+                // spec: S-0501 claims 18 and 46 (in flight it crashes; on the ground it does not, claim 9)
+                crash_fall_back(w, id);
+                return;
+            }
         }
     }
-    // spec: S-0501 T2 (after the row: an aircraft holding a contact queues enter)
     if w.obj(id).is_some_and(|x| x.contact.is_some()) {
-        queue(w, id, Behaviour::Enter);
+        // spec: S-0501 T2 (after the row: an aircraft holding a contact queues enter)
+        chosen = Some(Behaviour::Enter);
+    }
+    if let Some(b) = chosen {
+        queue(w, id, b);
     }
     // spec: S-0501 claim 31 (the second start opportunity: the end of an ordinary fall-back)
     start_if_ready(w, id);
+}
+
+/// The fall-back crash of a pad-bound aircraft in flight with no pad
+/// granting it contact (claim 46): its destruction without a hit, credited
+/// to nobody, then S-0312 claim 16's crash start, with none of a killing
+/// hit's effects. It then falls as a dead aircraft (claim 9).
+fn crash_fall_back(w: &mut World, id: ObjectId) {
+    if height(w, id) <= 0 {
+        // spec: S-0501 claim 9 (a crash starts only above the ground)
+        return;
+    }
+    let none = crate::combat::damage::Hit {
+        amount: 0,
+        warhead: None,
+        distance: 0,
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    if let Some(ob) = w.obj_mut(id) {
+        // spec: S-0501 claim 46 (the crash begins with the aircraft's destruction without a hit: no damage dealt, health set to 0)
+        ob.health = 0;
+    }
+    // spec: S-0501 claims 32 and 46 (destroyed: those targeting it lose it at that moment)
+    crate::combat::death::mark_killed(w, id);
+    // spec: S-0501 claim 46 and S-0414 claim 21 (credited to nobody: no house's kills, score or experience change; one loss of its own house unless its type is not scored)
+    crate::combat::damage::credit(w, id, &none);
+    // spec: S-0501 claim 46 (a tag on the aircraft is raised as for other destructions, destroyed-by-anything; low, unmeasured)
+    crate::combat::death::destruction_raises(w, id, &none);
+    // spec: S-0501 claim 46 and S-0312 claim 16 (the crash-start effects: its passengers are lost, three tumbling draws; no debris, explosion-list pick or bomb detonation, as no hit kills it)
+    start_crash_hit(w, id, false, None);
 }
 
 // ---------------------------------------------------------------------------
@@ -2718,8 +2847,9 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
     let cur = w.obj(id).and_then(|o| o.beh.current);
     match cur {
         Some(Behaviour::Attack) => attack(w, id),
-        // spec: S-0215 claim 5 (sticky is processed as guard); area guard of a computer house's aircraft is processed as guard here (the original's computer-only choice, S-0501 claim 18)
-        Some(Behaviour::Guard | Behaviour::Sticky | Behaviour::AreaGuard) => guard(w, id),
+        // spec: S-0215 claim 5 (sticky is processed as guard)
+        Some(Behaviour::Guard | Behaviour::Sticky) => guard(w, id),
+        Some(Behaviour::AreaGuard) => area_guard(w, id),
         Some(Behaviour::Hunt) => hunt(w, id),
         Some(Behaviour::Move) => move_(w, id),
         Some(Behaviour::Enter) => enter(w, id),
@@ -2747,6 +2877,16 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         set_dest(w, id, None);
         fall_back(w, id);
         return standard(w, id);
+    }
+    if let Some(o) = w.obj(id)
+        && o.beh.expired
+        && let Some(orig) = o.dest
+    {
+        // spec: S-0501 claim 40 (the first processing of every ordinary move applies the selection to its destination, also one the aircraft already flies to; its own earlier choice does not count against it: retained, or a replacement cell with its draws)
+        let sel = move_destination(w, id, orig);
+        if sel != orig {
+            set_dest(w, id, Some(sel));
+        }
     }
     let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
     // spec: S-0501 claim 33 (when its locomotor has stopped there it falls back to rest)
@@ -2820,8 +2960,10 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
     }
     if !ground && h >= t.cruise {
         if o.dest.is_some() {
-            // spec: S-0501 claim 29 (at cruise height with a destination: move)
-            queue(w, id, Behaviour::Move);
+            if !t.bound {
+                // spec: S-0501 claim 29 (at cruise height with a destination: move, if it is not pad-bound)
+                queue(w, id, Behaviour::Move);
+            }
         } else if armed {
             // spec: S-0501 claim 29 (at cruise height, armed, no destination: falls back to rest)
             fall_back(w, id);
@@ -2843,6 +2985,35 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
     }
 }
 
+/// *Area guard* of an aircraft (claim 45; S-0215 claim 26 with *k* = 2).
+fn area_guard(w: &mut World, id: ObjectId) -> i32 {
+    let Some(t) = ty(w, id) else {
+        return NO_RULE_DELAY;
+    };
+    let h = height(w, id);
+    // Q-1837 interim: above the flight height is read as at it, as claim 29 reads "at cruise height".
+    if !on_ground(w, id) && h >= t.cruise {
+        // spec: S-0501 claim 45 (at exactly its flight height each processing is the fall-back to rest instead of S-0215 claim 26's rows; a delay of 1 tick)
+        fall_back(w, id);
+        return 1; // spec: S-0501 claim 45 (a delay of 1 tick at its flight height)
+    }
+    let spent = armed(w, id) && !ammo_left(w, id) && w.obj(id).is_some_and(|o| o.contact.is_none());
+    if spent {
+        // spec: S-0501 claim 45 (below its flight height, an armed aircraft with its ammunition spent and no contact makes the same fall-back first)
+        fall_back(w, id);
+    }
+    let Some(o) = w.obj(id) else {
+        return NO_RULE_DELAY;
+    };
+    if o.target.is_some() {
+        // spec: S-0501 claim 45 and its Changes for S-0215 claim 26 (a held target: attack queued; the next processing 1 tick later)
+        queue(w, id, Behaviour::Attack);
+        return 1; // spec: S-0501 claim 45 (1 tick with a held target)
+    }
+    // spec: S-0501 claim 45 and S-0215 claim 26 (below its flight height and with no target: claim 26's rows and table, its delay with k = 2 for aircraft)
+    crate::process::process_area_guard(w, id)
+}
+
 /// *Enter* toward a pad (claim 24).
 fn enter(w: &mut World, id: ObjectId) -> i32 {
     let Some(o) = w.obj(id).cloned() else {
@@ -2860,6 +3031,8 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building));
     let Some(k) = pad else {
+        // spec: S-0501 T3 and claim 46 (the pad is gone: the destination is cleared before the fall-back)
+        set_dest(w, id, None);
         // spec: S-0501 claim 24 (a lost reservation: falls back to rest; the unlinked and fallback paths return 1 tick)
         fall_back(w, id);
         return 1; // spec: S-0501 claim 24 (the unlinked retry and fallback paths return 1 tick)
@@ -2869,6 +3042,10 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
         if let Some(ob) = w.obj_mut(id) {
             ob.contact = None;
             ob.econ.exit = None;
+        }
+        if o.beh.queued.is_none() {
+            // spec: S-0501 T3 and claim 46 (a refusal clears the destination when no behaviour is queued; Open question 19 otherwise, where it is kept)
+            set_dest(w, id, None);
         }
         fall_back(w, id);
         return 1; // spec: S-0501 claim 24 (the fallback path returns 1 tick)
@@ -3139,19 +3316,14 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             Some(standard(w, id))
         }
         Stage::Approaching => {
-            // spec: S-0501 T1 (approaching: the pending round spent, run lock off)
-            if !a.run_lock || a.pending {
-                set_lock(w, id, false);
-                spend_pending(w, id);
-            }
-            let Some(tgv) = tg else {
+            // spec: S-0501 T1 (every processing of approaching first spends a pending round and turns the run lock off, whatever else it then finds)
+            set_lock(w, id, false);
+            spend_pending(w, id);
+            let Some(tgv) = tg.filter(|_| ammo_left(w, id)) else {
+                // spec: S-0501 T1 and claim 32 (approaching, no target or no ammunition, a strafer arriving from strafe pass 5 included: done; 1 tick)
                 set_stage(w, id, Stage::Done);
-                return Some(standard(w, id));
+                return Some(1);
             };
-            if !ammo_left(w, id) {
-                set_stage(w, id, Stage::Done);
-                return Some(standard(w, id));
-            }
             let in_range = crate::combat::range::in_range(w, id, primary(w, id), Some(tgv), None);
             // spec: S-0501 T1 and claim 42 (a strafer within range, a fighter, or another aircraft whose current speed fraction, left by the previous movement tick, is exactly 0: firing, the destination kept; 1 tick)
             let ordinary = !is_strafer && !is_fighter;
@@ -3193,14 +3365,11 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
             Some(1)
         }
         Stage::Firing => {
-            let Some(tgv) = tg else {
+            let Some(tgv) = tg.filter(|_| ammo_left(w, id)) else {
+                // spec: S-0501 T1 (firing, no target or no ammunition: done; 1 tick)
                 set_stage(w, id, Stage::Done);
-                return None;
+                return Some(1);
             };
-            if !ammo_left(w, id) {
-                set_stage(w, id, Stage::Done);
-                return None;
-            }
             if !is_strafer {
                 // spec: S-0501 T1 (a non-strafer requests its body and aiming facing toward the target; claim 42 decides which request lasts); S-0204 claim 8 and S-0310 F1 (toward its reference point)
                 let tp = crate::combat::range::target_point(w, tgv);
@@ -3277,8 +3446,9 @@ fn attack_stage(w: &mut World, id: ObjectId) -> Option<i32> {
         }
         Stage::Refiring => {
             let Some(tgv) = tg else {
+                // spec: S-0501 T1 and claim 32 (refiring, no target: done; 1 tick)
                 set_stage(w, id, Stage::Done);
-                return None;
+                return Some(1);
             };
             let ans = crate::combat::check::check(w, id, Some(tgv), 0, true);
             match ans {
@@ -3397,6 +3567,10 @@ fn run_end(w: &mut World, id: ObjectId) {
         // spec: S-0501 claim 17 (no ammunition: a visiting or human-controlled house's aircraft forgets its target)
         crate::spawn::clear_own_target(ob);
         ob.combat.burst = 0; // spec: S-0301 claim 4 (a cleared target resets the burst counter)
+    }
+    // spec: S-0501 claims 17 and 37 (every other run end gives a destination after the target is forgotten and before retreat or the fall-back: a cell on the house's computed edge, selected as in S-0522 claim 4 with its draws)
+    if let Some(c) = arrival_edge_cell(w, id, false) {
+        set_dest(w, id, Some(Target::Cell(c)));
     }
     // spec: S-0501 claim 17 (a strike aircraft with ammunition retreats; every other aircraft falls back to rest)
     set_stage(w, id, Stage::Start);

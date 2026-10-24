@@ -118,6 +118,13 @@ pub struct HoverState {
     /// repair depot (S-0314 claim 21), until switched on again.
     #[serde(default)]
     pub off: bool,
+    /// The order-level destination in place when claim 10's stop request
+    /// cleared the locomotor's *D*: while the order-level destination is
+    /// still this one, the locomotor has no *D* (the stop request never
+    /// touches the order-level destination). Ended by the next destination
+    /// the locomotor takes, and by stopping, completion or failure.
+    #[serde(default)]
+    pub stopped: Option<Target>,
 }
 
 impl HoverState {
@@ -146,6 +153,7 @@ impl HoverState {
             retained: None,
             held: None,
             off: false,
+            stopped: None,
         }
     }
 }
@@ -193,7 +201,12 @@ pub fn powered(w: &World, id: ObjectId) -> bool {
 pub fn moving(w: &World, id: ObjectId) -> bool {
     // spec: S-0503 Terms and claim 16 (moving: D or P; moving-state tests use D, also a D kept after the order-level destination was cleared)
     w.obj(id).is_some_and(|o| {
-        o.dest.is_some()
+        // spec: S-0503 claim 10 (a D cleared by the stop request, its order-level destination left in place, is no D)
+        let d_cleared = o
+            .hover
+            .as_ref()
+            .is_some_and(|h| h.stopped.is_some() && h.stopped == o.dest);
+        (o.dest.is_some() && !d_cleared)
             || o.hover
                 .as_ref()
                 .is_some_and(|h| h.point.is_some() || h.retained.is_some())
@@ -227,12 +240,16 @@ pub fn heading_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 /// The destination point *D* (Terms): a cell's centre at its surface height,
 /// plus 416 on a high-bridge cell; an object's position; with no order-level
 /// destination, the point kept by a stop order (claim 16).
-fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
+pub fn destination_point(w: &World, id: ObjectId) -> Option<Pos> {
     let o = w.obj(id)?;
     let Some(dest) = o.dest else {
         // spec: S-0503 claim 16 (the locomotor's D, distinct from the order-level destination)
         return o.hover.as_ref().and_then(|h| h.retained);
     };
+    if o.hover.as_ref().is_some_and(|h| h.stopped == Some(dest)) {
+        // spec: S-0503 claim 10 (the stop request cleared D and left the order-level destination in place)
+        return None;
+    }
     if let Some(h) = o.hover.as_ref()
         && h.for_dest == Some(dest)
         && let Some(p) = h.held
@@ -330,6 +347,8 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
         // spec: S-0503 claims 5, 17 and 18 (a held vehicle, its parasite hold timer running, merely remembers the supplied point as D: no immediate choice and no destination-height adjustment; the order-level destination changes as usual)
         with(w, id, |h| {
             h.for_dest = dest;
+            // spec: S-0503 claim 10 (a destination the locomotor takes gives it a D again)
+            h.stopped = None;
             h.held = supplied;
             if dest.is_some() {
                 h.retained = None;
@@ -343,6 +362,8 @@ fn take(w: &mut World, id: ObjectId, given: bool) {
     let restart = dest.is_some() && powered && now && no_point;
     with(w, id, |h| {
         h.for_dest = dest;
+        // spec: S-0503 claim 10 (a destination the locomotor takes gives it a D again)
+        h.stopped = None;
         // spec: S-0503 claim 18 (an assignment after hold expiry applies the ordinary height adjustment anew, even for the same cell)
         h.held = None;
         if dest.is_some() {
@@ -648,6 +669,7 @@ fn drop_dest(w: &mut World, id: ObjectId) {
         h.retained = None;
         // spec: S-0503 claim 18 (stopping, completion or failure clears the remembered D)
         h.held = None;
+        h.stopped = None;
     });
 }
 
@@ -1302,12 +1324,18 @@ pub fn stop_request(w: &mut World, id: ObjectId) {
     let d = destination_point(w, id);
     let p = state(w, id).and_then(|h| h.point);
     // spec: S-0503 claim 10 (cleared only when destination and heading point differ as full 3-D points)
-    if d != p
-        && let Some(ob) = w.obj_mut(id)
-    {
-        ob.dest = None;
-        ob.path.steps.clear();
+    if d == p {
+        return;
     }
+    let Some(ob) = w.obj_mut(id) else { return };
+    ob.path.steps.clear();
+    let dest = ob.dest;
+    // spec: S-0503 claim 10 (the stop request itself never touches the order-level destination: it clears the locomotor's D, and a depot's destination stays in place for S-0314 claims 21 and 22)
+    with(w, id, |h| {
+        h.retained = None;
+        h.held = None;
+        h.stopped = dest;
+    });
 }
 
 /// The spin (claim 10, F7) and, when it ends, the sinking test (claim 11).
