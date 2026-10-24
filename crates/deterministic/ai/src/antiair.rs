@@ -54,41 +54,135 @@ use crate::brain::RECALL;
 use crate::drain::is_drainer;
 use crate::scripted::{Role, Script, all_types, dist2};
 
-/// The weapon slots of type `t`, ordinary and elite.
-fn slots(w: &World, t: TypeRef) -> Vec<WeaponId> {
+/// The combat data of type `t`.
+fn combat_of(w: &World, t: TypeRef) -> Option<&glasnost_sim::combat::data::TypeCombat> {
     let r = w.rules();
-    let tc = match t.kind {
+    match t.kind {
         Kind::Building => r.buildings.get(t.index as usize).map(|b| &b.combat),
         Kind::Terrain => None,
         _ => r.unit(t.kind, t.index).map(|u| &u.combat),
-    };
-    tc.map(|tc| {
-        tc.slots
-            .iter()
-            .chain(&tc.elite_slots)
-            .flatten()
-            .copied()
-            .collect()
-    })
-    .unwrap_or_default()
+    }
 }
 
-/// Whether type `t` has a weapon that can hit an object of armour class
-/// `armour` in the air: an anti-air projectile (S-0306 claim 23), a
-/// warhead whose versus value for the class is not zero (S-0304 claim 1)
-/// and damage above zero (a healing weapon heals).
-pub fn hits_air(w: &World, t: TypeRef, armour: usize) -> bool {
+/// The weapon slots of type `t`: the ordinary ones, and with `elite` the
+/// elite ones too.
+fn slots(w: &World, t: TypeRef, elite: bool) -> Vec<WeaponId> {
+    combat_of(w, t)
+        .map(|tc| {
+            let none = [None; 0];
+            let elite_slots: &[Option<WeaponId>] = if elite { &tc.elite_slots } else { &none };
+            tc.slots
+                .iter()
+                .chain(elite_slots)
+                .flatten()
+                .copied()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The ordinary weapons a new object of type `t` could fire at an object
+/// of armour class `armour` in the air, by the weapon choice of S-0308: an
+/// infantry type with the deploy-fire flag, not deploying and in no
+/// transport, uses slot 0 (claim 8); a type with an empty slot 0 or 1, or
+/// a never-use secondary, uses slot 0 (claim 4, table P row 3); an
+/// airstrike secondary leaves slot 0 against a target that is not a
+/// building (row 6); then the versus rows 15 and 16 and the air rows 19
+/// and 20. A switching or gattling type (rows 1 and 5) and a draining
+/// secondary (row 8) choose by the object's own state, so every ordinary
+/// slot counts and the firing check decides once the object is on the
+/// map. A new object rides in no transport, holds no occupants and is not
+/// overpowered (rows 2, 4 and 10); the target is no building, cell or
+/// water target (rows 7, 11, 13, 14 and 17, S-0308 Terms: a water target
+/// is not in the air).
+fn air_slots(w: &World, t: TypeRef, armour: usize) -> Vec<WeaponId> {
     let r = w.rules();
-    slots(w, t).into_iter().any(|wp| {
-        // spec: S-0306 claim 23 (an airborne target needs an anti-air projectile)
-        let aa = r.combat.projectile_of(wp).is_some_and(|p| p.aa);
-        // spec: S-0304 claim 1 (a versus value of exactly zero makes the target illegal)
-        let versus = r
-            .combat
-            .warhead_of(wp)
-            .is_some_and(|h| !h.versus(armour).eq_num(Default::default()));
-        aa && versus && r.combat.weapon(wp).damage > 0
-    })
+    let Some(tc) = combat_of(w, t) else {
+        return Vec::new();
+    };
+    let (p, s) = (tc.slots[0], tc.slots[1]);
+    // spec: S-0308 claim 8 (a deploy-fire infantry type not deploying and in no open-topped transport: slot 0)
+    if t.kind == Kind::Infantry && tc.deploy_fire {
+        return p.into_iter().collect();
+    }
+    // spec: S-0308 table P rows 1 and 5 (a switching or gattling type: its weapon number or stage, the object's own state)
+    if tc.multi_weapon {
+        return slots(w, t, false);
+    }
+    // spec: S-0308 claim 4 and table P row 3 (slot 0 or 1 empty, or a never-use secondary: 0)
+    let (Some(pw), Some(sw)) = (p, s) else {
+        return p.into_iter().collect();
+    };
+    if r.combat.weapon(sw).never_use {
+        return vec![pw];
+    }
+    let warhead = |x: WeaponId| r.combat.warhead_of(x);
+    // spec: S-0308 table P row 6 (an airstrike secondary: 0 against a target that is not a building)
+    if warhead(sw).is_some_and(|h| h.airstrike) {
+        return vec![pw];
+    }
+    // spec: S-0308 table P row 8 (a draining secondary: 1 while the firer drains nothing, the object's own state)
+    if r.combat.weapon(sw).drain {
+        return vec![pw, sw];
+    }
+    let zero =
+        |x: WeaponId| warhead(x).is_some_and(|h| h.versus(armour).eq_num(Default::default()));
+    // spec: S-0308 table P row 15 (the secondary's versus value is zero: 0)
+    if zero(sw) {
+        return vec![pw];
+    }
+    // spec: S-0308 table P row 16 (the primary's versus value is zero: 1)
+    if zero(pw) {
+        return vec![sw];
+    }
+    let aa = |x: WeaponId| r.combat.projectile_of(x).is_some_and(|p| p.aa);
+    // spec: S-0308 table P row 19 (airborne and an anti-air secondary: 1; quirks.secondary_wins_against_air off: only when the primary is not anti-air)
+    if aa(sw) && (r.quirks.secondary_wins_against_air || !aa(pw)) {
+        return vec![sw];
+    }
+    // spec: S-0308 table P row 20 (otherwise 0)
+    vec![pw]
+}
+
+/// Whether a new object of type `t` can hit an object of armour class
+/// `armour` in the air with the weapon it would choose ([`air_slots`]):
+/// an anti-air projectile (S-0306 claim 23), a warhead whose versus value
+/// for the class is not zero (S-0304 claim 1) and damage above zero (a
+/// healing weapon heals). A new object is not elite (S-0311 claim 11: a
+/// produced unit starts a rookie or a veteran), and only an elite one
+/// uses its elite weapons (S-0311 claim 6, S-0308 claim 2), so its
+/// ordinary slots alone count: a type that hits the air only once elite
+/// answers nothing when built, nor does one whose anti-air weapon the
+/// weapon choice never takes against the air (M8 step B6).
+pub fn hits_air(w: &World, t: TypeRef, armour: usize) -> bool {
+    // spec: S-0311 claims 6 and 11 and S-0308 claim 2 (a produced object is not elite and uses its ordinary slots), S-0308 claims 4 and 8 and table P (the slot it chooses against the air)
+    air_slots(w, t, armour)
+        .into_iter()
+        .any(|wp| weapon_hits_air(w, wp, armour))
+}
+
+/// Whether weapon `wp` can hit an object of armour class `armour` in the
+/// air ([`hits_air`]).
+fn weapon_hits_air(w: &World, wp: WeaponId, armour: usize) -> bool {
+    let r = w.rules();
+    // spec: S-0306 claim 23 (an airborne target needs an anti-air projectile)
+    let aa = r.combat.projectile_of(wp).is_some_and(|p| p.aa);
+    // spec: S-0304 claim 1 (a versus value of exactly zero makes the target illegal)
+    let versus = r
+        .combat
+        .warhead_of(wp)
+        .is_some_and(|h| !h.versus(armour).eq_num(Default::default()));
+    aa && versus && r.combat.weapon(wp).damage > 0
+}
+
+/// Whether type `t` has a weapon, ordinary or (with `elite`) elite, that
+/// can hit an object of armour class `armour` in the air, in any slot: the
+/// first sift of the objects on the map, which the firing check then asks
+/// with the weapon each would use.
+fn slots_hit_air(w: &World, t: TypeRef, armour: usize, elite: bool) -> bool {
+    slots(w, t, elite)
+        .into_iter()
+        .any(|wp| weapon_hits_air(w, wp, armour))
 }
 
 /// The seen enemy drainers in the air (S-0307 Terms: airborne by height),
@@ -256,9 +350,23 @@ pub(crate) fn lit_when_placed(w: &World, house: HouseId, t: TypeRef) -> bool {
 /// answers, each answer counted for one drainer only (the first in
 /// threat order it answers).
 fn unanswered(script: &Script, w: &World, threats: &[(ObjectId, usize)]) -> Vec<(ObjectId, usize)> {
+    threats
+        .iter()
+        .zip(answers(script, w, threats))
+        .filter(|(_, a)| a.is_none())
+        .map(|(&t, _)| t)
+        .collect()
+}
+
+/// Per drainer of `threats`, the object of the house on the map that
+/// answers it, each answer counted for one drainer only (the first in
+/// threat order it answers).
+fn answers(script: &Script, w: &World, threats: &[(ObjectId, usize)]) -> Vec<Option<ObjectId>> {
     let house = script.house;
     let home = script.home(w);
-    let hits = |t: TypeRef| threats.iter().any(|&(_, a)| hits_air(w, t, a));
+    // An object on the map may be elite: its elite slots count here, and
+    // the firing check below asks with the weapon it would use.
+    let hits = |t: TypeRef| threats.iter().any(|&(_, a)| slots_hit_air(w, t, a, true));
     let defences: Vec<ObjectId> = script
         .own(w)
         .into_iter()
@@ -273,8 +381,8 @@ fn unanswered(script: &Script, w: &World, threats: &[(ObjectId, usize)]) -> Vec<
         .filter(|&id| w.obj(id).is_some_and(|o| hits(tech::type_of(o))))
         .collect();
     let mut used: Vec<ObjectId> = Vec::new();
-    let mut left = Vec::new();
-    for &(d, a) in threats {
+    let mut out = Vec::new();
+    for &(d, _) in threats {
         let answer = defences
             .iter()
             .chain(&units)
@@ -287,12 +395,158 @@ fn unanswered(script: &Script, w: &World, threats: &[(ObjectId, usize)]) -> Vec<
                     unit_answers(w, home, x, d)
                 }
             });
-        match answer {
-            Some(x) => used.push(x),
-            None => left.push((d, a)),
+        if let Some(x) = answer {
+            used.push(x);
+        }
+        out.push(answer);
+    }
+    out
+}
+
+/// What the anti-air step sees now (local-lane reports only, the lane's
+/// `GLASNOST_AI_AAPROBE`).
+#[derive(Clone, Debug, Default)]
+pub struct Probe {
+    /// The seen enemy drainers in the air, each with what answers it.
+    pub drainers: Vec<(ObjectId, Option<ObjectId>)>,
+    /// Seen enemy drainers linked with one of the house's buildings that
+    /// are not counted as in the air.
+    pub draining_on_ground: usize,
+    /// Answers on the house's lines ([`lined`]) for the unanswered ones.
+    pub lined: usize,
+    /// The type [`build_type`] would order now.
+    pub build: Option<TypeRef>,
+    /// The types that hit an unanswered drainer, by test passed: hits,
+    /// lit when placed, startable, line free.
+    pub candidates: [usize; 4],
+    /// The house's army units whose type hits the first drainer, by test
+    /// passed ([`unit_answers`]): hits, near home or the drainer, not
+    /// berserk, the firing check, gets there.
+    pub units: [usize; 5],
+    /// The house's defences whose type hits the first drainer, by test
+    /// passed ([`defence_answers`]): hits, in operation, a weapon, the
+    /// firing check, in range.
+    pub defences: [usize; 5],
+    /// The first such unit the firing check refuses: its type, the slot
+    /// it would use and the answer.
+    pub refused: Option<(TypeRef, usize, Answer)>,
+}
+
+/// What the anti-air step sees now ([`Probe`]).
+pub fn probe(script: &Script, w: &World) -> Probe {
+    let threats = drainers_in_air(script, w);
+    let found = answers(script, w, &threats);
+    let draining_on_ground = script
+        .seen_enemies(w)
+        .into_iter()
+        .map(|(id, _)| id)
+        .filter(|&id| is_drainer(w, id) && !threats.iter().any(|&(t, _)| t == id))
+        .filter(|&id| {
+            glasnost_sim::drain::partner(w, id)
+                .and_then(|b| w.obj(b))
+                .is_some_and(|b| b.owner == Some(script.house))
+        })
+        .count();
+    let left: Vec<usize> = threats
+        .iter()
+        .zip(&found)
+        .filter(|(_, a)| a.is_none())
+        .map(|(&(_, a), _)| a)
+        .collect();
+    let types = all_types(w);
+    let hits: Vec<TypeRef> = types
+        .into_iter()
+        .filter(|&t| left.iter().any(|&a| hits_air(w, t, a)))
+        .collect();
+    let lit: Vec<TypeRef> = hits
+        .iter()
+        .copied()
+        .filter(|&t| lit_when_placed(w, script.house, t))
+        .collect();
+    let start: Vec<TypeRef> = lit
+        .iter()
+        .copied()
+        .filter(|&t| crate::startable(w, script.house, t))
+        .collect();
+    let free = start.iter().filter(|&&t| !script.busy(w, t)).count();
+    let mut units = [0; 5];
+    let mut defences = [0; 5];
+    let mut refused = None;
+    if let Some(&(d, a)) = threats.first() {
+        let home = script.home(w);
+        let dc = w.obj(d).map(|x| x.pos.cell());
+        for id in script.of_role(w, Role::Army) {
+            let Some(o) = w.obj(id) else { continue };
+            if !slots_hit_air(w, tech::type_of(o), a, true) {
+                continue;
+            }
+            units[0] += 1;
+            let at = o.pos.cell();
+            let near = home.is_some_and(|h| dist2(at, h) <= RECALL * RECALL)
+                || dc.is_some_and(|c| dist2(at, c) <= RECALL * RECALL);
+            if !near {
+                continue;
+            }
+            units[1] += 1;
+            if glasnost_sim::psychic::berserk(w, id) {
+                continue;
+            }
+            units[2] += 1;
+            let t = Some(Target::Object(d));
+            let (slot, wp) = weapon::would_use(w, id, t);
+            let Some(wp) = wp else { continue };
+            let answer = check::check(w, id, t, slot, false);
+            if matches!(answer, Answer::Illegal | Answer::Impossible) {
+                refused = refused.or(Some((tech::type_of(o), slot, answer)));
+                continue;
+            }
+            units[3] += 1;
+            if gets_there(w, id, d, wp) {
+                units[4] += 1;
+            }
+        }
+        for id in script.own(w) {
+            let Some(o) = w.obj(id) else { continue };
+            if o.kind != Kind::Building || !slots_hit_air(w, tech::type_of(o), a, true) {
+                continue;
+            }
+            defences[0] += 1;
+            if power::firing_answer(w, id).is_some() {
+                continue;
+            }
+            defences[1] += 1;
+            let t = Some(Target::Object(d));
+            let (slot, wp) = weapon::would_use(w, id, t);
+            if wp.is_none() {
+                continue;
+            }
+            defences[2] += 1;
+            if matches!(
+                check::check(w, id, t, slot, false),
+                Answer::Illegal | Answer::Impossible
+            ) {
+                continue;
+            }
+            defences[3] += 1;
+            if defence_answers(w, script.house, id, d) {
+                defences[4] += 1;
+            }
         }
     }
-    left
+    Probe {
+        refused,
+        units,
+        defences,
+        drainers: threats.iter().map(|&(d, _)| d).zip(found).collect(),
+        draining_on_ground,
+        lined: if left.is_empty() {
+            0
+        } else {
+            lined(script, w, &left)
+        },
+        build: build_type(script, w),
+        candidates: [hits.len(), lit.len(), start.len(), free],
+    }
 }
 
 /// The items on the house's lines that will answer one of `armours` in

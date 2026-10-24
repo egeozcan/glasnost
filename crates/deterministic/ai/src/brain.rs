@@ -2257,6 +2257,11 @@ impl ExpansionProbe {
 }
 
 impl Brain {
+    /// What the anti-air step sees now ([`crate::antiair::Probe`]).
+    pub fn antiair_probe(&self, w: &World) -> crate::antiair::Probe {
+        crate::antiair::probe(&self.script, w)
+    }
+
     /// What the expansion step sees now ([`ExpansionProbe`]).
     pub fn expansion_probe(&self, w: &World) -> ExpansionProbe {
         let h = self.house();

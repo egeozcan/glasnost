@@ -179,6 +179,78 @@ fn only_the_anti_air_type_hits_the_disc() {
     assert!(!glasnost_ai::antiair::hits_air(&w, t("GUNR"), armour));
 }
 
+/// [`flak_rules`] plus ELITT, a vehicle cheaper than FLAKT whose anti-air
+/// gun is its elite primary only (test data of our own).
+fn elite_rules() -> Arc<SimRules> {
+    let mut r = flak_ruleset();
+    let mut v = r.sim.vehicles["GUNR"].clone();
+    v.elite_primary = Some("FLAKW".into());
+    v.cost = r.sim.vehicles["FLAKT"].cost.map(|c| c / 2);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("ELITT".into());
+    r.sim.vehicles.insert("ELITT".into(), v);
+    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+}
+
+// S-0311 claims 6 and 11, S-0308 claim 2: a produced unit is not elite and uses its ordinary weapons, so a type whose anti-air weapon is elite only is not built against a drainer; the anti-air type is.
+#[test]
+fn a_type_that_hits_the_air_only_when_elite_is_not_built() {
+    let (w, disc) = drained(elite_rules());
+    let armour = glasnost_sim::combat::veterancy::type_combat(&w, disc)
+        .unwrap()
+        .armour;
+    let elite = TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, "ELITT").unwrap(),
+    };
+    assert!(!glasnost_ai::antiair::hits_air(&w, elite, armour));
+    let (out, n) = think(&w);
+    assert!(!builds(&w, &out, "ELITT"), "{out:?}");
+    assert!(builds(&w, &out, "FLAKT"), "{out:?}");
+    assert_eq!(n, 1);
+}
+
+/// [`flak_rules`] plus NEVRT, a vehicle cheaper than FLAKT with GUNR's
+/// gun and FLAKT's anti-air gun as a never-use secondary (test data of
+/// our own: the never-use copy NEVRW).
+fn never_rules() -> Arc<SimRules> {
+    let mut r = flak_ruleset();
+    let never = WeaponType {
+        never_use: Some(true),
+        ..r.sim.weapons["FLAKW"].clone()
+    };
+    r.sim.weapons.insert("NEVRW".into(), never);
+    let mut v = r.sim.vehicles["GUNR"].clone();
+    v.secondary = Some("NEVRW".into());
+    v.cost = r.sim.vehicles["FLAKT"].cost.map(|c| c / 2);
+    r.registries
+        .entry("vehicles".into())
+        .or_default()
+        .push("NEVRT".into());
+    r.sim.vehicles.insert("NEVRT".into(), v);
+    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+}
+
+// S-0308 claim 4 and table P row 3: a type whose secondary has the never-use flag fires slot 0 at every target, so an anti-air secondary of that kind answers no drainer; the brain builds the anti-air type instead.
+#[test]
+fn a_never_use_anti_air_secondary_is_not_built() {
+    let (w, disc) = drained(never_rules());
+    let armour = glasnost_sim::combat::veterancy::type_combat(&w, disc)
+        .unwrap()
+        .armour;
+    let never = TypeRef {
+        kind: Kind::Vehicle,
+        index: w.rules().index_of(Kind::Vehicle, "NEVRT").unwrap(),
+    };
+    assert!(!glasnost_ai::antiair::hits_air(&w, never, armour));
+    let (out, n) = think(&w);
+    assert!(!builds(&w, &out, "NEVRT"), "{out:?}");
+    assert!(builds(&w, &out, "FLAKT"), "{out:?}");
+    assert_eq!(n, 1);
+}
+
 // M8 step B6: what answers a drainer. Beta's brain plays alone on the
 // real tick path (its orders issued as a person's), and an Alpha disc is
 // sent with the attack click; Alpha's start discs are taken off the map.
