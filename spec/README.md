@@ -139,3 +139,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0703](ui/S-0703-music-playback.md) | Music playback (track eligibility, next-track order, shuffle and repeat) | ui | 51 | approved | — |
 | [S-0318](combat/S-0318-shrapnel-fragments.md) | Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go) | combat | 13 | approved | — |
 | [S-0317](combat/S-0317-voxel-debris.md) | Debris pieces with voxel models (creation, flight, bounces, end of life, removal) | combat | 34 | approved | — |
+| [S-0319](combat/S-0319-bouncing-animations.md) | Bouncing animations (sprite debris and meteors): motion, landing and end | combat | 9 | approved | — |
