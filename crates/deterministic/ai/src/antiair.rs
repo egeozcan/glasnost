@@ -445,18 +445,33 @@ pub struct Probe {
     pub build: Option<TypeRef>,
     /// The types that hit an unanswered drainer, by test passed: hits,
     /// lit when placed, startable, line free.
-    pub candidates: [usize; 4],
+    pub candidates: Vec<usize>,
     /// The house's army units whose type hits the first drainer, by test
     /// passed ([`unit_answers`]): hits, near home or the drainer, not
     /// berserk, the firing check, gets there and does not stand off.
-    pub units: [usize; 5],
+    pub units: Vec<usize>,
     /// The house's defences whose type hits the first drainer, by test
     /// passed ([`defence_answers`]): hits, in operation, a weapon, the
     /// firing check, in range.
-    pub defences: [usize; 5],
+    pub defences: Vec<usize>,
     /// The first such unit the firing check refuses: its type, the slot
     /// it would use and the answer.
     pub refused: Option<(TypeRef, usize, Answer)>,
+}
+
+/// The tests [`Probe::units`] counts, in order.
+pub const UNIT_TESTS: &[&str] = &["hits", "near", "unberserk", "check", "there"]; // nocite: probe labels
+
+/// The tests [`Probe::defences`] counts, in order.
+pub const DEFENCE_TESTS: &[&str] = &["hits", "operating", "weapon", "check", "range"]; // nocite: probe labels
+
+/// Counts one more object past test `n` of a probe's tests and moves on
+/// to the next test.
+fn passed(counts: &mut [usize], n: &mut usize) {
+    if let Some(c) = counts.get_mut(*n) {
+        *c += 1;
+    }
+    *n += 1;
 }
 
 /// What the anti-air step sees now ([`Probe`]).
@@ -496,29 +511,30 @@ pub fn probe(script: &Script, w: &World) -> Probe {
         .filter(|&t| crate::startable(w, script.house, t))
         .collect();
     let free = start.iter().filter(|&&t| !script.busy(w, t)).count();
-    let mut units = [0; 5];
-    let mut defences = [0; 5];
+    let mut units = vec![0; UNIT_TESTS.len()];
+    let mut defences = vec![0; DEFENCE_TESTS.len()];
     let mut refused = None;
     if let Some(&(d, a)) = threats.first() {
         let home = script.home(w);
         let dc = w.obj(d).map(|x| x.pos.cell());
         for id in script.of_role(w, Role::Army) {
             let Some(o) = w.obj(id) else { continue };
+            let mut n = 0;
             if !slots_hit_air(w, tech::type_of(o), a, true) {
                 continue;
             }
-            units[0] += 1;
+            passed(&mut units, &mut n);
             let at = o.pos.cell();
             let near = home.is_some_and(|h| dist2(at, h) <= RECALL * RECALL)
                 || dc.is_some_and(|c| dist2(at, c) <= RECALL * RECALL);
             if !near {
                 continue;
             }
-            units[1] += 1;
+            passed(&mut units, &mut n);
             if glasnost_sim::psychic::berserk(w, id) {
                 continue;
             }
-            units[2] += 1;
+            passed(&mut units, &mut n);
             let t = Some(Target::Object(d));
             let (slot, wp) = weapon::would_use(w, id, t);
             let Some(wp) = wp else { continue };
@@ -527,36 +543,37 @@ pub fn probe(script: &Script, w: &World) -> Probe {
                 refused = refused.or(Some((tech::type_of(o), slot, answer)));
                 continue;
             }
-            units[3] += 1;
+            passed(&mut units, &mut n);
             if gets_there(w, id, d, wp) && !stands_off(w, id, d, slot) {
-                units[4] += 1;
+                passed(&mut units, &mut n);
             }
         }
         for id in script.own(w) {
             let Some(o) = w.obj(id) else { continue };
+            let mut n = 0;
             if o.kind != Kind::Building || !slots_hit_air(w, tech::type_of(o), a, true) {
                 continue;
             }
-            defences[0] += 1;
+            passed(&mut defences, &mut n);
             if power::firing_answer(w, id).is_some() {
                 continue;
             }
-            defences[1] += 1;
+            passed(&mut defences, &mut n);
             let t = Some(Target::Object(d));
             let (slot, wp) = weapon::would_use(w, id, t);
             if wp.is_none() {
                 continue;
             }
-            defences[2] += 1;
+            passed(&mut defences, &mut n);
             if matches!(
                 check::check(w, id, t, slot, false),
                 Answer::Illegal | Answer::Impossible
             ) {
                 continue;
             }
-            defences[3] += 1;
+            passed(&mut defences, &mut n);
             if defence_answers(w, script.house, id, d) {
-                defences[4] += 1;
+                passed(&mut defences, &mut n);
             }
         }
     }
@@ -572,7 +589,7 @@ pub fn probe(script: &Script, w: &World) -> Probe {
             lined(script, w, &left)
         },
         build: build_type(script, w),
-        candidates: [hits.len(), lit.len(), start.len(), free],
+        candidates: vec![hits.len(), lit.len(), start.len(), free],
     }
 }
 
