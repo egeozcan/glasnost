@@ -1,9 +1,9 @@
 ---
 id: Q-1831
 title: The shuffle and repeat settings when the settings file does not give them
-status: open
+status: answered
 related: [S-0703, S-0005, Q-1700]
-answered-by: []
+answered-by: [S-0703]
 ---
 
 ## Need
