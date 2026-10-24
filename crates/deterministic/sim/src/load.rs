@@ -512,6 +512,11 @@ pub fn new_game(
         effects: Vec::new(),
         notes: Vec::new(),
         theater: map.theater,
+        // spec: S-0303 Import mapping (the map's special-flags section: Inert, HarvesterImmune)
+        map_flags: crate::world::MapFlags {
+            inert: map.basic.inert,
+            harvester_immune: map.basic.harvester_immune,
+        },
         rules: Some(rules.clone()),
         catalogue: Some(catalogue.clone()),
         regions: Default::default(),

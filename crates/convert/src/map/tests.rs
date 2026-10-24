@@ -421,6 +421,21 @@ fn map_growth_switch() {
     assert_eq!(off.map.basic.tiberium_growth, Some(false));
 }
 
+/// spec: S-0303 Import mapping (the map's special-flags section, `Inert` and `HarvesterImmune`, booleans, absent: no; `DestroyableBridges` is not read, S-0511 claim 1)
+#[test]
+fn special_flags_inert_and_harvester_immune() {
+    let none = decode_text(&format!("{BASE}[Map]\n"));
+    assert!(!none.map.basic.inert && !none.map.basic.harvester_immune);
+    let both = decode_text(&format!(
+        "{BASE}[Map]\n[SpecialFlags]\nInert=yes\nHarvesterImmune=true\nDestroyableBridges=no\n"
+    ));
+    assert!(both.map.basic.inert && both.map.basic.harvester_immune);
+    let one = decode_text(&format!(
+        "{BASE}[Map]\n[SpecialFlags]\nHarvesterImmune=yes\n"
+    ));
+    assert!(!one.map.basic.inert && one.map.basic.harvester_immune);
+}
+
 /// spec: S-0104 claim 1 (map values in hundredths and thousandths)
 #[test]
 fn lighting_precision() {

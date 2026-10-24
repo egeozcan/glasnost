@@ -743,6 +743,10 @@ fn candidate(
             return Verdict::Reject;
         }
     }
+    // spec: S-0309 table C (harvester immunity: the map sets it and T's type is a game-wide harvester type)
+    if crate::combat::area::harvester_immune(w, to.kind, to.type_index) {
+        return Verdict::Reject;
+    }
     // spec: S-0309 table C (invisible building)
     if to.kind == Kind::Building && r.buildings[to.type_index as usize].invisible {
         return Verdict::Reject;

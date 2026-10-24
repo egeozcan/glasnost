@@ -414,8 +414,6 @@ const NAMED: &[(&str, &[&str])] = &[
         "S-0303",
         &[
             "DestroyableBridges",
-            "HarvesterImmune",
-            "Inert",
             "ShakeXhi",
             "ShakeXlo",
             "ShakeYhi",

@@ -1688,3 +1688,156 @@ fn claim_2_flagged_warhead_still_hits_from_other_producers() {
     );
     assert!(lost(&w, b) > 0);
 }
+
+// ---------------------------------------------------------------------------
+// The map's special flags (Import mapping): the inert flag and harvester immunity.
+// ---------------------------------------------------------------------------
+
+/// A vehicle BOX, a wall warhead WALLER with a spread of 1 cell, and a
+/// fence next to the vehicle; `inert` sets the map's inert flag.
+fn flag_world(inert: bool) -> (World, ObjectId, u8) {
+    let mut r = barrel_rules();
+    overlay(&mut r, "FENCE", |o| {
+        o.wall = Some(true);
+        o.strength = Some(100);
+        o.damage_levels = Some(3);
+    });
+    warhead(&mut r, "WALLER", |h| {
+        h.wall = Some(true);
+        h.cell_spread = Some(dec("1"));
+    });
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    w.map_flags.inert = inert;
+    let v = put(&mut w, Kind::Vehicle, "BOX", BETA, 0, 0);
+    let fence = ov(&w, "FENCE");
+    set_overlay(&mut w, at(1, 0), fence, 0);
+    (w, v, fence)
+}
+
+// spec: S-0303 claim 2 and scenario A1 variant e (on a map whose inert flag is set the area damage of every detonation does nothing: no hit, no wall hit, no exploding overlay, no draw, result missed); the same detonation on a map without the flag hits
+#[test]
+fn claim_2_inert_map_area_damage_does_nothing() {
+    for inert in [false, true] {
+        let (mut w, v, fence) = flag_world(inert);
+        let keg = ov(&w, "KEG");
+        set_overlay(&mut w, at(0, 0), keg, 0);
+        let h = wh(&w, "WALLER");
+        let taken = w.rng.taken();
+        let res = boom!(w, centre(0, 0), 60, Some(h), None, None);
+        if inert {
+            assert_eq!(res, DetonationResult::Missed);
+            assert_eq!(lost(&w, v), 0);
+            assert_eq!(overlay_at(&w, at(1, 0)), (fence, 0), "the wall stage stays");
+            assert_eq!(
+                overlay_at(&w, at(0, 0)).0,
+                keg,
+                "the exploding overlay stays"
+            );
+            assert_eq!(w.rng.taken(), taken, "no area-effect draw");
+        } else {
+            assert_eq!(res, DetonationResult::Hit);
+            assert!(
+                w.obj(v).is_none_or(|o| o.health < 50),
+                "hit (and the barrel blast)"
+            );
+            assert_eq!(
+                overlay_at(&w, at(0, 0)).0,
+                NO_OVERLAY,
+                "the barrel went off"
+            );
+            assert_ne!(
+                overlay_at(&w, at(1, 0)),
+                (fence, 0),
+                "the control hits the wall"
+            );
+        }
+    }
+}
+
+// spec: S-0303 claim 2 (the inert flag does not suppress the explosion animation or the debris, which belong to the projectile's detonation) and claim 22 (debris is thrown whatever the damage amount, on an inert map as well) and scenario A15 (repeat a on an inert map: the same count rule)
+#[test]
+fn claim_2_and_22_inert_map_keeps_the_debris() {
+    let mut seen = Vec::new();
+    for inert in [false, true] {
+        let (mut w, s) = anim_world(|h| {
+            h.max_debris = Some(4);
+            h.min_debris = Some(1);
+            h.anim_list = None;
+        });
+        w.map_flags.inert = inert;
+        let p = centre(0, 0);
+        w.effects.clear();
+        glasnost_sim::combat::projectile::projectile_detonation(
+            &mut w, s, 10, p, None, None, p, false,
+        );
+        assert!(!anims(&w).is_empty(), "debris on inert {inert}");
+        seen.push((anims(&w), w.rng.taken()));
+    }
+    assert_eq!(
+        seen[0], seen[1],
+        "the inert map changes neither the debris nor the draws"
+    );
+}
+
+/// A world with the harvester type HAUL (listed in the game-wide harvester
+/// list) and an ordinary vehicle BOX, side by side.
+fn harvester_world(immune: bool) -> (World, ObjectId, ObjectId) {
+    let mut r = testkit::combat_ruleset();
+    vehicle(&mut r, "HAUL", |_| {});
+    vehicle(&mut r, "BOX", |_| {});
+    warhead(&mut r, "PLAIN", |h| h.cell_spread = Some(dec("2")));
+    r.sim.general.harvester_unit = Some(vec!["HAUL".into()]);
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    w.map_flags.harvester_immune = immune;
+    let haul = put(&mut w, Kind::Vehicle, "HAUL", BETA, 0, 0);
+    let bx = put(&mut w, Kind::Vehicle, "BOX", BETA, 1, 0);
+    (w, haul, bx)
+}
+
+// spec: S-0303 claim 9 and scenario A6 (a vehicle of a game-wide harvester type is left out while the map's harvester-immunity flag is set; any other vehicle is hit, and without the flag the harvester is hit too)
+#[test]
+fn claim_9_harvester_immunity() {
+    for immune in [false, true] {
+        let (mut w, haul, bx) = harvester_world(immune);
+        let h = wh(&w, "PLAIN");
+        let res = boom!(w, centre(0, 0), 100, Some(h), None, None);
+        assert_eq!(res, DetonationResult::Hit);
+        assert_eq!(
+            lost(&w, haul),
+            if immune { 0 } else { 100 },
+            "immune {immune}"
+        );
+        assert!(lost(&w, bx) > 0, "the other vehicle is hit");
+    }
+}
+
+// spec: S-0303 Import mapping (the map's special flags reach the world at load) and the determinism rules (the flags are saved and hashed: a save and load keeps them and the state hash)
+#[test]
+fn map_flags_load_save_and_hash() {
+    let r = testkit::combat_ruleset();
+    let game = |inert: bool, immune: bool| {
+        let mut map = testkit::empty_map(SIZE);
+        map.basic.inert = inert;
+        map.basic.harvester_immune = immune;
+        let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-test"));
+        glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &testkit::setup(1))
+            .expect("synthetic test game loads")
+    };
+    let plain = game(false, false);
+    assert_eq!(plain.map_flags, glasnost_sim::world::MapFlags::default());
+    let w = game(true, true);
+    assert!(w.map_flags.inert && w.map_flags.harvester_immune);
+    let only = game(true, false);
+    assert!(only.map_flags.inert && !only.map_flags.harvester_immune);
+    let hash = glasnost_sim::save::state_hash;
+    assert_ne!(hash(&w), hash(&plain), "the flags are hashed");
+    assert_ne!(hash(&only), hash(&plain));
+    let back = glasnost_sim::save::load(
+        &glasnost_sim::save::save(&w),
+        w.rules_arc(),
+        testkit::catalogue(),
+    )
+    .expect("loads");
+    assert_eq!(back.map_flags, w.map_flags);
+    assert_eq!(hash(&back), hash(&w));
+}

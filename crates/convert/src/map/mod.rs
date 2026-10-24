@@ -941,6 +941,10 @@ impl Decoder<'_> {
                 .doc
                 .value(b"Basic", b"TiberiumGrowthEnabled")
                 .and_then(value::boolean),
+            // spec: S-0303 Import mapping (the map's special-flags section, Inert, absent: no)
+            inert: self.boolean(b"SpecialFlags", b"Inert", false),
+            // spec: S-0303 Import mapping (the map's special-flags section, HarvesterImmune, absent: no)
+            harvester_immune: self.boolean(b"SpecialFlags", b"HarvesterImmune", false),
         }
     }
 

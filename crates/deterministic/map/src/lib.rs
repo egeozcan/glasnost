@@ -358,6 +358,14 @@ pub struct Basic {
     /// is on.
     #[serde(default)]
     pub tiberium_growth: Option<bool>,
+    /// The inert flag (S-0303 claim 2 and Import mapping, `[SpecialFlags]
+    /// Inert`; absent: no).
+    #[serde(default)]
+    pub inert: bool,
+    /// Harvester immunity (S-0303 claim 9 and Import mapping,
+    /// `[SpecialFlags] HarvesterImmune`; absent: no).
+    #[serde(default)]
+    pub harvester_immune: bool,
 }
 
 /// A defined entry of the start list: waypoint number and cell.

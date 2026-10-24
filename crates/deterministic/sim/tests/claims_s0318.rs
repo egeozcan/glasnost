@@ -1678,3 +1678,32 @@ fn sh1n_every_special_hit_row_stops_the_burst() {
         );
     }
 }
+
+// spec: S-0318 claim 1 (scenario SH1 part s run 2: on a map whose inert flag is set the detonation still bursts, the 6 ranged draws R(−2, 2) are still taken at the burst, and no object loses health, the fragments' own area damage doing nothing either); the control without the flag lets T and the fragments hit
+#[test]
+fn sh1s_run_2_inert_map_still_bursts_and_nothing_loses_health() {
+    for inert in [false, true] {
+        let mut s = setup(&base(8), true);
+        s.w.map_flags.inert = inert;
+        let v = around(&mut s);
+        let t = s.t.unwrap();
+        let t0 = health(&s, t);
+        let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
+        let (_, after) = drawn(&s.w, 3);
+        let pr = shoot_t(&mut s);
+        burst(&mut s, &pr);
+        assert_eq!(frags(&s).len(), 8, "the burst launched its fragments");
+        assert_eq!(
+            s.w.rng, after,
+            "the 6 ranged draws were taken, inert or not"
+        );
+        testkit::run(&mut s.w, 4);
+        if inert {
+            assert_eq!(health(&s, t), t0, "T loses nothing");
+            assert_eq!(lost(&s, &v, &before), vec![0; 5], "no fragment damage");
+        } else {
+            assert!(health(&s, t) < t0, "the control: T takes the shot");
+            assert!(lost(&s, &v, &before).iter().any(|&x| x > 0));
+        }
+    }
+}

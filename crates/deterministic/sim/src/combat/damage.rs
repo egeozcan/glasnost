@@ -240,8 +240,11 @@ fn modified(w: &World, hit: &Hit, d3: i32, r: i32, class: usize) -> i32 {
     if hit.ignore_defences {
         return d3;
     }
-    // spec: S-0302 F3 case (ii) and claim 6 (an inert game or no warhead: 0, such as a debris piece of a type with no warhead, S-0317 claim 7); maps mark inertness, which our map data does not carry yet
+    // spec: S-0302 F3 case (ii) and claim 6 (an inert game or no warhead: 0, such as a debris piece of a type with no warhead, S-0317 claim 7)
     let Some(h) = hit.warhead else { return 0 };
+    if w.map_flags.inert {
+        return 0;
+    }
     if d3 < 0 {
         // spec: S-0302 F3 cases (iii) and (iv) (a negative amount: itself below 8 leptons, else 0)
         return if r < 8 { d3 } else { 0 };

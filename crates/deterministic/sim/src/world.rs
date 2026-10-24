@@ -348,6 +348,17 @@ pub struct GameSetup {
     pub skirmish: crate::econ::setup::Settings,
 }
 
+/// The map's special flags that the simulation consults (S-0303 Import
+/// mapping). `DestroyableBridges` is not here: a skirmish ignores it
+/// (S-0511 claim 1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapFlags {
+    /// The inert flag (S-0303 claim 2; S-0302 claim 6).
+    pub inert: bool,
+    /// Harvester immunity (S-0303 claim 9; S-0309 table C).
+    pub harvester_immune: bool,
+}
+
 /// The game state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct World {
@@ -461,6 +472,10 @@ pub struct World {
     pub triggers: crate::triggers::TriggerState,
     /// The map's theater.
     pub theater: Theater,
+    /// The map's special flags that the simulation consults (S-0303
+    /// Import mapping).
+    #[serde(default)]
+    pub map_flags: MapFlags,
     /// The hover slots (S-0502 Terms): the jumpjet that holds the slot of a
     /// cell, at most one per cell.
     #[serde(default)]
