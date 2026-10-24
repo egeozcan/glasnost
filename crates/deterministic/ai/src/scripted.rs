@@ -447,6 +447,32 @@ pub struct Script {
     /// sale's tick, and whether the house is selling out (it then builds no
     /// more buildings or harvesters, only army units).
     watch: Watch,
+    /// The placement cells found during the current think (derived data:
+    /// never saved, hashed or compared).
+    #[serde(skip)]
+    placed: PlaceMemo,
+}
+
+/// [`Script::place_cell`]'s answers during one think, by type. The world
+/// does not change while a brain thinks (it reads `&World`), and the
+/// answer depends only on the world and the house, so an answer found
+/// once holds for the rest of that think. Outside a think (between
+/// [`Script::begin_think`] and [`Script::end_think`]) nothing is kept, and
+/// every call searches. Our own tooling for speed (M8 C4 part 2): the
+/// same orders, found once instead of many times.
+#[derive(Clone, Debug, Default)]
+struct PlaceMemo(std::cell::RefCell<Option<BTreeMap<TypeRef, Option<CellXY>>>>);
+
+impl PlaceMemo {
+    fn get(&self, t: TypeRef) -> Option<Option<CellXY>> {
+        self.0.borrow().as_ref().and_then(|m| m.get(&t).copied())
+    }
+
+    fn put(&self, t: TypeRef, found: Option<CellXY>) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.insert(t, found);
+        }
+    }
 }
 
 /// What [`Script`] remembers of the house's income between thinks.
@@ -490,7 +516,19 @@ impl Script {
             next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             watch: Watch::default(),
+            placed: PlaceMemo::default(),
         }
+    }
+
+    /// A think starts: [`Script::place_cell`] keeps its answers until
+    /// [`Script::end_think`].
+    pub(crate) fn begin_think(&self) {
+        *self.placed.0.borrow_mut() = Some(BTreeMap::new());
+    }
+
+    /// The think is over: the kept answers go.
+    pub(crate) fn end_think(&self) {
+        *self.placed.0.borrow_mut() = None;
     }
 
     /// Sets the enemy start cells to visit: every start cell but the one
@@ -1636,17 +1674,36 @@ impl Script {
     /// foundation is free. A naval building is looked for in the wider
     /// spiral, as a person looks for the water near the base.
     pub fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+        if let Some(found) = self.placed.get(t) {
+            return found;
+        }
+        let found = self.search_place_cell(w, t);
+        self.placed.put(t, found);
+        found
+    }
+
+    /// [`Script::place_cell`]'s search. The gap narrows pass by pass, and
+    /// only the free-gap test depends on the gap: the order's legality and
+    /// the cell test of each spiral cell are asked once, on its first pass,
+    /// and remembered for the later ones (the same answer as asking every
+    /// pass, in the same order, with less work).
+    fn search_place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
         } else {
             SPIRAL_RINGS
         };
+        let cells: Vec<CellXY> = self.spiral(w, rings).collect();
+        let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
         // A cramped base (a start in a small clearing) has no cell with the
         // usual gap: the gap narrows, as a person squeezes a building in
         // when the room is short, down to none.
-        (0..=GAP)
-            .rev()
-            .find_map(|gap| self.spiral(w, rings).find(|&c| self.fits_gap(w, t, c, gap)))
+        (0..=GAP).rev().find_map(|gap| {
+            cells.iter().zip(legal.iter_mut()).find_map(|(&c, l)| {
+                let ok = *l.get_or_insert_with(|| self.order_fits(w, t, c));
+                (ok && self.free_gap(w, t, c, None, gap)).then_some(c)
+            })
+        })
     }
 
     /// The cells of the square spiral around the construction yard, ring by
@@ -1670,11 +1727,15 @@ impl Script {
 
     /// [`Script::fits`] with a gap of `gap` cells to other buildings.
     fn fits_gap(&self, w: &World, t: TypeRef, c: CellXY, gap: i32) -> bool {
+        self.order_fits(w, t, c) && self.free_gap(w, t, c, None, gap)
+    }
+
+    /// The part of [`Script::fits_gap`] that does not depend on the gap.
+    fn order_fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
         let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
         placement::place_legal(w, self.house, t, c)
             && (upgrade || placement::cell_test(w, t.index, c, &placement::Test::order(self.house)))
-            && self.free_gap(w, t, c, None, gap)
     }
 
     /// The water the base grows toward: when a naval factory type that the
@@ -1870,5 +1931,76 @@ impl Script {
             "; army reaching the nearest seen enemy, by zone (units, reaching): {reach:?}"
         );
         s
+    }
+}
+
+#[cfg(test)]
+mod place_cell_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// The placement search as it was before M8 C4 part 2: every pass asks
+    /// every spiral cell the whole test.
+    fn three_passes(s: &Script, w: &World, t: TypeRef) -> Option<CellXY> {
+        let rings = if naval_building(w, t) {
+            WIDE_RINGS
+        } else {
+            SPIRAL_RINGS
+        };
+        (0..=GAP)
+            .rev()
+            .find_map(|gap| s.spiral(w, rings).find(|&c| s.fits_gap(w, t, c, gap)))
+    }
+
+    /// Our tooling for speed (M8 C4 part 2): the search that asks each
+    /// cell's legality once, and the answers kept for a think, give every
+    /// house the cell the three passes give, for every building type, at
+    /// several points of a game, in a roomy base and in a cramped one (where
+    /// the gap narrows).
+    #[test]
+    fn the_kept_and_once_asked_placement_answers_match_the_three_passes() {
+        let maps = [
+            ("synthetic", fixture::map()),
+            ("synthetic-cramped", fixture::map_cramped(5)),
+        ];
+        let mut compared = 0;
+        let mut found = 0;
+        for (name, map) in maps {
+            let mut g = Game::new(
+                fixture::rules(),
+                &map,
+                name,
+                fixture::catalogue(),
+                fixture::setup(3),
+            )
+            .expect("the skirmish loads");
+            for _ in 0..4 {
+                for _ in 0..600 {
+                    g.step();
+                }
+                let w = &g.world;
+                let houses = w.houses.len();
+                for h in 0..houses {
+                    let s = Script::new(HouseId(h as u8), Plan::default());
+                    s.begin_think();
+                    for t in all_types(w)
+                        .into_iter()
+                        .filter(|t| t.kind == Kind::Building)
+                    {
+                        let want = three_passes(&s, w, t);
+                        assert_eq!(s.place_cell(w, t), want, "house {h}, type {t:?}");
+                        assert_eq!(s.place_cell(w, t), want, "kept: house {h}, type {t:?}");
+                        compared += 1;
+                        found += usize::from(want.is_some());
+                    }
+                    s.end_think();
+                    assert!(s.placed.0.borrow().is_none());
+                }
+            }
+        }
+        assert!(
+            compared > 0 && found > 0 && found < compared,
+            "{found} of {compared}"
+        );
     }
 }

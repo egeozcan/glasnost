@@ -289,6 +289,8 @@ impl Brain {
                 p.mark(Phase::Part(part));
             }
         };
+        // The world does not change during the think: placement answers are kept for it.
+        self.script.begin_think();
         mark(p, "ai:script");
         let mut out = if w.tick % THINK_PERIOD == 0 {
             self.script.think(w)
@@ -388,6 +390,7 @@ impl Brain {
             }
             _ => true,
         });
+        self.script.end_think();
         out
     }
 
