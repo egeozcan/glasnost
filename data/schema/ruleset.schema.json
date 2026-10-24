@@ -8526,8 +8526,18 @@
           "type": "boolean",
           "default": true
         },
+        "anim_fixed_upper_vertical_speed": {
+          "description": "A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field. Not consulted yet (S-0319 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
         "anim_random_rate_collapse": {
           "description": "A converted random rate pair is clamped to [min(d₁, max(d₂, 0)), max(d₂, 0)], so an ascending pair collapses to its faster end and takes no draw; off: the converted pair is put in order and the delay is a ranged draw over [min(d₁, d₂), max(d₁, d₂)], with no draw when they are equal. Changes the number of draws.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_resource_spread_neighbours_only": {
+          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the full pair selects the cell. Not consulted yet (S-0319 is taken in at the next intake).",
           "type": "boolean",
           "default": true
         },
@@ -8593,6 +8603,26 @@
         },
         "blocked_arrow_events": {
           "description": "View-arrow presses and releases made during an order block are discarded; off: they are accepted (unit orders stay blocked).",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_deck_impact_layer": {
+          "description": "An impact landing on a high-bridge deck hits the objects under the deck in that cell; off: a landing at deck height on a high-bridge cell hits the deck layer, every other impact landing the ground layer. Not consulted yet (S-0319 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_deep_landing": {
+          "description": "A move that ends 100 leptons or more below the ground height is not put back on the ground, so the landing point and what is made there lie below it; off: every ground landing is put at the ground height and claim 7 counts a height of 0. Not consulted yet (S-0319 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_expiry_needs_animation": {
+          "description": "A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0. Not consulted yet (S-0319 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_water_impact_hits": {
+          "description": "An impact landing on water makes its bounce animation and hits before the splash; off: one on water and not at deck height makes no bounce animation and no hits. Not consulted yet (S-0319 is taken in at the next intake).",
           "type": "boolean",
           "default": true
         },
