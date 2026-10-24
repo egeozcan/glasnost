@@ -572,21 +572,33 @@ pub fn resolve_lobby(
         // spec: S-0412 claim 7 (an observer gets no colour slot and takes no draw)
         if c.colour && !setup.skirmish.houses[i].observer {
             // spec: S-0412 claim 7 and Constants (the slots 0 … 7; no free slot: the setup is refused, a departure)
-            if (0..=7u8).all(|s| taken.contains(&s)) {
+            let Some(s) = draw_colour(&mut rng, &taken, half) else {
                 return Err(SetupError::NoFreeColour(i));
-            }
-            let s = loop {
-                // spec: S-0412 claim 7 (the first of successive draws R(0, 7) that is free)
-                let s = rng.ranged(0, 7, half) as u8;
-                if !taken.contains(&s) {
-                    break s;
-                }
             };
             taken.push(s);
             setup.skirmish.houses[i].colour = Some(s);
         }
     }
     Ok(())
+}
+
+/// The colour slot of a player whose colour is on "random" (S-0412 claim
+/// 7): the first of successive ranged draws R(0, 7) on `rng` that is not
+/// in `taken`; `None`, with no draw, when every slot 0 … 7 is taken.
+/// `half_span_quirk` is `quirks.ranged_draw_half_span`, which cannot change
+/// a draw over 0 … 7 (S-0202 claim 5 needs a span of 2147483647).
+pub fn draw_colour(rng: &mut Rng, taken: &[u8], half_span_quirk: bool) -> Option<u8> {
+    // spec: S-0412 claim 7 and Constants (the slots 0 … 7)
+    if (0..=7u8).all(|s| taken.contains(&s)) {
+        return None;
+    }
+    loop {
+        // spec: S-0412 claim 7 (the first of successive draws R(0, 7) that is free)
+        let s = rng.ranged(0, 7, half_span_quirk) as u8;
+        if !taken.contains(&s) {
+            return Some(s);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

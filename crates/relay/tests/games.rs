@@ -133,8 +133,18 @@ async fn three_persons_and_a_computer_play_over_the_relay_and_survive_a_drop() {
         .expect("binds");
     let map = map8();
     let met = meet(relay.addr).await;
-    // spec: S-0009 claim 19 (persons by increasing colour index, then computers); Q-1805 (interim: persons on random after them)
-    assert_eq!(met[0].1.rows, [1, 0, 2, 3]);
+    // spec: S-0009 claim 19 (persons by increasing colour slot, then computers; Q-1805: row 2's person on "random" is placed by the slot it was given)
+    let given = met[0].1.setup.slots[2]
+        .colour
+        .expect("row 2 is given a slot");
+    let rows = if given < 1 {
+        [2, 1, 0, 3]
+    } else if given < 5 {
+        [1, 2, 0, 3]
+    } else {
+        [1, 0, 2, 3]
+    };
+    assert_eq!(met[0].1.rows, rows, "given slot {given}");
     assert_eq!(
         met[0].1.slots.iter().map(|s| s.kind).collect::<Vec<_>>(),
         [
@@ -171,7 +181,7 @@ async fn three_persons_and_a_computer_play_over_the_relay_and_survive_a_drop() {
         .collect();
     peers.sort_by_key(|p| p.slot);
     assert!(setups.iter().all(|g| *g == setups[0]), "one game setup");
-    // The peer of slot 1 (the host, on row 0) is cut off.
+    // The peer of slot 1 is cut off: the host (row 0) when row 2 was given a slot above 5, else a guest.
     let victim = 1u8;
     let deadline = Duration::from_secs(120);
     loop {

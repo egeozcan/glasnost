@@ -367,7 +367,18 @@ fn the_start_needs_every_row_taken_every_person_ready_and_a_sound_setup() {
     );
     assert_eq!(b.seed, 77);
     assert_eq!(b.params, params.sane());
-    assert_eq!(b.rows, [0, 1, 2]);
+    // spec: S-0412 claim 7 (every row on "random" is given a free slot, distinct from the others)
+    let colour = |row: usize| b.setup.slots[row].colour.expect("given a slot");
+    let mut given = [colour(0), colour(1), colour(2)];
+    given.sort();
+    assert!(given.windows(2).all(|p| p[0] != p[1]) && given[2] <= 7);
+    // spec: S-0009 claim 19 (the two persons by the slots they were given, then the computer)
+    let (first, second) = if colour(0) < colour(1) {
+        (0, 1)
+    } else {
+        (1, 0)
+    };
+    assert_eq!(b.rows, [first, second, 2]);
     assert_eq!(
         b.slots
             .iter()
@@ -379,15 +390,25 @@ fn the_start_needs_every_row_taken_every_person_ready_and_a_sound_setup() {
             (2, NetKind::Computer)
         ]
     );
-    assert_eq!(b.names, ["Host", "Bea", "Computer"]);
-    assert_eq!(started.persons, [(HOST, 0), (B, 1)]);
-    assert_eq!(started.begin_for(B).map(|b| b.you), Some(1));
+    let names = ["Host", "Bea"];
+    assert_eq!(
+        b.names,
+        [
+            names[usize::from(first)],
+            names[usize::from(second)],
+            "Computer"
+        ]
+    );
+    let slot_of = |row: u8| if row == first { 0 } else { 1 };
+    assert_eq!(started.persons, [(HOST, slot_of(0)), (B, slot_of(1))]);
+    assert_eq!(started.begin_for(B).map(|b| b.you), Some(slot_of(1)));
     assert_eq!(started.begin_for(C), None);
 }
 
-// spec: S-0009 claim 19 (persons by increasing colour index, then computers in slot order); Q-1805 (interim: persons on random after them)
-#[test]
-fn the_slot_table_follows_the_house_order() {
+/// The room of `the_slot_table_follows_the_house_order`, started with
+/// `seed`: Host (row 0) on colour 5, Cy (row 3) on colour 1, Bea (row 1)
+/// and the computer (row 2) on "random".
+fn started_four(seed: u32) -> (Room, lobby::Started) {
     let mut r = room();
     r.join(B, &join("Bea")).unwrap();
     r.join(C, &join("Cy")).unwrap();
@@ -395,11 +416,58 @@ fn the_slot_table_follows_the_house_order() {
     r.edit(C, &choices(3, Some(1), None)).unwrap();
     r.set_ready(B, true, "m4").unwrap();
     r.set_ready(C, true, "m4").unwrap();
-    let s = r.start(HOST, 3, Params::default()).unwrap();
-    assert_eq!(s.begin.rows, [3, 0, 1, 2]);
-    assert_eq!(s.begin.names, ["Cy", "Host", "Bea", "Computer"]);
-    assert_eq!(s.persons, [(C, 0), (HOST, 1), (B, 2)]);
-    assert_eq!(s.begin.slots[3].kind, NetKind::Computer);
+    let s = r.start(HOST, seed, Params::default()).unwrap();
+    (r, s)
+}
+
+// spec: S-0009 claim 19 (persons by increasing colour slot, then computers in lobby-slot order; Q-1805: a person on "random" is placed by the slot it was given, as if it had chosen it; the draws in increasing lobby-slot order, persons and computers alike, design)
+#[test]
+fn the_slot_table_follows_the_house_order() {
+    // Over the seeds Bea's given slot falls before 1, between 1 and 5 and
+    // after 5.
+    let mut seen = [false; 3];
+    for seed in 0..64 {
+        let (r, s) = started_four(seed);
+        // The room's own setup keeps its choices on "random".
+        assert_eq!(r.setup().slots[1].colour, None);
+        let given = s.begin.setup.slots[1].colour.expect("Bea is given a slot");
+        let computer = s.begin.setup.slots[2].colour.expect("the computer too");
+        // spec: S-0412 claim 7 (a slot fixed by one player, or given to an earlier one, is not free)
+        assert!(![1, 5].contains(&given) && ![1, 5, given].contains(&computer));
+        let (case, rows, names, mut persons) = if given < 1 {
+            (
+                0,
+                [1, 3, 0, 2],
+                ["Bea", "Cy", "Host", "Computer"],
+                vec![(B, 0), (C, 1), (HOST, 2)],
+            )
+        } else if given < 5 {
+            (
+                1,
+                [3, 1, 0, 2],
+                ["Cy", "Bea", "Host", "Computer"],
+                vec![(C, 0), (B, 1), (HOST, 2)],
+            )
+        } else {
+            (
+                2,
+                [3, 0, 1, 2],
+                ["Cy", "Host", "Bea", "Computer"],
+                vec![(C, 0), (HOST, 1), (B, 2)],
+            )
+        };
+        seen[case] = true;
+        assert_eq!(s.begin.rows, rows, "seed {seed}, given {given}");
+        assert_eq!(s.begin.names, names);
+        persons.sort();
+        let mut got = s.persons.clone();
+        got.sort();
+        assert_eq!(got, persons);
+        assert_eq!(s.begin.slots[3].kind, NetKind::Computer);
+        // The same seed gives the same draws.
+        assert_eq!(started_four(seed).1.begin, s.begin);
+    }
+    assert_eq!(seen, [true; 3], "every place among the chosen slots");
 }
 
 // spec: S-0412 claim 7 (a colour fixed by one player is not free for another); S-0412 claim 15 (the offered countries and rows)

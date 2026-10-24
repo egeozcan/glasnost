@@ -472,7 +472,8 @@ pub struct Begin {
     pub map: MapChoice,
     /// The game seed (the relay's host randomness).
     pub seed: u32,
-    /// The setup as it was started; its `map` index is 0.
+    /// The setup as it was started, its colours on "random" given their
+    /// slots ([`Setup::resolve_colours`]); its `map` index is 0.
     pub setup: Setup,
     /// The slot table, in house order ([`Setup::house_order`]).
     pub slots: Vec<Slot>,

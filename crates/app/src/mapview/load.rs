@@ -238,7 +238,7 @@ pub async fn load_with(
     make: Option<live::MakeSetup<'_>>,
 ) -> Loaded {
     let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
-    // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it)
+    // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it); S-0009 Import mapping ([Basic] Theme: read and kept as map data, absent: no map theme)
     let theme = map_ini.value(b"Basic", b"Theme").map(<[u8]>::to_vec);
     let GameInputs {
         map,
