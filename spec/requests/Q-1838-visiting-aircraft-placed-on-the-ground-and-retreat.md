@@ -1,9 +1,9 @@
 ---
 id: Q-1838
 title: A visiting aircraft placed on the ground retreats at once and then ignores its orders
-status: open
+status: answered
 related: [S-0501, S-0506]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
