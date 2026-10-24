@@ -43,6 +43,12 @@ fn moving(w: &World, id: ObjectId) -> bool {
     if driving(w, id) {
         return drive_moving(w, id);
     }
+    if w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle)
+        && crate::lift::current_locomotor(w, id) == Some(crate::rules::Locomotor::Hover)
+    {
+        // spec: S-0215 claim 11 (the vehicle's current locomotor's moving-now report) and S-0503 claim 19 and Terms (a hover is held back while it is moving now: a destination or heading point and a throttle that is not 0; a tick with throttle 0 and the heading point present is not moving now)
+        return crate::hover::moving_now(w, id);
+    }
     // spec: S-0215 claim 11 (other locomotors: the actor is moving on this tick while its locomotor moves it; the driving predicate is the driving locomotor's only)
     occupancy::in_progress(w, id)
 }

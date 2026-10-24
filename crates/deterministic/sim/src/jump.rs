@@ -859,6 +859,24 @@ pub fn clear_rejected(w: &mut World, id: ObjectId) -> bool {
     if !balloon_hover_vehicle(w, id) {
         return false;
     }
+    retention_rejects(w, id)
+}
+
+/// The deploy order's destination-clear request (S-0213 claim 10): as
+/// [`clear_rejected`], and also for a vehicle of the hovering locomotor whose
+/// type has the balloon-hover field, to which S-0503 claim 19 extends the
+/// retention.
+pub fn deploy_clear_rejected(w: &mut World, id: ObjectId) -> bool {
+    // spec: S-0503 claim 19 (the balloon-hover retention of S-0213 claims 10 and 21 extended to the hovering locomotor: a hovering type with the balloon-hover field that meets the retention predicate keeps its order-level destination, D and stored path)
+    if crate::hover::is_hover(w, id) && balloon_vehicle(w, id) {
+        return retention_rejects(w, id);
+    }
+    clear_rejected(w, id)
+}
+
+/// Claim 28's retention predicate and its rejection, for a vehicle the
+/// caller has found subject to it.
+fn retention_rejects(w: &mut World, id: ObjectId) -> bool {
     let Some(o) = w.obj(id) else { return false };
     // spec: S-0502 claim 28 (only an empty assignment is subject to it, and only with a nonempty destination and a target: having a target alone does not retain an empty destination)
     let (Some(dest), Some(target)) = (o.dest, o.target) else {

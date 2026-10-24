@@ -338,10 +338,21 @@ fn ground_ok(w: &World, p: &PlaceType, c: CellXY) -> bool {
 
 /// The vehicle-present claims the ignored object holds in `c`.
 fn ignored_claims(w: &World, ignore: Option<ObjectId>, c: CellXY) -> u8 {
-    ignore
-        .and_then(|id| w.obj(id))
-        .and_then(|o| o.drive.as_ref())
-        .map_or(0, |d| u8::from(d.claims.contains(&c)))
+    let Some(o) = ignore.and_then(|id| w.obj(id)) else {
+        return 0;
+    };
+    let drive = o
+        .drive
+        .as_ref()
+        .map_or(0, |d| u8::from(d.claims.contains(&c)));
+    // spec: S-0415 claim 3 (the deploying vehicle does not count as being in the way) and S-0503 claim 19 (a hover's deploy attempt takes the cell test at the cell where it stopped: its own vehicle-present flags there, S-0503 claim 13, do not count)
+    let hover = o.hover.as_ref().map_or(0, |h| {
+        h.claims
+            .iter()
+            .filter(|&&(x, l)| x == c && l == Layer::Ground)
+            .count()
+    });
+    drive.saturating_add(u8::try_from(hover).unwrap_or(u8::MAX))
 }
 
 /// Condition (b), nothing in the way (S-0406 claim 3 b), with the object

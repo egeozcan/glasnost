@@ -298,8 +298,13 @@ pub(crate) fn attempt(w: &mut World, id: ObjectId, b: u32) -> Attempt {
             return Attempt::Turning;
         }
     } else {
-        // spec: S-0415 claim 2 (a moving vehicle makes no attempt before a turn; a queued behaviour other than unload takes over)
-        if crate::occupancy::in_progress(w, id) {
+        // spec: S-0415 claim 2 (a moving vehicle makes no attempt before a turn; a queued behaviour other than unload takes over); S-0503 claim 19 (a hover is moving in the sense of S-0503 Terms, a destination D or a heading point, whatever its throttle; once both are absent it is not)
+        let moving = if crate::hover::is_hover(w, id) {
+            crate::hover::moving(w, id)
+        } else {
+            crate::occupancy::in_progress(w, id)
+        };
+        if moving {
             if o.beh.queued.is_some_and(|q| q != Behaviour::Unload)
                 && let Some(ob) = w.obj_mut(id)
             {

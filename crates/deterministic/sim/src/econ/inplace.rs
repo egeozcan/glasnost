@@ -177,6 +177,10 @@ fn set_form(w: &mut World, id: ObjectId, f: Form) {
     if let Some(o) = w.obj_mut(id) {
         o.econ.deploy.form = f;
     }
+    if let Form::Deploying { .. } | Form::Deployed = f {
+        // spec: S-0503 claim 19 (a hover that becomes deploying or deployed keeps the movement it holds; quirks.hover_deployed_keeps_moving)
+        crate::hover::deploying(w, id, f == Form::Deployed);
+    }
 }
 
 /// Requests the type's deploy or undeploy sound at the vehicle's position
@@ -212,19 +216,44 @@ fn start_presentation(w: &mut World, id: ObjectId, reverse: bool) {
 
 /// Whether the vehicle is above the ground (claim 4's height).
 fn airborne(w: &World, id: ObjectId) -> bool {
-    crate::jump::is_jumpjet(w, id) && crate::jump::height_above(w, id) > 0
+    (crate::jump::is_jumpjet(w, id) && crate::jump::height_above(w, id) > 0)
+        // spec: S-0503 claim 19 (for a hover the height claims 4 and 5 read is its hover height, S-0503 claim 8, left by the movement of its previous turn)
+        || (crate::hover::is_hover(w, id) && crate::hover::hover_height(w, id) > 0)
+}
+
+/// Whether a landing request for deploy stands (claim 5; a hover's, S-0503
+/// claim 19).
+fn landing_requested(w: &World, id: ObjectId) -> bool {
+    crate::jump::landing_requested(w, id) || crate::hover::landing_requested(w, id)
 }
 
 /// The deploy step (claims 4 and 5) of a mobile vehicle; the deploy sound
 /// request of claim 12.
 fn deploy_step(w: &mut World, id: ObjectId) {
     let repeats = w.rules().quirks.deploy_sound_repeats;
-    if airborne(w, id) {
+    let mut met = false;
+    if crate::hover::landing_requested(w, id) {
+        // spec: S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands: while a hover's landing request stands, a deploy step does not deploy it, even at height 0; off: once it is no longer moving, S-0503 Terms, the request counts as met and the step deploys it by claim 4's height-0 rows, whatever its hover height)
+        if w.rules().quirks.hover_landing_request_stands || crate::hover::moving(w, id) {
+            if repeats {
+                // spec: S-0517 claim 12 (every deploy step requests the deploy sound)
+                sound(w, id, Sound::Deploy);
+            }
+            return;
+        }
+        crate::hover::landing_met(w, id);
+        met = true;
+    }
+    if airborne(w, id) && !met {
         let landing_first = unit_of(w, id).is_some_and(|u| u.deploy_to_land);
         if landing_first {
-            // spec: S-0517 claim 5 (a landing-first type above the ground requests landing for deploy; the jumpjet locomotor then lands, S-0502 claim 15)
-            let first = !crate::jump::landing_requested(w, id);
-            crate::jump::request_landing(w, id);
+            // spec: S-0517 claim 5 (a landing-first type above the ground requests landing for deploy; the jumpjet locomotor then lands, S-0502 claim 15); S-0503 claim 19 (a hover makes the request too; no rule of hovering movement acts on it)
+            let first = !landing_requested(w, id);
+            if crate::hover::is_hover(w, id) {
+                crate::hover::request_landing(w, id);
+            } else {
+                crate::jump::request_landing(w, id);
+            }
             if repeats || first {
                 // spec: S-0517 claim 12 (every deploy step requests the deploy sound; off: once, at the first step that starts landing)
                 sound(w, id, Sound::Deploy);
@@ -350,7 +379,9 @@ pub fn process(w: &mut World, id: ObjectId) -> i32 {
         Form::Deploying { since } => deploying_step(w, id, since),
         Form::Deployed | Form::Undeploying { .. } => undeploy_step(w, id),
     }
-    let landing = crate::jump::landing_requested(w, id) && airborne(w, id);
+    // spec: S-0503 claim 19 (a hover's standing landing request keeps unload current with a deploy step each tick, whatever its height)
+    let landing = (crate::jump::landing_requested(w, id) && airborne(w, id))
+        || crate::hover::landing_requested(w, id);
     if in_transition(w, id) || landing {
         // spec: S-0517 claim 3 (in transition or landing for deploy: 1 tick, no draw: processing every tick until the change finishes)
         return TRANSITION_DELAY;
