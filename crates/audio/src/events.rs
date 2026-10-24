@@ -195,6 +195,14 @@ pub struct Audio {
     /// The game's side names (S-0004 claim 1), for the music's side
     /// restrictions (S-0703 claim 2).
     sides: Vec<String>,
+    /// The next game's map's stored `[Basic]` `Theme` value (S-0703 claim
+    /// 11).
+    theme: Option<Vec<u8>>,
+    /// The host time a music hold began (S-0703 claim 13), while held.
+    music_hold: Option<i64>,
+    /// The host time spent in music holds, which the music's logical time
+    /// leaves out.
+    music_offset: i64,
 }
 
 /// The side of the local player's country (S-0004 claim 9), by index.
@@ -270,6 +278,9 @@ impl Audio {
             started: Vec::new(),
             music: None,
             sides: Vec::new(),
+            theme: None,
+            music_hold: None,
+            music_offset: 0,
         }
     }
 
@@ -356,12 +367,110 @@ impl Audio {
         self.sides = sides;
     }
 
-    /// Stops the music (the game is left; Q-1833).
+    /// Sets the next game's map's stored `[Basic]` `Theme` value, which
+    /// names its map theme (S-0703 claim 11).
+    pub fn set_theme(&mut self, theme: Option<Vec<u8>>) {
+        self.theme = theme;
+    }
+
+    /// Stops the music, with no track to follow.
     pub fn stop_music(&mut self) {
+        self.release_music();
         if let Some(m) = self.music.as_mut() {
             m.stop();
         }
         self.mixer.set_music(None);
+    }
+
+    /// A game starts to load (S-0703 claim 11): whatever plays stops at
+    /// once and the loading track, if any, starts.
+    pub fn loading_music(&mut self) {
+        self.release_music();
+        let rate = self.mixer.output_rate();
+        // spec: S-0703 claim 11 (a game starting to load stops whatever is playing at once, with no fade, whether or not there is a loading track)
+        let v = self.music.as_mut().and_then(|m| m.loading_track(rate));
+        self.mixer.set_music(v);
+    }
+
+    /// The game is over and our end screen opens (S-0703 claim 12): the
+    /// playing track stops at once and the score track, if any, starts.
+    pub fn game_over_music(&mut self) {
+        self.release_music();
+        let rate = self.mixer.output_rate();
+        // spec: S-0703 claim 12 (the playing track is stopped at once when the end screen opens)
+        let v = self.music.as_mut().and_then(|m| m.game_over(rate));
+        self.mixer.set_music(v);
+    }
+
+    /// The main menu opens from the end screen, or from a game left
+    /// through its options menu (S-0703 claims 12 and 13): whatever plays
+    /// stops at once and the menu track, if any, starts.
+    pub fn main_menu_music(&mut self) {
+        self.release_music();
+        let rate = self.mixer.output_rate();
+        // spec: S-0703 claims 12 and 13 (the track stops at once; the menu track, if any, starts; no music update or pick follows)
+        let v = self.music.as_mut().and_then(|m| m.main_menu(rate));
+        self.mixer.set_music(v);
+    }
+
+    /// Holds the music at host time `now_ms` (`held`), or resumes it
+    /// (S-0703 claim 13: our engine's options menu and its settings screen
+    /// opened from a game are a stand-still for music). While held the
+    /// track is silent at the point it had reached, no music update runs,
+    /// and the held time does not count towards its logical duration.
+    pub fn hold_music(&mut self, held: bool, now_ms: i64) {
+        match (held, self.music_hold) {
+            (true, None) => self.music_hold = Some(now_ms),
+            (false, Some(t)) => {
+                // spec: S-0703 claim 13 and S-0701 claim 30 (logical time does not advance in a stand-still, and resuming causes no catch-up)
+                self.music_offset = self.music_offset.saturating_add((now_ms - t).max(0));
+                self.music_hold = None;
+            }
+            _ => {}
+        }
+        self.mixer.hold_music(self.music_hold.is_some());
+    }
+
+    /// Whether the music is held ([`Audio::hold_music`]).
+    pub fn music_held(&self) -> bool {
+        self.music_hold.is_some()
+    }
+
+    /// Ends a hold that a screen change made moot.
+    fn release_music(&mut self) {
+        self.music_hold = None;
+        self.mixer.hold_music(false);
+    }
+
+    /// Services the music off the audio passes (the end screen, the menus,
+    /// a game loading) and feeds the output. Call once per drawn frame on
+    /// those screens.
+    pub fn menu_frame(&mut self) {
+        // A silent output drops the voices at each pump, so only one that
+        // plays can tell that a track has played out.
+        let timed = self.output.state() == OutputState::Running;
+        self.serve_screen(timed);
+        self.output.pump(&mut self.mixer);
+    }
+
+    /// [`Audio::menu_frame`] without feeding the output (offline rendering,
+    /// tests): the track is timed by what [`Mixer::render`] has played.
+    pub fn menu_service(&mut self) {
+        self.serve_screen(true);
+    }
+
+    fn serve_screen(&mut self, timed: bool) {
+        let Some(m) = self.music.as_mut() else {
+            return;
+        };
+        let rate = self.mixer.output_rate();
+        if let Some(v) = m.poll(rate) {
+            self.mixer.set_music(Some(v));
+        }
+        // spec: S-0703 claim 12 (our engine: on the end screen the score track is timed by the audio output, not by audio passes)
+        if timed && let Some(v) = m.screen_update(self.mixer.has_music(), rate) {
+            self.mixer.set_music(v);
+        }
     }
 
     /// The mixer (offline rendering, tests, volume).
@@ -389,8 +498,11 @@ impl Audio {
         self.low_funds_after = None;
         self.low_power = false;
         let side = local_side(w, local);
+        // spec: S-0703 claim 11 (our engine: the loading track is stopped when the game starts)
+        self.release_music();
+        self.mixer.set_music(None);
         if let Some(m) = self.music.as_mut() {
-            m.start_game(&self.sides, side);
+            m.start_game(&self.sides, side, self.theme.as_deref());
         }
     }
 
@@ -464,10 +576,15 @@ impl Audio {
         if let Some(v) = m.poll(rate) {
             self.mixer.set_music(Some(v));
         }
+        // spec: S-0703 claim 13 and S-0701 claim 30 (no music update in a stand-still)
+        if self.music_hold.is_some() {
+            return;
+        }
         // spec: S-0703 claim 10 (one music update at the end of every audio pass, after that pass's sound choices; its draws take the same unsynchronised stream)
         if pass {
             let half_span = self.quirks.ranged_draw_half_span;
-            if let Some(v) = m.update(now_ms, self.mixer.rng_mut(), half_span, rate) {
+            let c = now_ms.saturating_sub(self.music_offset);
+            if let Some(v) = m.update(c, self.mixer.rng_mut(), half_span, rate) {
                 self.mixer.set_music(v);
             }
         }

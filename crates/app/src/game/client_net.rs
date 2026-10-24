@@ -1077,6 +1077,7 @@ impl Client {
         self.job = Some(job);
         self.net_loading = true;
         self.shell.screen = Screen::Game;
+        self.loading_music();
     }
 
     /// A part of the game sent for a rejoin (N5): once all of it came, the

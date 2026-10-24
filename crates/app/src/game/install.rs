@@ -221,6 +221,10 @@ pub async fn prepare(vfs: &mut Vfs) -> Result<Install, String> {
         for w in m.db.side_warnings(&sides) {
             log::warn!("{w}");
         }
+        // spec: S-0703 claim 8a (our engine: the importer warning for a found sound file that does not parse, naming the entry)
+        for w in &m.warnings {
+            log::warn!("{w}");
+        }
     }
     // spec: S-0111 claim 19a (with quirks.art_cache_never_invalidated on, the cursor palette is read once when the program starts, before any game)
     let cursor_palette = super::session::CursorPaletteKeep::at_program_start(vfs).await;

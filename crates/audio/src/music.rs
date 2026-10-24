@@ -37,6 +37,14 @@ const SOUND_LIMIT: usize = 255; // spec: S-0703 Import mapping (Sound: text limi
 const SIDE_LIMIT: usize = 127; // spec: S-0703 Import mapping (Side: text limit 127 bytes)
 /// The extension added to a sound file name.
 const EXTENSION: &str = ".wav"; // spec: S-0703 claim 1a (the extension .wav is added)
+/// Text limit of a map's theme name.
+const THEME_LIMIT: usize = 127; // spec: S-0703 Import mapping ([Basic] Theme: text limit 127 bytes)
+/// The loading track's identifier (S-0703 Terms).
+pub const LOADING_TRACK: &str = "LOADING"; // spec: S-0703 Import mapping (LOADING, the loading track)
+/// The score track's identifier (S-0703 Terms).
+pub const SCORE_TRACK: &str = "SCORE"; // spec: S-0703 Import mapping (SCORE, the score track)
+/// The menu track's identifier (S-0703 Terms).
+pub const MENU_TRACK: &str = "INTRO"; // spec: S-0703 Import mapping (INTRO, the menu track)
 
 /// One track entry of the music database (S-0703 Terms, Import mapping).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -98,7 +106,7 @@ pub fn sound_file(stored: &[u8]) -> Option<String> {
     if name.is_empty() {
         return None;
     }
-    // Q-1832 (interim: a name that already ends in .wav gets the extension again, as claim 1a states the rule)
+    // spec: S-0703 claim 1a (the extension is added whatever the name ends with, also to a name already ending in .wav)
     Some(format!("{}{EXTENSION}", text(name)))
 }
 
@@ -160,6 +168,41 @@ impl MusicDatabase {
         self.entries.is_empty()
     }
 
+    /// The entry whose identifier is `id`, compared ignoring case as claim
+    /// 1 compares identifiers.
+    pub fn find(&self, id: &[u8]) -> Option<usize> {
+        // spec: S-0703 Import mapping (the fixed names and the map theme are compared with the entry identifiers ignoring case, as claim 1 compares them)
+        self.entries
+            .iter()
+            .position(|t| t.id.as_bytes().eq_ignore_ascii_case(id))
+    }
+
+    /// The loading track (S-0703 Terms, claim 11), if the list has one.
+    pub fn loading(&self) -> Option<usize> {
+        self.find(LOADING_TRACK.as_bytes())
+    }
+
+    /// The score track (S-0703 Terms, claim 12), if the list has one.
+    pub fn score(&self) -> Option<usize> {
+        self.find(SCORE_TRACK.as_bytes())
+    }
+
+    /// The menu track (S-0703 Terms, claim 12), if the list has one.
+    pub fn menu(&self) -> Option<usize> {
+        self.find(MENU_TRACK.as_bytes())
+    }
+
+    /// The map theme (S-0703 Terms, claim 11): the entry a map's stored
+    /// `[Basic]` `Theme` value names, if any.
+    pub fn theme(&self, stored: Option<&[u8]>) -> Option<usize> {
+        // spec: S-0703 Import mapping ([Basic] Theme: text limit 127 bytes; an empty value counts as absent; a value that matches no entry gives no map theme)
+        let name = value::text(stored?, THEME_LIMIT);
+        if name.is_empty() {
+            return None;
+        }
+        self.find(name)
+    }
+
     /// The importer warnings for side restrictions that name no side of
     /// `sides` (S-0703 Edge cases), naming the entry and the value.
     pub fn side_warnings(&self, sides: &[String]) -> Vec<String> {
@@ -211,29 +254,47 @@ fn names_a_side(s: &str, sides: &[String]) -> bool {
     sides.iter().any(|n| n.eq_ignore_ascii_case(s))
 }
 
-/// The shuffle and repeat settings (S-0703 Terms, Import mapping).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The shuffle, repeat and in-game music settings (S-0703 Terms, Import
+/// mapping).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MusicSettings {
     /// The shuffle setting (claims 5 and 6).
     pub shuffle: bool,
     /// The repeat setting (claim 4).
     pub repeat: bool,
+    /// The in-game music setting (claim 11).
+    pub in_game: bool,
+}
+
+impl Default for MusicSettings {
+    /// The settings when the settings file does not give them.
+    fn default() -> Self {
+        Self {
+            // spec: S-0703 Import mapping ([Audio] IsScoreShuffle absent: off)
+            shuffle: false,
+            // spec: S-0703 Import mapping ([Audio] IsScoreRepeat absent: off)
+            repeat: false,
+            // spec: S-0703 Import mapping ([Audio] InGameMusic absent: on)
+            in_game: true,
+        }
+    }
 }
 
 impl MusicSettings {
-    /// Reads `[Audio]` `IsScoreShuffle` and `IsScoreRepeat` from the
-    /// settings file, when there is one.
+    /// Reads `[Audio]` `IsScoreShuffle`, `IsScoreRepeat` and `InGameMusic`
+    /// from the settings file, when there is one.
     pub fn from_ini(doc: Option<&Document>) -> Self {
-        // spec: S-0703 Import mapping ([Audio] IsScoreShuffle, IsScoreRepeat: booleans of S-0003)
-        let get = |k: &[u8]| {
+        let d = Self::default();
+        // spec: S-0703 Import mapping ([Audio] keys: booleans of S-0003 claim 2; a value whose first byte is none of the six recognised keeps the default; a missing settings file means every default, S-0005 claim 5)
+        let get = |k: &[u8], default: bool| {
             doc.and_then(|d| d.value(b"Audio", k))
                 .and_then(value::boolean)
-                // Q-1831 (interim: off when the settings file or the key is missing, or the value is malformed)
-                .unwrap_or(false)
+                .unwrap_or(default)
         };
         Self {
-            shuffle: get(b"IsScoreShuffle"),
-            repeat: get(b"IsScoreRepeat"),
+            shuffle: get(b"IsScoreShuffle", d.shuffle),
+            repeat: get(b"IsScoreRepeat", d.repeat),
+            in_game: get(b"InGameMusic", d.in_game),
         }
     }
 }
@@ -496,11 +557,21 @@ impl MusicVoice {
     }
 }
 
-/// What the player is doing.
+/// The header of a playable sound file (S-0703 claim 8a) from its first
+/// bytes `head`, for a file of `file_len` bytes: a RIFF WAVE file whose
+/// format chunk comes before its data chunk, whose format code is one our
+/// decoder plays, and which holds sample data after its header. `None`
+/// when the file does not parse as a playable sound (its start fails).
+pub fn playable(head: &[u8], file_len: usize) -> Option<WavInfo> {
+    // spec: S-0703 claim 8a (RIFF form WAVE, format chunk before the data chunk, format code 1 or 17, sample data after the header; a file that lacks any of these does not parse)
+    WavInfo::parse(head).ok().filter(|i| i.frames(file_len) > 0)
+}
+
+/// What the player is doing with the track it last started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
-    /// No track plays: the next music update picks (a failed start, no
-    /// track picked, or the first update of a game).
+    /// No track plays: a failed start, no track picked, a track that
+    /// finished, or nothing started yet.
     Idle,
     /// Entry `entry` started at pass time `c0`; `t` is its logical
     /// duration once its file has been read.
@@ -511,21 +582,39 @@ enum State {
     },
 }
 
-/// What a music update did (tests, the lane).
+/// Where the program is, for music (S-0703 claims 10 to 13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    /// No music: no game yet, or the in-game music setting off in a game.
+    Off,
+    /// A game is loading: the loading track, if any, plays; no pick.
+    Loading,
+    /// The game has loaded: the next music update makes the first start.
+    Armed,
+    /// Music started (claim 10): music updates pick.
+    Started,
+    /// The end screen: the score track, timed by the output, no pick.
+    Score,
+    /// The main menu: the menu track, if any, no pick.
+    Menu,
+}
+
+/// What a music update or a direct start did (tests, the lane).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Update {
     /// Nothing (music not started, an empty list, or a track still
     /// playing).
     Nothing,
-    /// A pick started entry `k`, which plays or is being read.
+    /// A pick or a direct start started entry `k`, which plays or is
+    /// being read.
     Started(usize),
-    /// A pick named entry `k`, whose file could not be opened.
+    /// A start of entry `k` failed (claims 8 and 8a).
     Failed(usize),
     /// A pick found no track (switch off).
     NoTrack,
 }
 
-/// The music player of a game (S-0703 claims 3 to 10).
+/// The music player of the program (S-0703 claims 3 to 13).
 pub struct Music {
     db: MusicDatabase,
     present: Vec<bool>,
@@ -534,7 +623,8 @@ pub struct Music {
     quirks: MusicQuirks,
     source: Box<dyn TrackSource>,
     warnings: Vec<String>,
-    started: bool,
+    phase: Phase,
+    theme: Option<usize>,
     ended: Option<usize>,
     state: State,
     log: Vec<Update>,
@@ -557,7 +647,8 @@ impl Music {
             quirks: MusicQuirks::default(),
             source,
             warnings: Vec::new(),
-            started: false,
+            phase: Phase::Off,
+            theme: None,
             ended: None,
             state: State::Idle,
             log: Vec::new(),
@@ -584,23 +675,76 @@ impl Music {
         self.source.as_mut()
     }
 
-    /// Starts music for a game whose sides are `sides` (S-0004 claim 1)
-    /// and whose local player's country is on side `local_side`: decides
-    /// availability (claim 2) and gives the side warnings (Edge cases).
-    pub fn start_game(&mut self, sides: &[String], local_side: Option<usize>) {
+    /// Where the program is, for music.
+    pub fn phase(&self) -> Phase {
+        self.phase
+    }
+
+    /// A game starts to load (S-0703 claim 11): whatever plays is stopped
+    /// (the caller silences the output), the ended track is forgotten, and
+    /// the loading track, if any, is started directly. Returns its voice.
+    pub fn loading_track(&mut self, output_rate: u32) -> Option<MusicVoice> {
+        // spec: S-0703 claim 11 and State and ordering (loading starts: the ended track is forgotten; the loading track is started directly, not by a pick; music is not yet started)
+        self.phase = Phase::Loading;
+        self.ended = None;
+        let k = self.db.loading();
+        self.direct(k, 0, output_rate)
+    }
+
+    /// Starts music for a game whose sides are `sides` (S-0004 claim 1),
+    /// whose local player's country is on side `local_side` and whose map
+    /// gives `theme` as its stored `[Basic]` `Theme` value: decides
+    /// availability (claim 2), gives the side warnings (Edge cases) and
+    /// arms the first start (claim 11). Any loading track has been stopped.
+    pub fn start_game(
+        &mut self,
+        sides: &[String],
+        local_side: Option<usize>,
+        theme: Option<&[u8]>,
+    ) {
         // spec: S-0703 Edge cases (the side check at each skirmish start, against that game's sides)
         self.warnings = self.db.side_warnings(sides);
         self.available = self.db.availability(&self.present, sides, local_side);
-        // Q-1830 (interim: music starts with the skirmish's audio; the first update picks with no ended track; a new game forgets the last one's)
-        self.started = true;
+        // spec: S-0703 claim 11 (every skirmish starts with no ended track, whatever its loading track did; our engine stops the loading track when the game starts)
         self.ended = None;
         self.state = State::Idle;
         self.log.clear();
+        self.theme = self.db.theme(theme);
+        // spec: S-0703 claim 11 (the in-game music setting, as read at startup, off: no track is picked or started during the game)
+        self.phase = if self.settings.in_game {
+            Phase::Armed
+        } else {
+            Phase::Off
+        };
     }
 
-    /// Stops the music (the game is left).
+    /// The game is over (S-0703 claim 12): our end screen opens, the
+    /// playing track stops at once (the caller silences the output) and
+    /// the score track, if any, is started directly, even with the in-game
+    /// music setting off. No music update follows. Returns its voice.
+    pub fn game_over(&mut self, output_rate: u32) -> Option<MusicVoice> {
+        // spec: S-0703 claim 12 (our engine: the end screen opens when the game is over; the playing track stops at once; the score track is started directly, from its start, not by a pick; no music update after that cycle)
+        self.phase = Phase::Score;
+        let k = self.db.score();
+        self.direct(k, 0, output_rate)
+    }
+
+    /// The main menu opens from the end screen or from a game left through
+    /// its options menu (S-0703 claims 12 and 13): whatever plays stops at
+    /// once (the caller silences the output) and the menu track, if any,
+    /// starts. Returns its voice.
+    pub fn main_menu(&mut self, output_rate: u32) -> Option<MusicVoice> {
+        // spec: S-0703 claim 12 (leaving the score screen for the main menu stops the score track at once; the menu track, if any, starts)
+        // spec: S-0703 claim 13 (our engine: leaving through the options menu stops the track at once, with no music update or pick; the main menu then starts the menu track)
+        self.phase = Phase::Menu;
+        let k = self.db.menu();
+        self.direct(k, 0, output_rate)
+    }
+
+    /// Stops the music, with no track to follow (the program leaves a
+    /// screen with music for one that has none of its own).
     pub fn stop(&mut self) {
-        self.started = false;
+        self.phase = Phase::Off;
         self.state = State::Idle;
     }
 
@@ -627,9 +771,36 @@ impl Music {
         }
     }
 
-    /// The updates that picked since the last call, oldest first.
+    /// The updates and starts since the last call, oldest first.
     pub fn take_log(&mut self) -> Vec<Update> {
         std::mem::take(&mut self.log)
+    }
+
+    /// A direct start of entry `k` (claims 11 and 12), not by a pick: it
+    /// plays whether or not it is available, unless it fails, and it makes
+    /// no ranged draw. `None` for `k` silences the music.
+    fn direct(&mut self, k: Option<usize>, c: i64, output_rate: u32) -> Option<MusicVoice> {
+        let Some(k) = k else {
+            self.state = State::Idle;
+            return None;
+        };
+        self.start(k, c, output_rate)
+    }
+
+    /// Starts entry `k` at pass time `c`: opens its file.
+    fn start(&mut self, k: usize, c: i64, output_rate: u32) -> Option<MusicVoice> {
+        self.state = State::Track {
+            entry: k,
+            c0: c,
+            t: None,
+        };
+        let load = self.source.open(k);
+        let pending = matches!(load, Load::Pending);
+        let voice = self.loaded(load, output_rate);
+        if pending || voice.is_some() {
+            self.log.push(Update::Started(k));
+        }
+        voice
     }
 
     /// A finished read: the track plays, or its start fails.
@@ -640,11 +811,11 @@ impl Music {
         let parsed = match load {
             Load::Pending => return None,
             Load::Failed => None,
-            Load::Ready(bytes) => WavInfo::parse(&bytes).ok().map(|i| (i, bytes)),
+            Load::Ready(bytes) => playable(&bytes, bytes.len()).map(|i| (i, bytes)),
         };
         match parsed {
             Some((info, bytes)) => {
-                // spec: S-0703 claim 10 (the logical duration counts from the pass at which the track started)
+                // spec: S-0703 claim 10 (the logical duration counts from the pass at which the track started, and is that of the sample data it actually plays)
                 let t = logical_ms(info.frames(bytes.len()), info.sample_rate);
                 self.state = State::Track {
                     entry,
@@ -655,7 +826,7 @@ impl Music {
             }
             None => {
                 // spec: S-0703 claim 8 and State and ordering (a file that cannot be opened: silence; the next update picks again; the entry stays the ended track)
-                // Q-1832 (interim: a file that does not parse as a sound file fails like one that cannot be opened)
+                // spec: S-0703 claim 8a (a present file that does not parse as a playable sound: a failed start, with the same result as a missing file)
                 self.state = State::Idle;
                 self.log.push(Update::Failed(entry));
                 None
@@ -683,18 +854,32 @@ impl Music {
         half_span: bool,
         output_rate: u32,
     ) -> Option<Option<MusicVoice>> {
-        // spec: S-0703 Terms and State and ordering (no pick before music has started)
         // spec: S-0703 claim 9 (an empty list: no pick, no draw)
-        if !self.started || self.db.is_empty() {
+        if self.db.is_empty() {
             return None;
         }
-        match self.state {
-            // spec: S-0703 claim 10 (a track finishes at the first pass with C ≥ C0 + T)
-            State::Track { c0, t: Some(t), .. } if c >= c0.saturating_add(t) => {}
-            // A read under way, or a track still playing: nothing.
-            State::Track { .. } => return None,
-            // spec: S-0703 State and ordering (music started, no track playing: a pick)
-            State::Idle => {}
+        match self.phase {
+            Phase::Armed => {
+                // spec: S-0703 claim 10 (music started begins with claim 11's first start after loading, even when that pick starts nothing)
+                self.phase = Phase::Started;
+                if let Some(k) = self.theme {
+                    // spec: S-0703 claim 11 (the map theme's entry is started first, directly, whether or not it is available, with no ranged draw; it becomes the ended track)
+                    // spec: S-0703 claim 11 (our engine: the first start is made at the music update of the game's first audio pass)
+                    self.ended = Some(k);
+                    return Some(self.start(k, c, output_rate));
+                }
+                // spec: S-0703 claim 11 (otherwise the first track is chosen by an ordinary pick with no ended track)
+            }
+            Phase::Started => match self.state {
+                // spec: S-0703 claim 10 (a track finishes at the first pass with C ≥ C0 + T)
+                State::Track { c0, t: Some(t), .. } if c >= c0.saturating_add(t) => {}
+                // A read under way, or a track still playing: nothing.
+                State::Track { .. } => return None,
+                // spec: S-0703 State and ordering (music started, no track playing: a pick)
+                State::Idle => {}
+            },
+            // spec: S-0703 Terms and State and ordering (no pick before music has started; none with the in-game music setting off, claim 11; none at the end screen or in the menus, claims 12 and 13)
+            Phase::Off | Phase::Loading | Phase::Score | Phase::Menu => return None,
         }
         // spec: S-0703 claim 3 and Edge cases (the pick at every music volume: the volume never adds or removes a draw)
         let next = next_track(
@@ -715,18 +900,36 @@ impl Music {
         // spec: S-0703 claim 4 (a started entry becomes the ended track whether or not its file opens; music stays started)
         self.ended = Some(k);
         // spec: S-0703 claim 10 (the track picked starts in the same pass; its logical duration counts from it)
-        self.state = State::Track {
-            entry: k,
-            c0: c,
-            t: None,
+        Some(self.start(k, c, output_rate))
+    }
+
+    /// Off the audio passes (the end screen, the menus, a loading game):
+    /// the track started directly there is timed by the output, and
+    /// `has_voice` says whether the output still plays it. Returns the
+    /// voice to start (`Some(None)` silences, `None` leaves it as it is).
+    pub fn screen_update(
+        &mut self,
+        has_voice: bool,
+        output_rate: u32,
+    ) -> Option<Option<MusicVoice>> {
+        let State::Track {
+            entry, t: Some(_), ..
+        } = self.state
+        else {
+            // Nothing plays, or a read is under way.
+            return None;
         };
-        let load = self.source.open(k);
-        let pending = matches!(load, Load::Pending);
-        let voice = self.loaded(load, output_rate);
-        if pending || voice.is_some() {
-            self.log.push(Update::Started(k));
+        if has_voice {
+            return None;
         }
-        Some(voice)
+        // spec: S-0703 claim 12 (our engine: on the end screen the score track has finished when its whole length has been played out; under the repeat setting or with its own repeat flag it starts again from its start at once, with no ranged draw; otherwise silence, no pick)
+        let repeat = self.settings.repeat || self.db.entries.get(entry).is_some_and(|t| t.repeat);
+        if self.phase == Phase::Score && repeat {
+            return Some(self.start(entry, 0, output_rate));
+        }
+        // nocite: our own choice for the menu and loading tracks, which play once (how menu music goes on is open, Q-1700 question 7)
+        self.state = State::Idle;
+        Some(None)
     }
 }
 
