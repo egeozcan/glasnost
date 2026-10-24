@@ -1389,6 +1389,18 @@ impl Live {
         let Some(defs) = self.slot_defs.get(&idx) else {
             return Vec::new();
         };
+        // spec: S-0405 claim 9 and Changes for other specs (revision 36, S-0108 claim 10: a building being sold, or packing up, S-0415 claim 9, keeps its slot animations drawn until the first tick of its build-down, S-0408 claim 6, and hides them from then on)
+        if self.world.obj(id).is_some_and(|o| {
+            matches!(
+                o.econ.sale,
+                Some(glasnost_sim::econ::sell::Sale {
+                    stage: glasnost_sim::econ::sell::Stage::BuildDown(_),
+                    ..
+                })
+            )
+        }) {
+            return Vec::new();
+        }
         let mut out: Vec<(slot_play::Slot, super::build::LiveSlot)> = self
             .slot_anims
             .get(&id)

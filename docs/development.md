@@ -170,7 +170,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
 | `turret_building_no_body_wrap` | S-0108 claim 6 | building body ranges are not played |
 | `turret_start_clears_damaged` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; the turret slot start and damage swaps are not played |
-| `enable_unfreezes_unpowered` | S-0108 claim 13 | slot animations do not advance, so freezing changes nothing; power is not applied to them |
+| `enable_unfreezes_unpowered` | S-0108 claim 13, S-0405 claim 10 | slot animations play, but the power rules of S-0108 claims 13 and 14 are not applied to them, so no slot freezes at a switch-off or a pulse and the switch is not consulted |
 | `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; damage swaps are not played |
 | `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
 | `anim_hide_at_level_15` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played (the played animations have *t* = 0) |
