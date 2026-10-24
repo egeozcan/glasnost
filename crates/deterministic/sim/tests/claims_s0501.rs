@@ -3329,17 +3329,57 @@ fn claim_46_crash_sets_off_a_planted_bomb_with_the_quirk_off() {
     assert!(w.obj(by).unwrap().health < h, "bomb damage at impact");
 }
 
-// spec: S-0501 claim 46 (the detonate order during the fall sets the bomb off by S-0519 claim 5 at the aircraft's position then)
+// spec: S-0501 claim 46 (the detonate order during the fall sets the bomb off by S-0519 claim 5 at the aircraft's position then) and S-0519 claims 5 and 7 (the falling carrier's health is already 0, so the one detonation cannot kill it again: no second death, loss or credit, and the bomb is gone, so impact sets off nothing)
 #[test]
 fn claim_46_detonate_order_during_the_fall() {
+    let stats = glasnost_sim::econ::stats::of;
     let (mut w, a, by, h) = bomb_crash(true);
     step(&mut w);
     assert!(w.obj(a).is_some(), "still falling");
+    let losses: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    let kills: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).kills).collect();
     glasnost_sim::bomb::detonate_order(&mut w, a);
     assert!(w.obj(a).unwrap().combat.bomb.is_none(), "gone off");
+    let hb = w.obj(by).expect("the bystander survives").health;
+    assert!(hb < h, "bomb damage in the order's tick");
+    crashed(&w, a);
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    assert_eq!(now, losses, "no second loss");
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).kills).collect();
+    assert_eq!(now, kills, "no credit");
+    assert!(run_until(&mut w, 600, |w| w.obj(a).is_none()));
+    assert_eq!(w.obj(by).unwrap().health, hb, "no second detonation");
+    let now: Vec<i32> = (0..2).map(|i| stats(&w, HouseId(i)).losses).collect();
+    assert_eq!(now, losses, "still one loss in all");
+}
+
+// spec: S-0501 claim 46 and S-0519 claims 4, 5 and 7 (a bomb whose timer comes due in the falling carrier's impact tick goes off in that turn, before the impact: one detonation, not the silent removal of quirks.crash_drops_planted_bomb)
+#[test]
+fn claim_46_bomb_due_in_the_impact_tick_goes_off_before_the_impact() {
+    // A first run finds the tick number of the impact tick.
+    let (mut w, a, _, _) = bomb_crash(true);
+    let mut last = w.tick;
+    while w.obj(a).is_some() {
+        last = w.tick;
+        step(&mut w);
+    }
+    // The same crash with the bomb due then.
+    let (mut w, a, by, h) = bomb_crash(true);
+    let delay = w.rules().combat.general.ivan.delay;
+    // spec: S-0519 F1 (the bomb goes off in the first tick n with n > t + D)
+    let planted = last.wrapping_sub(1).wrapping_sub(delay);
+    w.obj_mut(a).unwrap().combat.bomb.as_mut().unwrap().planted = planted;
+    while w.tick < last {
+        step(&mut w);
+        let o = w.obj(a).expect("still falling");
+        assert!(o.combat.bomb.is_some(), "not due before the impact tick");
+        assert_eq!(w.obj(by).unwrap().health, h, "no damage before");
+    }
+    step(&mut w);
+    assert!(w.obj(a).is_none(), "the impact came in this tick");
     assert!(
         w.obj(by).unwrap().health < h,
-        "bomb damage in the order's tick"
+        "the bomb went off in the impact tick"
     );
 }
 
