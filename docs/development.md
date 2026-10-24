@@ -2534,6 +2534,14 @@ S-0501 r41 (Q-1837, Q-1838), S-0302 r39, S-0312 r44 and S-0009 r44 (Q-1805). The
 - A hit without a warhead meets no bunker row.
 - In a network game, colours on random are drawn before the house order.
 
+### A moving hover's deploy order (M8 step A3 intake 14)
+
+S-0503 r27 claim 19 (Q-1773). The ledger, [m8-claims/intake14-S-0503.md](m8-claims/intake14-S-0503.md), holds the notes.
+- The deploy order's clear reaches a hover as the stop order's point-equality rule: midway it stops at the next cell centre, on the final leg it completes the move. Balloon-hover retention reaches hovering types.
+- A hover's readiness asks whether it is moving now, and its deploy attempt into a building waits until it holds no point. Its cell test now ignores the hover's own claims, so a hover's deploy attempt can succeed.
+- In-place deploy reads the hover height. `quirks.hover_landing_request_stands` and `quirks.hover_deployed_keeps_moving` are consulted.
+- Save format 75, AI game format 36.
+
 ### Pathing reports (M8 A4)
 
 A pathing report is what the lead saves while playing when a unit moves strangely; the replay tool explains it from the simulation's own decisions. Everything here is our own diagnostics (`// nocite: our own diagnostics`): no game rule changes, the save format stays 70 and the AI game format 31, and every golden is unchanged.
@@ -3268,7 +3276,7 @@ Finding, handed to its own step: in A1 and A2 a house never built a base and los
 
 **The finding's cause** (follow-up step, 2026-10-23, local lane on the install, never the server; counts and timings only, in `local-lane/m9/reh-ai/`). It needs no network. `crates/tools/tests/four_houses.rs` (ignored, local lane; options in its header) plays the room's setup (four rows, teams 1, 2, 1, 2, random countries and starts) on map index 30 outside the network, with the AI inside the tick or with one brain per house outside the simulation whose orders run 0 or 8 ticks later behind the bot's repeat filter, and logs when and how each house's objects leave the map. Seeds 1 to 12, each three ways, 3 000 ticks: 26 of 144 houses never got a construction yard, and 17 had nothing left at the end. 20 of the 26 still had their yard vehicle at tick 3 000. 16 of those came from the two starts near cells (110, 25) and (78, 163), where the vehicle has to move before it can deploy, and the other 4 from three other starts. There were two causes:
 
-- *The simulation* (fixed; S-0207 claim 11, S-0415 Terms and claim 2). The AI's deploy step counts a vehicle within two cells of its move goal as idle, so it gives the deploy order while the vehicle still has stored path steps. The order cleared the destination but kept the steps. S-0206's in-progress test saw them, so the vehicle never became still, never made its deploy attempt and stood in *unload* for the rest of the game (seed 1, house 1: the order at tick 196, in *unload* at (107, 25) from tick 199 to 3 000). Now the deploy order drops a driving vehicle's stored path along with its destination, as the stop and behaviour orders already do. A hover keeps its stored path until Q-1773 is answered.
+- *The simulation* (fixed; S-0207 claim 11, S-0415 Terms and claim 2). The AI's deploy step counts a vehicle within two cells of its move goal as idle, so it gives the deploy order while the vehicle still has stored path steps. The order cleared the destination but kept the steps. S-0206's in-progress test saw them, so the vehicle never became still, never made its deploy attempt and stood in *unload* for the rest of the game (seed 1, house 1: the order at tick 196, in *unload* at (107, 25) from tick 199 to 3 000). Now the deploy order drops a driving vehicle's stored path along with its destination, as the stop and behaviour orders already do. A hover follows S-0503 claim 19 (Q-1773, answered by S-0503 r27, built at A3 intake 14).
 - *The AI* (fixed). While the house had no yard, the crate step (S-0520) and the deploy-spot step both sent orders to the yard vehicle, and the two orders alternated: the vehicle went back and forth between (64, 162) and (66, 161) for 2 800 ticks (seed 2, house 1). With the simulation fix alone it still did. The crate step no longer picks a vehicle that deploys into a construction yard.
 
 What follows from either cause: the house builds nothing, its army leaves on the opening wave, an enemy wave that reaches the start kills the yard vehicle, and the short-game defeat (S-0414 claims 2 and 5) removes everything else in the same tick. For example, in seed 12 house 3's vehicle was killed at tick 1 574 by house 0's tanks.

@@ -125,6 +125,12 @@ pub struct HoverState {
     /// the locomotor takes, and by stopping, completion or failure.
     #[serde(default)]
     pub stopped: Option<Target>,
+    /// The landing request of an in-place deploy step (S-0517 claim 5) made
+    /// while the vehicle was above the ground (S-0503 claim 19): no rule of
+    /// hovering movement acts on it or ends it
+    /// (`quirks.hover_landing_request_stands`).
+    #[serde(default)]
+    pub landing_request: bool,
 }
 
 impl HoverState {
@@ -154,6 +160,7 @@ impl HoverState {
             held: None,
             off: false,
             stopped: None,
+            landing_request: false,
         }
     }
 }
@@ -1336,6 +1343,57 @@ pub fn stop_request(w: &mut World, id: ObjectId) {
         h.held = None;
         h.stopped = dest;
     });
+}
+
+/// Whether a landing request of an in-place deploy step stands (claim 19).
+pub fn landing_requested(w: &World, id: ObjectId) -> bool {
+    state(w, id).is_some_and(|h| h.landing_request)
+}
+
+/// An in-place deploy step of a landing-first type above the ground makes
+/// the landing request (claim 19, S-0517 claim 5).
+pub fn request_landing(w: &mut World, id: ObjectId) {
+    with(w, id, |h| h.landing_request = true);
+}
+
+/// A standing landing request treated as met (claim 19,
+/// `quirks.hover_landing_request_stands` off).
+pub fn landing_met(w: &mut World, id: ObjectId) {
+    with(w, id, |h| h.landing_request = false);
+}
+
+/// The vehicle becomes deploying or deployed in place (claim 19, S-0517
+/// claims 4 and 9): `deployed` when it becomes deployed. The order-level
+/// destination is replaced by none (S-0517 claim 9), but no rule clears the
+/// locomotor's *D*, the stored path or the heading point, so a *D* the
+/// locomotor has taken stays as its own point and the hover finishes the
+/// movement it holds (`quirks.hover_deployed_keeps_moving`). With that
+/// switch off, becoming deployed drops *D* and the stored path as claim 19's
+/// unequal row does, and the hover finishes only the leg to its heading
+/// point.
+pub fn deploying(w: &mut World, id: ObjectId, deployed: bool) {
+    let Some(o) = w.obj(id) else { return };
+    let Some(h) = o.hover.as_ref() else { return };
+    if o.dest.is_some() && h.for_dest == o.dest {
+        // spec: S-0503 claim 19 (becoming deployed stops nothing: no rule clears a hover's D, and hovering movement does not test the deployed state); S-0517 claim 9 (the order-level destination is replaced by none)
+        let d = destination_point(w, id);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.dest = None;
+        }
+        with(w, id, |h| {
+            h.for_dest = None;
+            h.held = None;
+            h.stopped = None;
+            h.retained = d;
+        });
+    }
+    if deployed && !w.rules().quirks.hover_deployed_keeps_moving {
+        // spec: S-0503 Edge cases (quirks.hover_deployed_keeps_moving off: becoming deployed drops D and the stored path as claim 19's unequal row; the heading point is kept)
+        drop_dest(w, id);
+        if let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
+    }
 }
 
 /// The spin (claim 10, F7) and, when it ends, the sinking test (claim 11).

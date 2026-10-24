@@ -1372,11 +1372,11 @@ pub struct Quirks {
     // spec: S-0503 claim 13, Edge cases
     #[serde(default = "on")]
     pub hover_flag_clear_height_only: bool,
-    /// A landing-first in-place hover whose first deploy step found it above the ground keeps its landing request while it hovers, so it never deploys and *unload* stays current; off: a hover no longer moving treats a standing landing request as met, and its next deploy step deploys it by S-0517 claim 4's height-0 rows. Not consulted yet: S-0503 r27 is taken in by a later intake.
+    /// A landing-first in-place hover whose first deploy step found it above the ground keeps its landing request while it hovers, so it never deploys and *unload* stays current; off: a hover no longer moving treats a standing landing request as met, and its next deploy step deploys it by S-0517 claim 4's height-0 rows.
     // spec: S-0503 claim 19, Edge cases
     #[serde(default = "on")]
     pub hover_landing_request_stands: bool,
-    /// A hover that becomes deployed in place while it still holds movement finishes that movement deployed and then stands; off: becoming deployed drops *D* and the stored path, and the hover finishes only the leg to its current heading point. Not consulted yet: S-0503 r27 is taken in by a later intake.
+    /// A hover that becomes deployed in place while it still holds movement finishes that movement deployed and then stands; off: becoming deployed drops *D* and the stored path, and the hover finishes only the leg to its current heading point.
     // spec: S-0503 claim 19, Edge cases
     #[serde(default = "on")]
     pub hover_deployed_keeps_moving: bool,
