@@ -362,6 +362,7 @@ pub fn sync_listing(w: &mut World, id: ObjectId) {
     }
     let Some(o) = w.obj(id) else { return };
     if !o.on_map {
+        crate::combat::flying::unregister(w, id);
         return;
     }
     let cell = o.pos.cell();
@@ -375,6 +376,33 @@ pub fn sync_listing(w: &mut World, id: ObjectId) {
         } else if listed {
             w.cells.leave(cell, l, id);
         }
+    }
+    sync_tracking(w, id);
+}
+
+/// Keeps an aircraft's registration as a tracked flying object (S-0303
+/// Terms: an aircraft-kind object in ordinary flight) in line with this
+/// spec's in-flight test, and its sector with its cell. The boundaries are
+/// the interim rule of Q-1845, which S-0501 does not give: registered while
+/// in flight (the test of [`on_ground`] fails, exactly when no cell lists
+/// it, S-0209 claim 13), not on the ground or off the map, and its sector
+/// updated at every movement update in flight.
+fn sync_tracking(w: &mut World, id: ObjectId) {
+    // spec: S-0303 Terms (an aircraft in ordinary flight is a tracked flying object); S-0501 Terms (in flight: not on the ground); Q-1845 (interim: these are the boundaries)
+    if w.obj(id).is_some_and(|o| o.on_map) && !on_ground(w, id) {
+        // spec: S-0303 claim 11 (a newly tracked object follows every object already registered)
+        crate::combat::flying::register(w, id);
+        crate::combat::flying::moved(w, id);
+    } else {
+        crate::combat::flying::unregister(w, id);
+    }
+}
+
+/// An aircraft goes off the map (inside a transport or building): it stops
+/// being a tracked flying object (S-0303 Terms; Q-1845 interim).
+pub fn leaving_map(w: &mut World, id: ObjectId) {
+    if is_aircraft(w, id) {
+        crate::combat::flying::unregister(w, id);
     }
 }
 
