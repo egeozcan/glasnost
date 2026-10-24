@@ -121,7 +121,11 @@ fn cell(dx: i32, dy: i32) -> CellXY {
 /// The world: houses 0 and 1 are players, 2 neutral and 3 the special
 /// house; the test vehicle at (−6, 0) from T's cell, T a buggy of house 1.
 fn setup(r: &Ruleset, with_t: bool) -> S {
-    let mut w = testkit::game_with_non_players(r, N, 11);
+    setup_seed(r, with_t, 11)
+}
+
+fn setup_seed(r: &Ruleset, with_t: bool, seed: u32) -> S {
+    let mut w = testkit::game_with_non_players(r, N, seed);
     let a = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, cell(-6, 0), 0);
     let t = with_t.then(|| testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, cell(0, 0), 0));
     S { w, a, t }
@@ -1224,4 +1228,391 @@ fn rad(mut r: Ruleset) -> Ruleset {
     g.rad_light_delay = Some(60);
     g.rad_level_factor = Some(d("0.0625"));
     r
+}
+
+// ---------------------------------------------------------------- seams sweep 1 (M8): parts of SH1, SH5 and SH8 not yet tested
+
+/// Registers a wall overlay type of our own, of the given strength.
+fn wall_type(r: &mut Ruleset, strength: i32) {
+    r.registries
+        .entry("overlays".into())
+        .or_default()
+        .push("RAMPART".into());
+    r.sim.overlays.insert(
+        "RAMPART".into(),
+        glasnost_rules::sim::OverlayType {
+            has_art: Some(true),
+            wall: Some(true),
+            strength: Some(strength),
+            damage_levels: Some(3),
+            armor: Some("steel".into()),
+            ..Default::default()
+        },
+    );
+}
+
+// spec: S-0318 claim 1 and State and ordering, scenario SH1 part p (a wall hit in the shot's own area damage takes its draw after the burst's six ranged draws: the 3 random-cell fragments land where draws 1 to 6 give, and the wall's outcome agrees with the 7th draw R(0, T_w))
+#[test]
+fn sh1p_wall_hit_draw_follows_the_burst_draws() {
+    let mut r = base(8);
+    wall_type(&mut r, 100);
+    {
+        let h = r.sim.warheads.get_mut("Pin").unwrap();
+        h.wall = Some(true);
+        h.cell_spread = Some(d("1"));
+    }
+    let mut told_apart = 0;
+    for seed in 1..=40 {
+        let mut s = setup_seed(&r, true, seed);
+        around(&mut s);
+        let wall = cell(0, 1);
+        let ov =
+            s.w.rules()
+                .overlays
+                .iter()
+                .position(|o| o.name == "RAMPART")
+                .unwrap() as u8;
+        {
+            let c = s.w.cells.grid.get_mut(wall).unwrap();
+            c.overlay = ov;
+            c.overlay_data = 0;
+        }
+        let h = half(&s.w);
+        let shot = wp(&s.w, "Shot");
+        let p = s.w.obj(s.a).unwrap().pos;
+        let t = s.t.unwrap();
+        let id = launch(&mut s.w, s.a, shot, Target::Object(t), p, SHOT).unwrap();
+        // The draws come from the state at the shot's detonation; the shot
+        // takes its turn alone (the tick's other objects draw as well).
+        let first = s.w.rng.clone().ranged(0, 100, h);
+        let (_, mut after_six) = drawn(&s.w, 3);
+        let seventh = after_six.ranged(0, 100, h);
+        glasnost_sim::combat::projectile::turn(&mut s.w, id);
+        let hit = s.w.cells.cell(wall).unwrap().overlay_data != 0;
+        assert_eq!(hit, SHOT > seventh, "seed {seed}: the 7th draw");
+        if (SHOT > first) != (SHOT > seventh) {
+            told_apart += 1;
+        }
+    }
+    assert!(told_apart > 0, "the seeds tell the two orders apart");
+}
+
+/// `base(count)` with the shot's projectile an airburst one that names a
+/// test airburst weapon of its own (S-0306 claim 21).
+fn airburst_rules(count: i32) -> Ruleset {
+    let mut r = base(count);
+    ball(&mut r).airburst = Some(true);
+    ball(&mut r).airburst_weapon = Some("Burst".into());
+    r.sim.weapons.insert(
+        "Burst".into(),
+        WeaponType {
+            damage: Some(9),
+            range: Some(d("6")),
+            speed: Some(77),
+            projectile: Some("Pellet".into()),
+            warhead: Some("Prick".into()),
+            ..Default::default()
+        },
+    );
+    r.sim.projectiles.insert(
+        "Pellet".into(),
+        ProjectileType {
+            inviso: Some(true),
+            ..Default::default()
+        },
+    );
+    r
+}
+
+// spec: S-0318 claim 1 and State and ordering, scenario SH5 part c (an airburst projectile bursts once, before its area damage and its nine children: the 5 surrounding vehicles are candidates, the 6 ranged draws R(-2, 2) come first, then the draws of the detonation, then the nine draws R(0, 32), and no draw R(256, 512))
+#[test]
+fn sh5c_airburst_bursts_before_its_area_damage_and_children() {
+    let r = airburst_rules(8);
+    let mut s = setup(&r, true);
+    let v = around(&mut s);
+    let id = {
+        let shot = wp(&s.w, "Shot");
+        let p = s.w.obj(s.a).unwrap().pos;
+        let t = s.t.unwrap();
+        launch(&mut s.w, s.a, shot, Target::Object(t), p, SHOT).unwrap()
+    };
+    let (cells, after_six) = drawn(&s.w, 3);
+    // The control: the same shot with no fragments, from the state the six
+    // draws leave. Its draws are the detonation's, then the nine children's.
+    let mut c = setup(&airburst_rules(0), true);
+    around(&mut c);
+    let shot = wp(&c.w, "Shot");
+    let p = c.w.obj(c.a).unwrap().pos;
+    let ct = c.t.unwrap();
+    let cid = launch(&mut c.w, c.a, shot, Target::Object(ct), p, SHOT).unwrap();
+    c.w.rng = after_six;
+    glasnost_sim::combat::projectile::turn(&mut c.w, cid);
+    glasnost_sim::combat::projectile::turn(&mut s.w, id);
+    let mut want = objs(&v);
+    want.extend(cells);
+    let got: Vec<Target> = frags(&s)
+        .iter()
+        .filter(|p| p.chain == 1)
+        .filter_map(|p| p.target)
+        .collect();
+    assert_eq!(got, want, "the 5 candidates, then the 3 drawn cells");
+    assert_eq!(s.w.rng, c.w.rng, "six ranged draws, then the rest in order");
+    let kids = s.w.projectiles.values().filter(|p| p.chain == 0).count();
+    assert_eq!(kids, 9, "the nine children are launched");
+    assert!(
+        s.w.projectiles
+            .values()
+            .all(|p| p.chain >= 1 || p.damage == 9),
+        "the children carry the airburst weapon's damage"
+    );
+}
+
+/// Fires a visible, slow, straight shot at `target` and runs until it is
+/// gone (at most 400 ticks).
+fn fly(s: &mut S, target: Target) {
+    let shot = wp(&s.w, "Shot");
+    let mut p = s.w.obj(s.a).unwrap().pos;
+    p.z += 20;
+    // The aim is the firer's current target (S-0306 claim 3 and its quirk).
+    s.w.obj_mut(s.a).unwrap().target = Some(target);
+    let id = launch(&mut s.w, s.a, shot, target, p, SHOT).expect("a shot");
+    for _ in 0..400 {
+        if !s.w.projectiles.contains_key(&id) {
+            // The fragments take their turns in the ticks after.
+            testkit::run(&mut s.w, 5);
+            return;
+        }
+        testkit::run(&mut s.w, 1);
+    }
+    panic!("the shot never arrived");
+}
+
+// spec: S-0318 claim 1 (the burst is judged at the burst point, not at the detonation point that S-0306 claim 20 (c) may move to a building's aim shift) and Terms, scenario SH1 part r (run 1: a building at T's cell with an aim shift of 256 towards (1, 0) where an enemy vehicle stands: the burst cell is the building's, first-listed there, so no object loses the fragment's damage; run 2, control: the vehicle at T gives the fragments of part a)
+#[test]
+fn sh1r_burst_point_against_detonation_point() {
+    let visible = |r: &mut Ruleset| {
+        ball(r).inviso = None;
+        r.sim.general.gravity = Some(0);
+    };
+    // Run 1.
+    let mut r = base(3);
+    visible(&mut r);
+    r.sim
+        .buildings
+        .get_mut("TOWER")
+        .unwrap()
+        .target_coord_offset = Some([256, 0, 0]);
+    let mut s = setup(&r, false);
+    let v = around(&mut s);
+    let b = testkit::spawn(&mut s.w, Kind::Building, "TOWER", 1, cell(0, 0), 0);
+    let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
+    fly(&mut s, Target::Object(b));
+    let got = lost(&s, &v, &before);
+    assert!(
+        got.iter().all(|&l| l == 0 || l == SHOT),
+        "no object loses the fragment's damage: {got:?}"
+    );
+    assert!(
+        got[1] == SHOT,
+        "the detonation point did move to the target point in (1, 0): {got:?}"
+    );
+    // Run 2, the control.
+    let mut r = base(3);
+    visible(&mut r);
+    let mut s = setup(&r, true);
+    let v = around(&mut s);
+    let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
+    let t = s.t.unwrap();
+    fly(&mut s, Target::Object(t));
+    assert_eq!(lost(&s, &v, &before), vec![FRAG, FRAG, FRAG, 0, 0]);
+}
+
+// spec: S-0318 claim 3 and Edge cases, scenario SH8 part d (the scan ignores the fragment projectile's anti-air and anti-ground flags: run 1 anti-ground off and anti-air on, run 2 both off; the three fragments still go to (0, -1), (1, 0) and (0, 2) and no draw R(-2, 2) is taken)
+#[test]
+fn sh8d_flags_of_the_fragment_projectile_are_ignored() {
+    for (ag, aa) in [(false, true), (false, false)] {
+        let mut r = base(3);
+        r.sim.projectiles.get_mut("Bit").unwrap().ag = Some(ag);
+        r.sim.projectiles.get_mut("Bit").unwrap().aa = Some(aa);
+        let mut s = setup(&r, true);
+        let v = around(&mut s);
+        let pr = shoot_t(&mut s);
+        let rng = s.w.rng.clone();
+        burst(&mut s, &pr);
+        assert_eq!(targets(&s), objs(&v[..3]), "ag {ag} aa {aa}");
+        assert_eq!(s.w.rng, rng, "ag {ag} aa {aa}: no draw");
+    }
+}
+
+// spec: S-0318 claim 3 and Edge cases, scenario SH8 part e (the scan lists the ground layer only: an aircraft in the air over (0, -1) is unhurt and passed over, the fragments go to (1, 0), (0, 2) and (3, 0), and no draw R(-2, 2) is taken)
+#[test]
+fn sh8e_an_aircraft_in_the_air_is_not_a_candidate() {
+    let mut r = base(3);
+    r.registries.insert("aircraft".into(), vec!["PLANE".into()]);
+    r.sim.aircraft.insert(
+        "PLANE".into(),
+        glasnost_rules::sim::UnitType {
+            strength: Some(5000),
+            locomotor: Some(glasnost_rules::sim::Locomotor::Fly),
+            ..Default::default()
+        },
+    );
+    let mut s = setup(&r, true);
+    let v: Vec<ObjectId> = AROUND[1..]
+        .iter()
+        .map(|&(x, y)| put(&mut s, 1, x, y))
+        .collect();
+    let plane = testkit::spawn(&mut s.w, Kind::Aircraft, "PLANE", 1, cell(0, -1), 0);
+    s.w.obj_mut(plane).unwrap().pos.z += 1000;
+    // Climbing removes the listing (S-0209 claim 13).
+    glasnost_sim::air::sync_listing(&mut s.w, plane);
+    assert!(
+        !s.w.cells
+            .list(cell(0, -1), glasnost_sim::world::Layer::Ground)
+            .contains(&plane),
+        "an aircraft at positive listing height is not listed"
+    );
+    assert!(
+        glasnost_sim::combat::weapon::in_air(&s.w, plane),
+        "void unless the aircraft is in the air over (0, -1)"
+    );
+    assert_eq!(s.w.obj(plane).unwrap().pos.cell(), cell(0, -1));
+    let pr = shoot_t(&mut s);
+    let rng = s.w.rng.clone();
+    burst(&mut s, &pr);
+    assert_eq!(targets(&s), objs(&v[..3]), "(1, 0), (0, 2) and (3, 0)");
+    assert_eq!(s.w.rng, rng, "no draw");
+    assert_eq!(health(&s, plane), s.w.rules().aircraft[0].strength);
+}
+
+/// `base(count)` with a cloaking vehicle type GHOST of house B's (an
+/// unarmed copy of BUGGY that cloaks by itself, S-0516 claims 2 and 5).
+fn cloak_rules(count: i32) -> Ruleset {
+    let mut r = base(count);
+    {
+        let g = &mut r.sim.general;
+        g.cloaking_stages = Some(8);
+        g.cloak_delay = Some(d("0.01"));
+    }
+    let mut ghost = r.sim.vehicles["BUGGY"].clone();
+    ghost.combat.cloakable = Some(true);
+    ghost.combat.cloaking_speed = Some(2);
+    r.sim.vehicles.insert("GHOST".into(), ghost);
+    r.registries
+        .get_mut("vehicles")
+        .expect("vehicle registry")
+        .push("GHOST".into());
+    r
+}
+
+// spec: S-0318 claim 3 and Edge cases, scenario SH8 part a (the scan has no visibility test: a fully cloaked vehicle at (0, -1), with no sensor of house A anywhere, receives the first fragment, the others go to (1, 0) and (0, 2), (3, 0) is unhurt and no draw R(-2, 2) is taken)
+#[test]
+fn sh8a_a_cloaked_vehicle_is_a_candidate() {
+    let r = cloak_rules(3);
+    let mut s = setup(&r, true);
+    let ghost = testkit::spawn(&mut s.w, Kind::Vehicle, "GHOST", 1, cell(0, -1), 0);
+    let mut v = vec![ghost];
+    v.extend(AROUND[1..].iter().map(|&(x, y)| put(&mut s, 1, x, y)));
+    testkit::run(&mut s.w, 60);
+    assert_eq!(
+        glasnost_sim::cloak::state(&s.w, ghost),
+        glasnost_sim::cloak::CloakState::Cloaked,
+        "void unless fully cloaked at the shot"
+    );
+    let pr = shoot_t(&mut s);
+    let rng = s.w.rng.clone();
+    burst(&mut s, &pr);
+    assert_eq!(targets(&s), objs(&v[..3]));
+    assert_eq!(s.w.rng, rng, "no draw");
+}
+
+// spec: S-0318 claim 3 and Edge cases, scenario SH8 part c (the alliance test reads the object's true owner, so a disguise plays no part: a house-B infantry unit disguised with house A as its disguise house, at (0, -1), receives the first fragment, and (3, 0) is unhurt)
+#[test]
+fn sh8c_a_disguise_plays_no_part() {
+    use glasnost_sim::cloak::{Disguise, DisguiseAs};
+    let mut s = setup(&base(3), true);
+    let inf = testkit::spawn(&mut s.w, Kind::Infantry, "WALKER", 1, cell(0, -1), 0);
+    let walker = s.w.rules().index_of(Kind::Infantry, "WALKER").unwrap();
+    let tick = s.w.tick;
+    s.w.obj_mut(inf).unwrap().cloak.disguise = Some(Disguise {
+        what: Some(DisguiseAs::Infantry(walker)),
+        house: Some(HouseId(0)),
+        since: tick,
+    });
+    let mut v = vec![inf];
+    v.extend(AROUND[1..].iter().map(|&(x, y)| put(&mut s, 1, x, y)));
+    let pr = shoot_t(&mut s);
+    let rng = s.w.rng.clone();
+    burst(&mut s, &pr);
+    assert_eq!(targets(&s), objs(&v[..3]));
+    assert_eq!(s.w.rng, rng, "no draw");
+}
+
+// spec: S-0318 claim 3 and Edge cases, scenario SH8 part b (the scan has no visibility test: with the shroud on, fragment count 4 and house A never having seen the cell (3, 0), the fourth fragment goes to the vehicle in (3, 0) and no draw R(-2, 2) is taken)
+#[test]
+fn sh8b_a_shrouded_vehicle_is_a_candidate() {
+    use glasnost_sim::econ::shroud;
+    let mut r = base(4);
+    r.sim.vehicles.get_mut("CART").unwrap().sight = Some(7);
+    let mut s = setup(&r, true);
+    let v = around(&mut s);
+    testkit::run(&mut s.w, 3);
+    let a = HouseId(0);
+    assert!(
+        !shroud::seen(&s.w, a, cell(3, 0)) && !shroud::explored(&s.w, a, cell(3, 0)),
+        "void if house A has seen (3, 0)"
+    );
+    assert!(
+        shroud::explored(&s.w, a, cell(-6, 0)),
+        "the shroud is on and the test vehicle sees"
+    );
+    let pr = shoot_t(&mut s);
+    let rng = s.w.rng.clone();
+    burst(&mut s, &pr);
+    assert_eq!(targets(&s), objs(&v[..4]), "the fourth is in (3, 0)");
+    assert_eq!(s.w.rng, rng, "no draw");
+}
+
+/// Puts `id` on the bridge deck of its cell: out of the ground layer, into
+/// the deck layer, 416 leptons up (S-0209 claim 15, S-0307 Constants).
+fn to_deck(s: &mut S, id: ObjectId) {
+    let c = s.w.obj(id).unwrap().pos.cell();
+    s.w.cells.leave(c, glasnost_sim::world::Layer::Ground, id);
+    s.w.cells
+        .enter(c, glasnost_sim::world::Layer::Deck, id, false);
+    let o = s.w.obj_mut(id).unwrap();
+    o.layer = glasnost_sim::world::Layer::Deck;
+    o.pos.z += 416;
+}
+
+// spec: S-0318 claim 1 (b), claim 3 and Edge cases (high bridges), scenario SH8 part f run 1 (T on the bridge deck over a cell whose ground layer lists nothing: no object is first-listed in the burst cell, so no fragment is launched and no draw R(-2, 2) is taken, though enemy vehicles stand on land within 3 cells)
+#[test]
+fn sh8f_run_1_a_target_on_the_deck_launches_no_fragments() {
+    let mut s = setup(&base(3), true);
+    around(&mut s);
+    let t = s.t.unwrap();
+    to_deck(&mut s, t);
+    assert!(
+        s.w.cells
+            .list(cell(0, 0), glasnost_sim::world::Layer::Ground)
+            .is_empty()
+    );
+    let pr = shoot_t(&mut s);
+    let rng = s.w.rng.clone();
+    burst(&mut s, &pr);
+    assert!(frags(&s).is_empty(), "no fragments");
+    assert_eq!(s.w.rng, rng, "no draw");
+}
+
+// spec: S-0318 claim 3 and Edge cases (high bridges), scenario SH8 part f run 2 (T on land beside the bridge, fragment count 1, the only other house-B vehicle on the deck over a cell of ring 1: the scan gives it no fragment, so the fragment goes by claim 4 with 2 draws R(-2, 2))
+#[test]
+fn sh8f_run_2_a_vehicle_on_the_deck_is_not_a_candidate() {
+    let mut s = setup(&base(1), true);
+    let deck = put(&mut s, 1, 0, -1);
+    to_deck(&mut s, deck);
+    let pr = shoot_t(&mut s);
+    let (cells, after) = drawn(&s.w, 1);
+    burst(&mut s, &pr);
+    assert_eq!(targets(&s), cells, "the fragment goes to a drawn cell");
+    assert_eq!(s.w.rng, after, "2 draws");
 }
