@@ -3,7 +3,7 @@ id: Q-1830
 title: How music starts in a skirmish, and what the first pick is relative to
 status: open
 related: [S-0703, S-0701, Q-1700]
-answered-by: []
+answered-by: [S-0703]
 ---
 
 ## Need
