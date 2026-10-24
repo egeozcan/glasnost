@@ -104,7 +104,9 @@ pub struct EconFields {
     #[serde(default)]
     pub powered_unit: Option<bool>,
     /// Units: `ConsideredAircraft`, the counts-as-aircraft flag of the
-    /// sidebar order (S-0004 claim 11 rule 3); absent: no.
+    /// sidebar order (S-0004 claim 11 rule 3) and of tracking from a
+    /// placement in the air (S-0502 claim 29, S-0501 claim 47); absent: no,
+    /// yes for an aircraft type (S-0501 Import mapping).
     #[serde(default)]
     pub considered_aircraft: Option<bool>,
     /// Aircraft: `AirportBound` (S-0407 claim 16); absent: no.

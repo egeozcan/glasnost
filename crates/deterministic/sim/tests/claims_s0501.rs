@@ -299,6 +299,56 @@ fn attack_take_off_run_return_rearm() {
     assert!(full_ammo, "rearms: {}", describe(&w, a));
 }
 
+// spec: S-0501 claim 47 (a) (leaving a pad is a take-off: tracked from it) and (b) (tracked until the accepted touchdown on the pad, through the landing; an aircraft at rest on its pad, built there or docked again, is never tracked)
+#[test]
+fn claim_47_tracked_from_the_pad_to_the_pad() {
+    use glasnost_sim::combat::flying;
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    let (mut w, k, a) = built_with(&r, "JET");
+    for _ in 0..10 {
+        step(&mut w);
+        assert!(
+            !flying::tracked(&w, a),
+            "built, docked: {}",
+            describe(&w, a)
+        );
+    }
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 10, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    assert!(run_until(&mut w, 200, |w| !st(w, a).ground));
+    assert!(
+        flying::tracked(&w, a),
+        "from leaving the pad: {}",
+        describe(&w, a)
+    );
+    assert!(run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0));
+    let mut landing = 0;
+    let down = run_until(&mut w, 3000, |w| {
+        let s = st(w, a);
+        if s.ground {
+            return true;
+        }
+        assert!(flying::tracked(w, a), "in flight: {}", describe(w, a));
+        if s.landing {
+            landing += 1;
+        }
+        false
+    });
+    assert!(down, "{}", describe(&w, a));
+    assert!(landing > 1, "a landing of several updates");
+    assert_eq!(w.obj(a).unwrap().contact, Some(k), "on its pad");
+    assert!(
+        !flying::tracked(&w, a),
+        "touchdown on the pad: {}",
+        describe(&w, a)
+    );
+    for _ in 0..30 {
+        step(&mut w);
+        assert!(!flying::tracked(&w, a), "docked: {}", describe(&w, a));
+    }
+}
+
 // spec: S-0501 claim 24 and S-0524 claim 14 (ordinary pad landing, docking and departure add no entered-by raise on the pad's object tag and no destroyed-by-anything raise on the aircraft's own tag; C16)
 #[test]
 fn claim_24_pad_docking_raises_no_tag() {
@@ -400,6 +450,44 @@ fn carrier_launches_attacks_and_recovers() {
         slots.iter().all(|s| s.object.is_some()),
         "both slots hold their aircraft again"
     );
+}
+
+// spec: S-0501 claim 47 (a) (a slot aircraft launched on the ground inside the usable area, claim 35, is first tracked when its take-off starts) and (b) (going inside its carrier ends the tracking)
+#[test]
+fn claim_47_a_launched_slot_aircraft_is_tracked_from_its_take_off() {
+    use glasnost_sim::combat::flying;
+    let mut w = game(&rules());
+    ready(&mut w);
+    let c = put(&mut w, Kind::Vehicle, "CARRIER", 0, 0, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    testkit::run(&mut w, 2);
+    click(&mut w, c, ClickOn::Object(v));
+    let mut seen = std::collections::BTreeSet::new();
+    let mut flew = 0;
+    for _ in 0..6000 {
+        step(&mut w);
+        let on: Vec<ObjectId> = w
+            .objects
+            .values()
+            .filter(|o| o.kind == Kind::Aircraft && o.on_map)
+            .map(|o| o.id)
+            .collect();
+        for &h in &on {
+            seen.insert(h);
+            let ground = st(&w, h).ground;
+            assert_eq!(flying::tracked(&w, h), !ground, "{}", describe(&w, h));
+            if !ground {
+                flew += 1;
+            }
+        }
+        if on.is_empty() && !seen.is_empty() {
+            break;
+        }
+    }
+    assert!(seen.len() == 2 && flew > 100, "both launched and flew");
+    for &h in &seen {
+        assert!(!flying::tracked(&w, h), "inside its carrier");
+    }
 }
 
 // ---------------------------------------------------------------------------
