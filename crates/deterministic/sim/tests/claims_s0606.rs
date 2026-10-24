@@ -1314,3 +1314,40 @@ fn claim_12_released_simple_deployer_with_presentation() {
     assert_eq!(cur(&w, u), Some(Behaviour::Guard), "guard at completion");
     assert_eq!(queued(&w, u), None, "the move is replaced");
 }
+
+// spec: S-0302 claim 8, *Hits without a warhead* (scenario D34 part e: the tank-bunker row does not hold for a hit without a warhead, which counts as neither penetrating bunkers nor not; claim 7 then takes exactly 1 from an occupied undemolishable bunker, while a penetrating warhead is stopped by the row)
+#[test]
+fn s0302_d34_e_a_hit_without_a_warhead_on_an_occupied_bunker() {
+    let mut r = rules();
+    building(&mut r, "HPIT", |t| t.can_c4 = Some(false));
+    let mut w = game_on(&r);
+    let b = pit(&mut w, "HPIT");
+    let u = fill(&mut w, b, -6, 0);
+    assert!(inside(&w, u, b));
+    let bare = Hit {
+        ignore_defences: false,
+        ..hit(&w, b, None, 50)
+    };
+    let h0 = w.obj(b).unwrap().health;
+    damage::apply(&mut w, b, bare);
+    assert_eq!(
+        h0 - w.obj(b).unwrap().health,
+        1,
+        "claim 7's 1, no bunker row"
+    );
+    let pen = hit(&w, b, Some("PEN"), 50);
+    damage::apply(&mut w, b, pen);
+    assert_eq!(
+        h0 - w.obj(b).unwrap().health,
+        1,
+        "the row stops a penetrating hit"
+    );
+    // The bunkered unit: the zero-amount row stops the hit whether or not the bunkered-unit row would.
+    let hu = w.obj(u).unwrap().health;
+    let bare_u = Hit {
+        ignore_defences: false,
+        ..hit(&w, u, None, 50)
+    };
+    damage::apply(&mut w, u, bare_u);
+    assert_eq!(w.obj(u).unwrap().health, hu);
+}

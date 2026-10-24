@@ -16,7 +16,8 @@ use crate::world::{HouseId, ObjectId, World};
 pub struct Hit {
     /// Delivered damage d₀.
     pub amount: i32,
-    /// Warhead (absent for some scripted sources).
+    /// Warhead (absent for some scripted sources and for the hits of a
+    /// debris piece of a type with no warhead; S-0302 claim 1).
     pub warhead: Option<WarheadId>,
     /// Distance r in leptons from the detonation point (0 without one).
     pub distance: i32,
@@ -239,7 +240,7 @@ fn modified(w: &World, hit: &Hit, d3: i32, r: i32, class: usize) -> i32 {
     if hit.ignore_defences {
         return d3;
     }
-    // spec: S-0302 F3 case (ii) (an inert game or no warhead: 0); maps mark inertness, which our map data does not carry yet
+    // spec: S-0302 F3 case (ii) and claim 6 (an inert game or no warhead: 0, such as a debris piece of a type with no warhead, S-0317 claim 7); maps mark inertness, which our map data does not carry yet
     let Some(h) = hit.warhead else { return 0 };
     if d3 < 0 {
         // spec: S-0302 F3 cases (iii) and (iv) (a negative amount: itself below 8 leptons, else 0)
@@ -400,7 +401,7 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
         .attacker
         .and_then(|a| w.obj(a))
         .is_some_and(|a| w.allied(a.owner, o.owner));
-    // spec: S-0302 claim 8 (stage 2 rows: radiation, psychic, poison immunities; allies)
+    // spec: S-0302 claim 8 (stage 2 rows: radiation, psychic, poison immunities; allies); *Hits without a warhead* (none of them holds for a hit without one)
     let stage2 = wh.as_ref().is_some_and(|h| {
         (h.radiation && tc.immune_radiation)
             || (h.psychic && tc.immune_psionic_weapons)
@@ -408,16 +409,17 @@ pub fn apply(w: &mut World, target: ObjectId, hit: Hit) -> HitResult {
             || (!h.affects_allies && allied_attacker)
     });
     // spec: S-0302 claim 8 (stage 2 bunker rows, + and − hits: a tank bunker holding a bunkered unit hit by a bunker-penetrating warhead; a bunkered unit hit by a warhead that does not penetrate bunkers)
-    let penetrates = wh.as_ref().is_some_and(|h| h.penetrates_bunker);
+    // spec: S-0302 claim 8, *Hits without a warhead* (revision 39: neither bunker row holds for a hit without a warhead, which counts as neither penetrating bunkers nor not penetrating them)
+    let penetrates = wh.as_ref().map(|h| h.penetrates_bunker);
     let bunker_row = !ign
         && ((crate::structures::bunker::is_bunker(w, target)
             && crate::structures::bunker::occupied(w, target)
-            && penetrates)
-            || (crate::structures::bunker::bunkered(w, target) && !penetrates));
+            && penetrates == Some(true))
+            || (crate::structures::bunker::bunkered(w, target) && penetrates == Some(false)));
     if stage2 || bunker_row {
         return HitResult::Unaffected;
     }
-    // spec: S-0302 claim 10 (stage 3: a berserk warhead changes no health)
+    // spec: S-0302 claim 10 (stage 3: a berserk warhead changes no health); claim 8, *Hits without a warhead* (a hit without one has no berserk effect)
     if let Some(h) = wh.as_ref().filter(|h| h.psychedelic) {
         let house_allied = hit.house.is_some_and(|hh| w.allied(o.owner, Some(hh)));
         if house_allied || tc.immune_psionics || building {
