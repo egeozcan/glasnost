@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 40
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838]
 supersedes: []
 ---
 
@@ -53,6 +53,20 @@ re-approach flag plays no part. (3) The run does not resume when the object come
 ground attacker loses the target by the same rule (Changes for other specs, S-0309); what it does
 next is S-0215's and S-0309's. Q-1755's harvester dock and the suicide shot inside a burst stay
 open (Open questions 23 and 24).
+Q-1837 in full, by claim 45: an aircraft's *area guard* processing compares its height (Terms),
+taken at the start of the processing, with its cruise height, not with its held height. Only
+equality gives the fall-back to rest with a delay of 1 tick; above its cruise height, as below
+it, the processing is the spent-ammunition fall-back, the held-target *attack* with 1 tick, or
+S-0215 claim 26's rows with *k* = 2 (AC29 part j). Q-1838 in full, by claim 1 and Terms: (1) a
+type that is not landable or not selectable, with no visiting mark before placement, is placed on
+the ground inside the usable area; (2) its first fall-back is the placement fall-back, made
+during placement before the type test marks it, so it takes T2's ground row for an aircraft that
+is not visiting: target and destination forgotten, *guard* (*area guard* for an armed aircraft of
+a computer-controlled house outside a team), and resting there makes no later fall-back by
+itself; (3) claim 34 holds for any *retreat* of an aircraft that is not a strike aircraft, but
+this one is not in *retreat* after placement, so orders and a carrier's launch-pass *move* and
+*attack* reach it; (4) AC29 parts g and h stand, with the starting heights stated there. (1) is
+rated high (AC1), (2) to (4) medium (AC29 parts g (4) and h).
 Against the committed text, these rows of tables T1 and T2 change. In T1: the *approaching* row
 with no target or no ammunition goes to *done* after 1 tick, not after the standard delay (claim
 32, AC19 parts a and j); the spend of a pending round with the run lock turned off is stated
@@ -74,6 +88,11 @@ Against revision 39, revision 40 changes no behaviour: the Summary lists every r
 and T2 that changes against the committed text, gives the delay before claim 45's descent as the
 flight's length with a pointer to AC29 part b's per-tick positions, and AC29 part c says the type
 is made pad-bound by the test rules.
+Against revision 40, revision 41 states one behaviour that revision 40 left open: an aircraft's
+*area guard* processing above its cruise height follows the branch stated for below it (claim
+45). It also states that the placement fall-back comes before the type test that marks a
+visiting aircraft (Terms, claim 1), and adds AC29 parts g (4) and j and a placement record to
+part h.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -118,6 +137,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   sets this mark when the type is not both selectable and landable, or its primary weapon is a
   camera weapon. It does not clear an existing mark. A dispatch can mark an aircraft before
   placement. Placement height uses the mark already present, not the type test made afterward.
+  The placement fall-back (S-0215 Terms) also comes before that type test, so it too sees only a
+  mark already present: an aircraft marked only by the type test makes it by T2's rows for an
+  aircraft that is not visiting.
   A carrier's launch of a slot aircraft is such a placement (claim 35), so the same type test
   decides whether a slot aircraft is visiting.
 - **pad**: a building whose type is one of the aircraft type's dock types. In this spec *dock
@@ -172,8 +194,17 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    A type placed carrying passengers is marked as a passenger carrier for the rest of
    its life (claim 19). Where an aircraft factory puts a new aircraft is S-0404 claims 13 and 15,
    and its contact and tether at release are S-0417 claim 11.
-   - Backing: `measurable` (scenario AC1)
-   - Confidence: high
+   A type that only the type test marks visiting (Terms), with no visiting mark before placement,
+   is therefore placed on the ground inside the usable area. Its placement fall-back is made before
+   the type test marks it (Terms): on the ground it forgets target and destination and has
+   *guard* (*area guard* for an armed aircraft of a computer-controlled house outside a team), not
+   *retreat*, and it makes no further fall-back while it rests there. Orders, and a carrier's
+   launch pass (claim 35), reach it in that behaviour. A later fall-back to rest on the ground
+   takes T2's visiting rows (Terms).
+   - Backing: `measurable` (scenario AC1; AC29 parts g (4) and h for a type that is not both
+     selectable and landable)
+   - Confidence: high; medium for the placement fall-back of a type marked visiting only by the
+     type test, until AC29 parts g (4) and h run
 
 2. **Climbing.** In an ordinary movement tick with a living aircraft below its held height,
    height rises by min(*FL*ₕ − *h*, *c*) leptons, where *c* = 10 for an aircraft that carries
@@ -1400,28 +1431,30 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       40's search accept no cell, the edge cell is kept, and the aircraft behaves at it as in the
       computer case below.
     - **Computer-controlled house, outside a team.** It is in *area guard* (T2). An aircraft's
-      *area guard* follows S-0215 claim 26 only in part, by height. At exactly its flight height
+      *area guard* follows S-0215 claim 26 only in part, by height. Each processing compares the
+      aircraft's height (Terms), taken at its start, with its cruise height *FL*, not with its
+      held height. At exactly its cruise height
       each processing is this spec's fall-back to rest (claim 18) instead of claim 26's rows, and
       ends with a delay of 1 tick: claim 26's delay, with its factor *k* = 2 for aircraft, does
-      not apply there. Below its flight height, an armed aircraft with its ammunition spent and
-      no contact shows at each processing the same fall-back to rest as at its flight height, and
-      in addition: if it holds a target, it has *attack* queued after that processing and its
-      next processing comes 1 tick later; if it has no target, the processing also has the result
-      of claim 26's rows and table, and the next one comes after claim 26's delay, with *k* = 2. T2's in-flight row for an
-      armed aircraft with no dock types keeps the destination and *area guard* (Changes for
-      other specs). Claim 26's leash needs an actor with no destination, so it does not hold
-      while the edge cell is the destination. Observably, it keeps the edge cell as destination,
-      stays in *area guard* and queues no *move* (rated in claim 18), so no replacement is
-      sought and its destination alone moves it, unless claim 26's search below its flight
-      height gives it a target; what such a target then leads to was not traced (Open
-      questions). It flies past the
-      usable area's border to the edge cell, since it may not leave the map now (claims 4 and
-      10), unless claim 5's hover stops it short. In that cell the landing trigger of claim 6 starts a landing, and claim 7's cell test
-      refuses every touchdown there, because F7 accepts no cell outside the usable area. Each
-      refusal makes it rise by 10 leptons and start to take off again (claim 7). It is still in
-      its destination cell with no target or no ammunition, so a new landing starts. Unless that hover stops it, it never
-      comes to rest: it repeats the descent and the refused touchdown above the edge cell for as
-      long as it keeps that destination.
+      not apply there. At any other height, above or below, an armed aircraft with its ammunition
+      spent and no contact shows at each processing the same fall-back to rest as at its cruise
+      height, and in addition: if it holds a target, it has *attack* queued after that processing
+      and its next processing comes 1 tick later; if it has no target, the processing also has the
+      result of claim 26's rows and table, and the next one comes after claim 26's delay, with *k*
+      = 2. T2's in-flight row for an armed aircraft with no dock types keeps the destination and
+      *area guard* (Changes for other specs). Claim 26's leash needs an actor with no destination,
+      so it does not hold while the edge cell is the destination. Observably, it keeps the edge
+      cell as destination, stays in *area guard* and queues no *move* (rated in claim 18), so no
+      replacement is sought and its destination alone moves it, unless claim 26's search away from
+      its cruise height gives it a target; what such a target then leads to was not traced (Open
+      questions). It flies past the usable area's border to the edge cell, since it may not leave
+      the map now (claims 4 and 10), unless claim 5's hover stops it short. In that cell the
+      landing trigger of claim 6 starts a landing, and claim 7's cell test refuses every touchdown
+      there, because F7 accepts no cell outside the usable area. Each refusal makes it rise by 10
+      leptons and start to take off again (claim 7). It is still in its destination cell with no
+      target or no ammunition, so a new landing starts. Unless that hover stops it, it never comes
+      to rest: it repeats the descent and the refused touchdown above the edge cell for as long as
+      it keeps that destination.
     - **A visiting aircraft**, such as one of a type that is not both selectable and landable
       (Terms), does not reach the rules above: T2's visiting rows apply to it (Q-1776 questions
       2 and 3). The owner changes neither case below. A visiting carrier slot aircraft takes the
@@ -1462,11 +1495,13 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       same result, and stays above the cell.
     - Backing: `measurable` (scenario AC29 parts b to d, human owner; T1's backing for the
       strafer's destination; AC29 part g for a type that is not landable, except its hunt case
-      with a flight flag, and its part (3) for a pad-bound visiting type). The computer owner's *area guard* in flight, its queueing no *move*,
+      with a flight flag, and its part (3) for a pad-bound visiting type). The computer owner's *area guard* in flight (except its height test, AC29 part j), its queueing no *move*,
       and its refused landings are `unmeasured`, as for T2's other computer rows (claim 18). The
       hunt case of a type that is not landable with a flight flag, beyond the border, is
-      `unmeasured`.
-    - Confidence: medium for the replacement cell and its draws, the landing there, the
+      `unmeasured`. The height test of the computer owner's *area guard*, above its cruise height
+      included, is `measurable` (scenario AC29 part j, an attempt).
+    - Confidence: medium for the height test of *area guard* and its branch above the cruise
+      height; medium for the replacement cell and its draws, the landing there, the
       pad-bound exception and the crash of a pad-bound type without ammunition that it leads to,
       the crash of a pad-bound visiting type without ammunition instead of its retreat, and a
       type that is not landable, until AC29 runs; low for the computer case's repeated
@@ -2709,7 +2744,7 @@ listed in Open questions are not claimed confirmed by these scenarios.
   and likewise reaches *done* after 1 tick without scatter. This constructed engine state
   is not an allowed way to prepare an oracle measurement.
 
-- **AC29 After the run (claims 17, 34, 35, 37, 45 and 46; Q-1756, Q-1775, Q-1776).** Skirmish on
+- **AC29 After the run (claims 1, 17, 34, 35, 37, 45 and 46; Q-1756, Q-1775, Q-1776, Q-1837, Q-1838).** Skirmish on
   open flat ground, human-controlled test house, measurement harness with the random-state
   recorder. Record per tick each aircraft's behaviour, queued behaviour, destination, position,
   height, ammunition, health and whether it exists, and attribute each draw.
@@ -2779,15 +2814,24 @@ listed in Open questions are not claimed confirmed by these scenarios.
     flag and part g's type also made pad-bound (named test rules). Expected: in (1) a crash
     (health 0, falling) at the run end's fall-back, after the run-end draws, with no *retreat*
     and no flight to a second edge cell; in (2) part (2)'s result, with no crash. Falsified by a
-    *retreat* or a removal in (1), or a crash in (2). If the
+    *retreat* or a removal in (1), or a crash in (2). (4) Part g's type placed by the map for the
+    test house inside the usable area, and in a second run produced for it. Record from the tick
+    of placement its height above the terrain, behaviour and queued behaviour, and give the attack
+    order in the first tick it is accepted. Expected: placed by the map, height 0, *guard*, no
+    *retreat* and no edge draws before the order; produced (no docking place, so entering from the
+    edge), cruise height; in both runs the order accepted in that tick, then (1)'s result.
+    Falsified by *retreat* current before the run ends, edge draws before the order, or the
+    order ignored. If the
     enemy house is defeated before the aircraft's run ends, the part is void.
   - h. AC21's carrier set-up, on water well inside the usable area so that no slot aircraft
     leaves it before a launch pass (claim 10), with named test rules: the carrier's slot type is
     made not selectable (so its slot aircraft are visiting, Terms), otherwise unchanged. The
     carrier attacks a durable enemy vehicle in range; then the same with the vehicle destroyed
     by another unit while a slot aircraft approaches it. Record each slot aircraft per tick,
-    with the launch passes (S-0506 claim 2).
-    Expected: at a run end with its ammunition spent, the run-end draws, then *retreat* with
+    with the launch passes (S-0506 claim 2), from its launch placement on: its height above the
+    terrain, behaviour and queued behaviour.
+    Expected: at its launch placement height 0 above the water surface, *guard* and no edge
+    draws, and the next launch pass's rows (T4) accepted, not ignored (claims 1 and 35); at a run end with its ammunition spent, the run-end draws, then *retreat* with
     target and destination forgotten; a second set of edge draws only when a *retreat*
     processing comes before the next pass; at that pass the spawner as destination, no target,
     no *move* queued and *retreat* still current (claims 34 and 35). With the target lost and
@@ -2811,6 +2855,20 @@ listed in Open questions are not claimed confirmed by these scenarios.
     tick, then the impact as in part f. Falsified by: a bomb detonation at the crash start, a
     bomb detonation or bomb damage at impact in (1), the bomb gone before the impact in (1), or
     no detonation in (2) when the order landed during the fall.
+  - j. Named test rules: part b's type with a low flight level, for a computer-controlled test
+    house, placed by the map; the durable enemy vehicle stands on a raised plateau whose cliff
+    drops toward the house's computed edge, so that the aircraft crosses the rim after its run.
+    No order is given: the vehicle stands within the aircraft's *area guard* search (S-0215 claim
+    26), so that its own search picks the vehicle and starts the run. Record
+    per tick its height above the terrain, behaviour, queued behaviour and the ticks between
+    *area guard* processings. This is an attempt: the run is reported unreached if no *area
+    guard* processing finds the aircraft above its cruise height. Expected at a processing above
+    it: with no target held, S-0215 claim 26's delay with *k* = 2 to the next processing and
+    *area guard* kept (with its ammunition spent, after claim 45's fall-back to rest in the same
+    processing); with a target held, *attack* queued and 1 tick to the next processing; at a
+    processing at exactly its cruise height, the fall-back to rest and 1 tick. Falsified by a
+    1-tick delay with no target held at a processing above the cruise height. Void if the
+    aircraft joins a team.
 
 ## Changes for other specs
 
@@ -2820,10 +2878,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
   outside those five (claim 34). Claim 7 could add it as a first row for aircraft.
 
 - **S-0215 claim 26.** Its rows, its table and its delay, with *k* = 2 for aircraft (scenario
-  B10, case i, an aircraft standing landed), reach an aircraft's *area guard* only below the
-  aircraft's flight height and only when no held target makes it queue *attack* (1 tick).
-  At exactly its flight height an aircraft's *area guard* processing is instead this spec's
-  fall-back to rest, with a delay of 1 tick; below that height an armed aircraft with its
+  B10, case i, an aircraft standing landed), reach an aircraft's *area guard* only at a height
+  other than its cruise height, above or below it, and only when no held target makes it queue
+  *attack* (1 tick).
+  At exactly its cruise height an aircraft's *area guard* processing is instead this spec's
+  fall-back to rest, with a delay of 1 tick; at any other height an armed aircraft with its
   ammunition spent and no contact makes the same fall-back first, in the same processing
   (claims 18 and 45, table T2). S-0215 claim 26 should say so.
 - **S-0309, holding a target.** No approved spec states the plain loss of a target object for an
@@ -2927,8 +2986,8 @@ listed in Open questions are not claimed confirmed by these scenarios.
     fares in that interval. The interval is
     at most 10 ticks, and AC21 does not record the slot's destination in it.
 21. A computer-controlled house's armed aircraft with no dock types, outside a team, in *area
-    guard* below its flight height (claim 45): S-0215 claim 26's search there can give it a
-    target, and a later processing below that height that finds it still holding the target
+    guard* away from its cruise height (claim 45): S-0215 claim 26's search there can give it a
+    target, and a later processing away from that height that finds it still holding the target
     queues *attack*; whether it keeps that target, and what that *attack* does with
     the edge cell as destination, and with its ammunition spent, was not traced.
 22. A visiting carrier slot aircraft that stays in *retreat* with its spawner as destination
