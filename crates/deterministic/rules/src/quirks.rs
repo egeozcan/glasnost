@@ -1372,6 +1372,14 @@ pub struct Quirks {
     // spec: S-0503 claim 13, Edge cases
     #[serde(default = "on")]
     pub hover_flag_clear_height_only: bool,
+    /// A landing-first in-place hover whose first deploy step found it above the ground keeps its landing request while it hovers, so it never deploys and *unload* stays current; off: a hover no longer moving treats a standing landing request as met, and its next deploy step deploys it by S-0517 claim 4's height-0 rows. Not consulted yet: S-0503 r27 is taken in by a later intake.
+    // spec: S-0503 claim 19, Edge cases
+    #[serde(default = "on")]
+    pub hover_landing_request_stands: bool,
+    /// A hover that becomes deployed in place while it still holds movement finishes that movement deployed and then stands; off: becoming deployed drops *D* and the stored path, and the hover finishes only the leg to its current heading point. Not consulted yet: S-0503 r27 is taken in by a later intake.
+    // spec: S-0503 claim 19, Edge cases
+    #[serde(default = "on")]
+    pub hover_deployed_keeps_moving: bool,
     /// The repair cursor offers repair at an enabled first nearby link that has neither endpoint at the traversal cell; off: such links are skipped and the first link with that endpoint decides, none giving no cursor.
     // spec: S-0511 claim 21, Edge cases
     #[serde(default = "on")]
@@ -2293,6 +2301,8 @@ impl Default for Quirks {
             hover_stalled_start_reset: true,
             hover_idle_arrival_reservation: true,
             hover_flag_clear_height_only: true,
+            hover_landing_request_stands: true,
+            hover_deployed_keeps_moving: true,
             bridge_cursor_unrelated_link: true,
             bridge_event_band_short: true,
             bridge_family_by_block: true,
@@ -3282,6 +3292,14 @@ impl Quirks {
             (
                 "hover_flag_clear_height_only",
                 self.hover_flag_clear_height_only,
+            ),
+            (
+                "hover_landing_request_stands",
+                self.hover_landing_request_stands,
+            ),
+            (
+                "hover_deployed_keeps_moving",
+                self.hover_deployed_keeps_moving,
             ),
             (
                 "bridge_cursor_unrelated_link",

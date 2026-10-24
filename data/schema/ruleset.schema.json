@@ -9396,6 +9396,11 @@
           "type": "boolean",
           "default": true
         },
+        "hover_deployed_keeps_moving": {
+          "description": "A hover that becomes deployed in place while it still holds movement finishes that movement deployed and then stands; off: becoming deployed drops *D* and the stored path, and the hover finishes only the leg to its current heading point. Not consulted yet: S-0503 r27 is taken in by a later intake.",
+          "type": "boolean",
+          "default": true
+        },
         "hover_elevated_heading_point": {
           "description": "A next heading point gains 416 leptons whenever the vehicle is 312 or more above its terrain, bridge or not; off: a high-bridge cell is needed too.",
           "type": "boolean",
@@ -9408,6 +9413,11 @@
         },
         "hover_idle_arrival_reservation": {
           "description": "Clearing the last heading point at an arrival with no destination and no choice keeps its old reservation; off: that reservation is released and the actual position is marked instead.",
+          "type": "boolean",
+          "default": true
+        },
+        "hover_landing_request_stands": {
+          "description": "A landing-first in-place hover whose first deploy step found it above the ground keeps its landing request while it hovers, so it never deploys and *unload* stays current; off: a hover no longer moving treats a standing landing request as met, and its next deploy step deploys it by S-0517 claim 4's height-0 rows. Not consulted yet: S-0503 r27 is taken in by a later intake.",
           "type": "boolean",
           "default": true
         },
