@@ -4,7 +4,8 @@
 //! anti-air projectile, S-0306 claim 23; a versus value that is not zero,
 //! S-0304 claim 1), one per drainer; a ruleset with no such type leaves
 //! the brain as it was. The tests use the synthetic M7b skirmish (Alpha's
-//! drainer DISC) and, for Beta, an invented anti-air vehicle FLAKT.
+//! drainer DISC) and, for Beta, an invented anti-air vehicle FLAKT and
+//! (M8 step B6) an invented anti-air defence FLAKD.
 
 use std::sync::Arc;
 
@@ -15,16 +16,36 @@ use glasnost_ai::game::Game;
 use glasnost_map::CellXY;
 use glasnost_rules::sim::{ProjectileType, WeaponType};
 use glasnost_sim::combat::weapon;
-use glasnost_sim::orders::Order;
-use glasnost_sim::rules::{Kind, SimRules};
-use glasnost_sim::testkit;
-use glasnost_sim::world::{HouseId, ObjectId, World};
+use glasnost_sim::econ::{TypeRef, tech};
+use glasnost_sim::orders::{self, Order};
+use glasnost_sim::rules::{Behaviour, Kind, SimRules};
+use glasnost_sim::world::{HouseId, ObjectId, Target, World};
+use glasnost_sim::{drain, objects, testkit, tick};
 
 const BETA: HouseId = HouseId(1);
 
 /// The M7b rules with FLAKT: Beta's war-factory vehicle with an anti-air
 /// gun (test data of our own).
 fn flak_rules() -> Arc<SimRules> {
+    Arc::new(SimRules::new(&flak_ruleset(), kit::MAP_NAME))
+}
+
+/// [`flak_rules`] plus FLAKD, a one-cell anti-air defence with the
+/// needs-power flag and a drain, cheaper than FLAKT (test data of our own).
+fn defence_rules() -> Arc<SimRules> {
+    let mut r = flak_ruleset();
+    let mut d = fixture::building(1, 1, 300, -10);
+    d.powered = Some(true);
+    d.primary = Some("FLAKW".into());
+    r.registries
+        .entry("buildings".into())
+        .or_default()
+        .push("FLAKD".into());
+    r.sim.buildings.insert("FLAKD".into(), d);
+    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+}
+
+fn flak_ruleset() -> glasnost_rules::schema::Ruleset {
     let mut r = kit::ruleset();
     r.sim.projectiles.insert(
         "FLAKP".into(),
@@ -49,7 +70,7 @@ fn flak_rules() -> Arc<SimRules> {
         .or_default()
         .push("FLAKT".into());
     r.sim.vehicles.insert("FLAKT".into(), flak);
-    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+    r
 }
 
 fn game(rules: Arc<SimRules>) -> Game {
@@ -156,4 +177,201 @@ fn only_the_anti_air_type_hits_the_disc() {
     };
     assert!(glasnost_ai::antiair::hits_air(&w, t("FLAKT"), armour));
     assert!(!glasnost_ai::antiair::hits_air(&w, t("GUNR"), armour));
+}
+
+// M8 step B6: what answers a drainer. Beta's brain plays alone on the
+// real tick path (its orders issued as a person's), and an Alpha disc is
+// sent with the attack click; Alpha's start discs are taken off the map.
+
+/// The M7b skirmish world with `rules`, without Alpha's start discs, and
+/// Beta with its yard vehicle deployed (a construction yard in its place),
+/// a war factory and a power plant.
+fn bench(rules: Arc<SimRules>) -> World {
+    let g = game(rules);
+    let mut w = g.world.clone();
+    let mcv = w.rules().index_of(Kind::Vehicle, "MCV").unwrap();
+    let (yv, at) = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(BETA) && o.kind == Kind::Vehicle && o.type_index == mcv)
+        .map(|o| (o.id, o.pos.cell()))
+        .expect("Beta's yard vehicle");
+    objects::remove(&mut w, yv);
+    testkit::spawn(&mut w, Kind::Building, "YARD", 1, at, 0);
+    let disc = w.rules().index_of(Kind::Vehicle, "DISC").unwrap();
+    let discs: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.kind == Kind::Vehicle && o.type_index == disc)
+        .map(|o| o.id)
+        .collect();
+    for d in discs {
+        objects::remove(&mut w, d);
+    }
+    spawn(&mut w, "FACT", Kind::Building, 1, -6, 6);
+    spawn(&mut w, "POWR", Kind::Building, 1, 5, -5);
+    w
+}
+
+/// Thinks watched for an anti-air order: long enough for Beta's base lines
+/// to free (the control is the out-of-reach test, which orders within it).
+const WATCH: i32 = 120;
+
+/// Plays Beta's brain for `ticks` ticks through the tick.
+fn play(w: &mut World, br: &mut Brain, ticks: i32) {
+    for _ in 0..ticks {
+        if w.tick % 15 == 0 {
+            for o in br.think(w) {
+                orders::issue(w, BETA, o);
+            }
+        }
+        tick::step(w);
+    }
+}
+
+/// Sends Alpha's disc `d` at Beta's building `b` with the attack click
+/// and plays until the disc drains it (S-0608 claim 2), at most 600 ticks.
+fn drain_it(w: &mut World, br: &mut Brain, d: ObjectId, b: ObjectId) {
+    orders::issue(
+        w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: d,
+            behaviour: Behaviour::Attack,
+            attack_move: false,
+            target: Some(Target::Object(b)),
+            dest: None,
+        },
+    );
+    for _ in 0..40 {
+        play(w, br, 15);
+        if drain::partner(w, d) == Some(b) {
+            return;
+        }
+    }
+    panic!("the disc did not drain the building");
+}
+
+fn type_ref(w: &World, kind: Kind, name: &str) -> TypeRef {
+    TypeRef {
+        kind,
+        index: w.rules().index_of(kind, name).unwrap(),
+    }
+}
+
+/// Whether a line of Beta's holds an item or a queued entry of `t`.
+fn lined(w: &World, t: TypeRef) -> bool {
+    w.econ
+        .lines
+        .lines
+        .iter()
+        .filter(|l| l.house == BETA)
+        .any(|l| l.item.as_ref().is_some_and(|i| i.t == t) || l.queue.contains(&t))
+}
+
+/// Beta's objects of type `t` on the map.
+fn of_type(w: &World, t: TypeRef) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(BETA) && o.on_map && tech::type_of(o) == t)
+        .map(|o| o.id)
+        .collect()
+}
+
+// S-0405 claims 5 and 8, table T1 (a drained power plant blacks out the house; a defence with the needs-power flag is then not in operation and cannot fire): a dark anti-air defence beside the drainer answers nothing, and the house trains an anti-air unit rather than a defence the blackout would keep dark.
+#[test]
+fn a_dark_defence_does_not_answer_and_no_dark_defence_is_chosen() {
+    let mut w = bench(defence_rules());
+    let powr = spawn(&mut w, "POWR", Kind::Building, 1, -12, -6);
+    spawn(&mut w, "FLAKD", Kind::Building, 1, -9, -6);
+    let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -16, -6);
+    let mut br = Brain::new(&w, &kit::map(), BETA);
+    drain_it(&mut w, &mut br, d, powr);
+    play(&mut w, &mut br, 30);
+    assert!(
+        w.houses[1].econ.power.drain_blackout,
+        "the drained plant blacks out Beta (S-0405 claim 5)"
+    );
+    assert!(
+        br.special_uses().anti_air_builds >= 1,
+        "the dark defence answers nothing"
+    );
+    assert!(
+        lined(&w, type_ref(&w, Kind::Vehicle, "FLAKT")),
+        "an anti-air unit is trained"
+    );
+    assert!(
+        !lined(&w, type_ref(&w, Kind::Building, "FLAKD")),
+        "no defence the blackout keeps dark"
+    );
+}
+
+// S-0301 claim 9 and S-0307 (the firing check with its range test): an anti-air defence in operation within reach of the drainer answers it, and nothing more is built.
+#[test]
+fn a_lit_defence_in_reach_answers_and_nothing_more_is_built() {
+    let mut w = bench(defence_rules());
+    let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
+    spawn(&mut w, "FLAKD", Kind::Building, 1, -10, -4);
+    let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
+    let mut br = Brain::new(&w, &kit::map(), BETA);
+    drain_it(&mut w, &mut br, d, proc_);
+    play(&mut w, &mut br, 15 * WATCH);
+    assert!(!w.houses[1].econ.power.drain_blackout);
+    assert_eq!(br.special_uses().anti_air_builds, 0);
+}
+
+// S-0307 (range) and PLAN §4.7: an anti-air defence in operation but far from the drainer answers nothing; the house builds the cheapest anti-air type, a defence, and places it beside the drained building, where it reaches the drainer.
+#[test]
+fn a_defence_out_of_reach_does_not_answer_and_the_new_one_goes_beside_the_drainer() {
+    let mut w = bench(defence_rules());
+    let flakd = type_ref(&w, Kind::Building, "FLAKD");
+    let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
+    let far = spawn(&mut w, "FLAKD", Kind::Building, 1, 3, 3);
+    let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
+    let mut br = Brain::new(&w, &kit::map(), BETA);
+    drain_it(&mut w, &mut br, d, proc_);
+    // The brain's lines may be busy with its base; the order waits for one.
+    for _ in 0..WATCH {
+        if br.special_uses().anti_air_builds > 0 {
+            break;
+        }
+        play(&mut w, &mut br, 15);
+    }
+    assert!(
+        br.special_uses().anti_air_builds >= 1,
+        "the far defence answers nothing"
+    );
+    let mut placed = None;
+    for _ in 0..200 {
+        play(&mut w, &mut br, 15);
+        placed = of_type(&w, flakd).into_iter().find(|&x| x != far);
+        if placed.is_some() {
+            break;
+        }
+    }
+    let placed = placed.expect("the new defence is placed");
+    let at = w.obj(placed).unwrap().pos.cell();
+    let pc = w.obj(proc_).unwrap().pos.cell();
+    assert!(
+        (at.x - pc.x).abs() <= 6 && (at.y - pc.y).abs() <= 6,
+        "placed at {at:?}, the drained refinery at {pc:?}"
+    );
+    assert_eq!(
+        br.special_uses().anti_air_builds,
+        1,
+        "the defence beside the drainer answers it: no second build"
+    );
+}
+
+// S-0212 claim 4 (reach regions) and S-0301 claim 9: an anti-air unit of the army near home that can drive to the drainer answers it.
+#[test]
+fn an_anti_air_unit_near_home_answers() {
+    let mut w = bench(defence_rules());
+    let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
+    spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -3, 3);
+    let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
+    let mut br = Brain::new(&w, &kit::map(), BETA);
+    drain_it(&mut w, &mut br, d, proc_);
+    play(&mut w, &mut br, 15 * WATCH);
+    assert_eq!(br.special_uses().anti_air_builds, 0);
 }

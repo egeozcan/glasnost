@@ -1304,13 +1304,17 @@ impl Script {
                 .then_some(item.t)
         });
         if let Some(t) = done {
-            // While the naval yard has no cell, other buildings go toward
-            // the water.
-            let toward = (!naval_building(w, t))
-                .then(|| self.water_goal(w))
-                .flatten()
-                .and_then(|g| self.place_toward(w, t, g));
-            if let Some(cell) = toward.or_else(|| self.place_cell(w, t)) {
+            // An anti-air defence ordered against a drainer goes beside it
+            // (M8 step B6, `antiair::place_goal`). While the naval yard has
+            // no cell, other buildings go toward the water.
+            let aa = crate::antiair::place_goal(self, w, t).and_then(|g| self.place_near(w, t, g));
+            let toward = || {
+                (!naval_building(w, t))
+                    .then(|| self.water_goal(w))
+                    .flatten()
+                    .and_then(|g| self.place_toward(w, t, g))
+            };
+            if let Some(cell) = aa.or_else(toward).or_else(|| self.place_cell(w, t)) {
                 out.push(Order::Place {
                     what: t,
                     cell: Some(cell),
@@ -1765,6 +1769,27 @@ impl Script {
                 let ok = *l.get_or_insert_with(|| self.order_fits_kept(w, &mut supports, t, c));
                 (ok && self.free_gap(w, t, c, None, gap)).then_some(c)
             })
+        })
+    }
+
+    /// The first cell of a square spiral around `goal`, ring by ring up to
+    /// [`SPIRAL_RINGS`], where a place order for `t` is legal, the cell
+    /// test passes and the foundation is free, the gap narrowing as in
+    /// [`Script::place_cell`]: a building placed where it is needed, as a
+    /// person drops a defence beside the building under attack (M8 step
+    /// B6, `antiair::place_goal`).
+    pub(crate) fn place_near(&self, w: &World, t: TypeRef, goal: CellXY) -> Option<CellXY> {
+        let ring = |r: i32| {
+            (-r..=r).flat_map(move |dy| {
+                (-r..=r)
+                    .filter(move |dx| dx.abs() == r || dy.abs() == r)
+                    .map(move |dx| CellXY::new(goal.x + dx, goal.y + dy))
+            })
+        };
+        (0..=GAP).rev().find_map(|gap| {
+            (0..=SPIRAL_RINGS)
+                .flat_map(ring)
+                .find(|&c| self.fits_gap(w, t, c, gap))
         })
     }
 

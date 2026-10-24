@@ -75,7 +75,7 @@ const DEFEND: i64 = 12; // nocite: tuning of our own opponent
 
 /// Cells from the house's home within which army units are called back to
 /// defend the base; a wave further out goes on.
-const RECALL: i64 = 30; // nocite: tuning of our own opponent
+pub(crate) const RECALL: i64 = 30; // nocite: tuning of our own opponent
 
 /// An idle army vehicle with health at or below this share (in percent)
 /// of its strength is sent to a repair depot.
@@ -1228,7 +1228,9 @@ impl Brain {
             })
     }
 
-    /// Places a finished building of the house.
+    /// Places a finished building of the house: an anti-air defence near
+    /// the drainer in the air it answers (`antiair::place_goal`, M8 step
+    /// B6), any other in the spiral around the yard.
     fn place_done(&self, w: &World, out: &mut Vec<Order>) {
         let house = self.house();
         let done = w.econ.lines.lines.iter().find_map(|l| {
@@ -1236,8 +1238,13 @@ impl Brain {
             (l.house == house && item.t.kind == Kind::Building && item.done_tick.is_some())
                 .then_some(item.t)
         });
+        let cell = done.and_then(|t| {
+            crate::antiair::place_goal(&self.script, w, t)
+                .and_then(|goal| self.script.place_near(w, t, goal))
+                .or_else(|| self.script.place_cell(w, t))
+        });
         if let Some(t) = done
-            && let Some(cell) = self.script.place_cell(w, t)
+            && let Some(cell) = cell
         {
             out.push(Order::Place {
                 what: t,
