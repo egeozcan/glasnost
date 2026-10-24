@@ -47,7 +47,7 @@ use glasnost_sim::combat::data::WeaponId;
 use glasnost_sim::combat::{range, veterancy, weapon};
 use glasnost_sim::econ::{TypeRef, power, production, tech};
 use glasnost_sim::regions::{self, Reach};
-use glasnost_sim::rules::Kind;
+use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::{HouseId, ObjectId, Target, World};
 
 use crate::brain::RECALL;
@@ -293,10 +293,36 @@ fn gets_there(w: &World, id: ObjectId, d: ObjectId, wp: WeaponId) -> bool {
     })
 }
 
+/// Whether army unit `id` stands off drainer `d`: it holds the drainer as
+/// its target, the firing check answers *out of range* (S-0301 claim 9
+/// rank 9), and it is under no attack order and on its way nowhere else
+/// (its destination is none or its own cell), so it neither fires nor
+/// closes in. A person sees it stand there; the lane showed such a unit
+/// counted as the answer for thousands of ticks while the drainer drained
+/// on (M8 step B6).
+fn stands_off(w: &World, id: ObjectId, d: ObjectId, slot: usize) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let t = Some(Target::Object(d));
+    let attacking =
+        o.beh.current == Some(Behaviour::Attack) || o.beh.queued == Some(Behaviour::Attack);
+    let going = match o.dest {
+        None => false,
+        Some(Target::Cell(c)) => c != o.pos.cell(),
+        Some(Target::Object(x)) => x != id,
+    };
+    // nocite: own AI (what a person sees of the unit: it holds the drainer, does not fire and does not move)
+    o.target == t
+        && !attacking
+        && !going
+        // spec: S-0301 claim 9 rank 9 (the range answer of the firing check)
+        && check::check(w, id, t, slot, true) == Answer::OutOfRange
+}
+
 /// Whether army unit `id` answers drainer `d`: the firing check lets it
 /// attack the drainer (neither *illegal* nor *impossible*, S-0301 claim
 /// 9), it is not berserk (it takes no orders, S-0610 claim 6), it stands
-/// within [`RECALL`] cells of home or of the drainer, and it gets there.
+/// within [`RECALL`] cells of home or of the drainer, it gets there, and
+/// it does not stand off the drainer ([`stands_off`]).
 fn unit_answers(w: &World, home: Option<CellXY>, id: ObjectId, d: ObjectId) -> bool {
     let (Some(o), Some(dc)) = (w.obj(id), w.obj(d).map(|x| x.pos.cell())) else {
         return false;
@@ -316,6 +342,7 @@ fn unit_answers(w: &World, home: Option<CellXY>, id: ObjectId, d: ObjectId) -> b
         check::check(w, id, t, slot, false),
         Answer::Illegal | Answer::Impossible
     ) && gets_there(w, id, d, wp)
+        && !stands_off(w, id, d, slot)
 }
 
 /// Whether a building of type `t` placed now would be in operation as far
@@ -421,7 +448,7 @@ pub struct Probe {
     pub candidates: [usize; 4],
     /// The house's army units whose type hits the first drainer, by test
     /// passed ([`unit_answers`]): hits, near home or the drainer, not
-    /// berserk, the firing check, gets there.
+    /// berserk, the firing check, gets there and does not stand off.
     pub units: [usize; 5],
     /// The house's defences whose type hits the first drainer, by test
     /// passed ([`defence_answers`]): hits, in operation, a weapon, the
@@ -501,7 +528,7 @@ pub fn probe(script: &Script, w: &World) -> Probe {
                 continue;
             }
             units[3] += 1;
-            if gets_there(w, id, d, wp) {
+            if gets_there(w, id, d, wp) && !stands_off(w, id, d, slot) {
                 units[4] += 1;
             }
         }

@@ -3067,14 +3067,23 @@ fn aa_probe_line(w: &World, h: HouseId, p: &glasnost_ai::antiair::Probe) -> Stri
                 let c = x.pos.cell();
                 let dist =
                     ((i64::from(c.x - dc.x)).pow(2) + (i64::from(c.y - dc.y)).pow(2)).isqrt();
+                let t = Some(glasnost_sim::world::Target::Object(d));
+                let (slot, wp) = glasnost_sim::combat::weapon::would_use(w, x.id, t);
+                let full = glasnost_sim::combat::check::check(w, x.id, t, slot, true);
+                let reach = wp.map(|wp| w.rules().combat.weapon(wp).range);
                 format!(
-                    "answered by {:?} #{} at ({}, {}) {} cells {:?} target {}",
+                    "answered by {:?} #{} at ({}, {}) {} cells {:?} dest {:?} check {:?} range {:?} heights {} {} target {}",
                     x.kind,
                     x.type_index,
                     c.x,
                     c.y,
                     dist,
                     x.beh.current,
+                    x.dest,
+                    full,
+                    reach,
+                    x.pos.z,
+                    o.pos.z,
                     matches!(x.target, Some(glasnost_sim::world::Target::Object(t)) if t == d)
                 )
             }

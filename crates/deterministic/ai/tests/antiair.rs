@@ -251,6 +251,39 @@ fn a_never_use_anti_air_secondary_is_not_built() {
     assert_eq!(n, 1);
 }
 
+/// [`flak_rules`] plus two infantry types with WALKER's weapon as primary
+/// and FLAKT's anti-air gun as secondary: SECIT plain, DEPIT with the
+/// deploy-fire flag (test data of our own).
+fn deploy_rules() -> Arc<SimRules> {
+    let mut r = flak_ruleset();
+    for (name, deploy) in [("SECIT", false), ("DEPIT", true)] {
+        let mut i = r.sim.infantry["WALKER"].clone();
+        i.secondary = Some("FLAKW".into());
+        i.deploy_fire = Some(deploy);
+        r.registries
+            .entry("infantry".into())
+            .or_default()
+            .push(name.into());
+        r.sim.infantry.insert(name.into(), i);
+    }
+    Arc::new(SimRules::new(&r, kit::MAP_NAME))
+}
+
+// S-0308 claim 8 and table P row 19: an infantry type with an anti-air secondary fires it at a drainer in the air, but one with the deploy-fire flag fires slot 0 until it deploys, so only the first hits the air when built.
+#[test]
+fn a_deploy_fire_infantry_type_does_not_hit_the_air_with_its_secondary() {
+    let (w, disc) = drained(deploy_rules());
+    let armour = glasnost_sim::combat::veterancy::type_combat(&w, disc)
+        .unwrap()
+        .armour;
+    let t = |n: &str| TypeRef {
+        kind: Kind::Infantry,
+        index: w.rules().index_of(Kind::Infantry, n).unwrap(),
+    };
+    assert!(glasnost_ai::antiair::hits_air(&w, t("SECIT"), armour));
+    assert!(!glasnost_ai::antiair::hits_air(&w, t("DEPIT"), armour));
+}
+
 // M8 step B6: what answers a drainer. Beta's brain plays alone on the
 // real tick path (its orders issued as a person's), and an Alpha disc is
 // sent with the attack click; Alpha's start discs are taken off the map.
@@ -446,4 +479,33 @@ fn an_anti_air_unit_near_home_answers() {
     drain_it(&mut w, &mut br, d, proc_);
     play(&mut w, &mut br, 15 * WATCH);
     assert_eq!(br.special_uses().anti_air_builds, 0);
+}
+
+// S-0301 claim 9 rank 9 and PLAN §4.7 (own AI): an anti-air unit that holds the drainer as its target but stands out of range of it, under no attack order and going nowhere, does not answer it (the near-home test above: the same unit answers while it is free).
+#[test]
+fn an_anti_air_unit_standing_off_the_drainer_does_not_answer() {
+    let mut w = bench(defence_rules());
+    let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
+    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -3, 3);
+    let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
+    let mut br = Brain::new(&w, &kit::map(), BETA);
+    drain_it(&mut w, &mut br, d, proc_);
+    while w.tick % 15 != 0 {
+        tick::step(&mut w);
+    }
+    let o = w.obj_mut(flak).unwrap();
+    let at = o.pos.cell();
+    o.target = Some(Target::Object(d));
+    o.dest = Some(Target::Cell(at));
+    o.beh.current = None;
+    o.beh.queued = None;
+    let t = Some(Target::Object(d));
+    let slot = weapon::choose_slot(&w, flak, t);
+    assert_eq!(
+        glasnost_sim::combat::check::check(&w, flak, t, slot, true),
+        glasnost_sim::combat::check::Answer::OutOfRange,
+        "the unit stands out of range"
+    );
+    let p = br.antiair_probe(&w);
+    assert_eq!(p.drainers, vec![(d, None)], "{p:?}");
 }
