@@ -2,11 +2,11 @@
 id: S-0413
 title: Country bonuses (what each country field does, which spec owns it, and the fields with no effect)
 topic: simulation
-revision: 5
+revision: 6
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0478]
 supersedes: []
@@ -16,7 +16,7 @@ supersedes: []
 
 ## Summary
 
-This spec catalogues the country fields read by the original and their rule owners for skirmish; network games and campaigns are out of scope. Map-owner colour inheritance is an import-only pointer, not gameplay in another mode. It owns the leftovers: the factors that are read but change nothing, the aircraft speed factor, the country's colour field, the wall-owner rewrite at game start, and the rule that every house of a country gets the same advantages whoever plays it. It names no stock country and says nothing about which country has which advantage: that is stock data.
+This spec catalogues the country fields read by the original and their rule owners for skirmish; network games and campaigns are out of scope. Map-owner colour inheritance is an import-only pointer, not gameplay in another mode. It owns the leftovers: the factors that are read but change nothing, the aircraft speed factor, the country's colour field, the wall-owner rewrite at game start, and the rule that every house of a country gets the same advantages whoever plays it. It names no stock country and says nothing about which country has which advantage: that is stock data. This revision carries S-0703's hand-off to scenario C3 part a: its game now ends with the human's defeat at a fixed tick, since a skirmish's options menu offers no resignation.
 
 ## Terms
 
@@ -382,8 +382,11 @@ unit), per run.
   the country can be chosen explicitly before loading (S-0412 claim 15). The seed differs between
   runs and is not fixed; nothing below depends on a random draw, because only the two displays
   are compared. Observable: whether the computer's house appears in the in-game player list, and
-  whether it appears in the score screen, at the end of a game that the human ends by resigning
-  at tick 300. Expected: in run 1 the computer's house is listed in both places; in run 2 it is in
+  whether it appears in the score screen, at the end of a game that ends with the human's defeat
+  at a fixed tick: a timed action of the test map removes the human's last counted object at tick
+  300 (as in S-0414 scenario V12, part c), the skirmish ends at that defeat (S-0414 claim 6) and
+  the score screen opens. A skirmish's options menu offers no resignation: its one way to leave
+  ends the game at once, with no score screen (S-0703 claim 13). Expected: in run 1 the computer's house is listed in both places; in run 2 it is in
   neither. Falsified if the house is missing from either place in run 1, or appears in either
   place in run 2. Not covered: whether the flag changes any game state (credits, objects, random
   streams, who wins). Claim 4 marks that unmeasured, because two runs of the original differ in

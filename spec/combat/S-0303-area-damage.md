@@ -2,11 +2,11 @@
 id: S-0303
 title: Area damage (spread, falloff, cells scanned, walls, bridges and detonation effects)
 topic: combat
-revision: 19
+revision: 25
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0020, Q-0060, Q-0061, Q-0614]
 supersedes: []
@@ -23,6 +23,20 @@ overlays; it also gives the explosion animation and the debris of a projectile's
 one hit does to one object (armour, multipliers, the health change) is damage resolution, S-0302,
 and what happens when an object dies is S-0312. This revision covers skirmish; network games
 and campaigns are out of scope.
+
+Revision 25 takes in the S-0303 entries of the Changes for other specs of S-0318 and S-0317. From
+S-0318: the detonation order table gains row 1a for the fragments of S-0318, and a sentence after
+the table gives the draws that follow each detonation that is not an airburst (S-0306 claim 21).
+From S-0317: the voxel-model debris of claim 22 and the barrel debris of claim 19 are pieces of
+S-0317, objects of play whose creation and later behaviour are S-0317's; claim 23 names a piece's
+expiry damage beside the disc laser. Row 1a and the sentence after the order table are
+cross-references rated by S-0318 and S-0306.
+
+Against revision 19, revision 25 also makes one claim of its own: claim 19's barrel debris
+piece, when one is chosen, takes its creation draws (S-0317 claim 3 or 4) after the draw that
+chose it and before the barrel particle system's percent draw, where revision 19 listed no draws
+between the two. That placement is new behaviour of this revision, rated medium in claim 19 until
+scenario A13 variant d runs. Against revision 24, revision 25 changes no behaviour.
 
 ## Terms
 
@@ -437,17 +451,25 @@ addition:
     (such as a barrel), that overlay is removed, the game-wide barrel-explosion animation appears at
     *P*, and a nested detonation follows at *P* with the game-wide ammunition-crate damage as its
     damage amount, the game-wide demolition warhead, no source object and the outer detonation's
-    source house. After the nested detonation, at most one barrel debris animation appears, and
+    source house. After the nested detonation, at most one barrel debris piece appears, and
     then possibly the barrel particle system. With *n* the length of the barrel debris list and
     percent draws *r*₀, *r*₁, … (each a ranged draw over 0 to 99) belonging to its entries in list
-    order, the debris animation is of the type of entry *i*\*, the least *i* with *r*ᵢ < 15, and the draws
+    order, the debris piece is of the type of entry *i*\*, the least *i* with *r*ᵢ < 15, and the draws
     taken are *r*₀ … *r*ᵢ\*, that is *i*\* + 1 draws; when no *r*ᵢ is below 15, all *n* draws are
-    taken and no debris appears. One further percent draw *r* follows, and the game-wide barrel
+    taken and no debris appears. The barrel debris list names voxel-model animation types, so the
+    debris is a piece of S-0317, an object of play created at *P*: its creation takes the draws of
+    S-0317 claim 3 (or claim 4 for a type with the meteor flag) right after *r*ᵢ\*, and what it
+    does afterwards is S-0317's. One further percent draw *r* follows, and the game-wide barrel
     particle system appears at *P* when *r* < 25. This happens whatever the sign of *D*. Only the centre
     cell is affected, so a barrel next to the centre cell is set off only by its own detonation
     chain. This has no switch, as decided at the delegated sign-off of 2026-10-10.
-    - Backing: `measurable` (scenario A13)
-    - Confidence: high for the trigger and the nested detonation; medium for the draws
+    - Backing: `measurable` (scenario A13; variant d for the piece's creation draws between *r*ᵢ\*
+      and *r*)
+    - Confidence: high for the trigger and the nested detonation; medium for the draws. The
+      medium for the barrel debris piece's creation draws is S-0317's: claims 3 and 4 there rate
+      the draw count medium until S-0317 scenario V1 runs, and also rate medium the order among
+      those draws. The place of those creation draws, after *r*ᵢ\* and before *r*, is medium until
+      A13 variant d runs
 
 20. **Particle systems and rocking.** A warhead that names a particle system creates it at *P* at
     the end of the detonation, owned by the source house. When the system has a held particle type,
@@ -509,13 +531,17 @@ addition:
     projectile detonates: Formulas F6 gives the count and the types, all created at the projectile
     position *Q* (the metallic debris of F6 raised by 20 leptons), not at *P*. This happens
     whatever the damage amount, on an inert map as well, and not when the detonation was nullified
-    (claim 21).
+    (claim 21). The voxel-model debris that F6 gives consists of pieces of S-0317: objects of
+    play, created at *Q* with the draws of S-0317 claims 3 and 4, whose flight, impacts and end
+    are S-0317's.
     - Backing: `measurable` (scenario A15, statistical; variant c for the position), and
       `measurable` for signed maxima and a zero allocation divisor (A19 variants b and c), and
       `unmeasured` for F6's signed-magnitude exceptional raw value and its overflowing quotient:
       the setup cannot select the seed to make that one value in 2³² occur, as S-0202 claim 6
       explains. The safe results of arithmetic departures are design rules, not oracle values
-    - Confidence: high for the count draw; medium for the distribution over types and the position
+    - Confidence: high for the count draw; medium for the distribution over types and the
+      position; medium for the pieces' creation draws, as S-0317 claim 3 rates them until its
+      scenario V1 runs
 
 23. **Result of a detonation.** A detonation reports one of three results to whatever produced it:
     *hit* (at least one object received a hit), *missed* (none did, or claim 2 applied) or
@@ -525,10 +551,27 @@ addition:
     projectile-only effects of claims 21 and 22: no explosion animation, warhead debris or
     nullify animation, and no animation-selection draw of F5. It also produces no light flash.
     The area damage's own effects, including an exploding overlay's animation and the
-    warhead's particle system, still follow their rules above.
+    warhead's particle system, still follow their rules above. The end of a debris piece of
+    S-0317 (claim 11 there) is a second such producer: its expiry damage applies the area damage
+    of claims 1 to 20 and none of the projectile-only effects of claims 21 and 22. Only a piece
+    whose type names an expiry animation, and that ends not on water or on water at deck height,
+    makes this area damage, as S-0317 claim 11 gives its cases. Unlike the disc laser, it also
+    makes the warhead's light flash when the warhead has one. Both happen also when the type's
+    damage amount is 0 (S-0317 claim 11); the area damage then has no effect (claim 2).
     - Backing: `measurable` through claim 21 (scenario A14, variants b and c), and S-0615
-      scenario DL7 for disc-laser area effects and absence of projectile-only effects
-    - Confidence: high
+      scenario DL7 for disc-laser area effects and absence of projectile-only effects; S-0317
+      scenario V8 for a piece's expiry: its runs with and without an expiry animation (the area
+      damage only with one, the flash and the warhead's particle system, and no explosion
+      animation of the warhead's list and no warhead debris of claim 22, V8 using a falling test
+      type). The area damage and the light flash at a damage amount of 0 are `unmeasured`: the
+      area damage then has no effect to observe (claim 2), and the flash inherits S-0317 claim
+      11's rating and reason for that case
+    - Confidence: high, also for a piece's end; medium for which ends on water make the area
+      damage (at deck height or not), as S-0317 claim 11 rates its meteor water row and the exact
+      deck height; medium for the area damage and the light flash at a damage amount of 0, which
+      S-0317 claim 11 leaves `unmeasured`. Claim 23 asserts nothing else of a piece's end: the
+      order of its expiry animation and area damage, the area damage's lack of a source object and
+      its effect on resources keep S-0317 claim 11's own ratings
 
 24. **Defaults of bridge and barrel damage.** At a fresh program start the game-wide bridge
     strength is 1000 bridge-strength points and the ammunition-crate damage is 100 damage points.
@@ -820,10 +863,18 @@ recorder sees the draws of a projectile's detonation on the scenario random stre
 | Order | Source of the draws | Draws on the scenario random stream |
 |---|---|---|
 | 1 | the effects that the special-warhead specs own (radiation, mind control and the like, which can replace the area damage) | as their specs say |
+| 1a | the fragments of S-0318 (claims 3 and 4), for a projectile with a fragment weapon, when S-0318 claim 1 lets it burst | for choosing the fragments' targets: two ranged draws per fragment sent to a random cell, none for a fragment sent to an object (whether a fragment's launch takes scatter draws is open in S-0318) |
 | 2 | the area damage above | as in *Order inside one detonation* |
 | 3 | the nearby point of claim 21, for a projectile of the invisible kind only | one raw value |
 | 4 | the choice of the explosion animation (F5) | as F5: one ranged draw when F5 reaches its electromagnetic case with a non-empty list, whatever the result of row 2, nullified included; none otherwise |
 | 5 | the warhead debris (F6), only when the table below creates it | as F6 |
+
+The table covers one detonation. After each detonation that is not an airburst, S-0306 claim
+21's ranged draw R(256, 512) and one raw value follow (S-0318 State and ordering). Row 1a is
+numbered so that the other rows keep the numbers other specs cite. Row 1a and the sentence on
+S-0306 claim 21's draws after a detonation are cross-references: their backing and ratings are
+those of S-0318 (claims 3 and 4, State and ordering) and S-0306 claim 21, and this spec adds none
+of its own.
 
 Before row 1, the warhead's screen-shake ranges take one ranged draw each, horizontal then vertical,
 for each range that is not zero at both ends, from the unsynchronised random stream, so they reach
@@ -1261,7 +1312,7 @@ draw per eligible low test otherwise, as S-0511 claim 1. Any contrary draw count
 **A13. Exploding overlays (claims 19, 20).** *Setup:* a stock exploding overlay (barrel) in the
 centre cell of a detonation with a warhead that cannot damage overlays otherwise, and another in a
 neighbouring scanned cell. *Observable:* whether each barrel explodes, the health lost by the
-vehicles near the centre barrel, and the debris animations and particle systems that the recorder
+vehicles near the centre barrel, and the debris pieces and particle systems that the recorder
 sees created. *Expected:* the centre barrel explodes (nested detonation damages nearby
 vehicles by the ammunition-crate damage scaled as F3 with the demolition warhead); the neighbour
 barrel explodes only if the nested detonation's own centre cell holds it (it does not), so it stays.
@@ -1270,11 +1321,15 @@ the barrel debris list) and the particle system in 25 %. Variant c: a warhead na
 system shows it at *P*. For initial-particle and lifetime variants, use S-0613 scenario G3:
 record the initial count with and without a held type, and compare an unlimited gas system with
 one whose lifetime is positive. Expect exactly one initial particle when a held type exists,
-none otherwise, and no timeout with the absent lifetime default. *Falsified if:* the neighbour barrel explodes from the outer detonation, or
+none otherwise, and no timeout with the absent lifetime default. Variant d, with the
+random-state recorder, over runs until one shows a debris piece: expect the piece's creation draws
+(S-0317 claim 3) after the percent draw that chose its entry and before the particle system's
+percent draw. *Falsified if:* the neighbour barrel explodes from the outer detonation, or
 the share of runs with debris differs from 1 − 0.85ⁿ, or the share with the barrel particle system
 differs from 25 %, by more than 3 standard errors, or in variant c the warhead's particle system
 does not appear at *P*, the initial particle count differs from the held-type prediction,
-or the finite/unlimited system-lifetime outcomes differ from G3.
+or the finite/unlimited system-lifetime outcomes differ from G3, or in variant d the piece's
+creation draws come after the particle system's percent draw or are missing.
 
 **A14. Explosion animation (claims 21, 23).** *Setup:* a test warhead with an animation list of 4
 distinct stock animations and damage values 1, 24, 25, 74, 75, 99, 100, 1000. *Observable:* which
