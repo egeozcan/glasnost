@@ -1,9 +1,9 @@
 ---
 id: Q-1833
 title: What music does when a skirmish ends or is left
-status: open
+status: answered
 related: [S-0703, S-0701, Q-1700]
-answered-by: []
+answered-by: [S-0703]
 ---
 
 ## Need
