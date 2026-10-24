@@ -3,7 +3,7 @@ id: Q-1762
 title: Bouncing (sprite debris) animations: motion, landing and end
 status: open
 related: [S-0109, S-0312, S-0303, S-0202, Q-1702]
-answered-by: []
+answered-by: [S-0319]
 ---
 
 ## Need
