@@ -491,6 +491,38 @@ fn a4_counts(
         "A4: multi-turret vehicle types whose voxel art is discarded",
         discarded,
     );
+    // (a2) Round 3, note 14: what the renderer draws as the turret of every
+    // vehicle type with voxel art (S-0105 claims 4, 8 and 12; S-0007
+    // claim 16). Counts only.
+    let mut classes: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
+    if let Some(vehicles) = regs.get(&Kind::Vehicles) {
+        for (i, t) in vehicles.iter().enumerate() {
+            let Some(art) = import.arts.get(&(Kind::Vehicles, i)) else {
+                continue;
+            };
+            if !art.voxels.contains_key("body") {
+                continue;
+            }
+            let n = raw(t, "TurretCount").and_then(|v| integer(&v)).unwrap_or(0);
+            let turret = flag(t, "Turret");
+            let multi = turret && n >= 1 && !flag(t, "IsGattling");
+            let class = match (turret, multi) {
+                (false, _) if art.voxels.contains_key("turret") => {
+                    "no turret flag, a turret part imported: none drawn"
+                }
+                (false, _) => "no turret flag, no turret part: none drawn",
+                (true, true) => "multi-turret: none drawn until Q-1760",
+                (true, false) if art.voxels.contains_key("turret") => {
+                    "turret flag, single turret part: drawn"
+                }
+                (true, false) => "turret flag, no turret part: none drawn",
+            };
+            *classes.entry(class).or_default() += 1;
+        }
+    }
+    for (class, n) in classes {
+        report.count(&format!("A4: voxel vehicle types, {class}"), n);
+    }
     // (b) Buildings whose primary weapon's projectile is anti-air and not anti-ground in the rules text.
     let projectile_raw: std::collections::BTreeMap<String, &glasnost_convert::layers::TypeRec> =
         regs.get(&Kind::Projectiles)
