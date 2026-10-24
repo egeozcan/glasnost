@@ -175,9 +175,10 @@ search classes leave out aircraft (its primary warhead is infantry-only; S-0309 
 also follows the specs. An empty unit of the gunner type that note 15 names has weapon number 0
 (S-0308 claim 6), so it uses slot 0, which is anti-air and anti-ground.
 
-**Shots that do no damage (explained by the specs).** Vehicles 4, 7 and 15 fire at the aircraft
-but never damage it (the other types' shots do). A diagnostic pass on the rebased tree (not
-committed) traced each case to approved claims, and the code follows them.
+**Shots that do no damage.** Vehicles 4, 7 and 15 fire at the aircraft but never damage it (the
+other types' shots do). A diagnostic pass on the rebased tree (not committed) traced both cases
+to approved claims, and the code follows them. The shot at an off-map target, the third case
+looked at, was a code bug.
 
 - Types 4 and 7: the slot that fires at the aircraft has no muzzle position in the type's art
   image section (no muzzle key of any form is there). By S-0313's Import mapping an absent muzzle
@@ -193,15 +194,21 @@ committed) traced each case to approved claims, and the code follows them.
   on, that distance passes the weapon's range one step before the final step, and the disc laser
   is cancelled without damage, as claim 14 states.
 - The shot at an off-map target that detonated at the firer (an aircraft hitting itself before
-  intake 9): the target had left the map while airborne, so the steering projectile kept no target
-  (S-0306 claim 17). At or above the missile safety altitude, T1's safety row detonated it at
-  *P*′, beside the firer, and the unfiltered flying candidates of S-0303 claim 9 let the blast
-  reach the firer. Since A3 intake 9 the target is lost when it is taken inside (S-0501 r40 claim
-  32), so no such shot is made: `target_taken_inside_is_lost_and_it_flies_home` passes with
-  aircraft tracked.
+  intake 9): this one was a code bug. The target, a vehicle on the ground, had been taken inside,
+  and the projectile turn replaced any target off the map with no target. S-0306 claim 17 gives
+  a target that leaves the game or becomes untargetable the cell it stood in when it was not
+  airborne, and nothing only when it was airborne. With no target, the steering projectile was at
+  or above the missile safety altitude, so T1's safety row detonated it at *P*′, beside the
+  firer, and the unfiltered flying candidates of S-0303 claim 9 let the blast reach the firer.
+  Fixed: `combat::projectile::target_leaves` applies claim 17 when the target goes inside
+  (`objects::take_inside`) or is removed (`objects::remove`), as the kill and the teleport
+  already did. Test `claim17_target_taken_inside_or_removed` (`claims_s0306.rs`). Since A3
+  intake 9 an aircraft also loses a target that is taken inside (S-0501 r40 claim 32), so it
+  makes no such shot.
 
-No request is filed, since every case follows from approved claims. Whether these slots are meant
-to have no muzzle height is a question for the lead, not for the code.
+No request is filed: the two remaining cases follow from approved claims, and the third was a
+code bug, now fixed. Whether the slots of types 4 and 7 are meant to have no muzzle height is a
+question for the lead, not for the code.
 
 Note 7 (seen again): the lead's statement and Q-1850 are in note 7's Round 1 row; nothing more is
 filed and the code keeps to S-0417 claims 10 and 14 until Q-1850 is answered.
