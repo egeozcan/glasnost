@@ -2,11 +2,11 @@
 id: S-0215
 title: Behaviours (standing orders) and their processing
 topic: simulation
-revision: 69
+revision: 76
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0019, Q-0020, Q-0030, Q-0072, Q-0161, Q-0202, Q-0231, Q-0238, Q-0241, Q-0312, Q-0371, Q-0663, Q-0685, Q-0797, Q-0798, Q-0983, Q-1154, Q-1160, Q-1161, Q-1166]
 supersedes: []
@@ -26,6 +26,13 @@ whether to keep, renew or take a destination towards its target (claim 37, answe
 side of Q-0072; the approach position and failure outcomes are S-0307 claims 15 to 25), the area-guard threshold's engine default (the guard stray distance has
 none in the original, and our engine's replacement is a documented departure), and pointers to the topics
 that own the other behaviours (harvesting, structures, superweapons, team scripts).
+
+This revision narrows one statement of claim 32 in the committed text. Under claim 32's non-SAM attack rule, a building
+whose target leaves its weapon's range returns to *guard* at the first processing at which the firing check
+answers *out of range*. While its rearm countdown runs, or while its animation-delayed shot is
+pending, that check answers *rearming* instead, and the building keeps its target; an answer that
+S-0301 ranks ahead of *rearming* still takes precedence (S-0301 claims 1, 9 and 14). Scenario
+B16 case e is scoped to match: it judges the building by the firing check's recorded answer.
 
 ## Terms
 
@@ -2421,7 +2428,15 @@ apply in our engine to the actors of every player house.
       | any other answer (*busy*, *cloaked*, *moving*, *must deploy*, *still turning*) | rotates towards the target where that applies | 1 tick |
 
       So an attacking building is processed every tick or every other tick, and one whose target
-      leaves its weapon's range returns to *guard* at its next processing.
+      leaves its weapon's range returns to *guard* at its next processing at which the firing check
+      answers *out of range*. While its rearm countdown runs, that check answers *rearming*
+      instead, unless one of the building's rank-4 reasons of S-0301 claim 9 gives its own answer
+      (ranks 1 to 3 apply only to vehicles; S-0301 claims 1 and 9), such as a target test's
+      *illegal* or *impossible*. While its animation-delayed shot is pending, the check answers
+      *rearming* unless one of S-0405's table T1 answers holds (S-0301 claims 9 and 14). The check
+      can also answer *rearming* for the other rank-5 causes of S-0301 claim 9, such as the
+      weapon's own effect still being alive. While the check answers *rearming*, for any cause, the
+      building keeps its target.
 
       **Upgrade weapon gate.** For a non-SAM building the gate applies only when its
       upgrade count is nonzero and upgrade position 1 is occupied (S-0406 claim 12).
@@ -2522,7 +2537,7 @@ apply in our engine to the actors of every player house.
       rules are `measurable` (B36's unarmed follow-up for the absence of a ready-mark
       setter inside unarmed guard; scenarios B8 and B16: cases b and f for the unarmed delays, case g for
       an armed *guard* building that starts *attack* by its own processing, case a for the rows
-      *can fire* and *rearming*, case e for the out-of-range row, case h for the turret snap and
+      *can fire* and *rearming*, case e for the out-of-range row and the target kept during the rearm countdown, case h for the turret snap and
       the row *not facing*, case i for *still turning* in the row of other answers; for SAM
       *attack*, case c for the 1-tick intervals and the return to *guard*, case j for the power
       row, case k for the aiming tolerance, case l for firing both weapons and case m for the
@@ -2538,6 +2553,11 @@ apply in our engine to the actors of every player house.
         cannon, the superweapon buildings and the empty occupiable building), because the only
         observable difference from the general rule needs such a building to hold a target at a
         processing, and no setup is known that gives one,
+      - a pending animation-delayed shot's *rearming* against a target out of range: no scenario
+        here drives an attacking building's target out of range while its animation-delayed shot
+        is pending; it rests on S-0301 claim 9, which rates that shot's place against the later
+        ranks medium; S-0301 scenario F21 tests the shot kept and dropped against the refusal
+        rows of S-0306 claim 23, not against *out of range*,
       - the non-SAM answers *illegal* and *impossible*: no fixture supplies a separately
         identified target producing either answer. *Out of ammunition* is `measurable`
         (B45 e), separately from B16 e's *out of range* case,
@@ -2556,7 +2576,9 @@ apply in our engine to the actors of every player house.
     - Confidence: high (upgrade gate applicability, predicate, suppression, paired-attempt
       order, empty-secondary no-op and animation-delay priority),
       medium (armed and unarmed *guard*, the ready mark, non-SAM *attack* and its delay
-      table, SAM *attack* every tick and its stages, firing both weapons); low (the turret snap and
+      table, a pending animation-delayed shot's *rearming* against a target out of range,
+      which is medium because no scenario here makes that case, SAM *attack* every tick and its
+      stages, firing both weapons); low (the turret snap and
       its bound F8, the SAM aiming tolerance, the power condition and the out-of-stage rule)
 
 33. **Automatic search under behaviours.** Separately from processing, on every tick an actor
@@ -2957,8 +2979,9 @@ apply in our engine to the actors of every player house.
       movement: actual displacement depends on the locomotor and the speed rules (S-0207,
       S-0208). This is distinct from setting the can-approach property to no, which still permits
       approach in *attack* (part d). A building, by contrast, never receives an approach
-      destination: a non-SAM building drops an out-of-range target and starts *guard*, and a
-      SAM building follows its aim-then-check stages (claim 32).
+      destination: a non-SAM building drops an out-of-range target and starts *guard* once its
+      firing check answers *out of range*, and a SAM building follows its aim-then-check stages
+      (claim 32).
     - (h) **Special vehicle approaches.** Before the parts above, a vehicle may take its target
       object itself as destination instead, and then nothing else of the step happens: the
       crushing approaches of S-0210 claim 11 (its attack-target variant for the original's
@@ -4353,17 +4376,27 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
   the building's first per-tick start after the order takes effect (its update on the next tick,
   S-0203 claim 7) and is processed on that tick; the time from the order to *attack* is at most 1
   tick, whatever is left of the anti-air delay. (e) Out of range: the building of case a attacks an
-  enemy vehicle, which an order then drives out of the building's weapon range. Expected: at the
-  building's first processing after the vehicle leaves range, the target is empty and *guard* is
-  current, so at most 2 ticks after the vehicle leaves range. Falsified by *attack*
+  enemy vehicle, which an order then drives out of the building's weapon range. The vehicle
+  stands just inside the edge of that range, and the order is given on the tick of a recorded
+  shot, so that the vehicle leaves range while the rearm countdown runs. The read-only recorder
+  records, at each of the building's processings, the firing check's answer, its target and its
+  current mission. A run is judged only if at least one processing after the vehicle leaves range
+  records the answer *rearming* (S-0301 claims 9 and 14); any other run is recorded and not
+  judged. Expected, in a judged run: at each processing after the vehicle leaves range whose
+  recorded answer is *rearming*, the building keeps its target; at the first processing after
+  the vehicle leaves range whose recorded answer is *out of range*, the target is empty and
+  *guard* is current. Falsified by *attack*
   becoming current only at the building's next scheduled *guard* processing (a wait that grows
   with the remaining anti-air delay), by an interval other than 1 or 2 ticks in case a, by
   1-tick intervals throughout a rearm period or a 2-tick interval right after a shot in case a,
-  by other intervals in case b, by a target kept out of range in case e, or in case c by an
+  by other intervals in case b, by a target dropped at a processing whose recorded answer is
+  *rearming*, or kept at the first one whose answer is *out of range*, in case e, or in case c by an
   interval other than 1 tick or by *guard* becoming current more than 2 ticks after the target's
   loss. Runs: 100 intervals
   each in cases a to c, five orders in case d, given at different points of the anti-air delay,
-  three runs in case e. (f) Unarmed delays: named test file giving *guard* the rate 0.07
+  three judged runs in case e, repeating a run that is not judged, with at most ten attempts in
+  all; if fewer than three runs are judged after ten attempts, case e is reported as not run,
+  not as confirming or falsifying evidence. (f) Unarmed delays: named test file giving *guard* the rate 0.07
   (*D*<sub>r</sub> = 63). An unarmed building of the human-controlled house that is neither a
   factory nor a repair bay nor of the stupid-guard type (for example a power building), and a
   unit repair building with no vehicle on it. Expected: intervals 189 to 191 (3 × 63 + *U*(0, 2)) for
@@ -4674,9 +4707,12 @@ human-controlled owners (Terms, houses in our engine), so those parts are not re
     by 180 + *u*₂ and *N* + *u*₁ on valid ticks. Runs: until 30 valid ticks.
   - (b) The search follows the processing's result (claim 33, part b): the building of B16, case
     e, in *attack* for longer than the normal targeting delay + 2 ticks (so its targeting timer has
-    run out: *attack* runs no per-tick search), and its target driven out of range. Expected: on
-    the tick of the processing that drops the target and starts *guard*, the recorder shows a
-    restart of the targeting timer on that same tick. Falsified by the first restart only on a
+    run out: *attack* runs no per-tick search), and its target driven out of range. The processing
+    that drops the target is the one case e judges: the building's first processing after the
+    target leaves range whose recorded firing-check answer is *out of range* (claim 32), not
+    necessarily the first processing after the target leaves range.
+    Expected: on the tick of that processing, which drops the target and starts *guard*, the
+    recorder shows a restart of the targeting timer on that same tick. Falsified by the first restart only on a
     later tick. Runs: five.
   - (c) A target found by the search waits for a later processing (claim 33, part c): named test
     file giving *guard* an anti-air rate of 0.001 (*D*<sub>aa</sub> = 0, so the building processes
