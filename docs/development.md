@@ -170,7 +170,7 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
 | `turret_building_no_body_wrap` | S-0108 claim 6 | building body ranges are not played |
 | `turret_start_clears_damaged` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; the turret slot start and damage swaps are not played |
-| `enable_unfreezes_unpowered` | S-0108 claim 13 | slot animations do not advance, so freezing changes nothing; power is not applied to them |
+| `enable_unfreezes_unpowered` | S-0108 claim 13, S-0405 claim 10 | slot animations play, but the power rules of S-0108 claims 13 and 14 are not applied to them, so no slot freezes at a switch-off or a pulse and the switch is not consulted |
 | `damage_swap_drops_occupied` | S-0108 claims 11 and 12 | slot animations are drawn only as started at placement; damage swaps are not played |
 | `theater_refresh_buildup_range` | S-0108 claim 5 | no theater refresh |
 | `anim_hide_at_level_15` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played (the played animations have *t* = 0) |
@@ -2507,6 +2507,10 @@ This intake takes in six spec revisions: S-0519 revision 17, S-0513 revision 34,
 **The bomb on a falling carrier (S-0519 claims 5 and 7).** Intake 9 builds S-0501 claim 46's dead fall-back crash, which carries this: the bomb is kept through the fall, can go off by its timer or the detonate order, and is removed silently at impact under `quirks.crash_drops_planted_bomb`. This intake only ledgers it.
 
 No format or golden change.
+
+### Disabled hovers, sold buildings' slots and fragment beams (M8 step A3 intake 11)
+
+S-0405 r36, S-0316 r35, S-0303 r25, S-0413 r6 and S-0616 r20. The ledger, [m8-claims/intake11-S-0405-S-0316-S-0303-S-0413-S-0616.md](m8-claims/intake11-S-0405-S-0316-S-0303-S-0413-S-0616.md), holds the notes.
 
 ### Start of music, the end screen and the options menu (M8 step A3 intake 12)
 

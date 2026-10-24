@@ -256,7 +256,7 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
     ),
     (
         "enable_unfreezes_unpowered",
-        "S-0108 claim 13: building slot animations are not drawn",
+        "S-0108 claim 13 and S-0405 claim 10: building slot animations play, but the power rules of S-0108 claims 13 and 14 are not applied to them, so no slot freezes and the switch is not consulted",
     ),
     (
         "damage_swap_drops_occupied",

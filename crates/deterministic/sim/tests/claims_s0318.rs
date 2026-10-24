@@ -1114,6 +1114,86 @@ fn sh1m_both_flags() {
     assert_eq!(bolts(&s), ends(&s, &pr, &v[..3]));
 }
 
+// ---------------------------------------------------------------- S-0316 claim 2 (revision 35): fragments and the line-effect flags
+
+/// Bursts the test shot at T with a fragment weapon of the given
+/// line-effect flags (laser, electric bolt, radiation beam, magnetic beam),
+/// the attacker still in play, its own weapon without line-effect flags and
+/// no live wave of its own.
+fn flags_scene(laser: bool, bolt: bool, rad: bool, mag: bool) -> (S, Projectile, Vec<ObjectId>) {
+    let mut r = base(3);
+    let f = frag(&mut r);
+    f.is_laser = Some(laser);
+    f.laser_duration = Some(15);
+    f.is_electric_bolt = Some(bolt);
+    f.is_rad_beam = Some(rad);
+    f.is_mag_beam = Some(mag);
+    let mut s = setup(&r, true);
+    let v = around(&mut s);
+    let pr = shoot_t(&mut s);
+    assert_eq!(glasnost_sim::lift::wave_of(&s.w, s.a), None, "no live wave");
+    s.w.effects.clear();
+    burst(&mut s, &pr);
+    (s, pr, v)
+}
+
+/// Whether the burst made a radiation beam or a magnetic wave: a shot's
+/// line effect (whose radiation-beam flash the drawing reads from the
+/// weapon), a wave, or a live wave of the attacker.
+fn beam_or_wave(s: &S) -> bool {
+    s.w.effects
+        .iter()
+        .any(|e| matches!(e, Effect::Line { .. } | Effect::Wave { .. }))
+        || !s.w.waves.is_empty()
+        || glasnost_sim::lift::wave_of(&s.w, s.a).is_some()
+}
+
+// spec: S-0316 claim 2 (revision 35, scenario EB6 part c runs 1 and 2: neither the radiation-beam nor the magnetic-beam flag suppresses a fragment's bolt, and a fragment of a weapon with either or both makes no radiation beam and no magnetic wave, while its projectile has its attacker and the attacker has no live wave) and S-0318 claim 8
+#[test]
+fn eb6c_bolt_with_radiation_or_magnetic_beam_flags() {
+    for (rad, mag) in [(true, false), (false, true), (true, true)] {
+        let (s, pr, v) = flags_scene(false, true, rad, mag);
+        assert_eq!(bolts(&s), ends(&s, &pr, &v[..3]), "rad {rad} mag {mag}");
+        assert!(lines(&s).is_empty());
+        assert!(!beam_or_wave(&s), "rad {rad} mag {mag}");
+    }
+}
+
+// spec: S-0316 claim 2 (revision 35, scenario EB6 part c runs 3 to 5: a fragment of a weapon without the electric-bolt flag that has both or one of the radiation-beam and magnetic-beam flags makes no radiation beam and no magnetic wave) and S-0318 claim 8 (no bolt without the electric-bolt flag)
+#[test]
+fn eb6c_radiation_or_magnetic_beam_flags_alone() {
+    for (rad, mag) in [(true, true), (true, false), (false, true)] {
+        let (s, _, _) = flags_scene(false, false, rad, mag);
+        assert!(bolts(&s).is_empty(), "rad {rad} mag {mag}");
+        assert!(lines(&s).is_empty());
+        assert!(!beam_or_wave(&s), "rad {rad} mag {mag}");
+        assert_eq!(frags(&s).len(), 3, "the fragments are still launched");
+    }
+}
+
+// spec: S-0316 claim 2 (revision 35, scenario EB6 part c run 6: a fragment of a weapon with the laser flag and both of those flags makes no radiation beam and no magnetic wave; its laser beam is S-0318 claim 8's) and S-0318 claim 8
+#[test]
+fn eb6c_laser_with_both_beam_flags() {
+    let (s, pr, v) = flags_scene(true, false, true, true);
+    assert_eq!(lines(&s), ends(&s, &pr, &v[..3]));
+    assert!(bolts(&s).is_empty());
+    assert!(!beam_or_wave(&s));
+}
+
+// spec: S-0316 claim 2 (revision 35: the ranking of the line-effect flags is for shots; a fragment of a weapon with every line-effect flag makes its laser beam and its bolt, and no radiation beam or magnetic wave) and claims 8 and 10 (the shrapnel weapon's own alternate-colour flag gives a fragment's bolt its colour: the bolt names the fragment weapon, and its firer is the projectile's attacker)
+#[test]
+fn eb6c_every_flag_and_the_bolt_weapon() {
+    let (s, pr, v) = flags_scene(true, true, true, true);
+    assert_eq!(lines(&s), ends(&s, &pr, &v[..3]));
+    assert_eq!(bolts(&s), ends(&s, &pr, &v[..3]));
+    assert!(!beam_or_wave(&s));
+    let fw = wp(&s.w, "Frag");
+    assert!(s.w.effects.iter().all(|e| match e {
+        Effect::Bolt { weapon, firer, .. } => *weapon == fw && *firer == s.a,
+        _ => true,
+    }));
+}
+
 // ---------------------------------------------------------------- import
 
 // spec: S-0318 Import mapping (ShrapnelWeapon absent: no fragments; ShrapnelCount absent: 0)

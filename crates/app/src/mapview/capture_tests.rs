@@ -13,6 +13,8 @@ use glasnost_render::compose::Paint;
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
 use glasnost_render::scene::{Item, Scene};
 use glasnost_rules::sim::{BuildingType, LocomotionClass, Locomotor, UnitType};
+use glasnost_sim::econ::sell::Stage;
+use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
 use glasnost_sim::targeting::{ClickOn, Modifiers};
 use glasnost_sim::testkit;
@@ -70,6 +72,11 @@ fn import(
 /// capturable 2 × 2 building, with `tech` one that needs an engineer (a
 /// tech building, S-0515 Terms), and MANX, an engineer.
 fn rules(tech: bool) -> Arc<SimRules> {
+    Arc::new(SimRules::new(&ruleset(tech), "synthetic-test"))
+}
+
+/// The ruleset of [`rules`].
+fn ruleset(tech: bool) -> glasnost_rules::schema::Ruleset {
     let mut r = testkit::combat_ruleset();
     r.registries
         .get_mut("buildings")
@@ -100,7 +107,7 @@ fn rules(tech: bool) -> Arc<SimRules> {
             ..Default::default()
         },
     );
-    Arc::new(SimRules::new(&r, "synthetic-test"))
+    r
 }
 
 /// The setup: houses Alpha (0) and Beta (1) and the neutral house (2).
@@ -393,4 +400,106 @@ fn a_damaged_map_building_shows_its_damage() {
     assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
     assert!(!s.body.0.is_empty() && !s.body.1.is_empty(), "{:?}", s.body);
     assert_ne!(s.body.0, s.body.1, "the damaged frame");
+}
+
+/// Alpha's own HUTX with the slot animation, sellable (its type has a
+/// build-up sprite, S-0408 claim 4), sold after the first ticks: for each
+/// tick from the order on, the sale's stage and the building's
+/// slot-animation pixels as redrawn after the tick.
+fn sale_slots() -> Vec<(Option<Stage>, Vec<u8>)> {
+    let (import, catalogue, assets) = import(true);
+    let map = testkit::empty_map(SIZE);
+    let mut r = ruleset(false);
+    r.sim.buildings.get_mut("HUTX").unwrap().econ.buildup = Some(true);
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = testkit::spawn(
+        &mut world,
+        SimKind::Building,
+        "HUTX",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options {
+        slots: vec![(b"Alpha".to_vec(), 1), (b"Beta".to_vec(), 2)],
+        ..Options::default()
+    };
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    for _ in 0..4 {
+        live.step();
+    }
+    live.redraw(&inputs, &mut scene);
+    assert_eq!(
+        pixels(&scene, sim_code(b), SLOT_FRAME).len(),
+        1,
+        "the slot animation is drawn before the sale"
+    );
+    assert!(
+        glasnost_sim::orders::issue(&mut live.world, ALPHA, Order::Sell { actor: b }),
+        "the sell order is accepted"
+    );
+    let mut out = Vec::new();
+    for _ in 0..120 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let stage = live
+            .world
+            .obj(b)
+            .and_then(|o| o.econ.sale.as_ref())
+            .map(|s| s.stage);
+        out.push((stage, pixels(&scene, sim_code(b), SLOT_FRAME)));
+        if live.world.obj(b).is_none() {
+            break;
+        }
+    }
+    out
+}
+
+/// spec: S-0405 claim 9 and Changes for other specs (revision 36, S-0108 claim 10 and scenario
+/// B14: a sold building's slot animations stay drawn until the first tick of its build-down and
+/// are hidden from then on) and S-0408 claim 6 (the build-down starts at a later processing than
+/// the sale's first)
+#[test]
+fn a_sold_buildings_slots_stay_until_its_build_down() {
+    let seen = sale_slots();
+    let begun = seen
+        .iter()
+        .position(|(s, _)| *s == Some(Stage::Begun))
+        .expect("the sale's first processing");
+    let down = seen
+        .iter()
+        .position(|(s, _)| matches!(s, Some(Stage::BuildDown(_))))
+        .expect("the build-down starts");
+    assert!(begun < down, "{seen:?}");
+    for (s, px) in &seen[..down] {
+        assert_eq!(px.len(), 1, "drawn before the build-down ({s:?}): {px:?}");
+    }
+    for (s, px) in &seen[down..] {
+        assert!(
+            px.is_empty(),
+            "hidden from the build-down's first tick ({s:?}): {px:?}"
+        );
+    }
 }

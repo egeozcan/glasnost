@@ -1242,3 +1242,187 @@ fn claim_13_tethered_vehicle_is_passed_over() {
         "tethered in its factory's cell"
     );
 }
+
+// spec: S-0405 claim 10 (revision 36: an ownership change leaves the power switch as it is: a building switched off stays off for its new owner, and one switched on stays on; a switched-off building makes no output and needs no drain)
+#[test]
+fn claim_10_ownership_change_keeps_the_switch() {
+    let mut w = game(&rules());
+    let b = HouseId(1);
+    put(&mut w, "PLANT", 0, 0, 0);
+    put(&mut w, "PLANT", 1, 0, 6);
+    let off = put(&mut w, "CONS", 0, 2, 0);
+    let on = put(&mut w, "CONS", 0, 4, 0);
+    power::switch(&mut w, off, false);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(w.obj(off).unwrap().econ.building.switched_off);
+    assert_eq!(power::totals(&w, b), (120, 0));
+    change_owner(&mut w, off, b);
+    change_owner(&mut w, on, b);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(
+        w.obj(off).unwrap().econ.building.switched_off,
+        "off stays off for its new owner"
+    );
+    assert!(
+        !w.obj(on).unwrap().econ.building.switched_off,
+        "on stays on"
+    );
+    assert_eq!(
+        power::totals(&w, b),
+        (120, 40),
+        "only the switched-on building drains for its new owner"
+    );
+}
+
+/// [`rules`] with DRONE3, a vehicle type without the powered-unit flag,
+/// and CENTRE3, a control centre whose powered unit is DRONE3.
+fn unflagged_rules() -> Ruleset {
+    let mut r = rules();
+    r.registries
+        .get_mut("buildings")
+        .unwrap()
+        .push("CENTRE3".into());
+    r.registries
+        .get_mut("vehicles")
+        .unwrap()
+        .push("DRONE3".into());
+    let mut c = building(500, -10);
+    c.powered = Some(true);
+    c.econ.powers_unit = Some("DRONE3".into());
+    r.sim.buildings.insert("CENTRE3".into(), c);
+    let mut v = r.sim.vehicles["DRONE"].clone();
+    v.econ.powered_unit = Some(false);
+    r.sim.vehicles.insert("DRONE3".into(), v);
+    r
+}
+
+/// Gives a disabled vehicle a destination as a request accepted after
+/// the disabling would (claim 20: "When an accepted request supplies a
+/// destination, it moves there ... still disabled"), and runs until it
+/// has none or 200 ticks pass. Returns whether it was deselected again,
+/// the sounds at it, and the ticks run.
+fn moved_while_disabled(
+    w: &mut World,
+    id: ObjectId,
+    to: glasnost_sim::world::Target,
+) -> (bool, Vec<glasnost_sim::combat::effects::Sound>, i32) {
+    {
+        let o = w.obj_mut(id).unwrap();
+        o.dest = Some(to);
+        o.path.steps.clear();
+        o.beh.queue(Some(Behaviour::Move));
+    }
+    w.effects.clear();
+    let mut seen = (false, Vec::new());
+    for n in 1..=200 {
+        step(w);
+        let (des, s) = effects_of(w, id);
+        seen.0 |= des;
+        seen.1.extend(s);
+        w.effects.clear();
+        if w.obj(id).unwrap().dest.is_none() {
+            return (seen.0, seen.1, n);
+        }
+    }
+    (seen.0, seen.1, 200)
+}
+
+// spec: S-0405 claim 20 (revision 36: a disabled vehicle that is given a destination moves there still disabled; its arrival is an arrival in claim 13's sense, so with the powered-unit flag, no building in the cell and no active control centre, it gets the disabling's guard reset and locomotor switch-off again, with no sound; one whose type lacks the flag gets no such second switch-off) and claim 13 (the cell-entry rule)
+#[test]
+fn claim_20_arrival_of_a_disabled_vehicle_disables_it_again() {
+    use glasnost_sim::world::Target;
+    let mut r = unflagged_rules();
+    // A count per powered-unit type, so that each centre's own transition disables its vehicles.
+    r.globals.quirks.shared_control_centre_count = false;
+    let mut w = game(&r);
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let k3 = put(&mut w, "CENTRE3", 0, 4, 0);
+    let d = drone(&mut w, 0, -6, 4);
+    let d3 = testkit::spawn(
+        &mut w,
+        Kind::Vehicle,
+        "DRONE3",
+        0,
+        testkit::mid(SIZE, -6, 8),
+        0,
+    );
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    order(&mut w, A, Order::PowerOff { actor: k });
+    order(&mut w, A, Order::PowerOff { actor: k3 });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(power::unit_disabled(&w, d));
+    assert!(
+        power::unit_disabled(&w, d3),
+        "the 1-to-0 transition disables it whatever its flag"
+    );
+    // With the flag: the first arrival in a cell without a building resets it again.
+    let start = w.obj(d).unwrap().pos.cell();
+    let far = Target::Cell(testkit::mid(SIZE, 6, 4));
+    let (deselected, sounds, _) = moved_while_disabled(&mut w, d, far);
+    let o = w.obj(d).unwrap();
+    assert_eq!(o.dest, None, "the guard reset cleared the destination");
+    assert_eq!(o.beh.current, Some(Behaviour::Guard));
+    assert_ne!(o.pos.cell(), start, "after an arrival of its own movement");
+    assert_ne!(
+        o.pos.cell(),
+        testkit::mid(SIZE, 6, 4),
+        "well before the destination"
+    );
+    assert!(deselected, "the disabling's removal from the selection");
+    assert!(sounds.is_empty(), "no sound: it was already disabled");
+    assert!(power::unit_disabled(&w, d), "still disabled");
+    // Without the flag: no second switch-off, it reaches its destination.
+    let to = testkit::mid(SIZE, 6, 8);
+    let (deselected, sounds, n) = moved_while_disabled(&mut w, d3, Target::Cell(to));
+    assert!(n < 200, "it arrives");
+    assert_eq!(
+        w.obj(d3).unwrap().pos.cell(),
+        to,
+        "it reaches its destination"
+    );
+    assert!(!deselected, "no second switch-off");
+    assert!(sounds.is_empty());
+    assert!(power::unit_disabled(&w, d3));
+}
+
+// spec: S-0405 claim 20 (at disabling the locomotor is switched off, and at enabling switched on again; S-0207 claim 16 refuses a scatter request in case (g) while the vehicle's locomotor is switched off) and S-0207 claim 16 (g): a disabled drive vehicle refuses a scatter request, which it accepts enabled
+#[test]
+fn claim_20_disabled_drive_vehicle_refuses_a_scatter_request() {
+    use glasnost_sim::scatter::{ScatterRequest, vehicle_request};
+    let mut w = game(&rules());
+    put(&mut w, "PLANT", 0, 0, 0);
+    let k = put(&mut w, "CENTRE", 0, 2, 0);
+    let d = drone(&mut w, 0, -4, 4);
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    let req = ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: false,
+    };
+    assert!(vehicle_request(&mut w.clone(), d, req), "enabled: accepted");
+    order(&mut w, A, Order::PowerOff { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(power::unit_disabled(&w, d));
+    assert!(
+        !vehicle_request(&mut w.clone(), d, req),
+        "disabled: refused by case (g)"
+    );
+    order(&mut w, A, Order::PowerOn { actor: k });
+    for _ in 0..3 {
+        step(&mut w);
+    }
+    assert!(vehicle_request(&mut w.clone(), d, req), "enabled again");
+}

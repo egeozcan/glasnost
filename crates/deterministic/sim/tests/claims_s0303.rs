@@ -1079,6 +1079,16 @@ fn wall_draws_come_before_the_hits() {
 // ---------------------------------------------------------------------------
 
 fn barrel_world() -> (World, u8) {
+    let r = barrel_rules();
+    let w = testkit::game_with(&r, SIZE, 1);
+    let keg = ov(&w, "KEG");
+    (w, keg)
+}
+
+/// The rules of [`barrel_world`]: the exploding overlay KEG, the vehicle
+/// BOX, the demolition warhead DEMO and the barrel fields, with the
+/// debris pieces StaveA to StaveC.
+fn barrel_rules() -> Ruleset {
     let mut r = testkit::combat_ruleset();
     overlay(&mut r, "KEG", |o| o.explodes = Some(true));
     vehicle(&mut r, "BOX", |t| t.strength = Some(50));
@@ -1092,9 +1102,7 @@ fn barrel_world() -> (World, u8) {
     g.barrel_particle = Some("KegSmoke".into());
     let staves = ["StaveA", "StaveB", "StaveC"].map(String::from);
     piece_types(&mut r, &staves);
-    let w = testkit::game_with(&r, SIZE, 1);
-    let keg = ov(&w, "KEG");
-    (w, keg)
+    r
 }
 
 // spec: S-0303 claim 19 (an exploding overlay in the centre cell is removed, the barrel explosion appears at P, a nested detonation of the ammunition-crate damage with the demolition warhead, no source object and the outer house follows, then percent draws for the debris (first below 15) and one for the particle system; whatever the sign of D) and S-0317 claim 11 (the barrel debris is a piece of S-0317, made with its creation draws)
@@ -1140,6 +1148,72 @@ fn exploding_overlays() {
         assert_eq!(pieces(&w), stave, "seed {seed}");
         assert_eq!(w.rng.taken(), rng.taken());
     }
+}
+
+// spec: S-0303 claim 19 (revision 25, scenario A13 variant d: a chosen barrel debris piece takes its creation draws, S-0317 claim 3, right after the percent draw rᵢ* that chose its entry and before the particle system's percent draw r) and S-0317 claim 3
+#[test]
+fn a13_d_piece_draws_come_before_the_particle_draw() {
+    let mut with_piece = 0;
+    let mut told_apart = 0;
+    for seed in 0..80 {
+        let mut r = barrel_rules();
+        register(&mut r, "particle_systems", "KegSmoke");
+        r.sim.particle_systems.insert(
+            "KegSmoke".into(),
+            glasnost_rules::sim::ParticleSystemType {
+                behaves_like: Some("smoke".into()),
+                ..Default::default()
+            },
+        );
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let keg = ov(&w, "KEG");
+        for _ in 0..seed {
+            w.rng.raw();
+        }
+        set_overlay(&mut w, at(0, 0), keg, 0);
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let mut model = w.rng.clone();
+        let mut piece = false;
+        for _ in 0..3 {
+            if model.percent() < 15 {
+                piece = true;
+                break;
+            }
+        }
+        // The swapped order: the particle system's draw before the piece's.
+        let mut swapped = model.clone();
+        let swapped_smoke = swapped.percent() < 25;
+        if piece {
+            piece_draws(&mut model, half);
+        }
+        let smoke = model.percent() < 25;
+        boom!(
+            w,
+            centre(0, 0),
+            10,
+            Some(wh(&w, "PLAIN")),
+            None,
+            Some(HouseId(ALPHA)),
+        );
+        let kind = w.rules().gas.system("KegSmoke").expect("a listed type");
+        let systems = w
+            .gas
+            .systems
+            .values()
+            .filter(|s| s.type_index == kind)
+            .count();
+        assert_eq!(systems, usize::from(smoke), "seed {seed}");
+        assert_eq!(pieces(&w).len(), usize::from(piece), "seed {seed}");
+        assert_eq!(w.rng.taken(), model.taken(), "seed {seed}");
+        if piece {
+            with_piece += 1;
+            if smoke != swapped_smoke {
+                told_apart += 1;
+            }
+        }
+    }
+    assert!(with_piece > 0, "some seed shows a debris piece");
+    assert!(told_apart > 0, "some seed tells the two orders apart");
 }
 
 // ---------------------------------------------------------------------------
