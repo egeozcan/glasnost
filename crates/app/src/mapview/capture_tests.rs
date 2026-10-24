@@ -406,11 +406,15 @@ fn a_damaged_map_building_shows_its_damage() {
 /// build-up sprite, S-0408 claim 4), sold after the first ticks: for each
 /// tick from the order on, the sale's stage and the building's
 /// slot-animation pixels as redrawn after the tick.
-fn sale_slots() -> Vec<(Option<Stage>, Vec<u8>)> {
+fn sale_slots(packs: bool) -> Vec<(Option<Stage>, Vec<u8>)> {
     let (import, catalogue, assets) = import(true);
     let map = testkit::empty_map(SIZE);
     let mut r = ruleset(false);
     r.sim.buildings.get_mut("HUTX").unwrap().econ.buildup = Some(true);
+    if packs {
+        // A type that undeploys into a vehicle packs up on a sell order (S-0213 claim 12).
+        r.sim.buildings.get_mut("HUTX").unwrap().undeploys_into = Some("CART".into());
+    }
     let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
     let setup = setup();
     let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
@@ -483,11 +487,35 @@ fn sale_slots() -> Vec<(Option<Stage>, Vec<u8>)> {
 /// the sale's first)
 #[test]
 fn a_sold_buildings_slots_stay_until_its_build_down() {
-    let seen = sale_slots();
+    let seen = sale_slots(false);
     let begun = seen
         .iter()
         .position(|(s, _)| *s == Some(Stage::Begun))
         .expect("the sale's first processing");
+    let down = seen
+        .iter()
+        .position(|(s, _)| matches!(s, Some(Stage::BuildDown(_))))
+        .expect("the build-down starts");
+    assert!(begun < down, "{seen:?}");
+    for (s, px) in &seen[..down] {
+        assert_eq!(px.len(), 1, "drawn before the build-down ({s:?}): {px:?}");
+    }
+    for (s, px) in &seen[down..] {
+        assert!(
+            px.is_empty(),
+            "hidden from the build-down's first tick ({s:?}): {px:?}"
+        );
+    }
+}
+
+/// spec: S-0405 claim 9 and S-0415 claim 9 (W15 part k: a pack-up goes the same stage path as a sale, so a packing building's slot animations stay drawn until the first tick of its build-down and are hidden from then on)
+#[test]
+fn a_packing_buildings_slots_stay_until_its_build_down() {
+    let seen = sale_slots(true);
+    let begun = seen
+        .iter()
+        .position(|(s, _)| *s == Some(Stage::Begun))
+        .expect("the pack-up's first processing");
     let down = seen
         .iter()
         .position(|(s, _)| matches!(s, Some(Stage::BuildDown(_))))

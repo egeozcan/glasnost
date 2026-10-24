@@ -1638,3 +1638,43 @@ fn range_above_eleven_cells_scans_to_ring_eleven_only() {
     assert_eq!(s.w.rng, after, "one drawn pair for the second fragment");
     assert!(!targets(&s).contains(&Target::Object(far)));
 }
+
+// spec: S-0318 claim 1 (a) (a detonation that selects any special hit launches no fragments, whichever row of S-0514 claim 20's table it is; the rows other than bomb planting are tested here one by one, through the shot's own detonation)
+#[test]
+fn sh1n_every_special_hit_row_stops_the_burst() {
+    type Set = fn(&mut WarheadType);
+    let rows: [(&str, Set); 11] = [
+        ("takeover", |h| h.mind_control = Some(true)),
+        ("bomb", |h| h.ivan_bomb = Some(true)),
+        ("charge", |h| h.electric_assault = Some(true)),
+        ("parasite", |h| h.parasite = Some(true)),
+        ("erase", |h| h.temporal = Some(true)),
+        ("locomotor", |h| h.is_locomotor = Some(true)),
+        ("airstrike", |h| h.airstrike = Some(true)),
+        ("direct rock", |h| h.direct_rocker = Some(true)),
+        ("disarm", |h| h.bomb_disarm = Some(true)),
+        ("disguise", |h| h.makes_disguise = Some(true)),
+        ("nuke", |h| h.nuke_maker = Some(true)),
+    ];
+    for (name, set) in rows {
+        let mut r = base(3);
+        set(r.sim.warheads.get_mut("Pin").unwrap());
+        let mut s = setup(&r, true);
+        let v = around(&mut s);
+        let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
+        let id = {
+            let shot = wp(&s.w, "Shot");
+            let p = s.w.obj(s.a).unwrap().pos;
+            let t = s.t.unwrap();
+            launch(&mut s.w, s.a, shot, Target::Object(t), p, SHOT).unwrap()
+        };
+        glasnost_sim::combat::projectile::turn(&mut s.w, id);
+        testkit::run(&mut s.w, 3);
+        assert!(frags(&s).is_empty(), "{name}: no fragments in play");
+        assert_eq!(
+            lost(&s, &v, &before),
+            vec![0; 5],
+            "{name}: no fragment damage"
+        );
+    }
+}
