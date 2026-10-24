@@ -1332,6 +1332,10 @@ pub struct Quirks {
     // spec: S-0501 claim 46, Edge cases; S-0519 claim 7
     #[serde(default = "on")]
     pub crash_drops_planted_bomb: bool,
+    /// An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list. Not consulted yet (S-0501 r45 claim 47 is taken in at the next intake).
+    // spec: S-0501 claim 47 (c), Edge cases
+    #[serde(default = "on")]
+    pub aircraft_corner_sector_untracked: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2291,6 +2295,7 @@ impl Default for Quirks {
             aircraft_unit_step_stall: true,
             aircraft_zero_step_attack_stall: true,
             crash_drops_planted_bomb: true,
+            aircraft_corner_sector_untracked: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3265,6 +3270,10 @@ impl Quirks {
                 self.aircraft_zero_step_attack_stall,
             ),
             ("crash_drops_planted_bomb", self.crash_drops_planted_bomb),
+            (
+                "aircraft_corner_sector_untracked",
+                self.aircraft_corner_sector_untracked,
+            ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (

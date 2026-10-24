@@ -8471,6 +8471,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_corner_sector_untracked": {
+          "description": "An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list. Not consulted yet (S-0501 r45 claim 47 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_endless_refire": {
           "description": "With the re-approach flag off, an ordinary non-fighter, non-strafer repeats burst-plus-single-shot cycles without spending its pending round; off: each such cycle ends as one run.",
           "type": "boolean",
