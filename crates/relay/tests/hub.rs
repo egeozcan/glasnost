@@ -44,10 +44,17 @@ fn hub() -> Hub {
     hub_with(Limits::default())
 }
 
+/// A setup with these rows and the rest closed. Each person's row has a
+/// fixed colour rising with the row, so that the persons' slots are their
+/// rows.
+// spec: S-0009 claim 19 (persons by increasing colour slot)
 fn setup(rows: &[SlotKind]) -> Setup {
     let mut slots = [Slot::closed(); 8];
-    for (s, &k) in slots.iter_mut().zip(rows) {
+    for (i, (s, &k)) in slots.iter_mut().zip(rows).enumerate() {
         s.kind = k;
+        if k == SlotKind::Human {
+            s.colour = Some(i as u8);
+        }
     }
     Setup {
         map: 0,

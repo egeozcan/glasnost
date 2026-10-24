@@ -145,14 +145,19 @@ async fn create_peek_join_leave_and_start_over_sockets() {
     else {
         panic!("both begin");
     };
-    assert_eq!((hb.you, bb.you), (0, 1));
+    // The host (row 0) and Bea (row 1) are both on random: the slots
+    // follow the colours they were given.
+    // spec: S-0009 claim 19 (persons by increasing colour slot; random colours drawn first)
+    let given = |row: usize| hb.setup.slots[row].colour.expect("a colour is given");
+    let want = if given(0) < given(1) { (0, 1) } else { (1, 0) };
+    assert_eq!((hb.you, bb.you), want);
     assert_eq!(hb.seed, bb.seed);
     assert_eq!(hb.slots, bb.slots);
     // Forwarding, both ways.
-    host.send(frames(0, 0, 2));
-    b.send(frames(1, 0, 1));
-    assert_eq!(next_game(&mut b).await.from, 0);
-    assert_eq!(next_game(&mut host).await.from, 1);
+    host.send(frames(hb.you, 0, 2));
+    b.send(frames(bb.you, 0, 1));
+    assert_eq!(next_game(&mut b).await.from, hb.you);
+    assert_eq!(next_game(&mut host).await.from, bb.you);
     r.stop();
 }
 
