@@ -131,6 +131,7 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
     let e = &b.raw.econ;
     let mode = r.mode;
     let wall_overlay = e.to_overlay.as_deref().and_then(|n| overlay_index(w, n));
+    let support = support_flags(w, t);
     PlaceType {
         size: b.foundation,
         // spec: S-0406 claim 2 (the 8-cell 3 × 3 word; absent: no)
@@ -152,10 +153,8 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
         firestorm: b.raw.firestorm_wall.unwrap_or(false),
         // spec: S-0406 Constants (adjacency absent-key default 3 cells)
         adjacent: e.adjacent.unwrap_or(3),
-        // spec: S-0406 Constants (base-normal absent-key default yes)
-        base_normal: e.base_normal.unwrap_or(true),
-        // spec: S-0406 Constants (ally-eligible absent-key default no)
-        ally_eligible: e.eligible_for_ally_building.unwrap_or(false),
+        base_normal: support.0,
+        ally_eligible: support.1,
         // spec: S-0406 Import mapping (GuardRange: cells converted to leptons as S-0215 states, trunc(256 × c); absent 0)
         guard_range: e.guard_range.as_ref().map_or(0, |d| {
             d.value(mode)
@@ -171,6 +170,23 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
         // spec: S-0406 Import mapping (Upgrades absent: 0)
         upgrades: e.upgrades.unwrap_or(0),
     }
+}
+
+/// The base-normal and ally-eligible flags of building type `t` (claim 4),
+/// as [`place_type`] gives them, without the rest of its fields: the
+/// adjacency scan asks them of every building it meets.
+fn support_flags(w: &World, t: u32) -> (bool, bool) {
+    let Some(b) = w.rules().buildings.get(t as usize) else {
+        // As `PlaceType::default()`.
+        return (false, false);
+    };
+    let e = &b.raw.econ;
+    (
+        // spec: S-0406 Constants (base-normal absent-key default yes)
+        e.base_normal.unwrap_or(true),
+        // spec: S-0406 Constants (ally-eligible absent-key default no)
+        e.eligible_for_ally_building.unwrap_or(false),
+    )
 }
 
 /// The overlay registration index of an overlay type name.
@@ -506,9 +522,9 @@ pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
                     continue;
                 }
                 let Some(owner) = o.owner else { continue };
-                let q = place_type(w, o.type_index);
+                let (base_normal, ally_eligible) = support_flags(w, o.type_index);
                 // spec: S-0406 claim 4 (own base-normal building, any state)
-                if owner == house && q.base_normal {
+                if owner == house && base_normal {
                     return true;
                 }
                 // spec: S-0406 claim 4 (build-off-ally: the owner allies the placing house, an ally-eligible building; a house allies itself)
@@ -516,7 +532,7 @@ pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
                     || w.houses
                         .get(usize::from(owner.0))
                         .is_some_and(|h| h.allied_with(house));
-                if ally_option && allies && q.ally_eligible {
+                if ally_option && allies && ally_eligible {
                     return true;
                 }
             }
