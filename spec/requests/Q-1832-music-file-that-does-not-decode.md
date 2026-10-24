@@ -1,9 +1,9 @@
 ---
 id: Q-1832
 title: A music track whose sound file is present but does not decode, or whose name ends in .wav
-status: open
+status: answered
 related: [S-0703, Q-1700]
-answered-by: []
+answered-by: [S-0703]
 ---
 
 ## Need
