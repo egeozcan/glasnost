@@ -1616,3 +1616,25 @@ fn sh8f_run_2_a_vehicle_on_the_deck_is_not_a_candidate() {
     assert_eq!(targets(&s), cells, "the fragment goes to a drawn cell");
     assert_eq!(s.w.rng, after, "2 draws");
 }
+
+// spec: S-0318 Edge cases (a fragment range above 11 cells: the scan stops at ring 11, S-0303 table T1's last ring, and what remains goes by claim 4) and F2 (k = floor(R / 256))
+#[test]
+fn range_above_eleven_cells_scans_to_ring_eleven_only() {
+    let mut r = base(2);
+    frag(&mut r).range = Some(d("14"));
+    let mut s = setup(&r, true);
+    let near = put(&mut s, 1, 0, -11);
+    let far = put(&mut s, 1, 0, -12);
+    let pr = shoot_t(&mut s);
+    let (cells, after) = drawn(&s.w, 1);
+    burst(&mut s, &pr);
+    let mut want = objs(&[near]);
+    want.extend(cells);
+    assert_eq!(
+        targets(&s),
+        want,
+        "ring 11 is the last; ring 12 is not visited"
+    );
+    assert_eq!(s.w.rng, after, "one drawn pair for the second fragment");
+    assert!(!targets(&s).contains(&Target::Object(far)));
+}
