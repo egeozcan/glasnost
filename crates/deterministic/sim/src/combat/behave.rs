@@ -414,8 +414,10 @@ pub fn building_process(w: &mut World, id: ObjectId) -> i32 {
             }
             Answer::NotFacing | Answer::Rearming => {
                 rotate(w);
+                // spec: S-0215 claim 32 (revision 76: while the check answers rearming, for any cause, the rearm countdown or a pending animation-delayed shot included, the building keeps its target, also out of range)
                 2 // spec: S-0215 claim 32 (not facing or rearming: 2 ticks)
             }
+            // spec: S-0215 claim 32 (revision 76: a target out of range is dropped at the first processing whose firing check answers out of range)
             Answer::Illegal | Answer::Impossible | Answer::OutOfAmmo | Answer::OutOfRange => {
                 // spec: S-0518 claim 10 (a prism master whose attack drops the target resets its support count)
                 crate::linked::reset_count(w, id);

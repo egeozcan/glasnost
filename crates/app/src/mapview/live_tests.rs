@@ -3719,6 +3719,60 @@ fn protection_slot_cell_shroud_on_ground_raised_four_levels() {
     );
 }
 
+/// spec: S-0513 claim 29b and SW10 part i6 (revision 34, Q-1740 answered: on a sloped cell the
+/// slot animation's shroud test is made at the terrain's surface height at the centre, S-0106
+/// claims 2 and 3, not the flat height of the cell's level; a valley or steep slope at level 0
+/// has its centre a whole level up, so u = 1 and the test reads *E* and its north-west
+/// neighbour *N*; the control, an edge slope with its centre half a level up, has u = 0 and reads
+/// *E* alone), S-0110 claim 8
+#[test]
+fn protection_slot_cell_shroud_on_a_sloped_cell_uses_the_surface_height() {
+    use super::live::slot_cell_shrouded;
+    use glasnost_sim::econ::shroud;
+    let e = testkit::mid(24, 0, 0);
+    let n = glasnost_map::CellXY::new(e.x - 1, e.y - 1);
+    let viewer = HouseId(1);
+    // (slope shape, centre height, shrouded with N explored and E not)
+    for (shape, centre_z, shrouded) in [(9u8, 104, false), (13, 104, false), (1, 52, true)] {
+        let map = testkit::empty_map(24);
+        let mut w = glasnost_sim::load::new_game(
+            testkit::rules(),
+            &map,
+            testkit::catalogue(),
+            &testkit::setup(3),
+        )
+        .expect("the map loads");
+        // The slope shape set by hand (the synthetic catalogue has no ramp tiles).
+        w.cells.grid.get_mut(e).expect("cell E").slope = shape;
+        let centre = glasnost_sim::world::Pos::centre(e, 0);
+        assert_eq!(w.cells.cell(e).unwrap().level, 0, "level 0");
+        assert_eq!(w.surface_at(centre.x, centre.y), centre_z, "shape {shape}");
+        // A reveal of N but not E.
+        let idx = |w: &glasnost_sim::world::World, c| w.cells.idx(c).map(|i| i as u32);
+        let (i_n, i_e) = (idx(&w, n), idx(&w, e));
+        let reveal = (-4..=0)
+            .flat_map(|dx| (-4..=0).map(move |dy| (dx, dy)))
+            .flat_map(|(dx, dy)| (1..=2).map(move |r| (dx, dy, r)))
+            .find_map(|(dx, dy, r)| {
+                let c = glasnost_map::CellXY::new(n.x + dx, n.y + dy);
+                let p = glasnost_sim::world::Pos::centre(c, 0);
+                let p = glasnost_sim::world::Pos::new(p.x, p.y, w.surface_at(p.x, p.y));
+                let cells = shroud::sight_cells(&w, p, r);
+                (i_n.is_some_and(|i| cells.contains(&i))
+                    && !i_e.is_some_and(|i| cells.contains(&i)))
+                .then_some((p, r))
+            })
+            .expect("a reveal that covers N and not E");
+        shroud::area_reveal(&mut w, viewer, reveal.0, reveal.1);
+        assert!(shroud::explored(&w, viewer, n) && !shroud::explored(&w, viewer, e));
+        assert_eq!(
+            slot_cell_shrouded(&w, viewer, e),
+            shrouded,
+            "shape {shape}: the surface height's u decides which cells are read"
+        );
+    }
+}
+
 /// spec: S-0513 claim 29b (slot animations: each cell of a force-shielded building carries its own
 /// shroud answer for the local player, so an animation over a visible edge cell *E* takes the
 /// mask while the centre cell is shrouded, SW10 part i1; the local player is not the owner;

@@ -239,7 +239,7 @@ fn sh1a_three_fragments_in_the_tick_of_the_shot() {
     );
 }
 
-// spec: S-0318 claim 5 (a fragment takes its first turn in the tick of the burst unless an earlier removal costs it that turn) and S-0203 claim 10 (removal-skip switch on: the shot leaving play in its own turn costs the first fragment, which entered during that turn, its turn; the second fragment leaving costs the third its turn, and in the next tick the first fragment leaving costs it again)
+// spec: S-0318 claim 5 (a fragment takes its first turn in the tick of the burst unless an earlier removal costs it that turn), S-0203 claim 5 (revision 40: the third fragment loses its first turn in the tick of the burst and again in the next, so its first turn is at n + 2) and S-0306 State and ordering (revision 38) and S-0203 claim 10 (removal-skip switch on: the shot leaving play in its own turn costs the first fragment, which entered during that turn, its turn; the second fragment leaving costs the third its turn, and in the next tick the first fragment leaving costs it again)
 #[test]
 fn sh1a_removals_cost_fragments_their_first_turn() {
     let mut s = setup(&base(3), true);
@@ -862,6 +862,40 @@ fn claim6_visible_fragment_direction() {
     assert!(y.to_i32_common().abs() <= 1, "no sideways part");
     let (xi, zi) = (x.to_i32_common(), z.to_i32_common());
     assert!(zi > 0 && (xi - zi).abs() <= 1, "45° elevation: {xi} {zi}");
+}
+
+// spec: S-0306 claims 1, 2 and 7 (revision 38: a fragment is not a shot; its speed is the fragment weapon's weapon speed S_w, without claim 1's shot speed or claim 2's cap at half the distance to the impact point, and a steering fragment does not start at 1, which S-0306 leaves open and our engine does not do) and S-0318 claims 5 and 6
+#[test]
+fn s0306_fragment_speed_is_the_weapon_speed_uncapped() {
+    let mut r = base(1);
+    let bit = r.sim.projectiles.get_mut("Bit").unwrap();
+    bit.inviso = None;
+    // Steering (ρ > 0): S_w is the imported speed field, here the largest.
+    bit.rot = Some(12);
+    frag(&mut r).speed = Some(100);
+    let mut s = setup(&r, true);
+    let v = put(&mut s, 1, 1, 0);
+    let pr = shoot_t(&mut s);
+    burst(&mut s, &pr);
+    let f = &frags(&s)[0];
+    assert_eq!(f.target, Some(Target::Object(v)));
+    let sw = s.w.rules().combat.weapon(f.weapon).speed;
+    assert_eq!(sw, 255, "S_w: the stored speed of the field 100");
+    let len2: i64 = f
+        .vel
+        .iter()
+        .map(|c| i64::from(c.to_i32_common()).pow(2))
+        .sum();
+    let len = len2.isqrt() as i32;
+    assert!((len - sw).abs() <= 2, "length S_w: {len}");
+    let tp = s.w.obj(v).unwrap().pos;
+    let d2 = i64::from(tp.x - f.pos.x).pow(2)
+        + i64::from(tp.y - f.pos.y).pow(2)
+        + i64::from(tp.z - f.pos.z).pow(2);
+    assert!(
+        len > d2.isqrt() as i32 / 2 + 2,
+        "not capped at half the distance"
+    );
 }
 
 // ---------------------------------------------------------------- claim 7: chains

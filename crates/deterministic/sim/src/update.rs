@@ -208,7 +208,7 @@ mod tests {
         );
     }
 
-    // spec: S-0203 claim 10 and scenario O8 variant (a) (lethal: W1 n, W2 n + 1, W3 n + 2)
+    // spec: S-0203 claim 10 and scenario O8 variant (a) (lethal: W1 n, W2 n + 1, W3 n + 2); S-0203 claim 5 (revision 40: P3, fired in tick n, loses its first turn to removals in n and again in n + 1, so its first turn is in n + 2, the first tick in which no removal costs it the turn) and S-0306 State and ordering (revision 38: n + 1 or later)
     #[test]
     fn o8_lethal() {
         let m = o8(true, 3);

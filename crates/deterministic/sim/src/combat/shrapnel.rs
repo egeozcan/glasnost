@@ -172,18 +172,18 @@ fn fragment(
         return;
     };
     let fp = rules.combat.projectiles[pid as usize].clone();
-    // spec: S-0318 claim 6 (towards the aim point's reference point)
+    // spec: S-0318 claim 6 (towards the aim point's reference point) and S-0306 claims 3 and 5 (revision 38: a fragment is excepted from the shot's aim point, lead and launch direction)
     let tp = target_point(w, target);
     let yaw = i32::from(direction(
         i64::from(tp.x - burst.x),
         i64::from(tp.y - burst.y),
         rules.quirks.table_direction,
     ));
-    // spec: S-0318 claim 6 and Constants (a fixed elevation of about an eighth of a turn, π/4)
+    // spec: S-0318 claim 6 and Constants (a fixed elevation of about an eighth of a turn, π/4) and S-0306 claim 6 (revision 38: every projectile except a fragment takes its pitch from (a) to (c); a fragment climbs at this fixed elevation instead)
     let (c1, _) = direction_constants();
     // spec: S-0318 claim 6 and Constants (π/4: half of S-0204 F3's c₁ = π/2)
     let pitch = angle_facing(c1.div(F64::from_i64(2, mode), mode), mode);
-    // spec: S-0318 claim 5 (the speed is the fragment weapon's weapon speed S_w of S-0306 claim 1, without the shot speed or its cap) and claim 6 (length S_w, 100 at a speed of 0)
+    // spec: S-0318 claim 5 (the speed is the fragment weapon's weapon speed S_w of S-0306 claim 1, without the shot speed or its cap) and claim 6 (length S_w, 100 at a speed of 0); S-0306 claims 1, 2 and 7 and Terms (revision 38: a fragment is not a shot, its speed S_w, uncapped; a steering or vertical fragment's start speed 1 is left open there, so S_w is kept)
     let speed = wr.speed;
     let mut vel = initial_velocity(w, yaw, pitch, speed);
     // spec: S-0306 claim 9 (the stored target point K; the arm time: 0 against an aircraft)
@@ -194,7 +194,7 @@ fn fragment(
     } else {
         fp.arm
     };
-    // spec: S-0318 claim 5 (placed at the burst point)
+    // spec: S-0318 claim 5 (placed at the burst point) and S-0306 claims 5 and 8 (revision 38: a fragment starts at the burst point, not the fire point)
     let mut pos = burst;
     if fp.inviso {
         // spec: S-0318 claims 5 and 6 and S-0306 claim 9 (an invisible fragment is moved at once to K, or the first blocking cell's centre; no launch scatter draw, S-0318 Open questions)
@@ -243,7 +243,7 @@ fn fragment(
         chain: pr.chain + 1,
     };
     w.projectiles.insert(id, frag);
-    // spec: S-0318 claim 5 and S-0306 claim 8 (the fragment enters play at once; its first turn is in the tick of the burst)
+    // spec: S-0318 claim 5 and S-0306 claim 8 (the fragment enters play at once; its first turn is in the tick of the burst) and S-0203 claim 5 (revision 40: unless removals cost it that turn, then in the first later tick in which none does; S-0306 State and ordering, revision 38: n + 1 or later)
     w.update.enter(id);
     let Some(a) = attacker else {
         // spec: S-0318 claim 8 (a fragment launched after the attacker has gone makes no beam and no bolt)

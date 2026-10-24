@@ -181,7 +181,7 @@ pub(crate) fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Opti
         delay = Some(w.rng.ranged(d1, d2, q.ranged_draw_half_span));
     }
     if a.bouncing {
-        // spec: S-0202 claim 10 (a bouncing type: three raw values, then three ranged draws R(−65535, 65535))
+        // spec: S-0202 claim 10 (a bouncing type of a sprite animation of S-0109: three raw values, then three ranged draws R(−65535, 65535); revision 36: not a voxel-model debris piece, whose draws are S-0317's)
         for _ in 0..3 {
             let _ = w.rng.raw(); // spec: S-0202 Constants (animation bounce draws: 3 raw values)
         }

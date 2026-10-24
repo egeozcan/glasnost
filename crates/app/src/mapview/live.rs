@@ -3760,14 +3760,16 @@ pub const CURSOR_PALETTE_MISSING: &str = "the cursor palette MOUSEPAL.PAL is mis
 
 /// Whether cell `c` counts as shrouded for house `viewer` for the slot
 /// animations drawn over it (S-0513 claim 29b): S-0110 claim 8's point
-/// test at the centre of the cell, at its ground height, which on raised
-/// ground reads the explored state of a displaced cell. The ground height
-/// is the surface height at the centre (S-0106 claims 2 and 3), as S-0410
-/// claim 6 gives the radar's test (our reading on a slope, Q-1740).
+/// test at the centre of the cell, at its surface height, which on raised
+/// ground reads the explored state of a displaced cell. The height is the
+/// terrain's surface height at the centre (S-0106 claims 2 and 3), as S-0410
+/// claim 6 gives the radar's test; on a sloped cell that is the slope's
+/// height at the centre, not the flat height of the cell's level (S-0513
+/// revision 34, Q-1740 answered).
 pub(super) fn slot_cell_shrouded(w: &World, viewer: HouseId, c: CellXY) -> bool {
     // spec: S-0513 claim 29b (the centre of the cell); S-0110 claim 8
     let centre = glasnost_sim::world::Pos::centre(c, 0);
-    // spec: S-0513 claim 29b (at its ground height); S-0106 claims 2 and 3 (the surface height at that point; Q-1740 interim on a slope)
+    // spec: S-0513 claim 29b (revision 34: at the terrain's surface height there, on a sloped cell the slope's height at the centre; Q-1740 answered); S-0106 claims 2 and 3
     let z = w.surface_at(centre.x, centre.y);
     // spec: S-0110 claim 8 and Edge cases (the point test, with the renderer's quirks.shroud_on_flat_grid, whose direct-cell test takes precedence when off)
     glasnost_sim::econ::shroud::point_shrouded_on(
