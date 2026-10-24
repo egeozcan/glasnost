@@ -2,13 +2,13 @@
 id: S-0703
 title: Music playback (track eligibility, next-track order, shuffle and repeat)
 topic: ui
-revision: 34
+revision: 51
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
-requests: [Q-1700]
+requests: [Q-1700, Q-1830, Q-1831, Q-1832, Q-1833]
 supersedes: []
 ---
 
@@ -16,11 +16,16 @@ supersedes: []
 
 ## Summary
 
-Which entries of the music database can play in a skirmish, and which track follows when one
-ends: list order, shuffle, repeat, the fallback when nothing can play, and missing sound files.
-This is a partial answer to Q-1700. How music starts, the options screen, volume scaling, game
-events, menus and the gap between tracks are open (Open questions). Music is presentation: no
-game state depends on it.
+How music starts in a skirmish, which entries of the music database can play there, and which track
+follows when one ends: list order, shuffle, repeat, the fallback when nothing can play, missing
+sound files and sound files that do not play, and the shuffle and repeat settings when the settings
+file does not give them. It also gives what the music does at the end of the game, through the end
+delay and once the game is over, on the score screen, while the options menu is open and when the
+game is left from it. This answers Q-1831, Q-1832 and Q-1833, and is a partial answer to Q-1830 (the
+length of the delay before the first track, and whether a game mode's own data can give a map theme,
+are open) and to Q-1700. The options screen's music controls, volume scaling, other game events,
+music in the other menus and the gap between tracks are open (Open questions). Music is
+presentation: no game state depends on it.
 
 ## Terms
 
@@ -35,23 +40,37 @@ game state depends on it.
   established here (Open questions, Import mapping). Entry *k* is the item at zero-based position *k*; *n* is the number
   of entries.
 - **file present.** A track entry whose sound file is found among the mounted archives and loose
-  files (claim 8). The scenario parts that back claims 2, 5 and 6 (MU1 parts a to g, i, j and l,
-  MU2, MU4 parts a and c, MU4 part b's first and second runs, and MU6) supply or withhold each
-  test file for the whole run; MU1 part k supplies no test track and uses the theme archive's own
-  files. MU1 part h, MU3 parts d and e and MU4 part b's third run change files during the run and
-  back claims 4 and 8. When presence is decided (at startup or later) is claim 8's, rated there:
-  medium for a file supplied after the program has started, until MU1 part h runs, and for a
-  file removed after startup from an entry with the *repeat* flag, until MU3 parts d and e run,
-  and low for a file removed after startup from an entry without that flag.
+  files (claim 8). When presence is decided (at startup or later) is claim 8's.
 - **available track.** In a skirmish, a track entry that is file present, has its *normal* flag
   set and whose side restriction passes claim 2's side-restriction rule.
-- **ended track.** The track entry most recently started by a pick of claims 4 to 7; the next pick is made relative to it. Whether the start of the music sets it is open (claim 4).
+- **ended track.** The track entry most recently started, by a pick of claims 4 to 7, by the map
+  theme's direct start (claim 11) or by a direct start of claim 12; the next pick is made
+  relative to it. A skirmish starts with no
+  ended track, and the first start after its loading is made with none (claim 11).
+- **failed start.** A start of a track entry whose sound file cannot be opened, or is opened but
+  does not parse as a playable sound (claim 8a). Nothing is heard; what it leaves is claim 4's.
+- **loading track.** The track entry, if the music database has one, whose identifier is the
+  fixed name given in Import mapping. It is started while a game loads (claim 11).
+- **map theme.** The track a map names for the start of its game (Import mapping), if that name
+  matches a track entry's identifier (claim 11).
+- **in-game music setting.** A player choice, read from the settings file (Import mapping), that
+  decides whether music plays during a game at all (claim 11).
+- **score track.** The track entry, if the music database has one, whose identifier is the fixed
+  name given in Import mapping. It is started when the score screen opens (claim 12).
+- **menu track.** The track entry, if the music database has one, whose identifier is the other
+  fixed name given in Import mapping. It is started when the main menu opens (claim 12).
+- **end of the game, end delay, game over, score screen.** These follow S-0414. The *end of the
+  game* is the moment its end test first succeeds (S-0414 claim 6). Play then goes on through the
+  *end delay*, whose ticks are ordinary play, and the *game is over* at the end of its final tick
+  (S-0414 claim 8). The *score screen* is S-0414's result screen as the original shows it after a
+  skirmish is over, before the main menu; our engine's counterpart is its end screen.
 - **music update.** The periodic check at which, once the playing track has finished, the next
   track is picked and started. When it runs and when a track has finished are claim 10's.
-- **music started.** The state in which music updates make picks (claim 10).
+- **music started.** The state in which music updates make picks. It begins with the first start
+  after loading (claims 10 and 11), not with the loading track's start.
 - **shuffle setting, repeat setting.** The two player choices that change the next-track rule
-  (claims 4 to 6). Both are read from the settings file (Import mapping); no
-  scenario here separates a read at startup from a later one. Which in-game controls change
+  (claims 4 to 6). Both are read from the settings file, and are off when it does not give them
+  (Import mapping); no scenario here separates a read at startup from a later one. Which in-game controls change
   them, and whether a change is saved, are open (Q-1700 question 4).
 
 ## Behaviour
@@ -66,8 +85,9 @@ game state depends on it.
 
 1a. **Sound file name.** The file looked for is the entry's sound file name with any leading `$`
    and `#` characters removed and the extension `.wav` added, among the mounted archives and loose
-   files (claim 8). The sound file name is given without that extension (a name that already
-   ends in it is open, Open questions). An entry whose sound
+   files (claim 8). The extension is added whatever the name ends with, so a sound file name that
+   already ends in `.wav` gets it a second time: the file looked for is that name followed by
+   `.wav` again, matched ignoring case like every file name (S-0005 claims 2 and 6). An entry whose sound
    file name is empty or absent never has its file present, and neither has one made only of `$`
    and `#` characters, since removing them leaves the name empty, provided that no file named by
    the extension alone is mounted. With such a file mounted, the outcome is not established.
@@ -76,10 +96,12 @@ game state depends on it.
      name being kept; for the extension, the test tracks of every scenario, each
      a file whose name ends in the extension while its entry's name does not; MU1 part g for an
      empty or absent name and, in its third run, a name made
-     only of those characters, while no file named by the extension alone is supplied).
+     only of those characters, while no file named by the extension alone is supplied; MU1 part m
+     for a name that already ends in the extension).
      `unmeasured` for such a name when a file named by the extension alone exists, which no
      scenario supplies.
-   - Confidence: high, except medium for an empty or absent name and a name made only of those
+   - Confidence: high, except medium for the extension added a second time, until MU1 part m
+     is made, and medium for an empty or absent name and a name made only of those
      characters, which in the original rest on a file named by the extension alone never being
      found.
 
@@ -87,10 +109,11 @@ game state depends on it.
    available track while its sound file is present (claim 8), its *normal* flag is set, and its
    side restriction is "any side" or matches the side of the local player's country (how a
    restriction is matched is given below). The campaign
-   scenario number plays no part in a skirmish. Two rules can still start a track that is not
-   available: repeat (claim 4) and the fallback (claim 7). S-0701 claim 30 schedules skirmish
-   audio passes only in a loaded game, and menu music is outside this spec (Open questions), so
-   this rule covers skirmish playback only. Our engine matches a side
+   scenario number plays no part in a skirmish. Some rules can still start a track that is not
+   available: repeat (claim 4), the fallback (claim 7), the loading track and the map theme
+   (claim 11), and the score track and the menu track (claim 12). S-0701 claim 30 schedules skirmish
+   audio passes only in a loaded game, and music in the other menus is outside this spec (Open questions), so
+   this rule covers skirmish playback only; once the game is over claim 12 applies. Our engine matches a side
    restriction to a side by name, ignoring case. In the original, a restriction written as the
    name of the local player's side, when that side is not the first (index 0, S-0004 claim 9),
    does not by that make its entry available (MU1 part b): a restriction meant for a side can
@@ -114,8 +137,7 @@ game state depends on it.
      claims 3 and 8 rate the pass-over, until MU1 part l runs; medium for a restriction written
      as the name of a side other than the first not matching in the original.
 
-3. **When the next track is picked.** Once music has started (Terms; how it starts is open,
-   Q-1700 question 1), each time the playing track finishes the next track is picked at the next
+3. **When the next track is picked.** Once music has started (claim 11), each time the playing track finishes the next track is picked at the next
    music update and started at once. In a pick under claim 5 or claim 6, an entry that is not an available
    track is passed over at the pick itself: no silence of its length is inserted, and the pick goes on to the next candidate.
    Under list order this is the rule our engine follows; whether the original passes over at the
@@ -158,13 +180,13 @@ game state depends on it.
 4. **Repeat.** When there is an ended track and its entry has its *repeat* flag set, or there is
    an ended track and the repeat setting is on, the next track is the ended track again, whatever
    the shuffle setting and whether or not it is still available, and no ranged draw is made.
-   Otherwise, including when there is no ended track, claim 5 or claim 6 picks the next track. A start whose file could not be opened still leaves its entry
+   Otherwise, including when there is no ended track, claim 5 or claim 6 picks the next track. A failed start (Terms) still leaves its entry
    the ended track (State and ordering), so repeat starts it again. What a start leaves does not
-   depend on the entry's *repeat* flag or on the repeat setting: whether its file opens or not, the
+   depend on the entry's *repeat* flag or on the repeat setting: whether the start fails or not, the
    started entry becomes the ended track and music stays started (claim 10), with either flag and
-   either setting; repeat acts only at the next pick. The first track heard is the ended
-   track only if whatever starts the music leaves it so (Q-1700 question 1), so the scenarios
-   judge repeat from the second track heard on.
+   either setting; repeat acts only at the next pick. The first start after loading is made with
+   no ended track, so repeat does not choose the loading track then (claim 11). The first track of a skirmish is started in the same way
+   (claim 11), so it is the ended track for the second pick and repeat applies to it.
    - Backing: `measurable` (MU3 parts a and b for an available track, MU3 part c for a track that
      is not available; MU6 part d for no ranged draw). `measurable` (MU4 part b, second run) for
      a failed start of a track that was not the ended track making it the ended track: there the
@@ -188,33 +210,36 @@ game state depends on it.
      with its *repeat* flag set, and none uses the repeat setting. That each such repeat choice
      makes a new failed start is `unmeasured`: silence looks the same whether every choice makes a
      failed start or the choices in between make no attempt, and the recovery in MU4 part b's third
-     run shows only that a choice made after the file is supplied starts it. `measurable` (MU3 parts d and e) for repeat of a track whose file
+     run shows only that a choice made after the file is supplied starts it. `measurable` (MU3
+     part b and MU8 part a's third run) for repeat of the first track of a skirmish.
+     `measurable` (MU10 part b) for a failed start of a file that is present but does not parse
+     making its entry the ended track. `measurable` (MU8 part g) for the first start after
+     loading being made with no ended track, even with the loading track's *repeat* flag set. `measurable` (MU3 parts d and e) for repeat of a track whose file
      is deleted during play, with named test files changed during the run (Measurement
-     scenarios)
+     scenarios).
    - Confidence: high; medium for a failed start making its entry the ended track, until MU4 part b's second and
      third runs are made, for repeat starting a failed track again, until MU3 parts d and e
      are run, and for the *repeat* flag and the repeat setting playing no part in what a start
      leaves (`unmeasured`, as the backing says); medium for a new failed start at each repeat
      choice (`unmeasured`, as the backing says: it is what claim 4's start rule gives at each
-     choice, and no observation separates it from choices that make no attempt)
+     choice, and no observation separates it from choices that make no attempt); medium for the
+     first start after loading being made with no ended track, until MU8 part g is made
 
 5. **List order (shuffle setting off).** The next track is the first available track found by
    stepping forward through the list from the entry after the ended track, wrapping from the last
    entry to entry 0. The ended track itself is the last candidate of the cycle, so with no other
-   available track it plays again if it is available. If there is no ended track (no pick of
-   claims 4 to 7 has started a track, and whatever starts the music left none, claim 4; whether
-   a new game restores this is open), stepping begins at entry 0. If no entry is available, claim 7 applies. A
-   list-order pick makes no ranged draw.
+   available track it plays again if it is available. If there is no ended track (claim 11),
+   stepping begins at entry 0. If no entry is available, claim 7 applies. A list-order pick makes
+   no ranged draw.
    - Backing: `measurable` (MU1 part a) for the order and the wrap; `measurable` (MU4 part a)
      for a list with no available entry; `measurable` (MU6 part e) for no ranged draw.
      `measurable` (MU4 part c) for the ended track as the last candidate, with a single available
-     track other than entry 0
+     track other than entry 0.
    - Confidence: high for the order, the wrap and no ranged draw for entries without a side
      restriction (for entries with one, as claim 2 rates the original's side rule); medium for
      the ended track as the last candidate, until MU4 part c is made
-   - The start at entry 0 when there is no ended track: `unmeasured`, low, because every
-     scenario judges from the second track heard and what starts the music is open (Q-1700
-     question 1), and whether a game start resets this is not traced
+   - The start at entry 0 when there is no ended track: `measurable` (MU8 parts a and c),
+     medium until they are made.
 
 6. **Shuffle (shuffle setting on).** Unless claim 7 applies, the next track is a uniformly random
    available track other than the ended track. It is drawn from the unsynchronised random stream
@@ -258,12 +283,12 @@ game state depends on it.
 7. **Fallback when nothing is picked (quirk).** With `quirks.music_fallback_entry_zero` on (the
    default, the original's behaviour), when claim 5 finds no available entry, or claim 6 stops
    without accepting a ranged draw, entry 0 is started whether or not it is available. If entry
-   0's sound file can be opened it plays, even when its *normal* flag is clear or its side
+   0's start does not fail (Terms) it plays, even when its *normal* flag is clear or its side
    restriction does not match. If it cannot, there is silence and the pick is made again at the
    next music update. Consequences, which apply only when claim 4 does not select the ended
    track:
    - With list order and no available entry at all, entry 0 is started again and again; each
-     start plays only if its file can be opened (claim 8).
+     start plays only if it does not fail (claim 8a).
    - With shuffle and only one available track *k*: if *k* is entry 0, it plays again and again.
      Otherwise *k* and entry 0 alternate, with entry 0 silent if its file is missing, so *k* is
      heard again after that brief failed start, which makes entry 0 the ended track (claim 4).
@@ -274,8 +299,9 @@ game state depends on it.
      gives the bound. Entry 0 is then started in the same way.
 
    With the switch off (our engine's design for that setting):
-   - List order with no available entry: no track starts and no ranged draw is made. The pick is
-     made again at each music update, and the music stays silent: file presence is fixed at
+   - List order with no available entry: no track starts and no ranged draw is made. This holds
+     from the first pick of the game (claim 11): that pick starts nothing, yet it begins music
+     started (claim 10), so the pick is made again at each music update, and the music stays silent: file presence is fixed at
      startup (claim 8) and the other availability inputs do not change during a game, so no entry
      becomes available later in it.
      With only the ended track available, it plays again, as with the switch on (claim 5).
@@ -287,15 +313,15 @@ game state depends on it.
    - Shuffle with no available track: as list order with no available entry, and no ranged draw
      is made.
    - Backing: `measurable` for the switch on: MU4 part b and MU6 part b for shuffle, and MU4 part a
-     for list order, which can confirm it but cannot falsify it by silence, since whether music
-     starts with no available entry is open (Q-1700 question 1); `measurable` for the switch off, by
+     for list order, which can also falsify it by silence, since music starts with no available
+     entry (claim 11); `measurable` for the switch off, by
      MU4's engine fixture, for list order with no available entry (part a) and for shuffle with
      the ended track the only available track (part b); `unmeasured`, our engine's design, for
      shuffle with no available track, which no fixture sets up with a non-empty list, and for the
      continuation past the thousandth ranged draw, which no fixture reaches; `unmeasured` for an
      entry 0 that is not available only because its side restriction does not match, which no
      scenario sets up (MU4 and MU6 give entry 0 no side restriction)
-   - Confidence: medium for list order (MU4 part a is one-sided); medium for shuffle (the
+   - Confidence: medium for list order, until MU4 part a is made; medium for shuffle (the
      alternation rests on the pick rule of claim 6 applied twice and, with entry 0's file
      missing, on claim 4's failed start making entry 0 the ended track, which MU4 part b's second
      and third runs test, claim 4); high for the switch-off rules that MU4's engine fixture checks (list order
@@ -338,16 +364,52 @@ game state depends on it.
      tell that from a pass-over (`unmeasured` until Q-1700 question 2 is answered); medium for the theme archive's files counting, since part k shows it only for
      tracks whose files are found in that archive alone
 
+8a. **Sound files that are present but do not play.** Presence (claim 8) depends only on the file
+   being found: its content is not judged, for each kind of file that MU10 part a runs (a found
+   file whose format chunk declares a very large size is not covered: Open questions). So an entry whose sound file is found but is not a
+   playable sound is file present, and is an available track when claim 2's other conditions
+   hold; claims 5 and 6 can pick it. A start fails (Terms) when its sound file cannot be opened,
+   or when the file opened does not parse as a playable sound. A playable sound file is a RIFF file
+   of form WAVE whose format chunk comes before its data chunk, whose format code is 1
+   (uncompressed PCM) or 17 (IMA ADPCM), and which holds sample data after its header; a file that
+   lacks any of these does not parse (of the other format codes, MU10 part a tries only code 2), a file with no data chunk included. The chunk order is part
+   of this format: a format chunk placed after the data chunk does not count, so such a file does
+   not parse (medium, like the other cases, until MU10 part a's run with the data chunk first is
+   made).
+
+   A failed start of a present file has the same result as one of a file that has gone missing
+   (claims 4 and 8): silence, its entry becomes the ended track, music stays started (claim 10),
+   and the next pick is made at the next music update. For each kind of file that does not parse that MU10 part a runs, the program goes on
+   running; whether it survives a found file whose format chunk declares a very large size is open
+   (Open questions). A file that
+   parses but whose sample data is cut short ends where its data ends: a track plays the lesser of
+   the data size its header gives and the sample data the file holds, and data beyond the size the
+   header gives is not played. Our engine (design) gives the importer warning for a found sound
+   file that does not parse, naming the entry, and still counts the file as present.
+   - Backing: `measurable` (MU10 part a, by the random-state recorder) for a present file that does
+     not parse staying an available track and its start failing, one run for each way a file can fail
+     the format (no RIFF header, no data chunk, the format chunk after the data chunk, another
+     format code, no sample data), but none for a RIFF header whose form is not WAVE, which no run isolates; `measurable` (MU10 part b) for that failed start making its entry the ended
+     track; `measurable` (MU10 part c) for the end of a track whose data is cut short or longer than its
+     header gives. `measurable` for our engine's warning (MU10 part a's engine fixture).
+   - Confidence: medium for presence depending only on the file being found and for each of the
+     cases that do not parse, until MU10 part a's runs are made, and because MU10 part a's run with a
+     text file does not tell a missing RIFF header from a form that is not WAVE, and for the end of a track cut
+     short, until MU10 part c is made; medium for format codes other than 1, 17 and 2, which no
+     run tries; high for our engine's warning, which its fixture checks.
+     A format chunk with a very large declared size, and a cut through
+     the middle of the last block of a compressed file, are not covered (Open questions).
+
 9. **Empty track list.** In our engine (our engine's choice, with either switch setting and
    either repeat setting), a music database that holds sections but no track entry (*n* = 0) gives
    silence throughout: no music update makes a pick and no ranged draw is taken. In the original no
-   pick is made before music has started (Terms). Whether music can start with an empty list, and
-   what the original does if it does, are unknown (Open questions). A music database that cannot be
+   pick is made before music has started (Terms); what the original does once a skirmish with an
+   empty list has loaded is open (Open questions). A music database that cannot be
    resolved, or that holds no section at all, stops the program from starting (S-0005 claim 16).
-   - Backing: `measurable` for our engine (MU5's engine fixture). The original's behaviour after
-     a start is open; MU5 records it. The rest is S-0005's.
+   - Backing: `measurable` for our engine (MU5's engine fixture). The original's behaviour with
+     an empty list is open; MU5 records it. The rest is S-0005's.
    - Confidence: high for our engine's rule, which our engine chooses and its fixture checks
-     directly; the original's behaviour after a start is not rated (open)
+     directly; the original's behaviour with an empty list is not rated (open).
 
 10. **Music update and music started.** How often the original's music update runs, and where
     its draws fall among the sound choices of S-0701 claim 30, are open (Open questions). Our
@@ -360,11 +422,15 @@ game state depends on it.
       completion rule for a sample with pitch percentage *p* = 100, its logical duration counted
       from the pass at which it started. The music update at the end of that same pass is the
       "next music update" of claim 3: it makes the pick and starts the track picked, whose
-      logical duration then counts from that pass. A start whose file cannot be opened plays
-      nothing, and the pick is made again at the update of the following pass (claim 8).
-    - Music started begins when something starts the music, which is open (Q-1700 question 1).
-      Before it, no music update makes a pick. It does not require that a track is heard: a start
-      whose file cannot be opened still leaves music started, in the original and in our engine.
+      logical duration then counts from that pass. A track's logical duration is that of the
+      sample data it actually plays (claim 8a): for a file cut short, the frames present, not
+      the data size its header gives. A failed start (Terms) plays
+      nothing, and the pick is made again at the update of the following pass (claims 8 and 8a).
+    - Music started begins with claim 11's first start after loading: the map theme's start, or
+      the first pick, even when that pick starts nothing (claim 7 with its switch off and no
+      available entry). The loading track's start does not begin it.
+      Before it, no music update makes a pick. It does not require that a track is heard: a
+      failed start still leaves music started, in the original and in our engine.
     - Backing: `measurable` for our engine's rules (MU7, an engine-only scenario). `measurable`
       (MU4 part b, second run) for the original's failed start leaving music started: there the
       one available track plays again after the fallback's failed start of entry 0, shown by the
@@ -374,6 +440,213 @@ game state depends on it.
     - Confidence: high for our engine's schedule, which our engine chooses and MU7 checks
       directly; medium for the original's failed start leaving music started, until MU4 part b's
       second run is made.
+
+11. **Start of music in a skirmish.** This claim holds while the music volume is above zero
+    during loading; what the original does when it is zero then is open (Open questions, Q-1700
+    question 5). Every skirmish starts with no ended track, whatever was
+    played before it in the session, in the menus or in an earlier game (claim 12 gives what plays
+    after a game). When a game is started from the menus, whatever is playing as it starts to
+    load, the menu track included, is stopped at once, with no fade, whether or not the music
+    database has a loading track: no music carries over from the menus into a game. The original's
+    options menu offers no restart in a skirmish (claim 13). While the game loads, the loading track (Terms), if the music database
+    has one, is started directly, not by a pick: like every start it plays whether or not it is
+    available, unless it fails (claim 8a), and it makes no ranged draw. It does not begin music
+    started (claim 10), and no pick is made while the game loads. Whether the loading track's start
+    failed or not, and whatever its *repeat* flag and the repeat setting, the first start after
+    loading is made with no ended track (claim 4). Then, if the in-game music
+    setting is on:
+    - if the map theme (Terms) names a track entry, that entry is started first, directly, whether
+      or not it is available: it plays unless the start fails, and it becomes the ended track.
+    - otherwise the first track is chosen by an ordinary pick with no ended track (claims 4 to 7):
+      under list order stepping begins at entry 0 (claim 5), under shuffle no ranged draw is
+      rejected for naming the ended track (claim 6), and with no available entry in a list that
+      holds at least one entry the fallback of claim 7 applies, so a track is started even then
+      (claim 9 covers an empty list). With claim 7's switch off and no available
+      entry in such a list, our engine's first pick starts nothing; music is started all the same (claim 10), and
+      the pick is made again at each music update (claim 7).
+
+    This first start is an ordinary start: it leaves music started (claim 10), its entry becomes
+    the ended track for the second pick, and repeat applies to it (claim 4). The start does not
+    depend on the local player's side, except through availability (claim 2). Apart from the map
+    theme, no game setting chooses the first track; whether a game mode's own data can give a map
+    theme is not established (Open questions). With the in-game
+    music setting off, as read at startup, no track is picked or started during the game, and no
+    ranged draw is made for music. What changing that setting during a session does is open
+    (Q-1700 question 4).
+    In the original, if the loading track is still playing when loading finishes, it fades out
+    first, and the first start is made at the first music update after the fade has ended; how
+    long the fade lasts is not established (Open questions). With no loading track playing, the
+    first start is made at the first music update of the game. In the original, a map theme that
+    names the loading track's own entry gives no fade: the loading track plays on to its end and
+    is then started again from its start, as the map theme. Our engine (design): the loading
+    track, if any, plays while the game loads and is stopped when the game starts (a fade, if one
+    is drawn, is presentation and delays nothing), and the first start is made at the music update
+    of the game's first audio pass (claim 10), so under shuffle the first pick's ranged draws
+    follow that pass's sound choices on the unsynchronised stream.
+    - Backing: `measurable` (MU8 part a) for the first pick under list order and for repeat of
+      the first track; `measurable` (MU8 part b, by the random-state recorder) for the first
+      shuffle pick having no ended track; `measurable` (MU8 part c) for a new skirmish forgetting
+      the ended track of an earlier one; `measurable` (MU8 part d) for the map
+      theme, and (its fourth run, by the random-state recorder) for its start making no ranged
+      draw; `measurable` (MU4 part a) for music starting with no available entry; `measurable` (MU8
+      part e) for the in-game music setting off, as read at startup, and (its second run) for the
+      loading track playing with that setting off; `measurable` (MU8 part h) for the first track
+      not depending on the local player's side or on the other skirmish settings that part h
+      varies; `measurable` for our engine's timing (MU8's
+      engine fixture). The original's delay from the end of loading is only recorded (MU8 part f), so the
+      original's first start coming at the first music update, and not at a later one, is
+      `unmeasured`: how often the music update runs is open (claim 10). `unmeasured` for no ranged
+      draw with the in-game music setting off: MU8 part e records no random state.
+      `measurable` (MU8 part f, its run with a long loading track) for the loading track's fade
+      ending before the first start.
+      `measurable` (MU11 part g) for the track playing in the menus being stopped at once when a
+      game started from the menus starts to load and the music database has no loading track, and
+      `unmeasured` when it has one, as no run of MU11 part g gives it one. `measurable` (MU8 part
+      g) for the first pick having no ended track when the music database has a loading track.
+      `unmeasured` for a map theme that names the loading track's entry: no scenario sets it up.
+      `unmeasured` for the loading track playing whether or not it is available and making no
+      ranged draw: MU8 part g gives it the normal flag, and neither MU8 part f nor part g reads the
+      random state at its start.
+    - Confidence: medium for the first pick being an ordinary pick with no ended track, until MU8
+      parts a and b are made (and, when the music database has a loading track, part g), as claim
+      5 rates where list order starts; medium for the first track not depending on the side or on
+      another game setting, until MU8 part h is made and because part h varies only the settings it
+      lists; medium for the loading track playing with the in-game music setting off and for the
+      setting being the one read at startup, until MU8 part e's runs are made; medium for a map theme naming the loading track's entry (`unmeasured`, as
+      the backing says); medium for the loading track playing whether or not it is available and
+      making no ranged draw (`unmeasured`); medium for the original's first start at the first
+      music update and for no ranged draw with the in-game music setting off (`unmeasured`); high
+      for the first track becoming the ended track, for the in-game music setting off giving no
+      music and for music in the menus being stopped at once when a game starts to load with no
+      loading track in the music database; medium for that stop when the database has a loading
+      track (`unmeasured`); medium for a new skirmish forgetting the ended track, until MU8 part c
+      is made; medium for the map theme, until MU8 part d is made; medium for the loading track's
+      fade coming first in the original, until MU8 part f's run with a long loading track is made
+      (its length is not established and is only recorded); high for our engine's timing, which our
+      engine chooses and its fixture checks.
+
+12. **The end of the game and the score screen.** This claim holds while the music volume is
+    above zero; what the original does at zero is open (Q-1700 question 5). In the original:
+    - At the end of the game, won or lost, the music does not change. The end delay's ticks are
+      ordinary play (S-0414 claim 8): the playing track plays on, music updates go on in them as
+      in play, and a track that finishes there is followed by an ordinary pick (claims 3 to 7).
+    - When the game is over, the playing track is still neither stopped nor faded. It plays on
+      through the original's real-time wait for the result announcement (S-0414 claim 8), until
+      the score screen opens. Music updates go on
+      in that wait too, so a track that finishes there is also followed by an ordinary pick. How
+      long the wait lasts belongs to the result screens, not to this spec.
+    - When the score screen opens, the playing track is stopped at once, with no fade, and the
+      score track (Terms) is started directly, from its start, not by a pick. Like every direct
+      start, it plays whether or not it is available, unless the start fails (claim 8a), and it
+      makes no ranged draw. With no score track in the music database, the score screen is
+      silent.
+    - Music updates go on at the score screen. Only the picks of claims 5 and 6 are left out:
+      when the score track finishes, no such pick follows, and the score screen is silent from then
+      on. Under the repeat setting, or with the score track's own *repeat* flag set, the score
+      track starts again each time it finishes, with no ranged draw (claim 4).
+    - The score track plays even with the in-game music setting off: that setting covers only
+      music during a game (claim 11).
+    - Leaving the score screen for the main menu stops the score track at once, and the menu
+      track (Terms), if any, starts. Music in the menus is otherwise outside this spec, except
+      that a game starting to load stops whatever is playing (claim 11).
+
+    Our engine (design, a departure with no switch, Edge cases): through the end delay the music
+    is as in the original. Its ticks are ordinary play in ordinary cycles, so audio passes, and
+    with them music updates and picks, go on in them on S-0701 claim 30's schedule. The end
+    screen, in place of the score screen, opens when the game is over (S-0414 claim 8): at the
+    end of the cycle that runs the end delay's final tick, after that cycle's audio pass if one
+    falls there (S-0701 claim 30). The music update of that pass is the last of the game: no
+    music update, and so no pick, runs after that cycle. Only the original's real-time wait
+    for the result announcement is dropped, as S-0414 claim 8 drops it, and with it the music
+    updates the original runs in that wait. The playing track is stopped at once when the end
+    screen opens, and the end screen then follows the score-screen rules above: the score track
+    is started directly, with the same silence after it, repeats and silent screen without a
+    score track, and leaving it for the main menu starts the menu track. The score track's start,
+    the silence after it and its repeats make no ranged draw, so they need no audio pass, and the
+    end screen has none (Changes for other specs, S-0701 claim 30). On the end screen the score
+    track is timed by our engine's audio output, not by audio passes: it has finished when its
+    whole length has been played out, and under repeat it starts again from its start as soon as
+    it has finished. Nothing synchronised depends on either moment. A failed start of the score
+    track (claim 8a) leaves the end screen silent until it is left: our engine makes no further
+    attempt, even under repeat, and starts no other track. The original, under repeat, attempts
+    the start again at each music update, which is equally silent while the start fails.
+    - Backing: `measurable` (MU11 part a) for the track playing on through the end delay and the
+      wait to the score screen, the picks in either, its stop there and the score track's start,
+      after a win, and (MU11 part i) for the same after a loss, except the picks; (MU11 part b) for the silence after the score track and
+      its repeats; (MU11 part c) for the silent score screen with no score track; (MU11 part d)
+      for the score track with the in-game music setting off; (MU11 part g) for the menu track
+      stopping the score track. That the original, under repeat, attempts a failed score-track
+      start again is `unmeasured`: silence looks the same whether or not each attempt is made, as
+      claim 4 says of repeat choices. That the original's score-track start and its repeats make no
+      ranged draw is `unmeasured`: MU11 does not record the random state at the score screen, as
+      claim 11 says of the loading track. `measurable` for our engine (MU11's engine fixture).
+    - Confidence: medium for the stop at the score screen and the direct start of the score track,
+      until MU11 part a is made, and after a loss until part i is made; medium for the silence
+      after the score track and its repeats, until MU11 part b is made; medium for the silent
+      score screen with no score track, until MU11 part c is made; medium for the original's
+      score track making no ranged draw (`unmeasured`, as the backing says); medium for the track
+      playing on, unfaded, through the end delay and the wait and for a pick in either, until
+      MU11 part a is made, and after a loss until part i is made (a pick after a loss rests on
+      part a's runs, since part i places no tone's end in the end sequence); medium for the score
+      track with the in-game music setting off,
+      until MU11 part d is made; medium for the menu track's start; medium for the original's
+      repeated attempts at a failed score-track start (`unmeasured`, as the backing says); high
+      for our engine's rules, which our engine chooses and its fixture checks (music updates
+      through the end delay, none after the cycle that runs its final tick, the stop when the end screen opens, the
+      score-screen rules on the end screen, the score track's timing there and its failed start,
+      with the single start attempt that the fixture's runs with the score track's file absent
+      record).
+
+13. **Options menu, leaving and restarting.** This claim holds while the music volume is above
+    zero (Q-1700 question 5). In the original, in a skirmish:
+    - While the options menu is open during a skirmish (a stand-still), the music is not
+      paused. The playing track goes on, music updates continue, and a
+      track that finishes is followed by an ordinary pick (claims 3 to 7), whose track is heard
+      while the menu is still open.
+    - The options menu offers one way to leave the game, and it ends the game at once, as S-0201
+      claim 1 describes for a choice that ends it at once. The menu calls it aborting the mission, and
+      it is how a skirmish player gives up the game. It is not S-0414 claim 11's surrender order: no house is
+      marked to die or defeated, no end delay runs, no result announcement is given, and no score
+      screen opens; the program goes back to the main menu. No choice of the menu sends the
+      surrender order of S-0414 claim 11 in a skirmish.
+    - When the game is left this way, the playing track starts to fade out, and no pick follows
+      it. The program then waits, in real time, while the fade and any sound still playing go
+      on, up to a fixed bound whose length is not established (Open questions); whatever still
+      sounds at the end of the wait is stopped at once. The main menu then opens and starts the
+      menu track, if the music database has one, as when the score screen is left (claim 12).
+    - The options menu offers no restart in a skirmish.
+
+    Our engine (design, a departure with no switch, Edge cases): the options menu is a stand-still
+    for music as S-0701 claim 30 makes it one for sound. No music update runs while it is open; the
+    playing track is held, silent, at the point it had reached, and resumes from that point on the
+    return to the game. Its logical duration (claim 10) does not run down during the stand-still, since neither
+    logical audio time nor logical playback advances then (S-0701 claim 30), so no pick
+    falls due in the menu, and the next pick is made at the music update of the pass at which the
+    track then finishes. Our engine's own settings screen, opened from a game, has no counterpart
+    in the original; the music is held there in the same way, and no pick is made while it is
+    open (design). Leaving through the options menu ends the game at once, as in the original
+    (S-0201 claim 1): the playing track is faded out or stopped at once, which is presentation and
+    delays nothing, and no music update or pick follows, since no skirmish audio pass occurs after
+    leaving the match (S-0701 claim 30); the main menu then starts the menu track. A surrender
+    order, where our engine's interface offers one (S-0414 claim 11), leaves the music as in play
+    for as long as play goes on: in our engine play goes on while a hostile pair remains, with
+    the person who surrendered watching, and claim 12 applies from the end of the game, with our
+    end screen once the game is over. A restart, where our engine offers one, starts the music as
+    claim 11 says; whether the old track fades is presentation and delays nothing.
+    - Backing: `measurable` (MU11 part f) for the music going on in the options menu and the pick
+      made there; (MU11 part e) for leaving through the options menu ending the game at once, with
+      no destruction of the local player's objects, no score screen and the main menu next, and
+      for the fade and the menu track then, the wait's bound being only recorded (MU11 part e).
+      That the wait has a fixed bound, and that a sound still playing at its end is stopped at
+      once, is `unmeasured`: no run here has a sound outlast the wait.
+      `measurable` (MU11 part h) for the menu offering no restart and no choice that sends the surrender order; `measurable` for our
+      engine's rules (MU11's engine fixture).
+    - Confidence: medium for the track going on while the options menu is open and for the pick
+      made in the menu, until MU11 part f is made. Medium for leaving ending the game at once with no surrender order, for the fade and the
+      menu track after it, and for the menu offering no restart and no choice that sends the surrender order, until MU11
+      parts e and h are made; medium for the wait's fixed bound and the stop at its end
+      (`unmeasured`); high for our engine's rules, which our engine chooses and its
+      fixture checks.
 
 ## Formulas
 
@@ -415,12 +688,25 @@ setting and either repeat setting.
 |---|---|---|
 | A track plays | It finishes | At the next music update (in our engine, that of the pass in which it finishes, claim 10): claim 4, else claim 5 or 6, picks; the pick starts at once |
 | A track plays | Music update | Nothing |
-| Picked entry's file opens | Start | It plays; it becomes the ended track for the next pick |
-| Picked entry's file does not open | Start | Silence; it becomes the ended track (claim 4); the next music update picks again |
+| A skirmish loads | Loading starts | The ended track is forgotten; the loading track, if any, is started directly; music is not yet started, and no pick is made (claims 10 and 11) |
+| A skirmish loads | Loading finishes | The first start after loading is made with no ended track (claim 11) |
+| Loading finished, in-game music setting on | First music update (in the original, after the loading track's fade, except as claim 11 gives for a map theme that names the loading track's own entry) | The map theme's entry is started, else a pick with no ended track; music started begins, even if that pick starts nothing (claims 10 and 11) |
+| In-game music setting off (read at startup) | Music update | No pick, nothing starts (claim 11) |
+| Picked entry's start does not fail | Start | It plays; it becomes the ended track for the next pick |
+| Picked entry's start fails (Terms; claim 8a) | Start | Silence; it becomes the ended track (claim 4); the next music update picks again |
 | No track picked (switch off, claim 7) | Music update | The pick is made again |
 | Music volume zero | Music update | Original: no pick, nothing starts (claim 3, low). Our engine: as at any other volume, the track playing silently |
-| Music not yet started (Terms: no start has happened yet, Q-1700 question 1) | Music update | No pick, whatever the track list holds |
+| Music not yet started (before claim 11's start) | Music update | No pick, whatever the track list holds |
 | Music started, no track playing (a failed start or a track that finished) | Music update | A pick (claims 4 to 7), unless, in the original, the music volume is zero; with an empty list, none in our engine (claim 9) |
+| A track plays | End of the game | Original and our engine: no change; the end delay's ticks are ordinary play, with music updates and picks as in play (claim 12) |
+| A track plays | The game is over (end of the end delay's final tick) | Original: it plays on through the real-time wait for the result announcement, with music updates and picks, until the score screen opens. Our engine: the end screen opens at the end of the cycle that runs the final tick, and no music update runs after that cycle (claim 12) |
+| Any track plays, or none | Score screen opens | The playing track stops at once; the score track, if any, is started directly (claim 12) |
+| Score track plays | It finishes | Repeat setting or its *repeat* flag: it starts again; otherwise silence, no pick (claim 12) |
+| Score screen | Main menu opens | The score track stops at once; the menu track, if any, starts (claim 12) |
+| A track plays in the menus | A game started from the menus starts to load | It stops at once (claim 11) |
+| A track plays | Options menu opens | Original: it plays on, and a track that finishes there is followed by a pick. Our engine: it is held, silent, until the return to the game (claim 13) |
+| Options menu open | The game is left through it | The game ends at once (S-0201 claim 1), with no surrender order and no score screen. Original: the track fades out, with no pick, through a real-time wait, and whatever still sounds is then stopped; the main menu starts the menu track. Our engine: the track is faded or stopped at once (presentation), no music update follows, and the main menu starts the menu track (claim 13) |
+| A track plays | A surrender order (our engine, where its interface offers one) | No change; the music goes on as in play, and claim 12 applies from the end of the game (claim 13) |
 
 ## Edge cases and quirks
 
@@ -438,8 +724,38 @@ setting and either repeat setting.
   playing; what the original then plays is open (Q-1700 question 5). Basis: the precedent of S-0701
   claim 30, which already keeps sound choices independent of each player's mute settings; this
   departure extends that rule to music, a design choice recorded here with that reason; the
-  project lead's acceptance of it is pending (Questions for the project lead). Backing and confidence: as claim 3 rates them (the original's rule low and
+  project lead has accepted it. Backing and confidence: as claim 3 rates them (the original's rule low and
   `unmeasured`, our engine's rule high through MU6 part c's engine fixture).
+- **Music held in the options menu (departure, no switch).** In the original the music goes on
+  while the options menu is open, and a track that finishes there is followed by a pick (claim
+  13). Our engine holds the music, silent, for as long as the menu is open, and resumes the
+  track from the point it had reached. The menu can stay open for any stretch of real time, and a
+  shuffle pick's ranged draws are on the unsynchronised stream that sound choices share, so picks
+  made in the menu would make later sound choices depend on how long a player kept it open.
+  Basis: S-0701 claim 30, which already makes the options menu a stand-still for sound, with no
+  logical audio time and no audio pass; this departure extends that rule to music, a design
+  choice recorded here with that reason. Playing the music on in the menu, as the original
+  does, would need a change to S-0701 claim 30. The project lead's acceptance of the departure is
+  pending (Open questions). A switch is not proposed: the behaviour changes music only, and a
+  switch selecting the original's behaviour would bring back the dependence on real time that the
+  departure removes. Backing and confidence: `measurable` (MU11 part f) for the original's music
+  going on in the menu and its pick there, medium until that part is made; `measurable`
+  (MU11's engine fixture) for our engine's hold, high.
+- **End screen when the game is over (departure, no switch).** In the original the music goes
+  on unchanged through the end delay's ticks and then through the real-time wait for the result
+  announcement that follows the game being over (S-0414 claim 8); a track that finishes in either is followed by a pick (claim 12). Our engine keeps the
+  end delay with its music: its ticks are ordinary play, so music updates and picks run in them
+  as in the original. Only the real-time wait is dropped, as S-0414 claim 8 drops it: the end
+  screen opens when the game is over, at the end of the cycle that runs the final tick, and no
+  music update runs after that cycle, so there is no pick in the wait. The wait is measured in
+  real time (it lasts until the result announcement has been given), not in ticks, so a pick in it would put ranged draws
+  on the unsynchronised stream at a point set by real time; what is heard there is presentation,
+  and no game state depends on it. A switch is not proposed: the behaviour changes music only,
+  and reproducing the wait would bring back that dependence on real time. The project lead's
+  acceptance of it is pending (Open questions). Backing and confidence: `measurable` (MU11 parts a
+  and i) for the original's music playing on through the end delay and the wait, with its picks,
+  medium until those parts are made; `measurable` (MU11's engine fixture) for our engine's end
+  screen opening when the game is over with no music update after that cycle, high.
 - **Side restriction matched by name (design choice of scope, no switch).** This is a design
   choice, not a departure from a known rule of the original, whose own rule is not established.
   Our engine makes an entry whose side
@@ -451,8 +767,8 @@ setting and either repeat setting.
   name, it is a bug that changes music only; if the rule is not by name at all (Open questions),
   the stock data may suit it, and this is a difference of reading the data. Giving it no switch
   is a design choice recorded here: the behaviour changes music only, and the original's rule is
-  not established, so there is no known behaviour for a switch to select. The project lead's
-  acceptance of it is pending (Questions for the project lead).
+  not established, so there is no known behaviour for a switch to select. The project lead has
+  accepted it.
   Backing and confidence: as claim 2 rates them (our engine's name matching high, the original's
   failure to match medium).
 - A side name in a track entry's side restriction that names no side of the rules data (bad
@@ -477,12 +793,15 @@ Music database (S-0005 claims 17 and 18):
 | Key (section) | Concept | Parse form | Default when absent |
 |---|---|---|---|
 | `[Themes]`, every value | track entry identifiers, in list order; the key names play no other part, except that each position's value is looked up by its key, so a key written more than once gives its winning occurrence's value at each of its positions (S-0002 claim 4, S-0004 claim 2); a key whose value is empty adds no entry, and the values `none` and `<none>` are ordinary identifiers here, each an entry like any other, so the special meaning that S-0004 claim 2 gives them in rules type lists does not apply. S-0003 claim 14's reserved names apply to references to rules types; a track entry is not a rules type, and the track list has no reserved name, so every nonempty value names an entry | string with a text limit of 31 bytes (S-0003 claim 1); in our engine compared ignoring case, a repeat being the same entry (claim 1; `unmeasured`, low for the original) | none (empty list, claim 9) |
-| `Sound` (the entry's own section) | sound file name (claim 1a) | string with a text limit of 255 bytes (MU1 part i; S-0003 claim 1 gives how a value is cut); then any leading `$` and `#` characters are dropped; the extension `.wav` is added; an empty value is treated as absent | empty: the file is never present, so the entry is never available, within claim 1a's limits |
+| `Sound` (the entry's own section) | sound file name (claim 1a) | string with a text limit of 255 bytes (MU1 part i; S-0003 claim 1 gives how a value is cut); then any leading `$` and `#` characters are dropped; the extension `.wav` is added, also to a name that already ends in it (MU1 part m); an empty value is treated as absent | empty: the file is never present, so the entry is never available, within claim 1a's limits |
 | `Name` | display name, whose use is not established here (Q-1700 question 4, open) | not used here | not used here |
 | `Normal` | *normal* flag (claim 2) | boolean (S-0003) | true |
 | `Repeat` | *repeat* flag (claim 4) | boolean (S-0003) | false |
 | `Side` | side restriction (claim 2) | a side name with a text limit of 127 bytes (S-0003 claim 1), matched ignoring case; empty counts as absent (MU1 part b, third run) | any side |
 | `Scenario` | campaign scenario number; not used in a skirmish (claim 2); its role in a campaign is not established here | not used here | not used here |
+| `LOADING`, as a `[Themes]` value | the loading track (claim 11): the entry whose identifier is this fixed name | compared with the entry identifiers ignoring case, as claim 1 compares them | no such entry: no loading track |
+| `SCORE`, as a `[Themes]` value | the score track (claim 12): the entry whose identifier is this fixed name | compared with the entry identifiers ignoring case, as claim 1 compares them | no such entry: a silent score screen |
+| `INTRO`, as a `[Themes]` value | the menu track (claim 12): the entry whose identifier is this fixed name | compared with the entry identifiers ignoring case, as claim 1 compares them | no such entry: no menu track |
 
 A listed identifier for which the section lookup below (S-0002) finds no section keeps every
 default, so its file is never present
@@ -501,7 +820,8 @@ their hashes.
   `none` and `<none>` in the track list, MU1 part f the 31-byte limit, MU1 part i the limit of
   255 bytes and MU1 part j that of 127 bytes, parts i and j each with the removal of trailing whitespace (part j
   for our engine only: `unmeasured` for the original, whose side rule claim 2 leaves open), and
-  MU1 part g an identifier with no section of its own and an empty sound file name. `unmeasured`
+  MU1 part g an identifier with no section of its own and an empty sound file name, MU11 parts a
+  and g the fixed names of the score track and the menu track. `unmeasured`
   for the ignored case: MU1 part c's second run gives the same cycle whether a repeat in another
   case is the same entry or a separate entry with no section of its own (S-0001 claim 13).
 - Confidence: high for the defaults of `Normal`, `Repeat` and `Side` and the repeat; medium for an
@@ -516,24 +836,45 @@ The settings file:
 
 | Key (section) | Concept | Parse form | Default when absent |
 |---|---|---|---|
-| `[Audio]` `IsScoreRepeat` | repeat setting (claim 4) | boolean (S-0003) | not established (Open questions) |
-| `[Audio]` `IsScoreShuffle` | shuffle setting (claims 5 and 6) | boolean (S-0003) | not established (Open questions) |
+| `[Audio]` `IsScoreRepeat` | repeat setting (claim 4) | boolean (S-0003 claim 2): a value whose first byte is none of the six it recognises, such as `on` or `off`, keeps the default | off |
+| `[Audio]` `IsScoreShuffle` | shuffle setting (claims 5 and 6) | boolean (S-0003 claim 2), as above | off |
+| `[Audio]` `InGameMusic` | in-game music setting (claim 11) | boolean (S-0003 claim 2), as above | on |
+
+The settings file is read only as a loose file, and a missing settings file means every default
+above (S-0005 claim 5).
 
 - Backing: `measurable`. Every scenario sets both keys before the program starts, and the
   expected sequences change with them: MU3 part b sets the repeat key (the same track over and
   over only with it on), MU2 parts a and b and MU6 set the shuffle key (no fixed cycle only with
-  it on), and MU1 part a sets both off (the list-order cycle). The defaults when the keys are
-  absent are not established (Open questions).
-- Confidence: high for the two keys, their section and their boolean form.
+  it on), and MU1 part a sets both off (the list-order cycle). MU9 parts a to c test the
+  defaults with the keys absent, with values that are not recognised and with no settings
+  file; MU8 part e sets the in-game music key off, and MU9 part c and its last run show its default.
+- Confidence: high for the keys, their section and their boolean form; high for the defaults
+  (MU9 parts a to c); medium for an
+  unrecognised value keeping the default, which rests on S-0003 claim 2, until MU9 part b is made.
+
+The map file (S-0009):
+
+| Key (section) | Concept | Parse form | Default when absent |
+|---|---|---|---|
+| `[Basic]` `Theme` | map theme (claim 11) | a track identifier with a text limit of 127 bytes (S-0003 claim 1), compared with the entry identifiers ignoring case; a value that matches no entry gives no map theme; an empty value counts as absent | no map theme |
+
+- Backing: `measurable` (MU8 part d: an entry named in another case, and a name that matches no
+  entry). The text limit is `unmeasured`: no scenario supplies a name that long.
+- Confidence: medium for the key, the case and the unmatched name, until MU8 part d is made; low
+  for the text limit (`unmeasured`).
 
 ## Measurement scenarios
 
 All scenarios: stock data with no add-ons or mods, plus loose test files put in
 the game directory before the program starts and removed afterwards. These are the measurement
 setup's named test files. MU1 part h and MU3 parts d and e also delete or supply one of them while
-the program runs (MU4 part b's third run supplies one), through the file system only and never through the game,
+the program runs (MU4 part b's third run and MU10 part b's second run supply one), through the
+file system only and never through the game,
 and the files are still removed after the run. The project lead ruled on 2026-10-22 that named
-test files may be deleted or supplied during a run in this way. A
+test files may be deleted or supplied during a run in this way. Every other part supplies or
+withholds each test file for the whole run, and MU1 part k supplies no test track and uses the
+theme archive's own files. A
 *test music database* is a
 loose copy of the music database whose track list is replaced by the entries given below. Each
 *test track* is a loose sound file with the extension `.wav`, in the same format as the stock
@@ -547,11 +888,13 @@ so that only music is captured. Each track heard is identified by its tone. The 
 settings are set in the settings file before the program starts (Import mapping), and are
 off unless a scenario says otherwise. That edit is one of the named test files: the settings file
 is saved before the run and put back afterwards. The gap between the end of one tone and the
-start of the next is noted for the Open questions. The first track heard may come from whatever
-starts the music (Q-1700 question 1), so neither it nor the pick of the track after it is
-judged (whether that start leaves an ended track is open, claim 4): every expected sequence below
-is judged by which track follows which from the second track heard on, in whatever phase the
-cycle starts.
+start of the next is noted for the Open questions. The in-game music setting is on. No test
+music database has an entry whose identifier is the loading track's name (Import mapping), so no
+loading track plays, and the map's theme key is absent or names no entry of the test music
+database, unless a part says otherwise. The first track heard is the start of claim 11, which
+MU8 tests; so that the other scenarios do not also rest on claim 11, their expected sequences
+are judged by which track follows which from the second track heard on, in whatever phase the
+cycle starts, unless a part says otherwise.
 Each scenario's *engine fixture* runs the same set-up on our engine, with the switch off unless the
 scenario says otherwise (MU5's fixture runs both settings, and MU7 is engine only), and checks
 the switch-off results of claim 7 and the name matching of claim 2.
@@ -627,7 +970,9 @@ the switch-off results of claim 7 and the name matching of claim 2.
     which does not match the local player's side, claim 2). *Falsified, for our engine, if* T4 is
     missing from the first run or heard in the second.
   - (k) Stock data and stock archives, no test tracks and no loose sound files; a skirmish with
-    the music volume at its highest, shuffle and repeat settings off. *Observable:* the tracks
+    the music volume at its highest, shuffle and repeat settings off, on a map whose theme key
+    names no entry of the stock music database (claim 11). The track heard while the game loads
+    is the loading track (claim 11) and is not counted. *Observable:* the tracks
     heard over at least three track ends. *Expected:* the track after the first is a different
     one, as list order moves to the next available entry (claim 5). The stock tracks' files are
     found only in the theme archive, so a presence decision made before that archive is mounted
@@ -635,8 +980,7 @@ the switch-off results of claim 7 and the name matching of claim 2.
     *Falsified if* the same track is heard four times in a row. *Inconclusive if* any
     track heard has its *repeat* flag set in the stock music database (claim 4), or fewer than
     two of its entries have their *normal* flag set and no side restriction (entries with a
-    restriction are not counted, since the original's side rule is open, claim 2). If music does
-    not start in a skirmish by itself (Q-1700 question 1), the part is reported unreached.
+    restriction are not counted, since the original's side rule is open, claim 2).
   - (l) Pass-over under list order (claim 3). As (a), with T1's *repeat* flag set and no test
     track supplied for T1 from the program's start, so that its file is missing throughout (T2's
     test track is still not supplied and T3 still has *normal* clear). Record over at least
@@ -650,6 +994,13 @@ the switch-off results of claim 7 and the name matching of claim 2.
     failed start makes its entry the ended track. Until then the expected cycle
     does not tell a pass-over from a start of T1 that fails followed by a new pick, and part l is
     inconclusive for claim 3.
+  - (m) Extension already in the name (claim 1a). As (a), with T4's sound file name written as
+    its test track's name followed by `.wav`, while only a test track with that name and the
+    extension once (the ordinary test track) is supplied. *Expected:* the cycle T0, T1 (T4 is never
+    found). Second run: a test track whose name is T4's sound file name followed by `.wav`, so
+    with the extension twice, is supplied as well. *Expected:* the cycle of (a), T0, T1, T4. Third
+    run: as the second, with T4's sound file name ending in `.WAV` instead. *Expected:* the cycle
+    of (a). *Falsified if:* T4 is heard in the first run, or not in the second or third.
 - **MU2. Shuffle.**
   - (a) Entries T0 to T2 available, shuffle setting on, repeat off; 60 tracks. Then quit, remove
     T2's test track, start the program again (so that T2's file is absent at startup, claim 8)
@@ -669,16 +1020,13 @@ the switch-off results of claim 7 and the name matching of claim 2.
     instance a fixed cycle, in which each ended track always has the same successor.
 - **MU3. Repeat.** (a) As MU1 (a), with T1's *repeat* flag set. *Expected:* once T1 plays after another track, only T1
   follows. (b) As MU1 (a), repeat setting on, then shuffle also on. *Expected:* in both runs, every
-  track from the third heard on is the same as the second. Whether the second is the same as the
-  first depends on whether what started the music left the first as the ended track (Q-1700
-  question 1, claim 4), and is only recorded. *Falsified if:* a track after the second differs
-  from the one before it. (c) Shuffle on: T0 with
+  track heard is the same as the first, which is the ended track for the second pick (claims 4
+  and 11). *Falsified if:* a track differs from the one before it. (c) Shuffle on: T0 with
   *normal* clear and its *repeat* flag set (test track supplied), T1 available, T2 with *normal*
   clear. *Expected:* T1 is followed by T0 (the fallback of claim 7), and once T0 plays only T0
-  follows, although T0 is not available. *Falsified if:* T1 is heard again after T0. If the
-  first track heard is T0, whatever started the music started it (Q-1700 question 1), and whether its
-  *repeat* flag then keeps it playing depends on claim 4's open point: that run is inconclusive and is
-  repeated; if every run starts with T0, part c is reported unreached. The engine fixture
+  follows, although T0 is not available. *Falsified if:* T1 is heard again after T0. The first
+  track heard is T1, the only available track, chosen by the first pick (claim 11); a run whose
+  first track is T0 falsifies claim 11 and is not counted for claim 4. The engine fixture
   expects, with the switch off, T1 over and over, under the same condition. (d) A failed start
   repeated: as (a). After T1 has played at least twice, delete T1's test track while T1 plays (a
   named test file changed during the run). *Expected:* after that T1 ends, silence for at least
@@ -701,9 +1049,9 @@ the switch-off results of claim 7 and the name matching of claim 2.
   inconclusive.
 - **MU4. Fallback.** (a) List order: entries T0 to T2, with T0's *normal* flag clear (test track
   supplied) and the test tracks of T1 and T2 not supplied. *Expected:* T0 is heard over and over.
-  *Falsified if:* T0, once heard, is followed by silence at its end. Silence throughout is
-  inconclusive, not a falsification: whether music starts at all with no available entry is
-  open (Q-1700 question 1), so it is only recorded. Repeat with T0's test track also not
+  This is judged from the first track heard: music starts with no available entry, and the
+  first pick's fallback starts T0 (claim 11). *Falsified if:* T0, once heard, is followed by
+  silence at its end, or silence throughout while the control is heard. Repeat with T0's test track also not
   supplied. *Expected:* silence throughout; this run only records the original's behaviour.
   *Control:* MU1 part a under the same options, just before, in which music is heard. (b) Shuffle
   on: T0 with *normal* clear (test track supplied), T1 available, T2 with *normal* clear.
@@ -801,9 +1149,8 @@ the switch-off results of claim 7 and the name matching of claim 2.
     expects, with the switch off, no advance at T1's end and T1 again.
   - (c) Zero volume. As (b). While T1 plays, set the music volume to its lowest setting in the
     in-game options by scripted input, leave the options and keep the volume there for at least
-    three track lengths of play after T1 would have ended, counted from leaving the options (on
-    the assumption that playback does not advance while the options menu is open; if the record
-    shows that it does, count from entering the options), then set it back to its maximum.
+    three track lengths of play after T1 would have ended, counted from entering the options,
+    then set it back to its maximum.
     *Expected:* while the volume is at its lowest, no advance of 1000 raw values and no tone; after it is raised, at the next music
     update, an advance of 1000 raw values and T0 heard. *Falsified if:* an advance of 1000 raw
     values happens while the volume is at its lowest and that setting is known to be zero volume.
@@ -842,20 +1189,465 @@ the switch-off results of claim 7 and the name matching of claim 2.
   pass's sound-choice draws, or after a failed start the pick is made in the same pass or later
   than the following one.
 
+- **MU8. Start of music (claim 11).** The set-up above; the recording runs from the moment the
+  skirmish is started in the menus, and the end of loading (the game view appearing) is marked
+  in it. Here the first track heard is judged.
+  - (a) MU1 part a's entries and options. *Observable:* the first three tones after loading.
+    *Expected:* T0, T1, T4. *Falsified if:* the first tone is not T0, or T0 is not followed by T1.
+    Second run: as the first, with T0's *normal* flag clear (test track supplied). *Expected:* the
+    first tone is T1, then T4, then T1 (T0 is never heard). *Falsified if:* T0 is heard. Third
+    run: as the first, with the repeat setting on. *Expected:* T0 over and over from the first
+    tone. *Falsified if:* the second tone differs from the first.
+  - (b) First shuffle pick, with the random-state recorder and MU6's accounting of unrelated
+    draws. MU6 part a's entries and options (T0 to T2 available, T3 and T4 with *normal* clear).
+    For the first tone, predict from the state recorded before the tick in which it starts the
+    ranged draws *R*(0, 4) up to the first that names T0, T1 or T2, with no draw rejected for
+    naming an ended track. *Expected:* the stream advances by exactly the predicted raw values
+    and the predicted entry is heard. Make at least 10 runs. *Falsified if:* in a run that is not
+    void the advance or the entry differs from the prediction, for instance because a draw naming
+    an available entry is rejected as if that entry were the ended track. A run in which that
+    alternative gives the same prediction does not tell them apart and is only counted for the advance.
+  - (c) A new skirmish. MU1 part a's entries and options. In the first skirmish, after at least
+    one full cycle, leave the game while T1 plays, and start a second skirmish in the same session
+    without leaving the program. What is heard between the two games is only recorded. Let *L* be
+    the last track the recording shows starting before the second game's loading (T1 unless a
+    track starts between the games). *Expected:* the first tone after the second game's loading
+    is T0. *Falsified if:* it is *L*'s list-order successor and not T0, which an ended track kept
+    from before would give. *Inconclusive if:* *L*'s successor is T0 itself (*L* is T4).
+  - (d) Map theme. MU1 part a's entries and options, on a test copy of the map whose theme key
+    names T3 (whose *normal* flag is clear). *Expected:* the first tone is T3, then T4, then T0,
+    T1, T4, … *Falsified if:* the first tone is not T3, or T3 is followed by any track but T4.
+    Second run: the theme key names T3 in another case (lower case for upper). *Expected:* as
+    the first run. Third run: the theme key names a text that matches no entry. *Expected:* the
+    first tone is T0, as in part a. *Falsified if* (third run): T3 or any track other than T0 is
+    heard first. Fourth run: as the first, with the shuffle setting on and the random-state
+    recorder reading the unsynchronised stream, with MU6's accounting of unrelated draws.
+    *Expected:* the tick in which T3 starts adds no music draw to the stream (no ranged draw
+    *R*(0, 4)), and the first ranged draws for music come at the pick after T3 ends. *Falsified
+    if:* a ranged draw is made for music in the tick in which T3 starts.
+  - (e) In-game music off. MU1 part a's entries and options, with the in-game music key set off
+    in the settings file, by a value that S-0003 claim 2 recognises (not `off`, which it does not), before the program
+    starts; the setting is not changed in the game. *Expected:* no tone during the game, for at
+    least five track lengths after loading. *Control:* part a, just before, in which music is
+    heard. *Falsified if:* any tone is heard. Second run: as the first, with part f's added
+    loading-track entry and its test track. *Expected:* the loading track's tone during loading,
+    then no tone during the game. *Falsified if:* no loading tone is heard while part f's run with
+    the same entry, on the same machine, hears it; or a tone is heard after loading.
+    *Inconclusive if:* part f's run hears no loading tone either (loading too short).
+  - (f) Delay. In parts a and d, and in a further run as part a with an added entry whose
+    identifier is the loading track's name (Import mapping) and whose test track has its own
+    tone, record the time from the end of loading to the first tone, and whether the loading
+    track's tone is heard during loading and how it ends. This part records the original's delay
+    and fade (Open questions); no claim predicts their length. Further run, for their order: as
+    the run with the added entry, with that entry's test track longer than loading lasts, so that
+    it still plays at the end of loading. *Expected* (claim 11): its tone fades and has ended before
+    the first tone after loading starts. *Falsified if:* the first tone after loading starts while
+    the loading track's tone is still heard, or the loading tone is cut off at once with no fade.
+    *Inconclusive if:* the loading tone has already ended when loading finishes.
+  - (g) Loading track and the first pick. A test music database with entries T0, T1, *D* and T2
+    in that order, where *D*'s identifier is the loading track's name (Import mapping) and *D* has
+    its own test track and tone with its *normal* flag set, so that it is also an available track.
+    Shuffle and repeat settings off. *Observable:* the tones during loading and the first two
+    tones that start after the end of loading. *Expected:* *D* during loading, if loading lasts
+    long enough to hear it; then T0, then T1. *Falsified if:* the first tone that starts after
+    loading is T2, the list-order successor of *D*, which an ended track kept from the loading
+    track's start would give, or is *D*. Second run: as the first, with *D*'s *repeat* flag set.
+    *Expected:* the first tone that starts after loading is T0. *Falsified if:* it is *D*, which
+    repeat of a kept ended track would give. A tone of *D* still fading at the end of loading does
+    not count as a start.
+  - (h) Side and settings. Part a's first run repeated with the local player on a country of
+    each other side, and once more with the starting credits, the short-game option, the
+    superweapons option and the crates option each changed from part a's values. *Expected:* the
+    first tone is T0 in every run. *Falsified if:* any run's first tone is not T0.
+  - Engine fixture: parts a to e, g and h on our engine, and a check that the first start is made at
+    the music update of the game's first audio pass, with the loading track of part f stopped when
+    the game starts. A further run with the switch off and no available entry (MU4 part a's
+    entries with every entry unavailable) checks that the first pick starts nothing, that music
+    started begins all the same, and that a pick is made again at each later music update with no
+    ranged draw.
+- **MU9. Settings when the settings file does not give them (Q-1831).** MU1 part a's entries.
+  - (a) The settings file with its shuffle and repeat keys removed. *Expected:* the cycle T0,
+    T1, T4 of MU1 part a over at least 12 tracks: list order (shuffle off) and no track twice in a
+    row (repeat off). *Falsified if:* the order is not that cycle, or a track follows itself.
+  - (b) Both keys present with the value `on`. Second run: both with the value `2`.
+    *Expected:* as (a) in both runs (a value that is not recognised keeps the default).
+    *Falsified if:* a track follows itself, or the order breaks the cycle.
+  - (c) No settings file: it is moved out of the game directory before the program starts and
+    put back afterwards; any settings file the program has written is removed after the run,
+    before the original is put back. No option is changed in the game during this run, an
+    exception to the set-up: the music, effect and voice volumes stay at their defaults, and each
+    test track's steady tone is told from the game's own sounds by its pitch (set-up), so the run
+    gives the program no cause to write a settings file, or to read one, before the run ends. The test
+    music database and test tracks are as in MU1 part a. *Expected:* music is heard during the game
+    (in-game music on) and the cycle is that of (a). *Falsified if:* no music during the game, or
+    the cycle of (a) breaks, unless the run is inconclusive. *Inconclusive if:* no music at all is
+    heard in the session, menus included: the default music volume, which Q-1700 question 5 leaves
+    open, may then be inaudible. A repeat whose test music database also holds a menu entry (as
+    MU11's) gives that control: the menu track heard in the main menu shows the default volume is
+    audible. Last run: the settings file present, with the in-game music key set
+    to `off`, which is not recognised. *Expected:* music is heard, as in (a).
+- **MU10. Sound files that are present but do not play (claim 8a).**
+  - (a) MU6 part a's set-up, with the random-state recorder and MU6's accounting, except that
+    T2's test track is replaced by a file of the same name that does not parse. One run for each
+    such file: a text file of a few hundred bytes; a RIFF WAVE file with format code 2; one whose
+    data chunk comes before its format chunk; one with no data chunk; one with a valid header and
+    no sample data after it. *Expected,* in every run: each pick is predicted with T2 as an
+    available track, and holds; a pick that accepts the draw naming T2 is followed by silence and
+    by a new pick at a later music update, whose draws are predicted with T2 as the ended
+    track; T2's tone is never heard and the program keeps running. *Falsified if:* a pick's advance
+    matches a prediction in which T2 is not available (a draw naming T2 rejected) and not the
+    prediction with T2 available, or the program stops. A run in which no pick names T2 within
+    20 picks is inconclusive. The engine fixture also expects the importer warning naming T2.
+  - (b) A failed start of a present file becomes the ended track. MU1 part a's entries, with T1's
+    *repeat* flag set and T1's test track replaced, before the program starts, by the text file
+    of part a. *Expected:* after T0, silence for at least five track lengths: T1 is available, is
+    picked, fails, becomes the ended track and its *repeat* flag starts it again at each pick
+    (claims 4 and 8a). *Falsified if:* T4 is heard after T0, which a pass-over of T1 would give.
+    The silence would also follow if the failed start stopped music updates altogether, so a
+    second run supplies a playable test track for T1 during the silence, as MU4 part b's third
+    run supplies entry 0's. *Expected:* T1's tone is heard at a later music update, within five
+    track lengths of the moment the playable track is supplied. *Falsified if:* the silence lasts
+    more than five track lengths after the playable track is supplied.
+    As MU1 part l, this part is read only after MU4 part b's third run has met its
+    expectation; until then it is inconclusive. Read with MU1 part l, where a missing file is passed over, it
+    shows that presence depends on the file being found, not on its content.
+  - (c) Data cut short. MU1 part a's entries, with T0's test track written as uncompressed PCM
+    and its sample data cut to the first half while its header still gives the full data size.
+    *Expected:* T0's tone lasts about half as long as the other test tracks', and T1 follows after
+    the ordinary gap. *Falsified if:* a silence of about half a track's length follows T0's
+    shortened tone before T1, which would mean the track ends at the size the header gives.
+    Second run: T0's test track with sample data of a second, different pitch appended after the
+    data the header gives (the file's overall RIFF size updated, the data chunk's size not).
+    *Expected:* the second pitch is never heard and T0's tone lasts as long as the other test
+    tracks'. *Falsified if:* the second pitch is heard.
+- **MU11. The end of the game, the score screen, the options menu and leaving (Q-1833; claims 11 to 13).**
+  MU1 part a's entries and options, plus two entries after T4: *S*, whose identifier is the score
+  track's name, and *M*, whose identifier is the menu track's name (Import mapping), each with its
+  own test track and tone and with its *normal* flag clear, so that neither is picked in play
+  (claim 2) and each part also tests the direct start. The recording runs through the score
+  screen and back to the main menu. The tick of the end of the game and the end delay's final
+  tick (the last tick before the tick count stops: the game is over) are marked in it by the
+  measurement harness; the opening of the score screen, each opening and closing of the options
+  menu and the opening of the main menu are marked by the harness or from a screen capture
+  aligned with the audio.
+  - (a) Win. A test copy of the map on which the computer opponent is quickly beaten (for
+    example with a single unit of its own beside the local player's force). Win while a tone
+    plays. *Observable:* the tones from the end of the game to the opening of the score screen, the
+    tone's envelope at that opening, and the first tone on the score screen. *Expected:* the
+    tone playing at the end of the game goes on at full level, with no fade, through the end
+    delay and the wait after the game is over, until the score screen opens; it stops there at once, within the recording's resolution, and *S* starts from its
+    beginning. If a tone ends in the end delay or in the wait, the next one is its list-order
+    successor (claim 12). The end delay's length in ticks, the wait's length in real time and the
+    moment each tone ends are recorded. If no tone ends within the end delay, the run is repeated
+    with the win given, by the tick count, a little less than the end delay's length (S-0414
+    claim 8, from the rules in force) before a tone ends. If no tone ends within the wait, a
+    further run gives the win so that a tone is due to end just after the end delay's final tick,
+    and if none ends there either, the wait's part is reported unreached. *Falsified if:* the tone
+    stops or fades at the end of the game or when the game is over, before the score screen
+    opens; a tone that ends in the end delay or the wait is not followed by its successor; it is
+    still heard after the score screen opens; or the first tone on the score screen is not *S*.
+  - (b) Score track's end. As (a), staying on the score screen for at least three of *S*'s
+    lengths after it starts. *Expected:* *S* once, then silence. Second run: repeat setting on.
+    Third run: repeat setting off, *S*'s *repeat* flag set. *Expected* (second and third runs):
+    *S* over and over. *Falsified if:* any tone other than *S* is heard on the score screen, *S*
+    is heard twice in the first run, or silence follows *S* in the second or third run.
+  - (c) No score track. As (a), without *S*. *Expected:* the tone stops at once when the score
+    screen opens, and the score screen stays silent for at least three track lengths.
+    *Falsified if:* any tone is heard on the score screen.
+  - (d) In-game music off. As (a), with the in-game music key set off in the settings file, by a
+    value that S-0003 claim 2 recognises (not `off`, which it does not).
+    *Expected:* no tone during the game (MU8 part e) and *S* heard when the score screen opens.
+    *Falsified if:* *S* is not heard on the score screen.
+  - (e) Leaving through the options menu. As (a) on the unchanged map: while T1 plays, open the options menu and leave the
+    game through it. The moment leaving is confirmed, the screens shown after it and the moment
+    the main menu opens are marked in the recording, and the read-only recorder gives the last
+    tick that runs. *Expected:* no tick runs after leaving is confirmed, so no object of the local
+    player's is destroyed and no result announcement is given; no score screen opens, and *S* is
+    never heard; the program goes to the main menu. T1 starts to fade when leaving is confirmed
+    (its envelope falls over a stretch of time rather than at once), no other test tone starts
+    before the main menu opens, and *M* starts when it opens. *Falsified if:* the local player's
+    objects are destroyed or play resumes after leaving, the score screen opens or *S* is heard,
+    T1 plays on at full level after leaving, or another test tone starts before the main menu.
+    The length of T1's fade and of the stretch from leaving to the main menu are recorded.
+  - (f) Options menu. MU1 part a's entries and options: open the options menu about one second
+    before a tone ends and keep it open for at least two track lengths. *Expected:* that tone
+    sounds to its end without a break or a fade, and the next tone, its list-order successor,
+    starts after the ordinary gap while the menu is still open, and then the one after it.
+    Second run: as the first, with the shuffle setting on, the random-state recorder reading the
+    unsynchronised stream across the menu's opening and closing. *Expected:* a tone different from
+    the one that ended starts in the menu; any advance of the stream in that stretch is recorded
+    for the Open questions. *Falsified if:* silence follows the tone's end until the menu
+    closes, or the tone breaks off or pauses when the menu opens.
+  - (g) Score screen to the main menu, and on into a game. *M*'s test track lasts at least three
+    minutes. After (a), leave the score screen for the main menu, then start a skirmish from the
+    menus as soon as they allow, while *M* still sounds. *Expected:* *S* stops at once when the
+    main menu opens and *M* starts; the tone playing when the second game starts to load, *M* or
+    any other menu tone, stops at once then, with no fade (its envelope drops within the
+    recording's resolution), and since the test music database has no loading track, loading is
+    silent. *Falsified if:* *S* is heard after the main menu opens; the tone playing when loading
+    starts fades out rather than stopping at once; or *M* or any menu tone is heard during the
+    second game's loading. If no tone sounds when loading starts, the run is repeated
+    with a longer *M*; if none sounds then either, the stop at loading is reported unreached.
+    What plays in the menus between the main menu and the start of loading is otherwise only
+    recorded.
+  - (h) The menu's choices. In (e)'s run, before leaving, the options menu's choices are captured
+    on screen, down to the confirmation that leaving brings up. *Expected:* no choice restarts
+    the game and none surrenders while play goes on; the one way to leave is that of (e).
+    *Falsified if:* the skirmish's options menu offers a restart or a surrender.
+  - (i) Loss. As (a), on a test copy of the map on which the local player is quickly beaten (for
+    example with the local player's only unit beside the computer opponent's force), the loss
+    given while a tone plays. *Observable* and *Expected:* as (a), with the loss in place of the
+    win: the tone playing at the end of the game goes on at full level, with no fade, through the
+    end delay and the wait after the game is over, until the score screen opens; it stops there
+    at once and *S* starts from its beginning. A tone that ends in the end delay or the wait is
+    followed by its list-order successor; unlike (a), no further runs are made to place a tone's
+    end there, and the moment each tone ends is only recorded. *Falsified if:* as (a).
+  - Engine fixture: parts a to e, g and i on our engine with its end screen in place of the score
+    screen, expecting the original's results except where claims 12 and 13 give our engine's
+    design: in part a music updates and picks go on through the end delay as in the
+    original, the end screen opens at the end of the cycle that runs the end delay's final tick,
+    the track stops there at once, and no music update runs after that cycle (a track due to
+    finish after it is followed by no pick); in part b's second and third runs the score track starts again as
+    soon as its whole length has played out, with no audio pass on the end screen, and a further
+    run of part b with the score track's file absent, once without and once with the repeat
+    setting, expects a silent end screen and records our engine's attempts to start the score
+    track, expecting exactly one attempt in each run; in part e the game ends at once, with no later music
+    update and no pick, and the main menu starts *M*. A further run, on a three-player test copy of the map whose two computer opponents are hostile
+    to each other, gives a surrender order, where our engine's interface offers one, expecting
+    play to go on after the local player's defeat, since a hostile pair remains, with the music as in play; and one restarts, where our engine
+    offers it, expecting the restarted game's first tone to be T0 (claim 11). Part f on our engine, expecting the departure of claim 13: the tone falls silent when
+    the menu opens, resumes from the same point when it closes, and no pick and no ranged draw
+    happen while the menu is open; the next pick's ranged draws (second run) come at the music
+    update of the pass at which the resumed track finishes. The same run with our engine's own
+    settings screen opened from the game in place of the options menu, expecting the tone held
+    and resumed in the same way and no pick while the screen is open.
+
 ## Changes for other specs
 
-- **S-0701 claim 30.** Its schedule of audio passes gains the music update of S-0703 claim 10,
-  run at the end of each pass after that pass's sound choices.
+In a skirmish, the original's options menu gives the game up only by aborting the mission, which
+ends the game at once and does not send the surrender order of S-0414 claim 11 (claim 13). The
+hand-offs below therefore move every run of the original that gives the human's surrender, in
+S-0414 and in other specs, to a network game of the original, and correct approved text that
+assumes a skirmish surrender. They rest on claim 13, which is rated medium until MU11 parts e and
+h are made; part h's capture shows the labels of the menu's choices, so a run of part h that finds
+a choice that surrenders in a skirmish withdraws them. Since a network game's end handling is left
+to the future multiplayer spec, each rating of those specs that comes to rest on a network-game
+run drops to medium at most.
+
+- **S-0701 claim 30.** Two changes. First, its schedule of audio passes gains the music update of
+  S-0703 claim 10, run at the end of each pass after that pass's sound choices. Second, its sentence "No skirmish audio passes occur in setup menus before loading
+  or after leaving the match." becomes "No skirmish audio passes occur in setup menus before
+  loading, after the cycle that runs the end delay's final tick (the game is over, S-0414 claim
+  8), or after leaving the match." The end delay's
+  ticks need no change: they run in ordinary cycles of the loaded skirmish, so the claim's
+  schedule already gives their audio passes, with their music updates (the first change). The
+  pass at the end of the cycle that runs the end delay's final tick, if one falls there, is the
+  last; our end screen opens after it (S-0703 claim 12) and has none. The score track and the end screen need no audio
+  pass, since they make no ranged draw. The options menu stays a stand-still with no audio pass,
+  for music as for sound (S-0703 claim 13). Only if the project lead chooses to play the music
+  on in the options menu (Open questions) would claim 30 also gain music-only
+  passes during that stand-still.
+- **S-0009.** A map's basic section also carries the map theme key, which S-0703 claim 11 and
+  its Import mapping interpret.
 - **S-0202 claim 11 and scenario R6 part b.** No change: the music track choice they name is
   S-0703 claim 6's shuffle pick, drawn from the unsynchronised stream.
+- **S-0414 claim 11, its Measurement scenarios and the scenarios that give a surrender.** In a
+  skirmish the original's options menu sends no surrender order: its one way to leave, aborting the
+  mission, is how a skirmish player gives up, and it ends the game at once (S-0201 claim 1, S-0703 claim 13), and no other input of a skirmish gives one. The
+  original's surrender order is a network game's (S-0201 claim 15, with its entry below), so every run
+  of the original that needs the human's surrender becomes a network game of the original, in
+  a form that this hand-off adds to S-0414's Measurement scenarios. Such a run measures a network
+  game of the original, whose end handling (the end test, the end delay, the final tick and what
+  is committed in it) is among the network-game states that S-0201 claim 15 leaves to the future
+  multiplayer spec. So what it backs holds for a skirmish only on the assumption that the
+  original handles these in a network game as in a skirmish, and that assumption is `unmeasured`:
+  no run of the original's skirmish can give the surrender order. Each S-0414 rating that comes to
+  rest on such a run therefore drops to medium at most, as listed below; ratings that skirmish
+  runs back keep theirs. The changes are as follows.
+  - Claim 11. The sentence "In the original only the local player can surrender, through the
+    options menu, and not when the local player is an observer, nor from the end of the game on"
+    gains: "In a skirmish the original's options menu sends no surrender order: its one way to
+    leave, aborting the mission, is how a skirmish player gives up, and it ends the game at once (S-0201 claim 1, S-0703 claim 13), and no other input of a skirmish
+    gives one; the original's surrender order is a network game's (S-0201 claim 15). The original
+    carries out the surrender order in the same way in a network game and in a skirmish: nothing
+    in carrying it out depends on the kind of game. So what the order does is measured in a
+    network game of the original (Measurement scenarios, *network-game form*), and our engine
+    gives the order that effect in a skirmish." The sentence "in the original the human
+    participant's surrender ends the game at that defeat (claim 6, departure)" becomes "in the
+    original no skirmish input gives the surrender order, and claim 6's departure ends a skirmish at the
+    human participant's defeat from any other cause". The backing gains: "That the order's
+    effect does not depend on the kind of game is `unmeasured`: no run of the original's
+    skirmish can give the order, and the network-game runs measure the effect itself." The
+    confidence's "high for the destruction in the next house update" becomes "medium for the
+    destruction in the next house update, which V8 measures in the network-game form", and the
+    confidence gains "medium that the effect does not depend on the kind of game". The
+    pending-result sentence and its backing (the original's case only through S-0201 scenario
+    T8, part H; in a skirmish a rule of our engine, which V8 part b checks) need no change.
+  - Measurement scenarios. After the first paragraph (the common setup) a paragraph is added:
+    "*Network-game form.* A scenario that gives the human's surrender in the original is run as
+    a network game of the original, since no input of the original's skirmish sends the surrender order (claim
+    11). Two machines on one local network, as in S-0201 scenario T8, each run the stock game
+    and the recorder; the scenario's human is machine 1's player, and the scenario's houses,
+    map, game speed (set in the lobby) and named test files are otherwise as stated. Machine 2's
+    player is an added human participant, far from the observed area, in one lobby team with
+    every computer player of the scenario, all of which are the human's enemies wherever this
+    form is used. Machine 2's house is a contender created for a human participant and remains,
+    so claim 6's departure does not end the game; the human's defeat leaves no hostile pair, and
+    the game ends at it by claim 6's ordinary test (no hostile pair remains), assuming the
+    original's network game ends as a skirmish does. How the original ends a network game is left
+    to the future multiplayer spec (S-0201 claim 15), so a rating that rests on a run in this form
+    is medium at most. Machine 2's player gives no orders except the one
+    below; a run in which machine 2's house is defeated, attacks or is attacked is void.
+    Machine 1's player surrenders through the options menu's choice that surrenders and keeps
+    the player watching (S-0201 claim 15), by scripted input where a tick is aimed at. The order
+    is carried out in tick *c* + *W*, where *c* is the tick in which the choice is made and *W*
+    is the order delay (S-0201 Terms and claim 17); wherever a scenario names the tick of the
+    surrender, or the tick in which it is applied, it means that tick. That tick is recorded,
+    not computed: it is the one tick at whose end machine 1's read-only recorder records the
+    human's house as marked to die (S-0414 claim 11 and State and ordering), so no reading is
+    needed after the surrender. *W* serves only to aim the choice: each run reads it once, before
+    the surrender, from a move order that machine 2's scripted input gives one of its own units
+    (the tick in which the unit's destination changes, less the tick in which the order is
+    given), and a run whose surrender is carried out in a tick other than the one a scenario
+    aims at is void. The surrender comes at least 600 s of real time after the map is visible, as in S-0201
+    scenario T8, so that timing orders have been carried out. The draws that a network game adds
+    to the scenario random stream in every tick (S-0202 claim 12) are not part of any count of
+    draws below."
+  - Scenario V4. "The human surrenders" (the setup) and "when the human surrenders" (part b)
+    are given in the network-game form; part c reads the kill counts on machine 1's result
+    screen, machine 2's house among the houses whose count must not rise. Claim 5's confidence
+    "high for the destruction, the ignored defences, the first two table rows and the
+    permanent-control rows" becomes "high for the destruction (V2) and the permanent-control rows
+    (S-0601 scenario MC10); medium for the ignored defences and the first two table rows, which
+    V4 measures in the network-game form".
+  - Scenario V8. The setup "the human surrenders from the options menu at tick *t*" becomes "the
+    human surrenders in the network-game form, the order carried out in tick *t*". Part b needs
+    no change: it is a run of our engine only, with S-0201 scenario T8, part H as the
+    original's counterpart. Claim 11's rating changes as given above.
+  - Scenario V11. "Procedure: surrender" (the main run, also used by part b's "during
+    surrender"), part c's "Surrender while P is still held" and part d's "Surrender and record"
+    give the surrender in the network-game form. The main run gains: "Before the surrender, at
+    least 100 ticks with no death are recorded, so that the network game's own draws of each
+    tick (S-0202 claim 12) are known; a draw in the tick of the destruction that is neither one
+    of those nor a draw of the sweep makes the run inconclusive." Claim 15's confidence "high for
+    creation order, no off-map exclusion and no repeated hit solely due to delayed removal"
+    becomes medium for the same, since V11 measures them in the network-game form.
+  - Scenario V12, parts a and b. "surrender in tick n − 1" becomes "surrender in the
+    network-game form, the order carried out in tick n − 1"; the control with an ordinary
+    vehicle likewise. Claim 16's confidence "high for the relative places of destruction, power,
+    radar and tech-tree work" becomes medium for the same, since V12 parts a and b measure them,
+    and the final tick that commits them, in the network-game form. Claim 8 keeps its rating:
+    its backing (V12 part c and V6) gives no surrender.
+  - Scenario V14. "Procedure: surrender and sample during the destruction interval" becomes
+    "Procedure: surrender in the network-game form and sample during the destruction interval".
+    Claim 17's confidence "high for the health-independent count and deletion rule" becomes
+    medium for the same.
+  - Scenario V15, part a. "Apply surrender in tick 7" becomes "Surrender in the network-game
+    form, the order carried out in a tick 8*m* − 1 for a whole number *m* (machine 1's choice
+    made in tick 8*m* − 1 − *W*, with *W* from the run's reading); a run whose order is carried
+    out in another tick is void". In the rest of part a, "tick 8" becomes "tick 8*m*" and
+    "tick 16" becomes "tick 8*m* + 8", in the end-delay sentence and in the counter run, which
+    also surrenders in this form. Part c's comparison "unlike surrender in part a" needs no
+    change. Claim 18's confidence "high for the relative places and continued raises after
+    defeat" becomes "high for what V15 parts b and c measure in a skirmish; medium for the
+    surrender's place relative to the assigned-tag raise and the raises after that defeat, which
+    part a measures in the network-game form".
+  - Scenario V17. "No-attacker surrender gives losses only" gains "(the surrender given in the
+    network-game form; machine 2's house gains no kill)". Claim 21's confidence gains "medium for
+    the counts after a surrender, which V17 measures in the network-game form".
+  - Claim 5's backing ("V4 does not arrange an object under an erasing weapon at surrender"),
+    the rule text of claims 15 to 18 and State and ordering describe the order's effect rather
+    than how it is given, and need no change.
+
+  Reason: in a skirmish the menu's leave choice ends the game with no tick after it, and no
+  choice of that menu marks the house to die (S-0703 claim 13, MU11 parts e and h), so a run that
+  left through the menu would end the game at once; no other input of the original's skirmish
+  gives a surrender, and scripted input acts only through the game's normal input (glossary,
+  *measurement setup*).
+- **S-0313 (the defeat variant of its firing-index scenario), S-0308 (scenario part g, own-house
+  defeat) and S-0508 (scenario G15).** "surrender the human house through ordinary input",
+  "surrender the occupants' house" and "surrender A through normal input" become a surrender of
+  that house, the human's, in the network-game form of S-0414's Measurement scenarios (the entry
+  above); the house that receives the building and the third contender are computer players of
+  machine 2's lobby team. A rating of these specs that comes to rest on such a run is medium at
+  most. Reason as for S-0414 above.
+- **S-0109 (the death fixture's after-pass surrender destruction).** The surrender is given in the
+  network-game form of S-0414's Measurement scenarios (the entry above). A rating that comes to
+  rest on that run is medium at most. Reason as for S-0414 above.
+- **S-0413 (scenario C3, part a).** "at the end of a game that the human ends by resigning at tick
+  300" becomes "at the end of a game that ends with the human's defeat at a fixed tick: a timed
+  action of the test map removes the human's last counted object (as in S-0414 scenario V12,
+  part c), the skirmish ends at that defeat (S-0414 claim 6) and the score screen opens". Reason:
+  in a skirmish the options menu's only way to give up, aborting the mission, is no resignation: it
+  ends the game at once with no score screen (S-0703 claim 13), so the score screen this scenario reads would not
+  open. A network game is not used here, since its score screen would also list machine 2's
+  house.
+- **S-0203 (the measurement note "Assigned-tag raises within a house update (claim 8)").** Its
+  first sentence, "S-0414 V15 owns the shared measurement: a named test skirmish map, scripted
+  input and a read-only recorder compare surrender in tick 7 with the assigned-tag raise in tick
+  8, then use a turn-pass gate to make a tag remove prerequisites or the last qualifying object
+  in tick 16.", becomes "S-0414 V15 owns the shared measurement: a named test map, scripted
+  input and a read-only recorder compare a surrender carried out in a tick 8*m* − 1 for a whole
+  number *m* with the assigned-tag raise in tick 8*m* (V15 part a, given in the network-game
+  form of S-0414's Measurement scenarios), then use a turn-pass gate in a skirmish to make a tag
+  remove prerequisites or the last qualifying object in tick 16 (V15 parts b and c)." The rest
+  of the note needs no change: its ticks 16 and 17 belong to parts b and c, which give no
+  surrender. Claim 8's backing (S-0414 scenarios V7, V8, V11, V12 and V15) needs no change, but
+  its confidence "S-0414's high for destruction creation order and within-update ordering"
+  becomes "high for what S-0414 scenarios V7 and V15 parts b and c measure in a skirmish; medium
+  for destruction creation order and within-update ordering where they rest on V8, V11, V12 and
+  V15 part a, which run in the network-game form", since how the original ends a network game is
+  left to the future multiplayer spec (S-0201 claim 15). Reason as for S-0414 above.
+- **S-0011 claim 35.** Its backing "S-0414 V15 for within-update timing and continued raises
+  after defeat" needs no change, but its confidence "high for within-update timing and continued
+  raises after defeat" becomes "high for the within-update timing that S-0414 V15 parts b and c
+  measure in a skirmish; medium for the raise's place relative to the surrender destruction and
+  for continued raises after that defeat, which V15 part a measures in the network-game form",
+  since how the original ends a network game is left to the future multiplayer spec (S-0201
+  claim 15). Reason as for S-0414 above.
+- **S-0201 claim 1.** Its bullet "Which of the menu's choices ends the game at once and which one
+  resigns is not established (Open questions)." becomes, for a skirmish: "In a skirmish the
+  options menu offers one way to leave, and it ends the game at once; no choice of that menu
+  resigns (S-0703 claim 13)." Its backing gains `measurable` (S-0703 MU11 parts e and h) for that
+  mapping in a skirmish, and its low rating for which menu choice is which becomes medium for a
+  skirmish until those parts are made. Reason as for S-0414 above.
+- **S-0201 claim 15.** Its sentence "After the player has resigned through the menu, it does not
+  open again until the player's house is defeated" holds for a network game only: in a skirmish
+  the menu's abort is no resignation (S-0703 claim 13). The backing's "`unmeasured` for the menu after
+  resigning in a skirmish" and the confidence's "medium for the menu after resigning in a
+  skirmish" are dropped, since the case cannot arise in a skirmish. Its "a skirmish player cannot
+  surrender during the end delay" stays, and gains "nor at any other time: a skirmish's options
+  menu sends no surrender order; its abort ends the game at once (S-0703 claim 13)". The claim gains a bullet:
+  "**What leaving offers in a network game.** While at least two houses of human participants
+  are undefeated, the player's own among them, leaving through the options menu offers two
+  choices that send the surrender order (S-0414 claim 11): one then leaves the game, the other
+  keeps the player watching. Otherwise the menu offers only a leave, which sends no surrender
+  order. Backing: `measurable` for the choice that keeps the player watching (part F of scenario
+  T8, and S-0414's network-game form in each of its runs), and for the condition on the
+  undefeated human houses and the leave-only menu otherwise through a run added to part F, in
+  which machine 2's house is defeated before machine 1's player opens the options menu
+  (expected: only a leave is offered; falsified by a choice that surrenders); `unmeasured` for
+  what the two leave choices do on the other machines, since no part records them there.
+  Confidence: medium, and medium for the condition and the leave-only menu until that run is
+  made." The bullet's premise, the two choices in a network game, is not measured yet: until
+  part F's runs are made it rests on the original's program alone. Reason as for S-0414
+  above; S-0414's network-game form rests on this bullet.
+- **S-0201 scenario T1, part D.** "trying each menu choice that leaves the game in its own runs"
+  is, in a skirmish, the one leave choice (S-0703 claim 13); the sentence "A choice that resigns
+  lets ticks run on through the defeat and its end delay, and its final tick then behaves as in
+  part C." holds for a network game only. The sentence of claim 1 "A resignation counts here"
+  then concerns a network game's resignation. Scenario T9 needs no change. Reason as for S-0414
+  above.
 
 ## Open questions
 
-- (Q-1700 question 1.) What starts the music in a skirmish, when, and with which track, including
-  whether music starts at all when no entry is available (MU4); whether that start leaves an
-  ended track (Terms, claim 4), which decides the first repeat and the first list-order pick
-  after it, and which every scenario avoids by judging from the second track heard on; whether
-  having no ended track (claim 5) is restored by a new game.
+- (Claim 11.) How long the original's fade of the loading track lasts, and so how long after the
+  end of loading the first track starts; MU8 part f records it. The delay also depends on how
+  often the music update runs (Q-1700 question 2).
+- (Claim 11; Q-1700 question 4.) What changing the in-game music setting during a session does.
+- (Claim 11; Q-1700 question 5.) What the original starts first when the music volume is zero
+  while a game loads with a loading track in the music database: the start of claim 11 may then
+  give way to the loading track once the volume is raised. No scenario here sets that up.
 - (Claim 1, Import mapping.) Whether a track identifier listed again in another case is the same
   entry in the original, or a separate entry with no section of its own: MU1 part c's second
   run gives the same cycle either way.
@@ -864,8 +1656,8 @@ the switch-off results of claim 7 and the name matching of claim 2.
 - (Claim 3.) Under list order, whether an entry that is not available is passed over at the pick
   or started, failed and followed by a new pick at the next music update; MU1 part l proposes a test that
   tells them apart once MU4 part b's third run is made (claim 3).
-- (Q-1700 question 8, part; claim 9.) With an empty track list: whether music can start, and
-  what the original does if it does (MU5 records it).
+- (Q-1700 question 8, part; claim 9.) With an empty track list: what the original does once a
+  skirmish has loaded (MU5 records it).
 - (Q-1700 question 2, part.) The gap between tracks: how often the music update runs. MU1 records
   the gap.
 - (Q-1700 question 2, part.) Where the original's music update falls among the sound choices made
@@ -873,8 +1665,7 @@ the switch-off results of claim 7 and the name matching of claim 2.
   after them. A variant of MU6 in which a sound choice is made just as a track ends, with the
   random-state recorder, would tell the two orders apart.
 - (Q-1700 question 4.) The options screen's music controls; which in-game controls change the
-  shuffle and repeat settings, whether a change is saved to the settings file, and the settings'
-  values when the settings file lacks their keys.
+  shuffle and repeat settings, and whether a change is saved to the settings file.
 - (Q-1700 question 4, part.) When the shuffle and repeat settings are read from the settings
   file: once at startup or again later. No scenario here separates the two (Terms).
 - (Claim 6.) Whether the original can accept the thousandth ranged draw of a shuffle pick, as
@@ -890,14 +1681,27 @@ the switch-off results of claim 7 and the name matching of claim 2.
   starts no track (claim 3, MU6 part c).
 - (Claim 1a.) With a file named by the extension alone mounted, whether an entry whose sound file
   name is empty, absent or made only of `$` and `#` finds that file and so has its file present.
-- (Q-1700 question 6.) Changes on game events (victory, defeat, score screen, a superweapon,
-  pause, minimise),
-  and music started or changed by a trigger action that names a music theme (S-0011): how such
-  a start interacts with the next-track rules here.
-- (Q-1700 question 7.) Menu music, and whether it carries into the game.
-- (Q-1700 question 8, part.) A sound file that is present but does not decode.
-- (Q-1700 question 3, part.) A sound file name that already ends in the extension: whether the
-  file looked for gets the extension twice.
+- (Q-1700 question 6, part.) Victory, defeat, the score screen and the options menu are claims
+  12 and 13. Still open: changes on a superweapon, on a pause of the game other than the options
+  menu, and on minimising the game window, and music
+  started or changed by a trigger action that names a music theme (S-0011): how such a start
+  interacts with the next-track rules here.
+- (Claim 12.) How long the original's real-time wait for the result announcement lasts after
+  the game is over, before the score screen opens; MU11 part a records it.
+- (Claim 12; Q-1700 question 5.) What the score screen plays when the music volume is zero as it
+  opens, and once the volume is raised there.
+- (Claim 11; Q-1830 question 2, part.) Whether a game mode's own data can give a map theme, and
+  so choose the first track, in place of or on top of the map's; no scenario here sets one.
+- (Claim 13.) How long the original's fade of the playing track lasts when the game is left
+  through the options menu, and the length of the real-time bound on the wait that follows. MU11
+  part e records both.
+- (Claim 13.) Where a pick made in the original's options menu falls on the unsynchronised stream,
+  among other draws; MU11 part f's second run records the advance.
+- (Q-1700 question 7, part.) Music in the menus does not carry into a game: it stops when a game
+  starts to load (claim 11), and the main menu starts the menu track (claim 12). Still open: what
+  the other menus play, and how the menu track continues there.
+- (Claim 8a.) A found sound file whose format chunk declares a very large size, which the original may not survive, even at startup; and a file cut through the middle
+  of the last block of a compressed file. No scenario supplies either.
 - (Claim 2.) Whether a track entry's side restriction that names a side the rules data does not
   have changes anything a player can see outside a game, for example the sides offered in a
   menu or their order, is not established. No claim here says that it does.
@@ -908,18 +1712,16 @@ the switch-off results of claim 7 and the name matching of claim 2.
 - (Terms, Import mapping.) What a track entry's display name and campaign scenario number do
   outside a skirmish: where the name is shown, and whether the number limits the entry in a
   campaign.
-
-## Questions for the project lead
-
-- (Edge cases.) Accept or reject the two design choices in Edge cases. Until the lead decides,
-  both stand as this spec's design choices with their stated reasons.
-  - Picks at zero music volume, a departure with no switch: our engine picks and starts tracks
-    at every music volume, where the original, by claim 3's low-rated reading, makes no pick at
-    zero volume.
-  - The side restriction matched by name, with no switch: a design choice of scope, not a
-    departure from a known rule. The tension to weigh: the original's
-    failure to match a side's name (MU1 part b) is claimed, but its actual side rule is not
-    established. So it cannot be said whether the original has a bug with no gameplay impact
-    (which the project's rule lets go without a switch) or a different reading of the data that
-    a switch could reproduce. Since the original's rule is unknown, a switch would have no known
-    behaviour to select.
+- (Edge cases; for the project lead.) Accept or reject the end screen opening when the game is over
+  (claim 12, S-0414 claim 8), a departure with no switch. Our engine keeps the end delay's ticks
+  with their music updates and picks, as the original does, and drops only the original's real-time
+  wait for the result announcement, in which the original plays the track on and can make a pick
+  before its score screen opens: no music update runs after the cycle that runs the end delay's
+  final tick. Until the lead decides, the departure stands as this spec's design choice with its
+  stated reason.
+- (Edge cases; for the project lead.) Accept or reject the music held in the options menu (claim
+  13), a departure with no switch. The alternative is the original's behaviour: the music plays on
+  in the menu and picks go on there. That alternative needs S-0701 claim 30 to gain music-only audio
+  passes during the options menu's stand-still, and it makes the unsynchronised stream's later
+  positions depend on how long the menu stays open in real time. Until the lead decides, the
+  departure stands as this spec's design choice with its stated reason.
