@@ -429,6 +429,8 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
         // spec: S-0215 Terms (the placement fall-back: an actor falls back to rest when placed)
         crate::process::fall_back(w, id, true);
         crate::refresh::placement_end(w, id);
+        // spec: S-0501 Terms and claim 1 (the type test that marks an aircraft visiting comes after the placement fall-back, which sees only a mark already present)
+        crate::air::placed_type_test(w, id);
     }
     crate::econ::events::entered_map(w, id, by_order);
 }
