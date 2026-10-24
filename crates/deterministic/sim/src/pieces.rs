@@ -245,6 +245,7 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
     let half = q.ranged_draw_half_span;
     let ov = q.random_magnitude_overflow;
     let d = |x: i64| F64::from_i64(x, mode);
+    // spec: S-0202 claim 10 (revision 36: a voxel-model debris piece is not an animation of S-0109's sprite kind, so the creation-draw table's bouncing row does not apply; its creation draws are S-0317 claims 3 and 4)
     let (pos, flight, velocity, counter, u) = if t.meteor {
         // spec: S-0317 claim 4 (a raw value for the y speed, one for the x speed, one that shortens the lifetime, one for the spin rate)
         let q1 = w.rng.raw();

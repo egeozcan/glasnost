@@ -260,7 +260,7 @@ fn round_trip(w: &World) {
     assert_eq!(back.pieces, w.pieces);
 }
 
-/// spec: S-0317 claim 3 and F1 (a falling piece: four raw values for the spin, vertical, y and x speeds, then three ranged draws R(−65535, 65535) for the axis (a₃, a₂, a₁); the velocity of F1 in single precision; the start position 10 leptons above the creation point; the position the creation point) and claim 2 (the counter starts at the duration)
+/// spec: S-0317 claim 3 and F1 (a falling piece: four raw values for the spin, vertical, y and x speeds, then three ranged draws R(−65535, 65535) for the axis (a₃, a₂, a₁); the velocity of F1 in single precision; the start position 10 leptons above the creation point; the position the creation point) and claim 2 (the counter starts at the duration); S-0202 claim 10 (revision 36: the bouncing row's group of three raw values and three ranged draws is for sprite animations only; a voxel-model debris piece takes S-0317's draws, not that group)
 #[test]
 fn claim_3_falling_piece_creation() {
     let r = rules();

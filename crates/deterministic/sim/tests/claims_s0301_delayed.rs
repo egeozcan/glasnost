@@ -475,3 +475,48 @@ fn claim_9_table_t1_answers_come_ahead_of_the_pending_shot() {
     assert!(w.obj(b).unwrap().combat.delayed_shot.is_some());
     assert_eq!(ask(&w, b, 0, true), Answer::Illegal, "selling, pending");
 }
+
+/// Moves `x` to the centre of `c` by hand, keeping the cell listing.
+fn relocate(w: &mut World, x: ObjectId, c: CellXY) {
+    let layer = glasnost_sim::world::Layer::Ground;
+    let from = w.obj(x).unwrap().pos;
+    w.cells.leave(from.cell(), layer, x);
+    let p = glasnost_sim::world::Pos::centre(c, 0);
+    let z = w.surface_at(p.x, p.y);
+    w.obj_mut(x).unwrap().pos = glasnost_sim::world::Pos::new(p.x, p.y, z);
+    w.cells.enter(c, layer, x, false);
+}
+
+// spec: S-0215 claim 32 (revision 76: while its animation-delayed shot is pending, the firing check answers rearming, so a building whose target is driven out of range during the delay keeps its target and attack; the shot is refused at the end of the delay, and the next processing, answering out of range, drops the target and starts guard) and S-0301 claims 9 and 14
+#[test]
+fn pending_shot_keeps_a_target_driven_out_of_range() {
+    let mut r = rules(DELAY, 0, 0);
+    // Sight beyond the range, so that the target stays seen.
+    r.sim.buildings.get_mut("DLY").unwrap().econ.sight = Some(14);
+    let (mut w, b, x) = fixture(&r, land::CLEAR);
+    order_attack(&mut w, b, x);
+    let due = until_pending(&mut w, b);
+    // Out of range (8 cells), in the tick after the delay started.
+    relocate(&mut w, x, at(11, 0));
+    while w.tick < due {
+        assert_eq!(ask(&w, b, 0, true), Answer::Rearming, "tick {}", w.tick);
+        testkit::run(&mut w, 1);
+        let o = w.obj(b).unwrap();
+        assert_eq!(o.target, Some(Target::Object(x)), "kept, tick {}", w.tick);
+        assert_eq!(o.beh.current, Some(Behaviour::Attack));
+    }
+    let rearm = w.obj(b).unwrap().combat.rearm_until;
+    testkit::run(&mut w, 1);
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.combat.delayed_shot, None, "the delay ended");
+    assert!(shots_of(&w, b).is_empty(), "refused out of range: no shot");
+    assert_eq!(o.combat.rearm_until, rearm, "no countdown");
+    assert_eq!(ask(&w, b, 0, true), Answer::OutOfRange);
+    testkit::run(&mut w, 2);
+    let o = w.obj(b).unwrap();
+    assert_eq!(o.target, None, "dropped at the out-of-range processing");
+    assert!(
+        o.beh.current == Some(Behaviour::Guard) || o.beh.queued == Some(Behaviour::Guard),
+        "guard"
+    );
+}
