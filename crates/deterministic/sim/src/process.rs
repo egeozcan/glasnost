@@ -1457,7 +1457,7 @@ pub(crate) fn process_area_guard(w: &mut World, id: ObjectId) -> i32 {
     let dr = rate_delay(w, id);
     // spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 2 for aircraft and 1 for every other kind)
     let k = if o.kind == Kind::Aircraft { 2 } else { 1 };
-    let d = dr.wrapping_mul(k).wrapping_add(w.rng.ranged(1, 5, half));
+    let d = dr.wrapping_mul(k).wrapping_add(w.rng.ranged(1, 5, half)); // spec: S-0215 F0 (U(1, 5))
     // spec: S-0215 F3 (trunc(D / 6) under the close-range condition)
     if close_range(w, id) { d / 6 } else { d }
 }
