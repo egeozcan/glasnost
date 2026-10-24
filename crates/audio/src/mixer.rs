@@ -410,6 +410,9 @@ pub struct Mixer {
     /// 0 … 16384.
     music: Option<MusicVoice>,
     music_option: i32,
+    /// The music is held, silent at the point it had reached (S-0703
+    /// claim 13).
+    music_held: bool,
     acc: Vec<i64>,
 }
 
@@ -437,6 +440,7 @@ impl Mixer {
             voice_option: FULL,
             speech: None,
             music: None,
+            music_held: false,
             // nocite: our own UI (the music volume is at full unless the person sets it)
             music_option: FULL,
             acc: Vec::new(),
@@ -506,6 +510,12 @@ impl Mixer {
     /// Whether a music track is sounding.
     pub fn has_music(&self) -> bool {
         self.music.is_some()
+    }
+
+    /// Holds the music track silent at the point it had reached, or lets
+    /// it play on (S-0703 claim 13).
+    pub fn hold_music(&mut self, held: bool) {
+        self.music_held = held;
     }
 
     /// The master level g of F3.
@@ -1133,7 +1143,8 @@ impl Mixer {
                 self.speech = None;
             }
         }
-        if let Some(m) = self.music.as_mut() {
+        if let Some(m) = self.music.as_mut().filter(|_| !self.music_held) {
+            // spec: S-0703 claim 13 (our engine: a held track is silent and resumes from the point it had reached)
             // nocite: our own UI (music skips the master level and the sound option; only our music volume scales it, Q-1700 question 5 open)
             m.mix(&mut self.acc, crate::music::music_gain(self.music_option));
             if m.finished() {

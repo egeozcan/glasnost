@@ -1,6 +1,6 @@
 //! Tests of the music database import, the next-track rule and the music
 //! player (S-0703), on synthetic databases and synthetic tones. Each test
-//! names the claim or scenario part (MU1 to MU7) whose engine fixture it is.
+//! names the claim or scenario part (MU1 to MU11) whose engine fixture it is.
 
 use super::*;
 use crate::catalog::{SoundCatalog, SoundEntry};
@@ -56,10 +56,12 @@ fn off() -> MusicQuirks {
 const LIST: MusicSettings = MusicSettings {
     shuffle: false,
     repeat: false,
+    in_game: true,
 };
 const SHUFFLE: MusicSettings = MusicSettings {
     shuffle: true,
     repeat: false,
+    in_game: true,
 };
 
 fn pick(
@@ -198,21 +200,54 @@ fn flags_are_booleans() {
     assert!(d.entries[1].normal && !d.entries[1].repeat);
 }
 
-// spec: S-0703 Import mapping (the settings file's [Audio] IsScoreShuffle and IsScoreRepeat)
+// spec: S-0703 Import mapping (the settings file's [Audio] IsScoreShuffle, IsScoreRepeat and InGameMusic)
 #[test]
 fn settings_from_the_settings_file() {
-    let s = MusicSettings::from_ini(Some(&doc("[Audio]\nIsScoreShuffle=yes\nIsScoreRepeat=1\n")));
+    let s = MusicSettings::from_ini(Some(&doc(
+        "[Audio]\nIsScoreShuffle=yes\nIsScoreRepeat=1\nInGameMusic=no\n",
+    )));
     assert_eq!(
         s,
         MusicSettings {
             shuffle: true,
-            repeat: true
+            repeat: true,
+            in_game: false,
         }
     );
-    // Q-1831 (interim: off when the file or the key is missing, or the value malformed)
-    assert_eq!(MusicSettings::from_ini(None), MusicSettings::default());
-    let s = MusicSettings::from_ini(Some(&doc("[Audio]\nIsScoreShuffle=what\n")));
-    assert!(!s.shuffle && !s.repeat);
+}
+
+// spec: S-0703 Import mapping and MU9's engine fixture (absent keys and a missing settings file: shuffle off, repeat off, in-game music on; a value S-0003 claim 2 does not recognise, `on`, `2` or `off`, keeps the default)
+#[test]
+fn mu9_settings_the_settings_file_does_not_give() {
+    let default = MusicSettings {
+        shuffle: false,
+        repeat: false,
+        in_game: true,
+    };
+    assert_eq!(MusicSettings::default(), default);
+    // (a) The keys removed; (c) no settings file.
+    assert_eq!(MusicSettings::from_ini(Some(&doc("[Audio]\n"))), default);
+    assert_eq!(MusicSettings::from_ini(None), default);
+    // (b) Values that are not recognised.
+    for v in ["on", "2", "what"] {
+        let text = format!("[Audio]\nIsScoreShuffle={v}\nIsScoreRepeat={v}\n");
+        assert_eq!(MusicSettings::from_ini(Some(&doc(&text))), default, "{v}");
+    }
+    // (c), last run: InGameMusic=off is not recognised, so music plays.
+    let s = MusicSettings::from_ini(Some(&doc("[Audio]\nInGameMusic=off\n")));
+    assert!(s.in_game);
+    // The six recognised first bytes.
+    for (v, want) in [
+        ("1", true),
+        ("t", true),
+        ("Y", true),
+        ("0", false),
+        ("f", false),
+        ("N", false),
+    ] {
+        let s = MusicSettings::from_ini(Some(&doc(&format!("[Audio]\nInGameMusic={v}\n"))));
+        assert_eq!(s.in_game, want, "{v}");
+    }
 }
 
 // ---------------------------------------------------------- availability
@@ -446,6 +481,7 @@ fn mu6d_repeat_makes_no_draw() {
     let rep = MusicSettings {
         repeat: true,
         shuffle: false,
+        in_game: true,
     };
     assert_eq!(pick(&d, &a, None, rep, on(), &mut rng), Some(0));
 }
@@ -459,13 +495,17 @@ fn mu5_empty_list() {
     for shuffle in [false, true] {
         for repeat in [false, true] {
             for q in [on(), off()] {
-                let s = MusicSettings { shuffle, repeat };
+                let s = MusicSettings {
+                    shuffle,
+                    repeat,
+                    in_game: true,
+                };
                 for e in [None, Some(0)] {
                     assert_eq!(pick(&d, &[], e, s, q, &mut rng), None);
                 }
                 let mut m = Music::new(d.clone(), vec![], s, Box::new(MemoryTracks::new()));
                 m.set_quirks(q);
-                m.start_game(&sides(), Some(0));
+                m.start_game(&sides(), Some(0), None);
                 for p in 0..50 {
                     assert!(m.update(p * PASS, &mut rng, true, RATE).is_none());
                 }
@@ -488,7 +528,7 @@ fn player(text: &str, files: &[(usize, usize)], s: MusicSettings, q: MusicQuirks
     let present = t.present(d.len());
     let mut m = Music::new(d, present, s, Box::new(t));
     m.set_quirks(q);
-    m.start_game(&sides(), Some(0));
+    m.start_game(&sides(), Some(0), None);
     m
 }
 
@@ -635,14 +675,17 @@ fn mu3c_repeat_after_fallback() {
     assert!(heard[1..].iter().all(|&k| k == 0));
 }
 
-// spec: S-0703 claim 7 (switch off, no available entry: no track starts, the pick is made again at each update, silence throughout)
+// spec: S-0703 claims 7, 10 and 11 (MU8's engine fixture, the run with the switch off and no available entry: the first pick starts nothing, music started begins all the same, and the pick is made again at each update with no ranged draw)
 #[test]
 fn switch_off_no_track_repicks() {
-    let mut m = player(&plain(3), &[], LIST, off());
-    let mut rng = Rng::new(1);
-    let log = run(&mut m, &mut rng, 0, 10);
-    assert_eq!(log, [Update::NoTrack; 10]);
-    assert_eq!(rng.taken(), 0);
+    for s in [LIST, SHUFFLE] {
+        let mut m = player(&plain(3), &[], s, off());
+        let mut rng = Rng::new(1);
+        let log = run(&mut m, &mut rng, 0, 10);
+        assert_eq!(log, [Update::NoTrack; 10]);
+        assert_eq!(rng.taken(), 0);
+        assert_eq!(m.phase(), Phase::Started);
+    }
 }
 
 // spec: S-0703 Terms and State and ordering (before music has started, no update picks)
@@ -658,7 +701,7 @@ fn no_pick_before_music_starts() {
         assert!(m.update(p * PASS, &mut rng, true, RATE).is_none());
     }
     assert_eq!(rng.taken(), 0);
-    m.start_game(&sides(), Some(0));
+    m.start_game(&sides(), Some(0), None);
     m.stop();
     assert!(m.update(0, &mut rng, true, RATE).is_none());
 }
@@ -699,7 +742,7 @@ fn pending_read_counts_from_the_start_pass() {
         ready: ready.clone(),
     };
     let mut m = Music::new(db(&plain(2)), vec![true, true], LIST, Box::new(slow));
-    m.start_game(&sides(), Some(0));
+    m.start_game(&sides(), Some(0), None);
     let mut rng = Rng::new(1);
     // T0 is picked at 0 and read later.
     assert!(matches!(m.update(0, &mut rng, true, RATE), Some(None)));
@@ -893,4 +936,630 @@ fn voice_streams_ima_tracks() {
     let got: Vec<i16> = acc.iter().map(|&s| s as i16).collect();
     assert_eq!(got, recon);
     assert!(v.finished());
+}
+
+// ------------------------------------------- intake 12 (S-0703 revision 51)
+
+/// MU1 part a's entries: T0 … T4, T3's *normal* flag clear (with T2's file
+/// missing, T0, T1 and T4 are available).
+fn mu1a_text() -> String {
+    plain(5).replacen("[T3]\nSound=tone3", "[T3]\nSound=tone3\nNormal=no", 1)
+}
+
+/// MU1 part a's files: every entry's but T2's, 800 frames (100 ms) each.
+const MU1A_FILES: [(usize, usize); 4] = [(0, 800), (1, 800), (3, 800), (4, 800)];
+
+/// MU11's entries: MU1 part a's, then the score track *S* (entry 5) and the
+/// menu track *M* (entry 6), each with its *normal* flag clear.
+fn mu11_text() -> String {
+    mu1a_text().replacen("[T0]", "5=SCORE\n6=INTRO\n[T0]", 1)
+        + "[SCORE]\nSound=score\nNormal=no\n[INTRO]\nSound=intro\nNormal=no\n"
+}
+
+const S: usize = 5;
+const M: usize = 6;
+
+/// MU11's files: MU1 part a's, *S* and *M*.
+const MU11_FILES: [(usize, usize); 6] =
+    [(0, 800), (1, 800), (3, 800), (4, 800), (S, 800), (M, 800)];
+
+/// A player over `text` with tone files for `files`, before any game.
+fn fresh(text: &str, files: &[(usize, usize)], s: MusicSettings) -> Music {
+    let d = db(text);
+    let mut t = MemoryTracks::new();
+    for &(k, frames) in files {
+        t.insert(k, tone(frames, k as u64));
+    }
+    let present = t.present(d.len());
+    Music::new(d, present, s, Box::new(t))
+}
+
+/// Track files that count the opens asked for.
+struct Counting {
+    files: MemoryTracks,
+    opens: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl TrackSource for Counting {
+    fn open(&mut self, k: usize) -> Load {
+        self.opens.set(self.opens.get() + 1);
+        self.files.open(k)
+    }
+    fn poll(&mut self) -> Load {
+        Load::Pending
+    }
+}
+
+// spec: S-0703 claim 1a (MU1 part m's engine fixture: the extension is added whatever the name ends with, also to a name ending in .wav or .WAV)
+#[test]
+fn mu1m_extension_added_again() {
+    assert_eq!(sound_file(b"tone4.wav").as_deref(), Some("tone4.wav.wav"));
+    assert_eq!(sound_file(b"tone4.WAV").as_deref(), Some("tone4.WAV.wav"));
+}
+
+// spec: S-0703 claim 11 (MU8 part a's engine fixture: the first start is an ordinary list-order pick with no ended track; it is the ended track for the second pick, and repeat applies to it)
+#[test]
+fn mu8a_first_start_in_list_order() {
+    let mut rng = Rng::new(1);
+    let mut m = player(&mu1a_text(), &MU1A_FILES, LIST, on());
+    assert_eq!(started(&run(&mut m, &mut rng, 0, 9)), [0, 1, 4]);
+    // Second run: T0 not available.
+    let text = mu1a_text().replacen("[T0]\nSound=tone0", "[T0]\nSound=tone0\nNormal=no", 1);
+    let mut m = player(&text, &MU1A_FILES, LIST, on());
+    assert_eq!(started(&run(&mut m, &mut rng, 0, 9)), [1, 4, 1]);
+    // Third run: the repeat setting on.
+    let rep = MusicSettings {
+        repeat: true,
+        ..LIST
+    };
+    let mut m = player(&mu1a_text(), &MU1A_FILES, rep, on());
+    assert_eq!(started(&run(&mut m, &mut rng, 0, 9)), [0, 0, 0]);
+    assert_eq!(rng.taken(), 0);
+}
+
+// spec: S-0703 claims 6 and 11 (MU8 part b's engine fixture: the first shuffle pick takes the ranged draws up to the first naming an available track, none rejected for naming an ended track)
+#[test]
+fn mu8b_first_shuffle_pick_has_no_ended_track() {
+    let text = plain(5)
+        .replacen("[T3]\nSound=tone3", "[T3]\nSound=tone3\nNormal=no", 1)
+        .replacen("[T4]\nSound=tone4", "[T4]\nSound=tone4\nNormal=no", 1);
+    let files = [(0, 800), (1, 800), (2, 800), (3, 800), (4, 800)];
+    let a = [true, true, true, false, false];
+    for seed in 1..=12 {
+        let mut rng = Rng::new(seed);
+        let mut m = player(&text, &files, SHUFFLE, on());
+        let (want, raws) = predict(&rng, 5, None, &a);
+        m.update(0, &mut rng, true, RATE);
+        assert_eq!(m.take_log(), [Update::Started(want)]);
+        assert_eq!(rng.taken(), raws);
+    }
+}
+
+// spec: S-0703 claim 11 (MU8 part c's engine fixture: a new skirmish forgets the ended track of the last one)
+#[test]
+fn mu8c_a_new_skirmish_starts_with_no_ended_track() {
+    let mut rng = Rng::new(1);
+    let mut m = player(&mu1a_text(), &MU1A_FILES, LIST, on());
+    assert_eq!(started(&run(&mut m, &mut rng, 0, 6)), [0, 1]);
+    assert_eq!(m.ended(), Some(1));
+    // Left while T1 plays; the main menu (no menu track), then a second game.
+    assert!(m.main_menu(RATE).is_none());
+    assert!(m.loading_track(RATE).is_none());
+    assert_eq!(m.ended(), None);
+    m.start_game(&sides(), Some(0), None);
+    assert_eq!(started(&run(&mut m, &mut rng, 0, 1)), [0]);
+}
+
+// spec: S-0703 claim 11 and Import mapping (MU8 part d's engine fixture: the map theme, matched ignoring case, is started first, directly, though it is not available, and becomes the ended track; a name that matches no entry, or an empty one, gives none; its start makes no ranged draw)
+#[test]
+fn mu8d_map_theme() {
+    for theme in [&b"T3"[..], b"t3"] {
+        let mut m = fresh(&mu1a_text(), &MU1A_FILES, LIST);
+        m.start_game(&sides(), Some(0), Some(theme));
+        let mut rng = Rng::new(1);
+        assert_eq!(started(&run(&mut m, &mut rng, 0, 12)), [3, 4, 0, 1]);
+    }
+    for theme in [&b"T9"[..], b"", b"nothing at all"] {
+        let mut m = fresh(&mu1a_text(), &MU1A_FILES, LIST);
+        m.start_game(&sides(), Some(0), Some(theme));
+        let mut rng = Rng::new(1);
+        assert_eq!(started(&run(&mut m, &mut rng, 0, 1)), [0]);
+    }
+    // Fourth run: shuffle on.
+    let mut m = fresh(&mu1a_text(), &MU1A_FILES, SHUFFLE);
+    m.start_game(&sides(), Some(0), Some(b"T3"));
+    let mut rng = Rng::new(5);
+    m.update(0, &mut rng, true, RATE);
+    assert_eq!(m.take_log(), [Update::Started(3)]);
+    assert_eq!(rng.taken(), 0, "the map theme's start makes no ranged draw");
+    assert_eq!(m.ended(), Some(3));
+    let a = [true, true, false, false, true];
+    let (want, raws) = predict(&rng, 5, Some(3), &a);
+    for c in [40, 80, 120] {
+        m.update(c, &mut rng, true, RATE);
+    }
+    assert_eq!(m.take_log(), [Update::Started(want)]);
+    assert_eq!(
+        rng.taken(),
+        raws,
+        "the first music draws come at the pick after it"
+    );
+}
+
+/// MU8 part f's added loading entry (entry 5) after MU1 part a's.
+fn with_loading(text: &str) -> String {
+    text.replacen("[T0]", "5=LOADING\n[T0]", 1) + "[LOADING]\nSound=loading\n"
+}
+
+// spec: S-0703 claim 11 (MU8 part e's engine fixture: the in-game music setting off gives no pick, no start and no draw in the game; its second run: the loading track plays while the game loads all the same)
+#[test]
+fn mu8e_in_game_music_off() {
+    let off = MusicSettings {
+        in_game: false,
+        ..SHUFFLE
+    };
+    let mut files = MU1A_FILES.to_vec();
+    files.push((5, 800));
+    let mut m = fresh(&with_loading(&mu1a_text()), &files, off);
+    assert!(m.loading_track(RATE).is_some(), "the loading track plays");
+    assert_eq!(m.take_log(), [Update::Started(5)]);
+    m.start_game(&sides(), Some(0), Some(b"T3"));
+    let mut rng = Rng::new(3);
+    for p in 0..100 {
+        assert!(m.update(p * PASS, &mut rng, true, RATE).is_none());
+    }
+    assert!(m.take_log().is_empty());
+    assert_eq!(rng.taken(), 0);
+    assert_eq!(m.phase(), Phase::Off);
+}
+
+// spec: S-0703 claim 11 (MU8 part g's engine fixture: the loading track is started directly while the game loads, makes no draw and does not begin music started; the first pick after loading has no ended track, whatever the loading track's repeat flag)
+#[test]
+fn mu8g_loading_track_and_the_first_pick() {
+    let text = "[Themes]\n0=T0\n1=T1\n2=Loading\n3=T2\n[T0]\nSound=tone0\n[T1]\nSound=tone1\n[Loading]\nSound=toneD\n[T2]\nSound=tone2\n";
+    let files = [(0, 800), (1, 800), (2, 800), (3, 800)];
+    for repeat in [false, true] {
+        let text = if repeat {
+            text.replace("Sound=toneD", "Sound=toneD\nRepeat=yes")
+        } else {
+            text.to_owned()
+        };
+        let mut m = fresh(&text, &files, LIST);
+        assert_eq!(m.database().loading(), Some(2), "matched ignoring case");
+        assert!(m.loading_track(RATE).is_some());
+        assert_eq!(m.take_log(), [Update::Started(2)]);
+        assert_eq!(m.phase(), Phase::Loading);
+        let mut rng = Rng::new(1);
+        // No pick while the game loads, the loading track finished or not.
+        for p in 0..10 {
+            assert!(m.update(p * PASS, &mut rng, true, RATE).is_none());
+        }
+        m.start_game(&sides(), Some(0), None);
+        assert_eq!(started(&run(&mut m, &mut rng, 0, 6)), [0, 1]);
+        assert_eq!(rng.taken(), 0);
+    }
+}
+
+// spec: S-0703 claim 11 (MU8 part h's engine fixture: the first track does not depend on the local player's side)
+#[test]
+fn mu8h_the_first_track_does_not_depend_on_the_side() {
+    for side in [None, Some(0), Some(1), Some(2)] {
+        let mut m = fresh(&mu1a_text(), &MU1A_FILES, LIST);
+        m.start_game(&sides(), side, None);
+        let mut rng = Rng::new(1);
+        assert_eq!(started(&run(&mut m, &mut rng, 0, 1)), [0], "{side:?}");
+    }
+}
+
+// spec: S-0703 claim 11 (MU8's engine fixture: the loading track of part f is stopped when the game starts, and the first start is made at the music update of the game's first audio pass)
+#[test]
+fn mu8_first_start_at_the_first_pass() {
+    let w = testkit::combat_game(3);
+    let mut files = MU1A_FILES.to_vec();
+    files.push((5, 4000));
+    let mut a = Audio::new(Box::new(NullOutput::new(RATE, "test")));
+    a.set_quirks(Quirks::default());
+    a.set_sides(sides());
+    a.set_music(Some(fresh(&with_loading(&mu1a_text()), &files, LIST)));
+    a.loading_music();
+    assert!(a.mixer().has_music());
+    assert_eq!(a.music().unwrap().playing(), Some(5));
+    assert!(render(&mut a, 200).iter().any(|&s| s != 0));
+    a.menu_service();
+    assert!(a.mixer().has_music(), "it plays while the game loads");
+    a.start(&w, Some(glasnost_sim::world::HouseId(0)));
+    assert!(!a.mixer().has_music(), "stopped when the game starts");
+    assert_eq!(a.music().unwrap().playing(), None);
+    let mut u = Rng::new(1);
+    a.service(0, &mut u);
+    assert_eq!(a.music().unwrap().playing(), Some(0));
+    assert!(a.mixer().has_music());
+}
+
+/// The files MU10 part a tries: none parses as a playable sound.
+fn unplayable() -> Vec<(&'static str, Vec<u8>)> {
+    let good = tone(800, 2);
+    let (fmt, data) = (12, 36);
+    assert_eq!(&good[fmt..fmt + 4], b"fmt ");
+    assert_eq!(&good[data..data + 4], b"data");
+    let mut code2 = good.clone();
+    code2[fmt + 8..fmt + 10].copy_from_slice(&2u16.to_le_bytes());
+    let mut swapped = good[..fmt].to_vec();
+    swapped.extend_from_slice(&good[data..]);
+    swapped.extend_from_slice(&good[fmt..data]);
+    let no_data = good[..data].to_vec();
+    let mut empty = good[..data + 8].to_vec();
+    empty[data + 4..data + 8].copy_from_slice(&0u32.to_le_bytes());
+    vec![
+        (
+            "text",
+            b"This is a text file of a few words, not a sound.\n".repeat(8),
+        ),
+        ("format code 2", code2),
+        ("data chunk first", swapped),
+        ("no data chunk", no_data),
+        ("no sample data", empty),
+    ]
+}
+
+// spec: S-0703 claim 8a (MU10 part a's engine fixture: a present file that does not parse stays an available track; its pick's start fails, and the next pick is made at the following update with it as the ended track)
+#[test]
+fn mu10a_present_files_that_do_not_parse() {
+    let good = tone(800, 2);
+    assert!(playable(&good, good.len()).is_some());
+    let text = plain(5)
+        .replacen("[T3]\nSound=tone3", "[T3]\nSound=tone3\nNormal=no", 1)
+        .replacen("[T4]\nSound=tone4", "[T4]\nSound=tone4\nNormal=no", 1);
+    let a = [true, true, true, false, false];
+    for (what, bad) in unplayable() {
+        assert!(playable(&bad, bad.len()).is_none(), "{what}");
+        let mut t = MemoryTracks::new();
+        for k in 0..5 {
+            t.insert(
+                k,
+                if k == 2 {
+                    bad.clone()
+                } else {
+                    tone(800, k as u64)
+                },
+            );
+        }
+        let mut m = Music::new(db(&text), t.present(5), SHUFFLE, Box::new(t));
+        m.start_game(&sides(), Some(0), None);
+        assert_eq!(m.available(), a, "{what}: present and available");
+        let mut rng = Rng::new(11);
+        let mut failed = 0;
+        let mut due = false;
+        for p in 0..300 {
+            let before = rng.clone();
+            let e = m.ended();
+            m.update(p * PASS, &mut rng, true, RATE);
+            let log = m.take_log();
+            if std::mem::take(&mut due) {
+                assert!(
+                    !log.is_empty(),
+                    "{what}: a pick at the update after the failed start"
+                );
+            }
+            let Some(&u) = log.first() else {
+                continue;
+            };
+            let (want, raws) = predict(&before, 5, e, &a);
+            let k = match u {
+                Update::Started(k) | Update::Failed(k) => k,
+                other => panic!("{what}: {other:?}"),
+            };
+            assert_eq!(k, want, "{what}");
+            assert_eq!(rng.taken() - before.taken(), raws, "{what}");
+            if k == 2 {
+                assert_eq!(u, Update::Failed(2), "{what}: never heard");
+                assert_eq!(m.ended(), Some(2));
+                failed += 1;
+                due = true;
+            }
+        }
+        assert!(failed >= 2, "{what}: {failed}");
+    }
+}
+
+// spec: S-0703 claims 4 and 8a (MU10 part b's engine fixture: a failed start of a present file becomes the ended track, so its repeat flag starts it again at each pick; a playable file supplied later plays)
+#[test]
+fn mu10b_failed_start_of_a_present_file_is_the_ended_track() {
+    let text = mu1a_text().replacen("[T1]\nSound=tone1", "[T1]\nSound=tone1\nRepeat=yes", 1);
+    let d = db(&text);
+    let mut t = MemoryTracks::new();
+    for &(k, frames) in &MU1A_FILES {
+        t.insert(k, tone(frames, k as u64));
+    }
+    t.insert(1, b"not a sound".to_vec());
+    let mut m = Music::new(d, t.present(5), LIST, Box::new(t));
+    m.start_game(&sides(), Some(0), None);
+    let mut rng = Rng::new(1);
+    let log = run(&mut m, &mut rng, 0, 12);
+    assert_eq!(log[0], Update::Started(0));
+    assert!(log[1..].iter().all(|u| *u == Update::Failed(1)), "{log:?}");
+    // T0 at 0 ends at 120; T1 is attempted at each pass from 120 to 440.
+    assert_eq!(log.len(), 1 + 9, "a new attempt at each pass after T0");
+    let mut t = MemoryTracks::new();
+    t.insert(1, tone(800, 1));
+    m.source = Box::new(t);
+    assert_eq!(started(&run(&mut m, &mut rng, 480, 1)), [1]);
+}
+
+// spec: S-0703 claims 8a and 10 (MU10 part c's engine fixture: a track cut short ends where its data ends; data beyond the size its header gives is not played)
+#[test]
+fn mu10c_data_cut_short_or_longer() {
+    let full = tone(800, 0);
+    let cut = full[..44 + 800].to_vec();
+    assert_eq!(
+        playable(&cut, cut.len()).map(|i| i.frames(cut.len())),
+        Some(400)
+    );
+    let mut long = full.clone();
+    long.extend_from_slice(&tone(800, 9)[44..]);
+    for (file, ends) in [(&cut, 80), (&long, 120)] {
+        let mut t = MemoryTracks::new();
+        t.insert(0, file.clone());
+        t.insert(1, tone(800, 1));
+        let mut m = Music::new(db(&plain(2)), vec![true, true], LIST, Box::new(t));
+        m.start_game(&sides(), Some(0), None);
+        let mut rng = Rng::new(1);
+        assert_eq!(
+            started(&run(&mut m, &mut rng, 0, ends / PASS)),
+            [0],
+            "not before {ends}"
+        );
+        assert_eq!(
+            started(&run(&mut m, &mut rng, ends, 1)),
+            [1],
+            "T1 at {ends}"
+        );
+    }
+    // The voice plays what the header gives, not the data after it.
+    let info = playable(&long, long.len()).unwrap();
+    let mut v = MusicVoice::new(info, Arc::from(long.clone()), RATE);
+    let mut acc = vec![0i64; 1600 * 2];
+    v.mix(&mut acc, 1 << 16);
+    assert!(v.finished());
+    assert!(acc[800 * 2..].iter().all(|&s| s == 0));
+}
+
+/// Audio on a silent output with a player over `text`, its files read
+/// through a counting source, started in a game.
+fn mu11_audio(
+    text: &str,
+    files: &[(usize, usize)],
+    s: MusicSettings,
+) -> (Audio, std::rc::Rc<std::cell::Cell<usize>>) {
+    let w = testkit::combat_game(3);
+    let d = db(text);
+    let mut t = MemoryTracks::new();
+    for &(k, frames) in files {
+        t.insert(k, tone(frames, k as u64));
+    }
+    let present = t.present(d.len());
+    let opens = std::rc::Rc::new(std::cell::Cell::new(0));
+    let source = Counting {
+        files: t,
+        opens: opens.clone(),
+    };
+    let m = Music::new(d, present, s, Box::new(source));
+    (audio_with_music(&w, m), opens)
+}
+
+// spec: S-0703 claim 12 (MU11 parts a and i, our engine, won or lost alike: music updates and picks go on through the end delay; at the end screen the track stops at once and the score track is started directly, with no draw; no music update after that cycle)
+#[test]
+fn mu11a_the_end_screen_stops_the_track_and_starts_the_score_track() {
+    let (mut a, _) = mu11_audio(&mu11_text(), &MU11_FILES, SHUFFLE);
+    let mut u = Rng::new(4);
+    // The end delay: ordinary passes, with picks.
+    for p in 0..6 {
+        a.service(p * PASS, &mut u);
+    }
+    let log = a.music_mut().unwrap().take_log();
+    assert_eq!(started(&log).len(), 2, "{log:?}");
+    let taken = u.taken();
+    // The game is over at the end of the cycle of the pass at 200.
+    a.game_over_music();
+    assert_eq!(a.music().unwrap().playing(), Some(S));
+    assert_eq!(a.music_mut().unwrap().take_log(), [Update::Started(S)]);
+    assert!(a.mixer().has_music());
+    // The track that played was due at 240 or later: no pick follows.
+    for p in 6..40 {
+        a.service(p * PASS, &mut u);
+    }
+    assert_eq!(a.music().unwrap().playing(), Some(S));
+    assert!(a.music_mut().unwrap().take_log().is_empty());
+    assert_eq!(u.taken(), taken, "no draw after the game is over");
+}
+
+// spec: S-0703 claim 12 (MU11 part b, our engine: the score track once and then silence; under the repeat setting or its own repeat flag it starts again as soon as it has played out, with no audio pass; its file absent: a silent end screen and exactly one attempt)
+#[test]
+fn mu11b_the_score_track_ends_or_repeats() {
+    let s_repeat = mu11_text().replacen(
+        "Sound=score\nNormal=no",
+        "Sound=score\nNormal=no\nRepeat=yes",
+        1,
+    );
+    let rep = MusicSettings {
+        repeat: true,
+        ..LIST
+    };
+    for (text, s, again) in [
+        (mu11_text(), LIST, false),
+        (mu11_text(), rep, true),
+        (s_repeat, LIST, true),
+    ] {
+        let (mut a, opens) = mu11_audio(&text, &MU11_FILES, s);
+        let mut u = Rng::new(1);
+        a.service(0, &mut u);
+        a.music_mut().unwrap().take_log();
+        a.game_over_music();
+        let first = opens.get();
+        for round in 0..3 {
+            assert!(render(&mut a, 400).iter().any(|&x| x != 0), "round {round}");
+            a.menu_service();
+            assert!(a.mixer().has_music());
+            render(&mut a, 400);
+            assert!(!a.mixer().has_music(), "played out");
+            a.menu_service();
+            if !again {
+                break;
+            }
+            assert!(a.mixer().has_music(), "started again at once");
+            assert_eq!(opens.get(), first + round + 1);
+        }
+        if !again {
+            for _ in 0..5 {
+                assert!(render(&mut a, 400).iter().all(|&x| x == 0), "silence");
+                a.menu_service();
+            }
+            assert_eq!(opens.get(), first, "S once");
+        }
+        let log = a.music_mut().unwrap().take_log();
+        assert!(started(&log).iter().all(|&k| k == S), "{log:?}");
+    }
+    let files: Vec<_> = MU11_FILES.iter().copied().filter(|f| f.0 != S).collect();
+    for s in [LIST, rep] {
+        let (mut a, opens) = mu11_audio(&mu11_text(), &files, s);
+        let mut u = Rng::new(1);
+        a.service(0, &mut u);
+        a.music_mut().unwrap().take_log();
+        let before = opens.get();
+        a.game_over_music();
+        assert_eq!(a.music_mut().unwrap().take_log(), [Update::Failed(S)]);
+        for _ in 0..20 {
+            a.menu_service();
+            assert!(render(&mut a, 400).iter().all(|&x| x == 0));
+        }
+        assert_eq!(opens.get(), before + 1, "exactly one attempt");
+    }
+}
+
+// spec: S-0703 claim 12 (MU11 part c, our engine: with no score track the track stops at once and the end screen is silent)
+#[test]
+fn mu11c_no_score_track() {
+    let (mut a, opens) = mu11_audio(&mu1a_text(), &MU1A_FILES, LIST);
+    let mut u = Rng::new(1);
+    a.service(0, &mut u);
+    assert!(a.mixer().has_music());
+    let before = opens.get();
+    a.game_over_music();
+    assert!(!a.mixer().has_music());
+    for _ in 0..10 {
+        a.menu_service();
+        assert!(render(&mut a, 400).iter().all(|&x| x == 0));
+    }
+    assert_eq!(opens.get(), before);
+}
+
+// spec: S-0703 claim 12 (MU11 part d, our engine: the score track plays with the in-game music setting off)
+#[test]
+fn mu11d_score_track_with_in_game_music_off() {
+    let off = MusicSettings {
+        in_game: false,
+        ..LIST
+    };
+    let (mut a, _) = mu11_audio(&mu11_text(), &MU11_FILES, off);
+    let mut u = Rng::new(1);
+    for p in 0..50 {
+        a.service(p * PASS, &mut u);
+    }
+    assert!(!a.mixer().has_music(), "no tone during the game");
+    a.game_over_music();
+    assert_eq!(a.music().unwrap().playing(), Some(S));
+    assert!(render(&mut a, 400).iter().any(|&x| x != 0));
+}
+
+// spec: S-0703 claim 13 (MU11 part e, our engine: leaving through the options menu stops the track at once, no music update or pick follows, and the main menu starts the menu track)
+#[test]
+fn mu11e_leaving_through_the_options_menu() {
+    let (mut a, _) = mu11_audio(&mu11_text(), &MU11_FILES, SHUFFLE);
+    let mut u = Rng::new(2);
+    for p in 0..4 {
+        a.service(p * PASS, &mut u);
+    }
+    // The options menu opens and the game is left through it.
+    a.hold_music(true, 4 * PASS);
+    let taken = u.taken();
+    a.main_menu_music();
+    assert!(!a.music_held(), "the main menu holds nothing");
+    assert_eq!(a.music().unwrap().playing(), Some(M));
+    a.music_mut().unwrap().take_log();
+    assert!(render(&mut a, 400).iter().any(|&x| x != 0), "M is heard");
+    for p in 4..40 {
+        a.service(p * PASS, &mut u);
+    }
+    assert!(a.music_mut().unwrap().take_log().is_empty(), "no pick");
+    assert_eq!(u.taken(), taken);
+}
+
+// spec: S-0703 claims 11 and 12 (MU11 part g, our engine: the main menu stops the score track at once and starts the menu track; a game starting to load stops the menu track at once, and with no loading track loading is silent)
+#[test]
+fn mu11g_score_screen_to_the_main_menu_and_into_a_game() {
+    let (mut a, _) = mu11_audio(&mu11_text(), &MU11_FILES, LIST);
+    let mut u = Rng::new(1);
+    a.service(0, &mut u);
+    a.game_over_music();
+    render(&mut a, 200);
+    assert_eq!(a.music().unwrap().playing(), Some(S));
+    a.main_menu_music();
+    assert_eq!(a.music().unwrap().playing(), Some(M));
+    assert!(a.mixer().has_music());
+    render(&mut a, 200);
+    a.loading_music();
+    assert!(!a.mixer().has_music(), "stopped at once");
+    assert_eq!(a.music().unwrap().playing(), None);
+    assert!(
+        render(&mut a, 400).iter().all(|&x| x == 0),
+        "silent loading"
+    );
+    // The menu track plays once (Q-1700 question 7 leaves the rest open).
+    let (mut a, _) = mu11_audio(&mu11_text(), &MU11_FILES, LIST);
+    a.main_menu_music();
+    render(&mut a, 800);
+    a.menu_service();
+    assert!(!a.mixer().has_music());
+    assert_eq!(a.music().unwrap().playing(), None);
+}
+
+// spec: S-0703 claim 13 and S-0701 claim 30 (MU11 part f, our engine: the track is held, silent, while the options menu is open, and resumes from the same point; no pick or draw in the menu; the next pick comes at the pass at which the resumed track finishes, the menu's time not counted)
+#[test]
+fn mu11f_the_options_menu_holds_the_music() {
+    for s in [LIST, SHUFFLE] {
+        let files = [(0, 800), (1, 800), (2, 800)];
+        let w = testkit::combat_game(3);
+        let mut reference = audio_with_music(&w, player(&plain(3), &files, s, on()));
+        let mut a = audio_with_music(&w, player(&plain(3), &files, s, on()));
+        let mut u = Rng::new(7);
+        let mut ur = Rng::new(7);
+        a.service(0, &mut u);
+        reference.service(0, &mut ur);
+        let first = a.music().unwrap().playing();
+        assert_eq!(first, reference.music().unwrap().playing());
+        assert_eq!(render(&mut a, 400), render(&mut reference, 400));
+        a.music_mut().unwrap().take_log();
+        // The menu opens at 80 ms of host time and stays open for 1000 ms.
+        a.hold_music(true, 80);
+        let taken = u.taken();
+        for c in (80..1080).step_by(40) {
+            a.service(c, &mut u);
+            assert!(render(&mut a, 320).iter().all(|&x| x == 0), "held silent");
+        }
+        assert_eq!(a.music().unwrap().playing(), first, "no pick in the menu");
+        assert!(a.music_mut().unwrap().take_log().is_empty());
+        assert_eq!(u.taken(), taken, "no draw in the menu");
+        a.hold_music(false, 1080);
+        // Resumes from the same point.
+        assert_eq!(render(&mut a, 200), render(&mut reference, 200));
+        // Logical time 80 at 1080: not finished; 120 at 1120: finished.
+        a.service(1080, &mut u);
+        assert!(a.music_mut().unwrap().take_log().is_empty());
+        a.service(1120, &mut u);
+        let log = a.music_mut().unwrap().take_log();
+        assert_eq!(log.len(), 1, "{log:?}");
+        if s.shuffle {
+            assert!(u.taken() > taken, "the next pick's draws come at that pass");
+        }
+    }
 }

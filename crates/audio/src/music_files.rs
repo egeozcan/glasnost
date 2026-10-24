@@ -1,5 +1,5 @@
 //! The music's files in a mounted install (S-0703 claim 8, S-0005): the
-//! music database, the settings file's shuffle and repeat keys, and each
+//! music database, the settings file's music keys, and each
 //! track entry's file, found once when the install is read and read
 //! through the picked file when a pick starts the track.
 
@@ -15,7 +15,12 @@ use glasnost_vfs::Vfs;
 use glasnost_vfs::game::Resolved;
 use glasnost_vfs::source::ByteSource;
 
-use crate::music::{Load, MusicDatabase, MusicSettings, TrackSource};
+use crate::music::{Load, MusicDatabase, MusicSettings, TrackSource, playable};
+
+/// The bytes of a track's file read first to judge whether it plays: enough
+/// for the header of any ordinary sound file (a longer header is read
+/// whole).
+const HEAD_LEN: u64 = 64 * 1024; // nocite: our own read size (any ordinary header fits; a longer one is read whole)
 
 /// The music database's file name.
 pub const MUSIC_DATABASE: &str = "thememd.ini"; // spec: S-0005 Import mapping (thememd.ini, the music database)
@@ -98,6 +103,41 @@ impl VfsTracks {
         self.files.iter().map(Option::is_some).collect()
     }
 
+    /// The importer warnings for present files that do not parse as a
+    /// playable sound (S-0703 claim 8a), naming the entry. Such a file
+    /// still counts as present.
+    pub async fn warnings(&self, db: &MusicDatabase) -> Vec<String> {
+        let mut out = Vec::new();
+        for (k, f) in self.files.iter().enumerate() {
+            let Some(f) = f else {
+                continue;
+            };
+            let Ok(len) = usize::try_from(f.len) else {
+                continue;
+            };
+            let head = f.len.min(HEAD_LEN) as usize;
+            let mut ok = match f.source.read_at(f.offset, head).await {
+                Ok(b) => playable(&b, len).is_some(),
+                Err(_) => false,
+            };
+            if !ok && head < len {
+                ok = match f.source.read_at(f.offset, len).await {
+                    Ok(b) => playable(&b, len).is_some(),
+                    Err(_) => false,
+                };
+            }
+            if !ok {
+                let id = db.entries.get(k).map_or("?", |t| t.id.as_str());
+                // spec: S-0703 claim 8a (our engine: the importer warning for a found sound file that does not parse, naming the entry; the file still counts as present)
+                out.push(format!(
+                    "music track {id}: sound file {} does not parse as a playable sound; its starts fail",
+                    f.name
+                ));
+            }
+        }
+        out
+    }
+
     fn step(&mut self) -> Load {
         let Some(read) = self.pending.as_mut() else {
             return Load::Pending;
@@ -142,6 +182,9 @@ pub struct InstallMusic {
     pub settings: MusicSettings,
     /// The track files.
     pub files: VfsTracks,
+    /// The importer warnings for present files that do not play (S-0703
+    /// claim 8a).
+    pub warnings: Vec<String>,
 }
 
 impl InstallMusic {
@@ -167,10 +210,12 @@ impl InstallMusic {
         };
         let settings = MusicSettings::from_ini(settings.as_ref());
         let files = VfsTracks::find(vfs, &db);
+        let warnings = files.warnings(&db).await;
         Some(Self {
             db,
             settings,
             files,
+            warnings,
         })
     }
 
@@ -238,5 +283,61 @@ mod tests {
         pollster::block_on(vfs.mount_startup(Default::default()));
         assert!(pollster::block_on(InstallMusic::read(&vfs)).is_none());
         assert!(vfs.loose_only(SETTINGS_FILE).is_some());
+    }
+
+    // spec: S-0703 claim 1a (MU1 part m's engine fixture: a name already ending in .wav or .WAV gets the extension again, matched ignoring case; the file with the extension once is not found)
+    #[test]
+    fn a_name_ending_in_the_extension_gets_it_again() {
+        for (name, twice) in [
+            ("tone4.wav", false),
+            ("tone4.wav", true),
+            ("tone4.WAV", true),
+        ] {
+            let db = format!("[Themes]\n0=T4\n[T4]\nSound={name}\n").into_bytes();
+            let mut vfs = Vfs::new(Default::default(), glasnost_vfs::MountOptions::default());
+            let mut opts = *vfs.game_options();
+            opts.mod_layer = true;
+            let mut files = vec![picked("thememd.ini", db), picked("tone4.wav", tone())];
+            if twice {
+                files.push(picked("tone4.wav.wav", tone()));
+            }
+            pollster::block_on(vfs.mount_install(files));
+            pollster::block_on(vfs.mount_startup(opts));
+            let m = pollster::block_on(InstallMusic::read(&vfs)).expect("database");
+            assert_eq!(m.files.present(), [twice], "{name}, twice: {twice}");
+        }
+    }
+
+    // spec: S-0703 claim 8a and MU10 part a's engine fixture (the importer warning names the entry whose present file does not parse; the file still counts as present)
+    #[test]
+    fn a_present_file_that_does_not_parse_gives_a_warning() {
+        let db = b"[Themes]\n0=T0\n1=T1\n2=T2\n[T0]\nSound=t0\n[T1]\nSound=t1\n[T2]\nSound=t2\n"
+            .to_vec();
+        let mut vfs = Vfs::new(Default::default(), glasnost_vfs::MountOptions::default());
+        let mut opts = *vfs.game_options();
+        opts.mod_layer = true;
+        // A header and no sample data after it.
+        let mut empty = tone();
+        let data = empty
+            .windows(4)
+            .position(|w| w == b"data")
+            .expect("data chunk");
+        empty.truncate(data + 8);
+        empty[data + 4..data + 8].copy_from_slice(&0u32.to_le_bytes());
+        pollster::block_on(vfs.mount_install(vec![
+            picked("thememd.ini", db),
+            picked("t0.wav", tone()),
+            picked("t1.wav", empty),
+            picked(
+                "t2.wav",
+                b"not a sound file, only a few words of text".to_vec(),
+            ),
+        ]));
+        pollster::block_on(vfs.mount_startup(opts));
+        let m = pollster::block_on(InstallMusic::read(&vfs)).expect("database");
+        assert_eq!(m.files.present(), [true, true, true]);
+        assert_eq!(m.warnings.len(), 2, "{:?}", m.warnings);
+        assert!(m.warnings[0].contains("T1"), "{:?}", m.warnings);
+        assert!(m.warnings[1].contains("T2"), "{:?}", m.warnings);
     }
 }

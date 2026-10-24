@@ -60,6 +60,9 @@ pub struct Loaded {
     pub cells: Option<glasnost_map::CellGrid>,
     /// The shroud and fog sprites of a skirmish game (S-0110 claim 3).
     pub covers: CoverSprites,
+    /// The map's stored `[Basic]` `Theme` value, which names its map theme
+    /// (S-0703 claim 11 and Import mapping); presentation only.
+    pub theme: Option<Vec<u8>>,
     /// The voxel buffer the scene's fresh voxel draws left, when no live
     /// game holds it (S-0105 claim 34, S2).
     canvas: VoxelCanvas,
@@ -193,6 +196,7 @@ impl Loaded {
             scroll_multiplier: glasnost_num::F64::from_i64(1, glasnost_num::Rounding::TowardZero),
             cells,
             covers: CoverSprites::default(),
+            theme: None,
             canvas: VoxelCanvas::new(),
         })
     }
@@ -234,6 +238,8 @@ pub async fn load_with(
     make: Option<live::MakeSetup<'_>>,
 ) -> Loaded {
     let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
+    // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it)
+    let theme = map_ini.value(b"Basic", b"Theme").map(<[u8]>::to_vec);
     let GameInputs {
         map,
         mut map_warnings,
@@ -391,5 +397,6 @@ pub async fn load_with(
         cells,
         canvas,
         covers,
+        theme,
     }
 }

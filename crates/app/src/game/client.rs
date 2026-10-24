@@ -18,6 +18,7 @@ use glasnost_audio::bank::SoundBank;
 use glasnost_audio::catalog::SoundCatalog;
 use glasnost_audio::events::{Audio, local_voice_set};
 use glasnost_audio::mixer::View as SoundView;
+use glasnost_audio::music::{Music, Phase as MusicPhase};
 use glasnost_audio::speech::SpeechCatalog;
 use glasnost_render::batch2d::CpuImage;
 use glasnost_sim::rng::Rng;
@@ -538,6 +539,8 @@ impl Client {
                 .as_ref()
                 .map(|m| m.player_with(super::music_share::track_source(&m.files))),
         );
+        // spec: S-0703 claim 11 (the map theme names the first track)
+        audio.set_theme(s.loaded.theme.clone());
         audio.start(w, Some(s.play.local));
         if let Some(m) = audio.music() {
             for warning in m.warnings() {
@@ -545,6 +548,58 @@ impl Client {
             }
         }
         self.apply_settings();
+    }
+
+    /// A game starts to load (S-0703 claim 11): the music playing in the
+    /// menus stops at once and the loading track, if any, starts.
+    pub(super) fn loading_music(&mut self) {
+        let player = self
+            .install
+            .as_ref()
+            .and_then(|i| i.music.as_ref())
+            .map(|m| m.player_with(super::music_share::track_source(&m.files)));
+        let Some(player) = player else {
+            if let Some(a) = self.audio.as_mut() {
+                a.stop_music();
+            }
+            return;
+        };
+        let audio = self.audio.get_or_insert_with(Audio::platform);
+        audio.set_music(Some(player));
+        audio.loading_music();
+        self.apply_settings();
+    }
+
+    /// The music for the screen shown, off the game's own frames (S-0703
+    /// claims 11 to 13): the end screen's score track and the menus' track
+    /// are fed to the output, the music is held on our settings screen
+    /// opened from a game, and music left over from a game is stopped on a
+    /// screen it does not belong to.
+    fn screen_music(&mut self, now_ms: i64) {
+        let Some(a) = self.audio.as_mut() else {
+            return;
+        };
+        let Some(phase) = a.music().map(Music::phase) else {
+            return;
+        };
+        let loading = self.session.is_none();
+        match &self.shell.screen {
+            // spec: S-0703 claim 13 (our engine: the music is held on our own settings screen opened from a game, as in the options menu)
+            Screen::Settings if self.settings_from_game => a.hold_music(true, now_ms),
+            // A game loading: its loading track, with no audio pass.
+            Screen::Game if loading => a.menu_frame(),
+            Screen::Game => {}
+            // spec: S-0703 claim 12 (our engine: the end screen's score track, timed by the output, with no audio pass)
+            Screen::End(_) => a.menu_frame(),
+            // The menus: the menu track, if one started; music of a game
+            // left by a way that starts no menu track stops at once.
+            _ => {
+                if !matches!(phase, MusicPhase::Menu | MusicPhase::Off) {
+                    a.stop_music();
+                }
+                a.menu_frame();
+            }
+        }
     }
 
     /// A user gesture happened: the browser lets sound start now.
@@ -592,6 +647,7 @@ impl Client {
             colour_blind: self.settings.colour_blind,
             watch: false,
         });
+        self.loading_music();
     }
 
     /// Sets the window size.
@@ -724,6 +780,10 @@ impl Client {
                 }
                 self.net_leave();
                 self.shell.leave_game();
+                if let Some(a) = self.audio.as_mut() {
+                    // spec: S-0703 claim 13 (our engine: leaving through the options menu stops the track at once, with no music update or pick; the main menu starts the menu track)
+                    a.main_menu_music();
+                }
             }
             SessionEvent::Settings => self.open_settings(true),
             SessionEvent::None => {}
@@ -769,6 +829,10 @@ impl Client {
         self.captions.clear();
         self.net_leave();
         self.shell.end_done();
+        if let Some(a) = self.audio.as_mut() {
+            // spec: S-0703 claim 12 (leaving the end screen for the main menu stops the score track at once; the menu track, if any, starts)
+            a.main_menu_music();
+        }
     }
 
     /// A key went down or up.
@@ -1003,16 +1067,7 @@ impl Client {
     pub fn update(&mut self, now_ms: i64) {
         self.clock = now_ms;
         self.net_pump(now_ms);
-        // Q-1833 (interim: music plays only while the game is played, the options menu open or not; it stops when play ends or the game is left; our settings screen from the game keeps it, unserviced)
-        let in_play = self
-            .session
-            .as_ref()
-            .is_some_and(|s| s.play.end().is_none())
-            && (self.shell.screen == Screen::Game
-                || (self.shell.screen == Screen::Settings && self.settings_from_game));
-        if !in_play && let Some(a) = self.audio.as_mut() {
-            a.stop_music();
-        }
+        self.screen_music(now_ms);
         if self.shell.screen != Screen::Game {
             return;
         }
@@ -1085,6 +1140,8 @@ impl Client {
                 // spec: S-0701 F2 (the position's place on screen: S-0101's projection with its height)
                 project: glasnost_render::projection::project_lifted,
             });
+            // spec: S-0703 claim 13 (our engine: the options menu of a skirmish is a stand-still for music; a network game does not stand still for it, S-0201 claim 15)
+            a.hold_music(!networked && s.paused, now_ms);
             a.frame(now_ms, &mut self.unsync);
             // spec: S-0701 claim 26 (each started announcement's caption: its text key when nonempty, otherwise its entry's name)
             for name in a.take_started() {
@@ -1096,6 +1153,10 @@ impl Client {
         self.captions.update(now_ms);
         if let Some(end) = s.play.end() {
             self.shell.game_over(end);
+            if let Some(a) = self.audio.as_mut() {
+                // spec: S-0703 claim 12 and S-0701 claim 30 (our engine: the end screen opens at the end of the cycle that runs the end delay's final tick, after that cycle's audio pass; no music update after it; the score track starts)
+                a.game_over_music();
+            }
             if networked {
                 // The game is over: nothing to rejoin (M9 N5).
                 self.keep_rejoin(None);
@@ -1334,3 +1395,7 @@ mod net_tests;
 #[cfg(test)]
 #[path = "client_access_tests.rs"]
 mod access_tests;
+
+#[cfg(test)]
+#[path = "client_music_tests.rs"]
+mod music_tests;
