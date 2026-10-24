@@ -2,13 +2,13 @@
 id: S-0503
 title: Hover and amphibious movement
 topic: movement
-revision: 16
+revision: 27
 sources-class: [decomp]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
-requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696]
+requests: [Q-0679, Q-0675, Q-0690, Q-0691, Q-0692, Q-0693, Q-0694, Q-0695, Q-0696, Q-1773]
 supersedes: []
 ---
 
@@ -22,10 +22,10 @@ bob, the wake it leaves over water, what it does at each entry outcome of its ne
 happens when it is switched off (it spins, settles and, over water, sinks), including the
 switch-offs and switch-ons by a repair depot or naval yard (claims 10 and 11). It also states which
 movement model an amphibious type uses, and how land and water affect the speed of hovering and
-amphibious vehicles. Skirmish only; network games and campaigns are out of scope. Against revision 15,
-revision 16 states in claim 10 that the new draws of a repeated switch-off replace an active spin
-count, and gives claim 10's sub-claims and claim 11's depot, naval-yard and no-spin sentences their
-own backing and confidence; it moves the note on S-0314's *settled vehicle* into Terms.
+amphibious vehicles. Skirmish only; network games and campaigns are out of scope.
+
+Against revision 16, this revision adds claim 19 (Q-1773), the deploy order of a moving hover,
+with scenario H16 and two proposed quirk switches for it. No claim of revision 16 changes.
 
 Pointers, not repeated here:
 - land types, locomotion classes, land multipliers, entering a cell and zones: S-0211 claims 1–3
@@ -53,17 +53,31 @@ Pointers, not repeated here:
 **Cross-spec corrections required at hand-off.** S-0206 claim 13's body aim must follow claim 5
 below, not necessarily the travel direction. S-0207 claim 19 d's stop permits claim 7's final
 already-computed step. S-0405 claim 13's description of inactivity must allow the settling, spin,
-residual travel and fall of claims 8 and 10–11. These corrections must be
-checked together at sign-off. Further coordinated additions: S-0209 claim 1 and its
-between-steps definition must use claim 13 below for hovering; S-0212 claims 8, 21 and 23
-must distinguish claim 14's ρ test, claim 12's immediate-search timer restart and claim 7's
-cached final step. For Q-0675, S-0209 claim 1 and S-0417 claim 7 must use claim 15's
-arrival outcome table, not equate failed searches with refused choices. S-0212 claims 20–23
-and S-0213 claim 8 must distinguish claim 16's retained movement destination from the
-cleared order-level destination. S-0209 claim 1 must also preserve claim 13's distinct
-flag-setting and flag-clearing layer tests and the no-choice reservation exception. S-0417 claims 5 and 7 must cite claims 5 and 15 for immediate first-point
-choice and hover cell-arrival updates. S-0206 claim 13 must cite claim 15 for initial north
-and retained placement heading. S-0213 claim 8 must cite claim 16 for the hover stop outcome.
+residual travel and fall of claims 8 and 10–11. These corrections must be checked together at
+sign-off. Further coordinated additions: S-0209 claim 1 and its between-steps definition must use
+claim 13 below for hovering; S-0212 claims 8, 21 and 23 must distinguish claim 14's ρ test, claim
+12's immediate-search timer restart and claim 7's cached final step. For Q-0675, S-0209 claim 1
+and S-0417 claim 7 must use claim 15's arrival outcome table, not equate failed searches with
+refused choices. S-0212 claims 20–23 and S-0213 claim 8 must distinguish claim 16's retained
+movement destination from the cleared order-level destination. S-0209 claim 1 must also preserve
+claim 13's distinct flag-setting and flag-clearing layer tests and the no-choice reservation
+exception. S-0417 claims 5 and 7 must cite claims 5 and 15 for immediate first-point choice and
+hover cell-arrival updates. S-0206 claim 13 must cite claim 15 for initial north and retained
+placement heading. S-0213 claim 8 must cite claim 16 for the hover stop outcome.
+
+For Q-1773 (claim 19):
+- S-0213 claim 10 cites claim 19 for a hover's outcome of the deploy order's destination clear.
+- S-0415 claim 2's moving rule notes that a hovering deployer reaches it only when its *unload*
+  becomes current while it still holds a point; D2 part m can then use a hovering test type
+  through H16.
+- S-0517 claim 9's last sentence becomes: "A deployed vehicle cannot be given movement under its
+  own power. A hover that became deployed in place while still moving (S-0503 claim 19) finishes,
+  deployed, the movement it holds as points, unless S-0503's
+  `quirks.hover_deployed_keeps_moving` is off." Rated medium, backed by H16 part j.
+- S-0517 claim 4's two height-0 rows apply only while no landing request of claim 5 stands, with
+  a new row "height 0, a landing request stands | nothing changes". No outcome changes for a
+  jumpjet. Rated medium, `unmeasured` (claim 19 gives the reason). A hover's exception with
+  S-0503's `quirks.hover_landing_request_stands` off is stated in S-0503 (Edge cases and quirks).
 
 ## Terms
 
@@ -606,6 +620,171 @@ New terms:
     - Backing: `measurable` (H14, raised-ground and high-bridge assignment subtests)
     - Confidence: high
 
+19. **A deploy order (Q-1773).** The deploy order's single destination-clear request (S-0213
+    claim 10) reaches hovering movement as the same stop request as a person's stop order
+    (claim 16) and claim 10's switch-off stop. When the order-level destination is cleared,
+    *D* and the stored path obey the point-equality rule: when *D* and *P* differ as full
+    three-dimensional points, both are cleared. When they are equal, both are left. In either
+    case the heading point, throttle, hover speed and ρ are kept, and the order forces no
+    immediate halt. A vehicle with no heading point stops in its cell only because no point is
+    left to move to (the table's last row). *D* = *P* can hold only on the final leg of a move, when the heading point
+    is in the destination cell. The final leg is necessary, not sufficient: the points are
+    compared in all three coordinates, and they differ on that leg when only one of them carries
+    the 416-lepton lift of Terms. For example, *P* is lifted when the vehicle is at least 312
+    leptons above the surface, while *D* in a cell without a high bridge is not. That final leg
+    then takes the unequal row.
+    Being close to the next cell does not make the points equal.
+    When the order-level destination is already empty and *D* and *P* have not changed since
+    the clear that emptied it, the order leaves *D*, the path and *P* untouched, whether the
+    vehicle assignment is then suppressed as unchanged (as S-0213 claim 21 states for a jumpjet
+    vehicle) or made: a repeated point-equality clear on unchanged points changes nothing. When
+    *D* or *P* has changed since that clear, whether the order acts on them is open (Open
+    questions). This spec extends to the hovering locomotor the
+    balloon-hover retention that S-0213 claims 10 and 21 state for balloon-hover types of the
+    jumpjet kind: a hovering type with the balloon-hover field that meets that retention
+    predicate keeps its order-level destination, *D* and stored path. No other spec states the
+    retention for a hovering vehicle; it is this claim's own rule.
+
+    | Situation when the order takes effect | Movement that follows |
+    |---|---|
+    | Heading point present, *D* ≠ *P* (midway along a path of several cells, or a final leg whose heights differ) | *D* and the rest of the path are dropped. The vehicle goes on to *P*, the centre of the next path cell, by claims 2–3 and 7. Its arrival there has no *D*, so claim 15's no-*D* rows apply: *P* is cleared and the already-computed final step may still be taken. It is then no longer moving. |
+    | Heading point present, *D* = *P* (final leg, equal heights) | *D* is kept. The vehicle arrives at the destination as an ordinary arrival (claim 16's equal case). When claim 7's completion test holds there, the move ends and it is no longer moving. When it does not (for example claim 18's height case), *D* remains and the searches of S-0212 target *D*'s cell (below). |
+    | No heading point | *D* is unequal to the absent point and is cleared. The vehicle is no longer moving from the moment the order takes effect, in its present cell. |
+
+    The table covers a vehicle whose order-level destination is cleared by the order. Two cases
+    leave the movement as it was, and the table does not apply to them:
+    - **Suppressed assignment.** When the order-level destination is already empty and *D* and
+      *P* are unchanged since the clear that emptied it, *D*, the stored path and *P* are
+      untouched. The vehicle goes on with the movement it already has,
+      and stops where that movement would have stopped without the order (claims 7, 15 and 16),
+      which can be more than one cell centre further.
+    - **Balloon-hover retention** (this spec's extension, above). A retaining hovering type
+      keeps its order-level destination, *D* and stored path. It goes on to *D* as an ordinary
+      move, along the whole remaining path, and stops where that move ends.
+
+    In every other case the vehicle travels at most to the heading point current when the order
+    takes effect, plus the one already-computed final step of claim 7 on its arrival there. The
+    one exception within the table is an equal *D* that is not completed on arrival; its later
+    movement is the search's, below. Orders take effect after the turn pass (S-0203
+    claim 7). When the order's tick is a tick in which the vehicle arrives at a cell centre and
+    chooses its next heading point, the order sees that new point, and the vehicle goes on one
+    more cell. When the order's tick is earlier, the vehicle stops on its arrival at the heading
+    point it is reaching, plus at most that one final step (whose size and overshoot are open:
+    Open questions, *Arrival and stopping*).
+    The same holds for a type that deploys into a building and for an in-place deployer.
+
+    Afterwards the vehicle does not move along the old path again without a new order. In the
+    unequal case the remaining path is gone. In the equal case only the destination cell
+    remained, and the vehicle has reached it. The behaviour that a failed deploy attempt queues
+    (S-0415 claim 2) does not resume the old path. Any later movement comes from that
+    behaviour's own target rules, not from the old path. If an equal retained *D* is not completed on
+    arrival (for example claim 18's height case), the ordinary search of S-0212 then targets
+    *D*'s cell even without an order-level destination (claim 16). That destination is the old
+    path's last cell, the one the vehicle is reaching, not further cells of the old path.
+
+    **Deploying into a building.** While the hover is still moving in the sense of Terms, it
+    makes no deploy attempt (S-0415 claim 2's moving rule). Readiness (S-0215 claim 11) keeps
+    *unload* queued while the hover is moving now under *move*, so the moving rule itself is
+    reached only when *unload* becomes current while a point remains, by the cases of the
+    in-place paragraph below (a targetless attack, a tick with throttle 0) or under balloon-hover
+    retention. Once *D* and *P* are both absent, it is no longer moving, whatever its
+    remaining throttle. The deploy attempt is then made at the cell where it stopped, with the
+    deploy anchor and cell test of S-0415 claim 3 taken there.
+
+    **Deploying in place (S-0517).** The in-place cycle itself has no moving test, but its first
+    deploy step comes only once *unload* is current. The deploy order only queues *unload*
+    (S-0213 claim 10), and it becomes current at a per-tick start of S-0215 claim 11 (the first
+    start, or the late start) at which the vehicle is ready. A hover is held back while it is
+    moving now (Terms): it has a destination or heading point and its throttle is not 0. The
+    first start reads the throttle left by the previous tick's movement, the late start that of
+    the same tick. Outside the exceptions of S-0215 claim 11 (next paragraph), *unload*
+    therefore becomes current, with *move* current, only:
+    - when the movement of the table has ended, with neither point left. Nothing then remains to
+      move. This is the usual case.
+    - on a tick in which the hover still has its heading point but its throttle is 0 (claim 2).
+      For a hover that is not switched off, that is a tick whose movement heading is more than
+      45° from the direction to its heading point, for example just after a sharp corner. The
+      hover still glides on its decaying speed (claim 3) and goes on with its movement.
+
+    S-0215 claim 11's exceptions make the hover ready even while it moves now. The one that a
+    deploy order reaches in ordinary play is *attack* without a target: the order clears the
+    target of a hover sent to attack (S-0213 claim 10), so *unload* becomes current at the next
+    first start, while the vehicle still moves. A current *guard* does the same.
+
+    For a hover, the height above the ground that S-0517 claims 4 and 5 read is expected to be
+    its hover height (claim 8), which is part of its position; H16 part j tests this. Within a vehicle's turn its
+    due behaviour processing comes before its ordinary movement (S-0203, through S-0516 claim 42
+    and S-0614 claim 18), so a deploy step reads the hover height left by claim 8's update in the vehicle's previous
+    turn. That height is usually above 0 while the vehicle is powered, but it is 0 after
+    an update that clamps it on a climb (claim 8). A powered hover at rest hovers above 0, so a
+    first step made after its movement has ended usually reads a height above 0. The outcome is set
+    by the height that the first deploy step reads:
+    - **Height 0.** S-0517 claim 4 applies as on the ground: the vehicle becomes deployed in that
+      step, or starts its deploying presentation and becomes deployed when that presentation
+      completes, whatever its hover height in the meantime. This holds for both landing-first
+      types and other types.
+    - **Above 0, type not landing-first.** The step does nothing, and *guard* replaces the order
+      (S-0517 claims 3 and 5). With S-0517's `quirks.airborne_deploy_order_dropped` at its
+      default, the order is dropped, and a later height of 0 does not deploy the vehicle. With
+      that switch off, the order is kept until the vehicle is on the ground, and the first deploy
+      step that reads a height of 0 deploys it as S-0517 claim 4 gives.
+    - **Above 0, landing-first type.** The step makes the landing request. While it stands, a
+      deploy step does not deploy the vehicle even at height 0, a refinement of S-0517 claim 4's
+      height-0 rows (listed in the Summary), `unmeasured` and rated medium (reason below). No rule is known by which hovering movement acts on
+      that request or ends it, so the request is expected to stand and the vehicle to stay
+      undeployed: *unload* stays current, and its deploy step is repeated each tick without
+      deploying. That expectation is rated low (below). It is the default of
+      `quirks.hover_landing_request_stands` (Edge cases and quirks).
+
+    A hover that becomes deployed while it still moves is therefore the combination of *unload*
+    becoming current while it moves (an exception, or a tick with throttle 0) with a first
+    deploy step that reads a height of 0, as on a climb. After an ordinary move order it is rare.
+
+    The deploy step does not stop the vehicle in any case. Its movement after the order is the
+    table above, or the retention cases, whether the step comes before or after it stops.
+    Becoming deployed stops nothing either: no rule clears a hover's heading point, *D* or
+    stored path when it becomes deployed, and hovering movement does not test the deployed
+    state. So a hover that becomes deployed in place at height 0 while still moving (the
+    combination above) finishes, deployed, the movement it holds, and then stands, the default of
+    `quirks.hover_deployed_keeps_moving` (Edge cases and quirks). This is an exception to S-0517 claim 9's
+    sentence that a deployed vehicle cannot move under its own power (the correction is listed
+    in the Summary). S-0517 claim 9's other rule still holds: the deployed vehicle cannot be
+    given a new destination, so the movement it holds is its last until it undeploys. The
+    exception covers the points the hover holds (*D*, stored path, *P*). It does not cover a
+    later search of S-0212 for a retained equal *D* not completed on arrival (claim 18's height
+    case): whether S-0517 claim 9's replacement of a deployed vehicle's destinations reaches
+    that search is not stated here (Open questions).
+    - Backing: `measurable` (H16: parts a to f for the table and the deploy attempt, i for the
+      balloon-hover retention, j for when *unload* becomes
+      current (run 1 the wait under *move*, run 2 the targetless-attack exception, run 3 a tick
+      with throttle 0), for the in-place outcomes at height 0 and above 0 and for the turn order
+      that makes the step read the previous turn's height). The suppressed assignment is
+      `unmeasured`: an order-level destination is emptied by the same point-equality clear, which
+      changes nothing when it is repeated on unchanged points, so a suppressed assignment and an
+      effective one leave the same points. No part of H16 tells them apart: parts f and h meet an
+      empty order-level destination on unchanged points and check only that the sequence ends
+      as stated. The one known change of *D* in between is the search of S-0212 for a retained
+      *D* not completed on arrival (claim 18's height case), for which no stock setup is
+      settled; that case is open.
+      The no-heading-point row is `unmeasured`: no set-up is known that holds the state when
+      the order takes effect (H16 part g is an attempt). The refusal to
+      deploy while a landing request stands is `unmeasured`: no run is known that gives a later
+      deploy step a height of 0 while the request stands (H16 part j records such a step if one
+      occurs).
+    - Confidence: high for the point-equality rule as claims 10 and 16 give it (which points are
+      kept or dropped); medium for its carry-over to the deploy order's clear, until H16 runs; medium
+      for the deploy step's height test, which rests on claim 8's hover height; medium for the
+      step's refusal to deploy while a landing
+      request stands, since no run is known to give a later step a height of 0 while the
+      request stands; medium for where the vehicle stops and the absence of resumed movement
+      (both rest on claim 7's final step, which is read, not observed), the arrival-tick case,
+      the no-heading-point row, the suppressed assignment, the balloon-hover retention, when
+      *unload* becomes current for a moving hover (the throttle-0 tick and the targetless-attack
+      exception), the turn order that makes the step read the previous turn's height, and a deployed hover's
+      continued movement (no rule is known that stops it; H16 part j would show a stop); low for
+      whether a landing-first type's landing request ever ends while it hovers, and so for that
+      type never deploying once its first step has found it above the ground
+
 ## Formulas
 
 Every floating-point operation in this spec runs in the original's program-wide round-toward-zero
@@ -760,6 +939,20 @@ These consequences inherit the backing and confidence of claims 8–10 (H6 and H
   height alone, while setting also requires a high bridge (claim 13). Off: both require the
   high bridge, avoiding a mismatched ground mark and deck clear at elevated non-bridge points.
   Backing: `measurable` (H15's named elevated-point test), confidence high.
+- **`quirks.hover_landing_request_stands`.** Default original: a landing-first in-place hover
+  whose first deploy step found it above the ground keeps its landing request while it hovers,
+  so it never deploys; *unload* stays current with a deploy step each tick (claim 19). Off: a
+  hovering vehicle treats a standing landing request as met once it is no longer moving (Terms),
+  and its next deploy step deploys it as S-0517 claim 4's height-0 rows give, whatever its hover
+  height. Backing: `measurable` (H16 part j, variant C) for never deploying, confidence low, as
+  claim 19 rates it; `unmeasured` for the refusal at a later height of 0 while the request
+  stands, confidence medium (claim 19 gives the reason).
+- **`quirks.hover_deployed_keeps_moving`.** Default original: a hover that becomes deployed in
+  place while it still holds movement finishes that movement deployed and then stands (claim 19),
+  an exception to S-0517 claim 9. Off: becoming deployed drops *D* and the stored path as the
+  table's unequal row of claim 19 does; the hover finishes only the leg to its current heading
+  point (with claim 7's final step on arrival), then stands. Backing: `measurable` (H16 part j, run 2), confidence
+  medium.
 - **Tunnels.** A stored step into a tunnel entrance is handled by the tunnel rules (S-0212 claim 9), not
   by this spec.
 
@@ -999,6 +1192,132 @@ One valid run per subcase unless stated. No completed measurement is claimed.
   original clearing rule falsifies claim 13. Record one qualifying run per matrix row and layer
   case; no qualifying trace leaves the subcase unmeasured rather than confirming it.
 
+- **H16 Deploy order while moving (Q-1773).** Use H1's flat open-ground map and settings, with
+  four named test-map variants of one stock hovering vehicle type, each with a passenger
+  capacity of 0 and no other unload rule, so that the deploy order reaches the deploy rules
+  of claim 19. Variant A gives it the
+  deploy-into-building field, naming a stock building whose footprint fits the open ground.
+  Variant B gives it the in-place deploy field instead, without the deploy-to-land flag.
+  Variant C is B with that flag, and variant D is A with the balloon-hover field (part i).
+  Map-placed units only. With scripted input (mouse and keyboard only), order the hover to a
+  cell eight cells away in a straight line and press the deploy key after two cells, (a) with
+  the vehicle midway between two cell centres; (b) on the tick of its arrival at a cell
+  centre (claim 15; claim 7 does not move it onto the exact point); (c) on the tick before that
+  arrival; (d) on the final leg, midway towards the
+  destination cell. (e) Order it to a single adjacent cell, so that the first leg is the final
+  one, and press the deploy key midway. Parts (b) and (c) need the order's tick exact: repeat
+  each with the key moved one tick earlier or later until the record shows the order taking
+  effect in the stated tick; a run whose order falls elsewhere counts for the part it falls in.
+  For variant A, repeat (a) with a stock unit
+  standing in one of the building's footprint cells at the expected stopping cell, so that
+  the attempt fails and *guard* is queued, and keep recording. Keep every other house's units
+  out of the vehicle's guard range in all runs. For variant A, also repeat (a) with an attack
+  order on part i's bystander building, placed as there, in place of the move order. (f) Give a
+  second deploy order on the tick after the first in (a). It meets an empty order-level
+  destination on unchanged points, the suppressed-assignment row of claim 19, and like part h it
+  does not tell a suppressed assignment from an effective one.
+  Record, every tick for up to 300 ticks: its cell and position, the order-level destination, *D*,
+  the stored path length, the heading point, throttle and ρ (read-only recorder), the heights of
+  *D* and *P*, its current and queued behaviour, and the deploy attempt or deploy step and its
+  outcome. Expected: in (a) and (c)
+  the vehicle stops on its arrival at the heading point it was reaching, plus at most claim 7's
+  one final step, having dropped *D* and the path at the order; in
+  (b) it goes one cell further; in (d) and (e) *D* is kept and the move completes at the
+  destination. A run of (d) or (e) whose recorded *D* and *P* heights differ at the order tests
+  the table's unequal row instead, and is expected to behave as (a). No tick shows throttle or ρ reset at the order. For variant A, the attempt
+  is made only after both points are absent, at the stopping cell; after a failed attempt the
+  vehicle stays in that cell for the rest of the 300 ticks, with no target in range. (f) shows no
+  difference from (a). In variant A's attack repeat, *unload* becomes current at the first
+  start after the order while the vehicle still moves, and no attempt is made until both points
+  are absent. Under the plain move orders of parts a to f, the record shows *unload* queued
+  under *move* while it shows the hover moving now, in every variant.
+  For variant B, when the first deploy step reads a height above 0, *guard* then replaces the
+  order without deploying, and the movement matches variant A's. For variant C, when that step
+  reads a height above 0, *unload* then stays current with a deploy step each tick and no
+  deploy while it hovers (the low-rated case of claim 19: whether the request ever ends while
+  it hovers).
+  (g) No heading point: a test map whose only route passes through a one-cell gap, with a
+  stock vehicle of the same house standing in the gap. Order the hover through the gap, wait
+  until the record shows *D* present and no heading point (it waits in the cell before the
+  gap), and press the deploy key. The blocker may leave on the scatter request of table T1's
+  stationary-friendly row; repeat with the key moved until the order takes effect while the
+  record still shows *D* present and no heading point. A run in which it does not is void.
+  Part g is an attempt: the row stays `unmeasured` (claim 19) unless a run reaches the state.
+  Expected: *D* is cleared at the order and the vehicle does
+  not leave its cell.
+  (h) Suppressed assignment: on the final leg, midway, press the stop key, and press the deploy
+  key on the next tick. Expected: the record shows an empty order-level destination before the
+  deploy order and no change in *D*, path or heading point at it; the move completes at the
+  destination, as in (d). An effective assignment would leave the same points here (*D* = *P*),
+  so this part does not back the suppressed-assignment row, which stays `unmeasured` (claim 19).
+  It checks only that the sequence ends as stated.
+  (i) Balloon-hover retention, variant D: the map places a stock building of the bystander
+  computer player in the lane, beyond the hover's range along the straight line; the bystander's
+  units stay outside the observed area. Order the hover to attack that building, and press the deploy key after two cells, at a
+  tick when the record shows a nonempty order-level destination, a target and one qualifying
+  row of S-0502 claim 28's retention; a run whose record does not show all three before the
+  deploy key is void. Expected: the order-level
+  destination, *D* and path are unchanged at the order, the vehicle travels on until that move
+  ends, and its deploy attempt is made only there. The order leaves *attack* without a target,
+  so *unload* may become current before the move ends; the record then shows it current with
+  no attempt while the vehicle moves (S-0415 claim 2). A run of the same type with a plain move
+  order and no target behaves as (a).
+  (j) In-place outcomes, variants B and C: a test map with a water strip and a bank that rises
+  at least two height levels, and a stock building of the bystander placed well beyond the
+  top of the bank, beyond the hover's range and guard range from every cell it reaches,
+  including its stopping cell (as in part i).
+  Record the hover height and throttle after each tick's update, the current and queued
+  behaviour, and the tick of each deploy step.
+  Run 1, plain move: order the hover across the strip and up the bank in a straight line, and
+  press the deploy key in the climb. Expected: *unload* stays queued while the record shows
+  the hover moving now, and becomes current only after the movement has ended. The outcome
+  then follows the height that the first deploy step reads, with the same rows as run 2.
+  Run 2, targetless attack: order the hover to attack that building, so that its route crosses
+  the strip and climbs the bank, and press the deploy key so that the order's tick falls in a
+  climb. Expected: *unload* becomes current at the next first start while the vehicle still
+  moves. Repeat with the key pressed one tick earlier and later until a run's first deploy step
+  follows a tick whose recorded hover height is 0. In that run both variants deploy in place in
+  that step (or start the deploying presentation and complete it), and the deployed vehicle
+  finishes the movement of the table and then stands. In runs whose first step follows a height
+  above 0, variant B returns to *guard* and variant C stays in *unload* without deploying, even
+  in a later tick at height 0.
+  Run 3, throttle 0: on a flat test map, order the hover along an L-shaped route with one 90°
+  turn, and press the deploy key so that the order takes effect on the tick of its arrival at
+  the corner cell, or in a later tick while the record still shows throttle 0 with the heading
+  point present; repeat with the key moved as for part b. Expected: *unload* is current no
+  later than the first start after a tick whose record shows throttle 0 with the heading point
+  present, while the vehicle still moves; the outcome then follows the height read, which on
+  flat ground is above 0.
+  Only a run whose vehicle deploys while it still moves tests a deployed hover's continued
+  movement; a run that deploys only after its movement has ended is inconclusive for that row.
+  In every part, the movement after the order follows the table whether or not the vehicle has
+  deployed.
+  Falsified by, per part:
+  - Every part except (g): an immediate halt at the order (throttle, hover speed or ρ reset). In
+    (g) no heading point is present, and the expected stop in the vehicle's cell is not such a
+    halt; there a reset of throttle or ρ at the order falsifies.
+  - (a) to (g): travel past the heading point current at the end of the order's tick beyond the
+    one already-computed final step that claim 7 allows on the arrival tick at that point; any
+    later travel along the old path. For variant A, an attempt while a point remains, or travel
+    after a failed attempt.
+  - (f): any difference from (a).
+  - (g): *D* kept at the order, or the vehicle leaving its cell.
+  - (h): a changed *D*, path or heading point at the order, or a stop before the destination.
+  - (i): a changed order-level destination, *D* or path at the order, a stop before that move
+    ends, or a deploy attempt before it ends.
+  - (j): travel past the heading point as in parts a to g; an in-place deploy on a first step that
+    follows a hover height above 0; no deploy on a first step that follows a height of 0 (for
+    this height test, starting the deploying presentation in that step counts as a deploy); a
+    deploy in variant C at a later step that follows a height of 0 while the landing request
+    stands; a deploy step in a tick under a plain move although the record after the previous
+    tick shows the hover moving now with *move* current and *unload* queued (runs 1 and 3); no
+    deploy step at the first start after the order (run 2); *unload* still queued at the first
+    start after a recorded throttle 0 with the heading point present (run 3); a deployed hover
+    that stops before its held movement ends (only a run whose record shows the deployed state
+    while the vehicle still moves counts for this).
+  One qualifying run per case; a part without a qualifying run (in particular (j), whose
+  timing is found by repetition) leaves its row unmeasured rather than confirming it.
+
 ## Open questions
 
 - **Pushing.** A push of a hovering vehicle one cell aside, with an optional spin, exists in the
@@ -1012,3 +1331,22 @@ One valid run per subcase unless stated. No completed measurement is claimed.
 - **Boost and exceptional disabling.** H2 still needs a qualifying half-throttle detour, and H7
   still needs an ordinary-input early-restoration sequence. The *sleep*/*enter* and equal-point
   stop exceptions also lack isolated stock setups. These remain unmeasured, not disproved.
+- **Landing-first hover deployer (claim 19, Q-1773).** Hovering movement is not expected to act on the
+  landing request, so a landing-first in-place hover whose first deploy step finds it above
+  the ground is expected never to deploy. The combination needs a test type; H16's variant C
+  runs are the only check. The default of `quirks.hover_landing_request_stands`. Low confidence.
+- **Deployed hover still moving (claim 19, Q-1773).** No rule is known that stops a hover's held
+  movement when it becomes deployed in place, so a hover that deploys at height 0 mid-move is
+  expected to finish that movement deployed, an exception to S-0517 claim 9 (listed in the
+  Summary). It needs *unload* to become current while the hover still moves (claim 19), which
+  H16 part j's targetless attack provides. An unknown stop would show there. The default of
+  `quirks.hover_deployed_keeps_moving`. Medium confidence.
+- **Deployed hover and a later search (claim 19, Q-1773).** Whether S-0517 claim 9's replacement of a
+  deployed vehicle's destinations applies to the search of S-0212 for a retained equal *D* not
+  completed on arrival (claim 18's height case) is not known. No stock setup reaches that case
+  for a deployed hover. Open.
+- **Deploy order on changed points (claim 19, Q-1773).** When the order-level destination is already
+  empty but *D* or *P* has changed since the clear that emptied it (the one known way is the
+  search of S-0212 for a retained *D* not completed on arrival, claim 18's height case),
+  whether the deploy order's clear acts on the changed points, and so whether a suppressed
+  assignment and an effective one differ, is not known. No stock setup reaches the case. Open.
