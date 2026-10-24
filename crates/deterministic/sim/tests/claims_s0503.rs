@@ -1122,3 +1122,43 @@ fn quirk_flag_clear_height_only() {
     );
     assert_eq!(run(false), 0);
 }
+
+// spec: S-0405 claim 20 and Changes for other specs (revision 36: S-0207 claim 16 case (g) refuses a hovering vehicle's scatter request only while its locomotor is not powered in S-0503's sense, switched off and down at a hover height of 0; a switched-off hovering vehicle still above the ground is powered and is not refused by case (g)) and S-0503 Terms (powered)
+#[test]
+fn switched_off_hover_accepts_a_scatter_request_until_it_is_down() {
+    use glasnost_sim::scatter::{ScatterRequest, vehicle_request};
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, -8, 0, 0);
+    settle(&mut w);
+    let req = ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: false,
+    };
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    let mut up = 0;
+    let mut down = false;
+    for _ in 0..600 {
+        assert!(hover::switched_off(&w, id));
+        let turning = w.obj(id).unwrap().body.turning(w.tick);
+        let ok = vehicle_request(&mut w.clone(), id, req);
+        if height_of(&w, id) > 0 {
+            assert!(hover::powered(&w, id));
+            if !turning {
+                assert!(ok, "above the ground: powered, not refused by case (g)");
+                up += 1;
+            }
+        } else {
+            assert!(!hover::powered(&w, id));
+            assert!(!ok, "down: refused by case (g)");
+            down = true;
+            break;
+        }
+        tick::step(&mut w);
+    }
+    assert!(
+        up > 0,
+        "some tick above the ground with its body not turning"
+    );
+    assert!(down, "it comes down");
+}

@@ -204,8 +204,12 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
     let e = o.dest.is_some() && !req.anywhere;
     // spec: S-0207 claim 16 (f): deployed, deploying or undeploying have no state yet
     let f = false;
-    // spec: S-0207 claim 16 (g): a locomotor switched off (S-0503 claim 10, the hovering locomotor's)
-    let g = crate::hover::switched_off(w, id);
+    // spec: S-0207 claim 16 (g): a locomotor switched off. A hovering vehicle's only while it is not powered in S-0503's sense, switched off and down at a hover height of 0 (S-0405 claim 20 and Changes for other specs, revision 36; S-0503 Terms and claim 10). Any other vehicle's locomotor is switched off by the disabling of S-0405 claims 13 and 20 and switched on again at enabling; no other switch-off of a vehicle locomotor has state here.
+    let g = if crate::hover::is_hover(w, id) {
+        !crate::hover::powered(w, id)
+    } else {
+        crate::econ::power::unit_disabled(w, id)
+    };
     if a || b || c || d || e || f || g {
         return false;
     }

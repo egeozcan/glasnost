@@ -1011,16 +1011,18 @@ pub(crate) fn has_centre(w: &World, h: HouseId, unit: u32) -> bool {
     }
 }
 
-/// A completed arrival in a cell (claim 13, the cell-entry rule): an
-/// enabled vehicle whose type has the powered-unit flag, completing an
-/// arrival in a cell while its house has no active control centre, is
-/// disabled, unless the cell holds a building. An arrival is the end of a
+/// A completed arrival in a cell (claim 13, the cell-entry rule): a
+/// vehicle whose type has the powered-unit flag, completing an arrival in
+/// a cell while its house has no active control centre, is disabled,
+/// unless the cell holds a building. One already disabled gets the
+/// disabling again, with no sound (claim 20). An arrival is the end of a
 /// step of its own movement into the cell; placement and creation are not
 /// arrivals. Called by the locomotors at their cell-arrival updates
 /// (`cloak::machine::cell_movement_completed`).
 pub fn arrival(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
-    if o.kind != Kind::Vehicle || !o.on_map || o.econ.building.unit_disabled {
+    // spec: S-0405 claim 20 (revision 36: a disabled vehicle's arrival is an arrival in claim 13's sense too, so it is not passed over here)
+    if o.kind != Kind::Vehicle || !o.on_map {
         return;
     }
     let (cell, owner, ti) = (o.pos.cell(), o.owner, o.type_index);
@@ -1042,7 +1044,7 @@ pub fn arrival(w: &mut World, id: ObjectId) {
         .occ(cell, Layer::Ground)
         .is_some_and(|r| r.buildings > 0);
     if !building {
-        // spec: S-0405 claims 13 and 20 (revision 20, Q-1503 answered: disabled on a completed arrival, not on placement or creation: guard reset, deselected, locomotor off)
+        // spec: S-0405 claims 13 and 20 (revision 20, Q-1503 answered: disabled on a completed arrival, not on placement or creation: guard reset, deselected, locomotor off; revision 36: a vehicle already disabled gets the guard reset and locomotor switch-off again, with no sound, and comes down as S-0503 states)
         disable(w, id);
     }
 }
