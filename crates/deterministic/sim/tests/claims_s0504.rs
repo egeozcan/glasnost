@@ -1204,7 +1204,7 @@ fn click_attack_as(w: &mut World, house: HouseId, actor: ObjectId, target: Objec
 #[test]
 fn carrier_and_missile_ship_fight() {
     let mut r = spawner_rules("RKB", 2, true);
-    let mut wasp = UnitType {
+    let wasp = UnitType {
         strength: Some(60),
         speed: Some(12),
         rot: Some(10),
@@ -1213,10 +1213,7 @@ fn carrier_and_missile_ship_fight() {
         primary: Some("Gun".into()),
         ..Default::default()
     };
-    // Q-1838 interim: a slot type that is not landable is visiting (S-0501 Terms), and placed on
-    // the ground at launch it takes T2's ground visiting row's retreat at once, which then ignores
-    // the launch pass's move and attack (S-0501 claim 34); a landable slot type keeps this fight.
-    wasp.econ.landable = Some(true);
+    // spec: S-0501 claim 1 and Terms (a slot type that is not landable is marked visiting by its launch placement's type test, after its placement fall-back gave it guard; the launch pass's move and attack reach it, claim 35; Q-1838)
     r.sim.aircraft.insert("WASP".into(), wasp);
     r.registries
         .entry("aircraft".into())

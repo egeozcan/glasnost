@@ -119,6 +119,21 @@ fn meet(relay: &Relay, clock: &Clock, cs: &mut [&mut Client]) {
                 .all(|c| c.room().is_some_and(|v| v.members.len() == i + 1))
         });
     }
+    // Each person picks a fixed colour rising with their row, so that the
+    // persons' slots are their rows. Set from the last person's row down,
+    // so that no step of the cycle from "random" passes a colour another
+    // row holds.
+    // spec: S-0009 claim 19 (persons by increasing colour slot)
+    for row in (0..n).rev() {
+        while cs[row].room().unwrap().setup.slots[row].colour != Some(row as u8) {
+            let at = cs[row].room().unwrap().setup.slots[row].colour;
+            press_room(cs[row], SetupHit::Colour(row, 1));
+            pump(clock, cs, "the colour's change", |c| {
+                c.iter()
+                    .all(|c| c.room().unwrap().setup.slots[row].colour != at)
+            });
+        }
+    }
     for c in cs.iter_mut().skip(1) {
         press_room(c, SetupHit::Start_);
     }

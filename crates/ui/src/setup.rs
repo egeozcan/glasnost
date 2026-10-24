@@ -325,19 +325,52 @@ impl Setup {
         None
     }
 
+    /// Gives every occupied row whose colour is on "random", person or
+    /// computer, its colour slot (S-0412 claim 7), in increasing row order
+    /// (S-0009 claim 19, our engine's rule for a network game), from a
+    /// stream of its own seeded from `seed`. The network room does this at
+    /// the start, before [`Setup::house_order`], because a person's place in
+    /// the house order follows the slot it was given (S-0009 claim 19). Our
+    /// lobby has no observer rows, so every occupied row draws. With at
+    /// most eight rows and the fixed colours distinct ([`Setup::check`]),
+    /// every row finds a free slot.
+    pub fn resolve_colours(&mut self, seed: u32) {
+        // nocite: our own netcode (the room's colour draws take a stream of their own, seeded one above the game seed, so that they do not repeat the lobby stream's country draws; S-0412 claim 7 leaves how the setup draws to our engine)
+        let mut rng = glasnost_sim::rng::Rng::new(seed.wrapping_add(1));
+        // spec: S-0412 claim 7 (a slot is free when no player has it fixed and no player resolved earlier was given it)
+        let mut taken: Vec<u8> = self.players().filter_map(|(_, s)| s.colour).collect();
+        let rows: Vec<usize> = self
+            .players()
+            .filter(|(_, s)| s.colour.is_none())
+            .map(|(i, _)| i)
+            .collect();
+        // spec: S-0009 claim 19 (every player on "random", person or computer, draws in increasing lobby-slot order, design)
+        for i in rows {
+            // spec: S-0412 claim 7 (the first free draw of R(0, 7)); the half-span switch cannot change a draw over 0 … 7 (S-0202 claim 5)
+            if let Some(c) = setup::draw_colour(&mut rng, &taken, true) {
+                taken.push(c);
+                self.slots[i].colour = Some(c);
+            }
+        }
+    }
+
     /// The occupied rows in house order (S-0009 claim 19): the persons in
-    /// increasing order of their chosen colour slot, the earlier row first
-    /// on a tie, then the computer rows in row order. A person on a random
-    /// colour has no chosen slot yet; until request Q-1805 is answered such
-    /// persons come after those with a chosen slot, in row order (interim).
-    /// With one person, as in a skirmish, this is the row order.
+    /// increasing order of their colour slot, the earlier row first on a
+    /// tie (design), then the computer rows in row order. A person whose
+    /// colour was on "random" is placed by the slot it was given, as if it
+    /// had chosen it, so a setup of several persons is resolved first
+    /// ([`Setup::resolve_colours`], as the network room does). A person
+    /// still on "random" comes after those with a slot; that arises only
+    /// with one person, as in a skirmish, whose order is the row order.
+    /// Observers would come between the persons and the computers (S-0009
+    /// claim 19, design); our lobby has none.
     pub fn house_order(&self) -> Vec<usize> {
         let mut persons: Vec<(Option<u8>, usize)> = self
             .players()
             .filter(|(_, s)| s.kind == SlotKind::Human)
             .map(|(i, s)| (s.colour, i))
             .collect();
-        // spec: S-0009 claim 19 (persons by increasing chosen colour index, ties to the earlier slot); Q-1805 (interim: random colours last, in row order)
+        // spec: S-0009 claim 19 (persons by increasing colour slot, a given slot as if chosen; ties to the earlier lobby slot, design; every person's house before every computer player's)
         persons.sort_by_key(|&(c, i)| (c.is_none(), c, i));
         persons
             .into_iter()
@@ -987,7 +1020,7 @@ mod tests {
         assert_eq!(l.game_speed, 4);
     }
 
-    // spec: S-0009 claim 19 (persons by increasing chosen colour index, ties to the earlier slot, then computers in slot order); Q-1805 (interim: persons on a random colour after the others, in row order)
+    // spec: S-0009 claim 19 (persons by increasing colour slot, ties to the earlier lobby slot, design, then computers in lobby-slot order; Q-1805: a person on "random" placed by the slot it was given; the draws in increasing lobby-slot order, persons and computers alike, design)
     #[test]
     fn house_order_puts_persons_by_colour_then_computers() {
         let r = rules();
@@ -999,7 +1032,38 @@ mod tests {
         s.slots[4].kind = SlotKind::Human;
         s.slots[0].colour = Some(5);
         s.slots[2].colour = Some(1);
-        assert_eq!(s.house_order(), vec![2, 0, 4, 1, 3]);
+        // Row 4's person on "random": placed by the slot it is given.
+        let mut seen = [false; 3];
+        for seed in 0..64 {
+            let mut t = s.clone();
+            t.resolve_colours(seed);
+            let given = t.slots[4].colour.expect("a slot");
+            // spec: S-0412 claim 7 (every row on "random" gets a free slot, distinct from the others)
+            let mut all: Vec<u8> = t.players().filter_map(|(_, x)| x.colour).collect();
+            assert_eq!(all.len(), 5);
+            all.sort();
+            all.dedup();
+            assert_eq!(all.len(), 5);
+            assert_eq!((t.slots[0].colour, t.slots[2].colour), (Some(5), Some(1)));
+            let (case, order) = if given < 1 {
+                (0, vec![4, 2, 0, 1, 3])
+            } else if given < 5 {
+                (1, vec![2, 4, 0, 1, 3])
+            } else {
+                (2, vec![2, 0, 4, 1, 3])
+            };
+            seen[case] = true;
+            assert_eq!(t.house_order(), order, "given {given}");
+            // The same seed resolves the same way.
+            let mut u = s.clone();
+            u.resolve_colours(seed);
+            assert_eq!(u, t);
+        }
+        assert_eq!(seen, [true; 3]);
+        // spec: S-0009 claim 19 (a tie between two persons goes to the earlier lobby slot, design)
+        let mut tie = s.clone();
+        tie.slots[4].colour = Some(1);
+        assert_eq!(tie.house_order(), vec![2, 4, 0, 1, 3]);
         s.slots[4].colour = Some(3);
         assert_eq!(s.house_order(), vec![2, 4, 0, 1, 3]);
         let maps = [MapEntry {

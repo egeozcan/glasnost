@@ -753,8 +753,8 @@ fn play_to(
 
 /// Three persons and a computer play; one person's client goes mid-game
 /// and a new one, with the same settings store, offers **Reconnect** (M9
-/// N5): it loads the map, takes the game the host sends, catches up and is
-/// readmitted; all three games then agree tick for tick, with orders from
+/// N5): it loads the map, takes the game the peer of the lowest slot sends,
+/// catches up and is readmitted; all three games then agree tick for tick, with orders from
 /// each. (Dropping a client in the test process closes its link as a
 /// killed process's would, but it is not a process kill: the local lane
 /// does that.)
@@ -814,6 +814,10 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
             .all(|c| c.lockstep().is_some_and(|ls| ls.phase() == Phase::Running))
     });
     let slot = b.lockstep().unwrap().me();
+    // The peer that sends the game back is the live person of the lowest
+    // slot; the slots follow the colours drawn for the rows on random.
+    // spec: S-0009 claim 19 (house order by colour slot)
+    let host_serves = a.lockstep().unwrap().me() < c.lockstep().unwrap().me();
     let kept = b
         .settings
         .rejoin
@@ -864,8 +868,8 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
     );
     let took = started.elapsed();
     let serving = |x: &Client| notice(x, |t| t == "Bea is reconnecting; sending them the game.");
-    assert!(serving(&a), "the host sends the game");
-    assert!(!serving(&c), "one peer sends the game");
+    assert_eq!(serving(&a), host_serves, "the lower slot sends the game");
+    assert_eq!(serving(&c), !host_serves, "one peer sends the game");
     pump(
         &clock,
         &mut [&mut a, &mut b, &mut c],

@@ -2773,17 +2773,17 @@ fn target_taken_inside_is_lost_and_it_flies_home() {
     flies_home_and_docks(&mut w, k, a);
 }
 
-// spec: S-0501 claim 45's visiting case and table T2 (in flight, armed, visiting, ammunition left after its target is lost, outside a team: hunt, keeping claim 17's edge destination while its hunt finds no target; with neither flight flag it is removed, without dying, when its position leaves the usable area, having entered it since it appeared, claim 10). The aircraft is marked visiting by hand after placement, since a type that is not landable placed on the ground at a pad retreats at once (Q-1838).
+// spec: S-0501 claim 45's visiting case and table T2 (in flight, armed, visiting, ammunition left after its target is lost, outside a team: hunt, keeping claim 17's edge destination while its hunt finds no target; with neither flight flag it is removed, without dying, when its position leaves the usable area, having entered it since it appeared, claim 10). The type is not landable, so its placement's type test marks it visiting; its placement fall-back came first, so it rests in guard on the ground and takes the attack order (claim 1 and Terms, Q-1838).
 #[test]
 fn lost_target_visiting_hunts_toward_the_edge_and_is_removed_at_the_border() {
-    let r = one_dock(|_| {});
+    let r = one_dock(|u| u.econ.landable = Some(false));
     let mut w = banded_game(&r);
     ready(&mut w);
     let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, 0);
+    assert!(st(&w, a).visiting, "marked by the type test");
+    assert!(air::on_ground(&w, a), "placed on the ground");
     let losses = glasnost_sim::econ::stats::of(&w, ALPHA).losses;
-    lose_target_on_approach(&mut w, a, Loss::Remove, |w| {
-        w.obj_mut(a).unwrap().air.as_mut().unwrap().visiting = true;
-    });
+    lose_target_on_approach(&mut w, a, Loss::Remove, |_| {});
     let hunts = run_until(&mut w, 100, |w| {
         w.obj(a).unwrap().beh.current == Some(Behaviour::Hunt)
     });
@@ -3299,7 +3299,7 @@ fn bomb_crash(quirk: bool) -> (World, ObjectId, ObjectId, i32) {
     (w, a, by, h)
 }
 
-// spec: S-0501 claim 46 and Edge cases (quirks.crash_drops_planted_bomb on: a destruction without a hit does not set off a planted bomb; it stays attached through the fall and is removed at impact with no detonation and no damage)
+// spec: S-0501 claim 46 and Edge cases (quirks.crash_drops_planted_bomb on: a destruction without a hit does not set off a planted bomb; it stays attached through the fall and is removed at impact with no detonation and no damage); S-0312 claim 7 (revision 44: a carrier destroyed without a hit has no shared death effects, so its bomb does not detonate at the destruction)
 #[test]
 fn claim_46_crash_drops_a_planted_bomb() {
     let (mut w, a, by, h) = bomb_crash(true);
@@ -3329,7 +3329,7 @@ fn claim_46_crash_sets_off_a_planted_bomb_with_the_quirk_off() {
     assert!(w.obj(by).unwrap().health < h, "bomb damage at impact");
 }
 
-// spec: S-0501 claim 46 (the detonate order during the fall sets the bomb off by S-0519 claim 5 at the aircraft's position then) and S-0519 claims 5 and 7 (the falling carrier's health is already 0, so the one detonation cannot kill it again: no second death, loss or credit, and the bomb is gone, so impact sets off nothing)
+// spec: S-0501 claim 46 and S-0312 claim 7 (revision 44: the detonate order during the fall sets the bomb off by S-0519 claim 5 at the aircraft's position then) and S-0519 claims 5 and 7 (the falling carrier's health is already 0, so the one detonation cannot kill it again: no second death, loss or credit, and the bomb is gone, so impact sets off nothing)
 #[test]
 fn claim_46_detonate_order_during_the_fall() {
     let stats = glasnost_sim::econ::stats::of;
@@ -3443,4 +3443,249 @@ fn claim_45_computer_area_guard_at_flight_height() {
         }
     }
     assert!(seen > 10, "processed at flight height: {seen}");
+}
+
+// ---------------------------------------------------------------------------
+// Area guard away from the cruise height (revision 41, Q-1837)
+
+/// Lifts JET to its cruise height, forces *area guard*, and raises it
+/// `above` leptons over its cruise height before every tick until its
+/// next *area guard* processing has run; returns the delay that processing
+/// chose. The height is set by hand, standing in for AC29 part j's cliff.
+fn area_guard_processing_at(w: &mut World, a: ObjectId, above: i32) -> i32 {
+    force(w, a, Behaviour::AreaGuard);
+    let before = w.obj(a).unwrap().beh.last;
+    for _ in 0..400 {
+        let o = w.obj(a).unwrap();
+        let surface = w.surface_at(o.pos.x, o.pos.y);
+        w.obj_mut(a).unwrap().pos.z = surface + CRUISE + above;
+        assert_eq!(air::height(w, a), CRUISE + above);
+        step(w);
+        let o = w.obj(a).unwrap();
+        if o.beh.last != before {
+            return o.beh.last.unwrap().1;
+        }
+    }
+    panic!("no area guard processing: {}", describe(w, a));
+}
+
+// spec: S-0501 claim 45 (each area-guard processing compares the aircraft's height, taken at its start, with its cruise height; above it, with no target held and ammunition left, the processing has S-0215 claim 26's rows and the delay of claim 26 with k = 2, and area guard is kept; Q-1837, AC29 part j)
+// spec: S-0215 claim 26 and F0 (D = k × D_r + U(1, 5), k = 2 for aircraft)
+#[test]
+fn claim_45_above_the_cruise_height_takes_claim_26_with_k_2() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "JET", 0, 0);
+    let dr = w.rules().behaviour(Behaviour::AreaGuard).rate_delay;
+    assert!(dr > 0, "a rate delay, so that 1 tick is not claim 26's");
+    for above in [1, 40, 300] {
+        let d = area_guard_processing_at(&mut w, a, above);
+        assert!(
+            (2 * dr + 1..=2 * dr + 5).contains(&d),
+            "claim 26's delay with k = 2 at {above} above: {d}, D_r {dr}"
+        );
+        let o = w.obj(a).unwrap();
+        assert_eq!(
+            o.beh.current,
+            Some(Behaviour::AreaGuard),
+            "{}",
+            describe(&w, a)
+        );
+        assert_eq!(o.target, None);
+        assert_eq!(o.beh.queued, None, "no attack queued, no fall-back");
+    }
+}
+
+// spec: S-0501 claim 45 (above the cruise height, as below it, an aircraft holding a target has attack queued after the processing and its next processing comes 1 tick later; Q-1837, AC29 part j)
+#[test]
+fn claim_45_above_the_cruise_height_with_a_target_queues_attack() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "JET", 0, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, -10, 10);
+    force(&mut w, a, Behaviour::AreaGuard);
+    glasnost_sim::spawn::set_own_target(w.obj_mut(a).unwrap(), Some(Target::Object(v)));
+    let d = area_guard_processing_at(&mut w, a, 200);
+    assert_eq!(d, 1, "1 tick with a held target");
+    // spec: S-0215 claim 11 (the late start of that update starts the queued attack)
+    let o = w.obj(a).unwrap();
+    assert_eq!(
+        o.beh.current,
+        Some(Behaviour::Attack),
+        "{}",
+        describe(&w, a)
+    );
+    assert_eq!(
+        o.beh.start_tick,
+        o.beh.last.unwrap().0,
+        "started in that update"
+    );
+    assert_eq!(o.target, Some(Target::Object(v)));
+}
+
+// spec: S-0501 claim 45 (only equality with the cruise height gives the fall-back to rest with a delay of 1 tick; a human house's aircraft so falls back to guard, T2, Q-1837)
+#[test]
+fn claim_45_at_exactly_the_cruise_height_falls_back() {
+    let mut w = game(&rules());
+    ready(&mut w);
+    let a = lifted(&mut w, "JET", 0, 0);
+    force(&mut w, a, Behaviour::AreaGuard);
+    let before = w.obj(a).unwrap().beh.last;
+    let mut done = false;
+    for _ in 0..400 {
+        let o = w.obj(a).unwrap();
+        let surface = w.surface_at(o.pos.x, o.pos.y);
+        w.obj_mut(a).unwrap().pos.z = surface + CRUISE;
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        if o.beh.last != before {
+            assert_eq!(o.beh.last.unwrap().1, 1, "{}", describe(&w, a));
+            assert_ne!(o.beh.current, Some(Behaviour::AreaGuard), "fell back");
+            done = true;
+            break;
+        }
+    }
+    assert!(done, "processed: {}", describe(&w, a));
+}
+
+// ---------------------------------------------------------------------------
+// The placement fall-back before the type test (revision 41, Q-1838)
+
+/// Creates and places JET1 for house 0 at the map middle through placement
+/// alone (no guard forced afterwards); returns it and the draws its
+/// placement took.
+fn placed_jet1(w: &mut World) -> (ObjectId, u64) {
+    let ti = w.rules().index_of(Kind::Aircraft, "JET1").unwrap();
+    let x = glasnost_sim::objects::create(w, Kind::Aircraft, ti, Some(ALPHA));
+    let p = Pos::centre(testkit::mid(SIZE, 0, 0), 0);
+    let z = w.surface_at(p.x, p.y);
+    let draws = w.rng.taken();
+    glasnost_sim::objects::place(w, x, Pos::new(p.x, p.y, z), 0);
+    (x, w.rng.taken() - draws)
+}
+
+/// JET1: armed and not landable, so visiting by the type test; with the
+/// one dock type APAD when `dock`, else with no dock types.
+fn not_landable(dock: bool) -> Ruleset {
+    one_dock(|u| {
+        u.econ.landable = Some(false);
+        if !dock {
+            u.econ.dock = None;
+        }
+    })
+}
+
+// spec: S-0501 claim 1 and Terms (a type that only the type test marks visiting, with no mark before placement, is placed on the ground inside the usable area; its placement fall-back, made before the type test, takes T2's ground row for an aircraft that is not visiting: guard, not retreat, no edge draws; it makes no further fall-back while it rests; orders reach it; Q-1838, AC29 part g (4))
+#[test]
+fn claim_1_a_type_marked_by_the_type_test_rests_in_guard_and_takes_orders() {
+    let mut w = game(&not_landable(true));
+    ready(&mut w);
+    let (a, draws) = placed_jet1(&mut w);
+    assert_eq!(draws, 0, "no edge draws at placement");
+    assert_eq!(air::height(&w, a), 0, "on the ground");
+    assert!(air::on_ground(&w, a));
+    assert!(st(&w, a).visiting, "the type test marks it");
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Guard), "{}", describe(&w, a));
+    assert_eq!((o.target, o.dest), (None, None));
+    let p = o.pos;
+    for _ in 0..300 {
+        step(&mut w);
+        let o = w.obj(a).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "{}", describe(&w, a));
+        assert_eq!(o.pos, p, "rests: {}", describe(&w, a));
+    }
+    // spec: S-0501 claim 34 (this aircraft is not in retreat, so the order is not ignored: it takes the target and has attack queued in the tick the order is carried out, which then starts)
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 12, 0);
+    click(&mut w, a, ClickOn::Object(v));
+    step(&mut w);
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.target, Some(Target::Object(v)), "{}", describe(&w, a));
+    assert_eq!(o.beh.queued, Some(Behaviour::Attack), "{}", describe(&w, a));
+    let attacks = run_until(&mut w, 100, |w| {
+        w.obj(a).unwrap().beh.current == Some(Behaviour::Attack)
+    });
+    assert!(attacks, "attack starts: {}", describe(&w, a));
+    assert!(
+        run_until(&mut w, 100, |w| air::height(w, a) > 0),
+        "takes off: {}",
+        describe(&w, a)
+    );
+}
+
+// spec: S-0501 claim 1 and Terms (the placement fall-back of an armed aircraft of a computer-controlled house outside a team gives area guard, not retreat; Q-1838). The house is made computer-controlled by S-0309's test-only mark.
+#[test]
+fn claim_1_a_computer_house_type_marked_by_the_type_test_rests_in_area_guard() {
+    let mut w = game(&not_landable(false));
+    ready(&mut w);
+    w.houses[0].human = false;
+    let (a, draws) = placed_jet1(&mut w);
+    assert_eq!(draws, 0, "no edge draws at placement");
+    assert_eq!(air::height(&w, a), 0);
+    assert!(st(&w, a).visiting);
+    assert_eq!(
+        w.obj(a).unwrap().beh.current,
+        Some(Behaviour::AreaGuard),
+        "{}",
+        describe(&w, a)
+    );
+}
+
+// spec: S-0501 claim 1 and Terms (a later fall-back to rest on the ground takes T2's visiting rows: retreat, Q-1838)
+#[test]
+fn claim_1_a_later_fall_back_on_the_ground_takes_the_visiting_row() {
+    let mut w = game(&not_landable(true));
+    ready(&mut w);
+    let (a, _) = placed_jet1(&mut w);
+    testkit::run(&mut w, 5);
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Guard));
+    glasnost_sim::process::fall_back(&mut w, a, false);
+    assert_eq!(
+        w.obj(a).unwrap().beh.current,
+        Some(Behaviour::Retreat),
+        "{}",
+        describe(&w, a)
+    );
+}
+
+/// [`pad_bound_no_dock_types_spent_crashes_at_the_run_end`]'s run to the
+/// tick of its fall-back crash; returns the raw values taken in that tick
+/// and the stream after it. With `debris`, JET1 has minimum debris 1,
+/// maximum debris 4, one sprite debris animation and an explosion list of
+/// two entries, so that a killing hit would take a debris count draw and
+/// a list pick.
+fn fall_back_crash_draws(debris: bool) -> (u64, glasnost_sim::rng::Rng) {
+    let mut r = pad_bound(None);
+    r.sim.general.economy.curley_shuffle = Some(true);
+    if debris {
+        let c = &mut r.sim.aircraft.get_mut("JET1").unwrap().combat;
+        c.min_debris = Some(1);
+        c.max_debris = Some(4);
+        c.debris_anims = Some(vec!["DA".into()]);
+        c.explosion = Some(vec!["EA".into(), "EB".into()]);
+    }
+    let mut w = game(&r);
+    ready(&mut w);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 1, 8);
+    let a = put(&mut w, Kind::Aircraft, "JET1", 0, 0, -4);
+    click(&mut w, a, ClickOn::Object(v));
+    for _ in 0..3200 {
+        let before = w.rng.taken();
+        step(&mut w);
+        if w.obj(a).unwrap().health == 0 {
+            crashed(&w, a);
+            return (w.rng.taken() - before, w.rng.clone());
+        }
+    }
+    panic!("no crash: {}", describe(&w, a));
+}
+
+// spec: S-0312 claim 16 (the fall-back crash of S-0501 claim 46 takes the three tumbling draws of a crash start and none of the killing-hit effects: no debris draws and no explosion-list pick; scenario D11 variant g) and S-0501 claim 46
+#[test]
+fn s0312_claim_16_the_fall_back_crash_takes_no_debris_or_list_draw() {
+    let (plain, a) = fall_back_crash_draws(false);
+    let (with, b) = fall_back_crash_draws(true);
+    assert!(plain >= 3, "the three tumbling draws: {plain}");
+    assert_eq!(with, plain, "no debris draw and no list pick");
+    assert_eq!(a, b, "the same stream state");
 }

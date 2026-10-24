@@ -676,6 +676,80 @@ fn a_hit_without_a_warhead_does_nothing() {
     assert_eq!(loss!(w, t, h), (0, HitResult::Unaffected));
 }
 
+/// A hit of `amount` without a warhead (S-0302 claim 1: some scripted
+/// sources, and a debris piece of a type with no warhead).
+fn bare(amount: i32) -> Hit {
+    Hit {
+        warhead: None,
+        ..hit(amount, 0)
+    }
+}
+
+// spec: S-0302 claim 8, *Hits without a warhead*, and claim 10 (scenario D34 part a: a hit without a warhead on infantry that is not prone takes no health, m₀ = 0, and has no berserk effect)
+#[test]
+fn d34_a_a_hit_without_a_warhead_on_infantry_takes_nothing() {
+    let mut r = testkit::combat_ruleset();
+    infantry(&mut r, "MAN", |_| {});
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let t = put(&mut w, Kind::Infantry, "MAN", BETA, 0);
+    assert_eq!(loss!(w, t, bare(100)), (0, HitResult::Unaffected));
+    assert_eq!(w.obj(t).unwrap().combat.berserk, None, "no berserk effect");
+}
+
+// spec: S-0302 claim 7 and claim 8, *Hits without a warhead* (scenario D34 part b: a hit without a warhead that does not ignore defences takes exactly 1 from an undemolishable building and nothing from another building, under either setting of quirks.undemolishable_heal_is_damage)
+#[test]
+fn d34_b_an_undemolishable_building_loses_exactly_one() {
+    for quirk in [true, false] {
+        let (mut w, soft, hard, _, _) = undemolishable_world(quirk);
+        assert_eq!(
+            loss!(w, hard, bare(50)),
+            (1, HitResult::Unchanged),
+            "{quirk}"
+        );
+        assert_eq!(loss!(w, soft, bare(50)).0, 0, "{quirk}");
+    }
+}
+
+// spec: S-0302 claim 9 and claim 8, *Hits without a warhead* (a hit without a warhead that ignores defences keeps its delivered amount)
+#[test]
+fn a_hit_without_a_warhead_that_ignores_defences_keeps_its_amount() {
+    let (mut w, soft, hard, _, _) = undemolishable_world(true);
+    assert_eq!(loss!(w, soft, ign(bare(50))).0, 50);
+    assert_eq!(loss!(w, hard, ign(bare(50))).0, 50);
+}
+
+// spec: S-0302 claim 10 and claim 8, *Hits without a warhead* (scenario D34 part c: such a hit that no stage 1 row stops causes readiness loss, F6 with the defended amount, and takes no health)
+#[test]
+fn d34_c_a_hit_without_a_warhead_costs_readiness() {
+    let (mut w, t) = readiness_world(|_| {});
+    assert_eq!(loss!(w, t, bare(300)), (0, HitResult::Unaffected));
+    assert_eq!(ammo(&w, t), f6(10, 10, "0.5", 300, 1000));
+    assert_eq!(ammo(&w, t), 8);
+}
+
+// spec: S-0302 claim 8, *Hits without a warhead* (scenario D34 part d: none of the three immunity rows of stage 2 holds for a hit without a warhead, nor the allies row, which reads the warhead too; so one that ignores defences lands in full)
+#[test]
+fn d34_d_no_immunity_row_holds_without_a_warhead() {
+    let mut r = testkit::combat_ruleset();
+    vehicle(&mut r, "LEAD", |t| t.immune_to_radiation = Some(true));
+    vehicle(&mut r, "CALM", |t| {
+        t.combat.immune_to_psionic_weapons = Some(true)
+    });
+    vehicle(&mut r, "CLEAN", |t| t.combat.immune_to_poison = Some(true));
+    let mut w = testkit::game_with(&r, SIZE, 1);
+    let friend = put(&mut w, Kind::Vehicle, "CART", BETA, -8);
+    for (i, ty) in ["LEAD", "CALM", "CLEAN"].into_iter().enumerate() {
+        let t = put(&mut w, Kind::Vehicle, ty, BETA, 2 * i as i32);
+        assert_eq!(loss!(w, t, ign(bare(100))).0, 100, "{ty}");
+        assert_eq!(loss!(w, t, bare(100)).0, 0, "{ty}: m₀ = 0");
+        let by_friend = Hit {
+            attacker: Some(friend),
+            ..ign(bare(100))
+        };
+        assert_eq!(loss!(w, t, by_friend).0, 100, "{ty}: no allies row");
+    }
+}
+
 // spec: S-0302 claim 6 (a negative versus value gives a negative result that heals, and the maximum does not limit it: scenario D25)
 #[test]
 fn a_negative_versus_value_heals() {

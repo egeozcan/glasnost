@@ -571,8 +571,6 @@ pub fn placed(w: &mut World, id: ObjectId) {
     let surface = w.surface_at(o.pos.x, o.pos.y);
     // spec: S-0501 claim 1 (on the ground when not visiting, by the mark already present, and inside the usable area; else at cruise height)
     let ground = !a.visiting && usable;
-    // spec: S-0501 Terms (placement sets the visiting mark when the type is not both selectable and landable, or its primary weapon is a camera weapon; it never clears it)
-    a.visiting |= !(t.selectable && t.landable) || t.camera;
     // spec: S-0501 claim 1 (a type placed carrying passengers is a passenger carrier for life)
     a.passenger_carrier |= passengers(w, id) > 0;
     a.entered = usable;
@@ -610,6 +608,24 @@ pub fn placed(w: &mut World, id: ObjectId) {
         ob.air = Some(a);
     }
     sync_listing(w, id);
+}
+
+/// The type test of a placement (S-0501 Terms and claim 1), called by
+/// [`crate::objects::place`] after the placement fall-back: it sets the
+/// visiting mark when the type is not both selectable and landable, or its
+/// primary weapon is a camera weapon, and never clears it. The placement
+/// height and the placement fall-back have seen only the mark already
+/// present.
+pub fn placed_type_test(w: &mut World, id: ObjectId) {
+    if !is_aircraft(w, id) {
+        return;
+    }
+    let Some(t) = ty(w, id) else { return };
+    // spec: S-0501 Terms (placement sets the visiting mark when the type is not both selectable and landable, or its primary weapon is a camera weapon; it never clears it; the placement fall-back comes before this test, revision 41)
+    let mark = !(t.selectable && t.landable) || t.camera;
+    if let Some(a) = w.obj_mut(id).and_then(|o| o.air.as_mut()) {
+        a.visiting |= mark;
+    }
 }
 
 /// The marks an aircraft holds for removal (S-0209 claim 1): its
@@ -1743,6 +1759,10 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             move_to(w, id, Pos::new(nx, ny, z));
             if let Some(ob) = w.obj_mut(id) {
                 ob.pos.z = z;
+            }
+            // spec: S-0501 claim 10 (removed at once when its position leaves the usable area: the nudge's displacement too)
+            if leave_map_test(w, id, &t) {
+                return true;
             }
         }
     }
@@ -3018,16 +3038,16 @@ fn area_guard(w: &mut World, id: ObjectId) -> i32 {
     let Some(t) = ty(w, id) else {
         return NO_RULE_DELAY;
     };
+    // spec: S-0501 claim 45 (each processing compares the aircraft's height, Terms, taken at its start, with its cruise height, not with its held height; Q-1837)
     let h = height(w, id);
-    // Q-1837 interim: above the flight height is read as at it, as claim 29 reads "at cruise height".
-    if !on_ground(w, id) && h >= t.cruise {
-        // spec: S-0501 claim 45 (at exactly its flight height each processing is the fall-back to rest instead of S-0215 claim 26's rows; a delay of 1 tick)
+    if h == t.cruise {
+        // spec: S-0501 claim 45 (at exactly its cruise height each processing is the fall-back to rest instead of S-0215 claim 26's rows; a delay of 1 tick)
         fall_back(w, id);
-        return 1; // spec: S-0501 claim 45 (a delay of 1 tick at its flight height)
+        return 1; // spec: S-0501 claim 45 (a delay of 1 tick at its cruise height)
     }
     let spent = armed(w, id) && !ammo_left(w, id) && w.obj(id).is_some_and(|o| o.contact.is_none());
     if spent {
-        // spec: S-0501 claim 45 (below its flight height, an armed aircraft with its ammunition spent and no contact makes the same fall-back first)
+        // spec: S-0501 claim 45 (at any other height, above or below, an armed aircraft with its ammunition spent and no contact makes the same fall-back first)
         fall_back(w, id);
     }
     let Some(o) = w.obj(id) else {
@@ -3038,7 +3058,7 @@ fn area_guard(w: &mut World, id: ObjectId) -> i32 {
         queue(w, id, Behaviour::Attack);
         return 1; // spec: S-0501 claim 45 (1 tick with a held target)
     }
-    // spec: S-0501 claim 45 and S-0215 claim 26 (below its flight height and with no target: claim 26's rows and table, its delay with k = 2 for aircraft)
+    // spec: S-0501 claim 45 and S-0215 claim 26 (away from its cruise height, above or below, and with no target: claim 26's rows and table, its delay with k = 2 for aircraft)
     crate::process::process_area_guard(w, id)
 }
 

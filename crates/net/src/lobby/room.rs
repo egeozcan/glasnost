@@ -26,10 +26,13 @@
 //! the host's rules ([`Offered`]).
 //!
 //! **The start.** The host starts when every person's row is taken, every
-//! other member is ready and the setup has no problem. The slot table lists
-//! the occupied rows in house order ([`Setup::house_order`], S-0009 claim
-//! 19), so it is the slot table N1's session builds from the game setup.
-//! Every member gets the same [`Begin`], with its own slot.
+//! other member is ready and the setup has no problem. The colours left on
+//! "random" are drawn then, row by row ([`Setup::resolve_colours`]), and
+//! [`Begin::setup`] carries them. The slot table lists the occupied rows in
+//! house order ([`Setup::house_order`], S-0009 claim 19: a person on
+//! "random" by the slot it was given), so it is the slot table N1's session
+//! builds from the game setup. Every member gets the same [`Begin`], with
+//! its own slot.
 //!
 //! **Leaving.** A member who leaves before the start frees their row (open,
 //! its choices back on random). When the host leaves, the member on the
@@ -597,8 +600,11 @@ impl Room {
         {
             return Err(Refusal::NotReady(i as u8));
         }
+        // spec: S-0009 claim 19 (the colour draws come before the house order is fixed: every row on "random", person or computer, in increasing lobby-slot order, design)
+        let mut setup = self.setup.clone();
+        setup.resolve_colours(seed);
         // spec: S-0009 claim 19 (the slot table follows the house order of the game setup)
-        let order = self.setup.house_order();
+        let order = setup.house_order();
         let mut slots = Vec::with_capacity(order.len());
         let mut names = Vec::with_capacity(order.len());
         let mut persons = Vec::new();
@@ -630,7 +636,7 @@ impl Room {
                 rules_hash: self.rules_hash.clone(),
                 map: self.map.clone(),
                 seed,
-                setup: self.setup.clone(),
+                setup,
                 slots,
                 rows: order.iter().map(|&r| r as u8).collect(),
                 names,
