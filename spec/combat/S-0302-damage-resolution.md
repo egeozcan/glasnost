@@ -2,11 +2,11 @@
 id: S-0302
 title: Damage resolution (shot damage, defences, versus values, rounding, healing, health thresholds)
 topic: combat
-revision: 30
+revision: 39
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0061, Q-0075, Q-0081, Q-0170, Q-0648]
 supersedes: []
@@ -21,6 +21,11 @@ the firing side, the target's defences, the versus value and the rules that stop
 health thresholds, for infantry, vehicles, aircraft, buildings and terrain objects. Which objects an
 explosion reaches is S-0303's, what small versus values mean for targeting is S-0304's, and the
 armour classes are S-0305's. This spec covers skirmishes; campaigns and network games are out of scope.
+
+A voxel-model debris piece's hits have no attacker and no attacking house (claim 1). A hit without
+a warhead is covered by claims 6 to 8: no row of claim 8 that reads the warhead holds for it, it
+can cause readiness loss (claim 10) but no berserk effect, and one that does not ignore defences
+takes no health except the 1 that claim 7 takes from an undemolishable building.
 
 ## Terms
 
@@ -72,7 +77,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
   glossary's *human participant*, which includes observers (S-0412 claim 4); it never occurs
   in a skirmish, which has at most one human participant.
 - **Versus value *v*.** The glossary's *versus value* (a double), written *v* in the formulas.
-- **Hit.** One delivery of an amount of damage, with a warhead, to one object, carrying the two
+- **Hit.** One delivery of an amount of damage, with a warhead or (for some sources, claim 1)
+  none, to one object, carrying the two
   markers of claim 1. A projectile's detonation delivers one hit to every object it reaches
   (S-0303); other sources deliver hits too (claim 1).
 - **Delivered damage *d*₀.** The integer amount a hit delivers, before the target's side of this
@@ -137,9 +143,11 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
 ### Where hits come from
 
 1. **Hits, their two markers and where they come from.** Every loss or gain of health in combat is
-   a hit with a delivered amount *d*₀, a warhead (absent for some scripted sources), a distance
-   *r*, an optional attacker and attacking house, and two yes/no markers: *ignores defences* (what
-   it changes is claim 9) and *no-escape* (Terms). The table gives the markers, the attacker and
+   a hit with a delivered amount *d*₀, a warhead (absent for some scripted sources, and for the
+   ground-impact hits that S-0317 claim 7 says a debris piece of a type with no warhead still
+   deals; the end of such a piece delivers no hit, S-0303 claim 2), a distance *r*, an optional
+   attacker and attacking house, and two yes/no markers: *ignores defences* (what it changes is
+   claim 9) and *no-escape* (Terms). The table gives the markers, the attacker and
    the attacking house of each source known to deliver hits; each owning spec says what else its
    source delivers. The table lists the sources that the specs written so far know about, not
    every source the original has.
@@ -171,6 +179,7 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
    | Genetic mutation, cell mode (S-0611 claim 4) | yes | no | none | the launching house |
    | Psychic domination area damage (S-0612 claim 9) | no | no | none | the current storm owner, or none (below) |
    | The area detonation of a damaging animation, such as a burning one (S-0109 claim 17) | no | no | none | none |
+   | A voxel-model debris piece's ground-impact hits and the area damage of its end (S-0317 claims 7 and 11) | no | no | none | none |
 
    The crate explosion and napalm rows describe their direct hits only; their additional area
    damage follows S-0303 with neither attacker nor attacking house (S-0520 claims 16 and 17).
@@ -232,8 +241,14 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      mutation through S-0611 claims 3 and 4, scenarios MU1, MU2, MU4 and MU11,
      domination through S-0612 claim 9, scenario PD5 part b,
      disc-laser damage and attacker through S-0615 claim 16, scenarios DL1 and DL4, and
-     damaging-animation metadata through D33),
-     `unmeasured` (the disc laser's absent explicit attacking house: ordinary kill credit falls
+     damaging-animation metadata through D33; a voxel-model debris piece's markers and house
+     as S-0317 claims 7 and 11 back them, through S-0317 scenario V5 parts c and d for the
+     markers and parts f and g for the house, the house part holding once the check of the
+     S-0414 claim 21 kill-tally amendment (S-0317 V5 part f) has run, as S-0317 claim 1 notes,
+     and S-0317 scenario V8's no-source-object and own-house parts for the area damage of the
+     piece's end),
+     `unmeasured` (a voxel-model debris piece's absent attacker, which S-0317 claims 7 and 11
+     leave `unmeasured`; the disc laser's absent explicit attacking house: ordinary kill credit falls
      back to its attacker and no discriminating house-only effect is identified (S-0615 claim 16),
      and mutation's unset no-escape marker in cell mode: only infantry receive it, so vehicle crew
      escape cannot distinguish the marker; a firer removed
@@ -251,7 +266,8 @@ Shared terms used here are defined in the glossary: *armour class*, *warhead*, *
      mutation, domination, disc-laser and damaging-animation metadata; a
      detonation of a firer that has not been killed, removed or started to cloak carries it and its
      owner; radiation-exposure and gas-particle metadata; crate-hit and suicide-hit metadata),
-     medium (planted-bomb metadata; a
+     medium (a voxel-model debris piece's hits, as S-0317 claims 7 and 11 rate them; planted-bomb
+     metadata; a
      detonation of a firer that has been killed carries neither, and the same for a firer that
      stays in play after its killing hit; the death weapon's attacker; the markers and attacker of
      the trigger kill, the contact destruction, the crash impact and the wave; the ore burst's
@@ -439,12 +455,18 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    with no cap.
    - Backing: `measurable` (scenario D1 for versus and truncation, D3 for the cap, the unused
      minimum and a maximum of 0 or below, D4 for the negative path and S-0314 H1 part c for its
-     bypass of a negative maximum, D9 for the inert map, D25 for a positive hit against a
-     negative versus value; the falloff at distances above 0 through S-0303's scenario A1, which
-     measures the same formula, including variant g for the edge product's use of the integer
-     defended amount rather than its single-precision narrowing); `unmeasured` (a hit that comes without a warhead: only scripted
-     sources deliver one, and no known scripted source can be set up to deliver it)
-   - Confidence: high (medium for the hit without a warhead)
+     bypass of a negative maximum, D9 for the inert map, D25 for a positive hit against a negative
+     versus value; the falloff at distances above 0 through S-0303's scenario A1, which measures
+     the same formula, including variant g for the edge product's use of the integer defended
+     amount rather than its single-precision narrowing); D34 part a for a hit without a warhead
+     on infantry objects that are not prone (no health lost, which cannot tell such a hit from no
+     hit at all), and D34 part b for the same hit on an undemolishable building, where claim 7's
+     loss of exactly 1 shows that the piece deals the hit.
+     `unmeasured` for a scripted source's hit without a warhead: no scripted source that a test
+     map can set up is known to deliver one
+   - Confidence: high for every part except a hit without a warhead; medium for the result of a
+     hit without a warhead from a debris piece, until D34 runs; medium for a scripted source's hit
+     without a warhead, which follows the same rule but has no scenario
 
 7. **Undemolishable buildings always take at least 1.** A building whose type is undemolishable
    loses at least 1 health from every hit that no row of claim 8 stops, whether or not the hit
@@ -452,13 +474,16 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    stops such a hit. A result of 0 becomes 1, and so does a negative result, so such a building cannot be healed by a hit and loses 1 health instead. This
    holds in an inert game too, for the hits that reach the building there (sonic waves, for
    example; detonations reach nothing, S-0303 claim 2). Buildings that can be demolished and all
-   other objects get no such minimum. Quirk `quirks.undemolishable_heal_is_damage` (Edge cases).
+   other objects get no such minimum. A hit without a warhead that does not ignore defences
+   therefore takes 1 from such a building, although its *m*₀ is 0 (claim 6).
+   Quirk `quirks.undemolishable_heal_is_damage` (Edge cases).
    A heal-all crate supplies a known hit that ignores defences with a negative or zero amount
    (S-0520 claim 14). It therefore damages an undemolishable building by 1 health rather than
    restoring it, even when the building was already at full health.
    - Backing: `measurable` (scenario D5; D9 for the inert game; D32 for a heal-all hit that
-     ignores defences with a negative or zero amount)
-   - Confidence: high (medium for the inert game and the heal-all exception)
+     ignores defences with a negative or zero amount; D34 part b for a hit without a warhead)
+   - Confidence: high (medium for the inert game, the heal-all exception and a hit without a
+     warhead)
 
 8. **Hits that do nothing.** A hit changes no health when one of the rows of the table below holds
    for it. It then reports *unaffected*, except under the berserk row (claim 10).
@@ -501,8 +526,9 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      claims 5, 10 and 13). Not every possible sinking state is asserted to retain positive health:
      sinking can also begin through a cull (S-0614 claim 11). If a sinking target has no health,
      the non-building no-health row still stops ordinary damage and healing hits; it is not revived. The sources that this spec cannot place under a filter are the sonic wave, the
-     contact destruction, the elimination of a house's objects, the destruction of a bridge section
-     and the train crush (claim 1): whether they skip an object with no health is for their specs
+     contact destruction, the elimination of a house's objects, the destruction of a bridge section,
+     the train crush (claim 1) and the ground-impact hits of a voxel-model debris piece (S-0317
+     claim 7, which leaves this open for them): whether they skip an object with no health is for their specs
      (Open questions).
    - *Amounts.* Only three things in the table look at an amount: the effect that the
      temporarily-invulnerable row shows is sized by twice the amount after the defences of claim 5,
@@ -543,7 +569,16 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
    and claim 6 applies to that 1 (a direct hit against a versus value of 0 or more deals trunc(*v*), at most the cap of claim 6).
    Detonations never deliver 0 (S-0303 claim 2: a detonation of 0 reaches nobody); claim 17 is
    one such source; radiation exposure can also deliver 0 while the exposure level is positive
-   (S-0525 claims 9 and 10).
+   (S-0525 claims 9 and 10), and so can a voxel-model debris piece, whose ground impact deals its
+   hits whatever its damage amount (S-0317 claim 7, scenario V5 part e).
+   - *Hits without a warhead.* No row that reads the warhead holds for a hit without one: neither
+     bunker row (such a hit counts as neither penetrating bunkers nor not penetrating them), none
+     of the three immunity rows of stage 2, not the allies row and not the berserk row. Such a hit
+     that no stage 1 row stops therefore causes readiness loss and has no berserk effect. If it
+     does not ignore defences, its *m*₀ is 0 (claim 6) and the zero-amount row stops it, unless
+     claim 7 raises it to 1 on an undemolishable building. A hit without a warhead that ignores
+     defences keeps its delivered amount (claim 9). On a terrain object such a hit is stopped
+     (claim 20).
    - Backing: `measurable` (scenario D6 for invulnerability, D8 for the allies rule (with an
      attacker; D17, part g, for a hit with none), the immune
      and type-immune rows and the bunker rows, D16 for the building, vehicle-factory, bridge-repair-hut,
@@ -561,12 +596,26 @@ system or projectile is ever such an object (S-0303 states which kinds receive h
      in particular an ignoring-defences hit with an allied attacker; the invulnerability
      effect's size of twice the defended amount: D6 checks health only and supplies no
      size-sensitive visual comparison; the direction of the one-way alliance test:
-     D8 and D17 use mutually allied houses only)
+     D8 and D17 use mutually allied houses only). For the *Hits without a warhead* bullet:
+     `measurable` through D34 parts a and b for its health result, part c for its readiness
+     loss, part d for the three immunity rows not holding, part e for the tank-bunker row not
+     holding, and part a's berserk record for the berserk row not holding (the row needs a
+     warhead that makes targets go berserk, which a hit without a warhead lacks); `unmeasured`
+     for the bunkered-unit and allies rows not holding. The only warhead-less source a scenario
+     can set up, a debris piece of a type with no warhead, has no attacker (S-0317 claim 7), so
+     the allies row cannot arise; and its hit on a bunkered unit, which is not a building and so
+     takes no minimum from claim 7, is stopped by the zero-amount row whether or not the
+     bunkered-unit row stops it first, so health does not tell the two apart. For those two rows
+     the bullet states the rule that no row reading the warhead holds without one, as the
+     measured rows show for the others, with no scenario of its own; the prone factor of claim 5
+     for such a hit is the one departure (Edge cases)
    - Confidence: high for the + column except the no-health rows and for the − and I entries that D6, D8, D16,
      D17 and D26 test; medium for the stages of the rows that only D16 and D17 test, and for the
      vehicle-factory, laser-fence and bridge-repair-hut rows (the conditions are clear; D16 is
      their first measurement); low for the no-health rows (their stages included) and the − entry of
-     the self-damage row and other entries without a scenario
+     the self-damage row and other entries without a scenario; medium for a hit without a
+     warhead, until D34 parts a to e run, and medium for the rows that no scenario can tell
+     apart (`unmeasured`, above)
 
 9. **What ignoring defences skips.** A hit that ignores defences skips the defences of claim 5
    (including the minimum of 1 and the prone factor), every part of claim 6 (inert map, falloff,
@@ -1291,7 +1340,9 @@ Observable consequences within one hit:
   c).
 - **A hit without a warhead on a prone infantry unit** (claim 5). The original's result is
   undefined (a crash at best). Our engine uses the factor 1.0 (a departure); such
-  hits come only from scripted sources, and claim 6 then reduces them to 0 anyway.
+  hits come only from scripted sources and from a debris piece of a type with no warhead (S-0317
+  claim 7). Claim 6 gives such a hit an *m*₀ of 0; on an undemolishable building claim 7 still
+  raises it to 1.
 - **Building fires with a short fire list** (claim 13). When the drawn kind of fire has no entry in
   the rules' list of damage-fire animations, the original's result is undefined. Our engine starts
   no fire for that cell (a departure), still takes the draws claim 13 gives, and the importer warns when the list
@@ -2084,6 +2135,59 @@ parts use their stated replay checks and rejection thresholds instead.
   its loss. *Falsified if:* animation ownership supplies kill credit, damage bypasses the stated
   defences, or the lethal animation hit alone suppresses the guaranteed crew escape. S-0109
   claim 17 supplies the per-advance amount; S-0312 claim 13 supplies the escape control.
+- **D34 (claims 6 to 8: a hit without a warhead).** Part a: as S-0317 scenario V5's setup (its
+  fixed-path test type, damage amount and radius, thrown over a cell holding two infantry objects),
+  with neither object prone, but the named test file gives the piece type no warhead, so it takes
+  the absent-key default (S-0317 Import mapping). A control run uses V5's test warhead. *Record:*
+  health and berserk state of both objects per tick with the read-only recorder, and the tick of
+  the piece's ground impact. *Expected:* in the control run both objects lose health at the
+  impact; without a warhead neither does, and neither goes berserk. *Falsified if:* either object
+  loses health from the warheadless piece's impact or goes berserk after it. A
+  control run in which either object loses no health at the impact is void. Part a shows only that
+  no health is lost: it cannot tell a hit that takes nothing from no hit at all.
+  Part b: as part a, with the piece thrown over the cell of a one-cell test building whose type
+  is undemolishable (a named test file, Import mapping), so that the building's reference point,
+  the centre of that cell, lies within the piece type's damage radius of the impact point (S-0317
+  claim 7; the run is void if the recorded impact point is farther than that radius from the
+  cell's centre), and a control run with V5's test warhead.
+  *Expected:* in the control run the building loses health at the impact; without a warhead it
+  loses exactly 1 health at the impact. *Falsified if:* without a warhead it loses none (no hit
+  dealt) or more than 1; a control run in which it loses none is void. The run shows both that
+  the piece deals the hit and claim 7's minimum for it.
+  Part c: as part a, with the piece thrown over the cell of D10's test aircraft type, landed,
+  instead of the infantry objects, so that the aircraft's position lies within the piece type's
+  damage radius of the impact point (S-0317 claim 7; the run is void if the recorded impact
+  point is in another cell or farther than that radius from the aircraft's recorded position),
+  and a control run with V5's test warhead. *Record:* the aircraft's position, ammunition and
+  health per tick, and the impact point. *Expected:* without a warhead the ammunition falls
+  at the impact by Formulas F6 with the piece's damage amount after claim 5's defences, and the
+  health does not change; in the control run the health falls at the impact. *Falsified if:* the
+  ammunition does not change at the impact, or the health changes at it; a control run in which
+  the health does not fall is void.
+  Part d: as part b, with the named test file also marking the undemolishable building's type
+  immune to radiation, to psychic weapons and to poison, but not immune to all damage, and no
+  control run. *Expected:* the building loses exactly 1 health at the impact, as in part b, since
+  none of the three immunity rows holds for a hit without a warhead. *Falsified if:* it loses
+  none (an immunity row stopped the hit) or more than 1.
+  Part e: as part b, with the piece thrown so that the impact point lies within the damage radius
+  of the reference point of a test tank bunker type, a copy of a stock tank bunker marked
+  undemolishable in the named test file, holding a test vehicle, and a control run with a test
+  warhead that penetrates bunkers. *Record:* the bunker's health per tick. *Expected:* in the
+  control run the bunker loses nothing (the tank-bunker row stops the hit); without a warhead it
+  loses exactly 1 at the impact, since that row does not hold. *Falsified if:* without a warhead
+  it loses none or more than 1; a control run in which it loses health is void.
+
+## Changes for other specs
+
+- **Glossary, *hit*.** "A *hit* is one delivery of an amount of damage, with a warhead, to one
+  object." becomes "A *hit* is one delivery of an amount of damage, with a warhead or, for some
+  sources (S-0302 claim 1), none, to one object." Reason: a debris piece of a type with no warhead
+  still delivers its ground-impact hits (S-0317 claim 7), and claims 6 to 8 say what such a hit
+  does.
+- **S-0317 claim 7, the row for a type with no warhead.** Its table row "A type with no warhead |
+  `unmeasured`: no scenario here isolates its hit consequences | medium, resting on S-0302"
+  should read that the hit consequences are `measurable` through S-0302 scenario D34, still
+  medium and resting on S-0302 until D34 runs.
 
 ## Open questions
 

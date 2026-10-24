@@ -1,9 +1,9 @@
 ---
 id: Q-1837
 title: An aircraft's area guard above its flight height
-status: open
+status: answered
 related: [S-0501, S-0215]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
