@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 41
+revision: 45
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-24
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845]
 supersedes: []
 ---
 
@@ -67,6 +67,23 @@ itself; (3) claim 34 holds for any *retreat* of an aircraft that is not a strike
 this one is not in *retreat* after placement, so orders and a carrier's launch-pass *move* and
 *attack* reach it; (4) AC29 parts g and h stand, with the starting heights stated there. (1) is
 rated high (AC1), (2) to (4) medium (AC29 parts g (4) and h).
+Q-1845 in full, by claim 47: (1) an aircraft becomes a tracked flying object when its take-off
+starts, on the ground at the height it has then, normally 0 leptons, or when it is placed on the
+map with its in-the-air answer *yes* and the counts-as-aircraft flag, which an aircraft type has
+unless its data turns it off; placement on the ground, from a factory, by the map or by a carrier's
+launch inside the usable area, does not track it, and leaving a pad is a take-off; (2) it stops
+being tracked at touchdown, not when its landing starts, on a pad as on open ground, at a crash
+impact, and when it leaves the map in any way, going inside a carrier, transport or building
+included; a dead aircraft stays tracked while it falls; (3) a
+landed aircraft is never tracked; (4) its sector is brought up to date at the start of each
+movement update in which it has changed cell and its speed fraction carried from the previous
+update is not zero; it moves to the end of the new sector's list only when the sector changes, so
+the sector follows its position one movement update late and not at all while it stands still.
+(5) aircraft that start being tracked in one tick join in the order of the events that start
+their tracking, with no sorting; (6) hovering, waiting, circling and attacking in flight are
+ordinary flight and tracked, and no temporary effect that holds an aircraft in flight ends its
+tracking: one that switches its locomotor off makes it crash (claim 9), and it stays tracked until
+the impact.
 Against the committed text, these rows of tables T1 and T2 change. In T1: the *approaching* row
 with no target or no ammunition goes to *done* after 1 tick, not after the standard delay (claim
 32, AC19 parts a and j); the spend of a pending round with the run lock turned off is stated
@@ -93,6 +110,8 @@ Against revision 40, revision 41 states one behaviour that revision 40 left open
 45). It also states that the placement fall-back comes before the type test that marks a
 visiting aircraft (Terms, claim 1), and adds AC29 parts g (4) and j and a placement record to
 part h.
+Against revision 41, revision 45 adds claim 47 on when an aircraft is a tracked flying object, its
+quirk switch, the counts-as-aircraft flag in Import mapping, and scenario AC30.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -1612,6 +1631,139 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       Medium for the planted bomb's handling, until AC29 part i runs, and for its timer during
       the fall (`unmeasured`)
 
+### Tracking as a flying object
+
+47. **When an aircraft is a tracked flying object (Q-1845).** S-0303 Terms define the *tracked
+    flying objects* and their *sectors* (F7) that area damage and the airborne scan of S-0309
+    claim 9 search, and leave to the movement spec the events that start and end tracking and that
+    change the sector. For an aircraft they are these.
+
+    (a) **Start.** While it is not tracked, an aircraft becomes tracked, at the end of its
+    current sector's list (S-0303 claim 11):
+    - when its take-off starts (claim 8), that is, when it accepts a destination while on the
+      ground or landing. This happens at the height it has at that moment, normally 0 leptons,
+      before it rises. Leaving a pad is such a take-off: the aircraft accepts its destination
+      while resting on the pad (claim 8). An aircraft that is already tracked, such as one taking
+      off again from a landing or after a refused touchdown (claim 7), is not added a second
+      time.
+    - when it is placed on the map (claim 1) with its in-the-air answer (Terms) *yes* and its
+      type's counts-as-aircraft flag set (Import mapping). An aircraft placed on the ground,
+      from a factory, by the map or by a carrier's launch inside the usable area (claim 35), is
+      therefore first tracked when its take-off starts. One placed at its cruise height, as a
+      visiting aircraft or outside the usable area, is tracked from its placement when that
+      height is at least 208 leptons.
+    - at a sector update of (c), in the cases (c) states.
+
+    A destination given while the aircraft is under an effect that disables vehicles, while it
+    is paralysed, while it is being erased or warped by a chrono weapon, or while its locomotor
+    is switched off is ignored. No take-off starts, so the aircraft does not become tracked.
+
+    (b) **End.** An aircraft stops being tracked:
+    - at touchdown (claim 7), when its landing ends at the landing height, on open ground and
+      on a pad alike. Starting to land does not end it, and a refused touchdown keeps it.
+    - at a crash impact (claim 9), when the fall brings its height below 1 lepton.
+    - when it leaves the map in any way: removal from the game (claim 10 included), going
+      inside a carrier, a transport or a building, and removal after death.
+
+    Nothing else ends it. An aircraft stays tracked while it hovers, waits, circles or attacks
+    in flight, while its speed fraction is 0, and while it falls, dead or with its locomotor
+    switched off, until the impact. Whether a dead object is a candidate of a search is S-0303's
+    and S-0309's. A landed aircraft resting on the ground or on a pad is never tracked. It is
+    listed in its cell layer instead (S-0209 claim 13). Since tracking starts with the take-off
+    (a), an aircraft is both tracked and listed in a cell layer from the start of its take-off
+    until its listing height becomes positive, the dual membership of S-0303 claim 6; this
+    overlap stands or falls with the start at take-off and carries its rating (below). At an
+    accepted touchdown the listing returns and tracking ends in the same update, so such a landing
+    makes no overlap. A refused touchdown lists the aircraft again in its cell layer while it
+    stays tracked (claim 7), so it does make one.
+
+    (c) **Sector update.** A tracked aircraft's sector is brought up to date at the start of
+    each of its movement updates, before that update's forward step (claim 4), when it is in
+    another cell than at its last start of tracking or sector update and its speed fraction
+    carried from the previous update is not zero. When its current cell lies in another sector
+    than its list's, it leaves that list and joins the end of its current sector's list
+    (S-0303 claim 11); otherwise its place in the list does not change. This has three
+    consequences.
+    - The sector follows the position one movement update late. An aircraft whose step takes it
+      into another sector moves to that sector's list at its next movement update; a search made
+      in between finds it in the old sector.
+    - No update happens while the carried speed fraction is 0. An aircraft that stops just after
+      crossing into another sector, or changes cell only by claim 4's descent nudge while its
+      fraction is 0, stays in the old sector's list until it moves on with a positive fraction.
+    - An aircraft in flight that is not tracked, such as one placed in the air below 208
+      leptons or one whose type lacks the counts-as-aircraft flag, becomes tracked at its first
+      movement update with a positive carried fraction, at the end of its current sector's list,
+      when its cell then lies outside sector (0, 0) of F7. While its cell lies in sector (0, 0),
+      cell (0, 0) itself included, it is not listed. It joins a list only at the first such
+      update after it has moved into another sector, at the end of that sector's list
+      (`quirks.aircraft_corner_sector_untracked`). An aircraft type that keeps the
+      counts-as-aircraft flag and has a cruise height of at least 208 leptons never reaches this
+      case.
+
+    (d) **Order.** Several aircraft that start being tracked in one tick, or move into the same
+    sector in one tick, join that sector's list in the order of the events, within the tick's
+    order (S-0203), that start their tracking or move them. Nothing sorts them. Only their order
+    within one sector's list is observable, through S-0303 claim 11's hit order and S-0309 claim
+    9's equal-score order.
+
+    (e) **Anti-air consequence.** The airborne scan of S-0309 claim 9 reads these objects, and
+    of those it finds it looks only at the ones on the map and not in the ground render layer
+    (S-0309 claim 9; claim 7 here: a height of at most 0). A building or unit whose automatic
+    search looks for aircraft therefore finds an aircraft flying on a move order without first
+    being damaged by it: from the first search after the aircraft is both tracked and out of
+    the ground render layer, while its sector is among those the search reaches. An aircraft
+    that has just started its take-off is tracked but not yet looked at. Whether a weapon may
+    then fire at it, and so whether the search takes it as a target, is S-0301's and S-0309's.
+    A weapon that may fire only at an object in the air waits for its in-the-air answer
+    (Terms).
+
+    With S-0303's `quirks.flying_search_sectors` off, (a), (b) and (d) are unchanged. Sector
+    updates then change nothing observable (S-0303 claim 11), and (c) decides only when an
+    aircraft in flight that is not tracked starts being tracked.
+    - Backing: `measurable` (scenario AC30: parts a, b, d and e back tracking in flight after a
+      take-off, bounded on both sides, the hover and the anti-air consequence of part (e); part c
+      and part i (4) that tracking holds after the landing starts; part i (1) to (3) the end at
+      touchdown, that a landed aircraft is not tracked, and the pad as open ground, through the
+      count of area-damage entries, which shows that tracking has ended by a detonation at least
+      one search interval after touchdown; part h (1) tracking from placement in the air with the
+      counts-as-aircraft flag set; part h (2) and part j the absent default of that flag; part f
+      the stop after a sector crossing in part (c); part g the untracked aircraft and sector
+      (0, 0)).
+      `unmeasured`, each for its own reason:
+      - tracking from the start of the take-off, below 208 leptons: a tracked aircraft that low is
+        found only by area damage from a detonation above the floor and by searches whose weapons
+        may fire at it there, and no fixture here sets either up during the climb; AC30 parts d
+        and e bound the start from both sides.
+      - the end at a crash impact: the only effect that follows the end in the same moment is the
+        impact's own damage, and the aircraft is destroyed by the impact either way.
+      - staying tracked while dead and falling: the area damage and the searches that read the
+        tracked objects pass over a dead object, so no observable shows the membership.
+      - the end on going inside a carrier, a transport or a building: an object inside is off the
+        map, and S-0309 claim 9 looks only at objects on the map, so the end itself does not show
+        through a search.
+      - a refused touchdown keeping the aircraft tracked: no fixture here forces a refusal at the
+        moment of touchdown.
+      - the ignored-destination list: no fixture here applies one of those effects to a landed
+        aircraft at the moment it gets a destination and then separates the missing take-off
+        from the effect's own hold on its movement.
+      - the one-update lag of (c): it shows only between the aircraft's own movement update and
+        its next one, and no fixture places a search in that window.
+      - the order of (d): no fixture here makes two aircraft start being tracked in one tick in
+        one sector with distinguishable hits.
+    - Confidence: high that a landed aircraft at rest is not tracked, on open ground and on a pad
+      alike, whether it landed after a move order or the map placed it on the ground (AC30 part
+      i (1) to (3), through area damage). Medium for tracking in flight after a take-off, for the
+      hover and for tracking from placement in the air with the flag set: AC30 parts a, b, d, e
+      and h (1) see them only through the airborne scan of S-0309 claim 9, which that claim rates
+      medium, and h (1) is an attempt that may be void. Medium for the end falling at the
+      touchdown update itself: part i shows that tracking has ended by a detonation at least one
+      search interval after touchdown, and parts c and i (4) that it holds after the landing
+      starts, but no part pins the update. Medium for the anti-air consequence of part (e), which
+      can be no firmer than the airborne scan and its ground render layer rule in S-0309 claim 9,
+      and for the absent default of the counts-as-aircraft flag (AC30 h (2), an attempt, and
+      part j, which rests on S-0004 claim 11's ranking); medium for each `unmeasured` point of (a)
+      and (b) above, the overlap at take-off included; medium for part (c) and for part (d).
+
 ## Formulas
 
 All heights and positions are integers in leptons (S-0204). "⌊ ⌋" on a quotient of integers is
@@ -2006,6 +2158,13 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
   claim 37's eligibility holds. Other aircraft draws and effects are unchanged. The default
   retains the higher smoke chance for dead aircraft. This alternative is a design rule,
   not an oracle measurement.
+- **Untracked aircraft in sector (0, 0)** (`quirks.aircraft_corner_sector_untracked`, default on =
+  original). An aircraft in flight that is not tracked and whose cell is in sector (0, 0) of
+  S-0303's F7, cell (0, 0) itself included, is not listed until it moves into another sector, so
+  neither area damage nor the airborne scan finds it there through the flying-object search
+  (claim 47 (c)). Off: at its first movement update with a positive carried speed fraction it
+  joins the end of sector (0, 0)'s list, like an aircraft in any other sector.
+  This alternative is a design rule, not an oracle measurement.
 
 ## Import mapping
 
@@ -2028,6 +2187,7 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 | `Selectable` | rules, object type | visiting test | boolean | yes |
 | `Strength`, `Cost` | rules, type | F11 | integer | S-0302, S-0403 |
 | `Spawned` | rules, type | spawned type (F7) | boolean | no |
+| `ConsideredAircraft` | rules, aircraft type | counts-as-aircraft flag: tracking from placement in the air (claim 47); other uses belong to the specs that read it | boolean | yes for an aircraft type |
 | `InitialAmmo` | rules, type | starting ammunition | S-0301 claim 10 | −1 (use maximum) |
 | `Spawns`, `SpawnsNumber`, `SpawnRegenRate`, `SpawnReloadRate` | rules, type | S-0506 Import mapping | — | S-0506 |
 | `Camera` | rules, weapon | camera weapon (visiting test) | boolean | no |
@@ -2869,9 +3029,106 @@ listed in Open questions are not claimed confirmed by these scenarios.
     processing at exactly its cruise height, the fall-back to rest and 1 tick. Falsified by a
     1-tick delay with no target held at a processing above the cruise height. Void if the
     aircraft joins a team.
+- **AC30 Tracking as a flying object (claim 47, Q-1845).** A flat purpose-made map at least 60
+  cells along each axis, so that each sector of S-0303's F7 is at least 3 cells wide. The
+  recorded house owns one stock defence whose weapons can engage only aircraft. The enemy
+  house is human-controlled, and its aircraft get only move orders, never a target: a stock
+  landable aircraft, or a named test copy of it without weapons. Neither house takes damage
+  from the other unless the defence fires. Record per tick the defence's target, turret
+  facing and shot events, and the aircraft's position, cell, height above the terrain, current
+  speed fraction, health and render layer.
+  - a. The aircraft starts on the ground inside the usable area, outside sector (0, 0) and
+    outside the defence's range, and takes off on a move order whose straight path crosses the
+    defence's range at cruise height. Expected: the defence takes the aircraft as its target and
+    turns toward it, then fires, with no damage to the defence first, at its first automatic search
+    after the aircraft enters its reach (S-0309). Falsified by no target until the defence is
+    damaged.
+  - b. A named test copy with the landable flag removed gets a move order to a cell within the
+    defence's range, so that it hovers there (AC4). Expected: the defence acquires it and
+    keeps it as a target while it hovers with speed fraction 0.
+  - c. The landable aircraft gets a move order, along a straight path from outside the
+    defence's range, to an empty cell that is the first cell of that path within the range, so
+    that it enters the range only on reaching that cell, where it slows and starts to land
+    (claim 6). The defence must not have acquired it before its landing starts. Record the tick
+    the aircraft enters the range, the tick its landing starts, the tick its in-the-air answer
+    becomes *no* and the touchdown tick. Run only if the descent keeps the in-the-air answer
+    *yes* for longer than the defence's interval between automatic searches (S-0309), since the
+    defence's weapons may fire only at an object in the air. Expected: the defence acquires it
+    during the descent, at its first automatic search after the aircraft enters the range.
+    Whether the defence keeps its target after touchdown is S-0309's and is only recorded; the
+    end at touchdown itself is part i's. Falsified (the end at the start of landing) by no
+    acquisition between the start of landing and the tick its in-the-air answer becomes *no*.
+    Void if the defence acquires it before its landing starts.
+  - d. The map places the aircraft on the ground within the defence's range, not visiting.
+    Expected: no acquisition while it stands there. Then give it a move order away. Expected:
+    acquisition no earlier than the first search of the defence after the aircraft has left the
+    ground render layer, and no later than the first search after its in-the-air answer becomes
+    *yes* (claim 47 (e)). Record the order's tick, the tick it leaves the ground render layer,
+    the tick its in-the-air answer becomes *yes*, the tick of the first target and the
+    aircraft's height at that tick, and the first shot.
+  - e. As d, with the aircraft standing on its house's pad inside the defence's range. The
+    expectation is the same as d.
+  - f. With the defence's search reaching sector *A* but not the neighbouring sector *B*, the
+    test copy of b hovers in the first cell of *A* past the *A*/*B* boundary, coming from *B*.
+    Its last forward step is the one that crosses into *A*: the movement update that makes the
+    crossing leaves its speed fraction at 0, so it takes no further step. Expected: the defence
+    does not acquire it while it hovers there; it acquires it once a new move order inside
+    *A* has made it move on with a positive fraction. This is an attempt: the run is reported
+    unreached if the aircraft takes a forward step inside *A* after the crossing. Falsified by
+    acquisition while it hovers stopped.
+  - g. Named test rules: a copy of the landable type with the counts-as-aircraft flag turned off,
+    placed by the map outside the usable area, so at its cruise height (claim 1), and given a
+    move order across the defence's range. (1) Outside sector (0, 0): expect acquisition as in
+    a. (2) Placed in sector (0, 0) and flying within sector (0, 0) past a defence that stands in
+    that sector: expect no acquisition until the aircraft first enters another sector. This is
+    an attempt: void if no usable cell in sector (0, 0) is within the defence's range of the
+    route.
+  - h. As g (2), with the test copy's counts-as-aircraft flag (1) set explicitly, and (2) left
+    out of its section. Expected in both: the aircraft is tracked from its placement in the air,
+    so the defence acquires it within sector (0, 0), at its first search after the aircraft
+    comes within its range, unlike g (2). Falsified by no acquisition until the aircraft first
+    enters another sector, which in (2) would mean an absent default of *no*. The same attempt
+    and void rule as g (2).
+  - i. Area-damage entries (S-0303 claim 6). Use S-0303 scenario A21's warhead override and
+    target health, with the aircraft as the target and the recorder of A21 for each candidate
+    entry. Cause one detonation whose height is above the terrain height of the centre cell
+    (S-0303 claim 6) with the aircraft within the spread, for example a shot at a flying decoy
+    that hovers above it, whose own entries are recorded apart. (1) The aircraft has landed on open
+    ground after a move order, at least one search interval before the detonation. (2) It has
+    landed on its house's pad in the same way. (3) The map placed it on the ground and it has
+    never moved. (4) It is in the descent of part c, after its landing has started and while
+    its listing height is positive. Record the number of entries that deliver a hit, their
+    order and the damage of each. Expected: one hit, from the scanned cell, in (1) to (3); one
+    hit, from the flying-object search, in (4). Falsified: two hits in (1), (2) or (3) (the
+    aircraft still tracked after touchdown, on the ground or on the pad), or no hit in (4) (the
+    end at the start of landing). Void when the detonation of (4) falls outside the descent, or
+    when the decoy's own hits cannot be told apart.
+  - j. Sidebar rank (S-0004 claim 11). Named test rules: a buildable test aircraft type with
+    the counts-as-aircraft key left out and a buildable test vehicle type with the naval flag
+    clear, of the same side, the same base-planning side, tech level and cost, offered in the same
+    tab; the aircraft's
+    display name sorts before the vehicle's. Make the aircraft available first, then the
+    vehicle. Expected: the vehicle's icon before the aircraft's, the aircraft ranking as air
+    with the absent default *yes*. Control: the same with the aircraft's key set to *no*, where
+    the aircraft's icon is expected first, by display name. Falsified: the aircraft first with the
+    key left out.
 
 ## Changes for other specs
 
+- **S-0303 Terms (*Tracked flying object*).** For aircraft, "an aircraft-kind object in
+  ordinary flight" could point to claim 47 here, which owns the events: tracking starts when
+  the take-off starts, at height 0, or at placement in the air, and ends at touchdown, at a
+  crash impact or on leaving the map. An aircraft placed in the air with the counts-as-aircraft
+  flag ends its placement registration at touchdown like any other aircraft, not only on
+  leaving the map. S-0303's Import mapping row for that flag gives "no" as its absent default,
+  but for an aircraft type the absent default is *yes* (Import mapping here).
+- **S-0105 Import mapping.** The absent default of the counts-as-aircraft flag is *yes* for an
+  aircraft type and *no* for other types, so S-0105's half-size shadow rule (claim 31) reads
+  *yes* for an aircraft type whose data leaves the key out.
+- **S-0004 open question 2 and claim 11.** The default that S-0004 leaves to this spec is
+  settled: the counts-as-aircraft flag of an aircraft type whose data leaves the key out is
+  *yes* (Import mapping here), so under claim 11's rule 3 such an aircraft ranks as air (1), not
+  as ground. Open question 2 can be closed with a reference to this spec (AC30 part j).
 - **S-0215 claim 7.** Its queueing table has no row for this aircraft rule: an aircraft that is
   not a strike aircraft and is in *retreat*, *paradrop approach*, *paradrop overfly*,
   *spy-plane approach* or *spy-plane overfly* ignores entirely a request to queue any behaviour
