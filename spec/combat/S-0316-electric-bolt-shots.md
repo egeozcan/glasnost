@@ -2,11 +2,11 @@
 id: S-0316
 title: Electric-bolt shots (the shot, its sparks, and how the bolt is drawn)
 topic: combat
-revision: 27
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-1701]
 supersedes: []
@@ -24,6 +24,16 @@ weapon's shot, makes neither. This spec owns when a
 bolt is made, where its ends are, which end can follow its firer, how long it lasts, its jagged
 shape, its colours and how its lines meet the screen. It corrects the glossary and S-0616, which
 describe the shot as fired instead of a projectile.
+
+Shrapnel fragments (S-0318) do not follow claim 2's ranking of the line-effect flags, which is for
+shots. A fragment of a weapon with the electric-bolt flag makes its bolt even when the weapon also
+has the laser, radiation-beam or magnetic-beam flag. A fragment of a weapon with the
+radiation-beam or magnetic-beam flag, with or without the electric-bolt or laser flag, makes no
+radiation beam and no magnetic wave while its projectile still has its attacker and the attacker
+has no live wave; the other cases are open. A fragment launched after its projectile has lost its
+attacker makes no bolt, and the shrapnel weapon's own alternate-colour flag gives a fragment's
+bolt its colour (claims 2, 8 and 10). The fragment rules for the radiation-beam and magnetic-beam
+flags are rated medium until their runs are made.
 
 ## Terms
 
@@ -109,15 +119,24 @@ describe the shot as fired instead of a projectile.
    electric-bolt flag, makes one bolt, in the tick of the shot. A shot that S-0301 claim 15 makes
    void (its projectile cannot be put on the map) makes no bolt and no sparks, so every bolt that a
    shot makes belongs to a shot whose projectile was put on the map (a fragment's bolt is claim
-   8's). Each shot of a burst makes its own bolt and its own spark system (S-0301 claim 4). Of a
-   weapon's line-effect flags, the laser flag wins over the electric-bolt flag, and the
-   electric-bolt flag wins over the radiation-beam flag (S-0514 claim 23), so a weapon that also
-   has the laser flag draws a laser and makes no bolt and no bolt sparks (the sparks of claim 6
-   come only with a bolt). The electric-bolt flag also wins over the magnetic-beam flag. This part
-   of the ranking is this claim's own; no other spec gives it. A weapon with the
-   electric-bolt flag and the magnetic-beam flag makes the bolt and no magnetic wave, even when its
-   firer has no live wave, and the shot itself is still fired, as S-0607 claim 21 says of a shot
-   that makes no wave (Changes for other specs).
+   8's). Each shot of a burst makes its own bolt and its own spark system (S-0301 claim 4).
+   - Shots. Of a weapon's line-effect flags, the laser flag wins over the electric-bolt flag, and
+     the electric-bolt flag wins over the radiation-beam flag (S-0514 claim 23), so a shot of a
+     weapon that also has the laser flag draws a laser and makes no bolt and no bolt sparks (the
+     sparks of claim 6 come only with a bolt). The electric-bolt flag also wins over the
+     magnetic-beam flag; this part of the ranking is this claim's own, and no other spec gives
+     it. A weapon with the electric-bolt flag and the magnetic-beam flag makes the bolt and no
+     magnetic wave, even when its firer has no live wave, and the shot itself is still fired, as
+     S-0607 claim 21 says of a shot that makes no wave (Changes for other specs).
+   - Fragments, the laser flag (S-0318 claim 8). The ranking is for shots. A fragment of a weapon
+     with both the laser flag and the electric-bolt flag makes both a laser beam and a bolt; S-0318
+     claim 8 states which fragments make a laser beam or a bolt.
+   - Fragments, the radiation-beam and magnetic-beam flags (this claim's own, not S-0318's).
+     Neither flag suppresses a fragment's bolt. A fragment of a weapon that has either or both of
+     those flags makes no radiation beam and no magnetic wave, whether the weapon also has the
+     electric-bolt flag, the laser flag or neither. This is claimed for a fragment launched while
+     its projectile still has its attacker (claim 8) and while the attacker has no live wave.
+     What a fragment launched in either other case makes is open (Open questions).
    The particle-effect flags of S-0301 claim 5 (fire, spark and railgun) and the sonic flag are
    outside this ranking: a weapon with the electric-bolt flag and any of them makes those effects
    as well, by their own rules. The single wave slot that a sonic wave and a magnetic wave share
@@ -125,12 +144,36 @@ describe the shot as fired instead of a projectile.
    - An electric-bolt shot adds no delay of its own. The next shot waits only by S-0301's rules:
      a bolt still being drawn is not one of the effects whose life S-0301 claim 5 makes a
      weapon wait for.
-   - Backing: `measurable` (scenarios EB1 and EB3; EB1 part i for a void shot, and EB1 part l for
-     the magnetic-beam flag). `unmeasured` for the independent flags and
-     the absence of a delay: no scenario gives the test weapon those flags or times its shots
-   - Confidence: high; medium for the void shot, as S-0301 claim 15 rates failed launches; medium
-     for the magnetic-beam flag, until EB1 part l is run; low for the
-     independent flags and the absence of a delay
+   - Backing:
+     - Shots: `measurable` (scenarios EB1 and EB3; EB1 part i for a void shot, and EB1 part l for
+       the magnetic-beam flag). `unmeasured` for the independent flags and the absence of a delay:
+       no scenario gives the test weapon those flags or times its shots.
+     - Fragment weapon with the laser flag and the electric-bolt flag: rests on S-0318 claim 8
+       (S-0318 scenario SH1 part m run 3).
+     - Fragment weapon with the electric-bolt flag and the radiation-beam or magnetic-beam flag:
+       `measurable` (scenario EB6 part c, runs 1 and 2, each read against part c's control runs),
+       for the bolt and for the fragment making no radiation beam and no magnetic wave.
+     - Fragment weapon without the electric-bolt flag that has both or one of the radiation-beam
+       and magnetic-beam flags: `measurable` (scenario EB6 part c, runs 3 to 5, each read against
+       part c's control runs), for the fragment making no radiation beam and no magnetic wave.
+     - Fragment weapon with the laser flag and both of those flags: `measurable` (scenario EB6
+       part c, run 6, read against part c's control runs), for the fragment making no radiation
+       beam and no magnetic wave; its laser beam rests on S-0318 claim 8.
+     - EB6 part c sees drawn effects only: a beam or wave made and ended between two drawn frames
+       would escape it, so these runs back the absence of a drawn beam or wave.
+   - Confidence:
+     - high for shots, except as follows; medium for the void shot, as S-0301 claim 15 rates
+       failed launches; medium for the magnetic-beam flag, until EB1 part l is run; low for the
+       independent flags and the absence of a delay.
+     - Medium for a fragment weapon with both the laser flag and the electric-bolt flag, as
+       S-0318 claim 8 rates it.
+     - Medium for the bolt of a fragment weapon that also has the radiation-beam or
+       magnetic-beam flag, until EB6 part c's runs 1 and 2 are made.
+     - Medium for the absence of a radiation beam and a magnetic wave from a fragment of a weapon
+       with the electric-bolt flag, until EB6 part c's runs 1 and 2 are made.
+     - Medium for the same absence from a fragment of a weapon without the electric-bolt flag,
+       until EB6 part c's runs 3 to 5 are made, and from one of a weapon with the laser flag as
+       well, until run 6 is made.
 
 3. **Its ends.** The bolt runs from the firer's fire point (the fire point of S-0313, claims 1 to 8) to the bolt end
    (Terms). The fire point is the one for the weapon slot that fired the shot. For a redirected
@@ -253,16 +296,18 @@ describe the shot as fired instead of a projectile.
    - Confidence: high
 
 8. **Shrapnel fragments.** A projectile with a shrapnel weapon launches fragments (S-0306 claim
-   21). When that shrapnel weapon has the electric-bolt flag, each fragment launched before the
-   projectile's firer has gone also makes a bolt with its spark system. That bolt runs from the
-   point where the fragments burst to the fragment's target, with the end rule of the Terms, and
-   is never attached. When fragments are launched, how many, and which target each is aimed at
-   belong to the fragment rules, which have no owner yet (S-0306 Open questions). So this claim
-   fixes that each fragment launched before the firer has gone makes one bolt, that it starts at
-   the burst point and ends at its fragment's target, and that it has sparks. Only the choice of
-   that target is left to the fragment rules. Which weapon's alternate-colour flag gives the
-   bolt its colour, and whether a fragment launched after the projectile's firer has gone still
-   makes a bolt, are open (Open questions).
+   21; S-0318). The projectile's firer here is its attacker in S-0318's sense, the object that
+   fired it, for as long as the projectile still has it. When that shrapnel weapon has the
+   electric-bolt flag, each fragment launched while the projectile still has its attacker also
+   makes a bolt with its spark system. That bolt
+   runs from the point where the fragments burst to the fragment's target, with the end rule of
+   the Terms, and is never attached. When fragments are launched, how many, and which target each
+   is aimed at belong to S-0318 (claims 1 to 6). So this claim fixes that each fragment launched
+   while the projectile still has its attacker makes one bolt, that it starts at the burst point and ends at its
+   fragment's target, and that it has sparks. Only the choice of that target is left to S-0318. A
+   fragment launched after the projectile has lost its attacker makes no bolt, and the shrapnel
+   weapon's own alternate-colour flag selects the colour of the bolt's side strands; the flag of
+   the weapon that fired the bursting projectile plays no part (S-0318 claim 8).
    For depth (F4), the projectile's firer counts as the bolt's firer: when it is a building, the
    fragment's bolt takes the building-source adjustment *a* of S-0518 claim 20, with the burst
    point in place of the fire point, and *a* = 0 for any other firer.
@@ -271,8 +316,12 @@ describe the shot as fired instead of a projectile.
      firer whose bolt claim 4 attaches. The building-source adjustment of a fragment's bolt is
      `unmeasured`: EB6's firer is not a building, and the adjustment shows only in which
      images hide the bolt near its start.
+     No bolt after the projectile has lost its attacker, and the colour, rest on S-0318 claim 8
+     (S-0318 scenario SH3 part d for the lost attacker, SH1 part m run 4 for the colour).
    - Confidence: medium (one bolt per fragment from the burst point, with sparks); low (never
-     being attached, `unmeasured`); medium (the building-source adjustment, `unmeasured`)
+     being attached, `unmeasured`); medium (the building-source adjustment, `unmeasured`); medium
+     (no bolt after the projectile has lost its attacker, and the colour, as S-0318 claim 8
+     rates them)
 
 ### How it is drawn
 
@@ -322,16 +371,18 @@ describe the shot as fired instead of a projectile.
     and C use entry 10, or entry 5 when the weapon has the alternate-colour flag. The main strand A
     always uses entry 15. Which colour each entry shows comes from the user's palette file. For a shot's bolt the
     flag is read from the weapon of the slot that fired (claim 3); for a fragment's bolt (claim 8),
-    which weapon's flag is read is open (Open questions). The general palette is never tinted, so
+    it is read from the shrapnel weapon (S-0318 claim 8). The general palette is never tinted, so
     neither the cell's lighting nor coloured light changes which colour an entry gives. The one
     light that acts on a bolt is the pixel's light-alpha value of claim 11, applied after the entry
     is chosen.
     - Backing: `measurable` (scenario EB4, with its colour runs for a second house and the
       alternate-colour flag) for the entries. `unmeasured` for the cell's lighting
       and coloured light, which EB4 does not vary; that the general palette is never tinted is
-      S-0306's (Terms)
-    - Confidence: high for the entries, read from the slot that fired as claim 3 rates it; low
-      for the lighting and coloured light (both `unmeasured`)
+      S-0306's (Terms). The shrapnel weapon's flag for a fragment's bolt rests on S-0318
+      claim 8 (S-0318 scenario SH1 part m run 4)
+    - Confidence: high for the entries, read from the slot that fired as claim 3 rates it; medium
+      for a fragment's bolt, as S-0318 claim 8 rates it; low for the lighting and coloured light
+      (both `unmeasured`)
 
 11. **How its lines meet the screen.** Each piece of each strand is a solid line one pixel wide
     between the screen positions of its two points (S-0101 claim 5, each with its own height lift),
@@ -545,10 +596,10 @@ and the order rests on S-0201 claim 6's order of drawn frame and tick, which S-0
 |---|---|---|---|---|
 | `IsElectricBolt` | weapon | the electric-bolt flag (claims 1 to 13) | boolean | no |
 | `IsAlternateColor` | weapon | strand B and C colour choice (claim 10) | boolean | no |
-| `IsLaser` | weapon | the laser flag that wins over the bolt (claim 2, S-0514 claim 23) | boolean | no |
-| `IsRadBeam` | weapon | the radiation-beam flag that the bolt wins over (claim 2, S-0514 claim 23) | boolean | no |
+| `IsLaser` | weapon | the laser flag that wins over the bolt for shots (claim 2, S-0514 claim 23) | boolean | no |
+| `IsRadBeam` | weapon | the radiation-beam flag that the bolt wins over for shots (claim 2, S-0514 claim 23) | boolean | no |
 | `Spawner`, `DrainWeapon`, `DiskLaser`, `Suicide` | weapon | the firings without a projectile of claim 1 | as mapped by their own specs: S-0301 (spawner), S-0608 (drain), S-0615 (disc laser), S-0519 (suicide) | those specs' rows |
-| `IsMagBeam` | weapon | the magnetic-beam flag that the bolt wins over (claim 2; S-0607 claim 21 for its wave) | boolean | no |
+| `IsMagBeam` | weapon | the magnetic-beam flag that the bolt wins over for shots (claim 2; S-0607 claim 21 for its wave) | boolean | no |
 | `UseFireParticles`, `UseSparkParticles`, `IsRailgun`, `IsSonic` | weapon | effect flags independent of the bolt (claim 2, S-0301 claim 5) | boolean | no |
 | `DefaultSparkSystem` | `[CombatDamage]` | the game-wide spark type at the bolt end (claim 6) | name | S-0616's row |
 | `PALETTE.PAL` | none (file name fixed by the original) | the general palette of claim 10 | palette file | S-0306's row |
@@ -713,10 +764,44 @@ skirmish at a fixed game speed.
   (S-0004). Part a: count the bolts at the burst.
   Expected: one bolt per fragment, each starting at the burst point and ending where that
   fragment is aimed (whatever rule picks it), each with sparks. Falsified if part a shows another
-  count or start. Part b (record only, for the Open questions): the same shot from a long range,
-  with the firer destroyed while the projectile flies; record whether fragment bolts appear and
-  whether fragments fly. It judges no claim: without a known firer, fewer fragments launched and
-  no bolt for a launched fragment can look alike.
+  count or start. Part b, record only: the same shot from a long range, with the firer destroyed
+  while the projectile flies; record whether fragment bolts appear and whether fragments fly.
+  Without a known firer, fewer fragments launched and no bolt for a launched fragment can look
+  alike, so part b is not judged (claim 8 gives what this rests on).
+  Part c: as part a, in six runs, with frame capture recording also whether a radiation beam or
+  a magnetic wave appears. The set-up is chosen so that either effect, if a fragment made it,
+  would be made and would show where the owning specs put it:
+  - Every target stands at least 512 leptons (horizontally) from the burst point and from the
+    attacker, so each fragment's horizontal span, and the attacker's span to any fragment target,
+    is above the 240 leptons under which S-0607 claim 21 makes no wave.
+  - The attacker's own weapon has none of the line-effect flags, so the attacker has no live wave
+    when the fragments launch.
+  - The radiation-beam colour used in this test is a test colour that neither the bolt's colours,
+    the terrain nor the targets use.
+  - The capture covers the attacker, the burst point and every target, and records every frame
+    from the burst until 20 frames after it. It looks anywhere in that view for a radiation beam
+    as S-0514 claims 24 and 25 draw one (a chain of segments oscillating in height, straight only
+    in its first frame, in the test colour scaled by a factor between 0.5 and 1), starting at the
+    attacker's fire point or at the burst point, and for S-0607's drawn wave between the attacker
+    or the burst point and any target.
+  Control runs, before the six runs: (i) the attacker fires a test weapon with the radiation-beam
+  flag at one of the targets; (ii) it fires a test weapon with the
+  magnetic-beam flag at one of them. Expected: the capture finds the beam in (i) and the wave in
+  (ii); if it misses either, the six runs are not judged for that effect. Run 1 gives the
+  shrapnel weapon the radiation-beam flag as well, run 2 the magnetic-beam flag; run 3 removes the
+  electric-bolt flag and gives it both the radiation-beam and the magnetic-beam flag; runs 4 and 5
+  remove the electric-bolt flag and give it the radiation-beam flag alone (run 4) or the
+  magnetic-beam flag alone (run 5); run 6 removes the electric-bolt flag and gives it the laser
+  flag with both the radiation-beam and the magnetic-beam flag. A bolt's lines are jagged and in
+  the bolt's colours, and a laser beam is straight in every frame, so a beam in the test colour is
+  told from them in runs 1, 2 and 6, and runs 3 to 5 make no bolt that could hide either.
+  Expected: in runs 1 and 2, as part a, one bolt per fragment with its sparks; in runs 3 to 6 no
+  bolt and no sparks; in run 6 a laser beam per fragment (S-0318 claim 8); in every run no
+  radiation beam and no magnetic wave. Falsified if run 1 or 2 shows no bolts or fewer bolts than
+  fragments, if run 3, 4, 5 or 6 shows a bolt, or if any run shows a radiation beam or a magnetic
+  wave. The capture sees drawn frames only: a beam or wave made and ended between two drawn
+  frames would escape it, and a recorder of the objects created at the burst would rule that out
+  as well.
 - **EB7, depth and shroud (claim 11).** Set-up: a test map where the stationary test vehicle fires
   the test weapon (a) from low ground at a target on high ground, across a cliff edge that stands
   in front of the bolt's lower part on screen; (b) at a target behind a building of a third house,
@@ -808,9 +893,8 @@ skirmish at a fixed game speed.
   shot fired by occupants: an ordinary shot's report takes no draw. A test weapon with no report
   sound, read with the random-state recorder, removes even that case (scenario EB8), so that part
   can become `measurable`.
-- **S-0306 Import mapping.** It says the shrapnel weapon and count are not imported there. The
-  spec that comes to own the fragment rules imports them; claim 8 here then reads the electric-bolt
-  flag of that shrapnel weapon.
+- **S-0306 Import mapping.** It says the shrapnel weapon and count are not imported there.
+  S-0318 imports them; claim 8 here reads the electric-bolt flag of that shrapnel weapon.
 - **S-0313 claim 5.** It gives a passenger's fire point for infantry only. A vehicle carried by
   an open-topped transport fires from S-0313 claim 1's fire point computed from its own
   position, facings, weapon slot and burst counter, with its position the transport's (S-0507
@@ -818,16 +902,26 @@ skirmish at a fixed game speed.
 - **S-0607 claim 21.** It creates a magnetic wave whenever the firer has no live wave. By claim 2
   here, a magnetic-beam weapon that also has the electric-bolt flag makes no wave; the shot itself
   is still fired, as claim 21 already says of a shot that makes no wave. Claim 21's creation
-  bullet could list this exception. Proposal, not backed here: the laser and radiation-beam flags
-  are likewise ranked above the magnetic-beam flag, so that only the highest of the four
+  bullet could list this exception, and also that a shrapnel fragment launched while its
+  projectile still has its attacker, and while the attacker has no live wave, makes no magnetic
+  wave (claim 2 here). Proposal, not backed here: the laser and radiation-beam flags are likewise ranked above the magnetic-beam flag, so that only the highest of the four
   line-effect flags a weapon has makes its effect; S-0514 and S-0607 would need their own
   scenarios for those pairs.
 - **S-0102 claim 2.** No change: it already places bolts after lasers and before line trails.
 - **S-0514 claim 23.** Its ranking of line-effect flags ends at the radiation beam. Claim 2 here
   adds that the electric-bolt flag also wins over the magnetic-beam flag. The order of the other
-  flags against it is the proposal under S-0607 claim 21 above.
+  flags against it is the proposal under S-0607 claim 21 above. Claim 23's "each time a weapon
+  with the radiation-beam flag fires a shot" could also say that a shrapnel fragment launched
+  while its projectile still has its attacker, and while the attacker has no live wave, makes no
+  radiation beam (claim 2 here).
 
 ## Open questions
+
+- **Fragments in the other cases.** Whether a fragment of a weapon with the radiation-beam or
+  magnetic-beam flag makes either effect when it is launched after its projectile has lost its
+  attacker, or while the attacker has a live wave (the case on which S-0607 claim 21 turns), is not
+  claimed (claim 2). A run of part c's set-up in which the attacker's own weapon has the
+  magnetic-beam flag and fires just before the burst would test the second.
 
 - **Slot.** In which shots the original's fresh weapon choice against the shot target (Edge
   cases) gives a slot other than the one that fired. S-0518 claim 7 gives one candidate: a prism
@@ -844,12 +938,6 @@ skirmish at a fixed game speed.
   rotation sound and music is off, so that no sound instance is made in the window, and a run in which any sound is heard is void. Our engine fixes the order by design: within one cycle, the bolt draws of its
   drawn frame are taken before the per-instance sound draws of that cycle's end pass, so that
   identical inputs give identical choices (S-0701).
-- **Shrapnel without a firer.** Whether a fragment launched after the projectile's firer has gone
-  makes a bolt (claim 8). The original is believed to make fragment bolts only while the firer is
-  known, but which fragments are launched once the firer is gone belongs to the fragment rules
-  that S-0306 lists as open, so EB6 part b can show that no bolt appears without showing why.
-- **Fragment colour.** Which weapon's alternate-colour flag gives a fragment's bolt its colour
-  (claims 8 and 10): the shrapnel weapon's or the weapon that fired the projectile.
 - **Interior pixels.** Which pixels a piece covers between its ends, as for the beam flash (S-0514
   Open questions).
 
