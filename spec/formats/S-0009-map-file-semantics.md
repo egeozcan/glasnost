@@ -2,13 +2,13 @@
 id: S-0009
 title: Map file semantics (geometry, terrain streams, waypoint markers, start positions, preview)
 topic: formats
-revision: 27
+revision: 44
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-24
 measurements: []
-requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419]
+requests: [Q-0010, Q-0016, Q-0018, Q-0023, Q-0045, Q-0046, Q-0419, Q-1805]
 supersedes: []
 ---
 
@@ -27,9 +27,11 @@ map's rules overrides are outside this spec (Open questions).
 Gameplay requirements specify skirmish only. Claims 47 and 48 additionally specify the house
 identity import needed for map inspection without skirmish reassignment, complementing
 S-0103 claim 14. This limited import probe does not establish campaign gameplay support.
-Network games and campaigns are out of scope. References
-below to their differing behaviour are retained as historical context, not requirements or
-measurement proposals for this revision.
+Network games and campaigns are out of scope, except what a network lobby needs (Q-1805):
+the house order of several human players and observers (claim 19) and the position an
+observer is shown (claim 22). Claim 19's rules for ties, for the order among observers, for a
+network game's random colours and for the place of observers in the house order are design
+rules of our engine; the original's place for observers is open (Open questions).
 
 S-0012 claim 9, Formulas F3 and scenario R2 own partial terrain values. Claims 45 and 46
 cover standard skirmish starting units; the all-base-units family follows S-0412 claim 13,
@@ -72,6 +74,14 @@ Claim 40 follows S-0215 claim 1: set-up queues *guard*, the grand opening during
 placement sets readiness, and *guard* becomes current at the building's first per-tick
 start. Confirm its placement-time slot effects with S-0108 claim 11 and the set-up
 exclusion of the free unit with S-0402 claim 18 at joint hand-off.
+
+**S-0412 claim 7 (Q-1805).** No change is needed. Its statement that no observable shows the
+order in which players are resolved holds within its scope, a skirmish with one human. In a
+network game, which human on "random" gets which colour slot decides that human's place in
+claim 19's house order and so the start positions. Our engine draws the slots of every player
+on "random", human or computer, in increasing lobby-slot order (claim 19, design). No
+observable against the original fixes that order, because how the original draws them in a
+network game is open.
 
 ## Terms
 
@@ -142,12 +152,12 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
 - **Farthest-sum rule.** The rule by which a player without a chosen start position is given one
   (claim 19).
 - **House number.** A house's place in the creation order of claim 19, counting from 0: the
-  players first (an observer's house among them, in the human part of the house order of
-  claim 19), then the neutral house, then the special house.
+  players first (an observer's house among them, placed as claim 19 states), then the neutral
+  house, then the special house.
 - **Observer.** A human participant whom the lobby sets to watch the game instead of playing it.
-  The original still creates a house for an observer, in the human part of the house order of
-  claim 19, but an observer does not count towards the player count P of claim 17 and receives no
-  starting units.
+  The original still creates a house for an observer. Our engine places it as claim 19 states,
+  and the original's place is open. An observer does not count towards the player
+  count P of claim 17 and receives no starting units.
 - **Passive house.** A house whose country is marked passive for multiplayer games by the
   country's passive field (Import mapping), as that field stands when the test is made (claims 28
   and 33 say which country data each test sees). A passive house takes no start position (claim 19) and
@@ -698,10 +708,35 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       S-0212 claim 25 on a flat map
 
 19. **Assigning positions to players.** Houses are created in a fixed order: human players in
-    increasing order of their chosen colour index (on a tie, the earlier lobby slot first), then
-    computer players in lobby-slot order, then the neutral house, then the special house. Players
-    who chose a start position get that list entry. Players left on "random" then receive positions
-    one at a time in house order:
+    increasing order of their colour slot, then computer players in lobby-slot order, then the
+    neutral house, then the special house. This holds for any number of human players, and every
+    non-observer human player's house comes before every computer player's. Observers come between
+    the non-observer human players and the computer players. That place is our engine's rule
+    (design); the original's place for observers is open (Open questions).
+    - A human whose colour was left on "random" is placed by the colour slot S-0412 claim 7 gave
+      it, exactly as if it had chosen that slot: the colour draws come before the house order is
+      fixed. S-0412 claim 7 places the draws for a
+      skirmish game. In a network game the original resolves "random" colours at the same point
+      of the game start. Which peer makes those draws, and in which
+      order, is open (Open questions).
+      - Backing for the draws coming first in a network game: `unmeasured`, because no measurement
+        setup yet runs a network game on the stock executable; M10 run 3 would back it then, since
+        a game of several humans is a network game. Confidence: low (unmeasured).
+    - The colour draws never give a player a slot that another player holds (S-0412 claim 7), so
+      they cannot produce a tie between two humans. Whether two humans can hold the same chosen
+      colour in the original is open (Open questions). In our engine such a tie goes to the
+      earlier lobby slot (design).
+    - Observers hold no colour slot (S-0412 claim 7). They come after every human player with a
+      slot and before every computer player. Among themselves they come in lobby-slot order in
+      our engine, the same on every peer (design). The original's order among several observers
+      is not known (Open questions).
+    - In our engine, S-0412 claim 7's colour-slot rule also gives the slots of a network game's
+      players on "random": every such player, human or computer, draws in increasing lobby-slot
+      order (design), so every peer gets the same slots. How the original draws them in a network
+      game is open (Open questions), so this order cannot yet be checked against the original.
+
+    Players who chose a start position get that list entry. Players left on "random" then receive
+    positions one at a time in house order:
 
     | Positions taken when the player's turn comes | Position the player gets |
     |---|---|
@@ -730,10 +765,19 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       M10c for the two reductions of a pair with a start cell far outside the map). The case in
       which every sum is below 0 is `unmeasured`: the original's result is unspecified, so there is
       nothing to compare with.
-    The ordering among multiple humans is `unmeasured` in this revision: skirmish has one
-    human participant, so M10's deferred network sub-test supplies no in-scope observation.
-    - Confidence: high for the rule and the tabulated square root, medium for the colour-index
-      ordering of humans and for the two reductions
+    - Backing for the house order of several humans and observers: `unmeasured` until a
+      measurement setup can run a game of several human players on the stock executable. M10's
+      colour-order sub-test is the scenario proposed to back it then: the colour-slot order of
+      humans (runs 1 and 2), the place of a human on "random" given its slot (run 3) and the
+      place of one observer (run 4, which would bear on the original's place for observers,
+      open). Our engine's tie order, observer order, observer place and network colour draws are
+      our engine's choice (design); the original's behaviour for those four is open (Open
+      questions).
+    - Confidence: high for the rule and the tabulated square root; medium for the two
+      reductions; low for the colour-slot ordering of humans and the place of a human on
+      "random" (unmeasured), though each is a single rule with no exception. The place of
+      observers is our engine's rule and gets no rating against the original, whose place is
+      open.
 
 20. **Start positions are resolved in two phases, from three start lists.** The *early phase*
     runs after the map size, the header block, the local area and the waypoint markers are read, and
@@ -795,8 +839,9 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
     | at least one | the lowest-numbered taken position | none: the observer takes nothing |
 
     - Backing: `measurable` (scenario M15's skirmish branch). The branch with an already
-      taken position is `unmeasured` here: its discriminating setup needs a human player
-      and a separate human observer, a network game outside this revision's scope.
+      taken position is `unmeasured`: its discriminating setup needs a human player and a
+      separate human observer. M10's colour-order sub-test, run 4, would back it once a
+      measurement setup can run a game of several human players on the stock executable.
     - Confidence: low
 
 ### Map selection data and preview
@@ -881,7 +926,8 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       Network-specific owner rules are `unmeasured` here because network games are out of
       scope. The online-name rule is `unmeasured`: online games need an online game
       service, which the measurement setup does not include.
-    - Confidence: medium
+    - Confidence: medium; low for the multiplayer-game statements and the online-name rule, which
+      are `unmeasured` network-game claims
 
 28. **Unused-house cleanup.** If the game has no computer players and fewer human slots (observers
     included) than the rules' maximum player count (Import mapping: an integer taken from the base
@@ -953,11 +999,14 @@ Terms used as defined in the shared glossary: *cell*, *lepton*, *height level*, 
       because the former proposal reused M16 variant A's network setup, and no
       discriminating no-computer-player skirmish fixture is established. That AI houses count as computer players
       is our engine's reading of the condition (design), not an oracle observation.
-    - Confidence: high that a removed house is gone with its objects and that the house after a
-      removed one is kept; medium for the condition; low for the trigger removal (including that tags created
-      at the end of loading escape it), the use of the map's override, the late-phase position and
-      its starting units; high for cleanup after the second pass and before the late phase,
-      medium for removal-cell recalculations and their conditional tile-animation draws
+    - Confidence: high that a removed house is gone with its objects; medium for the condition's
+      computer-player branch (M16 variants B and G); low for the removal condition without computer
+      players, alternating removals, the special house's starting units and the
+      maximum-player-count boundary, for cleanup after the second pass and before the late phase,
+      and for removal-cell recalculations and their conditional tile-animation draws, each
+      `unmeasured` because its setup is a network game; low for the trigger removal (including that
+      tags created at the end of loading escape it), the use of the map's override, the late-phase
+      position and its starting units
 
 ### Skirmish start positions: header pairs as start marks
 
@@ -1631,9 +1680,10 @@ read, in the placement order of claim 43, while the game's set-up at game start 
       the same way as the measured cases.
     - Confidence: high for the budget formula, the pools, the one-third rule, the failure limit,
       the type draw and the early stop, and that a player's house has the game's tech level; medium
-      for the left-over credits, for the setup values' path from the setup screen (Import
-      mapping), for the game's tech level being copied once at program start and changed by
-      nothing later, and for the neutral and special houses' tech level 1
+      for the left-over credits, for the setup values' path from the setup screen (Import mapping),
+      for the game's tech level being copied once at program start and changed by nothing later,
+      and for the neutral house's tech level 1; low for the special house's tech level and starting
+      behaviour, `unmeasured` because the setup that separates them is a network game
 
 46. **Where starting units are placed, and their draws.** In standard skirmish mode, all placements of this step happen while the map is still loading. Putting an object on a cell then ignores the cell's land type and occupants (the entry test that play applies is skipped during loading). So putting a unit directly on its base cell, or on a cell that the placement search below has accepted, is not known to fail in any established case. Apart from a base cell that is not a legal cell (the base-unit bullet below), a placement fails only when the search finds no cell that accepts the unit. The all-base-units family is an exception: its placement rules are S-0412 claim 13's, not the placement rules below.
     - **The base unit** is put directly at the centre of its base cell, with body facing 0
@@ -2339,6 +2389,7 @@ the original's absent-key behaviour.
 | [Basic] MinPlayers, MaxPlayers | shown in the map list only | integer | 2 and 4 (loose map files) |
 | [Basic] GameMode | game modes the map is listed under | string list | empty |
 | [Basic] Official | official-map flag | boolean | false |
+| [Basic] Theme | map theme: read and kept as map data; S-0703 (claim 11 and its Import mapping) gives what it means and how it is parsed | string, with the text limit S-0703 gives (127 bytes) | no map theme |
 | [Digest] | map digest for multiplayer comparison | string | "No Digest" |
 | [RandomMap] NumPlayers | lobby fallback player count (claim 23) | integer | 0 → 8 |
 | [Basic] TiberiumGrowthEnabled, VeinGrowthEnabled, IceGrowthEnabled | growth switches (economy topic, no spec yet) | boolean | true, true, true |
@@ -2837,13 +2888,59 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   2 computers) all on "random", 50 runs. House order is the human, then the computers in lobby-slot
   order. *Expected:* the human's position is roughly uniform over the 4 (each between 5 and 20 of
   the 50 runs). The first computer is always at the position farthest from the human. The second
-  computer has the largest distance sum, with ties going to the lower position. Colour-order
-  sub-test (deferred, no backing in this revision): a two-human network game
-  (2 humans, 1 computer, all on "random"), 10 runs, then the same
-  with the two humans' colour indices swapped, 10 runs. *Expected:* the human with the lower colour
-  index takes the uniformly drawn position in every run, so the roles of the two humans swap with
-  the colours. *Falsified if* any run breaks the farthest-sum rule, a position is never or almost
-  always drawn first, or swapping colours does not swap the roles.
+  computer has the largest distance sum, with ties going to the lower position.
+  *Colour-order sub-test (claim 19's house order of several humans; run 4 also claim 22's taken branch).* It needs a game of several
+  human players on the stock executable; no measurement setup runs one yet. Every start is on
+  "random". Runs 1 to 3 use 4 start waypoint markers in one row, 10 cells apart, numbered 0 to 3
+  from the row's west end. Every run records each player's start position.
+  *Telling runs.* The first player in the house order takes the drawn position, and every later
+  position follows from it by the farthest-sum rule, so for each candidate order of the humans
+  the analysis computes the positions that order would give from its first player's observed
+  position. A run is telling when only one candidate order reproduces every observed position.
+  The other runs back nothing. On this row, a draw of marker 1 or 2 makes run 1 telling (half
+  of all draws), and only a draw of marker 2 makes runs 2 and 3 telling (a quarter).
+  - Run 1: 2 humans in lobby slots 1 and 2 with chosen colour slots 5 and 2, and 1 computer,
+    10 runs, then the same with the two humans' colour slots swapped (2 and 5), 10 runs.
+    *Expected:* in every telling run the human with the lower colour slot is
+    first, so the roles of the two humans swap with the colours. Ten runs leave no telling run
+    about once in a thousand series.
+  - Run 2: 3 humans in lobby slots 1, 2 and 3 with chosen colour slots 5, 1 and 3, and 1
+    computer, 20 runs. *Expected:* every run is reproduced by the house order of the humans of
+    lobby slots 2, 3 and 1, then the computer, and in every telling run only by that order.
+    Twenty runs leave no telling run about three times in a thousand series.
+  - Run 3: as run 2, but the humans of lobby slots 1 and 2 choose colour slots 1 and 6 and the
+    human of lobby slot 3 leaves its colour on "random", and the computer is given colour slot 7,
+    40 runs, recording the slot it is given.
+    *Expected:* every run is reproduced by the order in which that human stands among the other
+    two by the slot it was given, as if it had chosen it, and in every telling run only by that
+    order. The alternatives are placing that human first, after every chosen colour, or by its
+    lobby slot; from lobby slot 3, outside the other two humans' lobby slots, the last is the
+    same order as after every chosen colour. A given slot between the other two humans' slots,
+    2 to 5, puts it between them, which tells this rule from all three alternatives. A given
+    slot of 0 puts it first, which tells the rule only from the last two. Slot 7 is the computer's,
+    so it cannot be given (S-0412 claim 7). A run backs the rule only against the
+    alternatives it tells apart. If the given slot is equally likely to be any of the five
+    free slots (0 and 2 to 5), so from 2 to 5 in four draws of five, and with a telling position
+    draw in one of four, 40 runs leave no run telling all three apart about 13 times in
+    100 000 series.
+  - Run 4: as run 2 with one more human set to observe, in a lobby slot after the computer's,
+    20 runs, on a map with 5 start waypoint
+    markers in one row, numbered 0 to 4 at 30, 0, 10, 20 and 40 cells from the row's west end,
+    recording the position the observer is shown at the start. *Expected:* by claim 22, the
+    observer is shown the lowest-numbered of the three humans' positions. An observer whose turn
+    came first would be shown the first human's position, which differs from that whenever the
+    draw is not of marker 0 (four draws in five). One whose turn came after the computer would
+    be shown the lowest-numbered of all four taken positions, which differs whenever the draw
+    is of marker 2 or 3 (two draws in five), since the computer then holds marker 0. An order
+    by lobby slot would put the observer after the computer, which is this last case. Twenty runs
+    leave no run telling the second case apart in fewer than one series in ten thousand.
+  *Falsified if* any run breaks the farthest-sum rule, a position is never or almost always drawn
+  first, a run of runs 1 to 3 is not reproduced by the predicted order (for a human on
+  "random", the order its given slot predicts), or the observer is shown a position other than
+  the lowest-numbered of the three humans' positions. That last result falsifies either claim
+  19's place for observers, against the two rival places run 4 tells apart (first in the house
+  order, or after the computer, which an order by lobby slot also gives), or claim 22's rule for
+  an observer whose turn comes after a position is taken; run 4 alone does not say which.
 - **M10b, tabulated square root (claim 19, quirk `quirks.table_root_distance` of S-0204).** A 140 × 140
   flat clear map with start waypoint markers 0 at (80, 150), 1 at (171, 241) and 2 at (209, 150),
   all legal. 2 players: the human on fixed position 0 and 1 computer on "random", so N = 3 and no
@@ -2983,17 +3080,20 @@ that the stream can be computed by S-0202 and compared with what the game shows 
   human-owned structure does not. *Falsified if* the credits change, the country-owned or
   player-at-position unit appears, the computer-owned unit belongs to the other computer player
   or is missing, the human-owned vehicle is missing, or the human-owned structure appears.
-- **M15, observers (claim 22).** 2 computer players on "random" plus one human observer, on a map
-  with 4 start waypoint markers, 10 runs. Record the position the observer is first shown and each
+- **M15, observers (claim 22; bears on the original's place of a single observer, open in claim
+  19: not after both computer players).** Runnable only if the original's skirmish lobby can
+  start a game with an observer, which S-0414 leaves open; if it cannot, M15 is void. 2 computer
+  players on "random" plus one human observer, on a map with 4 start waypoint markers at the corners of a rectangle, so that each position's farthest one is the
+  opposite corner, 10 runs. Record the position the observer is first shown and each
   player's start. *Expected:* the first computer player in house order always starts at the
-  position the observer was first shown. *Falsified if* it ever starts elsewhere.
-  Second branch (deferred, no backing in this revision): a network game with
-  1 human player on fixed position 2, 1 human observer and
-  1 computer player on "random", on a map with 4 start waypoint markers whose pairwise distances
-  are all different, 5 runs. *Expected:* the observer is first shown position 2 (the only taken
-  position) in every run, and the computer always starts at the waypoint farthest from waypoint 2,
-  as if no observer were present. *Falsified if* the observer is first shown another position, or
-  the computer starts anywhere else in any run.
+  position the observer was first shown. *Falsified if* it ever starts elsewhere. If the observer
+  came after the computer players, it would be shown the lower-numbered of their two starts, and
+  the first computer player would start there in about half the runs, so 10 passing runs leave
+  about 1 chance in 1000 of missing that order. An observer between the two computer players
+  would be shown the first one's start, as one before both would be, so M15 cannot detect that
+  place. A failure cannot tell the observer's place from claim 22's rule.
+  The branch for an observer whose turn comes after a position is taken is M10's colour-order
+  sub-test, run 4.
 - **M16, unused-house cleanup (claim 28).** Only variants B and G below are proposed
   skirmish measurements. The older network variants A, C, D, E and F, including D's second
   part, are deferred context and supply no backing in this revision. Before running, check that the base rules' maximum
@@ -3606,6 +3706,17 @@ that the stream can be computed by S-0202 and compared with what the game shows 
 Q-0419's house identity, country-only owners and unresolved-owner questions are answered by
 claims 47–48. S-0103 claim 14 already owns inherited and overridden colour selection. A viewer's
 optional diagnostic colour for unresolved entries is presentation policy, not an original colour.
+
+- (Q-1805, claim 19.) In the original, for a game of several humans: whether two humans can
+  hold the same chosen colour and, if so, which of them comes first in the house order; the
+  order among several observers; the place of observers in the house order (M10 run 4 would
+  bear on it, but cannot tell a failure of it from a failure of claim 22's rule; M15, if the
+  original's skirmish lobby can start a game with an observer at all, which S-0414 leaves open,
+  could only rule out a single observer after both computer players, again together with claim
+  22's rule); and how a network game's random colours are drawn, that is
+  which peer makes the draws and in which order. No
+  proposed run separates these, so no rule is claimed for the original; our engine's rules for
+  them are design.
 
 - Outside this spec, with pointers only: lighting (S-0104); tile categories and what tiles mean
   for play (S-0010); triggers and tags (S-0011); and the rules sections a map may override
