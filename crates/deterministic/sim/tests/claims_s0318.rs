@@ -239,20 +239,88 @@ fn sh1a_three_fragments_in_the_tick_of_the_shot() {
     );
 }
 
-// spec: S-0318 claim 5 (a fragment takes its first turn in the tick of the burst unless an earlier removal costs it that turn) and S-0203 claim 10 (removal-skip switch on: the shot leaving play in its own turn costs the first fragment, which entered during that turn, its turn; the second fragment leaving costs the third its turn, and in the next tick the first fragment leaving costs it again)
+// spec: S-0318 claim 5 and State and ordering (scenario SH1 part a run 1: the fragments join the end of the update order in launch order during the bursting projectile's turn; with S-0203's removal skip on, the projectile's removal costs the first fragment its turn and each fragment's removal costs the next waiting one its turn: T's loss and the vehicle at (1, 0)'s in the tick of the shot, (0, −1)'s one tick later, (0, 2)'s two ticks later)
 #[test]
 fn sh1a_removals_cost_fragments_their_first_turn() {
     let mut s = setup(&base(3), true);
     let v = around(&mut s);
+    let t = s.t.unwrap();
+    let t0 = health(&s, t);
     let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
     shoot_t(&mut s);
     testkit::run(&mut s.w, 1);
+    assert_eq!(health(&s, t), t0 - SHOT, "T in the tick of the shot");
     assert_eq!(lost(&s, &v, &before), vec![0, FRAG, 0, 0, 0]);
     testkit::run(&mut s.w, 1);
     assert_eq!(lost(&s, &v, &before), vec![FRAG, FRAG, 0, 0, 0]);
     testkit::run(&mut s.w, 1);
     assert_eq!(lost(&s, &v, &before), vec![FRAG, FRAG, FRAG, 0, 0]);
     assert!(frags(&s).is_empty());
+}
+
+// spec: S-0318 claim 5 (scenario SH1 part a run 2: a shot animation that entered play directly after the projectile, S-0109 claim 29, misses the turn instead, so the pattern starts one place later: T's loss and the vehicles at (0, −1) and (0, 2) in the tick of the shot, the vehicle at (1, 0) one tick later)
+#[test]
+fn sh1a_run_2_shot_animation_shifts_the_pattern() {
+    let mut r = base(3);
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("FLASH".into());
+    r.sim.animations.insert(
+        "FLASH".into(),
+        glasnost_rules::sim::AnimationType {
+            frame_count: Some(40),
+            rate: Some(1),
+            ..Default::default()
+        },
+    );
+    r.sim.weapons.get_mut("Shot").unwrap().anim = Some(vec!["FLASH".into()]);
+    let mut s = setup(&r, true);
+    let v = around(&mut s);
+    let t = s.t.unwrap();
+    let t0 = health(&s, t);
+    let before: Vec<i32> = v.iter().map(|&x| health(&s, x)).collect();
+    let shot = wp(&s.w, "Shot");
+    let p = s.w.obj(s.a).unwrap().pos;
+    launch(&mut s.w, s.a, shot, Target::Object(t), p, SHOT).expect("a shot");
+    glasnost_sim::combat::shotanim::create(&mut s.w, s.a, shot, p);
+    assert_eq!(s.w.anims.anims.len(), 1, "the shot animation entered play");
+    testkit::run(&mut s.w, 1);
+    assert_eq!(health(&s, t), t0 - SHOT, "T in the tick of the shot");
+    assert_eq!(lost(&s, &v, &before), vec![FRAG, 0, FRAG, 0, 0]);
+    testkit::run(&mut s.w, 1);
+    assert_eq!(lost(&s, &v, &before), vec![FRAG, FRAG, FRAG, 0, 0]);
+    assert!(frags(&s).is_empty());
+    assert_eq!(
+        s.w.anims.anims.len(),
+        1,
+        "the run is not void: the animation is still in play"
+    );
+}
+
+// spec: S-0318 claim 5 (scenario SH4 part b: the vehicle at (0, −1) is destroyed by the first fragment, which detonates one tick after the shot; house A's count of enemy units destroyed rises by one then, and no other house's count changes)
+#[test]
+fn sh4b_fragment_kill_credited_in_the_tick_after_the_shot() {
+    let mut s = setup(&base(3), true);
+    let v = around(&mut s);
+    s.w.obj_mut(v[0]).unwrap().health = FRAG;
+    let kills = |s: &S| -> Vec<i32> {
+        (0..2)
+            .map(|h| glasnost_sim::econ::stats::of(&s.w, HouseId(h)).kills)
+            .collect()
+    };
+    let k0 = kills(&s);
+    shoot_t(&mut s);
+    testkit::run(&mut s.w, 1);
+    assert!(s.w.obj(v[0]).is_some(), "alive after the tick of the shot");
+    assert_eq!(kills(&s), k0, "no kill in the tick of the shot");
+    testkit::run(&mut s.w, 1);
+    assert!(s.w.obj(v[0]).is_none_or(|o| o.health <= 0), "destroyed");
+    assert_eq!(
+        kills(&s),
+        vec![k0[0] + 1, k0[1]],
+        "house A's count, one tick later"
+    );
 }
 
 // spec: S-0318 claim 1 (b) (scenario SH1 part b: a shot at a building of one-cell foundation, first-listed in the burst cell, launches no fragments)
