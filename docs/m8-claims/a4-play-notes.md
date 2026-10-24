@@ -175,13 +175,33 @@ search classes leave out aircraft (its primary warhead is infantry-only; S-0309 
 also follows the specs. An empty unit of the gunner type that note 15 names has weapon number 0
 (S-0308 claim 6), so it uses slot 0, which is anti-air and anti-ground.
 
-**Open: shots that do no damage.** Vehicles 4, 7 and 15 fire at the aircraft but never damage it
-(the other types' shots do). A diagnostic pass (not committed) showed why only in part. Types 4
-and 7 launch a projectile, which detonates at the firer's own position, just above the ground, on
-the tick of the shot. Type 15's shot makes no detonation at all. Each time the aircraft flew at its
-cruise height, far above the ground, and the warhead's versus value against it was positive. S-0306 owns
-projectile flight, and it is not yet established whether these results follow from it. This is
-followed up separately.
+**Shots that do no damage (explained by the specs).** Vehicles 4, 7 and 15 fire at the aircraft
+but never damage it (the other types' shots do). A diagnostic pass on the rebased tree (not
+committed) traced each case to approved claims, and the code follows them.
+
+- Types 4 and 7: the slot that fires at the aircraft has no muzzle position in the type's art
+  image section (no muzzle key of any form is there). By S-0313's Import mapping an absent muzzle
+  position is 0, 0, 0, so by claim 1 the fire point is the firer's own position, on the ground (on
+  flat ground the body transform is a rotation only, S-0105 claim 7). S-0306 claim 8 places the
+  steering projectile there, so *h* is 0 at the start of its first turn, which falls in the tick of
+  the shot, and T1's row "steering, *h* ≤ 0: detonate" detonates it beside the firer. The aircraft
+  is at cruise height, far outside the blast. Any steering shot from a firer on the ground whose
+  slot has no muzzle height does the same.
+- Type 15: its weapon is a disc laser, so the shot makes no projectile (S-0615 claim 12). Claim
+  14's range re-check measures from the firer's position to the aircraft's position in three
+  dimensions, with the height difference, since the firer is on the ground. As the aircraft flies
+  on, that distance passes the weapon's range one step before the final step, and the disc laser
+  is cancelled without damage, as claim 14 states.
+- The shot at an off-map target that detonated at the firer (an aircraft hitting itself before
+  intake 9): the target had left the map while airborne, so the steering projectile kept no target
+  (S-0306 claim 17). At or above the missile safety altitude, T1's safety row detonated it at
+  *P*′, beside the firer, and the unfiltered flying candidates of S-0303 claim 9 let the blast
+  reach the firer. Since A3 intake 9 the target is lost when it is taken inside (S-0501 r40 claim
+  32), so no such shot is made: `target_taken_inside_is_lost_and_it_flies_home` passes with
+  aircraft tracked.
+
+No request is filed, since every case follows from approved claims. Whether these slots are meant
+to have no muzzle height is a question for the lead, not for the code.
 
 Note 7 (seen again): the lead's statement and Q-1850 are in note 7's Round 1 row; nothing more is
 filed and the code keeps to S-0417 claims 10 and 14 until Q-1850 is answered.
