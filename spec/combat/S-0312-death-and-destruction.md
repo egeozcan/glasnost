@@ -2,11 +2,11 @@
 id: S-0312
 title: Death and destruction (death weapons, debris, passengers, crews, survivors, sinking, crashing and building remains)
 topic: combat
-revision: 33
+revision: 44
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0060, Q-0061, Q-0070, Q-0081, Q-0236, Q-0268, Q-0413, Q-0652, Q-0707]
 supersedes: []
@@ -26,6 +26,10 @@ crashing, building explosions, spilled resources, survivors, smudges, rubble and
 their random draws in observable order, when a destroyed building leaves play, and the defaults
 and list items of the game-wide values these rules read. Infantry death sequences and corpses are S-0107's (claim 17); when a
 killed object leaves the turn order is S-0203's (claim 6); the damage itself is S-0302's and S-0303's.
+
+Against revision 33, this revision takes in the S-0312 entries of the Changes for other specs
+of S-0317 (voxel debris as S-0317's pieces) and of S-0501 (the fall-back crash of an aircraft,
+which starts dead without a hit).
 
 ## Terms
 
@@ -49,8 +53,9 @@ claim 19) and *curtain protection* are used as defined there. In addition:
   veterancy rank whose abilities include exploding (S-0311), or whose current weapon has
   the suicide flag (Import mapping).
 - **Death weapon** of a type: the weapon that its death detonates (claim 6).
-- **Debris.** Animations thrown by a death or a detonation: voxel debris types with per-type maxima,
-  sprite debris animations of a type, or the game-wide metallic debris list (Formulas F1).
+- **Debris.** What a death or a detonation throws: voxel-model pieces (S-0317) with per-type
+  maxima, sprite debris animations of a type, or animations from the game-wide metallic
+  debris list (Formulas F1).
 - **Crew.** An infantry unit created when a vehicle is destroyed (claim 13). **Survivor.** An
   infantry unit created when a building is destroyed (claim 18).
 - **Armed** (F4 only). An object is armed in F4's sense when it has the primary weapon of claim 6's
@@ -154,10 +159,31 @@ claim 19) and *curtain protection* are used as defined there. In addition:
 ### Effects every kind shares
 
 4. **Debris.** When an object whose type has a positive maximum debris count dies, it throws debris
-   by Formulas F1: the count is one ranged draw, and the pieces are created around the object's
-   position at the heights F1 specifies, owned by its house.
-   - Backing: `measurable` (scenario D4, statistical)
-   - Confidence: high
+   by Formulas F1: the count is one ranged draw, and the debris is created at the object's
+   position (sprite and metallic debris raised as F1 specifies), owned by its house. The voxel
+   debris of F1's first case consists of pieces of S-0317: objects of play, created there with the draws of
+   S-0317 claims 3 and 4, whose start positions, flight, impacts and end are S-0317's. The house
+   that owns a piece changes neither its ground-impact hits nor the area damage of its end: both
+   carry no attacking house (S-0317 claims 1, 7 and 11). Everything else a piece does, its
+   further pieces included, is S-0317's, with the ratings S-0317 gives it.
+   - Backing, by part:
+     - The count and the creation points: `measurable` (scenario D4, statistical).
+     - The ownership of sprite and metallic debris by the object's house: `measurable`
+       (scenario D4, its metallic and sprite repeats).
+     - The pieces' ownership by the object's house: `unmeasured`: a piece's house changes no
+       outcome in play (S-0317 claim 1), and the hits below carry no house at all.
+     - A voxel piece's creation draws: their count `measurable` (S-0317 scenario V1); the use of
+       each draw rests on S-0317 claims 3 and 4, with the backing those claims give it.
+     - The absence of an attacking house in a piece's ground-impact hits: `measurable` (S-0317
+       scenario V5 parts f and g).
+     - The absence of an attacking house in its end's area damage: `measurable` (S-0317 scenario
+       V8), resting on S-0317 claim 11.
+   - Confidence: high for the count and the creation points; high for the ownership of sprite
+     and metallic debris; medium for the pieces' ownership; medium for the draws of a voxel
+     piece's creation, as S-0317 claims 3 and 4 rate them until S-0317 scenario V1 runs; medium
+     for the piece's ground-impact hits carrying no attacking house, until S-0317 scenario V5
+     parts f and g run, and for its end's area damage carrying none, until S-0317 scenario V8
+     runs.
 
 5. **Exploding objects kill their passengers.** When an exploding object dies, every passenger it
    carries dies with it, and each death is credited to the attacker of the killing hit (score and
@@ -209,9 +235,22 @@ claim 19) and *curtain protection* are used as defined there. In addition:
    A building ownership change likewise removes its planted bomb without detonation, and
    that bomb never goes off later, except on a garrisonable type, where the bomb stays and
    keeps counting down (S-0509 claim 13).
+   The detonation at the end of the shared effects needs a death by a killing hit. A carrier
+   destroyed without a hit, as by the fall-back crash of S-0501 claim 46, has no shared death
+   effects, so its planted bomb does not detonate at the destruction. The bomb stays attached
+   while the carrier stays on the map: during the aircraft's fall its timer and the detonate order
+   still set it off (S-0519 claim 4 for the timer, claim 9 for the detonate order, claim 5 for
+   the detonation). If it has not gone off by the impact, it is removed then
+   with no effect, as for a carrier removed other than by death (S-0519 claim 7, under S-0501's
+   `quirks.crash_drops_planted_bomb`).
    - Backing: `measurable` (scenario D6, variant c; S-0519 scenarios T7 to T9 for lethal
-     detonation, off-map deaths and non-death removal; S-0509 scenario E8 for ownership changes)
-   - Confidence: high
+     detonation, off-map deaths and non-death removal; S-0509 scenario E8 for ownership
+     changes; S-0501 scenario AC29 part i for a bomb kept through the fall-back crash's start, removed
+     without effect at impact, and set off by a detonate order during the fall). A bomb whose
+     timer comes due during that fall is `unmeasured`, as S-0501 claim 46 gives: no normal input
+     places the crash start against the bomb's due tick.
+   - Confidence: high; medium for the carrier destroyed without a hit, as S-0501 claim 46 rates
+     the planted bomb's handling until AC29 part i runs; medium for its timer during the fall
 
 8. **Infantry.** A killed infantry unit takes the shared effects of claims 4 to 7 and then the death
    sequence or removal of S-0107 claim 17, which also owns its corpse. Nothing further belongs to
@@ -390,7 +429,8 @@ claim 19) and *curtain protection* are used as defined there. In addition:
     effects, crash start or later impact. The aircraft then starts to crash if it is above the
     terrain; otherwise it leaves play at once, and any passengers still aboard die without
     attacker credit under S-0507 claim 16. An object that starts to crash loses all
-    its passengers (credited to the attacker) and, unless it is infantry, takes three draws for its
+    its passengers (credited to the attacker; for the fall-back crash, to nobody, as the last
+    paragraph of this claim states) and, unless it is infantry, takes three draws for its
     tumbling (one unit-interval value, one ranged draw over 0 to 1 that chooses the sense, one more
     unit-interval value). For an aircraft using ordinary flying movement, S-0501 claim 9 owns
     crash motion: its growing fall counter supplies a downward contribution, not necessarily
@@ -422,12 +462,38 @@ claim 19) and *curtain protection* are used as defined there. In addition:
       no attacker (so its kill is credited to no one); an explosion
       animation chosen by S-0303 F5 for that amount appears, and a detonation with that amount, the
       demolition warhead, no source object and no source house follows at the impact point.
-    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): an ordinary killing hit also clears orders and can invoke its stopped-movement rule, so the otherwise idle case has not been isolated. The pending-crash update guarantee is design, not an oracle observation.
+
+    The fall-back crash of S-0501 claim 46 is not a crash started without a kill in this sense. It
+    sets the aircraft's health to 0 at its start without a hit, so the aircraft falls and strikes
+    the ground as one shot down: its death weapon goes off at the impact point and it leaves play.
+    Its destruction is credited to nobody and counted among its house's losses unless its type
+    is not scored (S-0414 claim 21), and it takes none of the other killing-hit effects, neither
+    at the start nor at impact: no debris (claim 4), no deaths of passengers by claim 5, no
+    detonation of an attached bomb by claim 7, and no animation from this claim's explosion-list
+    pick. The crash start's effects above apply as S-0501 claim 46 states, with one difference in
+    credit: its passengers are lost and credited to nobody, since the crash has no attacker, and
+    the three tumbling draws are taken.
+    - Backing: `measurable` for the death effects and dead-object crash cases covered by scenario D11, variant f for an empty explosion list, S-0501 scenario AC5 for dead flying-aircraft crash motion, S-0507 scenario T14 for uncredited ground-aircraft passenger cleanup, S-0522 scenario P9 for the attacker credit of the passengers lost at the crash start of an aircraft that was shot down (P9 observes only that case), S-0502 scenario J12 for jumpjet crash motion, S-0607 scenarios L3 to L6 for magnetic-drop outcomes, and S-0506 scenario R13 for rocket interception, unchanged phase timers and absence of additional crash fall. A crash that starts while the aircraft is still alive is `unmeasured`: D11 variant b is conditional and supplies no measurable backing until a reachable setup is established. Aircraft sinking retains the backing limitations of S-0501 claim 9. The original jumpjet idle-crash aftermath remains `unmeasured` under S-0502 claim 3 (diagnostic J15): an ordinary killing hit also clears orders and can invoke its stopped-movement rule, so the otherwise idle case has not been isolated. The pending-crash update guarantee is design, not an oracle observation.
+      The fall-back crash of S-0501 claim 46 is `measurable` through S-0501 scenario AC29 part f
+      (its health, fall and impact, the score screen's counts, and the absence of debris and of
+      the explosion-list animation), and its three tumbling draws through scenario D11 variant
+      g. The loss of its passengers rests on S-0501 claim 46, with that claim's backing and
+      rating; no run known to S-0501 or to this spec reaches a loaded aircraft of that kind,
+      so the loss is in effect `unmeasured` here as well, for the reason below. That they are credited to nobody is this claim's own statement, following from
+      the crash having no attacker (S-0501 claim 46): `unmeasured`, since it shows only for a
+      pad-bound armed aircraft that carries passengers, and no set-up is known that loads
+      passengers into such a type before its run.
     - Confidence: high for the explosion-list choice, the absence of an animation and draw for an
-      empty list, their independence from height, and uncredited passenger cleanup at removal.
+      empty list, their independence from height, uncredited passenger cleanup at removal, and
+      the attacker credit of the passengers lost at the crash start of an aircraft that was shot
+      down, which S-0522 scenario P9 observes (S-0522 claim 15).
       Rocket interception inherits S-0506
       claim 20's confidence; jumpjet motion inherits S-0502 claim 18's confidence,
-      medium for the non-rocket impact rules; low for the double death weapon
+      medium for the non-rocket impact rules; low for the double death weapon; medium for the
+      fall-back crash of S-0501 claim 46, as that claim rates its health 0 at the start, its dead
+      fall, its counts and the absent killing-hit effects until AC29 part f runs, and its
+      tumbling draws until D11 variant g runs; medium for its passenger loss, as S-0501 claim 46
+      rates it; medium for those passengers being credited to nobody, which no run observes
 
 ### Buildings
 
@@ -974,7 +1040,7 @@ otherwise. No measurement has been completed for this revision.
 | 6 | `unmeasured` for multi-turret selection and the unplaced projectile's land-type, height and water tests: D6 tests ordinary/elite primary selection and debris position, not these tests, and no setup isolating them is supplied. |
 | 12 | `unmeasured` for bridge-deck escape height and placement: D9 supplies no bridge run, and its placement point remains for the bridge specs to establish. Bomb-mark rows inherit claim 11's backing. |
 | 13 | `unmeasured` for crew trigger-tag inheritance: the kinds of tag that pass on are not established here, so D10 cannot predict a tag outcome. |
-| 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. |
+| 16 | `unmeasured` for a crash begun while still alive and the absence of tumbling draws for crashing infantry: no setup is established that starts either case. D11 b is conditional, not measurable backing. Also `unmeasured`: the fall-back crash's lost passengers and their credit to nobody, since no set-up is known that loads passengers into a pad-bound armed aircraft before its run. |
 | 17 | `unmeasured` for the exact ten-times-strength amount and no-escape marker: D12's contacts die, which alone cannot distinguish that amount from another lethal amount or test crew escape. Release of a non-helipad contact at or beyond 256 leptons is also unmeasured: D12 does not establish those contacts. Garrison eviction instead uses S-0508 G7 and G8's backing. |
 | 18, F4 | `unmeasured` for countries without a side and side numbers beyond 2: D10 and D13 do not construct those owners. Failed survivor placement and the eight-cell 3 × 3 foundation are also unmeasured here: D13 uses free positions and a full nine-cell foundation and supplies no blocked-survivor or eight-cell run. |
 | 18 | `unmeasured`, low confidence, for equating the owner's survivor-suppression state with defeat: no setup separates the two possible moments in Open questions. Ordinary undefeated-owner runs test the rest. |
@@ -992,7 +1058,9 @@ otherwise. No measurement has been completed for this revision.
 
 If the type lists voxel debris types with maxima, the *N* pieces are dealt out to the types in turn
 exactly as in S-0303 F6 (one raw value per turn, "magnitude first" remainder modulo the maximum plus
-one, capped at the pieces left), each piece one debris animation at the object's position. Otherwise,
+one, capped at the pieces left), each piece a piece of S-0317 created at the object's position
+(its creation point, S-0317 claims 3 and 4). The start positions of S-0317 claims 3 and 4 apply
+to these pieces, and the 20-lepton raise below only to sprite and metallic debris. Otherwise,
 if the type lists debris animations (*c* of them), *N* animations each of the entry R(0, *c* − 1),
 at the object's position raised by 20 leptons. Otherwise *N* animations from the game-wide metallic
 debris list, chosen the same way, at the same point. Exact integer arithmetic. Unit: pieces (*N*).
@@ -1354,16 +1422,29 @@ same warhead. *Expected of c:* at the end of the countdown the building is destr
 explosion animations but releases no survivors, over 50 runs. The tick and the credit of the expiry hit are S-0302's scenario D13, parts e to h. *Falsified
 if:* it dies at once, the delays differ, or a building of variant c releases a survivor.
 
-**D4. Death debris (claim 4).** *Setup:* a test vehicle type with minimum debris 1, maximum debris 4
-and no debris types; 200 kills. *Observable:* the number of debris pieces per kill. *Expected:* 1 to
-3 debris pieces each time, roughly uniform. Variant b (claim 8): the same with a test infantry type.
-*Falsified if:* 4 pieces or 0 pieces appear, or an infantry kill in variant b throws no debris or a
-number outside 1 to 3. Record ownership, creation position and stream state as well. Repeat with
-two named sprite debris animations, then two named voxel debris types with positive maxima.
-The initial setup uses the metallic fallback. Expected: sprite and metallic pieces start 20
-leptons above the dying object, voxel pieces at its position, all owned by its house; counts,
-types and end stream state match F1's replay. A different position, owner, type or end state
-falsifies that part.
+**D4. Death debris (claim 4).** *Setup:* a test vehicle type with minimum debris 1, maximum debris
+4 and no debris types; 200 kills. *Observable:* the number of debris pieces per kill. *Expected:* 1
+to 3 debris pieces each time, roughly uniform. Variant b (claim 8): the same with a test infantry
+type. *Falsified if:* 4 pieces or 0 pieces appear, or an infantry kill in variant b throws no
+debris or a number outside 1 to 3. The kills are run in three repeats, each also recording the
+creation position and the stream state: the setup above, with no debris types, gives metallic
+pieces (the game-wide fallback), the second repeat names two sprite debris animations and gives
+sprite pieces, and the third names two voxel debris types, each with a maximum of 3 so that no
+count of 1 to 3 is capped, both falling types (not meteor types, whose start position S-0317
+claim 4 moves back along their velocity), and gives voxel pieces. In every repeat the test
+vehicle type has no explosion list, no death weapon, no passengers, no crew and no survivors,
+so the kill's tick takes no draws for other death effects. The metallic and sprite repeats also
+record each animation's owning house. Expected: metallic and sprite pieces start 20 leptons
+above the dying object, owned by its house, and voxel pieces are created at its position, with
+counts and types that match F1's replay. The draws compared are those the random-state recorder
+logs in the kill's tick from the killing hit on, as S-0317 scenario V1 reads its detonation's
+tick: F1's replay in the metallic and sprite repeats, and in the voxel repeat F1's replay with
+each piece's creation draws (S-0317 claims 3 and 4). Draws after those, which a voxel piece's
+turns may take (S-0317 claims 7 and 12), are not compared, so the check does not depend on the
+tick of a piece's first turn. A different position or type, a compared draw that differs from
+that replay, or, in the metallic and sprite repeats, an owner other than the dying object's
+house falsifies that repeat. A voxel piece's
+ownership is not judged here.
 
 **D5. Passengers of exploding objects (claim 5).** *Setup:* a test transport with the explodes flag
 carrying a transport that carries an infantry unit. *Observable:* each passenger's death and kill
@@ -1572,6 +1653,14 @@ motion, distinguishing the counter contribution from net descent. Rocket interce
 instead tested by S-0506 scenario R13, not by D11's ordinary impact expectations.
 Magnetic drops use S-0607 scenarios L3 to L6, including L4's crashable-vehicle and aircraft
 variants; D11's ordinary impact predictions do not override those outcomes.
+Variant g (claim 16, fall-back crash): run S-0501 scenario AC29 part f with the random-state
+recorder, with the test aircraft type given minimum debris 1, maximum debris 4, one sprite
+debris animation and an explosion list of two entries, so that a killing hit would take a
+debris count draw and a list pick. Replay, under their owning rules, the draws of the tick in
+which the fall-back crash sets the aircraft's health to 0 and starts its crash. Expected: the
+crash start takes the three tumbling draws in the order of claim 16, and no explosion-list
+pick and no debris draws. A missing tumbling draw, an extra list pick or debris
+draw, or a different stream state falsifies g.
 
 **D12. Contacts of a destroyed building (claim 17).** *Setup:* a stock building type that produces
 vehicles, destroyed while a vehicle is leaving it; a stock building type that harvesters dock at,
