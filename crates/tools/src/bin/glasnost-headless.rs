@@ -59,6 +59,13 @@
 //!   compares every client's checkpoint hashes; writes counts and timings
 //!   to the git-ignored `local-lane/m9/n6/` (or `--out`). Exit code 0 when
 //!   it passed.
+//! - `GLASNOST_GAME_DIR=<install> glasnost-headless tick-bench [key=value
+//!   …]`: the tick benchmark (M8 C4 part 2, `glasnost_tools::tick_bench`):
+//!   the frame benchmark's AI game, ticks timed with nothing drawn, and
+//!   with `probe=on` split by the tick's parts; writes a summary, a
+//!   per-tick CSV and the state hashes to the git-ignored
+//!   `local-lane/m8/c4-2/` (or `out=`). `tick-bench synthetic [ticks]
+//!   [probe=on]` times the synthetic scripted replay instead.
 //! - `glasnost-headless path-report FILE [--out DIR] [--unit ID]… [--tick
 //!   T] [--names] [--any-build]`: a pathing report the client saved (M8
 //!   A4, `glasnost_tools::path_report`) replayed with the movement trace
@@ -74,7 +81,8 @@ use std::process::ExitCode;
 use glasnost_sim::save::Replay;
 use glasnost_tools::local_lane::GAME_DIR_VAR;
 use glasnost_tools::{
-    arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak, trigger_lane,
+    arena, desync, headless, net_client, oracle, path_report, skirmish_lane, soak, tick_bench,
+    trigger_lane,
 };
 
 fn arg<T: std::str::FromStr>(args: &[String], i: usize, default: T) -> T {
@@ -338,6 +346,38 @@ fn main() -> ExitCode {
                 Err(e) => {
                     eprintln!("glasnost-headless desync: {e}");
                     ExitCode::from(2)
+                }
+            }
+        }
+        Some("tick-bench") if args.get(1).map(String::as_str) == Some("synthetic") => {
+            let probe = args.iter().any(|a| a == "probe=on");
+            let (summary, _) = tick_bench::run_synthetic(7, arg(&args, 2, 2000), probe);
+            print!("{summary}");
+            ExitCode::SUCCESS
+        }
+        Some("tick-bench") => {
+            let o = match tick_bench::Options::parse(&args[1..]) {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!(
+                        "glasnost-headless tick-bench: {e}\nusage: glasnost-headless {}",
+                        tick_bench::USAGE
+                    );
+                    return ExitCode::from(2);
+                }
+            };
+            let Some(dir) = std::env::var_os(GAME_DIR_VAR) else {
+                eprintln!("glasnost-headless tick-bench: set {GAME_DIR_VAR} to an install folder");
+                return ExitCode::from(2);
+            };
+            match tick_bench::run(&o, &dir.to_string_lossy()) {
+                Ok(summary) => {
+                    print!("{summary}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("glasnost-headless tick-bench: {e}");
+                    ExitCode::FAILURE
                 }
             }
         }
