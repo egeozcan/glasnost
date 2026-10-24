@@ -2306,6 +2306,35 @@ How drawing was checked unchanged: every view's picture of every run after a fix
 
 Seams: the late-game tick spikes (simulation; frames over budget in every view); the browser's slower ticks; translucent drawings that overlap still need their own pass; the per-frame redraw (`mapview::live`'s scan of the grid and painting of mobile objects and buildings) is the client's largest remaining part (about 12 % of a sample profile); the benchmark has no zoomed-out view because the client has no zoom.
 
+#### The tick's cost (M8 C4 part 2)
+
+The tick benchmark (`crates/tools/src/tick_bench.rs`, our own tooling: nothing in it is game behaviour) plays the frame benchmark's game (the same setup through `game::bench::start_headless`: map index, seed, AI houses) without a client, timing every `Game::step` with the host clock. With `probe=on` it also passes a probe (`glasnost_sim::probe::Probe`) into the step: the step marks the start of each phase of the fixed tick order (S-0203), each object's turn by kind and each part of each brain's think, and the probe reads the clock at each mark. The simulation never reads the probe: the step's default is the unit probe `()`, whose marks compile to nothing, and the probe's run hashes the same as the plain run (`the_probe_leaves_an_ai_game_unchanged`, and every 500th tick's state hash of the runs below). A probed tick is a few per cent slower, so the plain run gives the times and the probed run the shares.
+
+```sh
+# Real data (local lane; DIR is the install folder; nothing of it is copied):
+GLASNOST_GAME_DIR=DIR cargo run --release -p glasnost-tools --bin glasnost-headless -- tick-bench map=9 seed=7 players=8 ticks=11399 probe=on
+# Synthetic, CI-cheap (the scripted test game; prints its summary and state hash):
+cargo run --release -p glasnost-tools --bin glasnost-headless -- tick-bench synthetic 2000 probe=on
+```
+
+Words: `map` (9), `seed` (7), `players` (8), `ticks` (9000), `probe` (off), `hash` (a state hash every N ticks, 500), `save` (save and load the game at this tick and go on from the loaded game), `worst` (worst ticks listed, 20), `out` (`local-lane/m8/c4-2`), `label` (`ticks`). Outputs: `<label>.txt` (mean, median, p95, p99, worst and ticks over 16.7 ms; the same by 1000 ticks with the object count and the update order's length; with the probe the share of each phase and part, the turns a tick by kind and the worst ticks' largest parts), `<label>.csv` (one row per tick) and `<label>-hashes.txt`.
+
+**Where the time went (this machine; map 9, seed 7, 8 AI houses, 11399 ticks: the frame benchmark's 9000 ticks before timing and the 2399 it plays while it draws; main 8dcc429 with the probe).** Plain run: mean 45.9 ms a tick, median 3.0, p95 355, p99 763, worst 1068; 1524 of 11399 ticks over 16.7 ms. The first 4000 ticks average 4 to 6 ms; from tick 4000 the mean is 55 to 79 ms with spikes of 0.4 to 1.1 s. The spikes fall on two tick classes: the AI's think (tick ≡ 0 mod 15, the main parts' period) and Movement on ticks ≡ 4, 9 and 14 mod 15.
+
+| Part (probe on, share of the probed time) | share | mean µs a tick | worst tick µs |
+|---|---|---|---|
+| AI think, all houses | 61.5 % | 28 200 | 1 068 000 (the whole tick: eight thinks together) |
+| of which `Script::think` (the base and army planner; share in the spanned run below) | 57 % | | |
+| of which superweapons, deploys, defence, filters and the rest (same) | 5 % | | |
+| Movement (the vehicle group update; almost all of it path computations) | 33.9 % | 15 500 | 712 000 |
+| Behaviour, before and after movement | 3.3 % | 1 530 | |
+| The object turns themselves (all kinds; 356 turns a tick) | 0.9 % | 430 | |
+| Houses, the turn pass, the strike sweep, every other phase | 0.5 % | 190 | |
+
+Inside the think (temporary spans, in a build that is not committed; the spans inflate small calls, so read them as proportions; 11399 ticks): `Script::place_cell` (the spiral search for a building's cell) is 97 % of the planner. It was called 44 195 times, and each call ran up to three passes over the spiral (gap 2, 1, 0: 624 cells, 4224 for a naval building), asking every cell the place order's legality (`placement::place_legal`, 86 M calls), whose adjacency scan (`placement::adjacent`) built a building's whole placement record (`place_type`, 1.2 G calls) for every building it met. Most of the calls came from the tech climb (`Script::climb` → `unblocker` → `placeable`), which asks the same building types' cells again for every army type it looks at, and from `water_goal`; the answers cannot change during a think (the brain reads the world by reference). The free-gap test (`Script::free_gap`, a scan of every object per cell) is 5 % of the placement time.
+
+Inside Movement: 10 977 path computations ran 20 491 cell searches (all but 4 inside a corridor); 12 558 found no path, and the searches expanded 51 M pairs, about 2 500 a search. Per expansion the cost is spread over the neighbour loop: the entry outcome (`path::step_outcome`, about 40 % of the search), the layer and height rules, the step cost's soft-float arithmetic and the pending heap. The object update order (A5's suspect) costs nothing measurable: the turn pass outside the turns is 0.1 %.
+
 ## Electric bolts (M8 step C5 part 1)
 
 S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md).
