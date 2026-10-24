@@ -2508,6 +2508,10 @@ This intake takes in six spec revisions: S-0519 revision 17, S-0513 revision 34,
 
 No format or golden change.
 
+### Disabled hovers, sold buildings' slots and fragment beams (M8 step A3 intake 11)
+
+S-0405 r36, S-0316 r35, S-0303 r25, S-0413 r6 and S-0616 r20. The ledger, [m8-claims/intake11-S-0405-S-0316-S-0303-S-0413-S-0616.md](m8-claims/intake11-S-0405-S-0316-S-0303-S-0413-S-0616.md), holds the notes.
+
 ### Start of music, the end screen and the options menu (M8 step A3 intake 12)
 
 This intake takes in S-0703 revision 51 and S-0701 revision 27, both audio. The ledger is [m8-claims/intake12-S-0703-S-0701.md](m8-claims/intake12-S-0703-S-0701.md). S-0703 revision 51 answers Q-1831, Q-1832 and Q-1833, and Q-1830 in part. The behaviour is described under *Music (M8 step C1 part 1)* above.
