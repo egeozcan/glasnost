@@ -7,6 +7,7 @@
 //! 6) and the houses (row 7) run the M5a topics (`crate::econ`). Radiation
 //! maintenance (row 13, `crate::radiation`) takes no draws.
 
+use crate::probe::{Phase, Probe};
 use crate::rules::{Kind, Locomotor};
 use crate::world::{ObjectId, World};
 use crate::{drive, infantry, occupancy, orders, process, turret, walk};
@@ -21,46 +22,75 @@ pub fn ticks_run(w: &World) -> i32 {
 
 /// Runs one tick (S-0203 claim 1, the draw order of its rows).
 pub fn step(w: &mut World) {
+    step_with(w, &mut ());
+}
+
+/// [`step`], telling `p` where the tick is (the tools' benchmark,
+/// `crate::probe`); `p` reads nothing and changes nothing.
+pub fn step_with<P: Probe>(w: &mut World, p: &mut P) {
+    let on = p.on();
+    let mark = |p: &mut P, phase| {
+        if on {
+            p.mark(phase);
+        }
+    };
+    mark(p, Phase::Triggers);
     // spec: S-0203 claim 1 (draw order: row 1, 9, 2, 10, 11, 12, 3, 14, then the turn pass, row 5; row 13, radiation maintenance, takes no draws)
     // spec: S-0203 row 1 and S-0011 claim 6 (the poll of every polled tag, at the start of the tick)
     crate::triggers::poll(w);
     // spec: S-0203 row 9 (growth and spread of resources, S-0401)
+    mark(p, Phase::Resources);
     crate::econ::resource::part(w);
     // Row 2 (planted-bomb maintenance, S-0519 claim 10; no draws) is presentation only (visibility, icon,
     // sound): nothing of it is state. Timed bombs detonate in their carrier's turn in row 5 (S-0203 claim 1,
     // S-0519 claim 4), not here.
     // spec: S-0506 claim 26 and S-0203 claim 1 row 17 (the shared kamikaze re-order cycle: once per tick, outside object turns, after planted-bomb maintenance (row 2), before diving aircraft (row 10) and the turn pass (row 5); it takes no draws)
+    mark(p, Phase::Kamikaze);
     crate::spawn::kamikaze_orders(w);
     // Rows 10 and 11 have no topic yet: empty seams.
     // spec: S-0203 claim 1 row 12 and S-0615 claim 13 (disc lasers, the most recently fired first, after rows 10 and 11 and before row 3 and the turn pass)
+    mark(p, Phase::Discs);
     crate::disc::update(w);
     // spec: S-0104 claims 4 and 5 (the ambient fade and the nuke flash's phase change; the fade work may run anywhere in the tick and takes no draws: here, just before the domination update that reads it)
+    mark(p, Phase::Lighting);
     crate::lighting::update(w);
     // spec: S-0612 Terms (the domination update runs in S-0203 row 3, before the storm's own update of that tick) and claims 4 to 7
+    mark(p, Phase::Domination);
     crate::domination::update(w);
     // spec: S-0203 claim 1 row 3 (the weather storm's own update and bolt strikes, after rows 10 to 12 and before row 14 and the turn pass; S-0513 claims 14 to 19)
+    mark(p, Phase::Storm);
     crate::superweapons::storm::update(w);
     // spec: S-0203 claim 1 row 13 and S-0525 claims 5, 6 and 11 (radiation maintenance: after the storm, before the turn pass; the most recently created field first; no draws)
+    mark(p, Phase::Radiation);
     crate::radiation::maintenance(w);
     // Rows 14 (and row 4) have no topic yet: empty seams.
     // spec: S-0203 claim 1 (other work once per tick, no draws: the regrowth of shroud; S-0409 claim 18)
     // spec: S-0409 claim 18 and State and ordering (a regrowth step due in the same tick as the re-cover sweep, tick 0 included, has its effect before the sweep)
+    mark(p, Phase::ShroudRegrowth);
     crate::econ::shroud::regrowth(w);
     // spec: S-0409 claim 13 (the re-cover sweep, before the turn pass of its tick)
+    mark(p, Phase::ShroudSweep);
     crate::econ::shroud::sweep(w);
-    turn_pass(w);
+    mark(p, Phase::TurnPass);
+    turn_pass(w, p);
     // spec: S-0203 claim 1 (after the turn pass: rows 15, 16, 6, 7, then the orders, row 8)
     // spec: S-0203 claim 1 row 15 and S-0612 claim 8 (blast rings, after the turn pass; no draws)
+    mark(p, Phase::Rings);
     crate::domination::rings(w);
     // spec: S-0203 claim 1 row 16 and S-0520 claim 4 (crate expiry and replacement, after the turn pass and before the production lines)
+    mark(p, Phase::Crates);
     crate::crates::update(w);
     // spec: S-0203 claim 8 and row 6 (the production lines see the whole turn pass)
+    mark(p, Phase::Production);
     crate::econ::production::part(w);
     // spec: S-0203 claim 8 and row 7 (the houses, in house order, after the production lines)
+    mark(p, Phase::Houses);
     crate::econ::houses::part(w);
     // spec: S-0203 claim 7 and S-0213 claim 1 (orders take effect after the turn pass)
+    mark(p, Phase::Orders);
     orders::apply_pending(w);
     // spec: S-0011 claim 11 (a one-time tag that fired is deleted at the end of the tick)
+    mark(p, Phase::EndTick);
     crate::triggers::end_tick(w);
     if w.econ.end.over == Some(w.tick) || w.econ.end.finished {
         // spec: S-0201 claim 1 and S-0203 State and ordering (the final tick runs in full but does not add 1: afterwards the tick number is the last tick's; no next tick runs, S-0414 claim 8)
@@ -71,16 +101,28 @@ pub fn step(w: &mut World) {
     }
     // Derived data, not state: the regions are brought up to date between
     // ticks, so that input rules can read them (crate::targeting).
+    mark(p, Phase::Regions);
     crate::regions::ensure(w);
+    mark(p, Phase::Done);
 }
 
 /// The turn pass (S-0203 claims 2 to 4, 10 and 11).
-fn turn_pass(w: &mut World) {
+fn turn_pass<P: Probe>(w: &mut World, p: &mut P) {
+    let on = p.on();
     w.update.begin_pass();
     while let Some(id) = w.update.next_turn() {
-        object_turn(w, id);
+        if on {
+            p.mark(Phase::Turn(crate::probe::classify(w, id)));
+        }
+        object_turn(w, id, p);
+        if on {
+            p.mark(Phase::StrikeSweep);
+        }
         // spec: S-0519 claim 19 (revision 3: a designator's change of target cancels its strike in the tick it applies, also a change after the designator's own turn, not at its next look or turn)
         crate::strike::sweep(w);
+        if on {
+            p.mark(Phase::TurnPass);
+        }
     }
     w.update.end_pass();
 }
@@ -88,7 +130,8 @@ fn turn_pass(w: &mut World) {
 /// One object's turn. Within a turn: the behaviour part (S-0215 claims 2,
 /// 11 and 33), then the locomotor, then the infantry sequence rules
 /// (S-0107 claims 8 to 10 and 15 run after the movement of the tick).
-fn object_turn(w: &mut World, id: ObjectId) {
+fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
+    let on = p.on();
     let t = w.tick;
     if w.projectiles.contains_key(&id) {
         // spec: S-0203 claim 5 (a shot is resolved in its projectile's own turn)
@@ -244,6 +287,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if w.obj(id).is_none() {
         return;
     }
+    if on {
+        p.mark(Phase::Behaviour);
+    }
     let behaves = early || !crate::temporal::building_erased(w, id);
     if behaves && !early {
         // The behaviour start (the first per-tick start and the countdown); an unlimited controller ran it before its overload update.
@@ -258,6 +304,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
     if behaves {
         // The behaviour processing.
         process::tail(w, id);
+    }
+    if on {
+        p.mark(Phase::BeforeMove);
     }
     if w.obj(id).is_none() {
         return;
@@ -310,6 +359,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
         // spec: S-0302 claim 16 (the countdown's expiry hit, in the building's own turn, after the actions due earlier in that turn: self-healing, behaviour, ordinary and animation-delayed shots; Q-0170)
         crate::combat::damage::delay_kill_expiry_turn(w, id);
         return;
+    }
+    if on {
+        p.mark(Phase::Movement);
     }
     if kind == Kind::Vehicle {
         // spec: S-0203 claim 12 (a vehicle master's due group update comes after that turn's behaviour start and processing, whose destination and group-state changes it sees, and before its movement; a destination it assigns is available to that movement)
@@ -367,6 +419,9 @@ fn object_turn(w: &mut World, id: ObjectId) {
         Some(Locomotor::Ship) => !held && crate::naval::tick(w, id),
         _ => false,
     };
+    if on {
+        p.mark(Phase::AfterMove);
+    }
     // spec: S-0507 claim 15 (whenever the transport moves to a new position, its passengers' positions become its position at once); S-0314 claim 23 (with the position change, before the queued-entry retry)
     crate::transport::sync(w, id);
     // spec: S-0215 claim 11 (the late start of an infantry unit or vehicle: after this update's movement, before its separate firing; a tunnel, erasing, leaving-stage or warp-only update never gets here, claim 2 and S-0513 claim 51)

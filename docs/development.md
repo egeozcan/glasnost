@@ -2306,6 +2306,65 @@ How drawing was checked unchanged: every view's picture of every run after a fix
 
 Seams: the late-game tick spikes (simulation; frames over budget in every view); the browser's slower ticks; translucent drawings that overlap still need their own pass; the per-frame redraw (`mapview::live`'s scan of the grid and painting of mobile objects and buildings) is the client's largest remaining part (about 12 % of a sample profile); the benchmark has no zoomed-out view because the client has no zoom.
 
+#### The tick's cost (M8 C4 part 2)
+
+The tick benchmark (`crates/tools/src/tick_bench.rs`, our own tooling: nothing in it is game behaviour) plays the frame benchmark's game (the same setup through `game::bench::start_headless`: map index, seed, AI houses) without a client, timing every `Game::step` with the host clock. With `probe=on` it also passes a probe (`glasnost_sim::probe::Probe`) into the step: the step marks the start of each phase of the fixed tick order (S-0203), each object's turn by kind and each part of each brain's think, and the probe reads the clock at each mark. The simulation never reads the probe: the step's default is the unit probe `()`, whose marks compile to nothing, and the probe's run hashes the same as the plain run (`the_probe_leaves_an_ai_game_unchanged`, and every 500th tick's state hash of the runs below). A probed tick is a few per cent slower, so the plain run gives the times and the probed run the shares.
+
+```sh
+# Real data (local lane; DIR is the install folder; nothing of it is copied):
+GLASNOST_GAME_DIR=DIR cargo run --release -p glasnost-tools --bin glasnost-headless -- tick-bench map=9 seed=7 players=8 ticks=11399 probe=on
+# Synthetic, CI-cheap (the scripted test game; prints its summary and state hash):
+cargo run --release -p glasnost-tools --bin glasnost-headless -- tick-bench synthetic 2000 probe=on
+```
+
+Words: `map` (9), `seed` (7), `players` (8), `ticks` (9000), `probe` (off), `hash` (a state hash every N ticks, 500), `save` (save and load the game at this tick and go on from the loaded game), `worst` (worst ticks listed, 20), `out` (`local-lane/m8/c4-2`), `label` (`ticks`). Outputs: `<label>.txt` (mean, median, p95, p99, worst and ticks over 16.7 ms; the same by 1000 ticks with the object count and the update order's length; with the probe the share of each phase and part, the turns a tick by kind and the worst ticks' largest parts), `<label>.csv` (one row per tick) and `<label>-hashes.txt`.
+
+**Where the time went (this machine; map 9, seed 7, 8 AI houses, 11399 ticks: the frame benchmark's 9000 ticks before timing and one tick for each of its 2399 timed frames (the frame benchmark's own end hash differs from this game's, so the two do not play exactly the same ticks); main 8dcc429 with the probe).** Plain run: mean 45.9 ms a tick, median 3.0, p95 355, p99 763, worst 1068; 1524 of 11399 ticks over 16.7 ms. The first 4000 ticks average 4 to 6 ms; from tick 4000 the mean is 55 to 79 ms with spikes of 0.4 to 1.1 s. The spikes fall on two tick classes: the AI's think (tick ≡ 0 mod 15, the main parts' period) and Movement on ticks ≡ 4, 9 and 14 mod 15.
+
+| Part (probe on, share of the probed time) | share | mean µs a tick | worst tick µs |
+|---|---|---|---|
+| AI think, all houses | 61.5 % | 28 200 | 1 068 000 (the whole tick: eight thinks together) |
+| of which `Script::think` (the base and army planner; share in the spanned run below) | 57 % | | |
+| of which superweapons, deploys, defence, filters and the rest (same) | 5 % | | |
+| Movement (the vehicle group update; almost all of it path computations) | 33.9 % | 15 500 | 712 000 |
+| Behaviour, before and after movement | 3.3 % | 1 530 | |
+| The object turns themselves (all kinds; 356 turns a tick) | 0.9 % | 430 | |
+| Houses, the turn pass, the strike sweep, every other phase | 0.5 % | 190 | |
+
+Inside the think (temporary spans, in a build that is not committed; the spans inflate small calls, so read them as proportions; 11399 ticks): `Script::place_cell` (the spiral search for a building's cell) is 97 % of the planner. It was called 44 195 times, and each call ran up to three passes over the spiral (gap 2, 1, 0: 624 cells, 4224 for a naval building), asking every cell the place order's legality (`placement::place_legal`, 86 M calls), whose adjacency scan (`placement::adjacent`) built a building's whole placement record (`place_type`, 1.2 G calls) for every building it met. Most of the calls came from the tech climb (`Script::climb` → `unblocker` → `placeable`), which asks the same building types' cells again for every army type it looks at, and from `water_goal`; the answers cannot change during a think (the brain reads the world by reference). The free-gap test (`Script::free_gap`, a scan of every object per cell) is 5 % of the placement time.
+
+Inside Movement: 10 977 path computations ran 20 491 cell searches (all but 4 inside a corridor); 12 558 found no path, and the searches expanded 51 M pairs, about 2 500 a search. Per expansion the cost is spread over the neighbour loop: the entry outcome (`path::step_outcome`, about 40 % of the search), the layer and height rules, the step cost's soft-float arithmetic and the pending heap. The object update order (A5's suspect) costs nothing measurable: the turn pass outside the turns is 0.1 %.
+
+**The fixes (the same game, tick for tick).** Each one does the same work in fewer steps and keeps nothing that is saved, hashed or compared:
+
+- `placement::adjacent` reads the two flags it needs of a building's type (`support_flags`) instead of building the type's whole placement record for every building it meets.
+- `Script::place_cell` keeps its answer for each type for the rest of a think (`PlaceMemo`, filled between `Script::begin_think` and `Script::end_think`, which `Brain::think_with` calls; `#[serde(skip)]`, empty outside a think, so a loaded game starts with nothing kept). The spiral asks each cell's legality and cell test once across the three gap passes; only the free-gap test is asked per pass.
+- During that search the adjacency answer of each cell is kept (`placement::SupportMemo`, read through `place_legal_kept`, which gives `place_legal`'s answer), since neighbouring top-left cells' rectangles overlap.
+- A think also keeps `tech::buildable` and `Script::unblocker` by type (and depth), so the tech climb no longer asks the same blocked types again for every army type.
+- The path search (S-0212) reads the mover once per search (`occupancy::Mover`: its unit type, whether it crushes, a walker's arms, mission target and master), works out the step cost for b × τ = 1 once per direction, keeps each pending entry's estimate for the stale test, and with `quirks.path_no_reopen` passes over a candidate that already has a record (not the destination) before asking its entry outcome: claim 11 forbids recording it again, so nothing below would use it.
+
+The proof is the same game: every 500th tick's state hash of the 11399-tick game is the same in every run before and after (also through a save and load at tick 6000); the M6c, M7a and M7b sweeps (seeds 1 to 16) and the oracle arena give the same counters and files; the goldens are unchanged and `cargo xtask gate` passes. The numbers below were measured on main 8dcc429; after the map's special flags landed (26f7de4, which changes the game) the fixes were proved again the same way against that main, and one pair of runs there gave the same picture (mean 45.2 ms before, 10.0 after). `scripted::place_cell_tests` compares the kept answers with a script that keeps nothing, on a cramped and an open fixture map.
+
+**After (this machine; the same 11399 ticks, probe off; three interleaved runs each, before and after, on the same four cores; other work on the machine took the load average from 45 down to 4 over the runs, so read the ranges, and the CPU time as the steadiest ratio).**
+
+| Tick time | before (main 8dcc429) | after |
+|---|---|---|
+| mean ms | 42.4 to 48.6 | 9.2 to 15.8 |
+| median ms | 2.7 to 3.6 | 2.7 to 4.5 |
+| p95 ms | 340 to 386 | 60 to 109 |
+| p99 ms | 728 to 800 | 86 to 151 |
+| worst ms | 872 to 1474 | 98 to 167 |
+| ticks over 16.7 ms | 1519 to 1534 | 1366 to 1476 |
+| user CPU s for the run | 487 to 559 | 110 to 187 (4.4 times less in the quietest pair) |
+
+With the probe after the fixes (mean 12.5 ms): Movement 41 %, the planner (`Script::think`) 20 %, the other brain parts 19 %, Behaviour and the movement steps around it 15 %, everything else 6 % (rounded).
+
+What is still over budget: 1421 of 11399 ticks in the probed run (1524 before). They are of two kinds. Every think tick (tick ≡ 0 mod 15, 760 of them) is still over: the eight houses think in the same tick, a median of 57 ms together (544 before) and at worst 125 ms (1066). And 658 Movement ticks (761 before), mostly on ticks ≡ 4 mod 5: their mean is 23 ms (72 before) and the worst 145 ms (712). The worst ticks are now all Movement, about 135 ms each, every 10 ticks over stretches of about 100 ticks (ticks 6569 to 6649 and 9739 to 9879): the same cost repeating, which looks like the same search being asked again (not looked into).
+
+The frame benchmark (native offscreen, default spec, one run each, before on main 8dcc429 and after): the 9000 late ticks took 37.8 ms a tick before and 8.7 after; the timed frames (all views) went from mean 77.8 ms, median 20.7, p95 399, p99 549, worst 750 to mean 29.7, median 19.4, p95 86, p99 94, worst 167. The tick part of a frame went from 60.8 to 13.8 ms on average. Same state hash at the end, and the four views' pictures are byte-identical. Every timed frame is still over 16.7 ms, before and after, for a reason outside the simulation: the HUD's draw list now takes 9.6 to 10.4 ms a frame, against 0.11 ms in C4 part 1's runs (86416da). That came in between those two commits and is not looked into here.
+
+Seams: the HUD draw list's cost since C4 part 1 (client); the think tick (eight brains in one tick); the repeated late-game Movement cost; the path search's per-step cost (the entry outcome is still most of a search).
+
 ## Electric bolts (M8 step C5 part 1)
 
 S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md).

@@ -447,6 +447,72 @@ pub struct Script {
     /// sale's tick, and whether the house is selling out (it then builds no
     /// more buildings or harvesters, only army units).
     watch: Watch,
+    /// The placement cells and clearing buildings found during the current
+    /// think (derived data: never saved, hashed or compared).
+    #[serde(skip)]
+    placed: PlaceMemo,
+}
+
+/// [`Script::place_cell`]'s, [`Script::unblocker`]'s and
+/// [`Script::buildable`]'s answers during one think. The world does not change while a brain thinks (it reads
+/// `&World`), and the answers depend only on the world and the house, so
+/// an answer found once holds for the rest of that think. Outside a think
+/// (between [`Script::begin_think`] and [`Script::end_think`]) nothing is
+/// kept, and every call searches. Our own tooling for speed (M8 C4 part
+/// 2): the same orders, found once instead of many times.
+#[derive(Clone, Debug, Default)]
+struct PlaceMemo(std::cell::RefCell<Option<Kept>>);
+
+/// The answers [`PlaceMemo`] keeps.
+#[derive(Clone, Debug, Default)]
+struct Kept {
+    /// [`Script::place_cell`] by type.
+    cells: BTreeMap<TypeRef, Option<CellXY>>,
+    /// [`Script::unblocker`] by type and depth.
+    unblockers: BTreeMap<(TypeRef, u32), Option<TypeRef>>,
+    /// [`Script::buildable`] by type.
+    buildable: BTreeMap<TypeRef, bool>,
+}
+
+impl PlaceMemo {
+    fn get(&self, t: TypeRef) -> Option<Option<CellXY>> {
+        self.0
+            .borrow()
+            .as_ref()
+            .and_then(|m| m.cells.get(&t).copied())
+    }
+
+    fn put(&self, t: TypeRef, found: Option<CellXY>) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.cells.insert(t, found);
+        }
+    }
+
+    fn unblocker(&self, t: TypeRef, depth: u32) -> Option<Option<TypeRef>> {
+        self.0
+            .borrow()
+            .as_ref()
+            .and_then(|m| m.unblockers.get(&(t, depth)).copied())
+    }
+
+    fn put_unblocker(&self, t: TypeRef, depth: u32, found: Option<TypeRef>) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.unblockers.insert((t, depth), found);
+        }
+    }
+
+    fn buildable(&self, t: TypeRef) -> Option<bool> {
+        self.0
+            .borrow()
+            .as_ref()
+            .and_then(|m| m.buildable.get(&t).copied())
+    }
+
+    fn put_buildable(&self, t: TypeRef, yes: bool) {
+        if let Some(m) = self.0.borrow_mut().as_mut() {
+            m.buildable.insert(t, yes);
+        }
+    }
 }
 
 /// What [`Script`] remembers of the house's income between thinks.
@@ -490,7 +556,19 @@ impl Script {
             next_army: [0; ARMY_KINDS.len()],
             waiting_since: None,
             watch: Watch::default(),
+            placed: PlaceMemo::default(),
         }
+    }
+
+    /// A think starts: [`Script::place_cell`], [`Script::unblocker`] and
+    /// [`Script::buildable`] keep their answers until [`Script::end_think`].
+    pub(crate) fn begin_think(&self) {
+        *self.placed.0.borrow_mut() = Some(Kept::default());
+    }
+
+    /// The think is over: the kept answers go.
+    pub(crate) fn end_think(&self) {
+        *self.placed.0.borrow_mut() = None;
     }
 
     /// Sets the enemy start cells to visit: every start cell but the one
@@ -524,7 +602,7 @@ impl Script {
     pub(crate) fn candidates(&self, w: &World, role: Role) -> Vec<TypeRef> {
         let mut v: Vec<TypeRef> = all_types(w)
             .into_iter()
-            .filter(|&t| self.allowed(w, t, role) && tech::buildable(w, self.house, t))
+            .filter(|&t| self.allowed(w, t, role) && self.buildable(w, t))
             .collect();
         v.sort_by_key(|&t| (production::cost_field(w, t), t.kind as u8, t.index));
         v
@@ -729,7 +807,28 @@ impl Script {
     /// is blocked itself; `None` when `t` is not blocked, is refused for
     /// another reason (tech level, owner, side) or nothing clears it.
     pub(crate) fn unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
-        if tech::buildable(w, self.house, t) {
+        if let Some(found) = self.placed.unblocker(t, depth) {
+            return found;
+        }
+        let found = self.search_unblocker(w, t, depth);
+        self.placed.put_unblocker(t, depth, found);
+        found
+    }
+
+    /// Whether the house can build `t` now ([`tech::buildable`]), the
+    /// answer kept for the rest of a think.
+    fn buildable(&self, w: &World, t: TypeRef) -> bool {
+        if let Some(yes) = self.placed.buildable(t) {
+            return yes;
+        }
+        let yes = tech::buildable(w, self.house, t);
+        self.placed.put_buildable(t, yes);
+        yes
+    }
+
+    /// [`Script::unblocker`]'s search.
+    fn search_unblocker(&self, w: &World, t: TypeRef, depth: u32) -> Option<TypeRef> {
+        if self.buildable(w, t) {
             return None;
         }
         let blockers = tech::unmet_prerequisites(w, self.house, t)?;
@@ -763,7 +862,7 @@ impl Script {
                 .collect();
             list.sort_by_key(|&b| (production::cost_field(w, b), b.index));
             for b in list {
-                if tech::buildable(w, self.house, b) {
+                if self.buildable(w, b) {
                     if self.placeable(w, b) {
                         return Some(b);
                     }
@@ -782,7 +881,7 @@ impl Script {
     pub(crate) fn climb(&self, w: &World) -> Option<TypeRef> {
         all_types(w)
             .into_iter()
-            .filter(|&t| self.allowed(w, t, Role::Army) && !tech::buildable(w, self.house, t))
+            .filter(|&t| self.allowed(w, t, Role::Army) && !self.buildable(w, t))
             .filter_map(|t| self.unblocker(w, t, CLIMB_DEPTH))
             .min_by_key(|&b| (production::cost_field(w, b), b.index))
     }
@@ -883,7 +982,7 @@ impl Script {
         // Broke: too few credits for anything the house can build now.
         let affordable = all_types(w)
             .into_iter()
-            .filter(|&a| tech::buildable(w, self.house, a))
+            .filter(|&a| self.buildable(w, a))
             .any(|a| credits >= production::cost_field(w, a));
         if t - since < BROKE_PATIENCE || affordable || refund {
             return;
@@ -1636,17 +1735,37 @@ impl Script {
     /// foundation is free. A naval building is looked for in the wider
     /// spiral, as a person looks for the water near the base.
     pub fn place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+        if let Some(found) = self.placed.get(t) {
+            return found;
+        }
+        let found = self.search_place_cell(w, t);
+        self.placed.put(t, found);
+        found
+    }
+
+    /// [`Script::place_cell`]'s search. The gap narrows pass by pass, and
+    /// only the free-gap test depends on the gap: the order's legality and
+    /// the cell test of each spiral cell are asked once, on its first pass,
+    /// and remembered for the later ones (the same answer as asking every
+    /// pass, in the same order, with less work).
+    fn search_place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
         } else {
             SPIRAL_RINGS
         };
+        let cells: Vec<CellXY> = self.spiral(w, rings).collect();
+        let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
+        let mut supports = placement::SupportMemo::new(w, self.house);
         // A cramped base (a start in a small clearing) has no cell with the
         // usual gap: the gap narrows, as a person squeezes a building in
         // when the room is short, down to none.
-        (0..=GAP)
-            .rev()
-            .find_map(|gap| self.spiral(w, rings).find(|&c| self.fits_gap(w, t, c, gap)))
+        (0..=GAP).rev().find_map(|gap| {
+            cells.iter().zip(legal.iter_mut()).find_map(|(&c, l)| {
+                let ok = *l.get_or_insert_with(|| self.order_fits_kept(w, &mut supports, t, c));
+                (ok && self.free_gap(w, t, c, None, gap)).then_some(c)
+            })
+        })
     }
 
     /// The cells of the square spiral around the construction yard, ring by
@@ -1670,11 +1789,32 @@ impl Script {
 
     /// [`Script::fits`] with a gap of `gap` cells to other buildings.
     fn fits_gap(&self, w: &World, t: TypeRef, c: CellXY, gap: i32) -> bool {
-        // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12); an upgrade needs only the former.
-        let upgrade = placement::place_type(w, t.index).upgrade_of.is_some();
-        placement::place_legal(w, self.house, t, c)
-            && (upgrade || placement::cell_test(w, t.index, c, &placement::Test::order(self.house)))
-            && self.free_gap(w, t, c, None, gap)
+        self.order_fits(w, t, c) && self.free_gap(w, t, c, None, gap)
+    }
+
+    /// The part of [`Script::fits_gap`] that does not depend on the gap.
+    fn order_fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+        // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12).
+        placement::place_legal(w, self.house, t, c) && self.cell_fits(w, t, c)
+    }
+
+    /// [`Script::order_fits`], the adjacency answers kept in `supports`
+    /// (made for this house).
+    fn order_fits_kept(
+        &self,
+        w: &World,
+        supports: &mut placement::SupportMemo,
+        t: TypeRef,
+        c: CellXY,
+    ) -> bool {
+        placement::place_legal_kept(w, supports, t, c) && self.cell_fits(w, t, c)
+    }
+
+    /// The cell test of [`Script::order_fits`] (S-0406 claims 3 and 8); an
+    /// upgrade needs only the place order's conditions.
+    fn cell_fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
+        placement::place_type(w, t.index).upgrade_of.is_some()
+            || placement::cell_test(w, t.index, c, &placement::Test::order(self.house))
     }
 
     /// The water the base grows toward: when a naval factory type that the
@@ -1702,7 +1842,7 @@ impl Script {
                 b.naval
                     && b.factory.is_some()
                     && tech::present_count(w, self.house, t) == 0
-                    && tech::buildable(w, self.house, t)
+                    && self.buildable(w, t)
                     && !self.placeable(w, t)
             })
             .map(|(i, _)| i as u32)
@@ -1870,5 +2010,93 @@ impl Script {
             "; army reaching the nearest seen enemy, by zone (units, reaching): {reach:?}"
         );
         s
+    }
+}
+
+#[cfg(test)]
+mod place_cell_tests {
+    use super::*;
+    use crate::{fixture, game::Game};
+
+    /// The placement search as it was before M8 C4 part 2: every pass asks
+    /// every spiral cell the whole test.
+    fn three_passes(s: &Script, w: &World, t: TypeRef) -> Option<CellXY> {
+        let rings = if naval_building(w, t) {
+            WIDE_RINGS
+        } else {
+            SPIRAL_RINGS
+        };
+        (0..=GAP)
+            .rev()
+            .find_map(|gap| s.spiral(w, rings).find(|&c| s.fits_gap(w, t, c, gap)))
+    }
+
+    /// Our tooling for speed (M8 C4 part 2): the search that asks each
+    /// cell's legality once, and the answers kept for a think, give every
+    /// house the cell the three passes give, for every building type, at
+    /// several points of a game, in a roomy base and in a cramped one (where
+    /// the gap narrows).
+    #[test]
+    fn the_kept_and_once_asked_placement_answers_match_the_three_passes() {
+        let maps = [
+            ("synthetic", fixture::map()),
+            ("synthetic-cramped", fixture::map_cramped(5)),
+        ];
+        let mut compared = 0;
+        let mut found = 0;
+        let mut unblocked = 0;
+        for (name, map) in maps {
+            let mut g = Game::new(
+                fixture::rules(),
+                &map,
+                name,
+                fixture::catalogue(),
+                fixture::setup(3),
+            )
+            .expect("the skirmish loads");
+            for _ in 0..4 {
+                for _ in 0..600 {
+                    g.step();
+                }
+                let w = &g.world;
+                let houses = w.houses.len();
+                for h in 0..houses {
+                    let s = Script::new(HouseId(h as u8), Plan::default());
+                    s.begin_think();
+                    for t in all_types(w)
+                        .into_iter()
+                        .filter(|t| t.kind == Kind::Building)
+                    {
+                        let want = three_passes(&s, w, t);
+                        assert_eq!(s.place_cell(w, t), want, "house {h}, type {t:?}");
+                        assert_eq!(s.place_cell(w, t), want, "kept: house {h}, type {t:?}");
+                        compared += 1;
+                        found += usize::from(want.is_some());
+                    }
+                    // The clearing buildings and the tech climb, kept and
+                    // asked afresh (a script outside a think keeps nothing).
+                    let plain = Script::new(HouseId(h as u8), Plan::default());
+                    for t in all_types(w) {
+                        let can = tech::buildable(w, HouseId(h as u8), t);
+                        assert_eq!(s.buildable(w, t), can, "house {h}, {t:?}");
+                        assert_eq!(s.buildable(w, t), can, "kept: house {h}, {t:?}");
+                        for depth in 0..=CLIMB_DEPTH {
+                            let want = plain.unblocker(w, t, depth);
+                            assert_eq!(s.unblocker(w, t, depth), want, "house {h}, {t:?}, {depth}");
+                            unblocked += usize::from(want.is_some());
+                        }
+                    }
+                    assert_eq!(s.climb(w), plain.climb(w), "house {h}");
+                    s.end_think();
+                    assert!(s.placed.0.borrow().is_none());
+                    assert!(plain.placed.0.borrow().is_none());
+                }
+            }
+        }
+        assert!(
+            compared > 0 && found > 0 && found < compared,
+            "{found} of {compared}"
+        );
+        assert!(unblocked > 0);
     }
 }

@@ -131,6 +131,7 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
     let e = &b.raw.econ;
     let mode = r.mode;
     let wall_overlay = e.to_overlay.as_deref().and_then(|n| overlay_index(w, n));
+    let support = support_flags(w, t);
     PlaceType {
         size: b.foundation,
         // spec: S-0406 claim 2 (the 8-cell 3 × 3 word; absent: no)
@@ -152,10 +153,8 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
         firestorm: b.raw.firestorm_wall.unwrap_or(false),
         // spec: S-0406 Constants (adjacency absent-key default 3 cells)
         adjacent: e.adjacent.unwrap_or(3),
-        // spec: S-0406 Constants (base-normal absent-key default yes)
-        base_normal: e.base_normal.unwrap_or(true),
-        // spec: S-0406 Constants (ally-eligible absent-key default no)
-        ally_eligible: e.eligible_for_ally_building.unwrap_or(false),
+        base_normal: support.0,
+        ally_eligible: support.1,
         // spec: S-0406 Import mapping (GuardRange: cells converted to leptons as S-0215 states, trunc(256 × c); absent 0)
         guard_range: e.guard_range.as_ref().map_or(0, |d| {
             d.value(mode)
@@ -171,6 +170,23 @@ pub fn place_type(w: &World, t: u32) -> PlaceType {
         // spec: S-0406 Import mapping (Upgrades absent: 0)
         upgrades: e.upgrades.unwrap_or(0),
     }
+}
+
+/// The base-normal and ally-eligible flags of building type `t` (claim 4),
+/// as [`place_type`] gives them, without the rest of its fields: the
+/// adjacency scan asks them of every building it meets.
+fn support_flags(w: &World, t: u32) -> (bool, bool) {
+    let Some(b) = w.rules().buildings.get(t as usize) else {
+        // As `PlaceType::default()`.
+        return (false, false);
+    };
+    let e = &b.raw.econ;
+    (
+        // spec: S-0406 Constants (base-normal absent-key default yes)
+        e.base_normal.unwrap_or(true),
+        // spec: S-0406 Constants (ally-eligible absent-key default no)
+        e.eligible_for_ally_building.unwrap_or(false),
+    )
 }
 
 /// The overlay registration index of an overlay type name.
@@ -487,42 +503,103 @@ pub fn build_off_ally(w: &World) -> bool {
 
 /// The adjacency condition (S-0406 claim 4, F1).
 pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
+    let ally_option = build_off_ally(w);
+    adjacent_by(w, t, top_left, |c| supports(w, house, ally_option, c))
+}
+
+/// [`adjacent`] with the cell test `support` (whether a cell holds a
+/// building the house may build next to).
+fn adjacent_by(
+    w: &World,
+    t: u32,
+    top_left: CellXY,
+    mut support: impl FnMut(CellXY) -> bool,
+) -> bool {
     let p = place_type(w, t);
     // spec: S-0406 F1 (d = A + 1; the zero-size word's rectangle is 0 × 0)
     let d = p.adjacent.saturating_add(1);
     let (fw, fh) = (p.size.0.max(0), p.size.1.max(0));
     let (x0, y0) = (top_left.x, top_left.y);
-    let ally_option = build_off_ally(w);
     for y in (y0 - d)..=(y0 + fh - 1 + d) {
         for x in (x0 - d)..=(x0 + fw - 1 + d) {
             // spec: S-0406 F1 (the foundation rectangle itself is not looked at)
             if (x0..x0 + fw).contains(&x) && (y0..y0 + fh).contains(&y) {
                 continue;
             }
-            let c = CellXY::new(x, y);
-            for &id in w.cells.list(c, Layer::Ground) {
-                let Some(o) = w.obj(id) else { continue };
-                if o.kind != Kind::Building {
-                    continue;
-                }
-                let Some(owner) = o.owner else { continue };
-                let q = place_type(w, o.type_index);
-                // spec: S-0406 claim 4 (own base-normal building, any state)
-                if owner == house && q.base_normal {
-                    return true;
-                }
-                // spec: S-0406 claim 4 (build-off-ally: the owner allies the placing house, an ally-eligible building; a house allies itself)
-                let allies = owner == house
-                    || w.houses
-                        .get(usize::from(owner.0))
-                        .is_some_and(|h| h.allied_with(house));
-                if ally_option && allies && q.ally_eligible {
-                    return true;
-                }
+            if support(CellXY::new(x, y)) {
+                return true;
             }
         }
     }
     false
+}
+
+/// Whether cell `c` holds a building that lets `house` build next to it
+/// (S-0406 claim 4), the build-off-ally option being `ally_option`.
+fn supports(w: &World, house: HouseId, ally_option: bool, c: CellXY) -> bool {
+    w.cells.list(c, Layer::Ground).iter().any(|&id| {
+        let Some(o) = w.obj(id) else { return false };
+        if o.kind != Kind::Building {
+            return false;
+        }
+        let Some(owner) = o.owner else { return false };
+        let (base_normal, ally_eligible) = support_flags(w, o.type_index);
+        // spec: S-0406 claim 4 (own base-normal building, any state)
+        if owner == house && base_normal {
+            return true;
+        }
+        // spec: S-0406 claim 4 (build-off-ally: the owner allies the placing house, an ally-eligible building; a house allies itself)
+        let allies = owner == house
+            || w.houses
+                .get(usize::from(owner.0))
+                .is_some_and(|h| h.allied_with(house));
+        ally_option && allies && ally_eligible
+    })
+}
+
+/// The answers of [`supports`] for one house on an unchanged world, kept
+/// by cell while a search asks the place order's conditions of many
+/// top-left cells whose adjacency rectangles overlap (our tooling for
+/// speed, M8 C4 part 2: the same answers, each cell looked at once).
+pub struct SupportMemo {
+    house: HouseId,
+    ally_option: bool,
+    /// By dense cell index: the answer, once asked.
+    known: Vec<Option<bool>>,
+}
+
+impl SupportMemo {
+    /// An empty memo for `house` on `w`.
+    pub fn new(w: &World, house: HouseId) -> Self {
+        Self {
+            house,
+            ally_option: build_off_ally(w),
+            known: vec![None; w.cells.grid.len()],
+        }
+    }
+
+    fn supports(&mut self, w: &World, c: CellXY) -> bool {
+        let Some(i) = w.cells.idx(c) else {
+            // Off the grid: an empty list.
+            return false;
+        };
+        if let Some(Some(yes)) = self.known.get(i).copied() {
+            return yes;
+        }
+        let yes = supports(w, self.house, self.ally_option, c);
+        if let Some(k) = self.known.get_mut(i) {
+            *k = Some(yes);
+        }
+        yes
+    }
+}
+
+/// [`place_legal`] for `memo`'s house, its adjacency read through `memo`
+/// (the same answer).
+pub fn place_legal_kept(w: &World, memo: &mut SupportMemo, t: TypeRef, cell: CellXY) -> bool {
+    place_legal_by(w, memo.house, t, cell, |w, t, c| {
+        adjacent_by(w, t, c, |k| memo.supports(w, k))
+    })
 }
 
 /// The explored-ground condition (S-0406 claim 5): every cell of the
@@ -543,6 +620,17 @@ pub fn explored(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
 /// 6 and 12): adjacency, or for an upgrade type a building it can go on,
 /// and explored ground. Applying the order does not judge them again.
 pub fn place_legal(w: &World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
+    place_legal_by(w, house, t, cell, |w, t, c| adjacent(w, house, t, c))
+}
+
+/// [`place_legal`] with the adjacency test `adjacent`.
+fn place_legal_by(
+    w: &World,
+    house: HouseId,
+    t: TypeRef,
+    cell: CellXY,
+    adjacent: impl FnOnce(&World, u32, CellXY) -> bool,
+) -> bool {
     if t.kind != Kind::Building {
         return false;
     }
@@ -551,7 +639,7 @@ pub fn place_legal(w: &World, house: HouseId, t: TypeRef, cell: CellXY) -> bool 
         // spec: S-0406 claim 12 (an upgrade order that names such a building passes claim 4)
         upgrade_target(w, house, t.index, cell).is_some()
     } else {
-        adjacent(w, house, t.index, cell)
+        adjacent(w, t.index, cell)
     };
     // spec: S-0406 claims 5 and 12 (the shroud condition is asked of an upgrade type's rectangle too)
     support && explored(w, house, t.index, cell)

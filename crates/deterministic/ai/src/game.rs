@@ -19,6 +19,7 @@ use glasnost_map::terrain::TileCatalogue;
 use glasnost_sim::econ::victory;
 use glasnost_sim::load::{LoadError, new_game};
 use glasnost_sim::orders::{self, Order};
+use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::save::{self, Replay, SaveError};
 use glasnost_sim::tick;
@@ -98,16 +99,30 @@ impl Game {
 
     /// Runs one tick: the AI houses think, then the simulation steps.
     pub fn step(&mut self) {
+        self.step_with(&mut ());
+    }
+
+    /// [`Game::step`], telling `p` where the tick is (the tools' benchmark,
+    /// `glasnost_sim::probe`); `p` reads nothing and changes nothing.
+    pub fn step_with<P: Probe>(&mut self, p: &mut P) {
+        let on = p.on();
         for b in &mut self.brains {
             let h = b.house();
             if victory::defeated(&self.world, h) || self.world.houses[usize::from(h.0)].removed {
                 continue;
             }
-            for o in b.think(&self.world) {
+            if on {
+                p.mark(Phase::Think(h.0));
+            }
+            let orders = b.think_with(&self.world, p);
+            if on {
+                p.mark(Phase::Issue);
+            }
+            for o in orders {
                 orders::issue(&mut self.world, h, o);
             }
         }
-        tick::step(&mut self.world);
+        tick::step_with(&mut self.world, p);
         self.replay.ticks = tick::ticks_run(&self.world);
     }
 

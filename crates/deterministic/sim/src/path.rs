@@ -258,24 +258,35 @@ fn height_ok(w: &World, f: CellXY, deck: bool, t: CellXY) -> bool {
 /// gives the search layers of both cells (S-0212 claim 7) and the cell
 /// layer the entry outcome reads (S-0209 Terms).
 pub fn step_outcome(w: &World, id: ObjectId, from: CellXY, to: CellXY, reference: i32) -> Outcome {
+    occupancy::Mover::of(w, id).map_or(Outcome::Blocked, |m| {
+        step_outcome_of(w, &m, from, to, reference)
+    })
+}
+
+/// [`step_outcome`] for a mover read once (a search reads it once for all
+/// its steps).
+pub fn step_outcome_of(
+    w: &World,
+    m: &occupancy::Mover<'_>,
+    from: CellXY,
+    to: CellXY,
+    reference: i32,
+) -> Outcome {
     // spec: S-0212 Terms (a pair 4 levels above its bridge cell is on the deck)
     let from_deck = is_bridge(w, from) && reference - level(w, from) >= 4;
     // spec: S-0212 claim 7 (the height rule of claim 10 is part of the entry outcome)
     if !height_ok(w, from, from_deck, to) {
         return Outcome::Blocked;
     }
-    let Some(o) = w.obj(id) else {
-        return Outcome::Blocked;
-    };
     // spec: S-0211 Terms (a unit inside the usable area may not step outside it)
     if w.cells.usable(from) && !w.cells.usable(to) {
         return Outcome::Blocked;
     }
-    match o.kind {
-        Kind::Infantry => occupancy::infantry_outcome(w, id, to, reference),
+    match m.o.kind {
+        Kind::Infantry => occupancy::infantry_outcome_of(w, m, to, reference),
         // spec: S-0209 claim 14 (an aircraft gets clear everywhere in skirmish games)
         Kind::Aircraft => Outcome::Clear,
-        _ => occupancy::vehicle_outcome(w, id, to, reference),
+        _ => occupancy::vehicle_outcome_of(w, m, to, reference),
     }
 }
 
@@ -321,6 +332,10 @@ struct Pending {
     seq: u32,
     cell: CellXY,
     layer: Layer,
+    /// The cell's estimate h, kept so that the stale test on taking the
+    /// entry does not work it out again (the same value: h depends on the
+    /// cell alone).
+    h: F32,
 }
 
 impl Ord for Pending {
@@ -414,6 +429,8 @@ fn counted_search(
         let mode = r.mode;
         let o = w.obj(req.unit)?;
         let u = r.unit(o.kind, o.type_index)?;
+        // The mover, read once for every step outcome of the search.
+        let mover = occupancy::Mover::of(w, req.unit)?;
         let train = u.train;
         let passive = u.passive && o.kind == Kind::Vehicle;
         let from = req.from;
@@ -453,12 +470,20 @@ fn counted_search(
         sc.g[fi] = F32::ZERO;
         // spec: S-0212 F1 (recorded-pair margin μ = 1.009, the double nearest)
         let mu = crate::consts::PATH_MARGIN;
+        // The step cost of F1 below for b × τ = 1 (a clear cell without a
+        // congestion mark, the usual step), worked out once per direction:
+        // the same arithmetic, asked once instead of once per step.
+        // spec: S-0212 F1 (c = trunc₂₄(b × τ + ε(d)), here for b × τ = 1)
+        let unit_cost: [F32; 8] =
+            std::array::from_fn(|d| t24(F64::from_i64(1, mode).add(epsilon(d), mode), mode));
         // spec: S-0212 claim 12a (the start pair is recorded first)
+        let h_from = est(from);
         heap.push(Pending {
-            f: t24(est(from).to_f64(), mode).0,
+            f: t24(h_from.to_f64(), mode).0,
             seq,
             cell: from,
             layer: from_layer,
+            h: h_from,
         });
         let expansions = &mut size.expansions;
         let recorded = &mut size.recorded;
@@ -493,7 +518,7 @@ fn counted_search(
             if !q.path_no_reopen {
                 // A stale entry superseded by a cheaper record.
                 let cur = sc.g(ni).unwrap_or(F32::ZERO);
-                if t24(cur.to_f64().add(est(next.cell).to_f64(), mode), mode).0 != next.f {
+                if t24(cur.to_f64().add(next.h.to_f64(), mode), mode).0 != next.f {
                     continue;
                 }
             }
@@ -521,11 +546,19 @@ fn counted_search(
                 let c = CellXY::new(next.cell.x + dx, next.cell.y + dy);
                 let cl = candidate_layer(w, here_level, c);
                 let Some(ci) = ix(c, cl) else { continue };
+                // spec: S-0212 claim 11 (with quirks.path_no_reopen a recorded pair is never recorded again)
+                // Such a candidate leads nowhere below unless it is the
+                // destination (claim 15's blocked destination), so it is
+                // passed over before its outcome is asked: the same search
+                // with less work.
+                if q.path_no_reopen && c != to && sc.seen[ci] == stamp {
+                    continue;
+                }
                 if w.cells.cell(c).is_none() || behind.contains(&(c, cl)) {
                     continue;
                 }
                 // spec: S-0209 Terms (reference height level in a path search: the expanded pair's, plus 4 on its deck layer, with the start-pair adjustment of S-0212 claim 7; the step starts from that pair's cell)
-                let v = step_outcome(w, req.unit, next.cell, c, here_level);
+                let v = step_outcome_of(w, &mover, next.cell, c, here_level);
                 if v == Outcome::Blocked {
                     // spec: S-0212 claim 15 (a blocked destination is approached from a neighbour whose search layer is within 1 level of the destination's; not for passive vehicles)
                     if c == to && !passive && (here_level - to_level).abs() <= 1 {
@@ -569,7 +602,11 @@ fn counted_search(
                 // spec: S-0212 F1 (c = trunc₂₄(b × τ + ε(d)); τ = 4 on a congestion mark)
                 let tau = if req.congested.contains(&c) { 4 } else { 1 };
                 let b = base_cost(w, req, v, c, cl, train) * tau;
-                let cost = t24(F64::from_i64(b, mode).add(epsilon(d), mode), mode);
+                let cost = if b == 1 {
+                    unit_cost[d]
+                } else {
+                    t24(F64::from_i64(b, mode).add(epsilon(d), mode), mode)
+                };
                 // spec: S-0212 F1 (g(new) = trunc₂₄(g(current) + c))
                 let gn = t24(ge.to_f64().add(cost.to_f64(), mode), mode);
                 let recorded_g = sc.g(ci);
@@ -595,13 +632,15 @@ fn counted_search(
                 sc.pred[ci] = (next.cell, next.layer, d as u8);
                 seq += 1;
                 // spec: S-0212 F2 (f = trunc₂₄(g + h))
-                let f = t24(gn.to_f64().add(est(c).to_f64(), mode), mode).0;
+                let h = est(c);
+                let f = t24(gn.to_f64().add(h.to_f64(), mode), mode).0;
                 // spec: S-0212 claim 12a (pairs recorded in expansion order, an expansion's candidates in generation order)
                 heap.push(Pending {
                     f,
                     seq,
                     cell: c,
                     layer: cl,
+                    h,
                 });
                 // spec: S-0212 claim 13 (progress: the first recorded candidate in the next corridor sector)
                 if let Some(cf) = corr

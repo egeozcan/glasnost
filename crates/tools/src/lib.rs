@@ -28,6 +28,7 @@ pub mod side_audit;
 pub mod skirmish_lane;
 pub mod soak;
 pub mod stats;
+pub mod tick_bench;
 pub mod trigger_lane;
 
 use std::io;

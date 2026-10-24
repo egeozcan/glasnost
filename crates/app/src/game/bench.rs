@@ -1379,6 +1379,32 @@ pub fn run_offscreen(
     }
 }
 
+/// Starts the benchmark's game natively without drawing: the install in
+/// `game_dir`, the skirmish of `opts` (map, seed, houses) set up exactly as
+/// [`Bench`] sets it up, stopped before its first tick. Returns the client
+/// holding the session and the map's content hash. The tools' tick
+/// benchmark (M8 C4 part 2) times the ticks from here.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn start_headless(opts: BenchOptions, game_dir: &str) -> Result<(Client, String), String> {
+    let mut bench = Bench::new(opts, "ticks");
+    let mut client = Client::new();
+    client.cpu_map = false;
+    client.mount(crate::viewer::tasks::native_files(std::path::Path::new(
+        game_dir,
+    ))?);
+    while !bench.finished() && bench.stage != Stage::Forward {
+        while let Some(job) = client.job.take() {
+            let done = pollster::block_on(super::client::run_job(job));
+            client.done(done);
+        }
+        bench.before_frame(&mut client);
+    }
+    if let Some(why) = bench.failure() {
+        return Err(why.to_owned());
+    }
+    Ok((client, bench.map_hash.clone()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
