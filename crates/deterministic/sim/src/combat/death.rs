@@ -59,7 +59,7 @@ fn debris(w: &mut World, id: ObjectId) {
     // spec: S-0312 F1 (debris animations raised by 20 leptons)
     let raised = Pos::new(o.pos.x, o.pos.y, o.pos.z + 20);
     if !tc.debris_types.is_empty() {
-        // spec: S-0312 claim 4 (the pieces of a destroyed object get that object's house)
+        // spec: S-0312 claim 4 (revision 44: the voxel debris consists of S-0317 pieces, objects of play created at the unraised position with S-0317 claims 3 and 4 draws, owned by the object's house; that house changes neither their ground-impact hits nor their end's area damage, which carry no attacking house, S-0317 claims 1, 7 and 11)
         deal_debris(w, n, &tc.debris_types, &tc.debris_maximums, o.pos, o.owner);
     } else if !tc.debris_anims.is_empty() {
         let c = tc.debris_anims.len() as i32;

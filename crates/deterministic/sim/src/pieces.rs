@@ -608,7 +608,7 @@ fn land_impact(w: &mut World, t: &PieceType, old: Pos, cell: CellXY, at: Pos, on
             amount: t.damage,
             warhead: t.warhead,
             distance,
-            // spec: S-0317 claims 1 and 7 (no attacker, no attacking house, defences not ignored, no no-escape marker)
+            // spec: S-0317 claims 1 and 7 and S-0312 claim 4 (no attacker, no attacking house whatever the piece's own house, defences not ignored, no no-escape marker; S-0302 claim 1's table row)
             attacker: None,
             house: None,
             ignore_defences: false,
