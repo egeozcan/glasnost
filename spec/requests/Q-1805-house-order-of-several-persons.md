@@ -1,9 +1,9 @@
 ---
 id: Q-1805
 title: House order of several human players, and of a human whose colour is on random
-status: open
+status: answered
 related: [S-0009, S-0412]
-answered-by: []
+answered-by: [S-0009]
 ---
 
 ## Need
