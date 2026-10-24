@@ -1,9 +1,9 @@
 ---
 id: Q-1845
 title: When an aircraft starts and stops being a tracked flying object, and when its sector is updated
-status: open
+status: answered
 related: [S-0303, S-0309, S-0501, S-0209, S-0502]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
