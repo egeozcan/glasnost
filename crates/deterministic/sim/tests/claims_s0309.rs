@@ -2882,3 +2882,21 @@ fn disguise_draw_only_for_an_object_the_other_rows_let_through() {
     assert_eq!(range_search(&mut w, a), None);
     assert_eq!(w.rng, draws(&before, &w, false), "friendly row: no draw");
 }
+
+// spec: S-0309 table C row harvester immunity and scenario A14 part i (the map sets harvester immunity and T's type is a game-wide harvester type: never found by itself; on a map without the setting, found; a vehicle of another type is found on either map)
+#[test]
+fn table_c_harvester_immunity() {
+    let mut r = base();
+    r.sim.general.harvester_unit = Some(vec!["T1".into()]);
+    for (immune, listed_found) in [(false, true), (true, false)] {
+        let (mut w, a, b) = one_target(&r, Kind::Vehicle, "T1");
+        w.map_flags.harvester_immune = immune;
+        let got = range_search(&mut w, a);
+        assert_eq!(got, listed_found.then_some(b), "immune {immune}");
+    }
+    // The flag alone rejects nothing: T1 is no harvester type.
+    r.sim.general.harvester_unit = None;
+    let (mut w, a, b) = one_target(&r, Kind::Vehicle, "T1");
+    w.map_flags.harvester_immune = true;
+    assert_eq!(range_search(&mut w, a), Some(b));
+}

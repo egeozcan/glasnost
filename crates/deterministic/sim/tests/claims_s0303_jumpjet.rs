@@ -335,3 +335,22 @@ fn placement_in_the_air_needs_the_counts_as_aircraft_flag() {
         assert_eq!(flying::tracked(&w, u), flag);
     }
 }
+
+// spec: S-0303 claim 9 and Edge cases (a listed harvester that a detonation finds through the flying-object search is hit by default, quirks.flying_candidates_unfiltered; with the switch off the harvester-immunity exclusion applies to it too, and without the map flag it is hit either way)
+#[test]
+fn flying_listed_harvester_and_immunity() {
+    for (unfiltered, immune) in [(true, true), (false, true), (false, false)] {
+        let mut r = ruleset();
+        r.globals.quirks.flying_candidates_unfiltered = unfiltered;
+        r.sim.general.harvester_unit = Some(vec!["JV".into()]);
+        let mut w = glasnost_sim::testkit::game_with(&r, SIZE, 7);
+        w.map_flags.harvester_immune = immune;
+        let u = put(&mut w, "JV", Kind::Vehicle, 0, 0, 0);
+        jump::start_in_flight(&mut w, u, Phase::Hovering, 500);
+        assert!(flying::tracked(&w, u));
+        let before = w.obj(u).unwrap().health;
+        blast_at(&mut w, u);
+        let hit = w.obj(u).unwrap().health < before;
+        assert_eq!(hit, unfiltered || !immune, "{unfiltered} {immune}");
+    }
+}

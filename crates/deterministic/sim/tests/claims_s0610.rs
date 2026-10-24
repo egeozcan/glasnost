@@ -870,3 +870,23 @@ fn claim_14_centre_has_the_height_shift() {
     assert_eq!(got, want);
     assert_ne!(want, unshifted, "the shift moves the area");
 }
+
+// spec: S-0610 scenario P3 (zero duration: any target in an inert game takes a berserk hit with T = 0, S-0302 claim 6 and Formulas; with quirks.berserk_zero_duration on it is still dropped to hunt and the state ends at the next countdown update); the control on a map without the flag gives T = 50
+#[test]
+fn p3_berserk_hit_in_an_inert_game_has_zero_duration() {
+    for inert in [false, true] {
+        let mut w = testkit::game_with(&rules(), SIZE, 1);
+        w.map_flags.inert = inert;
+        let (tank, _) = attacker(&mut w, BETA);
+        let h = mad(&w, 100, Some(ALPHA));
+        assert_eq!(damage::apply(&mut w, tank, h), HitResult::Unchanged);
+        let o = w.obj(tank).unwrap();
+        assert_eq!(o.combat.berserk, Some(if inert { 0 } else { 50 }));
+        assert_eq!(o.target, None, "dropped either way");
+        assert_eq!(o.beh.queued, Some(Behaviour::Hunt));
+        if inert {
+            psychic::countdown_turn(&mut w, tank);
+            assert_eq!(w.obj(tank).unwrap().combat.berserk, None);
+        }
+    }
+}

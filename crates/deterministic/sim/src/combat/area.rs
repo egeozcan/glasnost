@@ -329,16 +329,30 @@ fn curtain_trigger(w: &World, id: ObjectId, raw: i32) -> bool {
             == Some(crate::superweapons::ProtectKind::Curtain)
 }
 
+/// Whether an object of this kind and type is left out for harvester
+/// immunity: a vehicle of a game-wide harvester type on a map that sets the
+/// flag.
+// spec: S-0303 claim 9 (a vehicle whose type is in the game-wide harvester list while the map's harvester-immunity flag is set)
+pub fn harvester_immune(w: &World, kind: Kind, type_index: u32) -> bool {
+    w.map_flags.harvester_immune
+        && kind == Kind::Vehicle
+        && w.rules()
+            .combat
+            .general
+            .harvester_units
+            .contains(&type_index)
+}
+
 /// Applies one detonation's area damage (S-0303 claims 1 to 20).
 // spec: S-0303 claim 7 and Constants (raised-detonation building allowance 208 leptons)
 pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
     let rules = w.rules_arc();
     let q = rules.quirks;
-    // spec: S-0303 claim 2 (a damage amount of 0 or no warhead: no effect at all, missed); inert maps are not marked in our map data yet
+    // spec: S-0303 claim 2 (a damage amount of 0 or no warhead: no effect at all, missed; and every detonation of an inert map is like this)
     let Some(warhead) = det.warhead else {
         return DetonationResult::Missed;
     };
-    if det.damage == 0 {
+    if det.damage == 0 || w.map_flags.inert {
         return DetonationResult::Missed;
     }
     let h = rules.combat.warhead(warhead).clone();
@@ -418,6 +432,13 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
                     continue;
                 }
             }
+            // spec: S-0303 Edge cases (quirks.flying_candidates_unfiltered off: the listed-harvester exclusion applies, claim 9)
+            if !q.flying_candidates_unfiltered
+                && w.obj(id)
+                    .is_some_and(|o| harvester_immune(w, o.kind, o.type_index))
+            {
+                continue;
+            }
             let raw = dist(w, p, w.reference_point(id));
             let d = half_in_air(w, id, raw);
             if d > big_r {
@@ -456,7 +477,10 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
             if o.kind == Kind::Building && rules.buildings[o.type_index as usize].invisible {
                 continue;
             }
-            // The map's harvester-immunity flag is not in our map data yet.
+            // spec: S-0303 claim 9 (a vehicle whose type is in the harvester list while the map's harvester-immunity flag is set)
+            if harvester_immune(w, o.kind, o.type_index) {
+                continue;
+            }
             let d = if o.kind == Kind::Building {
                 // spec: S-0303 claim 7 (a building: from P to the centre of this foundation cell at the surface height there; 0 in the centre cell unless P is more than 208 above)
                 building_cell_distance(w, p, c, centre)

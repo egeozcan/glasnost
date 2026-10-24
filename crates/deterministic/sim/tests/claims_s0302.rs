@@ -2291,3 +2291,39 @@ fn claim_16_expiry_turn_shot_launches_then_loses_its_owner() {
         .collect();
     assert_eq!(new, vec![(None, None)]);
 }
+
+// spec: S-0302 claim 6 and claim 7 and scenario D9 (an inert game: a detonation delivers no hits at all, S-0303 claim 2; a hit from another source that does not ignore defences, such as a sonic wave, has m0 = 0, so a vehicle loses nothing and an undemolishable building exactly 1; a hit that ignores defences is unchanged)
+#[test]
+fn d9_inert_game() {
+    let (mut w, soft, hard, _, full) = undemolishable_world(true);
+    // The control: the same hits on a map without the flag.
+    assert_eq!(loss!(w, soft, hit(50, full)).0, 50);
+    assert_eq!(loss!(w, hard, hit(50, full)).0, 50);
+    w.map_flags.inert = true;
+    // (b) A sonic-wave style direct hit: nothing for the demolishable building, 1 for the other.
+    assert_eq!(loss!(w, soft, hit(50, full)).0, 0);
+    assert_eq!(loss!(w, hard, hit(50, full)).0, 1);
+    assert_eq!(loss!(w, hard, hit(50, full)).0, 1, "exactly 1 per hit");
+    // (a) A detonation reaches nobody.
+    let p = Pos::centre(at(3, 0), 0);
+    let before = (health(&w, soft), health(&w, hard));
+    let res = area::detonate(
+        &mut w,
+        Detonation {
+            point: p,
+            damage: 50,
+            warhead: Some(full),
+            source: None,
+            house: None,
+            resources: false,
+        },
+    );
+    assert_eq!(res, glasnost_sim::combat::area::DetonationResult::Missed);
+    assert_eq!((health(&w, soft), health(&w, hard)), before);
+    // A hit that ignores defences keeps its amount (claim 6 covers hits that do not).
+    let ign = Hit {
+        ignore_defences: true,
+        ..hit(50, full)
+    };
+    assert_eq!(loss!(w, soft, ign).0, 50);
+}
