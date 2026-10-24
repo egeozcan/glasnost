@@ -101,6 +101,17 @@ balloon-hover field).
   becoming deploying. During the deploying presentation the hover keeps *D* (retained, as
   above).
 - The 416-lepton lift of a final leg with unequal heights has no test on flat ground.
+- Under `quirks.hover_landing_request_stands` (default on), nothing clears a hover's landing
+  request. The jumpjet's request is cleared by its own locomotor rules (S-0502 claim 16's
+  re-ascent, a landing, S-0607's seizure and drop). Claim 19 knows no hovering rule that ends
+  it, and S-0517 claim 5 and S-0213 claim 10 name no order that ends it. So a landing-first
+  in-place hover whose first deploy step found it above the ground never deploys again in that
+  game, even after later move, stop or deploy orders. Its later deploy orders make *unload*
+  current, and the deploy step returns at once.
+- The readiness change (`process::moving`) reaches every queued behaviour of a hover, not
+  only *unload*. A hover with a point but throttle 0 (a sharp corner) is now ready, and a
+  queued behaviour can become current there. This is the widest change of the intake, and the
+  likeliest source of differences in play outside H16.
 
 ## Requests
 
