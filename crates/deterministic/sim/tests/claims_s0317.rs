@@ -9,6 +9,7 @@ use glasnost_num::{F32, F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     Decimal, LandRow, LandType, OverlayType, ParticleSystemType, ParticleType, VoxelAnimationType,
+    WarheadType,
 };
 use glasnost_rules::sim_econ::TiberiumType;
 use glasnost_sim::combat::effects::Effect;
@@ -711,6 +712,64 @@ fn claim_11_expiry() {
     }
 }
 
+/// spec: S-0303 claim 23 (revision 25: the end of a debris piece is a producer of the area damage of claims 1 to 20 and of none of the projectile-only effects of claims 21 and 22: the warhead's particle system appears, and no explosion animation of the warhead's list and no warhead debris; also at a damage amount of 0, when the area damage has no effect, claim 2: no hit and no particle system) and S-0317 claim 11
+#[test]
+fn s0303_claim_23_a_pieces_end_is_area_damage_only() {
+    for damage in [40, 0] {
+        let mut r = rules();
+        r.sim.warheads.insert(
+            "SHOWY".into(),
+            WarheadType {
+                verses: Some(vec![dec("1").unwrap(); 11]),
+                cell_spread: dec("0.75"),
+                anim_list: Some(vec!["Kaboom".into()]),
+                max_debris: Some(3),
+                min_debris: Some(3),
+                debris_types: Some(vec!["BARE".into()]),
+                debris_maximums: Some(vec![3]),
+                particle: Some("PUFFS".into()),
+                combat_light_size: dec("0.5"),
+                ..Default::default()
+            },
+        );
+        let t = r.sim.voxel_animations.get_mut("ROCK").unwrap();
+        t.warhead = Some("SHOWY".into());
+        t.damage = Some(damage);
+        let mut w = world(&r);
+        let c = mid(0, 0);
+        let near = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, c, 0);
+        let h0 = health(&w, near);
+        let id = make(&mut w, "ROCK", centre(c, 0));
+        w.pieces.get_mut(&id).unwrap().counter = 1;
+        w.effects.clear();
+        pieces::turn(&mut w, id);
+        assert!(
+            w.pieces.is_empty(),
+            "no warhead debris (claim 22), damage {damage}"
+        );
+        let names: Vec<String> = anims(&w).into_iter().map(|a| a.0).collect();
+        assert_eq!(
+            names,
+            ["Boom"],
+            "only the expiry animation, damage {damage}"
+        );
+        let puffs = w.rules().gas.system("PUFFS").unwrap();
+        let systems = w
+            .gas
+            .systems
+            .values()
+            .filter(|s| s.type_index == puffs)
+            .count();
+        if damage > 0 {
+            assert!(health(&w, near) < h0, "the area damage");
+            assert_eq!(systems, 1, "the warhead's particle system (claim 20)");
+        } else {
+            assert_eq!(health(&w, near), h0, "no hit (claim 2)");
+            assert_eq!(systems, 0, "no particle system (claim 2)");
+        }
+    }
+}
+
 /// spec: S-0317 claim 12 (a meteor piece's end: n = R(0, c) + R(0, c) further pieces of the spawn type at its flight point, with no house)
 #[test]
 fn claim_12_spawns() {
@@ -775,7 +834,7 @@ fn claim_12_resources() {
     assert_eq!(w.rng.raw(), probe.raw());
 }
 
-/// spec: S-0317 claim 13 (the attached system at the creation point, owned by the piece, no owner house, directly after the piece in the update order; a falling piece's displacement zero, a meteor piece's the whole flight; marked when the piece leaves play) and claim 14 (the start sound at the creation point)
+/// spec: S-0317 claim 13 (the attached system at the creation point, owned by the piece, no owner house, directly after the piece in the update order; a falling piece's displacement zero, a meteor piece's the whole flight; marked when the piece leaves play) and claim 14 (the start sound at the creation point); S-0616 claim 1 (revision 20: a voxel-model animation's system is made at the piece's creation point, not its start position, and keeps claim 5's displacement from it: zero for a falling piece, the flight from the start position to the creation point for a meteor piece)
 #[test]
 fn claim_13_14_system_and_sound() {
     let r = rules();

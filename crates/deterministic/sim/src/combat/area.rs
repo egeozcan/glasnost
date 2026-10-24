@@ -582,6 +582,7 @@ fn exploding_overlay(w: &mut World, centre: CellXY, det: &Detonation) {
     for name in &debris {
         if w.rng.percent() < 15 {
             // spec: S-0317 claim 11 (claim 19's barrel debris is a piece of S-0317) and claim 1 (a detonation's pieces have no house)
+            // spec: S-0303 claim 19 (revision 25: the piece is created at P with the creation draws of S-0317 claim 3, or claim 4 for a meteor type, right after the draw rᵢ* that chose it and before the particle system's percent draw r)
             crate::pieces::create_named(w, name, det.point, None);
             break;
         }
