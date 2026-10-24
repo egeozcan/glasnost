@@ -2,11 +2,11 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 25
+revision: 27
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671, Q-1735]
 supersedes: []
@@ -19,9 +19,10 @@ supersedes: []
 Sound data, selection and order responses, event sounds, announcements, mixing limits,
 placement and traced random choices in skirmish; network games and campaigns are out of scope.
 Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
-Music belongs to planned S-0703; archive mounting to S-0005 claim 10. Which files hold the samples
-is claim 34; the byte formats of those files are outside this spec. Claim 21 aligns
-spin-sound choices and ordinary report suppression with S-0609 claim 13.
+Music belongs to S-0703; claim 30's audio passes carry its music updates. Archive mounting
+belongs to S-0005 claim 10. Which files hold the samples is claim 34; the byte formats of those
+files are outside this spec. Claim 21 aligns spin-sound choices and ordinary report suppression
+with S-0609 claim 13.
 
 **Coverage boundary.** This is a partial sound specification, not an exhaustive event catalogue.
 Claim 40 indexes every question of Q-0260, Q-0264 and Q-0265 against the established answers
@@ -734,7 +735,7 @@ normalisation N of its Formulas F3. In addition:
     generator is substituted. The following schedule is our engine's design rule, a
     deterministic departure, not a description or proposed measurement of the original.
 
-    **Clock and passes.** In a loaded skirmish, logical audio time *C* and last-pass time *L* begin at 0 ms, and no pass occurs at that instant. At the end of each cycle—after that cycle's input, presentation requests and any tick—*C* is greater than its previous value by *P(s)*, where *P(0) = 8 ms* and *P(s) = 16s* ms for speed indices 1 through 6, using the speed in force during that cycle (S-0201 claims 4, 5 and 8). A pass occurs at that cycle end exactly when *C − L > 33 ms*; when it occurs, the new value of *L* is *C*. Otherwise *L* is unchanged. These are exact integer-millisecond operations, without rounding or clock wrap. At constant speed the interval between passes is *P(s) × (⌊33 / P(s)⌋ + 1)* logical milliseconds: 40, 48, 64, 48, 64, 80 and 96 ms at indices 0 through 6 respectively. Speed changes do not restart the cadence. Thus the strict lower bound of claim 12 is retained without making pass choices depend on host execution time. Frozen cycles advance logical audio time and can service audio despite running no tick. During a stand-still, including the options menu or lost focus, neither logical audio time nor logical playback advances, and resumption causes no catch-up. No skirmish audio passes occur in setup menus before loading or after leaving the match. Menu-specific audio is outside scope.
+    **Clock and passes.** In a loaded skirmish, logical audio time *C* and last-pass time *L* begin at 0 ms, and no pass occurs at that instant. At the end of each cycle—after that cycle's input, presentation requests and any tick—*C* is greater than its previous value by *P(s)*, where *P(0) = 8 ms* and *P(s) = 16s* ms for speed indices 1 through 6, using the speed in force during that cycle (S-0201 claims 4, 5 and 8). A pass occurs at that cycle end exactly when *C − L > 33 ms*; when it occurs, the new value of *L* is *C*. Otherwise *L* is unchanged. These are exact integer-millisecond operations, without rounding or clock wrap. At constant speed the interval between passes is *P(s) × (⌊33 / P(s)⌋ + 1)* logical milliseconds: 40, 48, 64, 48, 64, 80 and 96 ms at indices 0 through 6 respectively. Speed changes do not restart the cadence. Each pass ends with one music update (S-0703 claim 10), after that pass's sound choices, so the ranged draws of a music pick follow that pass's draws on the same unsynchronised stream. Thus the strict lower bound of claim 12 is retained without making pass choices depend on host execution time. Frozen cycles advance logical audio time and can service audio despite running no tick. During a stand-still, including the options menu or lost focus, neither logical audio time nor logical playback advances, and resumption causes no catch-up. No skirmish audio passes occur in setup menus before loading, after the cycle that runs the end delay's final tick (the game is over, S-0414 claim 8), or after leaving the match. The end delay's ticks run in ordinary cycles of the loaded skirmish, so this schedule gives them audio passes, each with its music update. The options-menu stand-still has no audio pass, so no music update either (S-0703 claim 13). Menu-specific audio is outside scope.
 
     **Completion and waits.** Each selected sample has a logical duration
     *T* = max(1, ⌈100000 × *N* / (*f* × *p*)⌉) ms, where *N* is its decoded number of
@@ -771,8 +772,11 @@ normalisation N of its Formulas F3. In addition:
     Scenario-stream state and game rules remain unaffected (claim 29).
     - Backing: `measurable` (E1 for original instance draw order, E2 for original audio-clock
       eligibility, H1 for original separation from game state). The replacement schedule,
-      duration calculation, tie rules and shared-stream retention are design requirements,
-      tested by engine-only H2, not oracle measurements.
+      duration calculation, tie rules, shared-stream retention, the music update at each pass's end,
+      the absence of passes after the end delay's final cycle and of music updates in a
+      stand-still are design requirements, not oracle measurements: engine-only H2's music
+      controls test all three, and engine-only S-0703 MU7 also tests the music update's place
+      after the pass's sound choices.
     - Confidence: high
 
 31. **Response draws come before the local-player check in two places.** The feedback chance of
@@ -2250,6 +2254,16 @@ requirement. Changed logical input voids the comparison. Also check these canoni
   host frames/callbacks occur; closing it resumes at the next cycle with no catch-up.
   Test two announcements with known decoded durations: their starts obey both completion
   and the strict 500-ms start gap, rounded to the first qualifying pass.
+- Music controls, with S-0703 MU7's music fixture (shuffle on, test tracks of known length) and
+  a log of each pass's logical time and of each music update. Expect exactly one music update
+  per pass, its ranged draws after that pass's sound-choice draws, and none in a cycle without
+  a pass. Bring a test skirmish to its end by a timed defeat with a known end delay (S-0414
+  claim 8): expect passes and music updates in the end delay's cycles as the cadence gives them,
+  a pass at the end of the cycle that runs the end delay's final tick only if the cadence puts
+  one there, and no pass or music update after that cycle. Open the options menu for many
+  host frames just before a track would complete: expect no music update, pick or draw while it
+  is open, and the completion and pick at the pass its logical duration gives after closing,
+  the menu's time not counted.
 Any different pass, deadline, ordering or stand-still result falsifies the design rule.
 Use positive-rate, positive-pitch fixtures, plus one invalid-rate and one nonpositive-pitch
 fixture to check warning/discard without additional sample-preparation draws. These are

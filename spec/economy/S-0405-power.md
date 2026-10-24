@@ -2,11 +2,11 @@
 id: S-0405
 title: Power (output and drain, damaged power plants, low power, blackouts, which buildings stop)
 topic: economy
-revision: 21
+revision: 36
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-24
 measurements: []
 requests: [Q-0180, Q-0224, Q-0276, Q-1503, Q-1505]
 supersedes: []
@@ -21,6 +21,15 @@ formed and when they are worked out again, the blackouts that cut a house's powe
 power switch, and what low power changes: which buildings stop working, the units that depend on
 a control centre, and the pointers to the production slowdown and to the radar rule (S-0410), in a
 skirmish. Campaigns and network games are out of scope.
+
+Against revision 21, revision 36 corrects claims 9, 10 and 20. A building out of operation keeps
+its working animations, except as the rendering spec's power rules change them, and keeps its
+light, which changes only at the events claim 9 lists; a sold or packed-up building's working
+animations stay drawn until its build-down. An accepted switch-off freezes the building's
+*freeze-unpowered* slots rather than stopping them, and an ownership change leaves the power
+switch as it is. A disabled hovering vehicle still above the ground can accept a scatter request
+(claim 20). A sell order to a type with no build-up sprite starts no sale. Revision 36 also adds
+scenario W15 for the light, the beam and a pack-up's working animation.
 
 ## Terms
 
@@ -325,8 +334,24 @@ house's own update in a tick, which comes after the turn pass and before orders 
    - releases every controlled unit it holds (S-0601 claims 9–10 own the release effects and
      release order) and lets go of its held unit (S-0607 claims 12–13): at 1 lepton or more
      above the surface the unit is dropped; at height 0 or less it is set down,
-   - stops the effects of sensor types (visibility specs), and its lights and working animations
-     (rendering specs).
+   - stops the effects of sensor types (visibility specs),
+   - changes its working animations only as S-0108 claims 13 and 14 give for a loss of power,
+     which act only on a type that needs and draws power or is marked for special power
+     behaviour; a switch-off or a pulse also disables the building in S-0108 claim 13's sense.
+     A type that is neither, such as a refinery without the needs-power flag, keeps its working
+     animations playing when a sale takes it out of operation (that a switch-off or a pulse
+     freezes such a type's slots rests on S-0108 claim 13, where that case is
+     `unmeasured`), and through any hold of the sale
+     by a docked unit. They stay drawn until the first tick of the sale's build-down and are
+     hidden from then on: the reading of S-0108 claim 10 listed under Changes for other specs.
+     That reading reverses committed S-0108 scenario B14's expectation of slots hidden for the
+     whole sale; the reversal is contested and rated medium until W6 part i runs.
+     A building that packs up is sold with a build-down (S-0415 claim 9), and the same holds for
+     it. A sell order to a building whose type has no build-up sprite starts no sale (S-0408
+     claim 4), so it takes the building out of operation in no way and hides none of its working
+     animations; a building of such a type with the firestorm-wall flag is removed at once.
+     The animations that a docked unit's own activity plays at the building belong to that
+     docking role's spec, not to this claim.
 
    **T1, a building's own answers in the firing check.** The three rows do not overlap, so a
    building has exactly one own answer at any moment.
@@ -349,54 +374,147 @@ house's own update in a tick, which comes after the turn pass and before orders 
    factory off does to production is S-0404's (claim 8). The original's being in operation also
    gates further building functions that the specs of those functions own.
 
+   **The building's light.** The light a building casts (S-0104 claim 12) does not follow the
+   in-operation result. Once the building is on the map, the light changes only at these events:
+   - It goes out when the building is switched off (claim 10), when a pulse starts on it, when the
+     map's building list places a building of a needs-engineer type that is not manned, and when
+     the building leaves the map in any way: by destruction, at the end of a sale or a pack-up, or
+     when a sell order removes a firestorm-wall building at once (S-0408 claim 4).
+   - It comes on when the building is switched on (claim 10), when a pulse on it ends (even on a
+     building that is still switched off), and at every ownership change of a building of a
+     needs-engineer type.
+
+   So a building that goes out of operation because its house is short of power, because it is not
+   manned or because it is being sold keeps its light, through the build-down too. A light switched
+   on while the building is out of operation, as at a switch-on while its house is short of power,
+   stays on until one of these events puts it out. A sell order to a type with no build-up sprite
+   starts no sale (S-0408 claim 4), so it changes the light only when it removes a firestorm-wall
+   building.
+
+   A searchlight beam (a building light effect, S-0102 Terms) is not this light. It is drawn on no
+   frame drawn while its building is out of operation.
+
    Firing reads the test whenever it is asked. The control centre, gap, release of controlled
-   and held units, lights and animations follow the in-operation result in the building's own
-   turn (S-0203), except for the immediate switch effects in claim 10. The first such turn after
-   the result changes applies the new operation state. This also applies when build-up ends or
-   selling begins. These effects can be reconciled on a turn even without an in-operation
-   transition: for example, a charged gap building whose switch-off stopped its field but left
-   it in operation can generate again in its next turn. A building that loses power by the house
-   update of tick *n* releases its controlled units in its turn of tick *n* + 1. The charged-gap
-   switch case is `unmeasured` for claim 10's reason.
-   - Backing: `measurable` (scenario W6, parts a, h, i, j and k, which cover firing, the release of a
-     controlled unit, the working animation, the effects at the end of the build-up and the gap),
-     `unmeasured` for T1's distinction between *illegal* and *impossible*, including where both
-     sets of conditions hold (W6 observes firing refusal, not an answer label; no differing
-     building response to these labels is known, and S-0301 claim 9 makes the same argument).
-     `measurable` for cash production (S-0515 scenario TB3, including switched-off and unmanned
-     cases). Held-unit release inherits S-0607 claims 12–13's backing (scenario L8 for a
-     building losing operation). `unmeasured` for the lights and the sensor types (each needs the
-     observable of the spec that owns the effect, and those specs' scenarios should add a variant
-     in which the building is switched off)
-   - Confidence: high (firing under low power, the one-off effects' timing for the animation and the
-     controlled unit), medium (T1 where only one of its conditions holds, the gap, the other items),
-     low (T1's answer where the conditions of both its rows hold)
+   and held units and the animations that claim 9 changes follow the in-operation result in the
+   building's own turn (S-0203), except for the immediate switch effects in claim 10. The first
+   such turn after the result changes applies the new operation state. This also applies when
+   build-up ends or selling begins. These effects can be reconciled on a turn even without an
+   in-operation transition: for example, a charged gap building whose switch-off stopped its field
+   but left it in operation can generate again in its next turn. A building that loses power by
+   the house update of tick *n* releases its controlled units in its turn of tick *n* + 1. The
+   charged-gap switch case is `unmeasured` for claim 10's reason.
+   - Backing and confidence, item by item:
+     - Firing refused while not in operation, low power included: high, `measurable` (W6 part a).
+     - The release of a controlled unit and its timing, tick *n* + 1: high, `measurable` (W6
+       part h).
+     - T1's rows where only one of their conditions holds: medium, `measurable` for the refusal
+       (W6 part a) and `unmeasured` for the distinction between *illegal* and *impossible* (W6
+       observes firing refusal, not an answer label; no differing building response to these
+       labels is known, and S-0301 claim 9 makes the same argument).
+     - T1's answer where the conditions of both its rows hold: low, `unmeasured` for the same
+       reason.
+     - The effects at the end of the build-up: medium, `measurable` (W6 part j).
+     - The gap: medium, `measurable` (W6 part k); its charged switch case `unmeasured` for claim
+       10's reason.
+     - Cash production stopping: medium, `measurable` (S-0515 scenario TB3, including the
+       switched-off and unmanned cases).
+     - The release of a held unit: medium, inheriting S-0607 claims 12–13's backing (scenario L8
+       for a building losing operation).
+     - The working animations kept through a sale and drawn until the build-down's first tick:
+       medium until W6 part i runs, `measurable` (W6 part i, which every run shows).
+     - A sell order to a type with no build-up sprite starting no sale, so that no working
+       animation is hidden: medium, `measurable` (S-0408 scenario S3, parts c and d, which show
+       that no sale starts); low for the firestorm-wall building's removal, as S-0408 claim 4
+       rates it.
+     - A pack-up's working animations drawn until its build-down and hidden from then on, as in a
+       sale: medium until W15 part k runs, `measurable` (W15 part k).
+     - The working animations advancing through a hold of the sale: medium, `unmeasured`: no input
+       is known that ensures a hold (S-0408 claim 6 tells every docked unit to leave at the first
+       processing, and S-0402 claim 11 has an unloading harvester break off at once), so W6 part i
+       reports that part only when a hold arises.
+     - The freeze, by a switch-off or a pulse, of the slots of a type that does not need power:
+       medium, `unmeasured`, because it rests on S-0108 claim 13, where that case is `unmeasured`.
+     - The building's light, its events (the end of a pulse on a switched-off building included)
+       and its staying on through low power, a sale and a switch-on while short of power: high,
+       `measurable` (W15 parts a to f), except the events below. These are high before W15 runs:
+       in each of parts a to f the run gives the event itself (a click, the start or end of a
+       pulse, a placement, a capture) and logs its tick, and the light is expected to change in
+       that tick, which the comparison with the control run tells from a light that follows the
+       in-operation result. The items below are held at medium because the tick of their event (a
+       destruction, a removal, a pack-up's end, a transfer under a pulse) is set by another spec's
+       rules, which the run must confirm first.
+     - The tick on which a light change shows on the ground: medium, as S-0104 claim 12 rates its
+       same-tick relighting. W15 reads the light from the ground light level, so a change that
+       shows one tick after its event agrees with the event list and leaves only this tick
+       unconfirmed.
+     - The light going out when the building is destroyed, and coming on at an ownership change
+       other than part f's capture of a building that is not manned: medium, `measurable` (W15
+       parts h and j), until those parts run.
+     - The light going out when the building leaves the map in any other way, the end of a
+       pack-up and a firestorm-wall building's removal by a sell order included: medium,
+       `measurable` (W15 parts k and l for those two), until those parts run; low for the
+       firestorm-wall removal, as S-0408 claim 4 rates that removal.
+     - The light's staying on while the building is not manned: medium, `measurable` (W15 part
+       i). It is inferred from the event list, in which no event puts the light out while a
+       building is not manned.
+     - The searchlight beam shown only while in operation: medium, `measurable` (W15 part g).
+     - The sensor types' effects stopping: medium, `unmeasured`: each needs the observable of the
+       spec that owns the effect, and those specs' scenarios should add a variant in which the
+       building is switched off.
+     - The control centre stopping: medium, `measurable` (claim 13's scenario W8).
 
 10. **The power switch.** A power order applies only to a live building on the map whose type
     does not have the firestorm-wall flag (S-0213, claim 13 and its Edge cases define the flag).
     An applicable power-off order switches an on building off only when its type has a base drain
     above 0 or the needs-power flag; otherwise it changes nothing. An applicable power-on order
     switches an off building on only when it is not under a pulse. Repeating an order for the
-    state already set changes nothing. A switched-off building makes no output and needs no drain
+    state already set changes nothing. An ownership change, of any cause, leaves the switch as it
+    is: a building switched off stays off for its new owner, and one switched on stays on. A switched-off building makes no output and needs no drain
     (claims 1 and 2) and is not in operation unless charged and the other conditions hold (claim 8).
     Which buildings the player may click in power mode is S-0214's (claim 13).
 
-    An accepted switch-off stops the building's lights and power-dependent working animations
-    immediately, without waiting for its next turn; an accepted switch-on starts them immediately.
+    An accepted switch-off disables the building in S-0108 claim 13's sense at once, without
+    waiting for its next turn: its lights go out, and each running working-animation slot that
+    counts *freeze-unpowered* holds its image frame and stays drawn (it freezes; it is not stopped
+    or hidden), whether or not the type needs power. This hold is stated for the working
+    animations; a turret slot and a silo-fill slot, whose image frame S-0108 claims 19 and 16 set
+    from the turret facing and the fill level, are outside it, and whether such a slot shows a
+    held frame or the frame those claims give is an Open question. The switch itself does not touch a slot that
+    counts *light-unpowered* or *effect-unpowered*; such slots change only as claim 9 gives, in
+    the building's own turn. An accepted switch-on re-enables the building at once: its lights
+    come on and its frozen slots resume, even while its house is short of power (S-0108 claim 13,
+    `quirks.enable_unfreezes_unpowered`); any other slot starts as claim 9 gives. Lights switched
+    on while the house is short of power stay on: claim 9's light paragraph gives the only events
+    that put them out again.
     An accepted switch-off also ends its gap field immediately; switching on lets the field
     start again in the next building turn that finds it in operation.
     These switch effects do not wait for the in-operation transition of claim 9 and do not test
-    its other conditions. A later in-operation transition can change them again.
-    - Backing: `measurable` (scenario W7, parts a to d for switching and animations; S-0213
-      scenario O12 for the firestorm-wall exclusion); `unmeasured` for orders to buildings dead
-      or off the map (input cannot target them), an order repeating the existing switch state
-      (input produces the opposite order), a power-off order to a type with neither drain nor
-      needs-power flag (input produces no order for it), and the immediate light effect (W7
-      specifies an animation, not a light-equipped test type), and for the gap's switch-off
-      timing and its restoration while charged (W6 tests a house-power change, not these
-      switch-only cases). S-0409 claim 11 already states the immediate switch-off exception and the next-building-turn restoration rule; this claim is consistent with that rule and does not change the gap's shape or cell effects.
-    - Confidence: high (the drain-or-flag condition and order eligibility), medium (the pulse
-      condition, immediate lights and animations)
+    its other conditions. A later in-operation transition can change the slots and the gap again,
+    but not the lights (claim 9).
+    - Backing and confidence, item by item:
+      - The drain-or-flag condition and order eligibility: high, `measurable` (scenario W7, part
+        a).
+      - The firestorm-wall exclusion: high, `measurable` (W7 part d; S-0213 scenario O12).
+      - The switch kept through an ownership change: high, `measurable` (W7 part d and W13, which
+        record the switch before and after each transfer).
+      - The pulse condition: medium, `measurable` (W7 parts b and c).
+      - The immediate freeze of *freeze-unpowered* slots at a switch-off and their resumption at a
+        switch-on: medium, `measurable` (W7 parts a and b); their resumption while the house is
+        short of power: medium, `measurable` (S-0108 scenario B11).
+      - Orders to buildings dead or off the map, an order repeating the existing switch state and
+        a power-off order to a type with neither drain nor needs-power flag: medium, `unmeasured`
+        (input cannot target such buildings, produces the opposite order, or produces no order).
+      - The lights going out at a switch-off and coming on at a switch-on, and staying on under
+        low power: high, `measurable` (W15 parts a and b), for the events; the tick on which the
+        change shows on the ground is medium, as claim 9 gives.
+      - The gap's switch-off timing and its restoration while charged: medium, `unmeasured` (W6
+        tests a house-power change, not these switch-only cases). S-0409 claim 11 already states
+        the immediate switch-off exception and the next-building-turn restoration rule; this claim
+        is consistent with that rule and does not change the gap's shape or cell effects.
+      - The switch leaving slots that count *light-unpowered* or *effect-unpowered* untouched:
+        medium, `unmeasured` (W7's slot counts *freeze-unpowered*).
+      - The freeze of a type that does not need power: medium, `unmeasured`, because it rests on
+        S-0108 claim 13, where that case is `unmeasured`.
 
 11. **Production under low power.** Low power slows every production line of the house by the
     factor that S-0403 (claim 5) derives from the power fraction *p*. When a house works out its
@@ -540,7 +658,9 @@ house's own update in a tick, which comes after the turn pass and before orders 
     when it is not under a pulse. A firestorm-wall building cannot be switched on by such an
     order. Input must still offer the order under S-0214 claim 13. A pure producer that stayed
     on at placement has no off state to restore.
-    - Backing: `measurable` (W13 for start states and subsequent input; W7 for the pulse gate)
+    - Backing: `measurable` (W13 for start states and subsequent input, on buildings pre-placed
+      for a computer house and then handed to the human, since a structure pre-placed for a human
+      player's house is dropped in a skirmish, S-0009 claim 27; W7 for the pulse gate)
     - Confidence: high
 
 19. **Meaning of the power meter (Q-0276).** The local player's meter represents the
@@ -598,9 +718,36 @@ house's own update in a tick, which comes after the turn pass and before orders 
     - **Its turn and behaviour.** It still takes its turn and processes its current behaviour
       (S-0616 claim 1 for its sparks). With no target and no destination, *guard* gives it
       nothing to do.
-    - **Movement and turning.** It starts no new movement of its own: the reset clears its
-      destination, no order can give it one, and a scatter request is refused because its
-      locomotor is off. A hovering vehicle's remaining motion is S-0503's. The disabled state
+    - **Movement and turning.** It starts no new movement of its own, except through a late
+      order (Orders, above) or by accepting a scatter request (below). The reset clears its
+      destination, and no order given while it is disabled can give it one: the refusals of the
+      Orders bullet stand, the scatter order included. A scatter request is a term of its own,
+      apart from the scatter order (glossary, *scatter request*), and the Orders bullet does not
+      judge it. S-0207 claim 16 refuses it in case (g), while the vehicle's
+      locomotor is switched off. For a hovering vehicle the refusal holds only while it is not
+      powered in S-0503's sense (S-0503 Terms: switched off and down at a hover height of 0); a
+      switched-off hovering vehicle still above the ground is powered and is not refused by case
+      (g). This is the reading of case (g) listed under Changes for other specs. So a disabled
+      hovering vehicle can accept one in two states:
+      - while it is still above the ground after its switch-off (S-0503 claims 8 and 10), or
+      - after it has been switched on again at an end of its being settled at a repair depot
+        (S-0314 Terms and claim 21), an end that the run-away notice of the depot's sale can
+        itself bring (S-0314 claim 22). A disabled hovering vehicle in contact with a depot is
+        switched on then like any other hovering vehicle. That switch-on leaves it disabled and
+        does not reset its guard state. A depot switches
+        no other disabled vehicle on: S-0314 claim 21 switches only hovering vehicles off and on.
+
+      Which requests reach it, and whether it accepts them, are otherwise S-0215 claim 19's and
+      S-0207 claim 16's. The run-away notice of a depot's sale (S-0314 claim 22) and the scatter
+      from damage (S-0215 claim 19) are among them. When an accepted request supplies a
+      destination (S-0207 claim 16), it moves there as S-0503 states, still disabled. Its arrival
+      there is an arrival in claim 13's sense: if its type has the powered-unit flag and the cell
+      holds no building while its house has no active control centre, it gets the disabling's
+      guard reset and locomotor switch-off again, with no sound (*Sounds*, above), and comes down
+      as S-0503 states. A vehicle disabled at a 1-to-0 transition whose type lacks the flag gets
+      no such second switch-off at an arrival. Claim 13 adds no switch-off in a cell with a
+      building; other switch-offs there, such as a repair depot's, are S-0503's and S-0314's.
+      A hovering vehicle's remaining motion is S-0503's. The disabled state
       itself stops neither its body nor its turret from turning; it only leaves them nothing to
       turn towards.
     - **As a target.** It is targeted, attacked, crushed and damaged like any other vehicle.
@@ -614,11 +761,23 @@ house's own update in a tick, which comes after the turn pass and before orders 
       part l for the reset at enabling). Drawing and sounds are `measurable` by inspection in
       W8 part a, whose run records a screenshot and the sounds. The late order is `unmeasured`:
       it needs an order and a disabling in the same tick. Passengers are `unmeasured`: no
-      scenario part puts a disabled open-topped transport in play.
+      scenario part puts a disabled open-topped transport in play. The depot's switch-on of a
+      still-disabled hovering vehicle is `unmeasured` here and carries S-0314 claim 21's rating
+      (medium): no scenario ensures a disabled vehicle in contact meets an end of being settled.
+      The scatter request accepted by a disabled hovering vehicle, in either state, the movement
+      it starts, and the second switch-off at the arrival are `unmeasured`: the first state needs
+      a request to reach the vehicle in the ticks between its switch-off and its touching down,
+      and the second needs that unensured end of being settled, and no known input ensures
+      either. The first state rests on the reading of S-0207 claim 16 case (g) above, which S-0207
+      rates low, and is rated low here too, with what follows a request accepted in it; the second
+      state and what follows a request accepted in it are rated medium.
     - Confidence: high (firing and acquisition, the guard reset, deselection, orders refused,
       being a normal target); medium (enabling resets every vehicle of the type, the turn
-      continuing, drawing, sounds); low (the late order, passengers, no new movement for a
-      vehicle whose locomotor does not itself stop when switched off)
+      continuing, drawing, sounds, the scatter request accepted by a disabled hovering vehicle
+      after a depot's switch-on and what follows it); low (the scatter request accepted while still
+      above the ground after the switch-off and what follows it, the late order,
+      passengers, no new movement for a vehicle whose locomotor does not itself stop when
+      switched off)
 
 ## Formulas
 
@@ -778,7 +937,7 @@ remain through tick *n*, and the re-evaluation is in tick *n* + 1 (claim 7, S-04
 | Rules, `[General]`, `SpyPowerBlackout` | spy blackout length *d* (claim 6) | integer, ticks | 0; keeps |
 | Rules, `[General]`, `LowPowerPenaltyModifier`, `MinLowPowerProductionSpeed`, `MaxLowPowerProductionSpeed` | production slowdown (claim 11) | owned by S-0403 | S-0403 |
 | Map, `[Structures]`, switched-on field of a building entry | request for initial power state, subject to claim 18, not an unconditional off state | comma-separated integer field, position and parsing owned by S-0009; 0 requests off, nonzero requests on | on |
-| Rules, building section, `IsFirestormWall` | exclusion of later power orders (claim 10), not of map-requested off state (claim 18) | boolean, owned by S-0213 | no |
+| Rules, building section, `FirestormWall` | exclusion of later power orders (claim 10), not of map-requested off state (claim 18) | boolean, owned by S-0213 | no |
 
 The radar flag and the free-radar map flag are mapped in S-0410, the spy satellite flag and the normal
 gap radius in S-0409.
@@ -791,6 +950,12 @@ read from a recorder of the house's power values, or from the sidebar's power me
 them; health and credits from a recorder or the interface; ticks with a recorder of the tick
 number. Any game speed, held fixed within a comparison. No engine add-on and no mods (the named test files of a scenario excepted).
 Only the named test data for the scenario are enabled. One human player owns the test buildings.
+A structure that the map's building list gives a human player's house is dropped in a skirmish and
+never created (S-0009 claim 27), so the human's test buildings are built by that house (the named
+test files make the test types buildable), except where a scenario pre-places a building for a
+*donor* house: a computer house that has nothing else on the map, from which a map trigger
+attached to the building transfers it to the human house. The transfer leaves the building's
+power switch as it is (claim 10) and mans it (S-0515 claim 2).
 One bystander computer player is kept outside the observed area (the test buildings and all
 units acting on them), under the glossary's void rule. Enemy spies and other acting test units
 are map-placed and execute the stated behaviours; scripted input controls the human player's
@@ -862,7 +1027,8 @@ switched off the house has full power (W3's second pair).
 - *Setup:* own house with two test plants (base output 100 each, neither with the radar flag), a consumer (drain 100) and the
   defence of W3; spy blackout length 300 in a named test file (parts d and e change it as stated),
   an enemy house with spies and a draining unit; a test type C with the special-power flag and a
-  working animation, and no needs-power flag.
+  working animation whose slot art has *special-outage* on (S-0108 claim 14), and no
+  needs-power flag.
 - *Procedure:* (a) an enemy spy enters one plant at tick *t*₀ (recorded). (b) In a second run a
   draining unit attaches to one plant, and later lets go. (c) In a third run a second spy enters
   the other plant 100 ticks after the first. (d) With the spy blackout length 1, a spy enters a
@@ -910,13 +1076,15 @@ switched off the house has full power (W3's second pair).
 - *Setup:* a named test file defines these types:
   - defence A with the needs-power flag and a drain of 10; defence B with the needs-power flag and
     no drain,
-  - a type C with the special-power flag and a working animation, and a type D with the animation
+  - a type C with the special-power flag and a working animation whose slot art has
+    *special-outage* on (S-0108 claim 14), and a type D with the animation
     and without the flag; neither has the needs-power flag,
-  - a defence E placed for the human house, never having changed owner, with the needs-engineer
-    flag and no needs-power flag; a defence F with the
+  - a defence E with the needs-engineer flag and no needs-power flag, pre-placed for a donor house
+    (common setup), never having changed owner; a defence F with the
     needs-power flag, a drain and a mind-control weapon,
-  - a refinery-type R with a working animation, no needs-power flag, and a harvester docked in it
-    with its way out blocked,
+  - a refinery-type R with a working animation, a build-up sprite (a type without one is not
+    sold, S-0408 claim 4), no needs-power flag, and a harvester docked in it with its way out
+    blocked,
   - a control-centre type K with powered unit X, no needs-power flag and no drain, with a long
     build-up time (at least 300 ticks), and a vehicle type X with the powered-unit flag,
   - a gap type G with the needs-power flag and a drain of 10 (S-0409 owns the gap),
@@ -929,9 +1097,9 @@ switched off the house has full power (W3's second pair).
   - (c) at full power with A switched off, two chargers charge A.
   - (d) at full power, a pulse hits A; watch A during the pulse and after it ends.
   - (e) at full power, a timed blackout (W4) while C and D are switched on.
-  - (f) at full power, observe E before any ownership change; a trigger transfers it to another
-    house and a second trigger returns it to the human house, then observe it again. Keep full
-    power and a legal enemy target in range after its return.
+  - (f) at full power, observe E while the donor house owns it, with a vehicle hostile to the
+    donor house in range; then E's trigger transfers it to the human house, and E is observed again
+    with a legal enemy target of the human house in range. Keep full power after the transfer.
   - (g) at low power, watch the factory.
   - (h) F takes over an enemy vehicle at full power; then the house is brought to low power.
   - (i) at full power, a sell order on R.
@@ -943,34 +1111,52 @@ switched off the house has full power (W3's second pair).
     then bring the house to low power and read again.
 - *Runs:* three per part, except (h) and (i), whose tick-level timing is run twenty times with the
   trigger at different points of the tick.
-- *Observable:* whether each defence fires; whether C, D and R show their working animation; whether
+- *Observable:* whether each defence fires; whether C, D and R show their working animation (in
+  part (i), per tick, with the ticks of the sale's first processing and of the build-down's start); whether
   the item's progress advances; whether the X vehicle obeys orders; whether the gap hides cells.
 - *Expected:* (a) A does not fire and B fires. (b) A fires with two chargers and not with one.
   (c) A fires; (d) A does not fire while under the pulse and fires again after it ends; (e) C stops
-  its animation, D keeps it; (f) E does not fire before the ownership changes and fires after
-  its return, remaining manned without an engineer inside; (g) progress advances,
+  its animation, D keeps it; (f) E does not fire while the donor house owns it and fires after
+  the transfer, its first ownership change, remaining manned without an engineer inside; (g) progress advances,
   more slowly; (h) the vehicle returns to its owner's control 1 tick after the tick in which the
-  recorder first reads low power; (i) the animation stops at the tick of the sale's first
-  processing (S-0408 claim 6) and the building then stays on the map, sprite unchanged, until the
-  harvester has left; (j) the X vehicle is disabled during the build-up and enabled again in the
+  recorder first reads low power; (i) R's working animation (its fill-level slot, S-0108 claim 15) is drawn
+  from the sale's first processing (S-0408 claim 6) and, when a hold arises, keeps advancing while
+  the harvester holds the sale,
+  the building stays on the map, sprite unchanged, until the harvester has left, and the animation
+  is hidden from the first tick of the build-down (the reading of S-0108 claim 10 under Changes for
+  other specs); the refinery's unloading
+  animations, which belong to the docking role, are not this part's observable; (j) the X vehicle is disabled during the build-up and enabled again in the
   tick after the build-up ends (the building's first turn in operation); the second A does not fire
   during its build-up and does after it; (k) the gap hides cells at full power and stops hiding
   them one tick after the house's low-power update.
 - *Falsified if:* any state, animation or firing result differs from the expectation, or any
-  timed result is outside its stated tick interval.
+  timed result is outside its stated tick interval; in (i), in particular, R's working animation
+  is not drawn on the tick of the sale's first processing, stops or freezes before the build-down,
+  or is still drawn after the build-down starts. Every run tells the animation drawn until the
+  build-down from one hidden for the whole sale, since the build-down starts at least 1 tick after
+  the sale's first processing (S-0408 claim 6). A run in which the build-down starts before R's
+  working animation has had time to advance one image frame after the sale's first processing
+  (no hold, or too short a one) cannot tell the animation kept through a hold from one stopped at
+  the sale's start: it is inconclusive for the hold, and is repeated with the harvester's way out
+  blocked more fully, up to five attempts in all. If none gives such a hold, the advancing part is
+  reported unreached and stays `unmeasured`.
 
 **W7: switching power (claim 10).**
 - *Setup:* own consumer (drain 40) and needs-power test type with output 10 and no drain.
   A named test file
-  gives each the power-mode flag and a power-dependent working animation. A plant maintains
+  gives each the power-mode flag and a power-dependent working animation in a slot that counts
+  *freeze-unpowered* (the default, S-0108 claim 13). A plant maintains
   full power throughout. A pulse weapon. Part (d) uses two additional consumer variants with
-  the firestorm-wall flag: one map-placed switched on, the other map-placed switched off.
+  the firestorm-wall flag, both pre-placed for a donor house (common setup): one with the map's
+  switched-on field 1, the other with field 0 (claim 18), each handed to the human house by its
+  trigger before part (d).
 - *Procedure:* (a) click each test consumer in power mode to switch it off, record the tick *n*
   when its switch changes, then click again to switch it on. (b) Switch the consumer off, hit
   it with the pulse and click it in power mode while under the pulse. (c) Wait for the pulse
   to end without another click; read *D*, then click to switch on. (d) Click the two
   firestorm-wall variants in power mode and read their switch state and drain after the next
-  house update. Use normal scripted input only, not a trigger that might follow a different
+  house update. Record each variant's switch state in the tick before its transfer and in the
+  tick after. Use normal scripted input only, not a trigger that might follow a different
   application rule.
 - *Runs:* three per part, except (a): twenty with tick-level recording.
 - *Observable:* switch state, *O*, *D* and whether the working animation is running or paused,
@@ -983,9 +1169,9 @@ switched off the house has full power (W3's second pair).
   not first at their next turn.
   Clicking again switches them on, restores their contributions at the next house update,
   and makes their animation running in that order's tick. (b) The switch stays
-  off, the consumer contributes no drain, and its animation remains stopped. (c) It still
+  off, the consumer contributes no drain, and its animation remains paused. (c) It still
   contributes no drain until the new click after the pulse; that click switches it on and
-  restores its drain at the next house update. (d) Neither variant changes its switch state
+  restores its drain at the next house update. (d) The transfer leaves each variant's switch state as placed, and neither variant changes its switch state
   or drain contribution.
 - *Falsified if:* any switch, output, drain or animation result differs from the stated expectation,
   in particular, a firestorm-wall variant changing state falsifies the exclusion, and an
@@ -1175,16 +1361,18 @@ switched off the house has full power (W3's second pair).
   no base drain and no needs-power flag; C with base drain 40; N with base output 10,
   no base drain and the needs-power flag. Give all three the power-mode flag. Add two
   firestorm-wall variants, F with C's drain and G with P's output and no needs-power flag.
-  Pre-place each with switched-on field 0. Control runs use field 1 and an absent field.
-  Use the map-owner setup of S-0009 to give the human player the test objects. Keep enough
+  Pre-place each with switched-on field 0 for a donor house (common setup; a structure pre-placed
+  for the human house would be dropped, S-0009 claim 27); each one's trigger hands it to the human
+  house within the first ticks. Control runs use field 1 and an absent field. Keep enough
   other generation for full power; the observed area is these buildings. Game speed 2,
   no engine add-on and no mods (the named test files of a scenario excepted), one bystander computer player, kept away from the test buildings, under the glossary's void rule.
-- *Procedure:* record switch states and totals from the first visible tick. Click each
-  building in power mode after setup, then record its switch and the next house totals.
+- *Procedure:* record switch states from the first visible tick, through the transfer, and the
+  human house's totals after it. Click each building in power mode after the transfer, then record its switch and the next house totals.
 - *Runs:* three for each field variant.
 - *Observable:* switch state per building, output and drain, and whether input gives a power
   order; use read-only recording and ordinary scripted input, never state writes.
-- *Expected:* with field 0, P and G start on, C, N and F start off. P and G each contribute
+- *Expected:* with field 0, P and G start on, C, N and F start off, and the transfer changes none
+  of these states. P and G each contribute
   output 100; C, N and F contribute neither output nor drain. Clicks switch C and N on,
   restoring drain 40 and output 10 at the next house update. Neither firestorm-wall variant
   changes through a power order; P remains on because input offers no power order for it.
@@ -1222,8 +1410,116 @@ switched off the house has full power (W3's second pair).
   occupied extent follows damage-scaled output instead of the base-dependent scale.
   No transition duration or colour choice is tested by this scenario.
 
+**W15: the building's light, and a pack-up's working animation (claims 9 and 10).**
+- *Setup:* a named test file gives four types a non-zero light intensity and a light-visibility
+  value of a few cells (S-0104 claim 12): a consumer type P with the needs-power flag, a drain, the
+  power-mode flag, a build-up sprite (a type without one is not sold, S-0408 claim 4) and no
+  needs-engineer flag, which the human house builds (a structure that the map's building list
+  gives a human player's house is dropped, S-0009 claim 27); a type N with the
+  needs-engineer flag, placed by the map's building list for a neutral house, not manned; a copy
+  Y of the construction-yard type, which packs up into its vehicle (S-0415 claim 9), which the
+  human house deploys from that vehicle with room around it for the vehicle to return, with the
+  game option that lets construction yards be packed up again on (S-0213 claim 12), and whose
+  type the test file gives no needs-power flag and a visible working animation in a slot (S-0108
+  claim 10); and a type W with the firestorm-wall flag and no build-up
+  sprite, which the human house builds. A further
+  type S has the needs-power flag, a drain and the searchlight flag (S-0102 Import mapping), and
+  the human house builds it too, so its beam is created when it is placed (S-0102 claim 3). A
+  plant keeps full power unless a part says otherwise; low power comes from the spare consumer
+  (Power states, above). A pulse weapon whose pulse lasts at least 300 ticks (an invented test
+  value), an engineer, a unit that can destroy P, a computer player's house, a map trigger action
+  on a timer that gives N to that house (part j), and a control run with the same map whose P, N,
+  Y and W have no light. Every run is at the high detail level, at which building lights count
+  (S-0104 claim 11).
+- *Procedure:*
+  - (a) at full power, click P in power mode to switch it off, then again to switch it on.
+  - (b) switch P off, bring the house to low power, then switch P on while the house is still
+    short of power and keep it short for at least 100 ticks.
+  - (c) at full power with P on, bring the house to low power and keep it there for at least 100
+    ticks.
+  - (d) a pulse hits P while it is on; wait for the pulse to end. Repeat with P switched off before
+    the pulse hits it, and give no click until the pulse has ended and 50 more ticks have passed.
+  - (e) at full power, a sell order on P; watch until P leaves the map.
+  - (f) watch N from the start of the game; an engineer captures it.
+  - (g) at full power, watch S's beam; bring the house to low power; restore full power. If no
+    beam is drawn with the test lighting at full power, repeat the part with a darker ambient light
+    (as S-0102 scenario D19 part e does); if none is drawn then either, part g is not measurable
+    and the beam item stays medium.
+  - (h) at full power with P on, destroy P with weapons.
+  - (i) in runs of its own, with no capture, a pulse hits N; watch N for at least 100 ticks after
+    the pulse ends.
+  - (j) after part f's capture, in the same run, a pulse hits N; the timed trigger action gives N
+    to the computer player's house while the pulse lasts. A run in which the pulse has ended
+    before the trigger fires is void.
+  - (k) at full power, select Y and give a move click on an open cell, which sets its guard spot
+    and issues the sell order, so that it packs up (S-0213 claim 12); watch until its vehicle
+    appears, recording per tick whether Y's working animation is drawn.
+  - (l) sell W in sell mode (S-0408 scenario S3 part d).
+- *Runs:* three per part.
+- *Observable:* whether each building's light is present, per tick: the ground light level of a
+  cell inside the light's radius and outside every other light, read by the read-only recorder,
+  compared with the control run; the ticks of each click, pulse start and end, sale, build-down
+  start, removal, destruction, capture and ownership change, and of the pack-up vehicle's
+  appearance; in part k, whether Y's working animation is drawn, per tick, from a capture that
+  keeps every drawn frame; in part g, whether S's beam is drawn, per tick, from screenshots, with
+  the tick of each house power update.
+- *Expected:* (a) P's light is gone from the tick of the switch-off and back from the tick of the
+  switch-on. (b) The light comes on at the switch-on and stays on for the whole time the house is
+  short of power. (c) The light stays on throughout. (d) The light goes out on the tick the pulse
+  starts and is back on the tick it ends; in the repeat it is already out when the pulse starts
+  and is back on the tick the pulse ends, although P is still switched off.
+  (e) The light stays on through the sale and the build-down and is gone from the tick P leaves
+  the map. (f) N has no light from the start; it has its light from the tick of the capture. (g)
+  The beam is drawn at full power, is drawn on no frame drawn after the low-power update, and is
+  drawn again after full power returns. (h) P's light is on until it is destroyed and gone from
+  the tick it leaves the map. (i) N stays unlit through the pulse, has its light from the tick the
+  pulse ends, and keeps it for the whole watch although it is not manned. (j) N's light goes out
+  on the tick the pulse starts and is back on the tick of the ownership change, while the pulse
+  still lasts. (k) Y's light stays on through the pack-up's build-down and is gone from the tick
+  Y leaves the map, when its vehicle appears; Y's working animation is drawn from the pack-up's
+  first processing until its build-down starts and is hidden from the build-down's first tick.
+  (l) W's light is gone from the tick the sell order
+  removes it.
+- *Falsified if:* the light follows the in-operation result (it goes out under low power, during
+  the sale or the build-down, or stays out after a switch-on while short of power); it stays out
+  after the end of a pulse on a switched-off building; N is lit before the capture or unlit after
+  it, apart from part i's pulse end; N's light does not come on at part i's pulse end or goes out
+  again while it is not manned; N's light stays out at part j's ownership change; a light stays on
+  after its building has left the map in parts h, k or l; the beam is drawn while S is out of
+  operation; or, in part k, Y's working animation is hidden before its build-down starts or drawn
+  after it starts. Every part k run tells the two readings apart, since the build-down starts at
+  least 1 tick after the sale's first processing (S-0408 claim 6). A light change that shows on the ground
+  one tick after its event falsifies none of these; it leaves only the tick of claim 9's
+  relighting item unconfirmed (S-0104 claim 12).
+
+## Changes for other specs
+
+- **S-0207 claim 16, case (g).** "its locomotor is switched off" should read, for a hovering
+  vehicle, "its locomotor is not powered in S-0503's sense (switched off and down at a hover
+  height of 0)". Reason: the refusal tests whether the locomotor is powered, and a switched-off
+  hovering vehicle counts as powered until it has come down (S-0503 Terms). So a hovering vehicle
+  disabled while above the ground can still accept a scatter request in the ticks before it
+  touches down (claim 20 here). This spec claims the reading for a hovering vehicle only. Backing
+  and confidence: as claim 20 gives them for that state (`unmeasured`, low, as S-0207 rates
+  case g).
+- **S-0108 claim 10 and scenario B14.** While a building is being sold, or packs up (S-0415 claim
+  9), its slot animations stay drawn until the first tick of its build-down and are hidden from
+  then on. Committed B14 expects them hidden for the whole sale; that expected result is reversed.
+  The reversal is contested: it is rated medium until W6 part i and W15 part k run. Reason: S-0108
+  claim 10 hides the slots "while the building is being sold during its *construction* state".
+  This spec reads that state as the sale's build-down, which starts only once no docked unit holds
+  the sale (S-0408 claim 6), so the slots stay drawn before it. W6 part i and W15 part k test
+  that reading.
+  This spec's claim 9, W6 part (i) and W15 part (k) rest on this reading. Backing and confidence:
+  as claim 9 gives them (W6 part i for a sale, W15 part k for a pack-up; medium).
+
 ## Open questions
 
+- Claim 10's frame hold for a turret slot or a silo-fill slot, whose image frame S-0108 claims 19
+  and 16 set from the turret facing and the fill level: whether such a slot, frozen by a
+  switch-off, shows a held frame or the frame those claims give. Claim 10 states the hold for the
+  other working-animation slots only, and will defer to the building-animation spec for these two
+  once that spec states which wins.
 - Whether a sprite-drawn vehicle is darkened while disabled, as a voxel vehicle is (claim 20).
 - Whether a disabled vehicle whose locomotor keeps working when switched off can still be moved
   by a behaviour that gives it a destination, for example one whose *wait* behaviour refused the

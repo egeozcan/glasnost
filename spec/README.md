@@ -74,7 +74,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0612](superweapons/S-0612-psychic-dominator.md) | Psychic Dominator superweapon | superweapons | 2 | approved | — |
 | [S-0614](combat/S-0614-parasites.md) | Parasites | combat | 12 | approved | — |
 | [S-0110](rendering/S-0110-shroud-rendering.md) | Shroud and fog rendering | rendering | 12 | approved | — |
-| [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 25 | approved | — |
+| [S-0701](ui/S-0701-sound-selection.md) | Sound selection | ui | 27 | approved | — |
 | [S-0213](simulation/S-0213-human-orders.md) | Human orders (the order set, when orders apply, and what each order changes) | simulation | 46 | approved | — |
 | [S-0511](structures/S-0511-bridges.md) | Bridges (destruction, collapse, falling and repair) | structures | 8 | approved | — |
 | [S-0407](production/S-0407-tech-tree.md) | Tech tree (what a house may build: prerequisites and generic groups, tech level, country lists, stolen tech, build limits, captured buildings, secret labs) | production | 20 | approved | — |
@@ -106,7 +106,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0502](movement/S-0502-jumpjet-movement.md) | Movement of jumpjets | movement | 20 | approved | — |
 | [S-0309](combat/S-0309-target-acquisition.md) | Target acquisition (automatic searches, candidate tests, threat score, retaliation, target switching) | combat | 38 | approved | — |
 | [S-0208](infantry/S-0208-infantry-movement.md) | Infantry movement (standing positions, walking step and speed, crawling, scatter destinations) | infantry | 34 | approved | — |
-| [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 21 | approved | — |
+| [S-0405](economy/S-0405-power.md) | Power (output and drain, damaged power plants, low power, blackouts, which buildings stop) | economy | 36 | approved | — |
 | [S-0608](combat/S-0608-drain.md) | Drain (attaching to a building, draining its power and credits, and letting go) | combat | 6 | approved | — |
 | [S-0607](combat/S-0607-magnetic-lift.md) | Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall) | combat | 11 | approved | — |
 | [S-0518](combat/S-0518-linked-weapons.md) | Linked weapons (prism support beams, charging of overpowerable buildings, beam drawing) | combat | 6 | approved | — |
@@ -135,7 +135,7 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0514](combat/S-0514-chrono-weapons.md) | Chrono weapons (temporal erasure) | combat | 11 | approved | — |
 | [S-0102](rendering/S-0102-draw-order.md) | Draw order, render layers, depth compositing, sprite placement and shadow pixels | rendering | 24 | approved | — |
 | [S-0506](combat/S-0506-missiles.md) | Missiles (spawned missiles, launch cycle and rocket flight) | combat | 13 | approved | — |
-| [S-0316](combat/S-0316-electric-bolt-shots.md) | Electric-bolt shots (the shot, its sparks, and how the bolt is drawn) | combat | 27 | approved | — |
+| [S-0316](combat/S-0316-electric-bolt-shots.md) | Electric-bolt shots (the shot, its sparks, and how the bolt is drawn) | combat | 35 | approved | — |
 | [S-0703](ui/S-0703-music-playback.md) | Music playback (track eligibility, next-track order, shuffle and repeat) | ui | 51 | approved | — |
 | [S-0318](combat/S-0318-shrapnel-fragments.md) | Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go) | combat | 13 | approved | — |
 | [S-0317](combat/S-0317-voxel-debris.md) | Debris pieces with voxel models (creation, flight, bounces, end of life, removal) | combat | 34 | approved | — |
