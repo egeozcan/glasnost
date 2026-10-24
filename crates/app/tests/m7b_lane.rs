@@ -62,6 +62,19 @@
 //! an enemy vehicle; frames while bolts are shown, with the bolt, attached
 //! bolt, pixel and spark-system counts.
 //!
+//! M8 step A4 round 3 (the lead's play notes 13 and 15): `aa-auto` puts
+//! every building, vehicle and infantry type with an anti-air weapon in
+//! slots 0 or 1 (any slot for a gunner type) on open land, of the local
+//! (human) house and of a test-only computer house, and flies an enemy
+//! aircraft across it on a move order (never an attack order, so that no
+//! retaliation decides): the tick it comes into the weapon's range in
+//! flight, the tick the searcher takes it as its target and the tick of the
+//! first shot at it (S-0309 claims 1 to 9; S-0303 Terms). `debris-left`
+//! kills enemy infantry by each death kind and enemy vehicles and counts,
+//! 300 and 1000 ticks later, what stays on the map: animations by kind
+//! (bouncing, corpse, endless, other), voxel debris pieces and particle
+//! systems (S-0107 claim 17; S-0109; S-0317; S-0616).
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -113,6 +126,8 @@ const SCENES: &[Scene] = &[
     ("bolt-vehicle", |l| bolts(l, Kind::Vehicle)),
     ("bolt-infantry", |l| bolts(l, Kind::Infantry)),
     ("bolt-building", |l| bolts(l, Kind::Building)),
+    ("aa-auto", aa_auto),
+    ("debris-left", debris_left),
 ];
 
 #[test]
@@ -1702,6 +1717,379 @@ fn aa_only(lane: &mut Lane) {
             watch_attack(&mut l, &format!("{key} air"), b2, &[("aircraft", a)]);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// M8 step A4 round 3
+
+/// Whether weapon `x`'s projectile is anti-air and whether it is
+/// anti-ground.
+fn aa_ag(w: &World, x: u32) -> (bool, bool) {
+    let r = w.rules();
+    r.combat.weapon(x).projectile.map_or((false, false), |p| {
+        let p = &r.combat.projectiles[p as usize];
+        (p.aa, p.ag)
+    })
+}
+
+/// The types with an anti-air weapon in slot 0 or 1, or, for a gunner
+/// type, in any slot (its weapon number picks the slot, S-0308 claim 6).
+fn aa_types(w: &World) -> Vec<(Kind, usize)> {
+    let r = w.rules();
+    let mut out = Vec::new();
+    for i in 0..r.buildings.len() {
+        let b = &r.buildings[i];
+        if b.strength > 0 && b.combat.slots[..2].iter().flatten().any(|&x| aa_ag(w, x).0) {
+            out.push((Kind::Building, i));
+        }
+    }
+    for kind in [Kind::Vehicle, Kind::Infantry] {
+        for i in 0..type_count(w, kind) {
+            let Some(u) = r.unit(kind, i as u32) else {
+                continue;
+            };
+            let n = if u.combat.gunner {
+                u.combat.slots.len()
+            } else {
+                2
+            };
+            if u.strength > 0 && u.combat.slots[..n].iter().flatten().any(|&x| aa_ag(w, x).0) {
+                out.push((kind, i));
+            }
+        }
+    }
+    out
+}
+
+/// A landable aircraft type placed on the ground (not visiting) at `at`,
+/// for the flight across a searcher.
+fn crossing_aircraft(lane: &mut Lane, house: HouseId, at: CellXY) -> Option<ObjectId> {
+    let n = lane.world().rules().aircraft.len();
+    for i in 0..n {
+        let r = lane.world().rules();
+        if r.unit(Kind::Aircraft, i as u32)
+            .is_none_or(|u| u.strength <= 0)
+        {
+            continue;
+        }
+        let name = r.aircraft[i].name.clone();
+        let id = lane.spawn(Kind::Aircraft, &name, house, at);
+        let ok = lane
+            .world()
+            .obj(id)
+            .and_then(|o| o.air.as_ref())
+            .is_some_and(|a| !a.visiting)
+            && glasnost_sim::air::on_ground(lane.world(), id);
+        if ok {
+            return Some(id);
+        }
+        glasnost_sim::objects::remove(lane.world_mut(), id);
+    }
+    None
+}
+
+/// Note 15: every anti-air type of [`aa_types`], human and computer owner,
+/// with an enemy aircraft flying across it on a move order. Counts and
+/// ticks only.
+fn aa_auto(lane: &mut Lane) {
+    let found = aa_types(lane.world());
+    println!("aa-auto: anti-air types: {}", found.len());
+    // GLASNOST_LANE_AA_INDEX=n plays only the n-th type.
+    let pick: Option<usize> = std::env::var("GLASNOST_LANE_AA_INDEX")
+        .ok()
+        .and_then(|x| x.parse().ok());
+    for (n, &(kind, ti)) in found.iter().enumerate() {
+        if pick.is_some_and(|p| p != n) {
+            continue;
+        }
+        for computer in [false, true] {
+            let mut l = Lane::start().expect("the install is set");
+            let Some(enemy) = l.enemy() else { return };
+            let local = l.local();
+            let (owner, other) = if computer {
+                (enemy, local)
+            } else {
+                (local, enemy)
+            };
+            let name = type_name_of(l.world(), kind, ti);
+            if kind == Kind::Building {
+                // The lane's own copy: the building needs and draws no power.
+                patch_rules(&mut l, |r| {
+                    if let Some(p) = r.econ.power.buildings.get_mut(ti) {
+                        p.needs_power = false;
+                        p.drain = 0;
+                    }
+                });
+            }
+            l.world_mut().houses[usize::from(owner.0)].human = !computer;
+            let home = l.home();
+            let key = format!(
+                "aa-auto {n} {:?} {}",
+                kind,
+                if computer { "computer" } else { "human" }
+            );
+            let at = l.open_land(CellXY::new(home.x + 14, home.y + 14));
+            let s = l.spawn(kind, &name, owner, at);
+            let west = l.open_land(CellXY::new(at.x - 16, at.y));
+            let Some(a) = crossing_aircraft(&mut l, other, west) else {
+                println!("{key}: no aircraft type");
+                return;
+            };
+            let target = Some(glasnost_sim::world::Target::Object(a));
+            {
+                let w = l.world();
+                let tc = if kind == Kind::Building {
+                    w.rules().buildings[ti].combat.clone()
+                } else {
+                    w.rules()
+                        .unit(kind, ti as u32)
+                        .map(|u| u.combat.clone())
+                        .unwrap_or_default()
+                };
+                let wn = glasnost_sim::combat::weapon::weapon_number(w, s);
+                let (slot, wp) = glasnost_sim::combat::weapon::would_use(w, s, target);
+                let c = glasnost_sim::combat::acquire::classes(w, s);
+                println!(
+                    "{key}: gunner {} turret count {} switching {} weapon number {wn}; slot 0 aa/ag {:?}, slot 1 aa/ag {:?}; against the aircraft slot {slot} aa/ag {:?}; search classes aircraft {} ground {}; passive {}; guard range {}; scan mode {:?}",
+                    tc.gunner,
+                    tc.turret_count,
+                    glasnost_sim::combat::weapon::switching(w, s),
+                    tc.slots[0].map(|x| aa_ag(w, x)),
+                    tc.slots[1].map(|x| aa_ag(w, x)),
+                    wp.map(|x| aa_ag(w, x)),
+                    c.aircraft,
+                    c.infantry || c.vehicles || c.buildings,
+                    glasnost_sim::combat::acquire::may_search_passively(w, s),
+                    w.rules().unit(kind, ti as u32).map_or(0, |u| u.guard_range),
+                    tc.scan_mode,
+                );
+            }
+            l.ticks(2);
+            let east = CellXY::new(at.x + 16, at.y);
+            let na = l.order(other, a, ClickOn::Cell(east));
+            let (mut first_range, mut first_target, mut first_shot) = (None, None, None);
+            let mut first_hit = None;
+            let mut in_range_beh = std::collections::BTreeMap::<String, usize>::new();
+            let mut last_timer = l.world().obj(s).map_or(0, |o| o.targeting_timer);
+            let mut shots = std::collections::BTreeMap::<&str, usize>::new();
+            let mut last = l.world().obj(s).map_or(0, |o| o.last_fired);
+            let full = l.world().obj(a).map_or(0, |o| o.health);
+            let (mut in_range_ticks, mut tracked_ticks, mut flight_ticks) = (0, 0, 0);
+            for _ in 0..700 {
+                l.ticks(1);
+                let w = l.world();
+                if w.obj(a).is_none() || w.obj(s).is_none() {
+                    break;
+                }
+                let flying = !glasnost_sim::air::on_ground(w, a);
+                flight_ticks += usize::from(flying);
+                tracked_ticks += usize::from(glasnost_sim::combat::flying::tracked(w, a));
+                let (_, wp) = glasnost_sim::combat::weapon::would_use(w, s, target);
+                let inr = flying && glasnost_sim::combat::range::in_range(w, s, wp, target, None);
+                if inr {
+                    in_range_ticks += 1;
+                    first_range.get_or_insert(w.tick);
+                    // The searcher's behaviour and target kind while the
+                    // aircraft is in range (only behaviours that search
+                    // passively look at it, S-0215 claim 33).
+                    let o = w.obj(s).expect("checked above");
+                    let what = match o.target {
+                        None => "none",
+                        x if x == target => "the aircraft",
+                        _ => "another",
+                    };
+                    // With no target: the firing check without range and
+                    // the versus test of S-0309 table C, and whether a
+                    // search restarted the targeting timer this tick.
+                    let why = if o.target.is_none() {
+                        let (slot, wp) = glasnost_sim::combat::weapon::would_use(w, s, target);
+                        let ans = glasnost_sim::combat::check::check(w, s, target, slot, false);
+                        let vs = wp.and_then(|x| {
+                            target.and_then(|t| glasnost_sim::combat::weapon::versus(w, x, t))
+                        });
+                        let vs_ok =
+                            vs.is_some_and(|v| v.gt(glasnost_sim::combat::acquire::tau_a()));
+                        let expected = w.obj(a).map_or(0, |x| x.combat.expected_health);
+                        format!(
+                            "; slot {slot} check {ans:?} versus above τ {vs_ok} searched {} expected health above 0 {}",
+                            o.targeting_timer != last_timer,
+                            expected > 0
+                        )
+                    } else {
+                        String::new()
+                    };
+                    *in_range_beh
+                        .entry(format!("{:?} target {what}{why}", o.beh.current))
+                        .or_insert(0) += 1;
+                }
+                last_timer = w.obj(s).map_or(0, |o| o.targeting_timer);
+                if w.obj(s).and_then(|o| o.target) == target {
+                    first_target.get_or_insert(w.tick);
+                }
+                // A shot at the aircraft: the searcher's tick of the last
+                // shot (S-0206 claim 9) moved while it held the aircraft.
+                if let Some(o) = w.obj(s) {
+                    if o.last_fired != last {
+                        // Every shot, by what the searcher holds after it. A
+                        // distributed-fire type outside attack drops the
+                        // target it fired at onto its list (S-0309 claim 20).
+                        let listed = o.combat.fired_at.contains(&a);
+                        let what = match o.target {
+                            x if x == target => "the aircraft",
+                            None if listed => "the aircraft, dropped onto the list",
+                            None => "no target",
+                            _ => "another target",
+                        };
+                        *shots.entry(what).or_insert(0) += 1;
+                        if o.target == target || listed {
+                            first_shot.get_or_insert(w.tick);
+                        }
+                    }
+                    last = o.last_fired;
+                }
+                if w.obj(a).is_some_and(|o| o.health < full) {
+                    first_hit.get_or_insert(w.tick);
+                }
+            }
+            let alive = l.world().obj(a).is_some();
+            let delta = |x: Option<i32>| x.zip(first_range).map(|(x, r)| x - r);
+            println!(
+                "{key}: order {na}; aircraft in flight {flight_ticks} ticks, tracked {tracked_ticks}, in range in flight {in_range_ticks}; first in range {first_range:?}, first target {first_target:?} ({:?} after), first shot {first_shot:?} ({:?} after), first damage {first_hit:?} ({:?} after); aircraft alive {alive}; shots {shots:?}; in range: {in_range_beh:?}",
+                delta(first_target),
+                delta(first_shot),
+                delta(first_hit),
+            );
+        }
+    }
+}
+
+/// Animation types named by a corpse list (the general list or any
+/// infantry type's own), lower case.
+fn corpse_names(w: &World) -> std::collections::BTreeSet<String> {
+    let r = w.rules();
+    let mut out: std::collections::BTreeSet<String> = r
+        .combat
+        .general
+        .dead_bodies
+        .iter()
+        .map(|x| x.to_ascii_lowercase())
+        .collect();
+    for i in 0..r.infantry.len() {
+        if let Some(u) = r.unit(Kind::Infantry, i as u32) {
+            for x in u.raw.dead_bodies.as_deref().unwrap_or_default() {
+                out.insert(x.to_ascii_lowercase());
+            }
+        }
+    }
+    out
+}
+
+/// What stays on the map of the animations created after `before`, the
+/// voxel debris pieces and the particle systems.
+fn leftovers(lane: &Lane, before: &std::collections::BTreeSet<ObjectId>, what: &str) {
+    let w = lane.world();
+    let corpses = corpse_names(w);
+    let (mut bouncing, mut corpse, mut endless, mut other, mut ended) = (0, 0, 0, 0, 0);
+    let mut corpse_loops = std::collections::BTreeMap::<i32, usize>::new();
+    for (id, a) in &w.anims.anims {
+        if before.contains(id) {
+            continue;
+        }
+        let ty = a.anim.and_then(|i| w.rules().animations.get(i as usize));
+        let name = a.player.name_text().to_ascii_lowercase();
+        if a.player.ended() {
+            ended += 1;
+        }
+        if ty.is_some_and(|t| t.bouncing) {
+            bouncing += 1;
+        } else if corpses.contains(&name) {
+            corpse += 1;
+            *corpse_loops.entry(a.player.play.loop_count).or_default() += 1;
+        } else if a.player.remaining_passes().is_none() {
+            endless += 1;
+        } else {
+            other += 1;
+        }
+    }
+    let (k, n) = census(w);
+    println!(
+        "{what}: new animations: bouncing {bouncing}, corpse {corpse} (by loop count {corpse_loops:?}), endless other {endless}, other {other}, ended but listed {ended}; voxel debris pieces {}; walkers {}; particle systems {} with {n} particles",
+        w.pieces.len(),
+        w.walkers.len(),
+        k.iter().sum::<usize>()
+    );
+}
+
+/// Note 13: enemy infantry killed by each death kind 1 to 7 and 10 and
+/// enemy armed vehicles destroyed, then what stays on the map at +300 and
+/// +1000 ticks.
+fn debris_left(lane: &mut Lane) {
+    let Some(inf) = human_infantry(lane.world()) else {
+        println!("debris-left: no human infantry type");
+        return;
+    };
+    let Some(enemy) = lane.enemy() else { return };
+    let before: std::collections::BTreeSet<ObjectId> =
+        lane.world().anims.anims.keys().copied().collect();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 10, home.y + 10));
+    lane.look_at(at);
+    let mut killed = 0;
+    for (j, k) in [1, 2, 3, 4, 5, 6, 7, 10].into_iter().enumerate() {
+        let Some(h) = warhead_of_kind(lane.world(), k) else {
+            continue;
+        };
+        let id = lane.spawn(
+            Kind::Infantry,
+            &inf,
+            enemy,
+            CellXY::new(at.x + j as i32, at.y),
+        );
+        lane.ticks(2);
+        kill_with(lane, id, h);
+        killed += 1;
+    }
+    let vehicles: Vec<String> = {
+        let r = lane.world().rules();
+        (0..r.vehicles.len())
+            .filter(|&i| {
+                r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                    u.strength > 0
+                        && u.combat.slots[0].is_some()
+                        && u.locomotor != glasnost_sim::rules::Locomotor::Ship
+                })
+            })
+            .take(6)
+            .map(|i| r.vehicles[i].name.clone())
+            .collect()
+    };
+    let h = warhead_of_kind(lane.world(), 0).unwrap_or(0);
+    for (j, v) in vehicles.iter().enumerate() {
+        let id = lane.spawn(
+            Kind::Vehicle,
+            v,
+            enemy,
+            CellXY::new(at.x + 2 * j as i32, at.y + 4),
+        );
+        lane.ticks(2);
+        kill_with(lane, id, h);
+        killed += 1;
+    }
+    println!("debris-left: killed {killed} ({} vehicles)", vehicles.len());
+    for t in (50..300).step_by(50) {
+        lane.ticks(50);
+        leftovers(lane, &before, &format!("debris-left +{t}"));
+    }
+    lane.ticks(50);
+    leftovers(lane, &before, "debris-left +300");
+    lane.save("debris-left-300");
+    for t in (350..1000).step_by(50) {
+        lane.ticks(50);
+        leftovers(lane, &before, &format!("debris-left +{t}"));
+    }
+    lane.ticks(50);
+    leftovers(lane, &before, "debris-left +1000");
+    lane.save("debris-left-1000");
 }
 
 /// The first weapon with the electric-bolt flag that makes a bolt (no

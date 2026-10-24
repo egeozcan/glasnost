@@ -513,7 +513,8 @@ pub fn placed(w: &mut World, id: ObjectId) {
 /// type has the counts-as-aircraft flag (Import mapping,
 /// `ConsideredAircraft`). Otherwise a jumpjet placed in the air is not
 /// registered until it next takes off from *grounded*. Aircraft are left
-/// to their own movement lane, which does not track them yet.
+/// to their own movement lane, which tracks them while in flight
+/// (`air::sync_listing`; Q-1845 interim).
 pub fn placed_registration(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj(id) else { return };
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle) {

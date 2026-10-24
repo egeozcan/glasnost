@@ -2149,6 +2149,43 @@ fn claim17_lost_target() {
     assert_eq!(pr(&s, id).target, None);
 }
 
+// spec: S-0306 claim 17 (a target that goes inside or is removed, leaving the map without being killed: its cell when it was not airborne, else nothing)
+#[test]
+fn claim17_target_taken_inside_or_removed() {
+    for inside in [true, false] {
+        let mut s = setup(&base(), 6, 0);
+        let f = fp(&s, 300);
+        let t = Target::Object(s.t);
+        let id = fire(&mut s, t, f).unwrap();
+        let cell = pos(&s, s.t).cell();
+        let tt = s.t;
+        if inside {
+            glasnost_sim::objects::take_inside(&mut s.w, tt);
+            assert!(s.w.obj(tt).is_some(), "the target still exists");
+        } else {
+            glasnost_sim::objects::remove(&mut s.w, tt);
+        }
+        assert_eq!(
+            pr(&s, id).target,
+            Some(Target::Cell(cell)),
+            "inside {inside}"
+        );
+        // An airborne target: nothing.
+        let mut s = setup(&base(), 6, 0);
+        let tp = pos(&s, s.t);
+        put(&mut s.w, s.t, Pos::new(tp.x, tp.y, 400));
+        let t = Target::Object(s.t);
+        let id = fire(&mut s, t, f).unwrap();
+        let tt = s.t;
+        if inside {
+            glasnost_sim::objects::take_inside(&mut s.w, tt);
+        } else {
+            glasnost_sim::objects::remove(&mut s.w, tt);
+        }
+        assert_eq!(pr(&s, id).target, None, "airborne, inside {inside}");
+    }
+}
+
 // spec: S-0306 claim 17 and T1 (a steering projectile without a target climbs and detonates once its height above the surface reaches the missile safety altitude; scenario P11 a)
 #[test]
 fn claim17_steering_without_target_climbs_to_the_safety_altitude() {

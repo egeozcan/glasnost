@@ -1986,6 +1986,23 @@ pub fn detonate_rocket(
     );
 }
 
+/// The target object `id` leaves the map, by going inside or by being
+/// removed (S-0306 claim 17): every projectile aimed at it now targets the
+/// cell it stood in when it was not airborne, else nothing. Call it while
+/// `id` is still on the map; an object already off the map changes nothing.
+pub(crate) fn target_leaves(w: &mut World, id: ObjectId) {
+    let Some(pos) = w.obj(id).filter(|o| o.on_map).map(|o| o.pos) else {
+        return;
+    };
+    // spec: S-0306 claim 17 (a target object that leaves the game or becomes untargetable: the cell the target stood in if it was not airborne, else nothing)
+    let airborne = crate::combat::weapon::airborne_by_height(w, id);
+    for p in w.projectiles.values_mut() {
+        if p.target == Some(Target::Object(id)) {
+            p.target = (!airborne).then_some(Target::Cell(pos.cell()));
+        }
+    }
+}
+
 /// A projectile leaves play (S-0203 claim 5: a removal for claim 10).
 pub fn remove(w: &mut World, id: ObjectId) {
     w.projectiles.remove(&id);

@@ -448,6 +448,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     }
     // spec: S-0501 claim 32 (an aircraft loses as its target an object that leaves the map, a transport or a building entered, at that moment)
     crate::air::targeters_lose(w, id, false);
+    // spec: S-0306 claim 17 (a projectile whose target goes inside: the cell it stood in when not airborne, else nothing)
+    crate::combat::projectile::target_leaves(w, id);
     // spec: S-0615 claim 14 (taken off the map: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0608 claim 17 and S-0507 claim 6 (Q-1443: successful temporary off-map storage of either party ends its drain links at once, a stranded earlier link included)
@@ -463,6 +465,8 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     crate::gattling::leaving_map(w, id);
     // spec: S-0209 claim 1 (an aircraft going inside clears its object-present mark)
     crate::air::clear_mark(w, id);
+    // spec: S-0303 Terms (an aircraft off the map is not in ordinary flight); Q-1845 (interim: going inside ends the tracking)
+    crate::air::leaving_map(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;
     // spec: S-0203 claim 10 (going inside: a removal from the update order, counting during the turn pass)
     w.update.leave(id, skip);
@@ -509,6 +513,8 @@ pub fn remove(w: &mut World, id: ObjectId) {
     };
     // spec: S-0501 claim 32 (an aircraft loses as its target an object that is removed, at that moment)
     crate::air::targeters_lose(w, id, true);
+    // spec: S-0306 claim 17 (a projectile whose target is removed from the map: the cell it stood in when not airborne, else nothing; a killed target was dealt with at the kill)
+    crate::combat::projectile::target_leaves(w, id);
     // spec: S-0615 claim 14 (removed or taken off the map, a transport or building entered included: lost to its disc lasers at once)
     crate::disc::object_lost(w, id);
     // spec: S-0519 claims 7 and 8 (a removed carrier loses its bomb silently; a bomb whose planter leaves forgets it)
