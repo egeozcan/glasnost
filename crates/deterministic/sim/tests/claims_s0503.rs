@@ -669,20 +669,58 @@ fn claim_10_switch_off_spin_and_settle() {
     assert!(height_of(&w, id) > 50);
 }
 
-// spec: S-0503 claim 10 (the stop request clears the destination and path when D and P differ; it does not zero throttle or hover speed)
+// spec: S-0503 claim 10 (the stop request clears the locomotor's D and the stored path when D and P differ; it never touches the order-level destination, which stays in place; it does not zero throttle or hover speed)
 #[test]
 fn claim_10_stop_request() {
     let mut w = world();
     let id = at(&mut w, "HOVER", 0, -8, 0, 16384);
     settle(&mut w);
-    order(&mut w, id, cell(-2, 0));
+    let c = cell(-2, 0);
+    order(&mut w, id, c);
     common::run(&mut w, 60);
     let phi = hs(&w, id).phi;
     assert!(phi.gt(F64::ZERO));
+    assert!(hover::destination_point(&w, id).is_some(), "a D before");
     glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
     let o = w.obj(id).unwrap();
-    assert!(o.dest.is_none() && o.path.steps.is_empty());
+    assert_eq!(
+        o.dest,
+        Some(glasnost_sim::world::Target::Cell(c)),
+        "the order-level destination stays in place"
+    );
+    assert!(o.path.steps.is_empty(), "the stored path is cleared");
+    assert_eq!(hover::destination_point(&w, id), None, "D is cleared");
     assert!(hs(&w, id).phi.eq_num(phi), "hover speed not zeroed");
+}
+
+// spec: S-0503 claim 10 (a repeated switch-off while a spin is active and the vehicle is still powered takes the two draws again, and the new count replaces the active one: the spin restarts from the new count)
+#[test]
+fn claim_10_repeated_switch_off_replaces_the_spin_count() {
+    let mut w = world();
+    let id = at(&mut w, "HOVER", 0, -8, 0, 0);
+    settle(&mut w);
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    let first = hs(&w, id).spin;
+    assert_ne!(first, 0, "a spin");
+    tick::step(&mut w);
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, false);
+    assert_eq!(
+        hs(&w, id).spin,
+        first - first.signum(),
+        "switching on keeps the spin"
+    );
+    assert!(hover::powered(&w, id) && height_of(&w, id) > 0);
+    let mut c = w.clone();
+    let half = c.rules().quirks.ranged_draw_half_span;
+    // spec: S-0503 claim 10 (R(20, 30), then R(0, 99); below 50 negates n)
+    let mut n = c.rng.ranged(20, 30, half);
+    if c.rng.ranged(0, 99, half) < 50 {
+        n = -n;
+    }
+    let before = w.rng.taken();
+    glasnost_sim::econ::power::apply_disabled(&mut w, id, true);
+    assert_eq!(w.rng.taken() - before, 2, "two draws again");
+    assert_eq!(hs(&w, id).spin, n, "the new count replaces the active one");
 }
 
 // spec: S-0503 claim 16 (a person's stop order keeps the heading point, throttle, hover speed and ρ at that instant; not a forced halt: it travels on to its heading point and stops there; Q-0696 answered)
