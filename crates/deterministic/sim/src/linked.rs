@@ -145,6 +145,8 @@ pub fn start_shot(w: &mut World, master: ObjectId) {
     let due = w.tick.wrapping_add((delay_field(w) - 1).max(0));
     if let Some(ob) = w.obj_mut(master) {
         ob.combat.delayed_shot = Some(due);
+        // spec: S-0518 claim 7 (the master's shot and its final check use slot 0)
+        ob.combat.delayed_slot = 0;
     }
 }
 

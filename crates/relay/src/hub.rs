@@ -85,7 +85,7 @@ use glasnost_net::wire::{
     self, Body, Envelope, Frame, Frames, MAGIC as GAME_MAGIC, RELAY, WireError,
 };
 use glasnost_net::{Field, Params};
-use glasnost_ui::setup::period_ms;
+use glasnost_ui::setup::net_period_ms;
 
 /// A connection, by the hub's number (also its member id in a room).
 pub type ConnId = MemberId;
@@ -1196,7 +1196,7 @@ impl Hub {
                 self.entropy.fill(&mut seed);
                 let mut params = self.limits.params;
                 let e = self.rooms.get_mut(&code).expect("the room exists");
-                let period = period_ms(e.room.setup().game_speed()).max(1) as u64;
+                let period = net_period_ms(e.room.setup().game_speed()).max(1) as u64;
                 params.grace_ticks =
                     (self.limits.grace_ms / period).min(u64::from(u32::MAX)) as u32;
                 match e.room.start(conn, u32::from_le_bytes(seed), params) {

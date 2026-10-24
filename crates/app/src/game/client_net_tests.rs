@@ -19,6 +19,7 @@ use glasnost_relay::{Entropy, Limits, Relay};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::world::Target;
+use glasnost_ui::hud::PauseHit;
 use glasnost_ui::setup::{MapEntry, SetupRules, SlotKind};
 use glasnost_vfs::ArchiveId;
 
@@ -93,8 +94,9 @@ fn install() -> Install {
             units_range: (1, 9),
             bases: true,
             flags: [false, true, true, true, true],
-            // The fast speeds: 16 ms ticks.
-            game_speed: 1,
+            // The fastest speed: a network game's 16 ms ticks (S-0201
+            // claim 17 and Formulas F5, index 0).
+            game_speed: 0,
             countries: vec!["Alphaland".into(), "Betaland".into()],
             colours: vec![[200, 0, 0, 255]; 8],
         },
@@ -362,6 +364,49 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
     );
     for t in 1..=TICKS {
         assert_eq!(hashes[0].get(&t), hashes[1].get(&t), "tick {t}");
+    }
+
+    // Ann changes the speed through the options menu: the ticks go on
+    // while it is open; at its close the speed order is carried out on
+    // both machines in one tick, Bea's machine names the house whose player
+    // changed it and Ann's does not, and both then pace the new index's
+    // period.
+    // spec: S-0201 claim 15 (the menu stops no tick in a network game) and claim 17 (sent when the menu closes; carried out in one tick on every machine; the message on every machine but the sender's; the cycles follow the new index's cap, Formulas F5)
+    let from = a.session.as_ref().unwrap().play.game.world.game_speed;
+    assert_eq!(from, 0);
+    assert!(a.session.as_mut().unwrap().open_options());
+    let opened = a.session.as_ref().unwrap().play.game.world.tick;
+    pump(
+        &clock,
+        &mut [&mut a, &mut b],
+        "ticks with the menu open",
+        |c| c[0].session.as_ref().unwrap().play.game.world.tick > opened + 5,
+    );
+    for hit in [PauseHit::Speed(-1), PauseHit::Resume] {
+        let _ = a.frame();
+        let r = a.session.as_ref().unwrap().pause_targets().rect_of(&hit);
+        click(&mut a, r.expect("an options menu target"));
+    }
+    assert!(!a.session.as_ref().unwrap().paused);
+    let speed = |c: &Client| c.session.as_ref().unwrap().play.game.world.game_speed;
+    pump(&clock, &mut [&mut a, &mut b], "the speed order", |c| {
+        c.iter().all(|c| speed(c) == 1) && notice(c[1], |t| t == "Ann changed the game speed.")
+    });
+    assert!(!notice(&a, |t| t.contains("changed the game speed")));
+    let at = [&a, &b].map(|c| c.session.as_ref().unwrap().play.game.world.tick);
+    pump(
+        &clock,
+        &mut [&mut a, &mut b],
+        "a tick at the new speed",
+        |c| {
+            c.iter()
+                .zip(at)
+                .all(|(c, t)| c.session.as_ref().unwrap().play.game.world.tick > t)
+        },
+    );
+    for c in [&a, &b] {
+        assert_eq!(c.session.as_ref().unwrap().speed, 1);
+        assert_eq!(c.lockstep().unwrap().tick_ms(), 22, "⌊1000/45⌋ ms");
     }
 
     // The other stops: after a while the host names whom it waits for.

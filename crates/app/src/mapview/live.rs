@@ -80,9 +80,10 @@ const TARGET_LINE_TICKS: i32 = 15; // spec: S-0301 claim 24 b (drawn while 0 ≤
 // ---------------------------------------------------------------------------
 
 /// The paced period of game-speed index `speed` in milliseconds (S-0201
-/// claims 4 and 5); kept with the setup so the relay works out the drop
-/// grace period in ticks from it too (M9 N5).
-pub use glasnost_ui::setup::period_ms;
+/// claims 4 and 5), and that of a network game (claim 17), from which the
+/// relay works out the drop grace period in ticks (M9 N5); both kept with
+/// the setup.
+pub use glasnost_ui::setup::{net_period_ms, period_ms};
 
 /// The tick pacer: a cycle runs one tick and lasts at least its paced period
 /// measured from its own start, with no catch-up (S-0201 claims 2 to 4).
@@ -100,11 +101,16 @@ impl Pacer {
     /// is not made up (S-0201 claim 3). Call once per drawn frame, so at most
     /// one tick runs per frame.
     pub fn due(&mut self, now_ms: i64, speed: u8) -> bool {
-        let due = self
-            .cycle_start
-            .is_none_or(|s| now_ms - s >= period_ms(speed));
+        self.due_after(now_ms, period_ms(speed))
+    }
+
+    /// Whether a tick is due at host time `now_ms` for cycles of at least
+    /// `period` milliseconds (a network game's, S-0201 claim 17); as
+    /// [`Pacer::due`] otherwise.
+    pub fn due_after(&mut self, now_ms: i64, period: i64) -> bool {
+        let due = self.cycle_start.is_none_or(|s| now_ms - s >= period);
         if due {
-            // spec: S-0201 claim 3 (each cycle measures its paced period from its own start)
+            // spec: S-0201 claim 3 (each cycle measures its paced period from its own start) and claim 17 (so does a network game's, with no catch-up)
             self.cycle_start = Some(now_ms);
         }
         due
@@ -112,8 +118,14 @@ impl Pacer {
 
     /// Milliseconds until the next tick is due (0 when it is).
     pub fn remaining(&self, now_ms: i64, speed: u8) -> i64 {
+        self.remaining_for(now_ms, period_ms(speed))
+    }
+
+    /// Milliseconds until the next tick is due for cycles of at least
+    /// `period` milliseconds (0 when it is).
+    pub fn remaining_for(&self, now_ms: i64, period: i64) -> i64 {
         self.cycle_start
-            .map_or(0, |s| (period_ms(speed) - (now_ms - s)).max(0))
+            .map_or(0, |s| (period - (now_ms - s)).max(0))
     }
 
     /// Forgets the current cycle (after a pause: S-0201 claims 3 and 8, the

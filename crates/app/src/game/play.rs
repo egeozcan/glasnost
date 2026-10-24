@@ -213,8 +213,10 @@ impl Play {
     }
 
     /// Advances the result duration's active clock to host time `now_ms`
-    /// (S-0414 claim 23): `active` is false while the game is paused for the
-    /// options menu or has lost focus. The clock stops when play stops.
+    /// (S-0414 claim 23, revision 16): `active` is false while a skirmish's
+    /// options menu is open; time without the input focus counts, and in a
+    /// network game nothing but leaving play stops the clock (S-0201 claim
+    /// 18). The clock stops when play stops.
     pub fn clock(&mut self, now_ms: i64, active: bool) {
         if !active || !self.running() {
             self.clock_last = None;
@@ -760,6 +762,12 @@ impl Play {
     /// Surrender (S-0414 claim 11).
     pub fn surrender(&mut self) {
         self.issue(vec![Order::Surrender]);
+    }
+
+    /// The options menu's speed change, as an order of the local house
+    /// (S-0201 claims 8 and 17); returns whether it was taken or sent.
+    pub fn change_speed(&mut self, speed: u8) -> bool {
+        self.give(Order::GameSpeed { speed })
     }
 
     /// The tab shown (S-0411 claim 2).

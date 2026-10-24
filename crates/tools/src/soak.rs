@@ -1204,7 +1204,7 @@ pub fn parse(args: &[String]) -> Result<Soak, String> {
     let secs = if minutes > 0 {
         minutes as u64 * 60
     } else {
-        // nocite: our own harness (the fastest paced speed's 16 ms ticks)
+        // nocite: our own harness (the synthetic room at index 0: a network game's 16 ms ticks)
         u64::from(ticks) * 16 / 1000
     };
     let mut t = match (trouble, custom) {

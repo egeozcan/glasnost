@@ -1463,7 +1463,7 @@ fn explode(
     }
     if p.airburst {
         // spec: S-0525 claim 1 (the airburst projectile's own detonation leaves radiation with its own weapon; its nine children carry no weapon and leave none)
-        // spec: S-0318 claim 5 (a fragment carries no weapon and leaves no radiation)
+        // spec: S-0318 claim 5 and S-0525 claim 1 (revision 4: a fragment carries no weapon and leaves no radiation, so a fragment weapon's radiation level has no effect)
         if !pr.airburst_child && pr.chain == 0 {
             crate::radiation::detonation(w, pr.weapon, point.cell());
         }
@@ -1492,7 +1492,7 @@ fn explode(
     let mut q = point;
     for _ in 0..p.cluster.max(0) {
         // spec: S-0525 claim 1 (each detonation of a projectile with a cluster count above 1 leaves radiation at its own point; a child of an airburst leaves none)
-        // spec: S-0318 claim 5 (a fragment carries no weapon and leaves no radiation)
+        // spec: S-0318 claim 5 and S-0525 claim 1 (revision 4: a fragment carries no weapon and leaves no radiation, so a fragment weapon's radiation level has no effect)
         if !pr.airburst_child && pr.chain == 0 {
             crate::radiation::detonation(w, pr.weapon, q.cell());
         }

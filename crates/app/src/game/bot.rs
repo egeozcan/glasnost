@@ -33,7 +33,7 @@ use glasnost_sim::world::HouseRole;
 use glasnost_ui::geom::{Point, Rect};
 use glasnost_ui::menu::MenuHit;
 use glasnost_ui::netmenu::NetHit;
-use glasnost_ui::setup::{MAX_SLOTS, SetupHit, SlotKind, period_ms};
+use glasnost_ui::setup::{MAX_SLOTS, SetupHit, SlotKind, net_period_ms};
 use glasnost_ui::shell::Screen;
 
 use super::client::{Client, PairReport};
@@ -641,7 +641,7 @@ impl Bot {
         let Some(s) = c.session.as_mut() else {
             return;
         };
-        let period = period_ms(s.speed).max(1);
+        let period = net_period_ms(s.speed).max(1);
         self.stats.period_ms = period;
         self.stats.house = Some(s.play.local.0);
         let world = &s.play.game.world;
@@ -1079,7 +1079,7 @@ impl Driver {
 
 /// The synthetic install a bot can play without game data: invented rules
 /// and map (`glasnost_ai::fixture`) with eight start positions, at the
-/// fastest paced speed.
+/// fastest network pacing (index 0).
 pub mod synthetic {
     use glasnost_ai::fixture;
     use glasnost_convert::find::Listing;
@@ -1131,8 +1131,8 @@ pub mod synthetic {
                 units_range: (1, 9),
                 bases: true,
                 flags: [false, true, true, true, true],
-                // The fast speeds: 16 ms ticks.
-                game_speed: 1,
+                // Index 0: 16 ms ticks in a network game (S-0201 claim 17, F5).
+                game_speed: 0,
                 countries: vec!["Alphaland".into(), "Betaland".into()],
                 colours: vec![[200, 0, 0, 255]; 8],
             },

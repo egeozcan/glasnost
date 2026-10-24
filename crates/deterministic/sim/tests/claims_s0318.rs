@@ -804,7 +804,7 @@ fn sh4_fragment_fields() {
     assert!(s.w.update.contains(f.id), "it enters play at once");
 }
 
-// spec: S-0318 claim 5 (a fragment carries no weapon: its detonation leaves no radiation; scenario SH1 part n run 4), and S-0318 claim 1 (a) (the bursting projectile's radiation does not stop fragments; run 2)
+// spec: S-0318 claim 5 and S-0525 claim 1 (revision 4) (a fragment carries no weapon: its detonation leaves no radiation, whatever the fragment weapon's radiation level; scenario SH1 part n run 4), and S-0318 claim 1 (a) (the bursting projectile's radiation does not stop fragments; run 2)
 #[test]
 fn sh1n_radiation_of_shot_and_fragment() {
     let mut r = rad(base(3));

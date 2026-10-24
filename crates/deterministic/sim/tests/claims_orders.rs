@@ -1350,3 +1350,67 @@ fn s0215_stale_suspended_revert() {
     assert_eq!(suspended_after_move(true), Some(Behaviour::Guard));
     assert_eq!(suspended_after_move(false), None);
 }
+
+// ---------------------------------------------------------------------------
+// S-0201 claims 8 and 17: the speed order
+
+/// A speed order is carried out at the end of the tick it is issued in, by
+/// our order path, and sets the game-speed index whoever sent it; the last
+/// one carried out holds, an index outside 0 to 6 is ignored, and speed-
+/// normalised delays started from then on use the new index (S-0201 claims
+/// 8 and 17; S-0107 F3).
+#[test]
+fn s0201_speed_order_sets_the_index_at_the_end_of_the_tick() {
+    let mut w = ready(7);
+    let before = w.game_speed;
+    assert_ne!(before, 1, "the fixture starts at another index");
+    // spec: S-0201 claim 17 (carried out in one tick on every machine; an order of either player)
+    assert!(orders::issue(&mut w, BETA, Order::GameSpeed { speed: 1 }));
+    assert_eq!(w.game_speed, before, "not before the order is carried out");
+    tick::step(&mut w);
+    assert_eq!(w.game_speed, 1);
+    // spec: S-0107 F3 and S-0201 claim 17 (delays started from then on use the new index)
+    assert_ne!(
+        glasnost_sim::infantry::normalised(4, w.game_speed),
+        glasnost_sim::infantry::normalised(4, before)
+    );
+    // spec: S-0201 claim 17 (the last change carried out holds)
+    assert!(orders::issue(&mut w, ALPHA, Order::GameSpeed { speed: 5 }));
+    assert!(orders::issue(&mut w, BETA, Order::GameSpeed { speed: 2 }));
+    tick::step(&mut w);
+    assert_eq!(w.game_speed, 2);
+    // spec: S-0201 claim 8 (indices 0 to 6 only; an index outside, which no menu sends, is ignored)
+    orders::issue(&mut w, ALPHA, Order::GameSpeed { speed: 9 });
+    tick::step(&mut w);
+    assert_eq!(w.game_speed, 2);
+    // The index is hashed state and survives a save/load round trip.
+    let back = glasnost_sim::save::load(
+        &glasnost_sim::save::save(&w),
+        testkit::rules(),
+        testkit::catalogue(),
+    )
+    .expect("loads");
+    assert_eq!(back.game_speed, 2);
+    assert_eq!(
+        glasnost_sim::save::state_hash(&back),
+        glasnost_sim::save::state_hash(&w)
+    );
+}
+
+/// The order block of the first ticks refuses input but not a speed change
+/// (S-0213 claim 1; S-0201 claim 8: the change takes effect from the next
+/// cycle; claim 14's block is stated for a single-player game).
+#[test]
+fn s0201_speed_order_is_taken_during_the_order_block() {
+    let mut w = testkit::new_game(7);
+    assert!(orders::blocked(&w));
+    let before = w.game_speed;
+    let want = if before == 0 { 3 } else { 0 };
+    assert!(orders::issue(
+        &mut w,
+        ALPHA,
+        Order::GameSpeed { speed: want }
+    ));
+    tick::step(&mut w);
+    assert_eq!(w.game_speed, want);
+}

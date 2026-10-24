@@ -43,6 +43,11 @@ pub struct CombatState {
     /// A building's pending delayed shot: the tick of its turn (S-0301
     /// claim 14).
     pub delayed_shot: Option<i32>,
+    /// The weapon slot a building's delayed shot was started with: the
+    /// check and the shot at the end of the delay use it, not a fresh
+    /// choice (S-0301 claim 14, S-0308 claim 14).
+    #[serde(default)]
+    pub delayed_slot: u8,
     /// A planted bomb the object carries (S-0519 Terms).
     #[serde(default)]
     pub bomb: Option<crate::bomb::Bomb>,
@@ -175,6 +180,7 @@ impl CombatState {
             anim_frame: 0,
             firing_frame: None,
             delayed_shot: None,
+            delayed_slot: 0,
             bomb: None,
             charge_planter: None,
             support: 0,

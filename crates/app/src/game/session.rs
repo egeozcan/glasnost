@@ -23,7 +23,7 @@ use glasnost_render::projection::{
 };
 use glasnost_render::scene::{Filter, Group, Scene, View};
 use glasnost_render::shroud::ShroudQuirks;
-use glasnost_sim::econ::TypeRef;
+use glasnost_sim::econ::{TypeRef, victory};
 use glasnost_sim::rules::Kind as SimKind;
 use glasnost_sim::targeting::{self, ClickOn, KeyCommand, Modifiers};
 use glasnost_sim::world::{GameSetup, HouseId, HouseRole, ObjectId};
@@ -77,14 +77,27 @@ pub struct Session {
     pub radar: Option<Radar>,
     /// The map's content hash.
     pub map_id: String,
-    /// The paced game-speed index (S-0201 claims 7 and 8).
+    /// The paced game-speed index (S-0201 claims 7, 8 and 17): in a
+    /// single-player game the index the options menu last set, from the
+    /// next cycle on; in a network game the index in force, which follows
+    /// the game's after every tick (a speed order carried out).
     pub speed: u8,
-    /// The options menu is open (S-0201 claim 8: no ticks run; in a network
-    /// game ticks go on, Q-1806's interim rule).
+    /// The options menu's speed control while the menu is open (S-0201
+    /// claims 8 and 17): it starts at the index in force and is sent as a
+    /// speed order when the menu closes, if it differs.
+    menu_speed: u8,
+    /// The person resigned through the options menu, which then stays
+    /// refused until the local house is defeated (S-0201 claim 15).
+    resigned: bool,
+    /// The options menu is open (S-0201 claim 8: in a single-player game no
+    /// cycle runs; claim 15: in a network game ticks go on).
     pub paused: bool,
+    /// The window has the input focus (S-0201 claims 9 and 16); the client
+    /// sets it every update.
+    pub focused: bool,
     /// A network game: the lockstep session paces the ticks and the
-    /// person's orders go through it (`Play::outbox`); the speed is the
-    /// room's (Q-1806's interim rule).
+    /// person's orders, a speed change among them, go through it
+    /// (`Play::outbox`; S-0201 claims 15 to 17).
     pub network: bool,
     /// The scroll-speed index of the person's settings (S-0101: 0 fastest to 6 slowest).
     pub scroll_index: i32,
@@ -386,7 +399,10 @@ impl Session {
             radar,
             map_id,
             speed,
+            menu_speed: speed,
+            resigned: false,
             paused: false,
+            focused: true,
             network: false,
             scroll_index: scroll::DEFAULT_SCROLL_INDEX,
             screen: (1024, 768),
@@ -521,12 +537,20 @@ impl Session {
         if !ran {
             return false;
         }
+        if self.network {
+            // spec: S-0201 claim 17, Our engine (a network game is paced at the index in force from the cycle after a speed order is carried out)
+            self.speed = self.play.game.world.game_speed;
+        }
         let played = lap();
         let effects = self.play.effects.clone();
+        // spec: S-0201 claim 15 (in a network game the opener's machine draws no new frame of the battlefield while the options menu is open; the ticks go on) and claim 16 (nor while its window lacks the focus)
+        let draw = !(self.network && (self.paused || !self.focused));
         self.with_live(|live, inputs, scene| {
             live.world.effects = effects;
             live.after_tick();
-            live.redraw(inputs, scene);
+            if draw {
+                live.redraw(inputs, scene);
+            }
         });
         let drawn = lap();
         let house = self.play.local;
@@ -1019,7 +1043,9 @@ impl Session {
                 self.play.scroll_icons(d, rows);
             }
             HudHit::Mode(m) => self.play.mode_click(m),
-            HudHit::Options => self.paused = true,
+            HudHit::Options => {
+                self.open_options();
+            }
             HudHit::Map | HudHit::Radar => {}
         }
     }
@@ -1028,18 +1054,20 @@ impl Session {
     fn pause_hit(&mut self, hit: PauseHit) -> SessionEvent {
         match hit {
             PauseHit::Resume => {
-                self.paused = false;
+                self.close_options();
                 SessionEvent::None
             }
-            // Q-1806 (interim: a network game keeps the room's speed)
-            PauseHit::Speed(_) if self.network => SessionEvent::None,
+            // spec: S-0201 claim 17 (no speed control once the local house is defeated)
+            PauseHit::Speed(_) if !self.speed_offered() => SessionEvent::None,
             PauseHit::Speed(d) => {
-                // spec: S-0201 claim 8 (the options menu's speed control)
-                self.speed = hud::step_speed(self.speed, d);
+                // spec: S-0201 claims 8 and 17 (the options menu's speed control; the change is sent when the menu closes)
+                self.menu_speed = hud::step_speed(self.menu_speed, d);
                 SessionEvent::None
             }
             PauseHit::Surrender => {
-                self.paused = false;
+                // spec: S-0201 claim 15 (after resigning through the menu it does not open again until the house is defeated)
+                self.resigned = true;
+                self.close_options();
                 self.play.surrender();
                 SessionEvent::None
             }
@@ -1280,9 +1308,77 @@ impl Session {
     }
 
     /// The options menu key opens the menu (S-0213 claim 23; S-0201
-    /// claim 8: no ticks run while it is open).
-    pub fn open_options(&mut self) {
+    /// claim 8: in a single-player game no cycle runs while it is open;
+    /// claim 15: in a network game ticks go on). Returns whether the menu
+    /// is open.
+    pub fn open_options(&mut self) -> bool {
+        if self.paused {
+            return true;
+        }
+        if !self.menu_allowed() {
+            return false;
+        }
         self.paused = true;
+        self.menu_speed = self.speed_in_force();
+        true
+    }
+
+    /// The index the open options menu's speed control shows (S-0201
+    /// claims 8 and 17).
+    pub fn menu_speed(&self) -> u8 {
+        self.menu_speed
+    }
+
+    /// Closes the options menu; a speed control set to an index other than
+    /// the one in force sends the speed change (S-0201 claims 8 and 17).
+    fn close_options(&mut self) {
+        self.paused = false;
+        if self.network {
+            // spec: S-0201 claim 15 (closing the menu brings back drawing: the battlefield as the ticks left it, nothing to catch up)
+            self.with_live(|live, inputs, scene| live.redraw(inputs, scene));
+        }
+        let want = self.menu_speed;
+        // spec: S-0201 claim 17 (setting the index already in force sends nothing; no control once the house is defeated)
+        if !self.speed_offered() || want == self.speed_in_force() {
+            return;
+        }
+        // spec: S-0201 claim 17 (the change is sent when the menu closes, as an order of the player with the delay of the player's other orders, and carried out in one tick on every machine) and claim 8 (in a skirmish, through our order path: the index changes when the order is carried out, at the end of the next tick)
+        self.play.change_speed(want);
+        if !self.network {
+            // spec: S-0201 claim 8 (in a single-player game the new paced period holds from the next cycle)
+            self.speed = want;
+        }
+    }
+
+    /// Whether the options menu may open now (S-0201 claim 15).
+    pub fn menu_allowed(&self) -> bool {
+        let w = &self.play.game.world;
+        // spec: S-0201 claim 15 (in a skirmish and a network game alike the menu does not open from the end of the game on, S-0414 claim 6, and stays refused through the end delay, S-0414 claim 8)
+        if victory::ended(w) {
+            return false;
+        }
+        // spec: S-0201 claim 15 (after resigning through the menu it does not open again until the player's house is defeated, S-0414 claims 5 and 11; a defeated player watching a network game can open it)
+        !self.resigned || victory::defeated(w, self.play.local)
+    }
+
+    /// Whether the options menu offers the speed control (S-0201 claim 17):
+    /// as long as the local house is not defeated, in a network game, and by
+    /// our engine's rule in a skirmish watched on after the defeat.
+    pub fn speed_offered(&self) -> bool {
+        // spec: S-0201 claim 17 (the control is offered as long as the player's own house has not been defeated; in a skirmish watched on after the defeat our engine shows none either, claim 8)
+        !victory::defeated(&self.play.game.world, self.play.local)
+    }
+
+    /// The index the menu's control starts from and is compared with: the
+    /// game's in a network game (the changer's own index changes only when
+    /// the speed order is carried out, S-0201 claim 17), the paced one in a
+    /// single-player game (the last one set, claim 8).
+    fn speed_in_force(&self) -> u8 {
+        if self.network {
+            self.play.game.world.game_speed
+        } else {
+            self.speed
+        }
     }
 
     /// Whether ticks may run now.
@@ -1653,7 +1749,8 @@ impl Session {
         ui.extend(hud_list);
         self.targets = targets;
         if self.paused {
-            let (p, t) = hud::pause_view(self.ui.ui, self.speed, !self.network, hover);
+            let speed = self.speed_offered().then_some(self.menu_speed);
+            let (p, t) = hud::pause_view(self.ui.ui, speed, self.network, hover);
             ui.extend(p);
             self.pause_targets = t;
             self.pause_focus.mark(&mut ui, &self.pause_targets);

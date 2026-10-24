@@ -539,7 +539,7 @@ fn surrender_ends_the_game_with_an_end_screen() {
     );
 }
 
-/// spec: S-0414 claim 23 and Formulas (the active clock counts ⌊v/16⌋ − ⌊u/16⌋ per active interval; paused or unfocused time and time after play stops are not counted)
+/// spec: S-0414 claim 23 and Formulas (the active clock counts ⌊v/16⌋ − ⌊u/16⌋ per active interval; an inactive interval, the skirmish's open options menu, and time after play stops are not counted)
 #[test]
 fn result_duration_counts_active_clock_units() {
     let mut p = start();
