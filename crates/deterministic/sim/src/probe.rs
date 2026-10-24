@@ -75,6 +75,9 @@ pub enum Phase {
     EndTick,
     /// Derived data after the tick (the regions).
     Regions,
+    /// A finer part, named by the code that marks it (our AI's parts,
+    /// `ai:…`).
+    Part(&'static str),
     /// The step is over.
     Done,
 }

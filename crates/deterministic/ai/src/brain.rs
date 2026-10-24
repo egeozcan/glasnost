@@ -55,6 +55,7 @@ use glasnost_map::{CellXY, Map};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, tech};
 use glasnost_sim::orders::Order;
+use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::regions;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, Action, ClickOn, Modifiers};
@@ -275,6 +276,20 @@ impl Brain {
     /// to issue, in the order to issue them (a later order to the same unit
     /// replaces an earlier one, so the reactions come last).
     pub fn think(&mut self, w: &World) -> Vec<Order> {
+        self.think_with(w, &mut ())
+    }
+
+    /// [`Brain::think`], telling `p` which part of the brain runs (the
+    /// tools' benchmark, `glasnost_sim::probe`); `p` reads nothing and
+    /// changes nothing.
+    pub fn think_with<P: Probe>(&mut self, w: &World, p: &mut P) -> Vec<Order> {
+        let on = p.on();
+        let mark = |p: &mut P, part: &'static str| {
+            if on {
+                p.mark(Phase::Part(part));
+            }
+        };
+        mark(p, "ai:script");
         let mut out = if w.tick % THINK_PERIOD == 0 {
             self.script.think(w)
         } else {
@@ -283,11 +298,17 @@ impl Brain {
             v
         };
         if w.tick % THINK_PERIOD == 0 {
+            mark(p, "ai:economy_first");
             let paying = self.economy_first(w, &mut out);
+            mark(p, "ai:drop_expansion");
             self.drop_expansion(w, &mut out);
+            mark(p, "ai:send_for_repair");
             self.send_for_repair(w, &mut out);
+            mark(p, "ai:ferry");
             self.ferry(w, &mut out);
+            mark(p, "ai:build_superweapon");
             self.build_superweapon(w, &mut out);
+            mark(p, "ai:build_specials");
             let sensors = self.special_uses().sensors;
             self.build_sensor(w, &mut out);
             if self.special_uses().sensors == sensors && !self.build_grinder(w, &mut out) {
@@ -297,25 +318,36 @@ impl Brain {
                     self.build_bunker(w, &mut out);
                 }
             }
+            mark(p, "ai:build_lifter");
             self.build_lifter(w, &mut out);
+            mark(p, "ai:build_drainer");
             self.build_drainer(w, &mut out);
+            mark(p, "ai:build_anti_air");
             self.build_anti_air(w, &mut out);
+            mark(p, "ai:expand");
             if !paying {
                 self.expand(w, &mut out);
             }
         }
         if w.tick % THINK_PERIOD == 0 {
+            mark(p, "ai:special");
             self.special.think(&self.script, w, &mut out);
+            mark(p, "ai:plant_first");
             if !self.script.selling() {
                 let plant = self.script.plant_type(w);
                 let n = crate::power::plant_first(w, self.house(), plant, &mut out);
                 self.special.count_plants_first(n);
             }
         }
+        mark(p, "ai:fire_superweapons");
         self.fire_superweapons(w, &mut out);
+        mark(p, "ai:rebuild_yard");
         self.rebuild_yard(w, &mut out);
+        mark(p, "ai:find_deploy_spot");
         self.find_deploy_spot(w, &mut out);
+        mark(p, "ai:defend");
         self.defend(w, &mut out);
+        mark(p, "ai:filters");
         // spec: S-0214 claim 15 and S-0610 claim 6 (a berserk unit takes no orders: a person cannot give it one, so neither does the brain)
         out.retain(|o| {
             o.actor()

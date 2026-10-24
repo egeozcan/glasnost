@@ -114,7 +114,7 @@ impl Game {
             if on {
                 p.mark(Phase::Think(h.0));
             }
-            let orders = b.think(&self.world);
+            let orders = b.think_with(&self.world, p);
             if on {
                 p.mark(Phase::Issue);
             }

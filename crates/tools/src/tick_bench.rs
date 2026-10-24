@@ -140,6 +140,7 @@ fn name(p: Phase) -> String {
     match p {
         Phase::Turn(c) => format!("turn:{c:?}"),
         Phase::Think(h) => format!("think:{h}"),
+        Phase::Part(n) => n.to_owned(),
         _ => format!("{p:?}"),
     }
 }
