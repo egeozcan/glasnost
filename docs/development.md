@@ -2601,6 +2601,15 @@ S-0503 r27 claim 19 (Q-1773). The ledger, [m8-claims/intake14-S-0503.md](m8-clai
 - In-place deploy reads the hover height. `quirks.hover_landing_request_stands` and `quirks.hover_deployed_keeps_moving` are consulted.
 - Save format 75, AI game format 36.
 
+### Aircraft as tracked flying objects (M8 step A3 intake 16)
+
+S-0501 r45 claim 47 (Q-1845). The ledger, [m8-claims/intake16-S-0501.md](m8-claims/intake16-S-0501.md), holds the notes.
+- Tracking changes only at claim 47's events in `air.rs`: `take_off` and `placed` (in the air, at least 208 leptons, with the counts-as-aircraft flag) start it; an accepted `touchdown`, `impact`, `released_docked`, `leaving_map` and the off-map case of `sync_listing` end it. The Q-1845 interim (tracked exactly while in flight) is gone, and `sync_listing` keeps only the cell listing.
+- `sector_update` runs at the start of each movement update, before the crash block and the forward step, and does nothing at a carried speed fraction of 0. A tracked aircraft goes through `flying::moved`; an untracked one in flight starts tracking, except in sector (0, 0) with `quirks.aircraft_corner_sector_untracked` on (now consulted).
+- Our take-off and first climb fall in one movement update, so S-0303 claim 6's dual membership at take-off never lasts past that update.
+- The counts-as-aircraft flag left out of an aircraft type now reads yes (`econ::tech`), so such an aircraft also ranks as air in the sidebar (S-0004 claim 11). The client's shadow rule still reads S-0105's no.
+- No new state: save format 76, AI game format 37.
+
 ### Pathing reports (M8 A4)
 
 A pathing report is what the lead saves while playing when a unit moves strangely; the replay tool explains it from the simulation's own decisions. Everything here is our own diagnostics (`// nocite: our own diagnostics`): no game rule changes, the save format stays 70 and the AI game format 31, and every golden is unchanged.
