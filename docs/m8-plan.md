@@ -24,6 +24,28 @@ gives, it files a request and stops that part.
   integrated GPU of a typical Intel laptop (Iris Xe class). Step C4 needs such a laptop
   for its measurement.
 
+## Lead rulings of 2026-10-24 (awaiting spec revisions)
+
+The lead's rulings, relayed by the speccer. Each reaches the code only when the spec revision that
+carries it is approved and taken in by an intake; until then the code keeps to the approved
+revision. The intake that takes in each revision checks it against this list.
+
+- **S-0108:** a captured tech building, or one that changes owner, restarts its production slots
+  as in the original, with no quirk switch.
+- **S-0109:** the Import mapping may name the stock invisibility animation literally.
+- **S-0212:** the building-exemption leak is fixed in our engine, with no quirk switch.
+- **S-0319** (new spec): a zero speed span or zero trailer separation takes the spec's safe
+  fallback, with an importer warning.
+- **S-0201:** the game-speed control stays shown after the player's defeat.
+- **S-0105:** the IFV's per-stem defaults are stated in the spec (play notes 3 and 14, Q-1760).
+- **S-0703:** the end screen opening at game over is accepted (built at intake 12).
+- **S-0703 and S-0701:** while the options menu is open in a loaded skirmish, the music plays on,
+  as in the original, with music time on the host's monotonic clock and lost focus still a full
+  stand-still (S-0701 claim 30). This reverses intake 12's options-menu hold once the revisions
+  land. The glossary's *departure* and *audio clock* entries change with it.
+- **S-0314:** a docked hover unit lost at a naval yard gets `quirks.docked_hover_water_loss`,
+  default the original behaviour.
+
 ## Request blocks
 
 | Block | Use |
