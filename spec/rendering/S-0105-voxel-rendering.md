@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 22
+revision: 35
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-25
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950, Q-1760]
 supersedes: []
 ---
 
@@ -111,8 +111,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   world height, *H* is the terrain surface height at its exact horizontal position
   (S-0106 claim 2), and *b* is 416 leptons while the aircraft deck mark is set
   (S-0501 claim 43), otherwise 0. This is not S-0501's altitude-guidance height.
-- **Aircraft-like type.** A type with the aircraft-like flag (import mapping); its shadow is
-  half size (claim 31).
+- **Aircraft-like type.** A type with the aircraft-like flag (import mapping), which an aircraft
+  type has unless its data clears it; its shadow is half size (claim 31).
 - **Depth-option type.** A type with the per-type depth-buffer option (claim 24).
 - **Ramp.** A sloped cell (a *slope* in the glossary's sense). A vehicle on a ramp is drawn tilted to match it; the tilt, and the
   per-cell slope that selects it, are left to S-0106. Here it matters only as an input of the body
@@ -159,11 +159,23 @@ turn per unit), to tell it apart from the coarser facings derived from it.
   art makes it show its main body instead. Otherwise off. It is a separate cache-key
   component (claim 26).
 - **Multi-turret type.** A vehicle type whose imported turret count is above 0 and that does not
-  have rotating-barrel weapon stages (import mapping). Such a type has one turret model, and
-  optionally one barrel model, per turret index 0, 1, … (file naming: S-0007).
-- **Selected turret index.** A per-object integer that says which of a multi-turret type's turret
-  models is in use. What sets it (for most such types the weapon currently chosen, for some the
-  progress of reloading) belongs to the vehicle and combat specs.
+  have rotating-barrel weapon stages (import mapping), whatever its body. With the voxel flag
+  such a type has one turret model, and optionally one barrel model, per turret index 0, 1, …
+  (file naming: S-0007 claim 16). A sprite-body vehicle (voxel flag not set) has no numbered
+  models (S-0007 claim 19) and draws as claim 12's *Sprite body* says; the index and weapon
+  rules of claim 43 apply to it all the same.
+- **Selected turret index.** A per-object value that says which of a multi-turret type's turret
+  models is in use: either a turret index (an integer, possibly outside 0 … *N* − 1, where *N* is
+  the type's turret count) or *none*. Claim 43 says what sets it. It picks the turret model drawn
+  (claim 12). It never selects a weapon: every test of a vehicle's current
+  weapon asks the weapon S-0308 chooses, which for a multi-turret vehicle is that of its weapon
+  number (S-0308 claim 5) unless S-0308 claim 9's override for a deployed vehicle applies, also
+  while the index is *none* (claim 43).
+- **Turret table.** A per-type table of 18 entries, one per weapon number 0 … 17 (S-0308 Terms),
+  each holding a turret index or *none*. Every entry is *none* unless the import fills it, which
+  happens only for one fixed vehicle type name (Import mapping).
+- **Charge-turret type, gunner type, weapon number, mode index.** As in S-0308 Terms. A
+  charge-turret type's turret follows its rearm countdown (S-0301 claim 16).
 
 ## Behaviour
 
@@ -282,13 +294,46 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       alternative-model state remains a separate key component (Terms, claim 26).
       This fallback is a lead-confirmed departure checked by MS-11 engine conformance.
 
-    A vehicle of a multi-turret type draws
-    the turret model and barrel model of its selected turret index instead of the type's ordinary
-    turret and barrel. A type with rotating-barrel weapon stages always draws its ordinary turret
-    and barrel, whatever its turret count. File naming is S-0007.
-    - Backing: `measurable` (MS-11)
-    - Confidence: high (missing-body fallback and no alternative without the option),
-      medium (remaining model choices)
+    A vehicle of a multi-turret type with the voxel flag draws
+    the turret model and barrel model of its selected turret index *k* (claim 43) instead of the
+    type's ordinary turret and barrel, which such a type never has (S-0007 claim 16). A type with
+    rotating-barrel weapon stages always draws its ordinary turret and barrel, whatever its turret
+    count. File naming is S-0007.
+    - **No model for the index.** When the index is *none*, or *k* is outside 0 … *N* − 1 (*N* the
+      turret count), the vehicle is drawn with neither a turret nor a barrel. The body is drawn
+      as usual. A missing numbered barrel *k* alone leaves turret *k* drawn without a barrel.
+    - **Original glitches, fixed without a switch.** In the original, a vehicle whose type has 18
+      turrets and whose index is *none* shows its turret model 17 in the barrel's place; our
+      engine draws nothing there. It is a drawing artefact with no gameplay impact, so it gets no
+      switch. An index of 18 or more, or below −1, names no turret any type can have (it can come
+      only from an imported turret table entry, Import mapping); what the original shows for it is
+      *unspecified*. Our engine draws neither part, and the importer warns about such entries.
+    - Backing: `measurable` (MS-11; MS-33 for the index rules and the missing-model cases).
+      `unmeasured` for the original's glitches with *N* = 18 and with *k* ≥ 18 or below −1, which
+      MS-33 does not set up
+    - Confidence: high (missing-body fallback, no alternative without the option, and nothing
+      drawn for *none* or an index from *N* to 17), medium (remaining model choices and the
+      original's glitches)
+    - **Sprite body (S-0007 claim 19).** A vehicle drawn with a sprite body (voxel flag not set)
+      never draws numbered models, whatever its turret count, and its selected turret index (claim
+      43), *none* included, selects neither its sprite frames nor its voxel barrel model. With the
+      turret flag it draws its body and turret image frames as S-0102 claim 22 says, at every
+      index. Of the two voxel parts S-0007 claim 19 loads for it, only the barrel is drawn. The
+      voxel turret part is loaded but never drawn, and without a barrel part no voxel part is drawn
+      at all. The barrel is drawn at the vehicle's turret position, turned with its turret facing
+      and pitched by its barrel elevation, as for a voxel vehicle (claims 8 and 10). Claim 11's
+      overlap rule, by the 4-step turret facing, decides whether the barrel or the sprite turret
+      wins where the two overlap.
+      - Backing: `measurable` (MS-33 part k, whose sprite runs use the fixed-name type, so the
+        filled turret table takes the index through 2, 0, 1 and *none*), for the parts drawn at
+        each index and the overlap rule. `unmeasured` for the barrel's exact position, turn and
+        pitch: part k does not compare them with claims 8 and 10
+      - Confidence: high (no numbered model and no voxel turret part drawn), low (the sprite turret
+        shown at every index, no higher than S-0102 claim 22 rates the turret path it rests on, as
+        part k shows that a sprite turret is drawn at each index, not which frame), medium (that
+        the barrel's position, turn and pitch are exactly those of claims 8 and 10, unmeasured as
+        above), medium (the overlap rule by 4-step turret facing, which extends claim 11 to a
+        sprite turret, until MS-33 part k runs)
 
 ### Sections and animation
 
@@ -325,9 +370,11 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     remainders of non-negative counters. **Barrels drawn together with a turret, of
     vehicles and buildings alike, are always drawn in HVA frame 0** (`quirks.barrel_frame_zero`). A
     building's barrel drawn without a turret uses the building's animation-frame counter instead
-    (claim 37). The frame used by the turret models of
-    a multi-turret type (claim 12) has not been determined; until it is, our engine gives them the
-    vehicle turret frame above. The animation-frame counter is 0 when the
+    (claim 37). **A numbered turret model** of a multi-turret type (claim 12) is drawn in frame
+    *f_b* whatever its value, so in frame 0 whenever *f_b* = 0: the animation-frame counter is
+    never used for it. Claim 13 then reduces the frame modulo that model's own HVA frame count.
+    Its turret image key (claim 26) records the same frame. Numbered barrels follow the barrel
+    rule above. The animation-frame counter is 0 when the
     object is created. For gattling-flagged types, S-0609 claim 14 owns its advances:
     a vehicle advances once per completed firing step with positive post-update spin,
     and our engine advances a building once per tick with positive post-processing spin,
@@ -339,14 +386,17 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     combat, vehicle and building specs. A vehicle or building that has never attacked shows
     turret frame 0 whenever its turret frame comes from this counter.
     - Backing: `measurable` (MS-3 and MS-3b for the body, the barrel and *f_b ≠ 0*; MS-3c for
-      *f_b = 0* and building turrets). The multi-turret frame is not a claim yet: the original's
-      rule has not been determined (open questions), so there is nothing to measure against.
+      *f_b = 0* and building turrets; MS-33 part e for numbered turret models following *f_b*).
+      That the animation-frame counter is never used for a numbered turret model is `unmeasured`:
+      MS-33 does not record the counter, so a counter that stayed at a multiple of the turret's 4
+      HVA frames during part e's attack would give the same images.
       The exact mapping from animation-frame counter u to a vehicle turret at f_b = 0 or
       a building turret is `unmeasured`: MS-3c observes changing frames but does not record u,
       so it cannot distinguish the precise modulo mapping. The counter's initial zero and
       subsequent changes are the parts tested there; S-0609 claim 14 and its scenario G11
       cover gattling advances and the original building's double advance separately.
-    - Confidence: high (barrel frame 0, body frame), medium (turret frame and counter advances)
+    - Confidence: high (barrel frame 0, body frame), medium (turret frame, numbered turret frame
+      and counter advances)
 
 ### Lighting
 
@@ -688,38 +738,38 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       voxels)
 
 31. **Shadow shift and scale.** The footprint is shifted 3 pixels to the right on screen (exactly
-    *−6 × L_x*, stored truncated as 2.9999964, before the footprint's positions are truncated,
-    F10). For types flagged as aircraft-like, the footprint is scaled by 1/2 about the shadow's
-    draw point, and the 3-pixel shift is not halved (F10). The shadow is drawn with the ordinary shadow
-    treatment (S-0102, S-0104). It is skipped whenever the object's cloak state is not
-    *uncloaked* (that is, while cloaking, cloaked or uncloaking), and when the type has the
-    no-shadow option. Shadow images are cached per type like part images (key: ramp, 32-step body
-    facing; for the flying locomotor substitute its 32-step aiming facing,
-    claims 41–42), unless the type has the shadow-cache-disable option. They are also neither looked up
-    nor stored, but drawn fresh, while a driving or naval unit's body is not settled or while a
-    hovering unit rocks (S-0106, claim 12). These freshness rules do not override the cloak and
-    no-shadow suppression above. For cache-eligible shadows, the key covers every input of the
-    unmasked footprint (frame 0, the type's shadow section and scale are fixed per type).
-    Cache only the unmasked footprint: current own-image exclusions are recomputed on
-    every appearance (claim 39), and no shadow enables depth mode (claim 32). Freshness
-    still matters where the original skips a shadow on a cache miss (open questions). That cache-miss skip does
-    not apply to the unsettled shadows just described. Until those cache-miss cases are known,
-    our engine makes the shadow on every cache miss.
-    - Backing: `measurable` (MS-8) for the shift, scale, cloak and no-shadow conditions.
-      MS-9 tests corrected mode isolation; MS-27 tests current-image exclusion with
-      caching enabled and disabled, as lead-confirmed departures. Hovering unsettled
-      shadow freshness is `unmeasured`: corrected exclusions agree for cached and fresh
-      footprints, so the old rocking comparison no longer distinguishes freshness. The driving/naval unsettled case and exemption
-      from cache-miss skip remain `unmeasured`: no scenario here isolates their freshness
-      or the miss-skip event from changed keys and other fresh draws. Also `unmeasured` in
-      two places. The look of a reused unmasked footprint: its key covers every input of that
-      footprint, so fresh and reused unmasked footprints have the same pixels. Vehicle
-      own-image exclusions also agree for fresh and reused appearances (claim 39). The ramp-key component is `measurable` through
-      the changed footprint in
-      S-0106 T3 and T6. The body-facing component is `unmeasured`: a new body facing
-      also gives the body image a new key, so no scenario here separates their fresh-draw side
-      effects. The skip on a cache miss is not a claim
-      yet (open questions).
+    *−6 × L_x*, stored truncated as 2.9999964, before the footprint's positions are truncated, F10).
+    For aircraft-like types (by default every aircraft type, Import mapping), the footprint is
+    scaled by 1/2 about the shadow's draw point, and the 3-pixel shift is not halved (F10). The
+    shadow is drawn with the ordinary shadow treatment (S-0102, S-0104). It is skipped whenever the
+    object's cloak state is not *uncloaked* (that is, while cloaking, cloaked or uncloaking), and
+    when the type has the no-shadow option. Shadow images are cached per type like part images (key:
+    ramp, 32-step body facing; for the flying locomotor substitute its 32-step aiming facing, claims
+    41–42), unless the type has the shadow-cache-disable option. They are also neither looked up nor
+    stored, but drawn fresh, while a driving or naval unit's body is not settled or while a hovering
+    unit rocks (S-0106, claim 12). These freshness rules do not override the cloak and no-shadow
+    suppression above. For cache-eligible shadows, the key covers every input of the unmasked
+    footprint (frame 0, the type's shadow section and scale are fixed per type). Cache only the
+    unmasked footprint: current own-image exclusions are recomputed on every appearance (claim 39),
+    and no shadow enables depth mode (claim 32). Freshness still matters where the original skips a
+    shadow on a cache miss (open questions). That cache-miss skip does not apply to the unsettled
+    shadows just described. Until those cache-miss cases are known, our engine makes the shadow on
+    every cache miss.
+    - Backing: `measurable` (MS-8) for the shift, scale, cloak and no-shadow conditions. The
+      aircraft-like flag's absent default for an aircraft type is `measurable` through S-0501
+      scenario AC30 parts h (2) and j, and rated medium, as S-0501 rates it. MS-9 tests corrected
+      mode isolation; MS-27 tests current-image exclusion with caching enabled and disabled, as
+      lead-confirmed departures. Hovering unsettled shadow freshness is `unmeasured`: corrected
+      exclusions agree for cached and fresh footprints, so the old rocking comparison no longer
+      distinguishes freshness. The driving/naval unsettled case and exemption from cache-miss skip
+      remain `unmeasured`: no scenario here isolates their freshness or the miss-skip event from
+      changed keys and other fresh draws. Also `unmeasured` in two places. The look of a reused
+      unmasked footprint: its key covers every input of that footprint, so fresh and reused unmasked
+      footprints have the same pixels. Vehicle own-image exclusions also agree for fresh and reused
+      appearances (claim 39). The ramp-key component is `measurable` through the changed footprint
+      in S-0106 T3 and T6. The body-facing component is `unmeasured`: a new body facing also gives
+      the body image a new key, so no scenario here separates their fresh-draw side effects. The
+      skip on a cache miss is not a claim yet (open questions).
     - Confidence: medium (shift, scale, cache), high (cloak and no-shadow conditions)
 
 ### Depth-mode isolation
@@ -1054,6 +1104,80 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     - Backing: `measurable` (MS-32)
     - Confidence: high
 
+### Multi-turret selection
+
+43. **Selected turret index (Q-1760).** This claim says which index claim 12 draws for a vehicle
+    of a multi-turret type (Terms). State table S3 summarises it.
+    - **Taken from the turret table.** Each time the vehicle's weapon number is set (S-0308
+      claims 5 and 6), its selected turret index becomes the turret table entry for the resulting
+      weapon number, in the same tick. This includes a request outside 0 … 17, which S-0308
+      claim 5 turns into weapon number 0.
+      The model shown is therefore not the one numbered like the weapon number. It is the one
+      the table maps that number to, and no turret at all when the table holds *none* for it.
+      Only one fixed type name ever has a filled table (Import mapping), so a vehicle of any
+      other multi-turret type that is not a charge-turret type shows no turret in any state,
+      unless it has a sprite body (*Any body*, below; `quirks.turret_table_fixed_type_only`).
+    - **Not a weapon choice.** The index decides what is drawn, not which weapon is used.
+      Firing, target and threat choice, the bunker test of S-0606 claim 1 and the armed tests of
+      S-0209 all ask the weapon S-0308 chooses, which is that of the vehicle's weapon number
+      (S-0308 claim 5) unless S-0308 claim 9's override for a deployed vehicle applies, whatever
+      the index holds. So a multi-turret vehicle whose index is *none*
+      for its whole life still fires, enters a vehicle bunker and counts as armed through the
+      weapon S-0308 chooses: outside S-0308 claim 9, that of its weapon number, which is 0 from
+      creation unless S-0308 claims 5 and 6 set it otherwise.
+    - **When the weapon number is set.** A vehicle of a gunner type has its weapon number set to 0
+      when it is created, whether it is built, placed by the map or made in any other way, and
+      again at every gunner hand-over of S-0308 claim 6. Its model changes in the same tick as its
+      weapon number. A vehicle whose type is neither a gunner type nor a
+      charge-turret type never has its weapon number set, so its index stays *none* for its whole
+      life.
+    - **Charge-turret types.** Their index never comes from the turret table, because the type
+      ignores every request to change its weapon number (S-0308 claim 5). A charge-turret type
+      here is a multi-turret type, so its turret count *N* is above 0 and it has no
+      rotating-barrel weapon stages (Terms): this is exactly the scope of S-0301 claim 16, which
+      covers only such types. In each of the vehicle's
+      turns its index becomes S-0301 claim 16's turret number *c*. Right after a shot with a
+      positive delay *D* it is *N* − 1. It steps down through the turret models while the rearm
+      countdown runs, and it is 0 once the countdown is over and whenever *D* ≤ 0, which is the
+      case from creation until the first shot. Ammunition has no direct effect: with a full,
+      partly spent or empty magazine (S-0301 claims 10 and 11), and in the turn a round comes
+      back, the index is what the countdown gives.
+    - **From creation (fixed, no switch).** Our engine gives a charge-turret vehicle index 0
+      from its creation, so it shows turret 0 in every drawn frame until its first shot. In the
+      original, a vehicle released by a person's place order (S-0404 claim 7) is shown in one
+      drawn frame with neither a turret nor a barrel, and with turret 0 from its first turn on; a
+      vehicle placed by the map is shown the same way in the game's first drawn frame, if that
+      frame shows it. It is a drawing artefact with no gameplay impact (the index selects no
+      weapon, above), so it gets no switch.
+    - **Nothing else changes it.** The index is kept through veterancy changes, through being
+      carried in a transport and unloaded from it, and through attacking, apart from a
+      charge-turret type's countdown.
+    - **Any body.** Everything in this claim holds for a sprite-body vehicle too: its index is set
+      by the same rules and selects no weapon. Only what is drawn differs (claim 12, *Sprite
+      body*): the drawn frame without a turret before a charge-turret vehicle's first turn, above,
+      does not occur on a sprite body. On a sprite body the index reaches what is drawn only
+      through the barrel's image reuse (claim 26, whose barrel key holds it), so that its index
+      follows these rules is `unmeasured`: no scenario here tells it apart. MS-33 part k shows only
+      that nothing drawn follows it. Rated medium, from the same rules being applied whatever the
+      body.
+    - Backing: `measurable` (MS-33, parts a to d, f, h, i, j, k and l; part i for the index
+      selecting no weapon in firing and the bunker test; part j for the original's drawn frame
+      without a turret before a charge-turret vehicle's first turn; part k for what a sprite body
+      draws at every index; part l for ammunition having no direct effect). `unmeasured` for
+      *none* for life on a type with neither flag and a filled turret table, and for the armed
+      tests of S-0209, which no part sets up.
+    - Confidence, table lookup: high (the model chosen from the turret table at every setting
+      of the index). This rating does not cover the next line.
+    - Confidence, other parts: medium (only the fixed type name having a filled table, which
+      MS-33 part d checks against one other name only; the index
+      selecting no weapon, until MS-33 part i runs, and for the armed tests of S-0209, which no
+      part sets up; *none* for life without a gunner or
+      charge-turret type; a sprite body's index following these rules (*Any body*); the
+      charge-turret rule, which S-0301 claim 16 rates medium, and ammunition having no direct
+      effect on it, until MS-33 part l runs; creation by
+      every route, keeping the index through veterancy and transport; the original's drawn
+      frame without a turret before the first turn, until MS-33 part j runs)
+
 ## Formulas
 
 **F0. Floating-point environment.** All floating-point work in this spec runs in the original
@@ -1376,6 +1500,7 @@ darkens.
 | Sub-pixel precision | 1/256 | pixel | F5 |
 | Depth-level spacing | 1 | model unit per level | Signed unwrapped depth; empty sentinel below every numeric depth (claim 24) |
 | Shadow shift | +3 (2.9999964) | pixels, screen x | Claim 31 |
+| Turret table size | 18 | entries, one per weapon number 0 … 17 | Terms, claim 43; every entry *none* unless imported |
 | Aircraft-like shadow scale | 1/2 | dimensionless (scale factor) | Claim 31 |
 | Normal tables | 16 / 36 / 64 / 245 | entries | Modes 1 / 2 / 3 / 4; see below |
 | Sine table | 8192 per turn | entries | F1 |
@@ -1808,6 +1933,20 @@ same shot.
 All fresh draws clear colour completely. Non-depth draws preserve depth except for
 claim 34's initial full clear. These are lead-confirmed departures (MS-9/MS-18).
 
+**S3. Selected turret index of a multi-turret vehicle (claim 43).** *T* is the type's turret
+table, *w* the resulting weapon number, *c* S-0301 claim 16's turret number.
+
+| Type | Event | Selected turret index |
+|---|---|---|
+| any, except our engine's charge-turret vehicles | the vehicle is created | *none* |
+| gunner type, not charge-turret | creation completes (weapon number set to 0) | *T*[0] |
+| not charge-turret | its weapon number is set (S-0308 claims 5, 6) | *T*[*w*], even when *w* is unchanged |
+| charge-turret | each of its turns | *c* (our engine: *c* from creation) |
+| any | veterancy change, transport carriage, anything else | unchanged |
+
+For a vehicle with the voxel flag, claim 12 draws no turret or barrel for *none* or for an index
+outside 0 … *N* − 1 (a sprite body: claim 12, *Sprite body*).
+
 **Ordering consequences.**
 - Within one part outside depth-buffered mode: claim 23's section overlap priority and
   claim 21's voxel priority decide which pixels show. A nearer voxel of a lower-priority
@@ -1930,11 +2069,34 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   turret (claim 37) never shows recoil, and its recoil cycle does not stop image reuse. Fixed: slide
   the barrel back by its recoil slide along its own forward axis, as claim 27 does for a barrel
   drawn with a turret, and draw it fresh while its cycle runs.
+- **`quirks.turret_table_fixed_type_only`** (default: on). Claim 43. Only the fixed type name of
+  Import mapping reads the turret table; every other type keeps an all-*none* table, so a
+  multi-turret type of any other name that is not a charge-turret type shows no turret unless it
+  has a sprite body. Fixed: every multi-turret type reads the same pairs of keys from its own
+  section, by the same rules for the table (order, layering and the per-stem absent-key index),
+  and entries no pair sets stay *none*. A pair with no weapon number still changes nothing in the
+  table, and `quirks.turret_pair_no_weapon_sets_charge_flag` still applies to the fixed type name
+  only, so no other type's charge-turret flag changes. Decided (delegated sign-off, 2026-10-25).
+  Confidence medium; `measurable` (MS-33 part d) for the default.
 - **Round-toward-zero mode** (switch `quirks.chop_rounding`, owned by S-0205 (claim 5); not defined here). Every floating-point operation and every single-precision store in
   this spec rounds toward zero (F0). With that switch off they round to nearest. Conversions from floating point to integers are still truncations toward zero, since
   each formula states them. The tabulated sine values of F1 do not change. In the table square
   root the stored input follows the switch, as every store does, while the final cut of the
   result stays a truncation. Example: F2's row z, x entry becomes 0.611342072 instead of 0.611342013.
+- **`quirks.turret_pair_no_weapon_sets_charge_flag`** (default: on). Observable result: the
+  fixed type name whose rules section fills the turret table (Import mapping) has charge-turret
+  behaviour exactly when, in a rules layer that has that section, a pair with no weapon number
+  (key absent or −1) gives a turret index that is not 0 and not a multiple of 256; such a pair
+  overrides that layer's own charge-turret key, and an index of 0 or a non-zero multiple of 256
+  in it turns the behaviour off. Such a pair leaves the turret table unchanged. The import
+  accepts any integer for the index key, so a user's file can give a multiple of 256, and the
+  importer must apply this rule to reproduce the original's behaviour. With several such pairs
+  in one layer, the last one in the Import mapping order decides. The flag then governs S-0308
+  claim 5 (weapon-number requests ignored) and claim 43 (turret from the rearm countdown), so
+  this has gameplay effect. Fixed: such a pair changes nothing. Confidence medium; `measurable`
+  (MS-33 part g) for one pair with turret index 1 and one with 0; `unmeasured` for indices that
+  are other multiples of 256 and for several such pairs in one layer, which part g does not set
+  up.
 
 ### Lead-confirmed presentation departures
 
@@ -1975,12 +2137,16 @@ own name, even when the type's image names a different section.
 | `UseBuffer` | Art [type] | boolean | no | Per-type depth buffering for fresh part draws only (claims 24 and 32); shadows never enable it. |
 | `ShadowIndex` | Art [image] | integer | 0 | Shadow section (claim 29) |
 | `NoShadow` | Rules [type] | boolean | no | Suppresses the shadow (claim 31); no-shadow control for claim 39 |
-| `ConsideredAircraft` | Rules [type] | boolean | no | Half-size shadow (claim 31) |
+| `ConsideredAircraft` | Rules [type] | boolean | yes for an aircraft type, no for every other type (S-0501 Import mapping; medium, as S-0501 rates it) | Half-size shadow (claim 31) |
 | `DisableVoxelCache`, `DisableShadowCache` | Art [image] | boolean | no | Disable reuse of part images and of shadow images (claims 26, 31) |
 | `FireAngle` | Rules [type] | integer, 1/256 turn (256 facing units), used modulo 256 | 8 | Barrel elevation target (claim 6) |
 | `NoSpawnAlt` | Rules [type] | boolean | no | The alternative-body option: alternative body while none of the vehicle's spawned aircraft is docked (claim 12) |
 | `TurretCount` | Rules [type] | integer | 0 | Turret count; above 0 makes a multi-turret type unless the type has rotating-barrel weapon stages (Terms, claim 12) |
 | `IsGattling` | Rules [type] | boolean | no | Rotating-barrel weapon stages; here only its effect on the multi-turret rule (claim 12) |
+| `Gunner` | Rules, vehicle type section | boolean | no | Gunner type (S-0308 owns it); here only the weapon-number setting at creation that selects turret table entry 0 (claim 43) |
+| `IsChargeTurret` | Rules [type] | boolean | held value; default no (S-0308) | Charge-turret type (S-0308, S-0301 claim 16 own it); here only the countdown-driven turret index (claim 43). For the fixed type name below it can be overwritten (`quirks.turret_pair_no_weapon_sets_charge_flag`) |
+| `IFVMode` | Rules [type], passenger types | integer | held value; default 0 (S-0308) | Mode index (S-0308 owns it); reaches the turret only through the weapon number (claim 43) |
+| `NormalTurretIndex` and `NormalTurretWeapon`, and the same pair of keys with `Normal` replaced by each of the stems `Repair`, `MachineGun`, `Flak`, `Pistol`, `Sniper`, `Shock`, `Explode`, `BrainBlast`, `RadCannon`, `Chrono`, `TerroristExplode`, `Cow`, `Initiate`, `Virus`, `YuriPrime`, `Guardian`, in that order | Rules [type], read only when the type name is `FV` (letters in either case); every other type keeps an all-*none* turret table (`quirks.turret_table_fixed_type_only`) | integers: a turret index, −1 meaning *none*; a weapon number | index: 1 for the `Repair` stem, 2 for `MachineGun`, 3 for `Flak`, 0 for every other stem; weapon number: −1 | Turret table (Terms, claim 43); the pair rules follow the table |
 | `UseTurretShadow` | Art [image], vehicles | boolean | no | Read, no effect (`quirks.no_turret_shadow`) |
 | `Locomotor` | Rules [type] | class identifier in hyphen-separated hexadecimal groups of 8, 4, 4, 4 and 12 digits, enclosed in paired brace characters, letters in either case (S-0207 claim 14) | keeps value in force; engine default teleporting locomotor (S-0207 claim 14) | Selects body attitude and heading source (claims 41–42); original aircraft displacement differs between flying and other locomotors, while the corrected anchor is independent of this selection (claim 40) |
 | `V3RocketPitchInitial`, `DMislPitchInitial`, `CMislPitchInitial`; `V3RocketPitchFinal`, `DMislPitchFinal`, `CMislPitchFinal` | Rules [General] | real quarter-turn fractions, single precision | selected set's defaults and layering as S-0506 Import mapping | current pitch is governed by S-0506 claims 14–18 and 24; the same selected set supplies claim 41's exact initial/final reuse comparisons; no separate drawing-pitch key |
@@ -1989,6 +2155,27 @@ own name, even when the type's image names a different section.
 | `PitchSpeed` | Rules [type] | real, double-precision speed fraction | 0.25 | strict speed threshold for pitch and bank, claim 42; not leptons per tick |
 | No data key | rocket/flying drawing | fixed transform and reuse rules | not imported | claims 41–42: no pitch-image count, pitch-facing count or banking-progress setting |
 | none: terrain and high-bridge marks | Map terrain and overlay data | terrain height and slope, high-bridge cells and bridge axis, as S-0106 claim 2, S-0211 claim 15 and S-0212 claim 3 specify | no deck where no intact high bridge marks the cell | Surface anchor and neighbour qualification in claim 40; no shadow-height INI key or helipad-height substitute |
+
+**Turret table pairs.** The pairs of the turret table row above (claim 43) follow these rules.
+- Each pair sets the entry for its weapon number to its turret index.
+- Pairs apply in the order listed, so a later pair naming the same weapon number wins.
+- The table is never cleared: entries set in one rules layer that has the section stay unless a
+  pair of a later such layer sets the same entry.
+- In every layer that has the section, a pair whose index key is absent uses its stem's default
+  index, never an index an earlier layer gave that pair. So a later layer that sets only the
+  weapon-number key of a pair sets that entry to the stem's default.
+- Both orders (a later pair wins, an entry is kept across layers) and the per-layer default are
+  `measurable` through MS-33 part h.
+- The index defaults are constants of the original for an absent key, not values of the user's
+  rules, and stating them here was decided at the delegated sign-off, 2026-10-25. Their numbers
+  are `unmeasured`, medium, apart from the `Normal` stem's 0 that part h checks: every other
+  part of MS-33 sets the index key of each pair it uses.
+- A weapon number of −1, or an absent weapon-number key:
+  `quirks.turret_pair_no_weapon_sets_charge_flag`.
+- Any other weapon number outside 0 … 17: the original's result is *unspecified* (`unmeasured`,
+  medium: no part of MS-33 supplies such a pair). Our engine ignores the pair and the importer
+  warns (design).
+- Turret indices outside −1 … *N* − 1 are kept and draw nothing (claim 12); the importer warns.
 
 **Importer warnings.** The importer warns, naming the file and the place in it, in these cases. A
 warning never changes the imported result (glossary, *importer warning*), and the warnings do not
@@ -2492,7 +2679,10 @@ Other model-selection checks remain oracle-checkable.
   - a vehicle type with the alternative-body option that carries spawned aircraft (a stock one
     if any exists; otherwise set the option with a test map override section, and supply its
     alternative-body model as a test model under the name S-0007 gives),
-  - a stock multi-turret type (Terms),
+  - MS-33's subject (the vehicle type with the fixed type name of Import mapping, with MS-33's
+    test override, base-copy deletion and test models) as the multi-turret type, with a mode-1
+    and a mode-2 passenger type as in MS-33, so that a gunner hand-over changes its selected
+    turret index between two models that exist (claim 43),
   - a stock type with rotating-barrel weapon stages, given a turret count of 2 in a test map
     override section, with test turret models for turret indices 0 and 1 (under the names S-0007
     gives) that look clearly different from its ordinary turret,
@@ -2513,7 +2703,7 @@ Other model-selection checks remain oracle-checkable.
     them has returned or, for spawned aircraft that do not return, been replaced. Holding the
     facing matters: the main body at that facing is cached before the launch, so only a key
     that records the alternative-model state can show the alternative body there.
-  - Change the multi-turret vehicle's selected turret index by the means the vehicle specs give,
+  - Change the multi-turret vehicle's selected turret index through a gunner hand-over (claim 43),
     with its body and turret held at the facings they had before the change (checked on the
     captures).
   - Capture the rotating-barrel vehicle idle and while attacking.
@@ -2530,7 +2720,9 @@ Other model-selection checks remain oracle-checkable.
 - *Expected:*
   - the spawner shows its main body while at least one spawned aircraft is docked, and the
     alternative body while none is, at the same facing,
-  - the multi-turret vehicle shows the turret and barrel models of its selected turret index,
+  - the multi-turret vehicle shows the turret and barrel models of its selected turret index:
+    turret 0 with barrel 0 for the mode-1 passenger and turret 1 with barrel 1 for the mode-2
+    passenger (MS-33 part b),
   - the rotating-barrel vehicle always shows its ordinary turret,
   - the turreted spawner keeps its main body and draws its turret normally,
   - with caching, body frames 2 and 3 show turret frames 2 and 3 respectively in
@@ -3367,6 +3559,156 @@ crashing body falsifies the corresponding rule. A −1 override changing an
 earlier angle also falsifies the import rule. Missing reuse records leave the
 exact reuse contract inconclusive: pixel matches alone do not settle it.
 
+**MS-33 Selected turret index of multi-turret vehicles (claims 11, 12, 16, 43).**
+- *Setup:*
+  - A tiny flat test map with a war factory, an infantry barracks, a transport able to
+    carry vehicles and a vehicle bunker (S-0606), all for the tester's house, and one
+    stationary enemy target in range.
+  - **Subject.** A test map override section for the vehicle type with the fixed type name of
+    Import mapping. It sets the turret flag, a turret count of 3, the gunner flag, a weapon
+    count of 18 with a weapon in every slot, and every one of the 17 turret table pairs with an
+    explicit weapon number, in the Import mapping order of the stems: `Normal` maps weapon 0 to
+    turret 2, `Repair` weapon 1 to turret 0, `MachineGun` weapon 2 to turret 1, `Flak` weapon 3
+    to turret 5 (at or above the count, below 18), and the other 13 pairs map weapon numbers 4
+    to 16, in order, to turret 0. Weapon number 17 gets no entry here.
+  - **Base copy.** In the base rules copy (S-0004), every turret table key of that type's
+    section is deleted, so no earlier rules layer gives any entry and every expected value
+    below follows from the test override alone.
+  - Test models under the names S-0007 gives: a body whose HVA has 4 frames, turret models 0, 1
+    and 2 that look clearly different from each other and whose HVAs have 4 clearly different
+    frames, and barrel models 0 and 1 only.
+  - **Control.** A second test vehicle type with another name and the same fields, keys and
+    models, added to the vehicle list of the base rules copy (S-0004) as in MS-11.
+  - **Charge subject.** A third test vehicle type, added in the same way, with the turret flag, the charge-turret flag,
+    a turret count of 3, the same kind of turret models and one weapon whose rate-of-fire field
+    is long enough to give many ticks per turret model.
+  - **Magazine subject (part l only).** A test copy of the charge subject, added in the same
+    way, whose weapon launches a projectile and whose section gives it a maximum ammunition of 2
+    and leaves its initial-ammunition field out, so it starts full (S-0301 claim 10). It lacks
+    the manual-reload flag, and its reload fields give a reload delay many times its weapon's
+    rate-of-fire field, at every ammunition count (S-0301 claim 11).
+  - **Sprite runs (part k only).** Only the fixed type name has a filled turret table (Import
+    mapping), so the sprite case uses the subject itself, in runs of their own. A test art file
+    clears the voxel flag in the art section of the subject's image (S-0007 claim 4). Its rules override stays as above, so its turret table, turret flag, gunner flag,
+    turret count and weapons are unchanged: the table is read by type name whatever the body.
+    Its body and turret image frames come from a test sprite file under its image name, with
+    turret frames clearly different from the test models. Test models with the single turret
+    and single barrel names that S-0007 claim 19 gives are added, clearly different from each
+    other and from the numbered models, which stay supplied. A second sprite run is the same
+    except that the single barrel model is withheld.
+  - Passenger types: override sections giving five infantry types the mode indices 0, 1, 2, 3
+    and 17, and a sixth one mode index 20.
+- *Procedure and observable:* capture the turret and barrel area of every drawn frame, with the
+  tick number, at a held body and turret facing unless stated.
+  - *Part a, creation:* build one subject and one control, and place one subject on the map.
+  - *Part b, hand-over:* load the mode-1 passenger into an empty subject, then a mode-2 passenger
+    as second passenger, then remove them with S-0308 scenario W4's load and unload procedure,
+    which isolates the first-passenger and last-exit hand-overs. Repeat with the passengers of modes 2, 3, 17 and 20
+    entering first. Record the tick of each entry and exit.
+  - *Part c, kept:* with the mode-1 passenger aboard, promote the subject by kills, then carry
+    it in the transport and unload it.
+  - *Part d, control:* repeat part b with the control.
+  - *Part e, frame:* with the mode-1 passenger aboard, drive the subject straight through at
+    least 8 walk-counter steps, recording the body frame *f_b* (from the four distinct body
+    frames) in every drawn frame. Then let it attack the target while standing still with its
+    body in frame 0; if it stops in another body frame, move it and stop again until it shows
+    frame 0.
+  - *Part f, charge:* let the charge subject fire one shot and capture every tick until its
+    rearm countdown is over.
+  - *Part g, absent weapon key:* repeat parts a and b with a subject whose override omits only
+    the weapon-number key of the `MachineGun` pair (turret index 1, not 0). In a mirror run, the
+    override sets the charge-turret flag on and omits only the weapon-number key of the `Repair`
+    pair (turret index 0).
+  - *Part h, layers and repeated weapon numbers:* repeat part b with two changes. The base
+    copy's section of the fixed-name type gets one pair only, the `Normal` pair, which maps weapon
+    17 to turret 1.
+    In the test override the `Pistol` pair, which follows the `Flak` pair in the Import mapping
+    order, maps weapon 3 to turret 1 instead of weapon 4 to turret 0. In a second run of part h,
+    the first run's `Pistol` change is undone and the test override's `Normal` pair instead gives
+    weapon number 17 and no turret index key, the base copy staying as in the first run.
+  - *Part i, weapon not chosen by the index:* give the control's weapons in slots 0 and 1 two
+    clearly different projectiles. With no passenger, order the control into the vehicle bunker
+    and record whether it is taken in; then, outside the bunker, let it attack the target.
+    Load the mode-1 passenger and let it attack again. Record which projectile each shot
+    creates.
+  - *Part j, before the first turn:* build a charge subject at the war factory for the tester's
+    house, which a person controls, and capture every drawn frame from the tick its place order
+    is given; place a second charge subject on the map, in view of the starting position, and
+    capture the game's first drawn frame. A run in which the factory's image hides the built
+    subject's turret area in the first drawn frame that shows the subject is inconclusive.
+    Repeat it with a test copy of the war factory whose imported exit position puts a released
+    vehicle outside its foundation.
+  - *Part k, sprite body:* in each sprite run, repeat parts a and b with the subject, so that
+    its index goes through 2, 0, 1 and *none* as in part b. Then, in the first sprite run, with
+    no passenger, turn the subject's turret through all 4-step turret facings while it attacks
+    targets placed round it, capturing every drawn frame. A run in which the subject is drawn
+    with voxel parts as in part a (the voxel flag not cleared) is void.
+  - *Part l, magazine:* let the magazine subject attack the target while standing still until
+    its magazine is empty. Go on capturing every tick, recording its ammunition, its rearm
+    countdown and its reload countdown, until it has regained a round and fired it.
+- *Expected:*
+  - Part a: both subjects show turret model 2 and no barrel (barrel model 2 is absent). The
+    control shows no turret and no barrel.
+  - Part b: mode 1 gives turret 0 with barrel 0, from the tick of entry. The second passenger
+    changes nothing, and the last exit brings back turret 2. Mode 2 gives turret 1 with barrel 1.
+    Mode 3 shows neither turret nor barrel, and neither does mode 17. Mode 20 shows turret 2.
+  - Part c: turret 0 throughout.
+  - Part d: no turret and no barrel in any state. With `quirks.turret_table_fixed_type_only`
+    off (engine conformance, not the original) the control shows what part b shows for the
+    subject.
+  - Part e: in every drawn frame the numbered turret shows the body's current frame *f_b*. While
+    attacking at rest with *f_b* = 0 it stays in frame 0 throughout.
+  - Part f: model 2 in the ticks whose remaining countdown *r* is at least 2*D*/3, model 1 for
+    *D*/3 ≤ *r* < 2*D*/3, and model 0 for smaller *r* and after the countdown.
+  - Part g: the subject behaves as a charge-turret type: hand-overs change neither weapon nor
+    turret. In the mirror run the flag
+    set in the override is cleared and hand-overs change the turret again, as in part b, except
+    that weapon number 1 has no entry, so the mode-1 passenger shows neither turret nor barrel.
+  - Part h: mode 17 gives turret 1 with barrel 1 (the base copy's entry is kept, because the
+    override sets no pair for weapon 17), and mode 3 gives turret 1 with barrel 1 (the later
+    pair for weapon 3 wins). The other modes are as in part b. In the second run, mode 17 gives
+    turret 0 with barrel 0 (the stem's default index, not the base copy's 1), and the subject
+    shows no turret at creation and after the last exit (weapon 0 has no entry).
+  - Part i: the control, which shows no turret throughout, is taken into the bunker, fires the
+    slot-0 projectile without a passenger and the slot-1 projectile with the mode-1 passenger.
+  - Part j (original): the first drawn frame that shows the built charge subject shows neither a
+    turret nor a barrel, and every drawn frame after its first turn and before its first shot
+    shows turret model 0.
+    The map-placed charge subject shows neither in the game's first drawn frame, if that frame
+    shows it, and turret model 0 after its first turn. Our engine shows turret model 0 in all of these frames.
+  - Part k: in every drawn frame and with every passenger, at indices 2, 0, 1 and *none* alike, the
+    subject shows a sprite turret frame, and a hand-over does not change which model or sprite
+    frame is selected. Which frame shows for a turret facing is S-0102 claim 22's rule and is
+    judged there, not here. In the first sprite run it also shows
+    the single barrel model at the turret, turned with it, winning over the sprite turret where
+    they overlap at 4-step turret facings 1 and 2 and losing at 0 and 3 (claim 11). In the second
+    sprite run it shows no voxel part. Neither run ever shows the single turret model or a numbered
+    model.
+  - Part l: model 0 from the subject's first turn until its first shot, with a full magazine.
+    After each shot, the shot made with the last round included, the steps of part f for that
+    shot's countdown. Model 0 in every tick in which the magazine is empty and the countdown is
+    over, with no change in the tick a round comes back. The shot made with the regained round
+    starts again at model 2.
+- *Falsified if:* a turret numbered like the weapon number appears where the table maps
+  elsewhere; the control shows a turret; a model shows for weapon number 3 or 17 outside part h; in
+  part h, mode 17 shows no turret (an entry lost between layers) or mode 3 shows none (the
+  earlier pair won); the model
+  changes in a tick other than the weapon number's; promotion or transport carriage changes the
+  model; a numbered turret shows a frame other than *f_b*; the charge subject's steps differ from
+  S-0301 claim 16; part g keeps gunner behaviour, or its mirror run keeps charge-turret behaviour, while the
+  quirk is on; in part h's second run, mode 17 shows turret 1 (a default taken from an earlier
+  layer); in part i, the control is refused by the bunker, does not fire, or fires a projectile
+  other than its weapon number's (the index choosing the weapon); in part j, the built charge
+  subject shows a turret in the first drawn frame that shows it, or shows no turret in a later
+  frame before its first shot; in part k, the subject shows a voxel turret model, a
+  numbered model, or no sprite turret in some frame, what is drawn changes at a hand-over, or
+  its barrel's overlap with the sprite turret follows another rule than claim 11's; in part l,
+  some tick shows a model other than the countdown gives, such as a turret other than 0, or no
+  turret, while the magazine is empty and the countdown is over, or the model changes in the
+  tick a round comes back.
+- *Tool:* the measurement harness, with the read-only recorder for weapon number, countdowns and
+  (part l) ammunition.
+
 ## Open questions
 
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
@@ -3381,8 +3723,6 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 - **Shadow on a cache miss.** When a shadow image is not yet cached, the shadow sometimes appears
   to be skipped for that draw instead of made. In which situations, and whether a shadow can be
   missing for one drawn frame, has not been determined.
-- **Turret frame of multi-turret types.** Which HVA frame the turret models of a multi-turret
-  type are drawn in (claims 12, 16) has not been determined.
 - **Animation-frame counter.** S-0609 claim 14 owns advances for gattling-flagged types,
   including continued animation during spin-down and the corrected building double advance.
   Exact advances for other types belong to the combat, vehicle and building specs; MS-3c
@@ -3408,24 +3748,65 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 
 ## Cross-spec reconciliation
 
-- **S-0106 claims 5, 8, 11 and 12.** Claims 26 and 41–42 here resolve the
-  flying/rocket body-attitude and reuse questions. Claim 11 there and its aircraft
-  heading open question must be updated: flying shadows use the 32-step aiming
-  facing, rocket shadows the 32-step body facing, and neither includes body pitch
-  or bank. Claim 12's shadow key uses the same heading source. Retain that spec's
-  slope transform and dropship flat-shadow exception. Confirm the two specs
-  together at sign-off; its current unresolved heading statement is not an
-  alternative to claims 30 and 42 here.
+- **S-0106 claims 5, 8, 11 and 12.** Claims 26 and 41–42 here resolve the flying/rocket
+  body-attitude and reuse questions. Claim 11 there and its aircraft heading open question must be
+  updated: flying shadows use the 32-step aiming facing, rocket shadows the 32-step body facing,
+  and neither includes body pitch or bank. Claim 12's shadow key uses the same heading source.
+  Retain that spec's slope transform and dropship flat-shadow exception. Its current unresolved
+  heading statement is not an alternative to claims 30 and 42 here.
 - **S-0506 claims 15 and 17.** Add a pointer to claim 41 here for the body's
   appearance throughout the flight phases and its level/endpoint reuse classes:
   current pitch is drawn without 32-step pitch quantisation and does not pitch
   the shadow. Flight-pitch evolution and movement formulas are unchanged.
+- **S-0308 claims 5 and 6, S-0301 claim 16 (Q-1760).** Claim 43 here adds only the turret-table
+  lookup on top of S-0308's weapon number and cites S-0301 claim 16 for charge turrets; S-0308
+  needs no change for it. S-0301 claim 16 says every shot of a charge-turret vehicle uses its
+  slot-0 weapon. In the original, S-0308 claim 9's override for a deployed vehicle whose type has
+  the deploy-fire flag applies to a charge-turret type too: such a vehicle, while deployed, fires
+  its type's deploy weapon index, whatever turret image is shown. No charge-turret type of the
+  stock data has the deploy-fire flag, so the two specs differ only for a type from a user's file
+  (`unmeasured`, medium: no scenario sets one up). S-0301 claim 16 should read "uses the weapon
+  S-0308 chooses: its slot-0 weapon, unless S-0308 claim 9 applies". S-0308 should note `quirks.turret_pair_no_weapon_sets_charge_flag`, which can
+  switch the charge-turret flag of the fixed type name. If S-0308 scenario W4 part h builds its
+  charge-turret gunner from that type through a map override, an omitted weapon-number key in
+  that override changes the flag too.
+- **S-0606 claim 1 and S-0209.** S-0606 claim 1 asks for "the weapon of its current turret
+  index", and S-0209's Terms entry *Armed*, in its *has a primary weapon* rule, for "the weapon
+  of its currently selected turret". In the original those tests, like every other weapon test, ask the weapon
+  S-0308 chooses and never the selected turret index (claim 43, *Not a weapon choice*; MS-33
+  part i for the bunker test). Both phrases should become "the weapon S-0308 chooses: that of
+  its weapon number (S-0308 claim 5), unless S-0308 claim 9's override for a deployed vehicle
+  applies". This changes no behaviour of the original, which
+  is what both specs describe; it corrects the wording. Read literally beside claim 43, the old
+  wording would differ for a multi-turret type whose index is *none*, such as any such type
+  other than the fixed type name: S-0606's "it has a turret weapon" would then find no weapon
+  and refuse it. In the original such a vehicle passes that test whenever the weapon S-0308
+  chooses holds a weapon (outside S-0308 claim 9, the slot of its weapon number, 0 from
+  creation), and the new wording says so. For the fixed
+  type name, too, the weapon is that of the weapon number wherever its table maps that number.
+- **Hover tip name (pointer only).** This spec does not specify hover tips. The interface spec
+  that takes them should check whether a multi-turret type's hover-tip name follows its selected
+  turret index (claim 43).
+- **S-0007 claims 16, 17 and 19.** Claims 16 and 17 are unchanged: a multi-turret type with the
+  voxel flag has no ordinary turret or barrel, which claim 12 here relies on. Claim 19 is
+  unchanged as a loading rule: a sprite-body vehicle with the turret flag loads the single voxel
+  turret and barrel whatever its turret count, and no numbered models. Its backing should note
+  that of these two parts only the barrel is ever drawn (claim 12 here, *Sprite body*), so its
+  scenario A14 can see the barrel lookup but never the voxel turret lookup. This changes no
+  behaviour; it narrows what A14 can show.
+- **S-0102 colour-selector table and S-0610 claim 7 table (wording only).** Their rows for a
+  vehicle drawn as a sprite say "including a voxel turret on a sprite body". By claim 12 here
+  (*Sprite body*), only the voxel barrel is drawn on a sprite body. The rows should read "including
+  a voxel barrel on a sprite body". Neither row's colouring changes. The amended rows should also
+  note that this barrel's overlap with the sprite turret follows claim 12 here, which extends
+  claim 11's overlap rule, by the 4-step turret facing, to a sprite turret. MS-2 and MS-6 back
+  claim 11 for voxel turrets only, so the extension is rated medium until MS-33 part k runs.
 
 ## Questions for the project lead
 
-- **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the
-  original can invalidate earlier images together at an event not specified here. Is that
-  departure, with no switch, acceptable?
+- **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the original
+  can invalidate earlier images together at an event not specified here. That departure, with no
+  switch, was decided at the delegated sign-off, 2026-10-25.
 Image enlargement and turret-origin pitching are settled as unconditional presentation
 fixes, with no extra pivot import. Claim 22 settles Q-0470's bounded-image policy and
 requires one importer warning per oversized model.
