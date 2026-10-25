@@ -298,12 +298,13 @@ pub fn step_outcome_of(
 /// It also keeps what one path computation with the corridor has asked of
 /// the world: the claim 13 exemption and the estimate h by dense cell
 /// index, the entry outcome of a step by search pair and direction (our
-/// tooling for speed, M8 C4 part 5). A computation's searches all read the one world it was
-/// asked on (the world does not change while it runs), so an answer kept
-/// is the answer asked again. A computation starts from a fresh stamp of
-/// its own, so nothing carries over from one computation to the next; a
-/// loaded game starts empty, and nothing here is saved or hashed.
-#[derive(Clone, Debug, Default)]
+/// tooling for speed, M8 C4 part 5). A computation's searches all read the
+/// one world it was asked on (the world does not change while it runs), so
+/// an answer kept is the answer asked again. A computation starts from a
+/// fresh stamp of its own, so nothing carries over from one computation to
+/// the next; a loaded or copied game starts empty, and nothing here is
+/// saved or hashed.
+#[derive(Debug, Default)]
 pub struct SearchScratch {
     stamp: u32,
     /// `seen[i] == stamp`: pair i has a recorded g.
@@ -330,6 +331,14 @@ pub struct SearchScratch {
     /// estimate h towards the computation's destination.
     estimate_at: Vec<u32>,
     estimates: Vec<F32>,
+}
+
+/// A copy of the world starts with empty working memory: nothing in it is
+/// read before a search or computation starts it afresh.
+impl Clone for SearchScratch {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
 }
 
 impl SearchScratch {

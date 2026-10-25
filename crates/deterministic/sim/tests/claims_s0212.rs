@@ -2150,10 +2150,10 @@ fn corridor_confines_the_search() {
     assert!(!corridor::exempt(&w, cell(5, 5)));
 }
 
-// spec: S-0212 claim 13 (the corridor exemption is read from the world of the computation); our tooling for speed (M8 C4 part 5): a path computation keeps what its searches asked of the exemption, and nothing it kept reaches a later computation on a changed world or a copy of the world
+// spec: S-0212 claims 13 and 15 (the corridor exemption and the entry outcomes are read from the world of the computation; a blocked destination is approached from a neighbour); our tooling for speed (M8 C4 part 5): a path computation keeps what its searches asked of the world, and nothing it kept reaches a later computation on a changed world, with another destination, or in a copy of the world
 #[test]
 fn a_computation_keeps_nothing_for_the_next() {
-    for barrier in [false, true] {
+    for (barrier, held) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut s = scene();
         if barrier {
             // A wall of enemy huts, blocked for the unarmed car but open
@@ -2163,12 +2163,16 @@ fn a_computation_keeps_nothing_for_the_next() {
                 s.place_structure(1, HUT, cell(5, y));
             }
         }
+        let to = cell(9, 4);
+        if held {
+            // An enemy hut on the destination: blocked, so the path ends
+            // next to it (claim 15).
+            s.place_structure(1, HUT, to);
+        }
         s.place_unit(0, CAR, cell(0, 0), 64);
         let mut w = s.build();
         regions::ensure(&mut w);
-        glasnost_sim::trace::switch_on(&mut w);
         let id = vehicles(&w)[0];
-        let to = cell(9, 4);
         let car = w.rules().index_of(Kind::Vehicle, CAR).unwrap();
         let mut paths = std::collections::BTreeSet::new();
         let mut off_corridor = 0;
@@ -2180,8 +2184,8 @@ fn a_computation_keeps_nothing_for_the_next() {
                     continue;
                 }
                 // A stone (a second car) in `at` gives its neighbours the
-                // exemption, in the world the computations before it read
-                // without it.
+                // exemption and blocks its cell, in the world the
+                // computations before it read without it.
                 let owner = w.obj(id).unwrap().owner;
                 let stone = glasnost_sim::objects::create(&mut w, Kind::Vehicle, car, owner);
                 glasnost_sim::objects::place(
@@ -2191,8 +2195,9 @@ fn a_computation_keeps_nothing_for_the_next() {
                     0,
                 );
                 regions::ensure(&mut w);
-                let mut fresh = w.clone();
-                fresh.scratch = Default::default();
+                // A copy starts with empty working memory; `w` keeps what
+                // its last computation asked.
+                let fresh = w.clone();
                 // Another destination first: the computations between differ
                 // in their goal too.
                 let other = cell(8, -3);
@@ -2203,19 +2208,21 @@ fn a_computation_keeps_nothing_for_the_next() {
                 );
                 let kept = path::corridor_find(&w, id, to);
                 assert_eq!(kept, path::corridor_find(&fresh, id, to), "stone in {at:?}");
-                // And the copy, which carries this computation's memory,
-                // answers a changed world afresh.
+                // The stone goes: `w` answers the changed world afresh.
                 glasnost_sim::objects::remove(&mut w, stone);
                 regions::ensure(&mut w);
-                let copy = w.clone();
-                let mut plain = w.clone();
-                plain.scratch = Default::default();
+                let plain = w.clone();
                 assert_eq!(
-                    path::corridor_find(&copy, id, to),
+                    path::corridor_find(&w, id, to),
                     path::corridor_find(&plain, id, to),
                     "stone gone from {at:?}"
                 );
                 if let Some(p) = kept {
+                    let cells = visits(cell(0, 0), &p);
+                    if held {
+                        // spec: S-0212 claim 15 (the path ends next to the blocked destination)
+                        assert_eq!(chebyshev(*cells.last().unwrap(), to), 1, "stone in {at:?}");
+                    }
                     let secs = fresh.regions.sectors.clone();
                     let chains = corridor::coarse(
                         &fresh,
@@ -2225,7 +2232,7 @@ fn a_computation_keeps_nothing_for_the_next() {
                         to,
                         &Default::default(),
                     );
-                    off_corridor += visits(cell(0, 0), &p)
+                    off_corridor += cells
                         .into_iter()
                         .filter(|&c| {
                             chains.as_ref().is_some_and(|ch| {
@@ -2247,11 +2254,12 @@ fn a_computation_keeps_nothing_for_the_next() {
                 }
             }
         }
-        assert!(paths.len() >= 2, "the stones change the answer");
-        assert!(off_corridor > 0, "some path uses the exemption");
+        let case = format!("barrier {barrier}, held {held}");
+        assert!(paths.len() >= 2, "{case}: the stones change the answer");
+        assert!(off_corridor > 0, "{case}: some path uses the exemption");
         assert!(
-            most_searches >= usize::from(barrier) + 1,
-            "the barrier makes the computation retry: {most_searches}"
+            most_searches > usize::from(barrier),
+            "{case}: the barrier makes the computation retry: {most_searches}"
         );
     }
 }
