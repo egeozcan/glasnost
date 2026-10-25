@@ -2044,6 +2044,72 @@ fn claim_36_release_crash_keeps_flight() {
     assert_ne!((p1.x, p1.y), (p0.x, p0.y), "it keeps moving");
 }
 
+// spec: S-0501 claims 9 and 36, S-0506 claims 12 and 13 and S-0312 claim 16 (the lead's note 16 of M8 step A4, round 4: a carrier destroyed by a hit releases its flying slot aircraft into a crash at health 0; each falls as a dead aircraft, its fall counter growing by 1 a tick, and at impact leaves play as one shot down)
+#[test]
+fn claim_36_released_aircraft_crash_and_leave_play() {
+    let r = rules();
+    let mut w = game(&r);
+    ready(&mut w);
+    let c = put(&mut w, Kind::Vehicle, "CARRIER", 0, 0, 0);
+    let v = put(&mut w, Kind::Vehicle, "VICTIM", 1, 8, 0);
+    testkit::run(&mut w, 2);
+    click(&mut w, c, ClickOn::Object(v));
+    let flying = |w: &World| -> Vec<ObjectId> {
+        w.objects
+            .values()
+            .filter(|o| o.kind == Kind::Aircraft && o.on_map && air::height(w, o.id) > 0)
+            .map(|o| o.id)
+            .collect()
+    };
+    assert!(run_until(&mut w, 600, |w| !flying(w).is_empty()));
+    let planes = flying(&w);
+    let strength = w.obj(c).unwrap().health;
+    // A killing hit on the carrier, through the damage path.
+    glasnost_sim::combat::damage::apply(
+        &mut w,
+        c,
+        glasnost_sim::combat::damage::Hit {
+            amount: strength,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: true,
+        },
+    );
+    assert!(
+        w.obj(c).is_none_or(|o| o.health <= 0),
+        "the carrier is killed"
+    );
+    for &p in &planes {
+        let o = w.obj(p).expect("still in play at the release");
+        assert_eq!(o.health, 0, "{}", describe(&w, p));
+        assert!(glasnost_sim::combat::damage::dead(o), "a dead aircraft");
+        assert!(st(&w, p).crash.is_some(), "crashing: {}", describe(&w, p));
+    }
+    let mut last: Vec<Option<i32>> = planes.iter().map(|&p| st(&w, p).crash).collect();
+    for _ in 0..600 {
+        step(&mut w);
+        for (i, &p) in planes.iter().enumerate() {
+            let Some(o) = w.obj(p) else { continue };
+            let k = o.air.as_ref().and_then(|a| a.crash);
+            if let (Some(a), Some(b)) = (last[i], k) {
+                // spec: S-0501 claim 9 (the fall counter grows by 1 a tick for a dead aircraft, by 3 for a living one)
+                assert_eq!(b, a + 1, "the dead fall counter: {}", describe(&w, p));
+            }
+            last[i] = k;
+        }
+        if planes.iter().all(|&p| w.obj(p).is_none()) {
+            break;
+        }
+    }
+    assert!(
+        planes.iter().all(|&p| w.obj(p).is_none()),
+        "every released aircraft has left play"
+    );
+}
+
 /// The cell of local point (a, b) by S-0522 F2, for the test map's local
 /// area (0, 0, 30, 30) and width 30.
 fn local_cell(a: i32, b: i32) -> glasnost_map::CellXY {
