@@ -2,11 +2,11 @@
 id: S-0414
 title: Victory and defeat (the defeat tests of the normal and short game, what defeat does, when the game ends, the end delay, surrender and alliance orders)
 topic: simulation
-revision: 16
+revision: 30
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-25
 measurements: []
 requests: [Q-0150, Q-0151, Q-0193, Q-0267, Q-0285]
 supersedes: []
@@ -21,27 +21,47 @@ for each house: the defeat test of the normal game and of the short game, the de
 defeated house's objects, the end test with allied victory, the delay between the end and the
 result, the order of events when several houses fall in one tick, and what the surrender and
 alliance orders of S-0213 do. Campaign missions (whose results come from map triggers) and network
-games are outside this spec. Claims 19–23 give the skirmish result screen's statistics,
+games are outside this spec; a network game of the original is used only to measure the surrender
+(Measurement scenarios, *network-game form*). Claims 19–23 give the skirmish result screen's statistics,
 score and duration; its layout and visual design belong to the implementer.
 
-**Joint hand-off confirmation.** S-0412 claim 11 agrees with claims 2, 6, 9 and 10 and the
+A destruction with neither an attacking object nor an attacking house gives no house a kill and
+no destruction score. A hit with an attacking house and no attacking object (the gas particles of
+a warhead-created gas system, for example) credits that house with the kill, as S-0302 claim 14
+says (claim 21); whenever S-0302 claim 14 credits the attacking house, that house also gains the
+victim's destruction score, with no not-scored or insignificant exclusion (claim 22); and by such
+a hit a not-scored victim gives its house a loss when it qualifies (claim 21). Claim 22's first
+row covers every destruction credited to an object, hits and the other credits of S-0311 claim 9
+alike.
+
+In a skirmish the original's options menu sends no surrender order: its one way to leave ends the
+game at once (S-0703 claim 13). So every run of the original that gives the human's surrender (V4,
+V8 part a, V11, V12 parts a and b, V14, V15 part a, V17) is given in a network game of the original,
+in the *network-game form* of the Measurement scenarios. Using such a run for a skirmish rests on
+the assumption that the order's effect does not depend on the kind of game, which no run can test
+and which is rated low (claim 11). So each rating of a skirmish rule that rests only on such a run
+is low (claims 5, 11, 15 to 18, 21 and 22). A rule that a skirmish run also shows keeps that run's
+rating: a defeat from another cause in a skirmish (V1, V2, V12 part c, V15 parts b and c, S-0601
+scenario MC10) shows claim 5's destruction at a defeat in its tick, and the permanent-control rows
+of claim 5. The form rests on S-0201 claims 13 and 15.
+
+**Agreements with other specs.** S-0412 claim 11 agrees with claims 2, 6, 9 and 10 and the
 bases-off edge case here: qualifying objects still prevent defeat; otherwise the first defeat
 leaving no hostile pair ends the game, and later same-tick defeats turn pending wins into
 losses only with `quirks.defeat_during_end_delay` on. Claims 8 and 16 retain the final-tick
 commitment boundary. S-0009 claims 28 and 45 agree too: cleanup removes the house itself, and a removed house
-receives no starting units and takes no defeat test. These are confirmations of existing rules,
-not additional behaviour. S-0011 claim 35 agrees with claim 18/V15 on owner-house raises
+receives no starting units and takes no defeat test. These agree with existing rules and add
+no behaviour. S-0011 claim 35 agrees with claim 18/V15 on owner-house raises
 within the update and their continuation after defeat. S-0202 claim 16 agrees with claims
 19 and 23 on score-request eligibility, house order and continuation of the scenario stream.
 S-0701's Import mapping already supplies the literal defeat, player-defeated and victory
 announcement bindings; its post-defeat muting agrees with claim 5 and V20 here.
 S-0601 claim 14 agrees with claim 5's permanent-control row: the original-owner query
 supplies the current owner, so the former owner's defeat does not hit the object, but the
-current owner's cleanup does. Joint hand-off must include that corrected row; S-0601
-scenario MC10 supplies both defeat variants.
+current owner's cleanup does (Changes for other specs, S-0601 claim 14).
 
 **Partial request answer.** Q-0193 is listed only for claim 17's defeat-count answer to
-part of question 3. Reopen the request at hand-off and record that limited answer.
+part of question 3; the request stays open for the rest (Changes for other specs).
 Its death effects, deletion, production lifetime, progress, completion, release, placement,
 refund and surviving-factory outcomes remain unresolved in S-0312 and S-0404.
 S-0404 claim 3 agrees with claim 15's off-map hit eligibility and creation-order precedence:
@@ -281,15 +301,17 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
      The computer-player alliance reaction is `unmeasured`: no scenario isolates its optional
      AI response, and it is outside our engine's rules. Reveal and radar are backed by the
      scenarios of S-0409 and S-0410 cited above
-   - Confidence: high for the destruction, the ignored defences, the first two table rows and
-     the permanent-control rows, and
-     medium for the missing attacker and attacking house (S-0302 claim 1 gives them, V4 part c
-     checks them through the result screen only); medium for the civilian-side cases
+   - Confidence: high for the destruction (V2, a skirmish defeat) and the permanent-control rows
+     (S-0601 scenario MC10, skirmish defeats by the short-game test); low for the ignored
+     defences, the no-escape marker, the first two table rows, the missing attacker and attacking
+     house and the civilian-side cases, which only V4 measures, in the network-game form
+     (Summary). S-0302 claim 1 lists the same markers for this hit but cites this claim for
+     them, so it adds no separate backing
 
 ### The end of the game
 
 6. **The end test.** The end test runs only right after a house is defeated (claim 5), never at
-   another time. It counts the contenders, the defeated house no longer among them and, in our
+   another time. It counts the contenders, the defeated house not among them and, in our
    engine, an observer's house left out (Terms, *observer's house set aside*). The game ends
    when **no hostile pair remains**: no two contenders exist of which one does not ally the other.
    This includes the case of at most one contender. So the game ends when every remaining
@@ -398,37 +420,53 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 
 11. **Surrender.** A surrender order (S-0213, table T1) marks its house to die when, at the moment
     the order is applied, the house is undefeated and has no result pending (State and ordering,
-    and orders are checked when they are applied, S-0213). In its next house update, which is in the tick after the
-    order (orders are applied after the houses' updates, S-0203 claim 7), every object of the house
-    is destroyed as in claim 5. The defeat test of that same house update (claim 1) already sees
-    the destruction, so the house is defeated in that tick when nothing counts any more. An object that stays in play for some ticks after its
-    death (an exploding building, a sinking vehicle, a crashing aircraft, S-0312) may keep the house
-    alive until it leaves play, and the counts of claim 4 may keep it alive for good, so the defeat
-    can come later or not at all. A
-    surrender order for a defeated house, or for a house whose result is pending, does nothing.
-    In the original only the local player can surrender, through the options menu, and not when
-    the local player is an observer, nor from the end of the game on: the original refuses the
-    options menu from then on (S-0201 claim 15), and in a skirmish no tick runs while it is open,
-    so a skirmish player cannot surrender in the end delay. The pending-result case can be given in
-    the original only in a network game, from a menu opened before the end (S-0201 scenario T8,
-    part H); in a skirmish it is a rule of our engine only. In our engine the order is legal at any
-    time for every player house, human or AI (S-0213); an observer's house is not a player house here, and a surrender order of it does
-    nothing (Edge cases, *Observers*). A surrender ends the game
-    only through the end test of claim 6, after the defeat it leads to: in our engine play goes on
-    while a hostile pair remains, and a person who surrendered keeps watching; in the original the
-    human participant's surrender ends the game at that defeat (claim 6, departure).
-    - Backing: `measurable` (scenario V8). The pending-result case is `measurable` in the
-      original only through S-0201 scenario T8, part H (a network game), which sees that the
-      surrender has no effect; whether the order is sent rather than dropped is `unmeasured` there
-      (S-0201 claim 15); in a skirmish it is a
-      rule of our engine and `unmeasured` against the original, since no skirmish input can give
-      it (S-0201 scenario T9 shows the menu staying closed in the end delay), and V8 part b checks
-      it in our engine only. The order for a
-      defeated house is `unmeasured` (such a house has no objects, so the order has no observable
-      effect); the observer's order is a rule of our engine and `unmeasured` (the original offers
-      an observer no surrender, so no run can give it)
-    - Confidence: high for the destruction in the next house update; medium for the timing of the
-      defeat when destroyed buildings stay in play; medium for the pending-result case
+    and orders are checked when they are applied, S-0213). In its next house update, which is in
+    the tick after the order (orders are applied after the houses' updates, S-0203 claim 7), every
+    object of the house is destroyed as in claim 5. The defeat test of that same house update
+    (claim 1) already sees the destruction, so the house is defeated in that tick when nothing
+    counts any more. An object that stays in play for some ticks after its death (an exploding
+    building, a sinking vehicle, a crashing aircraft, S-0312) may keep the house alive until it
+    leaves play, and the counts of claim 4 may keep it alive for good, so the defeat can come later
+    or not at all. A surrender order for a defeated house, or for a house whose result is pending,
+    does nothing. In the original's network game only the local player can surrender, through the
+    options menu, and not when the local player is an observer, nor from the end of the game on:
+    the original refuses the options menu from then on (S-0201 claim 15). In a skirmish the
+    original's options menu sends no surrender order: its one way to leave, aborting the mission,
+    is how a skirmish player gives up, and it ends the game at once (S-0703 claim 13 and S-0201
+    claim 1). No other skirmish input that gives the order is established here; the original's
+    network game gives it (S-0201 claim 15). This spec assumes that the original carries out the
+    surrender order in the same way in a network game and in a skirmish, nothing in carrying it out
+    depending on the kind of game. On that assumption what the order does is measured in a network
+    game of the original (Measurement scenarios, *network-game form*), and our engine gives the
+    order that effect in a skirmish. The pending-result case can be given in the original only in a
+    network game, from a menu opened before the end (S-0201 scenario T8, part H); in a skirmish it
+    is a rule of our engine only. In our engine the order is legal at any time for every player
+    house, human or AI (S-0213); an observer's house is not a player house here, and a surrender
+    order of it does nothing (Edge cases, *Observers*). A surrender ends the game only through the
+    end test of claim 6, after the defeat it leads to: in our engine play goes on while a hostile
+    pair remains, and a person who surrendered keeps watching; in the original no skirmish input
+    that gives the surrender order is established, and claim 6's departure ends a skirmish at the
+    human participant's defeat from any other cause.
+    - Backing: `measurable` (scenario V8). The pending-result case is `measurable` in the original
+      only through S-0201 scenario T8, part H (a network game), which sees that the surrender has
+      no effect; whether the order is sent rather than dropped is `unmeasured` there (S-0201 claim
+      15); in a skirmish it is a rule of our engine and `unmeasured` against the original, since no
+      skirmish input that gives it is established (S-0201 scenario T9 shows the menu staying closed
+      in the end delay), and V8 part b checks it in our engine only. The order for a defeated house
+      is `unmeasured` (such a house has no objects, so the order has no observable effect); the
+      observer's order is a rule of our engine and `unmeasured` (the original offers an observer no
+      surrender, so no run can give it). That the order's effect does not depend on the kind of
+      game is `unmeasured`: no run of the original's skirmish is known to give the order, and the
+      network-game runs measure the effect itself
+    - Confidence: low for the destruction in the next house update and for the timing of the
+      defeat when destroyed buildings stay in play, as rules of a skirmish: V8 measures them only
+      in the network-game form, and carrying them over rests on the low assumption below
+      (Summary); medium for the pending-result case as a rule of our engine, and low that the
+      original's order is sent rather than dropped (unmeasured); low that the effect does not
+      depend on the kind of game, an assumption that no run of the original can test
+      (unmeasured). The whole network-game form depends on S-0703 claim 13 (no surrender order
+      from a skirmish's options menu), which S-0703 rates medium until its MU11 parts e and h are
+      made
 
 12. **Making peace: the alliance order towards a house not yet allied.** An alliance order (S-0213,
     table T1) from house A naming house B, when A does not ally B yet, makes A ally B (one way: B's
@@ -459,8 +497,8 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
       targets; low for the three unmeasured refusals
 
 13. **Breaking an alliance: the alliance order towards an allied house.** An alliance order from
-    house A naming house B, when A already allies B, ends the alliance in both directions: A no
-    longer allies B and B no longer allies A. The order does nothing when A or B is passive. An
+    house A naming house B, when A already allies B, ends the alliance in both directions: afterwards A
+    does not ally B and B does not ally A. The order does nothing when A or B is passive. An
     alliance order that names A itself counts as naming an allied house and changes nothing. Unlike
     making peace (claim 12), breaking an alliance does not require A to be undefeated: a defeated
     house's order towards an allied house still ends the alliance in both directions. A message
@@ -504,9 +542,14 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
       items, V11 part d for the cancellation exception; S-0312 claim 1 for completion of each
       death's effects). Inclusion of newly created
       eligible objects is `unmeasured` here: no isolated defeat setup that creates such an object
-      without a nested trigger destruction or cancellation masking its later hit is identified
-    - Confidence: high for creation order, no off-map exclusion and no repeated hit solely due to
-      delayed removal; medium for changes to eligibility and cancellation skips during the sweep
+      without a nested trigger destruction or cancellation masking its later hit is identified.
+      That the destruction process itself takes no draw is `unmeasured`: in the network-game form
+      S-0202 claim 12's conditional draw, whose condition is not known, may fall in the
+      destruction tick, so V11 cannot tell an extra draw of the sweep from it
+    - Confidence: low for creation order, no off-map exclusion, no repeated hit solely due to
+      delayed removal, changes to eligibility and cancellation skips during the sweep, since V11
+      measures them only in the network-game form (Summary); medium that the sweep takes no draw
+      (unmeasured)
 
 16. **Consequences within a house update and at expiry (Q-0151).** Power totals and the ordinary
     radar recheck of a house update do not yet see that update's surrender or defeat destruction.
@@ -530,8 +573,10 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     extension is a design rule, not a claim that the original stores other houses' results.
     - Backing: `measurable` (V12); the common commitment for non-local houses and a game without
       a person-played house is `unmeasured`, since the original has no such result state
-    - Confidence: high for the relative places of destruction, power, radar and tech-tree work,
-      medium for the boundary result, pending V12's discriminating run
+    - Confidence: low for the relative places of destruction, power, radar and tech-tree work,
+      since V12 parts a and b measure them only in the network-game form (Summary); medium for
+      the boundary result, pending V12's discriminating run (part c, a skirmish run with a timed
+      map action)
 
 17. **Defeat counts of a killed production item (Q-0193, count part of question 3).**
     For an item that has never entered the map, reducing its health to 0 does not by itself
@@ -557,8 +602,9 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
       The base-unit vehicle's isolated contribution remains `unmeasured` for the factory
       masking reason in claim 2. The absence of on-map contributions for never-placed units
       follows claim 4 and is checked with V14's infantry control
-    - Confidence: high for the health-independent count and deletion rule; medium for arranging
-      a retained killed item in the proposed setup
+    - Confidence: low for the health-independent count and deletion rule, since V14 measures
+      it only in the network-game form (Summary); medium for arranging a retained killed item
+      in the proposed setup
 
 18. **Owner-house tag raises within the house update (Q-0267).** In ticks whose integer
     tick number is a multiple of 8, including tick 0, the assigned-tag raise of S-0011 claim 35
@@ -585,8 +631,10 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     result cutoff of claim 16 is unchanged by a later tag action.
     - Backing: `measurable` (V15, with V13 for cleanup absence and S-0011 T20 variant C
       for variable effects in house order)
-    - Confidence: high for the relative places and continued raises after defeat; medium for
-      arranging the same-update tech-tree probe
+    - Confidence: high for what V15 parts b and c measure in a skirmish; low for the
+      surrender's place relative to the assigned-tag raise and the raises after that defeat, which
+      part a measures only in the network-game form (Summary); medium for arranging the
+      same-update tech-tree probe
 
 ### Result-screen statistics (Q-0285)
 
@@ -623,11 +671,22 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
 
 21. **Kills and losses.** Kills sum credited destructions of infantry, vehicles, aircraft and
     buildings of every victim house, including allies, the same house and non-player houses.
-    A not-scored victim contributes neither a kill nor a loss. An insignificant building
-    contributes neither; an insignificant infantry unit, vehicle or aircraft still contributes.
-    A destruction without an attacking object gives no house a kill, but still gives the victim's
-    house a loss when it qualifies. This includes defeat and surrender hits. Passenger deaths
-    are counted individually when their death rules credit them to an attacker (S-0312).
+    A not-scored victim contributes no kill. It contributes no loss either, except by a hit whose
+    kill S-0302 claim 14 credits to the attacking house: there it still gives the victim's house a
+    loss when it qualifies. An insignificant building contributes neither, whether or not it is
+    also not scored, so that exception gives it no loss; an insignificant
+    infantry unit, vehicle or aircraft still contributes. A destruction with neither an
+    attacking object nor an attacking house gives no house a kill (S-0302 claim 14), but still
+    gives the victim's house a loss when it qualifies. This includes defeat and surrender hits.
+    A destruction by a hit that has an attacking house and no attacking object is credited to
+    that house (S-0302 claim 14), so it counts among that house's kills; the gas particles of a
+    warhead-created gas system deal such hits (S-0302 claim 1, S-0613 claims 13 and 14). A hit
+    whose attacking house differs from a present attacking object's owner is also credited to the
+    attacking house (S-0302 claim 14): it counts among that house's kills, and the attacking
+    object's owner gains no kill for it. A destruction that is not a hit counts among the kills of
+    the house of the object that S-0311 claim 9 credits with it.
+    Passenger deaths are counted individually when their death rules credit them to an attacker
+    (S-0312).
     Selling, cancellation, map exit, boarding, deployment conversion and consumption by a
     recycling building (S-0603 claim 11) are not destructions for these totals merely because
     an object leaves the map or ceases to exist.
@@ -644,24 +703,72 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     **Quirk `quirks.ownership_gain_counts_as_kill`**, default original: ownership gains add
     kills. Off: only qualifying destructions add kills. This switch does not change ownership
     gain's score contribution in claim 22.
-    - Backing: `measurable` (V17) for destructions, ownership gains, flags and passenger totals.
-      The initial-country-index exception is `unmeasured`: no skirmish input creating a
-      building for a country outside the registered list is identified
-    - Confidence: high for the event counters and flags; medium for isolating the passenger
-      and ownership-return cases; low for the exceptional initial-country setup
+    - Backing:
+      - `measurable` (V17) for destructions, ownership gains, flags and passenger totals.
+      - The kill of a hit with an attacking house and no attacking object: `measurable` (V17
+        part s, which records the attacking house's kill count; also S-0317 scenario V5 part f
+        in this tally and S-0613 scenario G10 for gas particles). S-0302 claim 14's own backing
+        for its storm-bolt case is rated low.
+      - The kill of a destruction that is not a hit: `measurable` for an erasure (V17 part t,
+        which records the kill count); `unmeasured` for the other credits of S-0311 claim 9 (an
+        assault's occupants, absorbed passengers, a charge planter at expiry), for the reasons
+        S-0311 claim 9 gives: no validated fixture for a locally ordered assaulter with hostile
+        occupants, and no setup that isolates those passenger and planter cases.
+      - An insignificant building that is also not scored giving no loss by such a hit:
+        `measurable` (V17 part s, the not-scored building run).
+      - The loss of a not-scored victim by such a hit is `measurable` (V17 part s, the not-scored
+        run, which records the victim house's loss count).
+      - A not-scored victim of a destruction that is not a hit giving no loss: `measurable` for an
+        erasure (V17 part t, the not-scored repeat, which records the victim house's loss count),
+        and `unmeasured` for the other credits of S-0311 claim 9 (an assault's occupants, absorbed
+        passengers, a charge planter at expiry), for the reasons S-0311 claim 9 gives.
+      - The kill and the not-scored victim's loss by a hit whose attacking house differs from a
+        present attacking object's owner are `unmeasured`: no known source delivers such a hit
+        (S-0302 claim 14).
+      - The initial-country-index exception is `unmeasured`: no skirmish input creating a
+        building for a country outside the registered list is identified.
+    - Confidence:
+      - High for the event counters and flags, except low for the kills and losses that V17
+        reads after the no-attacker surrender, which rests on the network-game form (Summary).
+      - Medium for isolating the passenger and ownership-return cases.
+      - Medium for the kill of a hit with an attacking house and no attacking object, until V17
+        part s runs (S-0317 scenario V5 part f records it too).
+      - Medium for the loss of a not-scored victim by such a hit, and for an insignificant building
+        that is also not scored giving none, until V17 part s runs; V17 part s tells this rule from
+        the object-credit rule, under which that victim would give no loss.
+      - Medium for the kill of an erasure, and for a not-scored victim of an erasure giving no
+        loss, until V17 part t runs. For the other non-hit credits, and for a not-scored victim
+        of one giving no loss, no higher than S-0311 claim 9 rates the credit itself: medium for
+        absorbed passengers and an assault's occupants, low for a charge planter at expiry.
+      - Low for the kill and that loss by a hit whose attacking house differs from a present
+        attacking object's owner, as S-0302 claim 14 rates that case.
+      - Low for a storm bolt's hit, as S-0302 claim 14 rates its credit to its owner's house.
+      - Low for the exceptional initial-country setup.
+      - Low for the counts after a surrender, which V17 measures only in the network-game form
+        (Summary).
 
 22. **Running score.** Each house starts with 0 score points. The score is not a function of
     its displayed kill, loss or built totals. Its contributions are:
 
     | Event | Contribution to the house's running score |
     |---|---|
-    | A qualifying victim is destroyed by an attacking object | To the attacker's current house: the victim type's current price for the victim's house, multiplied by 1 for rookie, 2 for veteran or 3 for elite victims; 0 instead when the attacker's house allies the victim's house |
+    | A qualifying victim's destruction is credited to an object: by a hit whose kill S-0302 claim 14 credits to the attacking object, or by any other destruction that S-0311 claim 9 credits to an object | To the credited object's current house: the victim type's current price for the victim's house, multiplied by 1 for rookie, 2 for veteran or 3 for elite victims; 0 instead when the credited object's house allies the victim's house |
+    | Any victim is destroyed by a hit with an attacking house and no attacking object, whose kill S-0302 claim 14 credits to that house | To that attacking house: the same price and rank multiplier; 0 instead when the attacking house allies the victim's house; no not-scored or insignificant exclusion |
+    | Any victim is destroyed by a hit whose attacking house differs from its attacking object's owner, whose kill S-0302 claim 14 credits to that house | As the row above |
     | An object changes owner to a different house | To the gaining house: the object's type's current price for the old owner, with no allied or rank multiplier and no not-scored or insignificant exclusion |
     | A resource amount is credited by unloading or conversion to credits | To the receiving house: 5 score points per credited resource unit, with the rounding below; purifier bonus amounts count too |
 
-    The destruction row excludes not-scored victims. An insignificant building can still
-    contribute destruction score even though claim 21 excludes its kill. A destruction without
-    an attacking object gives no destruction score. The rank is the victim's rank, not the
+    The first destruction row excludes not-scored victims. It covers every destruction credited to
+    an object, as S-0311 claim 7 gives it, including those that are not hits (S-0311 claim 9).
+    An insignificant building can still
+    contribute destruction score even though claim 21 excludes its kill. The two attacking-house
+    rows exclude nothing: a not-scored victim and an insignificant building both add their score
+    to the attacking house, although claim 21 gives that house no kill for either. S-0311 claim 7
+    gives the kill value of a destruction credited to an object and leaves the score total to
+    this spec; it does not cover a destruction credited to a house alone, so its not-scored
+    exclusion does not reach these rows (Changes for other specs). A destruction with neither
+    an attacking object nor an attacking house gives no destruction score. Alliance is judged
+    as the scoring house sees its alliances. The rank is the victim's rank, not the
     attacker's. Current price is the owner-adjusted type price of S-0404 claim 2, evaluated
     at this event; it is not the amount previously paid or the type's separate point-value
     field (Import mapping). Losing objects, spending money, starting credits, refunds,
@@ -678,11 +785,28 @@ the *base-unit list*), S-0412's terms *alliance*, *allied*, *mutually allied*, *
     the building-loss conversion also adds 5 times the removed amount truncated to an
     integer, per resource type; this storage-only path is not ordinary skirmish harvesting.
     Other additions and integer multipliers wrap as signed 32-bit integers (S-0205).
-    - Backing: `measurable` (V17 and V18) for destruction, ownership gains and normal
-      resource income; storage-only conversions are `unmeasured`, since no skirmish setup
-      filling that storage is known (S-0312 claim 22)
-    - Confidence: high for the ordinary event contributions and rank/alliance conditions,
-      medium for the storage-only path
+    - Backing: `measurable` (V17 and V18) for destruction, ownership gains and normal resource
+      income; `measurable` (V17 part t, which runs an erasure only) for an erasure's destruction
+      score; `unmeasured` for the other destructions credited to an object that are not hits (an
+      assault's occupants, absorbed passengers, a charge planter at expiry), for the reasons S-0311
+      claim 9 gives; `measurable` (V17 part s, with gas-particle hits) for the attacking-house row
+      with no attacking object and its conditions; `measurable` (V17's no-attacker surrender, in
+      the network-game form) for no destruction score from a destruction with neither an attacking
+      object nor an attacking house. Storage-only conversions are `unmeasured`, since no skirmish
+      setup filling that storage is known (S-0312 claim 22). The row for an attacking house that
+      differs from a present attacking object's owner is `unmeasured`: no known source delivers
+      such a hit (S-0302 claim 14), so that row has no scenario.
+    - Confidence: high for the ordinary event contributions by hits and rank/alliance conditions.
+      Medium for an erasure's destruction score, as S-0514 claim 13 rates its bookkeeping, until
+      V17 part t runs; for the other non-hit credits no higher than S-0311 claim 9 rates the credit
+      itself (medium for absorbed passengers and an assault's occupants, low for a charge planter
+      at expiry). Medium for the attacking-house row with no attacking object and its conditions,
+      until V17 part s runs, which tells them from the object-credit row's exclusions; low for a
+      storm bolt's hit, as S-0302 claim 14 rates its credit to its owner's house. Medium for the
+      storage-only path. Low for the row of an attacking house that differs from a present
+      attacking object's owner. Low for no destruction score from a destruction with
+      neither an attacking object nor an attacking house, which V17 reads only after its
+      no-attacker surrender in the network-game form (Summary)
 
 23. **Displayed score and duration.** Let *b* = max(*p*, 0), in integer score points, for the
     running score at the screen's cutoff. A defeated house displays *b*. An undefeated house
@@ -737,7 +861,7 @@ elapsed time before the host clock wraps; they use integer arithmetic with the i
 flooring, no floating-point operation. Host-clock wrap during an exceptionally long game
 is not established (Open questions).
 
-**End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping), let *x* be the product *d* × 900, rounded toward zero to double precision according to S-0205 and `quirks.chop_rounding`. The integer delay *D*, in ticks, is *x* truncated toward zero to a whole number. The factor 900 is the glossary's conversion from game minutes to ticks. The conversion to a whole number follows S-0205, claim 7: a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* no longer follows the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27 with it off.
+**End delay** (claim 8). With *d* the end-delay field in game minutes (a double, Import mapping), let *x* be the product *d* × 900, rounded toward zero to double precision according to S-0205 and `quirks.chop_rounding`. The integer delay *D*, in ticks, is *x* truncated toward zero to a whole number. The factor 900 is the glossary's conversion from game minutes to ticks. The conversion to a whole number follows S-0205, claim 7: a product of 2³¹ or more wraps (from a field of about 2.39 million game minutes up, *D* stops following the field, and whenever the wrapped *D* is 0 or negative the delay is the shortest one of the next formula), and a product of 2⁶³ or more gives 0. Example: at the absent-key default *d* = 0.03 the exact product of the stored double and 900 lies just below 27, so *D* = 26 with the switch on (the original) and 27 with it off.
 
 **When the game is over** (claims 8 and 9). With *t* the tick number of the end of the game (or, under
 claim 9, of the later defeat), the game is over in tick *t* + max(*D*, 1): the delay is counted from
@@ -877,8 +1001,8 @@ included), is empty (claim 6, departure); our engine does not.
   goes on and keeps the house alive (variant g of V1).
 - **`quirks.defeat_cancellation_skip`** (claim 15). Original: immediate deletions caused by one
   destruction hit can skip later objects, with the exact count in claim 15. Off: deletion costs
-  no remaining eligible object its destruction hit. Backing: `measurable` (V11 part d).
-  Confidence: medium.
+  no remaining eligible object its destruction hit. Backing: `measurable` (V11 part d, in the
+  network-game form). Confidence: low for a skirmish, as claim 15 rates it (Summary).
 - **Mind-controlled objects of a defeated house** (claim 5) pass to the first house of the
   civilian side when their control ends. No switch.
 
@@ -931,6 +1055,41 @@ computer players, at game-speed index 2 and 800 × 600, with no engine add-on an
 alliance or attack changes the events the scenario observes, and is then repeated. Every scenario
 in which the human gives an alliance order (V5 part c, V9) uses a test rules file that sets the
 allies-allowed and ally-change-allowed flags on (claim 14).
+
+*Network-game form.* A scenario that gives the human's surrender in the original is run as a
+network game of the original, since no input of the original's skirmish sends the surrender order
+(claim 11). Two machines on one local network, as in S-0201 scenario T8, each run the stock game
+and the recorder; the scenario's human is machine 1's player, and the scenario's houses, map, game
+speed (set in the lobby) and named test files are otherwise as stated. Machine 2's player is an
+added human participant, far from the observed area, in one lobby team with every computer player
+of the scenario, all of which are the human's enemies wherever this form is used. S-0201
+scenario T8 shows a lobby with two human participants and one computer player only; if the lobby
+offers no team that holds machine 2's player and every computer player of a scenario, that
+scenario's run is not made in this form, and each claim part that rests only on it is
+`unmeasured`. Machine 2's
+house is a contender created for a human participant and remains, so claim 6's departure does not
+end the game; the human's defeat leaves no hostile pair, and the game ends at it by claim 6's
+ordinary test (no hostile pair remains), assuming the original's network game ends as a skirmish
+does. How the original ends a network game is left to the future multiplayer spec (S-0201 claims 13
+and 15), so a rating that rests on a run in this form is medium at most for the original's network
+game, and low for a skirmish (Summary). Machine 2's player gives no
+orders except the one below; a run in which machine 2's house is defeated, attacks or is attacked
+is void. Machine 1's player surrenders through the options menu's choice that surrenders and keeps
+the player watching (S-0201 claim 15), by scripted input where a tick is aimed at. The order is
+carried out in tick *c* + *W*, where *c* is the tick in which the choice is made and *W* is the
+order delay (S-0201 Terms and claim 17); wherever a scenario names the tick of the surrender, or the tick in
+which it is applied, it means that tick. That tick is recorded, not computed: it is the one tick
+at whose end machine 1's read-only recorder records the human's house as marked to die (claim 11
+and State and ordering), so no reading is needed after the surrender. *W* serves only to aim the
+choice: each run reads it once, before the surrender, from a move order that machine 2's scripted
+input gives one of its own units (the tick in which the unit's destination changes, less the tick
+in which the order is given), and a run whose surrender is carried out in a tick other than the
+one a scenario aims at is void. S-0201 claim 17 rates low that a player's orders all share one
+delay; the form does not depend on that, since the tick is recorded and a run that misses the
+aimed tick is void. The surrender comes at least 600 s of real time after the map is
+visible, as in S-0201 scenario T8, so that timing orders have been carried out. The draws that a
+network game adds to the scenario random stream in every tick (S-0202 claim 12) are not part of
+any count of draws below.
 
 Ticks are read from the log of the recorder (glossary, *measurement setup*), which stamps each
 entry with the tick number; the defeat message, or the message of a test map trigger that fires on
@@ -1041,13 +1200,14 @@ defeated; the game ends with a win.
 
 **V4: what defeat destroys.** Setup: the human owns a test transport vehicle with infantry
 inside, a garrisoned building, and a mind-controlling unit that holds one of the computer's
-vehicles. The human surrenders (claim 11 uses the same destruction as claim 5).
+vehicles. The human surrenders, in the network-game form (claim 11 uses the same destruction as
+claim 5).
 - *Part a.* Observable: which objects die, whether passengers or occupants come out, and what
   happens to the controlled vehicle. Expected: every human object dies in one tick; no passenger
   or occupant comes out alive; the controlled vehicle is not hit (it goes back to the computer
   when its controller dies).
 - *Part b.* A computer's mind-controlling unit holds one of the human's vehicles when the human
-  surrenders. Run 1 with a test rules file that puts the neutral and special countries on the
+  surrenders in the network-game form. Run 1 with a test rules file that puts the neutral and special countries on the
   civilian side; run 2 with one that gives them a side other than the civilian side. Expected: run 1, the vehicle is not hit, and when
   the controlling unit is then destroyed it passes to the first house of the civilian side in house
   order; run 2, the vehicle is destroyed with the human's objects.
@@ -1056,10 +1216,10 @@ vehicles. The human surrenders (claim 11 uses the same destruction as claim 5).
   multiplier of every warhead to nothing, so that no ordinary hit could hurt them. The vehicle's
   type is one that leaves a crew when an ordinary hit destroys it (checked first in a run that
   gives the vehicle ordinary damage under stock multipliers). Observable: whether the three objects die, whether a crew comes out of the
-  vehicle, and the kill counts of every house on the result screen. Expected: all three die
+  vehicle, and the kill counts of every house on machine 1's result screen. Expected: all three die
   although no ordinary hit could hurt them (damage that ignores defences); no crew comes out of
-  the vehicle (the no-escape marker); no house's kill count rises through the defeat (no attacker,
-  no attacking house). The kill counts are the only observable of the last two; if the result
+  the vehicle (the no-escape marker); no house's kill count rises through the defeat, machine 2's
+  house among them (no attacker, no attacking house). The kill counts are the only observable of the last two; if the result
   screen does not list them, that item is `unmeasured`.
 
 **V5: the end test.**
@@ -1105,7 +1265,8 @@ the human, with both defeat messages in the same tick. Capture audio as well: ea
 message names the corresponding house and has a defeat announcement. A missing message or
 announcement for either non-observer house falsifies that presentation claim.
 
-**V8: surrender.** Setup: the human surrenders from the options menu at tick *t*. The human has no
+**V8: surrender.** Setup: the human surrenders in the network-game form, the order carried out in
+tick *t*. The human has no
 item in production, and no not-scored vehicle or nominal survivor of the human has been on the map
 in the game. Observable: the tick at which the human's objects die and the defeat tick. Expected:
 objects die in tick *t* + 1, defeat in the same tick, or later only when a destroyed object stays
@@ -1156,12 +1317,19 @@ case's description of the original then concerns no game that can be played.
 map overrides defining two vehicle and two building types with distinct debris draw ranges, with
 other random death effects disabled. Keep an enemy bystander away. Create the human's objects
 in a recorded interleaving of kinds through production and placement, at separated cells so
-deaths cannot damage one another. Procedure: surrender. Tool and observable: read-only health,
+deaths cannot damage one another. Procedure: surrender in the network-game form. Before the
+surrender, at least 100 ticks with no death are recorded, so that the network game's own draws of
+each tick (S-0202 claim 12) are known: its two raw values in every tick, and how often its
+conditional ranged draw R(0, 2) comes. That record cannot fix whether the conditional draw falls
+in the tick of the destruction, so a run with a draw there that is neither one of the two raw
+values nor a draw of the sweep is inconclusive, not falsifying, and is repeated with another
+seed. Tool and observable: read-only health,
 death-message and scenario-stream recorder, plus scripted input. Repeat for three recorded seeds
-with discriminating draws. Expected: draw allocation matches creation order across kinds and
-there is no extra draw from the sweep. Any kind-grouped or map-entry allocation falsifies this.
+with discriminating draws. Expected: draw allocation matches creation order across kinds. Any
+kind-grouped or map-entry allocation falsifies this. A draw left unexplained is inconclusive, so
+this run does not test claim 15's absence of a draw from the sweep (`unmeasured` there).
 - *Part b, re-entry and passengers.* Produce infantry P before transport T, then board P into T.
-  Make a later infantry Q. Record P's health during surrender. Expected: P receives its hit while
+  Make a later infantry Q. Record P's health during the surrender (network-game form). Expected: P receives its hit while
   off the map before T's hit, not only at T's death; boarding does not put P after Q. Reverse
   creation order in a control: T's passenger-death rules may kill P before P's place, without
   a second death or extra set of draws. Repeat with an absorbing building instead of T.
@@ -1170,8 +1338,8 @@ there is no extra draw from the sweep. Any kind-grouped or map-entry allocation 
   falsifies the rule. The recorder must sample within the destruction interval: an end-of-tick
   disappearance alone cannot distinguish these cases.
 - *Part c, production.* Start and hold infantry item P. Build a replacement infantry factory
-  after P's start, then sell the original factory without cancelling P. Surrender while P is
-  still held. Expected: P's health receives the killing hit before the replacement factory dies.
+  after P's start, then sell the original factory without cancelling P. Surrender, in the
+  network-game form, while P is still held. Expected: P's health receives the killing hit before the replacement factory dies.
   Repeat with a finished building awaiting placement and a replacement factory created after
   its production start. Unchanged item health until factory-loss cancellation falsifies off-map
   inclusion. Mere disappearance confirms nothing: cancellation would also delete the object.
@@ -1179,7 +1347,7 @@ there is no extra draw from the sweep. Any kind-grouped or map-entry allocation 
 - *Part d, multiple earlier cancellations.* Hold one ordinary-building item and one defence
   item. Deploy a replacement factory of buildings after both items were started, then sell
   the old factory without cancelling either. Create two test infantry units after the new
-  factory. Surrender and record immediate item deletions, the infantry health and creation
+  factory. Surrender in the network-game form and record immediate item deletions, the infantry health and creation
   order. Expected if the factory's death immediately deletes both earlier items: the first
   following object in combined creation order is skipped and can survive, while the second
   eligible one is hit. Control with only one earlier item: neither is skipped. If another
@@ -1193,13 +1361,14 @@ health, defeat messages and order destinations, with scripted input. Repeat each
 variant once; void unintended computer attacks or defeats.
 - *Parts a and b.* Normal game. Human owns a power plant, radar building, production buildings
   and a not-scored vehicle that entered the map; its stale count keeps the house undefeated
-  after surrender. Use no nominal survivors. Wait for pending rechecks and surrender in tick
-  n − 1. Expected in n: objects receive hits, no defeat, power totals and ordinary radar still
+  after surrender. Use no nominal survivors. Wait for pending rechecks and surrender in the
+  network-game form, the order carried out in tick n − 1. Expected in n: objects receive hits, no defeat, power totals and ordinary radar still
   show pre-destruction values, but the due tech-tree recheck removes offers whose factories or
   prerequisites actually left the map. In n + 1 power and radar reflect the losses. Record
   actual removal so lingering buildings cannot masquerade as stale totals. Same-update power
   or ordinary radar changes, or a due tech-tree change postponed to n + 1, falsify the ordering.
-  Control with an ordinary vehicle instead: at defeat radar is forced on in n, not postponed.
+  Control with an ordinary vehicle instead, the surrender likewise in the network-game form:
+  at defeat radar is forced on in n, not postponed.
 - *Part c, boundary.* Human and A allied against B. Use V6's test 90-tick end delay. Defeat B
   at t. A timed map action removes the human's last counted object at e = t + 90 before houses
   update; A survives. Expected: defeat message at e, a win on the result screen, no restart,
@@ -1210,8 +1379,8 @@ variant once; void unintended computer attacks or defeats.
   execution. These tests distinguish commitment from stopping simulation at the tick's start.
 
 **V13: cleanup-removed houses (claim 1).** Use S-0009 M16's setup with no computer slots, the
-neutral country non-passive and the special country passive. Confirm the neutral house itself
-was removed, not merely emptied. Tool and observable: read-only house-state recorder and defeat
+neutral country non-passive and the special country passive. Check that the neutral house
+itself was removed, not merely emptied. Tool and observable: read-only house-state recorder and defeat
 messages through tick 1. Expected: no update, defeat, result or contender/enemy membership for
 that removed house. A test counting it or a defeat message naming it falsifies this. Repeat with
 cleanup prevented as in S-0009 M16 part G: only a surviving non-passive house can be a contender.
@@ -1224,7 +1393,7 @@ normal game, with a remote enemy bystander and V11 part c's named test map and p
 ordering. Start and hold a counted building item P before creating the replacement factory
 of buildings, then sell the original factory without cancelling P. Tool: read-only recorder
 of P's health and continued existence, the house's counted-building count and defeat state,
-plus scripted input. Procedure: surrender and sample during the destruction interval, between
+plus scripted input. Procedure: surrender in the network-game form and sample during the destruction interval, between
 P's hit and the later replacement factory loss, then through P's cancellation. Expected:
 while P still exists at 0 health, its contribution to *B* is unchanged; deletion removes that
 contribution. Distinguish the factory's own contribution and deletion from P's. An end-of-tick
@@ -1246,14 +1415,18 @@ scripted input, screen capture and a read-only recorder of type counts, trigger 
 defeat state, power totals, radar, build offers and issued cancellation/release orders.
 Run each deterministic part once; void unplanned bystander actions.
 - *Part a, surrender and defeat.* Give the human only an on-map infantry unit, with no crew,
-  survivors, production or stale count contributions. Apply surrender in tick 7. A human-owned
+  survivors, production or stale count contributions. Surrender in the network-game form, the
+  order carried out in a tick 8*m* − 1 for a whole number *m* (machine 1's choice made in tick
+  8*m* − 1 − *W*, with *W* from the run's reading); a run whose order is carried out in another
+  tick is void. A human-owned
   tag tests absence of that infantry type and sets a variable, which a later house's tag tests.
-  Expected: no such firing before destruction; in tick 8 the owner-house raise fires after
+  Expected: no such firing before destruction; in tick 8*m* the owner-house raise fires after
   destruction and after the recorded defeat, and the later house sees the set variable in
-  its same-tick raise. Use a named test end-delay field long enough to include tick 16.
-  In a separate counter run, a repeating any-event tag owned by the human has its additional
-  owner-house firing in tick 8 and again in tick 16, despite defeat. Missing either additional
-  firing, or seeing the infantry's pre-destruction count at the tick-8 house raise, falsifies
+  its same-tick raise. Use a named test end-delay field long enough to include tick 8*m* + 8.
+  In a separate counter run, which also surrenders in this form, a repeating any-event tag owned
+  by the human has its additional owner-house firing in tick 8*m* and again in tick 8*m* + 8,
+  despite defeat. Missing either additional
+  firing, or seeing the infantry's pre-destruction count at the tick-8*m* house raise, falsifies
   the rule. Record phase samples within the update: an end-of-tick variable alone does not
   locate the defeat test relative to the raise.
 - *Part b, tag-caused loss.* Keep the human alive with a remote ordinary infantry unit.
@@ -1298,9 +1471,10 @@ enemy alive. Tool: scripted input, screen capture and read-only score/count reco
 Record baseline and delta for destruction of one infantry, vehicle, aircraft and building,
 then for capture and a mind-control/return pair. Expected: each eligible destruction adds
 1 kill to the attacking object's current house and 1 loss to the victim's current house.
-No-attacker surrender gives losses only; capture/control/return each gives the gaining
-house 1 kill and the old owner no loss. Test a not-scored victim (neither death counter)
-and insignificant victims (building excluded, other kinds included), then an insignificant
+No-attacker surrender gives losses only (the surrender given in the network-game form; machine
+2's house gains no kill); capture/control/return each gives the gaining
+house 1 kill and the old owner no loss. Test a not-scored victim of an attacking object
+(neither death counter) and insignificant victims (building excluded, other kinds included), then an insignificant
 building capture (gain kill included). Compare normal sale, boarding, deploy/pack-up and
 consumption by a recycling building controls: no death counter merely from removal. For passenger deaths compare S-0312's
 carrier outcomes with the individual passenger death records, not carrier disappearance alone.
@@ -1308,12 +1482,68 @@ carrier outcomes with the individual passenger death records, not carrier disapp
 For score, use an invented type price whose owner-adjusted value is recorded before each
 event, and rookie/veteran/elite victims. Expected destruction deltas: 1, 2 and 3 times that
 price respectively, independent of attacker's rank; an allied kill gives 0 score but still
-a kill. Not-scored destruction gives 0, insignificant-building destruction gives its price.
+a kill. Not-scored destruction by an attacking object gives 0 (part s for an attacking house),
+insignificant-building destruction gives its price.
 Ownership gain gives the old owner's current price regardless of rank, alliance or those
-flags. Repeat with a different separate point-value field: no score difference. Sample the
-running score before the winner bonus; comparing final scores alone is insufficient. Any
-different delta falsifies the applicable row. Run each deterministic variant once. Void
-unplanned attacks, ownership gains, income or passenger escape masking the named death.
+flags. Repeat with a different separate point-value field: no score difference.
+
+*Part s (attacking-house score).* The hits are the gas particles of a warhead-created gas system,
+which carry the detonation's house as attacking house and no attacking object (S-0302 claim 1,
+S-0613 claims 13 and 14). A named test rules file gives a weapon of a human-house unit a warhead
+that creates a gas system whose particles damage, as S-0613 scenario G10's owned variant does; the
+particles' warhead is given a nonzero versus value for the test vehicles' and the test buildings'
+armour, so that they damage both. The unit fires once at the first of a group of rookie vehicles of
+a hostile computer house standing together, one vehicle per cell, each of strength 1, whose
+owner-adjusted price is recorded, with no other object of the human house near them. The shot's own
+hit destroys its target, which the attacking-object row credits; the cloud's particles destroy the
+others. The recorder notes for each victim whether it was destroyed by the shot's hit (on the
+shot's arrival tick, with an attacking object) or by a particle's hit (with the attacking house and
+no attacking object); a victim destroyed by the shot's hit, other than its target, makes the run
+void. As in the other parts, every death effect and survivor is disabled, and a remote object of
+the computer house keeps that house undefeated. Record per tick the human house's running score and
+kill count and the computer house's loss count, and each victim's destruction tick. Expected: for
+each vehicle the particles destroy, the score rises by the price on its destruction tick, the kill
+count by one and the computer house's loss count by one. Repeat this run twice with the test map
+placing the victims at veteran and then at elite rank, recorded before the shot: the score rises
+by 2 and then 3 times the price for each vehicle the particles destroy. Repeat with victims of a
+type marked not-scored: the score still rises by the price for each one the particles destroy, the kill count does not change, and the loss count still rises
+by one for each (the shot's own target adds no score, kill or loss). Repeat with one-cell
+insignificant buildings of the hostile computer house, each of strength 1 and with its
+owner-adjusted price recorded, placed in the cells next to the shot's target, so that the cloud's
+particles, which hit every object listed in the ground layer of their cell (S-0613 claim 13), a
+building included in each of its foundation cells (S-0209 claim 13), reach them: the score rises by
+their price for each one the particles destroy, while the kill and loss counts do not change. A run
+in which the particles destroy no building is inconclusive for this part and is repeated, up to
+five attempts with the buildings moved closer to the target's cell; if none destroys a building,
+the building part is reported unreached. Repeat the building run once more with the insignificant
+building type also marked not-scored: the score still rises by the price, and the kill and loss
+counts still do not change (a loss there falsifies claim 21's insignificant-building rule).
+Repeat with victims of a computer house allied with the human house, the shot given as a forced
+attack; the victims are rookie vehicles of the first run's type, neither not-scored nor
+insignificant: no score change from the particle destructions,
+while the human house's kill count and the allied house's loss count each rise by one for each
+victim the particles destroy (claim 21 counts kills of allies). The shot's own target, an ally
+destroyed by the shot's hit, adds one kill and one loss of its own and no score; it is counted
+apart from the particle victims. A vehicle run in which the
+particles destroy no vehicle is inconclusive and is repeated, up to five attempts with the vehicles
+closer together; if none destroys one, that run is reported unreached. The score not rising in the
+first run falsifies the attacking-house row; a rise for allied victims, or no rise for not-scored
+or insignificant victims, falsifies its conditions; no loss for a not-scored victim falsifies claim
+21's loss exception. Where the cloud reaches varies, so each run is checked against its own
+destroyed count. Sample the running score before the winner bonus; comparing final scores alone is
+insufficient. Any different delta falsifies the applicable row. Run each deterministic variant
+once. Void unplanned attacks, ownership gains, income or passenger escape masking the named death.
+
+*Part t (score of a destruction credited to an object that is not a hit).* As the score runs
+above, but a trainable rookie unit of the human house with an erasing weapon (S-0514) erases a
+rookie test vehicle of a hostile computer house, whose owner-adjusted price is recorded; the
+erasure is credited to its leading attacker (S-0311 claim 9). Record the human house's running
+score, kill count and the computer house's loss count per tick. Expected: on the tick the erasure
+completes, the score rises by the price, the kill count by one and the loss count by one. Repeat
+with a victim of a not-scored type: no score, kill or loss change (claim 21). No score rise in the first run
+falsifies claim 22's first row for credits that are not hits; a rise for the not-scored victim
+falsifies its exclusion; a loss for the not-scored victim falsifies claim 21's no-loss rule
+for it.
 
 **V18: resource score and winner bonus (claims 22–23).** Common setup, one refinery and
 harvester, a remote enemy, no combat or other income while recording each unload. Named
@@ -1348,7 +1578,7 @@ second. Compare values allowing only clock-boundary sampling uncertainty, not a 
 scale change. A tick-derived total, a counted menu pause or frozen stretch, an uncounted focus
 loss or a different scale falsifies the rule.
 The 99-hour cap is checked by a read-only trace of a naturally long run if practicable.
-Short runs do not confirm that cap. No clock is altered by the recorder.
+Short runs do not establish that cap. No clock is altered by the recorder.
 
 **V20: announcements after local defeat (claim 5).** Common setup with two hostile
 bystanders and named test map end-delay long enough for a later enemy superweapon launch
@@ -1364,8 +1594,40 @@ our presentation requirement and cannot itself be measured in the original.
 
 ## Changes for other specs
 
-None for these confirmations. S-0407 claim 10 already excludes not-scored released types
-but includes types marked only insignificant, agreeing with claim 20's built total.
+S-0407 claim 10 needs no change: it already excludes not-scored released types but includes
+types marked only insignificant, agreeing with claim 20's built total.
+
+- **S-0311 claim 7.** After "the score screen's, outside this spec", add: "A destruction credited
+  to a house alone (S-0302 claim 14) gives no experience (claim 9) and is outside this claim: the
+  score it adds to that house, with no exclusion for an unscored type, is S-0414 claim 22's."
+  Reason: in the original a destruction credited to a house alone adds score for an unscored type
+  (and for an insignificant building), while a destruction credited to an object follows claim 7
+  unchanged, its exclusion included. S-0414 claim 22 rates this medium until its scenario V17
+  part s runs. Claim 7 covers only a destruction credited to an object; the sentence makes plain
+  that the house-only case is S-0414 claim 22's.
+- **S-0407 claim 12.** Its high rating for the same-update surrender and defeat destruction rests
+  on this spec's V12 parts a and b, which claim 16 rates low for a skirmish (network-game form,
+  Summary). Lower that part of S-0407 claim 12's confidence to low.
+- **S-0508 (scenario G15), S-0313 and S-0308.** Their scenarios still have the human house
+  surrender "through normal input" or "through ordinary input" in a skirmish, which S-0703
+  claim 13 and claim 11 here rule out. S-0703's Changes for other specs gives the rewording (a
+  surrender in this spec's network-game form). Each rating of a skirmish rule there that rests
+  only on such a run is low, not medium (Summary).
+- **S-0311 claim 15.** Its confidence is high for defeat's off-map inclusion, which rests on
+  S-0508 G15, whose surrender is a run in this spec's network-game form. Lower that part of the
+  rating to low (Summary); the rest of claim 15's confidence is unchanged.
+- **S-0601 claim 14.** Its permanent-control row states that the original-owner query
+  supplies the current owner, so the former owner's defeat does not hit the object, but the
+  current owner's cleanup does (claim 5 here). S-0601 scenario MC10 supplies both defeat
+  variants. Its confidence, high, also covers ordinary controlled objects and original-owner
+  redirection, which rest on this spec's V4 parts a and b, run in the network-game form. Replace
+  it with: "High for the permanent-control query (MC10, skirmish defeats) and for the change of
+  owner in the defeat test (S-0414 V2 variant j); low for ordinary controlled objects at a defeat
+  and for original-owner redirection, which rest on S-0414 V4 parts a and b, run in a network game
+  (S-0414 Summary)."
+- **Q-0193.** Claim 17 answers only the defeat-count part of question 3. Questions 1, 2 and 4
+  and the rest of question 3 stay open for S-0312 and S-0404 (Open questions), so the request
+  is answered in part only.
 
 ## Open questions
 
@@ -1375,9 +1637,9 @@ but includes types marked only insignificant, agreeing with claim 20's built tot
 - Q-0193 questions 1, 2, the progress/completion/release/placement parts of question 3, and
   question 4 remain for S-0312 and S-0404. Claim 17 answers only this spec's defeat-count part
   of question 3. The existing creation-order hit and factory-cancellation rules do not establish
-  the killed item's subsequent death effects or production-line lifetime. At hand-off,
-  reopen Q-0193 and retain claim 17 as the partial defeat-count answer only, not closure
-  of its death, deletion, production, release, placement or refund questions.
+  the killed item's subsequent death effects or production-line lifetime. Claim 17 is a
+  partial answer only; it does not close the death, deletion, production, release, placement
+  or refund questions.
 
 - Whether the original's skirmish lobby can start a game with an observer, and whether the game
   then ends in tick 1 as Edge cases, *Observers* reads it (scenario V10; our engine's rule does not

@@ -2,11 +2,11 @@
 id: S-0201
 title: Game speed and tick rate
 topic: simulation
-revision: 23
+revision: 31
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-25
 measurements: []
 requests: [Q-1806]
 supersedes: []
@@ -22,10 +22,10 @@ no tick runs (lost focus, the options menu, a freeze) or the player cannot give 
 ticks run (the first ticks of a game, a chrono flash). It owns exception 2 of glossary claim G3,
 the game-speed dependence of a chrono flash that overlaps a freeze, and that exception's part of the
 shared switch `quirks.speed_normalised_delays`; what happens inside one tick is S-0203.
-This revision covers skirmishes. Of network games it covers four points only: what the options
+This spec covers skirmishes. Of network games it covers four points only: what the options
 menu, lost focus and the options menu's speed control do in a network game, and whether the active
 clock stops there (claims 15 to 18, and claim 19 for games played online), with the part of the agreed tick rate that the speed control
-reaches (claim 17). The rest of network play and campaigns are out of scope (claim 13). Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this revision, and is not a requirement or measurement for this revision. Both radar-movie actions do nothing in skirmish. This revision defines no movie timeline for our engine: the earlier cycle-counted movie proposal is deferred, not an additional path from game speed to skirmish game state.
+reaches (claim 17). The rest of network play and campaigns are out of scope (claim 13). Campaign material retained below records earlier findings for a future campaign spec; it is historical context only, is not a claim of this spec, and is not a requirement or measurement for this spec. Both radar-movie actions do nothing in skirmish. This spec defines no movie timeline for our engine: the earlier cycle-counted movie proposal is deferred, not an additional path from game speed to skirmish game state.
 
 ## Terms
 
@@ -92,8 +92,8 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
   tick in which every machine carries it out, in a network game (claim 17). At any moment one
   value applies to the orders of every player, on every machine. In the original it is not a
   constant: it changes on every machine at once, in the tick in which a timing order is carried
-  out, so it depends on the network and can change during a game (`unmeasured`, confidence medium: scenario
-  T8 reads it in each run but varies no network condition). In our engine *W* is its own order
+  out, so it depends on the network and can change during a game (`unmeasured`, confidence low:
+  scenario T8 reads it in each run but varies no network condition). In our engine *W* is its own order
   delay for a network game, which the future multiplayer spec owns (claim 13).
 - **Active clock.** The clock of elapsed time whose total S-0414 claim 23 displays at the end of a
   game. It reaches no rule of game state.
@@ -117,23 +117,26 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
 1. **Tick number.** At game start the tick number is 0. It grows by exactly 1 at the end of every
    tick that runs except the final tick, and nothing else changes it during a game. How a game
    becomes over decides what it holds afterwards:
-   - **Ended by a rule of game state.** A victory or defeat decision does not itself make its
-     tick the final tick. Play continues through the end delay (S-0414, claim 8), and the tick
-     number advances after each tick before the final one. The final tick runs in full but does
-     not add 1, so afterwards the tick number is the number of the last tick that ran (S-0203,
-     State and ordering). A resignation counts here: it makes the player's house lose in a later
-     tick, followed by the end delay, rather than ending play immediately.
-   - **Left from the options menu.** When the player leaves the game through an options-menu choice
-     that ends it at once, the game ends between two cycles and no further tick runs. The tick
-     number stays at the count of ticks run, one more than the number of the last tick.
-   - Which of the menu's choices ends the game at once and which one resigns is not established (Open
-     questions). Our engine reproduces both rules.
+   - **Ended by a rule of game state.** A victory or defeat decision does not itself make its tick
+     the final tick. Play continues through the end delay (S-0414, claim 8), and the tick number
+     advances after each tick before the final one. The final tick runs in full but does not add 1,
+     so afterwards the tick number is the number of the last tick that ran (S-0203, State and
+     ordering). A resignation counts here: it does not end play immediately. What it does to the
+     player's house is S-0414 claim 11's (it may change nothing, or bring the house's defeat in a
+     later tick); a defeat it brings ends the game only through the end test and the end delay, as
+     above.
+   - **Left from the options menu, in a skirmish.** In a skirmish the options menu offers one way
+     to leave, and no choice of that menu resigns (S-0703 claim 13). Leaving through it ends the
+     game at once, between two cycles, and no further tick runs. The tick number stays at the
+     count of ticks run, one more than the number of the last tick. Our engine reproduces the
+     ending by a rule of game state and this skirmish leave.
    - Backing: `measurable` (scenario T1, part A) for the start at 0 and the step of 1; `measurable`
-     (scenario T1, parts C and D) for the two ways play becomes over; S-0414 claim 8 owns the
-     end delay's length and backing; `unmeasured` for the exact
-     menu-choice mapping, since no button-to-result mapping has been established
-   - Confidence: high for the start and the step; medium for the two ways play becomes over; low for
-     which menu choice is which
+     (scenario T1, parts C and D) for the two ways play becomes over; S-0414 claim 8 owns the end
+     delay's length and backing, and S-0414 claim 11 what a resignation does to the house, with its
+     backing and rating; `measurable` (S-0703 scenario MU11, parts e and h) for the menu's one leave
+     choice in a skirmish, ending the game at once; claim 15 gives a network game's choices
+   - Confidence: high for the start and the step; medium for the two ways play becomes over; medium
+     for the skirmish menu's one leave choice, until S-0703 MU11 parts e and h are made
 
 2. **Pacing at game speeds 1 to 6.** In a single-player game at game-speed index *s* from 1 to 6,
    a cycle does not end before the pacing clock has advanced by *s* pacing units since the cycle
@@ -234,8 +237,8 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
    game. Closing it resumes the cycles without catching up (claim 3). In a network game the menu
    stops no cycle and a speed change travels as an order (claims 15 and 17). The menu does not
    always offer the control: in a network game it shows none once the player's own house is
-   defeated, and in our engine neither does a menu opened while the person watches a skirmish on
-   after the human player's defeat (claim 17).
+   defeated. In our engine a menu opened while the person watches a skirmish on after the human
+   player's defeat shows it (claim 17).
    - Backing: `measurable` (scenario T5; scenario T3, part B, for the drawn frames), with
      `unmeasured` for the exact first cycle affected and for delays started after the change:
      T5 measures a sustained rate, not the transition cycle, and does not start a speed-normalised delay
@@ -325,7 +328,7 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
     - **Repeated action.** If the action runs again while the chrono flash is running, it starts
       over from its first step with the new *D*. With *D* of 0 or below the action does nothing,
       not even to a chrono flash already running.
-    - **Radar movies in the original.** *Skirmish rule:* in a skirmish both actions do nothing. *Historical campaign finding (out of scope; retained for a future campaign spec only, not a claim or measurement of this revision):* in a campaign mission, the plain radar-movie action and the freezing radar-movie action (Import mapping) each give the sidebar's radar panel a movie to play. The panel plays these movies one at a time, in the order in which their actions ran, so a movie starts only once every movie given before it has ended. While the earliest-given movie that has not yet ended is one given by the freezing action, the game is under an untimed freeze, which ends when that movie ends, and a chrono flash in force takes one step in each of its frozen cycles as well. A movie given by the plain action freezes nothing. A parameter value outside the game's movie list gives no movie. A movie ends when its playback ends, in real time, so in the original the freeze's length depends on the host (compare claim 10, at a host that does not keep up). Which movie a value names and how it is drawn are presentation, not covered by this revision.
+    - **Radar movies in the original.** *Skirmish rule:* in a skirmish both actions do nothing. *Historical campaign finding (out of scope; retained for a future campaign spec only, not a claim or measurement of this spec):* in a campaign mission, the plain radar-movie action and the freezing radar-movie action (Import mapping) each give the sidebar's radar panel a movie to play. The panel plays these movies one at a time, in the order in which their actions ran, so a movie starts only once every movie given before it has ended. While the earliest-given movie that has not yet ended is one given by the freezing action, the game is under an untimed freeze, which ends when that movie ends, and a chrono flash in force takes one step in each of its frozen cycles as well. A movie given by the plain action freezes nothing. A parameter value outside the game's movie list gives no movie. A movie ends when its playback ends, in real time, so in the original the freeze's length depends on the host (compare claim 10, at a host that does not keep up). Which movie a value names and how it is drawn are presentation, not covered by this spec.
     - **Radar movies in our engine.** Both actions do nothing in skirmish, as in the original.
       Movie timing, queueing and any movie-related freeze in our engine are deferred to a future
       campaign spec. They impose no requirement here and are not an exception to glossary G3.
@@ -336,16 +339,16 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
     - Backing: `measurable` (scenario T6, parts B, G, H and I) for the chrono flash, including the
       game-speed dependence (part G) and non-positive parameters (part N); `measurable` (scenario T6, part L) for the radar movies'
       skirmish behaviour (both actions do nothing); historical finding only for the campaign
-      radar-movie observations, not measured or measurable as claims of this revision (the earlier
+      radar-movie observations, not measured or measurable as claims of this spec (the earlier
       proposed measurements are retained in T6, parts J and M, as historical context only)
     - Confidence: medium for the chrono flash's step counts and the game-speed dependence; low for
       the radar movies
 
 12. **Campaign missions (historical finding; out of scope).** The following records an earlier finding for a future campaign spec; it is not a behavioural claim or implementation requirement of this skirmish-only revision. During a campaign mission the game speed is index 2, whatever the player has set, and the options menu does not offer the speed control. The player's own setting is put aside when the mission starts and restored when it ends. The speed-normalised delays of glossary claim G3, and the frozen cycles of claim 10, therefore use index 2 in a campaign mission. The original lifts this only through a developer start-up option, which is not one of our engine's inputs, so our engine always runs campaign missions at index 2.
-    - Backing: historical finding only; not measured or measurable as a claim of this revision (the earlier proposed measurement is retained in T2, parts C and D, as historical context only)
-    - Confidence: high for the recorded finding; it is outside this revision's scope
+    - Backing: historical finding only; not measured or measurable as a claim of this spec (the earlier proposed measurement is retained in T2, parts C and D, as historical context only)
+    - Confidence: high for the recorded finding; it is outside this spec's scope
 
-13. **Network games (mostly out of scope).** Of network games this revision covers only the
+13. **Network games (mostly out of scope).** Of network games this spec covers only the
     options menu (claim 15), lost focus (claim 16), the options menu's speed control with the cap
     that the game speed puts on the agreed tick rate (claim 17) and the active clock (claim 18).
     A future multiplayer spec owns the rest, including the full negotiation of the agreed tick rate
@@ -358,7 +361,7 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
     network game: neither stops the active clock. Claims 15 to 18 are stated for network
     games played on a local network; claim 19 says how far each holds for games played online.
     - Backing: `unmeasured` for the parts left to the future spec (they are outside the
-      measurement setup of this revision); claims 15 to 18 carry their own backing
+      measurement setup of this spec); claims 15 to 18 carry their own backing
     - Confidence: low for the parts left to the future spec
 
 14. **No orders in the first ticks of a game.** When a single-player game starts, orders are
@@ -403,8 +406,9 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       from the end of the game on, and stays refused through the end delay. The house state this
       rule turns on is S-0414's: the end of the game comes from its end test (S-0414 claim 6),
       from that tick the player's own house has its result, a win that is pending or a loss
-      (S-0414 claims 7 and 9), and the end delay is S-0414 claim 8's. After the player has
-      resigned through the menu, it does not open again until the player's house is defeated; what
+      (S-0414 claims 7 and 9), and the end delay is S-0414 claim 8's. In a network game, after
+      the player has resigned through the menu, it does not open again until the player's house
+      is defeated (in a skirmish the menu's abort is no resignation, S-0703 claim 13); what
       a resignation does to the house, and when the house is defeated, are S-0414's (claims 11
       and 5). A defeated player who goes on watching a network game can open it. The refusal of
       the menu in each of these states is this claim's rule; S-0414 does not state it. S-0414
@@ -412,30 +416,52 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       multiplayer spec is to define (claim 13).
     - **A surrender during the end delay.** In a skirmish no tick runs while the menu is open
       (claim 8), so a skirmish menu is never open when the game ends, and a skirmish player cannot
-      surrender during the end delay. In a network game ticks go on while the menu is open, so a
-      menu opened before the end can still be open during the end delay; choosing surrender in it
+      surrender through the options menu during the end delay, nor at any other time: a skirmish's
+      options menu sends no surrender order; its abort ends the game at once (S-0703 claim 13). In
+      a network game ticks go on while the menu is open, so a menu opened before the end can still
+      be open during the end delay; choosing the surrender that keeps the player watching in it
       then still sends the surrender order, and S-0414 claim 11 says what that order does (nothing,
       for a house whose result is pending). So in the original the surrender of S-0414 claim 11's
-      pending-result case can be given only in a network game (Changes for other specs).
+      pending-result case can be given only in a network game.
+    - **What leaving offers in a network game.** While at least two houses of human participants
+      are undefeated, the player's own among them, and the player is not an observer, leaving
+      through the options menu offers two choices that send the surrender order (S-0414 claim 11):
+      one then leaves the game, the other keeps the player watching. Otherwise the menu offers only
+      a leave, which sends no surrender order; an observer is offered no surrender (S-0414 claim
+      11; `unmeasured`, see the backing).
+    - Backing: `measurable` for the choice that keeps the player watching (part F of scenario T8,
+      and the network-game form of S-0414's Measurement scenarios, in each of its runs), and for
+      the condition on the undefeated human houses and the leave-only menu otherwise through three
+      readings of scenario T8: part F's first reading (both human houses undefeated: two surrender
+      choices), part F's further run (the opener's house undefeated, the other human house defeated:
+      a leave only) and part D's capture (the opener's house defeated, the other undefeated: a leave
+      only), with part F's three-machine run for a game of three human participants; `unmeasured`
+      that the choice that surrenders and leaves sends the surrender order and then leaves the game,
+      since no part takes it (T8 tells it from the other choice by its label only), and for what the
+      two leave choices do on the other machines, since no part records them there; `unmeasured`
+      that the leave-only choice sends no surrender order, since no part takes it; `unmeasured` that
+      an observer is offered no surrender choice, since no part has an observer open the menu.
+    - Confidence: medium for the choice that keeps the player watching, and for the condition and
+      the leave-only menu until those readings are made; low for what the choice that surrenders
+      and leaves does, for what the two choices do on the other machines, for the leave-only
+      choice sending no surrender order and for the observer's menu (unmeasured).
     - **Our engine.** Reproduces this. Q-1806's interim rule (the menu never stops the ticks)
       agrees with it. A surrender order given by other means (S-0213) is not limited by the menu.
     - Backing: `measurable` (scenario T8, parts A, F and H, part A also for the orders given before
       the menu opened, the objects acting and the other players not being told; part D for a
       defeated player opening the menu; scenario T9 for the skirmish end delay); `unmeasured` that
       the opener's machine takes no input while the menu is open, since no part offers input to a
-      machine whose menu is open and the menu itself takes the clicks; `unmeasured`
-      that the menu is refused from the end of a network game on, since no network part tries to
-      open it then; `unmeasured` that a surrender chosen in the end delay is sent rather than dropped: part H
-      sees only that it has no effect; `unmeasured` for the menu after resigning in a skirmish:
-      in a skirmish the defeat that follows a
-      resignation is also the end of the game (S-0414 claims 6 and 11), from which the menu is
-      refused anyway, so no reopening can be seen there; only part F, a network run, shows it
+      machine whose menu is open and the menu itself takes the clicks; `unmeasured` that the menu
+      is refused from the end of a network game on, since no network part tries to open it
+      then; `unmeasured` that a surrender chosen in the end delay is sent rather than dropped:
+      part H sees only that it has no effect
     - Confidence: medium, until part A runs, for everything part A tests: that ticks go on, for the
-      opener and the others, that the opener's machine draws no new frame of the battlefield while
-      the menu is open, the earlier orders, the objects and the notice; medium for the input
-      (unmeasured); medium for when the menu
-      opens, and for the surrender from a menu open across the end of a network game; medium for
-      the menu after resigning in a skirmish
+      opener and the others, that the opener's machine draws no new frame of the battlefield
+      while the menu is open, the earlier orders, the objects and the notice; low for the input
+      (unmeasured); medium for when the menu opens, until parts D and F run, and for the
+      surrender's lack of effect from a menu open across the end of a network game, until part H
+      runs; low that the menu is refused from the end of a network game on, and that a surrender
+      chosen in the end delay is sent rather than dropped (unmeasured)
 
 16. **Network games: lost focus (Q-1806, question 2).** In a network game a machine whose window
     lacks the input focus goes on running cycles and ticks, so the game goes on for its player and
@@ -454,16 +480,16 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       one. How the client keeps its pace when the host slows a window in the background is a matter
       of implementation; the requirement is that the ticks go on. The slowdown is real-time
       behaviour: it changes no rule of game state, so under glossary *quirk switch* it takes no
-      switch; the project lead is asked to confirm. Q-1806's interim rule agrees.
+      switch, as decided at the delegated sign-off, 2026-10-25. Q-1806's interim rule agrees.
     - Backing: `measurable` (scenario T8, part B); `unmeasured` that the unfocused machine takes
       no input for the game: a window without the focus gets no ordinary input from its player,
       so part B offers it none to refuse; `unmeasured` that its player's earlier orders are carried
       out as usual and that the other players keep their input and drawing: part B gives no order
       and records drawn frames on machine 2 only
     - Confidence: medium, until part B runs, that ticks go on and that the unfocused machine draws
-      nothing; medium that
-      it takes no input, that its player's earlier orders are carried out and that the other
-      players keep their input and drawing (unmeasured); medium for the slowdown of every machine; low for its size on a given host
+      nothing; low that it takes no input, that its player's earlier orders are carried out and
+      that the other players keep their input and drawing (unmeasured); medium for the slowdown
+      of every machine; low for its size on a given host
 
 17. **Network games: the speed control and the agreed tick rate (Q-1806, question 3).**
     - **The control is offered.** In a network game the options menu offers the speed control, at
@@ -472,8 +498,8 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       original's menu does not open after the human player's house is defeated: that defeat ends
       the game (S-0414 claim 6), and the menu does not open from the end of the game on (claim 15).
       Where our engine lets the person go on watching a skirmish after that defeat, a menu opened
-      then likewise shows no speed control; this is our engine's rule, not a claim about the
-      original.
+      then shows the speed control, and a change takes effect as in claim 8. This is our engine's
+      rule, not a claim about the original, by the project lead's ruling of 2026-10-24.
     - **A change travels as an order.** Setting the control to a position whose index differs
       from the index in force does not change the index on the player's own machine at once.
       The change is sent, when the menu is closed (State and ordering), to every machine as an
@@ -513,14 +539,14 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
     - **Our engine.** Q-1806's interim rule (the control does nothing, every machine keeps the
       speed set before the start) diverges from the original in game state, not only in pacing: in
       the original the index changes on every machine, and with it the speed-normalised delays.
-      This revision proposes that our engine sends a speed change as an order and carries it out as
-      above. Its pacing is a departure with no switch, in the manner of claim 4: each cycle of a
-      network game lasts ⌊1000 / cap(*s*)⌋ ms for the index *s* in force, or as long as its work
-      and the lockstep's wait take if that is longer, from the start of the game at the index set
-      before the start, and from the cycle after a speed order is carried out at the new index.
-      At a host that keeps up this is the original's settled rate at every index (F5). The start
-      at 30, the timing order's 256-tick schedule and *C* are host behaviour, not reproduced
-      (Questions for the project lead).
+      Our engine sends a speed change as an order and carries it out as above (decided at the
+      delegated sign-off, 2026-10-25). Its pacing is a departure with no switch, in the manner of
+      claim 4: each cycle of a network game lasts ⌊1000 / cap(*s*)⌋ ms for the index *s* in force,
+      or as long as its work and the lockstep's wait take if that is longer, from the start of the
+      game at the index set before the start, and from the cycle after a speed order is carried out
+      at the new index. At a host that keeps up this is the original's settled rate at every index
+      (F5). The start at 30, the timing order's 256-tick schedule and *C* are host behaviour, not
+      reproduced (the Decided list).
     - Backing: `measurable` (scenario T8: part C for the order, the message and the cap of index 6,
       and for the change landing in the same tick on both machines, later than the close (part C
       reads *W* from that change, so it does not test *t* + *W* against the delay of other orders); part D for the control hidden after defeat in a network game; part C's further runs for the caps of indices 0, 1, 2, 4 and 5; part G for the start
@@ -532,23 +558,27 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       index 3 only (part G), and at other starting indices `unmeasured`: T8 creates every game
       at index 3; that the speed order has the same delay as the player's other orders is
       `unmeasured`, since T8 reads *W* from the speed order itself and times no other order; the
-      hidden control in a skirmish after the human's defeat is our engine's rule (`unmeasured`:
+      control shown in a skirmish after the human's defeat is our engine's rule (`unmeasured`:
       the original has no such state to observe; design); the
       original's order delay as a function of the network is `unmeasured` (Terms),
       and the schedule's choice of which multiples of 256 carry a timing order, and *C*, are
       `unmeasured` here (left to the future multiplayer spec, claim 13)
     - Confidence: medium, until part C runs, that the control is offered and that a change is
-      carried out as an order on every machine; medium for the hidden control in a skirmish after defeat (our engine's rule); medium for the control hidden after defeat in a network game, until part D runs; medium for the delays' use of the new index, the cap table, the start at 30
-      and the interval of 256 ticks between the ticks that can carry a timing order, until T8 runs
+      carried out as an order on every machine; medium for the control shown in a skirmish after
+      defeat (our engine's rule, by the project lead's ruling of 2026-10-24; `unmeasured`, since
+      the original has no such state to observe); medium for the
+      control hidden after defeat in a network game, until part D runs; low for the delays' use
+      of the new index (unmeasured); medium for the cap table, the start at 30 at index 3 and
+      the interval of 256 ticks between the ticks that can carry a timing order, until T8 runs
       (parts C and G see the rate change, not the send: a change seen a short time after a
       multiple of 256 places the send at that multiple only to within the order delay in force
       when the timing order is sent, which may differ from the run's *W*, because a timing order
       carried out between the reading of *W* and that send changes the delay (Terms, *Order
-      delay*); so the parts show that changes come only just after multiples of 256, not the send
-      tick exactly); medium for
-      the speed order sharing the delay of the player's other orders, for the send at the menu's close, for the last change holding, for an unchanged index sending nothing, and for the room speed at
-      indices other than 3; low for which
-      multiples of 256 carry a timing order, and for *C*
+      delay*); so the parts show that changes come only just after multiples of 256, not the
+      send tick exactly); low for the speed order sharing the delay of the player's other
+      orders, for the send at the menu's close, for the last change holding, for an unchanged
+      index sending nothing, and for the room speed and the start at 30 at indices other than 3
+      (unmeasured); low for which multiples of 256 carry a timing order, and for *C*
 
 18. **Network games: the active clock (Q-1806, question 4).** In a network game the active clock
     does not stop while a player's options menu is open, while a window lacks the focus, or for the
@@ -556,19 +586,18 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
     claim 23 describes. Its total therefore includes every stretch of claims 15 and 16.
     - **The clock in a skirmish.** In a skirmish the original stops the active clock while the
       options menu is open and during every hold (a timed freeze, a chrono flash's freeze), and
-      does not stop it during a stand-still for lost focus. That differs from S-0414 claim 23 as
-      approved, which pauses it for lost focus and counts frozen cycles (Changes for other specs).
-      S-0414 owns the clock; this claim records the finding for that spec's next revision.
+      does not stop it during a stand-still for lost focus. S-0414 owns the clock and states it so
+      (claim 23, scenario V19).
     - Backing: `measurable` (scenario T8, part E, for the options menu and lost focus in a network
-      game; for the skirmish, `unmeasured` until S-0414 scenario V19 is revised as Changes for other specs
-      says, since no scenario here sets up a hold or a lost-focus stretch in a skirmish).
+      game; for the skirmish, S-0414 scenario V19 with S-0414 claim 23's own backing, since no
+      scenario here sets up a hold or a lost-focus stretch in a skirmish).
       That the pause action and a chrono flash do not stop the clock in a network game is
       `unmeasured`: T8 uses neither, and their other effects in a network game are left to the
       future multiplayer spec (claim 13), so no scenario here sets them up
     - Confidence: medium for the options menu and lost focus in a network game, until T8 part E
-      runs; medium for the pause action and the chrono flash in a network game, which rest on the
-      examination of the original alone; medium for the skirmish clock, until S-0414 scenario V19
-      runs as revised
+      runs; low for the pause action and the chrono flash in a network game, which rest on the
+      examination of the original alone (unmeasured); medium for the skirmish clock, until S-0414
+      scenario V19 runs
 
 19. **Network games played online (Q-1806).** Claims 15 to 18 are stated for games on a local
     network. In the original a network game played online follows the same rules, with the
@@ -590,11 +619,11 @@ reaches (claim 17). The rest of network play and campaigns are out of scope (cla
       the rules of claims 15 to 18, including claim 17's pacing (Our engine), apply to both. The
       original's start rule and extra waits online are host and network behaviour, not reproduced,
       like claim 17's start at 30 (design).
-    - Backing: `unmeasured` for every part: the original's own online service can no longer be
+    - Backing: `unmeasured` for every part: the original's own online service cannot be
       reached, so no scenario can set up an online game with the stock program; our engine's rule
       is design
-    - Confidence: medium that claims 15, 16 and 18, and claim 17's speed control and its order,
-      hold online as stated; low for the start rule and the extra waits online
+    - Confidence: low that claims 15, 16 and 18, and claim 17's speed control and its order, hold
+      online as stated, and for the start rule and the extra waits online (unmeasured)
 
 ### Evidence boundaries
 
@@ -602,9 +631,9 @@ These qualifications apply to the claims above and their restatements in Formula
 State and ordering, Edge cases and quirks, and Import mapping.
 
 - Claims 2 and 10: the exact within-cycle clock boundary, and a freeze's count on an arbitrarily
-  slow host, are `unmeasured` (confidence: high for pacing, medium for the freeze). T1 and T6
+  slow host, are `unmeasured` (confidence: medium for both). T1 and T6
   test sustained keep-up rates and selected holds, not each clock phase or host workload.
-- Claim 3: no catch-up after the menu or a freeze is `unmeasured` (confidence: high). T4 isolates
+- Claim 3: no catch-up after the menu or a freeze is `unmeasured` (confidence: medium). T4 isolates
   lost focus only; T5 and T6 do not bound the rate immediately after resumption.
 - Claim 11: stepping after a late-in-tick action is `measurable` by S-0203 scenario O6 part B,
   with that spec's confidence. Stepping across a stand-still is `unmeasured` (confidence: medium):
@@ -618,7 +647,7 @@ State and ordering, Edge cases and quirks, and Import mapping.
   followed by a zero parameter are `unmeasured` (confidence: medium): those combinations have
   no separate scenario here. Their stated rules are not confirmed by D or E.
 - Both switches' off states, importer warnings and our engine's cycle-counted departures are
-  `unmeasured` design rules (confidence: high): the original cannot exercise our alternatives.
+  `unmeasured` design rules (confidence: medium): the original cannot exercise our alternatives.
   F4's original equality boundary and a pause begun in the tick of the flash's own freeze are
   `unmeasured` (confidence: medium): G1–G3 do not isolate those boundary cases.
 - Claims 15 to 18 were established for network games played on a local network. Games played
@@ -696,9 +725,9 @@ Integer counts, exact. *F* is 60 × *N* / *s* − 1 for the original at a host t
 second hold at 365 at index 6 (*F* = 9) and at 315 at index 1 (*F* = 59); with *N* = 2 at index 1
 (*F* = 119) there is one hold of 119 frozen cycles at 301.
 
-Movie freezes and movie lengths are outside this table and this revision's implementation scope.
-Both radar-movie actions do nothing in skirmish (claim 11). The movie-length proposal of earlier
-revisions is withdrawn pending a campaign spec, including its fallback length and warning.
+Movie freezes and movie lengths are outside this table and this spec's implementation scope.
+Both radar-movie actions do nothing in skirmish (claim 11). Movie lengths, with any fallback
+length and warning, are left to a campaign spec.
 
 **F5 Network pacing** (claims 16 and 17), for a network game played on a local network (claim 19
 for online games):
@@ -758,7 +787,7 @@ games in the second table):
 |---|---|---|
 | Running | Cycle begins | One drawn frame and one tick; the cycle lasts at least its paced period (none at index 0, claim 5; claim 2) |
 | Running | Window loses focus | Stand-still (focus lost): no cycles (claim 9) |
-| Running | Options menu opened | Stand-still (menu open): no cycles (claim 8); in our engine, after the human player's defeat, the menu shows no speed control (claim 17) |
+| Running | Options menu opened | Stand-still (menu open): no cycles (claim 8); in our engine, after the human player's defeat, the menu still shows the speed control (claim 17) |
 | Stand-still (menu open) | Options menu closed | Running from the next cycle, at the index then set, with no catch-up (claims 3 and 8) |
 | Running | Pause action runs with *N* ≥ 1 | Frozen from the next cycle (claim 10) |
 | Running | Chrono flash takes its step *D* + 44 | Frozen from the next cycle, untimed (claim 11) |
@@ -910,7 +939,7 @@ whether the vehicle's destination changes.
 - *Setup of parts C and D:* a purpose-made skirmish map, index 6, with the human player's vehicle
   ordered, as soon as orders are accepted (claim 14), to a destination at least 40 cells away along
   open ground, so that it is still moving in the final tick after the end delay. The recorder reads the tick number and
-  the vehicle's position at least once every 4 ms, until the vehicle can no longer be read. A run in
+  the vehicle's position at least once every 4 ms, until the vehicle cannot be read. A run in
   which the vehicle stopped before the game ended is void and repeated. A run counts only if the
   vehicle's position is still read at least 100 ms (more than one cycle of index 6) after the tick
   number last changed; otherwise it is inconclusive and repeated. Under every reading that late
@@ -933,14 +962,13 @@ whether the vehicle's destination changes.
   for the final increment and is repeated; the recorder must resolve that boundary, not merely
   sample the settled final value.
 - *Part D (claim 1, leaving from the menu):* no trigger. After at least 30 s, open the options menu
-  and leave the game, trying each menu choice that leaves the game in its own runs. *Observable:*
-  the tick number
-  and the position read while the menu is open; then whether either changes after the menu closes,
-  and the final values. *Runs:* 2 per choice. *Expected:* at least one choice ends the game with
-  neither value changing after the menu closes (no further tick; the final tick number is the one
-  read while the menu was open). A choice that resigns lets ticks run on through the defeat and
-  its end delay, and its final tick then behaves as in part C. *Falsified if:* every choice that leaves the game lets at least
-  one more tick run after the menu closes and ends as in part C.
+  and leave the game through the menu's one leave choice of a skirmish (claim 1, S-0703 claim 13).
+  *Observable:* the tick number and the position read while the menu is open; then whether either
+  changes after the menu closes, and the final values. *Runs:* 2. *Expected:* the choice ends the
+  game with neither value changing after the menu closes (no further tick; the final tick number is
+  the one read while the menu was open). A choice that resigns, which only a network game offers
+  (claim 15), is outside this part. *Falsified if:* the leave choice lets at least one more tick
+  run after the menu closes.
 
 **Scenario T2: source of the game speed (claims 7, 12).**
 - *Setup:* parts A and B as T1 (a small skirmish map, one human player and one computer player, and
@@ -960,7 +988,7 @@ whether the vehicle's destination changes.
   position (index 6); B2: at the middle position (index 3); in both, the count matches that index
   by T1. *Falsified if:* either control starts at the second-fastest position (the general key) or
   at any position other than the expected one.
-- *Historical campaign observations (out of scope; not measurement scenarios or falsification tests for this revision).* The following earlier proposed procedures and expected observations are retained for a future campaign spec only. They do not support a claim of this revision.
+- *Historical campaign observations (out of scope; not measurement scenarios or falsification tests for this spec).* The following earlier proposed procedures and expected observations are retained for a future campaign spec only. They do not support a claim of this spec.
   - *Part C (campaign):* the general game-speed key set to 6, then in a second run to 0; start the first mission of a campaign. During the mission open the options menu once and close it.
     *Expected:* both runs within 1 % of 9375 (index 2); the options menu shows no speed control; after the mission the options menu shows the player's setting again. *Falsified if:* either run differs from 9375 by more than 1 %, or the menu offers the speed control during the mission, or after the mission the options menu does not show the player's setting.
   - *Part D (absent general key, claim 7):* the general game-speed key removed from the settings file, and a campaign mission started as in part C. After the mission, open the options menu where it offers the speed control. *Expected:* the control stands at the middle position (index 3). If the control cannot be reached outside a game, the part is inconclusive and the absent-key value stays untested. *Falsified if:* the control stands at another position.
@@ -1082,7 +1110,7 @@ whether the vehicle's destination changes.
   with *D* = 10, index 6. *Expected:* the tick number stands at 54 (steps 1 to 54 in ticks 0 to
   53), and no order is accepted at any time, during the 60 s observed after the hold as well.
   *Falsified if:* an order is accepted at any time, in particular from tick 4.
-- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part J (claim 11, radar movies):* a named test copy of a campaign mission map with two added one-time triggers whose only event is an elapsed time: elapsed time 20 with the plain radar-movie action and elapsed time 40 (tick 600) with the freezing radar-movie action (Import mapping), both with parameter value 0, the first entry of the movie list. A second test copy adds the chrono-flash action (*D* = 30) to the trigger of the freezing radar-movie action.
+- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this spec).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this spec. *Part J (claim 11, radar movies):* a named test copy of a campaign mission map with two added one-time triggers whose only event is an elapsed time: elapsed time 20 with the plain radar-movie action and elapsed time 40 (tick 600) with the freezing radar-movie action (Import mapping), both with parameter value 0, the first entry of the movie list. A second test copy adds the chrono-flash action (*D* = 30) to the trigger of the freezing radar-movie action.
   *Observable:* in addition to the common ones, whether the radar panel shows a movie, and from when to when. *Expected:* while the first movie plays the tick number goes on growing. Once the second movie starts, the tick number stands still for as long as it plays and runs again once it ends; how soon after tick 600 the movie starts, and how long it plays, remain questions for the future campaign spec, so only the hold's coincidence with the movie would be judged. With the chrono flash, its own freeze begins earlier than tick 674 by the number of frozen cycles of the movie's hold that fell before its step 74, or merges with the movie's hold when that hold lasts long enough (a possible campaign extension of F4, not a requirement here). *Falsified if:* the tick number stands still during the first movie, or runs on during the second; or, with the chrono flash, its own freeze begins at 674 although the movie's hold had frozen cycles before it.
 
 - *Part K (claim 10, orders already blocked):* two one-time triggers: elapsed time 20 with the
@@ -1107,7 +1135,7 @@ whether the vehicle's destination changes.
   for longer than one cycle, or a movie plays. A host stall makes the run inconclusive and it
   is repeated. Repeat with the plain action: no movie and no hold are expected, and either
   falsifies the claim.
-- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this revision).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this revision. *Part M (claim 11, a value outside the movie list):* the named test copy of a campaign mission map of part J, with the freezing radar-movie action given the parameter value −1 in one run and 99999 in a second. *Expected:* no movie plays and the tick number stands still at no value for longer than one cycle. *Falsified if:* a movie plays, or the game holds for more than 0.5 s.
+- *Historical campaign observation (out of scope; not a measurement scenario or falsification test for this spec).* The following earlier proposed procedure and expected observations are retained for a future campaign spec only; they do not support a claim of this spec. *Part M (claim 11, a value outside the movie list):* the named test copy of a campaign mission map of part J, with the freezing radar-movie action given the parameter value −1 in one run and 99999 in a second. *Expected:* no movie plays and the tick number stands still at no value for longer than one cycle. *Falsified if:* a movie plays, or the game holds for more than 0.5 s.
 
 **Scenario T7: no orders in the first ticks (claim 14).**
 - *Setup:* a purpose-made skirmish map with one human vehicle in the open, index 6, and a recorder
@@ -1200,8 +1228,10 @@ whether the vehicle's destination changes.
 - *Part D (claim 17, control hidden after defeat):* follows part F in the same run, while the
   other two houses play on: it reads the options menu that part F's scripted input opened on
   machine 2 after machine 2's house was defeated, and does not open another. *Observable:* whether
-  that menu shows the speed control. *Expected:* it shows no speed control.
-  *Falsified if:* the control is shown.
+  that menu shows the speed control, and the leave choices it offers (screen capture).
+  *Expected:* it shows no speed control, and offers only a leave (claim 15: the opener's own
+  house is defeated). *Falsified if:* the control is shown, or a choice that surrenders is
+  offered.
 - *Part E (claim 18):* a run of its own, with a test copy of the map that adds one one-time
   trigger whose only event is an elapsed time of 600 (tick 9000) and whose action is the win action
   with the registration index of machine 1's player's country, under the assumption that T1 part C
@@ -1213,12 +1243,31 @@ whether the vehicle's destination changes.
   (S-0414 claim 23's 960 ms second), with both 30 s stretches counted. *Falsified if:* the displayed
   total is short by about 31 s or 62 s (a stretch not counted). If machine 2's result screen
   shows no duration in a network game, the part is inconclusive.
-- *Part F (claim 15, the menu after resigning):* machine 2's player resigns through the options
-  menu, and the scripted input tries to open the menu once every 100 ms until it opens.
-  *Observable:* the tick at which the menu first opens, and the tick at which machine 2's house is
-  defeated. *Expected:* the menu does not open before the defeat and opens after it. *Falsified
-  if:* it opens before the defeat, or never opens after the defeat. A run in which machine 2's house is not defeated within 120 s
-  of the resignation (S-0414 claim 11 allows a later defeat, or none) is void and repeated.
+- *Part F (claim 15, the menu after resigning):* machine 2's player opens the options menu and
+  leaves through the choice that surrenders and keeps the player watching, and the scripted input
+  then tries to open the menu once every 100 ms until it opens.
+  *Observable:* the leave choices the menu offers before the resignation (screen capture), the
+  tick at which the menu first opens again, and the tick at which machine 2's house is
+  defeated. *Expected:* two choices that send the surrender order are offered, one leaving the
+  game and one keeping the player watching; the menu does not open before the defeat and opens
+  after it. *Falsified if:* the menu does not offer exactly two choices that send the surrender
+  order, one that leaves the game and one that keeps the player watching (a missing choice of
+  either kind, or two of one kind), or the menu opens before the defeat, or never opens after the
+  defeat. The kind of the choice that is not taken is read from its label only: this part does
+  not take it, so what it does is not tested (claim 15, `unmeasured`). *Further run (the
+  leave-only menu):* in the same game, after part D's reading, machine 1's player opens the
+  options menu, machine 2's house now being defeated. *Observable:* the leave choices offered
+  (screen capture). *Expected:* only a leave is offered. *Falsified if:* a choice that surrenders
+  is offered. A run in which machine 2's house is not defeated within 120 s of the resignation
+  (S-0414 claim 11 allows a later defeat, or none) is void and repeated.
+  *Three-machine run:* if a third machine is available, a game of its own with a third human
+  participant on machine 3, set up as machine 2. Machine 3's player leaves through the choice that
+  surrenders and keeps the player watching; once machine 3's house is defeated, machine 1's player
+  opens the options menu. *Observable:* the leave choices offered (screen capture). *Expected:*
+  the two choices that send the surrender order, as in part F's first reading (two human houses,
+  machine 1's among them, are undefeated). *Falsified if:* only a leave is offered. Without a
+  third machine the run is not made and the condition's case of three or more human participants
+  stays unconfirmed.
 - *Part G (claim 17, the start at 30 and the room speed):* a run of its own, at index 3.
   *Observable:* the game-speed index read on both machines in tick 0, and both machines'
   tick rate from the tick the map is visible, tick by tick, until tick 2048. *Expected:* index 3,
@@ -1233,12 +1282,13 @@ whether the vehicle's destination changes.
   lobby and the computer player, their only enemy, has a single object left, which machine 1's
   forces are attacking. Machine 2's player opens the options menu before that object is destroyed
   and keeps it open; 2 s of real time after the computer player's defeat (the end of the game,
-  logged by machine 1's recorder), machine 2's player chooses surrender. *Observable:*
+  logged by machine 1's recorder), machine 2's player chooses the surrender that keeps the player
+  watching. *Observable:*
   whether machine 2's objects are destroyed, machine 2's result, and the tick at which the game is
-  over. *Expected:* the surrender is offered and chosen, nothing of machine 2's is destroyed, its
+  over. *Expected:* that choice is offered and chosen, nothing of machine 2's is destroyed, its
   result is a win, and the game is over at the tick it would be without the surrender (S-0414
-  claim 11's pending-result case). *Falsified if:* the menu closes at the end of the game, or its
-  surrender choice cannot be made, or machine 2's objects are destroyed.
+  claim 11's pending-result case). *Falsified if:* the menu closes at the end of the game, or that
+  choice cannot be made, or machine 2's objects are destroyed.
 
 **Scenario T9: the options menu during the end delay of a skirmish (claim 15).**
 - *Setup:* a skirmish as in S-0414 scenario V8, part b: the end delay raised by a test rules file,
@@ -1272,10 +1322,10 @@ whether the vehicle's destination changes.
   list in a network game, which is left to the future multiplayer spec, claim 13).
 - Whether the original keeps the lobby's starting index in range when the saved value lies outside
   0 to 6 is not established (claim 7).
-- Which of the options menu's choices ends a game at once and which one resigns is not established
-  (claim 1); scenario T1, part D, tries each.
+- What the two leave choices of a network game's options menu do on the other machines (claim 15)
+  is not established; no part of scenario T8 records them there.
 - Radar-movie timing and its source in movie data are deferred to the future campaign spec.
-  No fallback length or importer warning for a missing movie duration is required by this revision.
+  No fallback length or importer warning for a missing movie duration is required by this spec.
 - When a timed freeze and a chrono flash overlap, each, when it ends, leaves orders blocked or
   accepted as they were when it started, so whether orders are accepted in the ticks between the two holds can depend on which
   started first (scenario T6, part G, judges tick numbers only). The full rule for overlapping
@@ -1299,32 +1349,6 @@ whether the vehicle's destination changes.
 
 ## Changes for other specs
 
-- **S-0414 (approved, revision 15), claim 23, network games.** The duration paragraph can add: in
-  a network game the active clock does not stop while a player's options menu is open, while a
-  window lacks the focus, or for the pause action or a chrono flash; only leaving play stops it
-  (S-0201 claim 18).
-- **S-0414, claim 23, skirmish (correction).** "pauses that clock when the game is paused for the
-  options menu or lost focus … Frozen cycles and the end delay are included" disagrees with the
-  original. The original stops the clock while the options menu is open and during every hold (a
-  timed freeze, a chrono flash's freeze), and restarts it when the last freeze in force ends. A
-  stand-still for lost focus does not stop it. The sentence can read: the clock pauses while the
-  options menu is open and while the game is frozen; time without the input focus and the end
-  delay are included (S-0201 claim 18). This agrees with S-0201 claim 10, by which a timed freeze's
-  real time keeps running through a stand-still for lost focus.
-- **S-0414, claim 11 and scenario V8, part b (the surrender during the end delay).** In the
-  original the options menu is refused from the end of the game on (S-0201 claim 15), and in a
-  skirmish no tick runs while it is open, so a skirmish player cannot surrender in the end delay.
-  V8 part b's input, "the human surrenders in the delay", therefore cannot be given in a skirmish,
-  and claim 11's sentence "In the original only the local player can surrender, through the
-  options menu" can add "and not from the end of the game on (S-0201 claim 15)". The pending-result
-  case can be given in the original only in a network game, from a menu opened before the end
-  (S-0201 scenario T8, part H); in a skirmish it is a rule of our engine, where the surrender order
-  is legal at any time (S-0213), and its backing there is `unmeasured`. V8 part b can either point
-  to T8 part H or be marked as a run of our engine only; S-0201 scenario T9 shows that the
-  original's menu stays closed in the skirmish end delay.
-- **S-0414, scenario V19.** "menu and focus pauses add none, freezes and the end delay add active
-  time" can read "the menu pause and the frozen stretch add none; the focus loss and the end delay
-  add active time", for a skirmish. A network run can point to S-0201 scenario T8, part E.
 - **Glossary, *cycle*.** "While the game stands still (the game window has lost the input focus,
   or the options menu is open) there are no cycles" can begin "In a single-player game, while …",
   with a pointer to S-0201 claims 15 and 16 for network games, where neither stops the cycles.
@@ -1340,52 +1364,43 @@ whether the vehicle's destination changes.
 
 ## Questions for the project lead
 
-- **Scope (Q-1806).** This revision brings four points of network games into S-0201 (claims 15 to
-  18, with claim 19 for games played online) while the glossary still states that network games are out of scope. Confirm that S-0201 is
-  the place for them until a multiplayer spec exists, and that claim 17's cap table may be stated
-  now while the rest of the agreed tick rate stays deferred.
-- **Lost focus in a network game (claim 16).** The original slows every machine while any player's
-  window lacks the focus. This revision proposes that our engine does not, as a departure without a
-  switch, since it is real-time behaviour. Confirm, or ask for the slowdown to be reproduced.
+Decided (delegated sign-off, 2026-10-25):
+
+- **Scope (Q-1806).** S-0201 holds four points of network games (claims 15 to 18, with claim 19
+  for games played online) until a multiplayer spec exists, although the glossary still states
+  that network games are out of scope. Claim 17's cap table is stated now, while the rest of the
+  agreed tick rate stays deferred.
+- **Lost focus in a network game (claim 16).** The original slows every machine while any
+  player's window lacks the focus. Our engine does not, as a departure without a switch, since it
+  is real-time behaviour.
 - **The speed control in a network game (claim 17).** Q-1806's interim rule ignores the control.
   In the original a change is an order that changes the game-speed index, and with it the
-  speed-normalised delays, on every machine in one tick, so ignoring it changes game state. This
-  revision proposes reproducing the order and the index change, and pacing at ⌊1000 / cap(*s*)⌋ ms
-  from the cycle after the change, as a departure (the original follows only at the next timing
-  order, sent only in ticks whose number is a multiple of 256, capped by the slowest machine,
-  and starts every game on a local network at 30 ticks per second; online, claim 19). Our engine
-  makes no difference between a game on a local network and an online game (claim 19). Confirm.
-- **The speed control after defeat in a skirmish (claims 8 and 17).** Where our engine lets the
-  person watch a skirmish on after the human player's defeat (the original ends the game there),
-  a menu opened then shows no speed control, as the original's network-game menu does after the
-  player's defeat. This is a design decision of our engine with no original behaviour to follow.
-  Confirm it.
+  speed-normalised delays, on every machine in one tick, so ignoring it changes game state. Our
+  engine reproduces the order and the index change, and paces at ⌊1000 / cap(*s*)⌋ ms from the
+  cycle after the change, as a departure (the original follows only at the next timing order,
+  sent only in ticks whose number is a multiple of 256, capped by the slowest machine, and starts
+  every game on a local network at 30 ticks per second; online, claim 19). Our engine makes no
+  difference between a game on a local network and an online game (claim 19).
 - **The active clock in a skirmish (claim 18).** The original stops it while frozen and keeps it
-  running without focus, against S-0414 claim 23 as approved (Changes for other specs). Confirm
-  that S-0414 takes the correction in its next revision, with scenario V19's expectations.
-
-- **Cycle wording, for hand-off.** Terms, *Cycle*, and claim 2 incorporate S-0213 claim 1's
-  limit of at most one input event per unfrozen cycle. S-0213 owns the limit and its scenario O9.
-  Claim 2 here owns pacing. Confirm this wording together with the S-0213 revision handed off,
-  including its citation to this spec's Terms rather than to claim 2 for input timing. Check the
-  compatible definitions and claims in the latest same-batch revisions at sign-off, not against
-  an earlier batch's revision list.
-- **Tick-order boundaries, for sign-off.** The current S-0203 rows 1 and 4 retain trigger
-  polling and the chrono-flash step: an action from row 1 takes its first step in that tick,
-  while an action after row 4 first steps in the next tick. Its claim 7 still places orders
-  after the turn pass and before the next tick's turns; claim 9 still counts timings against
-  the tick number, not turns. These agree with claims 6, 11 and 14 and F4 here, and with
-  S-0213 claim 1's input and order boundaries. Reconfirm those labels and boundaries in
-  the actual revisions handed off together. Production-start draw assignment belongs to
-  S-0202, S-0203 and S-0404; it changes none of these pacing or chrono-flash rules.
-- **Companion pointers in S-0011, for sign-off.** The current S-0011 companion table after I4
-  points here for the pause and chrono-flash actions, the no-effect skirmish radar-movie actions,
-  and T1 part C's win-action fixture assumption. These pointers agree with this revision's
-  claims 10 and 11, Import mapping and scenario T1 part C. The win-action row is a fixture
-  assumption only, not a general victory rule. Confirm the actual revisions handed off together:
-  the pointers neither extend S-0011's supported action subset nor specify campaign movies.
-- **Citations, for sign-off.** The current glossary's claim G3 holds exception 2 and gives
+  running without focus. S-0414 claim 23 and its scenario V19 carry this.
+- **Cycle wording.** Terms, *Cycle*, and claim 2 incorporate S-0213 claim 1's limit of at most one
+  input event per unfrozen cycle. S-0213 owns the limit and its scenario O9. Claim 2 here owns
+  pacing; S-0213 cites this spec's Terms, not claim 2, for input timing.
+- **Tick-order boundaries.** The current S-0203 rows 1 and 4 retain trigger polling and the
+  chrono-flash step: an action from row 1 takes its first step in that tick, while an action after
+  row 4 first steps in the next tick. Its claim 7 still places orders after the turn pass and
+  before the next tick's turns; claim 9 still counts timings against the tick number, not turns.
+  These agree with claims 6, 11 and 14 and F4 here, and with S-0213 claim 1's input and order
+  boundaries. Production-start draw assignment belongs to S-0202, S-0203 and S-0404; it changes
+  none of these pacing or chrono-flash rules.
+- **Companion pointers in S-0011.** The current S-0011 companion table after I4 points here for the
+  pause and chrono-flash actions, the no-effect skirmish radar-movie actions, and T1 part C's
+  win-action fixture assumption. These pointers agree with this spec's claims 10 and 11, Import
+  mapping and scenario T1 part C. The win-action row is a fixture assumption only, not a general
+  victory rule. The pointers neither extend S-0011's supported action subset nor specify campaign
+  movies.
+- **Citations.** The current glossary's claim G3 holds exception 2 and gives
   `quirks.speed_normalised_delays` the scope used here. S-0011, S-0202, S-0203 and S-0205 are
-  approved specs cited by number and claim. The glossary's *departure* entry lists the pause
-  action with *N* = 0, the paced period of index 0 and the real-time length of a timed freeze as
+  approved specs cited by number and claim. The glossary's *departure* entry lists the pause action
+  with *N* = 0, the paced period of index 0 and the real-time length of a timed freeze as
   departures of this spec.

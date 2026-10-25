@@ -2,11 +2,11 @@
 id: S-0703
 title: Music playback (track eligibility, next-track order, shuffle and repeat)
 topic: ui
-revision: 51
+revision: 58
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-25
 measurements: []
 requests: [Q-1700, Q-1830, Q-1831, Q-1832, Q-1833]
 supersedes: []
@@ -132,10 +132,11 @@ presentation: no game state depends on it.
      `measurable` for a restriction written as the name of a side other than the first not
      matching in the original (MU1 part b); the first side's result is only recorded and is not
      claimed. `measurable` for our engine's name matching (MU1 part b's engine fixture).
-   - Confidence: high for the *normal* part, for the scenario part and for our engine's name
-     matching; medium for the file part (only tracks whose files are present are picked), as
-     claims 3 and 8 rate the pass-over, until MU1 part l runs; medium for a restriction written
-     as the name of a side other than the first not matching in the original.
+   - Confidence: high for the *normal* part and for the scenario part; medium for our engine's
+     name matching, a design rule that only our engine's fixture checks, with no oracle run behind
+     it; medium for the file part (only tracks whose files are present are picked), as claims 3
+     and 8 rate the pass-over, until MU1 part l runs; medium for a restriction written as the name
+     of a side other than the first not matching in the original.
 
 3. **When the next track is picked.** Once music has started (claim 11), each time the playing track finishes the next track is picked at the next
    music update and started at once. In a pick under claim 5 or claim 6, an entry that is not an available
@@ -166,16 +167,15 @@ presentation: no game state depends on it.
      with no section of its own, which has no sound file name and so no file present.
      `unmeasured` for the same pass-over of an entry whose named sound file is missing at startup
      or whose side restriction does not match: no draw-level scenario includes such entries.
-   - Confidence: high for no silent gap of a track's length, and for the pass-over at the pick
-     under shuffle of an entry whose *normal* flag is clear, the case MU6 part a tests; medium
-     for the pass-over at the pick under shuffle of an entry with no section of its own, until
-     MU6 part a's third and fourth runs are made, and of an entry whose named sound file is
-     missing at startup or whose side restriction does not match, which no draw-level scenario
-     includes; medium for the
+   - Confidence: high for no silent gap of a track's length, and for the pass-over at the pick under
+     shuffle of an entry whose *normal* flag is clear, the case MU6 part a tests; medium for the
+     pass-over at the pick under shuffle of an entry with no section of its own, until MU6 part a's
+     third and fourth runs are made, and of an entry whose named sound file is missing at startup or
+     whose side restriction does not match, which no draw-level scenario includes; medium for the
      pass-over at the pick under list order, until MU1 part l is made; low for zero volume in the
-     original (`unmeasured`: which in-game setting gives a music volume of zero, and so whether
-     the original makes no pick there, is open, Q-1700 question 5); high for our engine's
-     zero-volume rule, which our engine chooses and its fixture checks.
+     original (`unmeasured`: which in-game setting gives a music volume of zero, and so whether the
+     original makes no pick there, is open, Q-1700 question 5); medium for our engine's zero-volume
+     rule, a design rule that only our engine's fixture checks, with no oracle run behind it.
 
 4. **Repeat.** When there is an ended track and its entry has its *repeat* flag set, or there is
    an ended track and the repeat setting is on, the next track is the ended track again, whatever
@@ -322,13 +322,14 @@ presentation: no game state depends on it.
      entry 0 that is not available only because its side restriction does not match, which no
      scenario sets up (MU4 and MU6 give entry 0 no side restriction)
    - Confidence: medium for list order, until MU4 part a is made; medium for shuffle (the
-     alternation rests on the pick rule of claim 6 applied twice and, with entry 0's file
-     missing, on claim 4's failed start making entry 0 the ended track, which MU4 part b's second
-     and third runs test, claim 4); high for the switch-off rules that MU4's engine fixture checks (list order
-     with no available entry, and shuffle with the ended track the only available track), and
-     medium for the other switch-off rules (shuffle with no available track, and the continuation
-     past the thousandth ranged draw), which are `unmeasured` (our engine's
-     design); medium for an entry 0 whose side restriction does not match (`unmeasured`)
+     alternation rests on the pick rule of claim 6 applied twice and, with entry 0's file missing,
+     on claim 4's failed start making entry 0 the ended track, which MU4 part b's second and third
+     runs test, claim 4); medium for the switch-off rules that MU4's engine fixture checks, design
+     rules with no oracle run behind them (list order with no available entry, and shuffle with the
+     ended track the only available track), and medium for the other switch-off rules (shuffle with
+     no available track, and the continuation past the thousandth ranged draw), which are
+     `unmeasured` (our engine's design); medium for an entry 0 whose side restriction does not match
+     (`unmeasured`)
 
 8. **Missing sound files.** A track entry whose sound file is not present is never an available
    track, so claims 5 and 6 never pick it to be heard. In our engine they pass over it at the
@@ -337,7 +338,7 @@ presentation: no game state depends on it.
    mounted when the program starts, the theme archive included (S-0005 claim 12). A file supplied
    after the program has started does not make its entry available, and a file removed after it
    has started does not make its entry unavailable. When the track of such a removed file is due
-   to start and its sound file can no longer be opened (removing a loose file can uncover an
+   to start and its sound file cannot be opened (removing a loose file can uncover an
    archived copy, S-0005 claim 1), it cannot play: there is silence, and the next track is picked at the next music
    update as if the track had ended.
    - Backing: `measurable` (MU1 part a) for a missing file's entry never being heard and leaving
@@ -393,12 +394,13 @@ presentation: no game state depends on it.
      track; `measurable` (MU10 part c) for the end of a track whose data is cut short or longer than its
      header gives. `measurable` for our engine's warning (MU10 part a's engine fixture).
    - Confidence: medium for presence depending only on the file being found and for each of the
-     cases that do not parse, until MU10 part a's runs are made, and because MU10 part a's run with a
-     text file does not tell a missing RIFF header from a form that is not WAVE, and for the end of a track cut
-     short, until MU10 part c is made; medium for format codes other than 1, 17 and 2, which no
-     run tries; high for our engine's warning, which its fixture checks.
-     A format chunk with a very large declared size, and a cut through
-     the middle of the last block of a compressed file, are not covered (Open questions).
+     cases that do not parse, until MU10 part a's runs are made, and because MU10 part a's run with
+     a text file does not tell a missing RIFF header from a form that is not WAVE, and for the end
+     of a track cut short, until MU10 part c is made; medium for format codes other than 1, 17 and
+     2, which no run tries; medium for our engine's warning, a design rule that only our engine's
+     fixture checks, with no oracle run behind it. A format chunk with a very large declared size,
+     and a cut through the middle of the last block of a compressed file, are not covered (Open
+     questions).
 
 9. **Empty track list.** In our engine (our engine's choice, with either switch setting and
    either repeat setting), a music database that holds sections but no track entry (*n* = 0) gives
@@ -408,23 +410,25 @@ presentation: no game state depends on it.
    resolved, or that holds no section at all, stops the program from starting (S-0005 claim 16).
    - Backing: `measurable` for our engine (MU5's engine fixture). The original's behaviour with
      an empty list is open; MU5 records it. The rest is S-0005's.
-   - Confidence: high for our engine's rule, which our engine chooses and its fixture checks
-     directly; the original's behaviour with an empty list is not rated (open).
+   - Confidence: medium for our engine's rule, a design rule that only our engine's fixture checks,
+     with no oracle run behind it; the original's behaviour with an empty list is not rated (open).
 
 10. **Music update and music started.** How often the original's music update runs, and where
     its draws fall among the sound choices of S-0701 claim 30, are open (Open questions). Our
     engine's rule (design):
     - One music update runs at the end of every audio pass of S-0701 claim 30's schedule, after
-      that pass's sound choices. The ranged draws of a shuffle pick (claim 6) therefore follow
+      that pass's sound choices, and one at each of that claim's music-only passes while the
+      options menu is open (claim 13). The ranged draws of a shuffle pick (claim 6) therefore follow
       that pass's draws on the same unsynchronised stream. A pick that makes no ranged draw (list
       order, repeat) leaves the stream unchanged.
-    - A track finishes at the first pass at which it would complete under S-0701 claim 30's
-      completion rule for a sample with pitch percentage *p* = 100, its logical duration counted
-      from the pass at which it started. The music update at the end of that same pass is the
-      "next music update" of claim 3: it makes the pick and starts the track picked, whose
-      logical duration then counts from that pass. A track's logical duration is that of the
-      sample data it actually plays (claim 8a): for a file cut short, the frames present, not
-      the data size its header gives. A failed start (Terms) plays
+    - A track finishes at the first pass, an audio pass or a music-only pass, at which it would
+      complete under S-0701 claim 30's completion rule for a sample with pitch percentage *p* = 100,
+      its logical duration counted on music time (S-0701 claim 30) from the pass at which it
+      started. Outside the options menu, music time advances with logical audio time. The music
+      update at the end of that same pass is the "next music update" of claim 3: it makes the pick
+      and starts the track picked, whose logical duration then counts from that pass. A track's
+      logical duration is that of the sample data it actually plays (claim 8a): for a file cut
+      short, the frames present, not the data size its header gives. A failed start (Terms) plays
       nothing, and the pick is made again at the update of the following pass (claims 8 and 8a).
     - Music started begins with claim 11's first start after loading: the map theme's start, or
       the first pick, even when that pick starts nothing (claim 7 with its switch off and no
@@ -434,35 +438,34 @@ presentation: no game state depends on it.
     - Backing: `measurable` for our engine's rules (MU7, an engine-only scenario). `measurable`
       (MU4 part b, second run) for the original's failed start leaving music started: there the
       one available track plays again after the fallback's failed start of entry 0, shown by the
-      recorder's advance of 1000 ranged draws, only if that start leaves music started and leaves
-      that track no longer the ended track (claim 4). MU4 part b's third run and MU3 part d also
+      recorder's advance of 1000 ranged draws, only if that start leaves music started and stops
+      that track being the ended track (claim 4). MU4 part b's third run and MU3 part d also
       show it, by the recovery once the missing test track is supplied.
-    - Confidence: high for our engine's schedule, which our engine chooses and MU7 checks
-      directly; medium for the original's failed start leaving music started, until MU4 part b's
-      second run is made.
+    - Confidence: medium for our engine's schedule, a design rule that only MU7 checks on our
+      engine, with no oracle run behind it; medium for the original's failed start leaving music
+      started, until MU4 part b's second run is made.
 
-11. **Start of music in a skirmish.** This claim holds while the music volume is above zero
-    during loading; what the original does when it is zero then is open (Open questions, Q-1700
-    question 5). Every skirmish starts with no ended track, whatever was
-    played before it in the session, in the menus or in an earlier game (claim 12 gives what plays
-    after a game). When a game is started from the menus, whatever is playing as it starts to
-    load, the menu track included, is stopped at once, with no fade, whether or not the music
-    database has a loading track: no music carries over from the menus into a game. The original's
-    options menu offers no restart in a skirmish (claim 13). While the game loads, the loading track (Terms), if the music database
-    has one, is started directly, not by a pick: like every start it plays whether or not it is
-    available, unless it fails (claim 8a), and it makes no ranged draw. It does not begin music
-    started (claim 10), and no pick is made while the game loads. Whether the loading track's start
-    failed or not, and whatever its *repeat* flag and the repeat setting, the first start after
-    loading is made with no ended track (claim 4). Then, if the in-game music
-    setting is on:
+11. **Start of music in a skirmish.** This claim holds while the music volume is above zero during
+    loading; what the original does when it is zero then is open (Open questions, Q-1700 question
+    5). Every skirmish starts with no ended track, whatever was played before it in the session, in
+    the menus or in an earlier game (claim 12 gives what plays after a game). When a game is started
+    from the menus, whatever is playing as it starts to load, the menu track included, is stopped at
+    once, with no fade, whether or not the music database has a loading track: no music carries over
+    from the menus into a game. The original's options menu offers no restart in a skirmish (claim
+    13). While the game loads, the loading track (Terms), if the music database has one, is started
+    directly, not by a pick: like every start it plays whether or not it is available, unless it
+    fails (claim 8a), and it makes no ranged draw. It does not begin music started (claim 10), and
+    no pick is made while the game loads. Whether the loading track's start failed or not, and
+    whatever its *repeat* flag and the repeat setting, the first start after loading is made with no
+    ended track (claim 4). Then, if the in-game music setting is on:
     - if the map theme (Terms) names a track entry, that entry is started first, directly, whether
       or not it is available: it plays unless the start fails, and it becomes the ended track.
     - otherwise the first track is chosen by an ordinary pick with no ended track (claims 4 to 7):
       under list order stepping begins at entry 0 (claim 5), under shuffle no ranged draw is
       rejected for naming the ended track (claim 6), and with no available entry in a list that
       holds at least one entry the fallback of claim 7 applies, so a track is started even then
-      (claim 9 covers an empty list). With claim 7's switch off and no available
-      entry in such a list, our engine's first pick starts nothing; music is started all the same (claim 10), and
+      (claim 9 covers an empty list). With claim 7's switch off and no available entry in such a
+      list, our engine's first pick starts nothing; music is started all the same (claim 10), and
       the pick is made again at each music update (claim 7).
 
     This first start is an ordinary start: it leaves music started (claim 10), its entry becomes
@@ -483,47 +486,46 @@ presentation: no game state depends on it.
     is drawn, is presentation and delays nothing), and the first start is made at the music update
     of the game's first audio pass (claim 10), so under shuffle the first pick's ranged draws
     follow that pass's sound choices on the unsynchronised stream.
-    - Backing: `measurable` (MU8 part a) for the first pick under list order and for repeat of
-      the first track; `measurable` (MU8 part b, by the random-state recorder) for the first
-      shuffle pick having no ended track; `measurable` (MU8 part c) for a new skirmish forgetting
-      the ended track of an earlier one; `measurable` (MU8 part d) for the map
-      theme, and (its fourth run, by the random-state recorder) for its start making no ranged
-      draw; `measurable` (MU4 part a) for music starting with no available entry; `measurable` (MU8
-      part e) for the in-game music setting off, as read at startup, and (its second run) for the
-      loading track playing with that setting off; `measurable` (MU8 part h) for the first track
-      not depending on the local player's side or on the other skirmish settings that part h
-      varies; `measurable` for our engine's timing (MU8's
-      engine fixture). The original's delay from the end of loading is only recorded (MU8 part f), so the
-      original's first start coming at the first music update, and not at a later one, is
-      `unmeasured`: how often the music update runs is open (claim 10). `unmeasured` for no ranged
-      draw with the in-game music setting off: MU8 part e records no random state.
+    - Backing: `measurable` (MU8 part a) for the first pick under list order and for repeat of the
+      first track; `measurable` (MU8 part b, by the random-state recorder) for the first shuffle
+      pick having no ended track; `measurable` (MU8 part c) for a new skirmish forgetting the ended
+      track of an earlier one; `measurable` (MU8 part d) for the map theme, and (its fourth run, by
+      the random-state recorder) for its start making no ranged draw; `measurable` (MU4 part a) for
+      music starting with no available entry; `measurable` (MU8 part e) for the in-game music
+      setting off, as read at startup, and (its second run) for the loading track playing with that
+      setting off; `measurable` (MU8 part h) for the first track not depending on the local player's
+      side or on the other skirmish settings that part h varies; `measurable` for our engine's
+      timing (MU8's engine fixture). The original's delay from the end of loading is only recorded
+      (MU8 part f), so the original's first start coming at the first music update, and not at a
+      later one, is `unmeasured`: how often the music update runs is open (claim 10). `unmeasured`
+      for no ranged draw with the in-game music setting off: MU8 part e records no random state.
       `measurable` (MU8 part f, its run with a long loading track) for the loading track's fade
-      ending before the first start.
-      `measurable` (MU11 part g) for the track playing in the menus being stopped at once when a
-      game started from the menus starts to load and the music database has no loading track, and
-      `unmeasured` when it has one, as no run of MU11 part g gives it one. `measurable` (MU8 part
-      g) for the first pick having no ended track when the music database has a loading track.
-      `unmeasured` for a map theme that names the loading track's entry: no scenario sets it up.
-      `unmeasured` for the loading track playing whether or not it is available and making no
-      ranged draw: MU8 part g gives it the normal flag, and neither MU8 part f nor part g reads the
-      random state at its start.
+      ending before the first start. `measurable` (MU11 part g) for the track playing in the menus
+      being stopped at once when a game started from the menus starts to load and the music database
+      has no loading track, and `unmeasured` when it has one, as no run of MU11 part g gives it one.
+      `measurable` (MU8 part g) for the first pick having no ended track when the music database has
+      a loading track. `unmeasured` for a map theme that names the loading track's entry: no
+      scenario sets it up. `unmeasured` for the loading track playing whether or not it is available
+      and making no ranged draw: MU8 part g gives it the normal flag, and neither MU8 part f nor
+      part g reads the random state at its start.
     - Confidence: medium for the first pick being an ordinary pick with no ended track, until MU8
-      parts a and b are made (and, when the music database has a loading track, part g), as claim
-      5 rates where list order starts; medium for the first track not depending on the side or on
+      parts a and b are made (and, when the music database has a loading track, part g), as claim 5
+      rates where list order starts; medium for the first track not depending on the side or on
       another game setting, until MU8 part h is made and because part h varies only the settings it
       lists; medium for the loading track playing with the in-game music setting off and for the
-      setting being the one read at startup, until MU8 part e's runs are made; medium for a map theme naming the loading track's entry (`unmeasured`, as
-      the backing says); medium for the loading track playing whether or not it is available and
-      making no ranged draw (`unmeasured`); medium for the original's first start at the first
-      music update and for no ranged draw with the in-game music setting off (`unmeasured`); high
-      for the first track becoming the ended track, for the in-game music setting off giving no
-      music and for music in the menus being stopped at once when a game starts to load with no
-      loading track in the music database; medium for that stop when the database has a loading
-      track (`unmeasured`); medium for a new skirmish forgetting the ended track, until MU8 part c
-      is made; medium for the map theme, until MU8 part d is made; medium for the loading track's
-      fade coming first in the original, until MU8 part f's run with a long loading track is made
-      (its length is not established and is only recorded); high for our engine's timing, which our
-      engine chooses and its fixture checks.
+      setting being the one read at startup, until MU8 part e's runs are made; medium for a map
+      theme naming the loading track's entry (`unmeasured`, as the backing says); medium for the
+      loading track playing whether or not it is available and making no ranged draw
+      (`unmeasured`); medium for the original's first start at the first music update and for no
+      ranged draw with the in-game music setting off (`unmeasured`); high for the first track
+      becoming the ended track, for the in-game music setting off giving no music and for music in
+      the menus being stopped at once when a game starts to load with no loading track in the music
+      database; medium for that stop when the database has a loading track (`unmeasured`); medium
+      for a new skirmish forgetting the ended track, until MU8 part c is made; medium for the map
+      theme, until MU8 part d is made; medium for the loading track's fade coming first in the
+      original, until MU8 part f's run with a long loading track is made (its length is not
+      established and is only recorded); medium for our engine's timing, a design rule that only
+      our engine's fixture checks, with no oracle run behind it.
 
 12. **The end of the game and the score screen.** This claim holds while the music volume is
     above zero; what the original does at zero is open (Q-1700 question 5). In the original:
@@ -572,30 +574,30 @@ presentation: no game state depends on it.
     the start again at each music update, which is equally silent while the start fails.
     - Backing: `measurable` (MU11 part a) for the track playing on through the end delay and the
       wait to the score screen, the picks in either, its stop there and the score track's start,
-      after a win, and (MU11 part i) for the same after a loss, except the picks; (MU11 part b) for the silence after the score track and
-      its repeats; (MU11 part c) for the silent score screen with no score track; (MU11 part d)
-      for the score track with the in-game music setting off; (MU11 part g) for the menu track
-      stopping the score track. That the original, under repeat, attempts a failed score-track
-      start again is `unmeasured`: silence looks the same whether or not each attempt is made, as
-      claim 4 says of repeat choices. That the original's score-track start and its repeats make no
-      ranged draw is `unmeasured`: MU11 does not record the random state at the score screen, as
-      claim 11 says of the loading track. `measurable` for our engine (MU11's engine fixture).
+      after a win, and (MU11 part i) for the same after a loss, except the picks; (MU11 part b)
+      for the silence after the score track and its repeats; (MU11 part c) for the silent score
+      screen with no score track; (MU11 part d) for the score track with the in-game music setting
+      off; (MU11 part g) for the menu track stopping the score track. That the original, under
+      repeat, attempts a failed score-track start again is `unmeasured`: silence looks the same
+      whether or not each attempt is made, as claim 4 says of repeat choices. That the original's
+      score-track start and its repeats make no ranged draw is `unmeasured`: MU11 does not record
+      the random state at the score screen, as claim 11 says of the loading track. `measurable`
+      for our engine (MU11's engine fixture).
     - Confidence: medium for the stop at the score screen and the direct start of the score track,
-      until MU11 part a is made, and after a loss until part i is made; medium for the silence
-      after the score track and its repeats, until MU11 part b is made; medium for the silent
-      score screen with no score track, until MU11 part c is made; medium for the original's
-      score track making no ranged draw (`unmeasured`, as the backing says); medium for the track
-      playing on, unfaded, through the end delay and the wait and for a pick in either, until
-      MU11 part a is made, and after a loss until part i is made (a pick after a loss rests on
-      part a's runs, since part i places no tone's end in the end sequence); medium for the score
-      track with the in-game music setting off,
-      until MU11 part d is made; medium for the menu track's start; medium for the original's
-      repeated attempts at a failed score-track start (`unmeasured`, as the backing says); high
-      for our engine's rules, which our engine chooses and its fixture checks (music updates
-      through the end delay, none after the cycle that runs its final tick, the stop when the end screen opens, the
-      score-screen rules on the end screen, the score track's timing there and its failed start,
-      with the single start attempt that the fixture's runs with the score track's file absent
-      record).
+      until MU11 part a is made, and after a loss until part i is made; medium for the silence after
+      the score track and its repeats, until MU11 part b is made; medium for the silent score screen
+      with no score track, until MU11 part c is made; medium for the original's score track making
+      no ranged draw (`unmeasured`, as the backing says); medium for the track playing on, unfaded,
+      through the end delay and the wait and for a pick in either, until MU11 part a is made, and
+      after a loss until part i is made (a pick after a loss rests on part a's runs, since part i
+      places no tone's end in the end sequence); medium for the score track with the in-game music
+      setting off, until MU11 part d is made; medium for the menu track's start; medium for the
+      original's repeated attempts at a failed score-track start (`unmeasured`, as the backing
+      says); medium for our engine's rules, a design rule that only our engine's fixture checks,
+      with no oracle run behind it (music updates through the end delay, none after the cycle that
+      runs its final tick, the stop when the end screen opens, the score-screen rules on the end
+      screen, the score track's timing there and its failed start, with the single start attempt
+      that the fixture's runs with the score track's file absent record).
 
 13. **Options menu, leaving and restarting.** This claim holds while the music volume is above
     zero (Q-1700 question 5). In the original, in a skirmish:
@@ -604,11 +606,11 @@ presentation: no game state depends on it.
       track that finishes is followed by an ordinary pick (claims 3 to 7), whose track is heard
       while the menu is still open.
     - The options menu offers one way to leave the game, and it ends the game at once, as S-0201
-      claim 1 describes for a choice that ends it at once. The menu calls it aborting the mission, and
-      it is how a skirmish player gives up the game. It is not S-0414 claim 11's surrender order: no house is
-      marked to die or defeated, no end delay runs, no result announcement is given, and no score
-      screen opens; the program goes back to the main menu. No choice of the menu sends the
-      surrender order of S-0414 claim 11 in a skirmish.
+      claim 1 describes for a choice that ends it at once. The menu calls it aborting the mission,
+      and it is how a skirmish player gives up the game. It is not S-0414 claim 11's surrender
+      order: no house is marked to die or defeated, no end delay runs, no result announcement is
+      given, and no score screen opens; the program goes back to the main menu. No choice of the
+      menu sends the surrender order of S-0414 claim 11 in a skirmish.
     - When the game is left this way, the playing track starts to fade out, and no pick follows
       it. The program then waits, in real time, while the fade and any sound still playing go
       on, up to a fixed bound whose length is not established (Open questions); whatever still
@@ -616,37 +618,45 @@ presentation: no game state depends on it.
       menu track, if the music database has one, as when the score screen is left (claim 12).
     - The options menu offers no restart in a skirmish.
 
-    Our engine (design, a departure with no switch, Edge cases): the options menu is a stand-still
-    for music as S-0701 claim 30 makes it one for sound. No music update runs while it is open; the
-    playing track is held, silent, at the point it had reached, and resumes from that point on the
-    return to the game. Its logical duration (claim 10) does not run down during the stand-still, since neither
-    logical audio time nor logical playback advances then (S-0701 claim 30), so no pick
-    falls due in the menu, and the next pick is made at the music update of the pass at which the
-    track then finishes. Our engine's own settings screen, opened from a game, has no counterpart
-    in the original; the music is held there in the same way, and no pick is made while it is
-    open (design). Leaving through the options menu ends the game at once, as in the original
-    (S-0201 claim 1): the playing track is faded out or stopped at once, which is presentation and
-    delays nothing, and no music update or pick follows, since no skirmish audio pass occurs after
+    Our engine (design; the project lead has accepted it): the music plays on while the options
+    menu is open, as in the original. The menu stays a stand-still for sound (S-0701 claim 30),
+    but music time advances there with real time and S-0701 claim 30's music-only passes run, each
+    with one music update (claim 10). The playing track is heard on, a track that finishes in the
+    menu is followed by an ordinary pick (claims 3 to 7) at the music-only pass at which it
+    completes on music time, and the track picked is heard while the menu is still open. On the
+    return to the game the track goes on from the point it had reached, and its logical duration
+    keeps counting on music time. Lost focus stops music time, also while the menu is open, and
+    the unfocused stretch adds nothing to it (S-0701 claim 30). How long the menu stays open, in
+    real time, decides when tracks end and how many picks are made there; when the track playing
+    as the menu closes ends afterwards, and so when every later track starts and ends; and,
+    through the shuffle picks' ranged draws, the unsynchronised stream's position for later sound
+    choices and later picks. S-0701 claim 30 lists what depends on it. This follows the original,
+    and no game state depends on it (S-0202 claim 11). Our engine's own settings screen, opened
+    from a game, has no counterpart in the original; the music plays on there in the same way
+    (design). Leaving through the options menu ends the game at once, as in the original (S-0201
+    claim 1): the playing track is faded out or stopped at once, which is presentation and delays
+    nothing, and no music update or pick follows, since no skirmish audio pass occurs after
     leaving the match (S-0701 claim 30); the main menu then starts the menu track. A surrender
     order, where our engine's interface offers one (S-0414 claim 11), leaves the music as in play
-    for as long as play goes on: in our engine play goes on while a hostile pair remains, with
-    the person who surrendered watching, and claim 12 applies from the end of the game, with our
-    end screen once the game is over. A restart, where our engine offers one, starts the music as
+    for as long as play goes on: in our engine play goes on while a hostile pair remains, with the
+    person who surrendered watching, and claim 12 applies from the end of the game, with our end
+    screen once the game is over. A restart, where our engine offers one, starts the music as
     claim 11 says; whether the old track fades is presentation and delays nothing.
     - Backing: `measurable` (MU11 part f) for the music going on in the options menu and the pick
       made there; (MU11 part e) for leaving through the options menu ending the game at once, with
-      no destruction of the local player's objects, no score screen and the main menu next, and
-      for the fade and the menu track then, the wait's bound being only recorded (MU11 part e).
-      That the wait has a fixed bound, and that a sound still playing at its end is stopped at
-      once, is `unmeasured`: no run here has a sound outlast the wait.
-      `measurable` (MU11 part h) for the menu offering no restart and no choice that sends the surrender order; `measurable` for our
+      no destruction of the local player's objects, no score screen and the main menu next, and for
+      the fade and the menu track then, the wait's bound being only recorded (MU11 part e). That the
+      wait has a fixed bound, and that a sound still playing at its end is stopped at once, is
+      `unmeasured`: no run here has a sound outlast the wait. `measurable` (MU11 part h) for the
+      menu offering no restart and no choice that sends the surrender order; `measurable` for our
       engine's rules (MU11's engine fixture).
     - Confidence: medium for the track going on while the options menu is open and for the pick
-      made in the menu, until MU11 part f is made. Medium for leaving ending the game at once with no surrender order, for the fade and the
-      menu track after it, and for the menu offering no restart and no choice that sends the surrender order, until MU11
-      parts e and h are made; medium for the wait's fixed bound and the stop at its end
-      (`unmeasured`); high for our engine's rules, which our engine chooses and its
-      fixture checks.
+      made in the menu, until MU11 part f is made. Medium for leaving ending the game at once
+      with no surrender order, for the fade and the menu track after it, and for the menu
+      offering no restart and no choice that sends the surrender order, until MU11 parts e and h
+      are made; medium for the wait's fixed bound and the stop at its end (`unmeasured`); medium
+      for our engine's rules, a design rule that only our engine's fixture checks, with no oracle
+      run behind it.
 
 ## Formulas
 
@@ -704,7 +714,7 @@ setting and either repeat setting.
 | Score track plays | It finishes | Repeat setting or its *repeat* flag: it starts again; otherwise silence, no pick (claim 12) |
 | Score screen | Main menu opens | The score track stops at once; the menu track, if any, starts (claim 12) |
 | A track plays in the menus | A game started from the menus starts to load | It stops at once (claim 11) |
-| A track plays | Options menu opens | Original: it plays on, and a track that finishes there is followed by a pick. Our engine: it is held, silent, until the return to the game (claim 13) |
+| A track plays | Options menu opens | Original and our engine: it plays on, and a track that finishes there is followed by a pick, heard in the menu; our engine makes it at a music-only pass (claim 13) |
 | Options menu open | The game is left through it | The game ends at once (S-0201 claim 1), with no surrender order and no score screen. Original: the track fades out, with no pick, through a real-time wait, and whatever still sounds is then stopped; the main menu starts the menu track. Our engine: the track is faded or stopped at once (presentation), no music update follows, and the main menu starts the menu track (claim 13) |
 | A track plays | A surrender order (our engine, where its interface offers one) | No change; the music goes on as in play, and claim 12 applies from the end of the game (claim 13) |
 
@@ -715,32 +725,18 @@ setting and either repeat setting.
   plays whenever nothing else can). The switch-off behaviour is one of several reasonable
   answers, so a switch keeps the original's result selectable. Backing and confidence: as claim
   7 rates the fallback.
-- **Picks at zero music volume (departure, no switch).** Our engine picks and starts tracks at
-  every music volume, silently at zero (claim 3), where, by claim 3's reading of the original
-  (`unmeasured`, low), the original makes no pick at zero volume. The music volume is a setting of each player, and a pick's ranged draws are on the
-  unsynchronised stream that sound choices share, so a rule that skipped picks would make later
-  sound choices depend on that setting. Nothing is heard at zero volume in either. When the
-  volume is raised again, our engine is heard part-way through whatever track it is then
-  playing; what the original then plays is open (Q-1700 question 5). Basis: the precedent of S-0701
-  claim 30, which already keeps sound choices independent of each player's mute settings; this
-  departure extends that rule to music, a design choice recorded here with that reason; the
-  project lead has accepted it. Backing and confidence: as claim 3 rates them (the original's rule low and
-  `unmeasured`, our engine's rule high through MU6 part c's engine fixture).
-- **Music held in the options menu (departure, no switch).** In the original the music goes on
-  while the options menu is open, and a track that finishes there is followed by a pick (claim
-  13). Our engine holds the music, silent, for as long as the menu is open, and resumes the
-  track from the point it had reached. The menu can stay open for any stretch of real time, and a
-  shuffle pick's ranged draws are on the unsynchronised stream that sound choices share, so picks
-  made in the menu would make later sound choices depend on how long a player kept it open.
-  Basis: S-0701 claim 30, which already makes the options menu a stand-still for sound, with no
-  logical audio time and no audio pass; this departure extends that rule to music, a design
-  choice recorded here with that reason. Playing the music on in the menu, as the original
-  does, would need a change to S-0701 claim 30. The project lead's acceptance of the departure is
-  pending (Open questions). A switch is not proposed: the behaviour changes music only, and a
-  switch selecting the original's behaviour would bring back the dependence on real time that the
-  departure removes. Backing and confidence: `measurable` (MU11 part f) for the original's music
-  going on in the menu and its pick there, medium until that part is made; `measurable`
-  (MU11's engine fixture) for our engine's hold, high.
+- **Picks at zero music volume (departure, no switch).** Our engine picks and starts tracks at every
+  music volume, silently at zero (claim 3), where, by claim 3's reading of the original
+  (`unmeasured`, low), the original makes no pick at zero volume. The music volume is a setting of
+  each player, and a pick's ranged draws are on the unsynchronised stream that sound choices share,
+  so a rule that skipped picks would make later sound choices depend on that setting. Nothing is
+  heard at zero volume in either. When the volume is raised again, our engine is heard part-way
+  through whatever track it is then playing; what the original then plays is open (Q-1700 question
+  5). Basis: the precedent of S-0701 claim 30, which already keeps sound choices independent of each
+  player's mute settings; this departure extends that rule to music, a design choice recorded here
+  with that reason; the project lead has accepted it. Backing and confidence: as claim 3 rates them
+  (the original's rule low and `unmeasured`, our engine's rule medium, a design rule that only MU6
+  part c's engine fixture checks).
 - **End screen when the game is over (departure, no switch).** In the original the music goes
   on unchanged through the end delay's ticks and then through the real-time wait for the result
   announcement that follows the game being over (S-0414 claim 8); a track that finishes in either is followed by a pick (claim 12). Our engine keeps the
@@ -751,26 +747,25 @@ setting and either repeat setting.
   real time (it lasts until the result announcement has been given), not in ticks, so a pick in it would put ranged draws
   on the unsynchronised stream at a point set by real time; what is heard there is presentation,
   and no game state depends on it. A switch is not proposed: the behaviour changes music only,
-  and reproducing the wait would bring back that dependence on real time. The project lead's
-  acceptance of it is pending (Open questions). Backing and confidence: `measurable` (MU11 parts a
+  and reproducing the wait would bring back that dependence on real time. The project lead has
+  accepted it. Backing and confidence: as claim 12 rates them: `measurable` (MU11 parts a
   and i) for the original's music playing on through the end delay and the wait, with its picks,
   medium until those parts are made; `measurable` (MU11's engine fixture) for our engine's end
-  screen opening when the game is over with no music update after that cycle, high.
-- **Side restriction matched by name (design choice of scope, no switch).** This is a design
-  choice, not a departure from a known rule of the original, whose own rule is not established.
-  Our engine makes an entry whose side
-  restriction names the local player's side available to that player (claim 2). In the original
-  such an entry does not by that become available when the side is not the first (MU1 part b),
-  and for the first side the result is not established. Which entries it makes available instead
-  is not established and is not reproduced. Only that failure to match by name is
-  claimed about the original. Whether it is a bug is not: if the original's rule is meant to be by
-  name, it is a bug that changes music only; if the rule is not by name at all (Open questions),
-  the stock data may suit it, and this is a difference of reading the data. Giving it no switch
-  is a design choice recorded here: the behaviour changes music only, and the original's rule is
-  not established, so there is no known behaviour for a switch to select. The project lead has
-  accepted it.
-  Backing and confidence: as claim 2 rates them (our engine's name matching high, the original's
-  failure to match medium).
+  screen opening when the game is over with no music update after that cycle, medium, a design
+  rule that only our engine's fixture checks, with no oracle run behind it.
+- **Side restriction matched by name (design choice of scope, no switch).** This is a design choice,
+  not a departure from a known rule of the original, whose own rule is not established. Our engine
+  makes an entry whose side restriction names the local player's side available to that player
+  (claim 2). In the original such an entry does not by that become available when the side is not
+  the first (MU1 part b), and for the first side the result is not established. Which entries it
+  makes available instead is not established and is not reproduced. Only that failure to match by
+  name is claimed about the original. Whether it is a bug is not: if the original's rule is meant to
+  be by name, it is a bug that changes music only; if the rule is not by name at all (Open
+  questions), the stock data may suit it, and this is a difference of reading the data. Giving it no
+  switch is a design choice recorded here: the behaviour changes music only, and the original's rule
+  is not established, so there is no known behaviour for a switch to select. The project lead has
+  accepted it. Backing and confidence: as claim 2 rates them (our engine's name matching medium, a
+  design rule that only its fixture checks, the original's failure to match medium).
 - A side name in a track entry's side restriction that names no side of the rules data (bad
   data): our engine gives the importer warning, naming the entry and the value, and treats the
   entry as never available. This spec covers skirmish playback only (claim 2), so the
@@ -783,8 +778,8 @@ setting and either repeat setting.
     entry never being available for a name that matches no side of the rules data. When the
     check is made (at each skirmish start, against a mode's or map layer's added sides, and
     outside a game) is our engine's design and `unmeasured` here: the fixture does not vary it.
-  - Confidence: high for the warning and the never-available entry, which the fixture checks
-    directly; medium for when the check is made
+  - Confidence: medium for the warning and the never-available entry, a design rule that only our
+    engine's fixture checks, with no oracle run behind it; medium for when the check is made
 
 ## Import mapping
 
@@ -1061,7 +1056,7 @@ the switch-off results of claim 7 and the name matching of claim 2.
   makes T0 the ended track (claim 4), so the next pick accepts T1. *Falsified if:* T2 is heard, T0
   never plays in the first run, or, in the second run, T1 is not heard again within five track
   lengths after it ends: then the failed start did not both leave music started (claim 10) and
-  leave T1 no longer the ended track (claim 4), and the run does not say which of the two failed.
+  stop T1 being the ended track (claim 4), and the run does not say which of the two failed.
   The tones alone do not show that the fallback started entry 0, since T1 played again without
   that start sounds the same. So the second run is made with the random-state recorder and MU6's
   accounting of unrelated draws: the run searches the ticks from T1's end to the start of the
@@ -1403,24 +1398,28 @@ the switch-off results of claim 7 and the name matching of claim 2.
     followed by its list-order successor; unlike (a), no further runs are made to place a tone's
     end there, and the moment each tone ends is only recorded. *Falsified if:* as (a).
   - Engine fixture: parts a to e, g and i on our engine with its end screen in place of the score
-    screen, expecting the original's results except where claims 12 and 13 give our engine's
-    design: in part a music updates and picks go on through the end delay as in the
-    original, the end screen opens at the end of the cycle that runs the end delay's final tick,
-    the track stops there at once, and no music update runs after that cycle (a track due to
-    finish after it is followed by no pick); in part b's second and third runs the score track starts again as
-    soon as its whole length has played out, with no audio pass on the end screen, and a further
-    run of part b with the score track's file absent, once without and once with the repeat
-    setting, expects a silent end screen and records our engine's attempts to start the score
-    track, expecting exactly one attempt in each run; in part e the game ends at once, with no later music
-    update and no pick, and the main menu starts *M*. A further run, on a three-player test copy of the map whose two computer opponents are hostile
-    to each other, gives a surrender order, where our engine's interface offers one, expecting
-    play to go on after the local player's defeat, since a hostile pair remains, with the music as in play; and one restarts, where our engine
-    offers it, expecting the restarted game's first tone to be T0 (claim 11). Part f on our engine, expecting the departure of claim 13: the tone falls silent when
-    the menu opens, resumes from the same point when it closes, and no pick and no ranged draw
-    happen while the menu is open; the next pick's ranged draws (second run) come at the music
-    update of the pass at which the resumed track finishes. The same run with our engine's own
-    settings screen opened from the game in place of the options menu, expecting the tone held
-    and resumed in the same way and no pick while the screen is open.
+    screen, expecting the original's results except where claims 12 and 13 give our engine's design:
+    in part a music updates and picks go on through the end delay as in the original, the end screen
+    opens at the end of the cycle that runs the end delay's final tick, the track stops there at
+    once, and no music update runs after that cycle (a track due to finish after it is followed by
+    no pick); in part b's second and third runs the score track starts again as soon as its whole
+    length has played out, with no audio pass on the end screen, and a further run of part b with
+    the score track's file absent, once without and once with the repeat setting, expects a silent
+    end screen and records our engine's attempts to start the score track, expecting exactly one
+    attempt in each run; in part e the game ends at once, with no later music update and no pick,
+    and the main menu starts *M*. A further run, on a three-player test copy of the map whose two
+    computer opponents are hostile to each other, gives a surrender order, where our engine's
+    interface offers one, expecting play to go on after the local player's defeat, since a hostile
+    pair remains, with the music as in play; and one restarts, where our engine offers it, expecting
+    the restarted game's first tone to be T0 (claim 11). Part f on our engine, with the test driver
+    supplying the menu's clock readings as logical input (as S-0701 H2 does) and a log of each
+    music-only pass's music time, expecting the original's result of part f (claim 13): the tone
+    sounds on to its end while the menu is open, and its successor starts in the menu at the first
+    music-only pass at which the tone completes on music time; in the second run the ranged draws of
+    each shuffle pick made while the menu is open come at the music-only pass at which the track
+    before it completes, however many picks the menu's stretch holds, and no draw other than those
+    picks' is made while the menu is open. The same run with our engine's own settings screen opened
+    from the game in place of the options menu, expecting the same results.
 
 ## Changes for other specs
 
@@ -1430,9 +1429,17 @@ hand-offs below therefore move every run of the original that gives the human's 
 S-0414 and in other specs, to a network game of the original, and correct approved text that
 assumes a skirmish surrender. They rest on claim 13, which is rated medium until MU11 parts e and
 h are made; part h's capture shows the labels of the menu's choices, so a run of part h that finds
-a choice that surrenders in a skirmish withdraws them. Since a network game's end handling is left
-to the future multiplayer spec, each rating of those specs that comes to rest on a network-game
-run drops to medium at most.
+a choice that surrenders in a skirmish withdraws them. A network-game run backs a skirmish rule
+only on the assumption that the original carries out the surrender order, and ends the game after
+it, in the same way in a network game and in a skirmish. A network game's end handling is left to
+the future multiplayer spec (S-0201 claims 13 and 15), no run of the original can test that
+assumption, and it is rated low (the S-0414 entry below). So each rating of those specs that
+comes to rest on a network-game run alone drops to low, unless a skirmish run of the original
+also backs the same rule, in which case that run's rating stands. The reason for the move: in a
+skirmish the menu's leave choice ends the game with no tick after it, and no choice of that menu
+marks the house to die (claim 13, MU11 parts e and h), so a run that left through the menu would
+end the game at once; no other input of the original's skirmish is known to give a surrender, and
+scripted input acts only through the game's normal input (glossary, *measurement setup*).
 
 - **S-0701 claim 30.** Two changes. First, its schedule of audio passes gains the music update of
   S-0703 claim 10, run at the end of each pass after that pass's sound choices. Second, its sentence "No skirmish audio passes occur in setup menus before loading
@@ -1443,83 +1450,107 @@ run drops to medium at most.
   schedule already gives their audio passes, with their music updates (the first change). The
   pass at the end of the cycle that runs the end delay's final tick, if one falls there, is the
   last; our end screen opens after it (S-0703 claim 12) and has none. The score track and the end screen need no audio
-  pass, since they make no ranged draw. The options menu stays a stand-still with no audio pass,
-  for music as for sound (S-0703 claim 13). Only if the project lead chooses to play the music
-  on in the options menu (Open questions) would claim 30 also gain music-only
-  passes during that stand-still.
+  pass, since they make no ranged draw. S-0701 carries both changes. It also adds music-only
+  passes while the options menu is open (S-0701 claim 30): the menu stays a stand-still for
+  sound, but music time advances there with real time and each music-only pass runs one music update, so the music plays on in the menu (S-0703 claim 13).
+  Lost focus stops music time there too. It also lists the glossary amendment for this
+  exception (S-0701, Changes for other specs).
 - **S-0009.** A map's basic section also carries the map theme key, which S-0703 claim 11 and
   its Import mapping interpret.
 - **S-0202 claim 11 and scenario R6 part b.** No change: the music track choice they name is
   S-0703 claim 6's shuffle pick, drawn from the unsynchronised stream.
-- **S-0414 claim 11, its Measurement scenarios and the scenarios that give a surrender.** In a
-  skirmish the original's options menu sends no surrender order: its one way to leave, aborting the
-  mission, is how a skirmish player gives up, and it ends the game at once (S-0201 claim 1, S-0703 claim 13), and no other input of a skirmish gives one. The
-  original's surrender order is a network game's (S-0201 claim 15, with its entry below), so every run
-  of the original that needs the human's surrender becomes a network game of the original, in
-  a form that this hand-off adds to S-0414's Measurement scenarios. Such a run measures a network
-  game of the original, whose end handling (the end test, the end delay, the final tick and what
-  is committed in it) is among the network-game states that S-0201 claim 15 leaves to the future
-  multiplayer spec. So what it backs holds for a skirmish only on the assumption that the
-  original handles these in a network game as in a skirmish, and that assumption is `unmeasured`:
-  no run of the original's skirmish can give the surrender order. Each S-0414 rating that comes to
-  rest on such a run therefore drops to medium at most, as listed below; ratings that skirmish
+- **S-0414 claim 11, its Summary, its Measurement scenarios and the scenarios that give a
+  surrender.** In a skirmish the original's options menu sends no surrender order: its one way to
+  leave, aborting the mission, is how a skirmish player gives up, and it ends the game at once
+  (S-0201 claim 1, with its entry below, and S-0703 claim 13); no other skirmish input that gives
+  the order is established. The original's surrender order is a network game's (S-0201 claim 15,
+  with its entry below), so every run of the original that needs the human's surrender becomes a
+  network game of the original, in a form that this entry adds to S-0414's Measurement
+  scenarios. Such a run measures a network game of the original, whose end handling (the end
+  test, the end delay, the final tick and what is committed in it) is among the network-game
+  states that S-0201 claims 13 and 15 leave to the future multiplayer spec. So what it backs holds
+  for a skirmish only on the assumption that the original carries out the surrender order in the
+  same way in a network game and in a skirmish, and that assumption is rated low: no run of the
+  original can test it. Each S-0414 rating that comes to rest on such a run alone therefore drops
+  to low, as listed below, unless a skirmish run of the original also backs the same rule (as V2's
+  defeat from another cause may), in which case that run's rating stands; ratings that skirmish
   runs back keep theirs. The changes are as follows.
-  - Claim 11. The sentence "In the original only the local player can surrender, through the
-    options menu, and not when the local player is an observer, nor from the end of the game on"
-    gains: "In a skirmish the original's options menu sends no surrender order: its one way to
-    leave, aborting the mission, is how a skirmish player gives up, and it ends the game at once (S-0201 claim 1, S-0703 claim 13), and no other input of a skirmish
-    gives one; the original's surrender order is a network game's (S-0201 claim 15). The original
-    carries out the surrender order in the same way in a network game and in a skirmish: nothing
-    in carrying it out depends on the kind of game. So what the order does is measured in a
+  - Summary. The sentence "Campaign missions (whose results come from map triggers) and network
+    games are outside this spec." gains: "; a network game of the original is used only to
+    measure the surrender (Measurement scenarios, *network-game form*)". A paragraph is added
+    after the first: "In a skirmish the original's options menu sends no surrender order: its one
+    way to leave ends the game at once (S-0703 claim 13). So every run of the original that gives
+    the human's surrender (V4, V8 part a, V11, V12 parts a and b, V14, V15 part a, V17) is given
+    in a network game of the original, in the *network-game form* of the Measurement scenarios.
+    A rating that rests on such a run alone is low, as the assumption that the order's effect does
+    not depend on the kind of game is (claim 11), unless a skirmish run also backs the same rule
+    (claims 5, 11, 15 to 18 and 21). The form rests on S-0201 claim 15."
+  - Claim 11. The sentences "In the original only the local player can surrender, through the
+    options menu, and not when the local player is an observer, nor from the end of the game on:
+    the original refuses the options menu from then on (S-0201 claim 15), and in a skirmish no
+    tick runs while it is open, so a skirmish player cannot surrender in the end delay." become:
+    "In the original's network game only the local player can surrender, through the options
+    menu, and not when the local player is an observer, nor from the end of the game on: the
+    original refuses the options menu from then on (S-0201 claim 15). In a skirmish the
+    original's options menu sends no surrender order: its one way to leave, aborting the mission,
+    is how a skirmish player gives up, and it ends the game at once (S-0703 claim 13 and S-0201
+    claim 1). No other skirmish input that gives the order is established here; the original's
+    network game gives it (S-0201 claim 15). This spec assumes that the original carries out the
+    surrender order in the same way in a network game and in a skirmish, nothing in carrying it
+    out depending on the kind of game. On that assumption what the order does is measured in a
     network game of the original (Measurement scenarios, *network-game form*), and our engine
     gives the order that effect in a skirmish." The sentence "in the original the human
     participant's surrender ends the game at that defeat (claim 6, departure)" becomes "in the
-    original no skirmish input gives the surrender order, and claim 6's departure ends a skirmish at the
-    human participant's defeat from any other cause". The backing gains: "That the order's
-    effect does not depend on the kind of game is `unmeasured`: no run of the original's
-    skirmish can give the order, and the network-game runs measure the effect itself." The
-    confidence's "high for the destruction in the next house update" becomes "medium for the
-    destruction in the next house update, which V8 measures in the network-game form", and the
-    confidence gains "medium that the effect does not depend on the kind of game". The
-    pending-result sentence and its backing (the original's case only through S-0201 scenario
-    T8, part H; in a skirmish a rule of our engine, which V8 part b checks) need no change.
+    original no skirmish input that gives the surrender order is established, and claim 6's
+    departure ends a skirmish at the human participant's defeat from any other cause". In the
+    backing, "since no skirmish input can give it" becomes "since no skirmish input that gives it
+    is established", and the backing gains: "That the order's effect does not depend on the kind
+    of game is `unmeasured`: no run of the original's skirmish is known to give the order, and the
+    network-game runs measure the effect itself." The confidence's "high for the destruction in
+    the next house update" becomes "low for the destruction in the next house update, which V8
+    measures only in the network-game form, unless a skirmish run also backs it", and the
+    confidence gains "low that the effect does not depend on the kind of game, an assumption that
+    no run of the original can test (unmeasured)". The pending-result case, its backing and its
+    rating need no change.
   - Measurement scenarios. After the first paragraph (the common setup) a paragraph is added:
     "*Network-game form.* A scenario that gives the human's surrender in the original is run as
-    a network game of the original, since no input of the original's skirmish sends the surrender order (claim
-    11). Two machines on one local network, as in S-0201 scenario T8, each run the stock game
-    and the recorder; the scenario's human is machine 1's player, and the scenario's houses,
-    map, game speed (set in the lobby) and named test files are otherwise as stated. Machine 2's
-    player is an added human participant, far from the observed area, in one lobby team with
-    every computer player of the scenario, all of which are the human's enemies wherever this
-    form is used. Machine 2's house is a contender created for a human participant and remains,
-    so claim 6's departure does not end the game; the human's defeat leaves no hostile pair, and
-    the game ends at it by claim 6's ordinary test (no hostile pair remains), assuming the
-    original's network game ends as a skirmish does. How the original ends a network game is left
-    to the future multiplayer spec (S-0201 claim 15), so a rating that rests on a run in this form
-    is medium at most. Machine 2's player gives no orders except the one
-    below; a run in which machine 2's house is defeated, attacks or is attacked is void.
+    a network game of the original, since no input of the original's skirmish sends the
+    surrender order (claim 11). Two machines on one local network, as in S-0201 scenario T8,
+    each run the stock game and the recorder; the scenario's human is machine 1's player, and
+    the scenario's houses, map, game speed (set in the lobby) and named test files are otherwise
+    as stated. Machine 2's player is an added human participant, far from the observed area, in
+    one lobby team with every computer player of the scenario, all of which are the human's
+    enemies wherever this form is used; if the lobby offers no such team, the run is not made,
+    and what it would back is `unmeasured`. Machine 2's house is a contender created for a human
+    participant and remains, so claim 6's departure does not end the game; the human's defeat
+    leaves no hostile pair, and the game ends at it by claim 6's ordinary test (no hostile pair
+    remains), assuming the original's network game ends as a skirmish does. How the original
+    ends a network game is left to the future multiplayer spec (S-0201 claims 13 and 15), so a
+    rating that rests on a run in this form alone is low, as claim 11 rates that assumption,
+    unless a skirmish run also backs the same rule. Machine 2's player gives no orders except the
+    one below; a run in which machine 2's house is defeated, attacks or is attacked is void.
     Machine 1's player surrenders through the options menu's choice that surrenders and keeps
     the player watching (S-0201 claim 15), by scripted input where a tick is aimed at. The order
     is carried out in tick *c* + *W*, where *c* is the tick in which the choice is made and *W*
     is the order delay (S-0201 Terms and claim 17); wherever a scenario names the tick of the
     surrender, or the tick in which it is applied, it means that tick. That tick is recorded,
     not computed: it is the one tick at whose end machine 1's read-only recorder records the
-    human's house as marked to die (S-0414 claim 11 and State and ordering), so no reading is
-    needed after the surrender. *W* serves only to aim the choice: each run reads it once, before
-    the surrender, from a move order that machine 2's scripted input gives one of its own units
-    (the tick in which the unit's destination changes, less the tick in which the order is
-    given), and a run whose surrender is carried out in a tick other than the one a scenario
-    aims at is void. The surrender comes at least 600 s of real time after the map is visible, as in S-0201
-    scenario T8, so that timing orders have been carried out. The draws that a network game adds
-    to the scenario random stream in every tick (S-0202 claim 12) are not part of any count of
-    draws below."
+    human's house as marked to die (claim 11 and State and ordering), so no reading is needed
+    after the surrender. *W* serves only to aim the choice: each run reads it once, before the
+    surrender, from a move order that machine 2's scripted input gives one of its own units (the
+    tick in which the unit's destination changes, less the tick in which the order is given), and
+    a run whose surrender is carried out in a tick other than the one a scenario aims at is void,
+    so no rule here rests on the order delay being the same for every order. The surrender comes
+    at least 600 s of real time after the map is visible, as in S-0201 scenario T8, so that
+    timing orders have been carried out. The draws that a network game adds to the scenario
+    random stream in every tick (S-0202 claim 12) are not part of any count of draws below."
   - Scenario V4. "The human surrenders" (the setup) and "when the human surrenders" (part b)
     are given in the network-game form; part c reads the kill counts on machine 1's result
     screen, machine 2's house among the houses whose count must not rise. Claim 5's confidence
     "high for the destruction, the ignored defences, the first two table rows and the
     permanent-control rows" becomes "high for the destruction (V2) and the permanent-control rows
-    (S-0601 scenario MC10); medium for the ignored defences and the first two table rows, which
-    V4 measures in the network-game form".
+    (S-0601 scenario MC10); low for the ignored defences and the first two table rows where they
+    rest only on V4, which runs in the network-game form, unless a skirmish run also backs them".
   - Scenario V8. The setup "the human surrenders from the options menu at tick *t*" becomes "the
     human surrenders in the network-game form, the order carried out in tick *t*". Part b needs
     no change: it is a run of our engine only, with S-0201 scenario T8, part H as the
@@ -1531,17 +1562,19 @@ run drops to medium at most.
     tick (S-0202 claim 12) are known; a draw in the tick of the destruction that is neither one
     of those nor a draw of the sweep makes the run inconclusive." Claim 15's confidence "high for
     creation order, no off-map exclusion and no repeated hit solely due to delayed removal"
-    becomes medium for the same, since V11 measures them in the network-game form.
+    becomes low for the same, since V11 measures them only in the network-game form, unless a
+    skirmish run also backs them.
   - Scenario V12, parts a and b. "surrender in tick n − 1" becomes "surrender in the
     network-game form, the order carried out in tick n − 1"; the control with an ordinary
     vehicle likewise. Claim 16's confidence "high for the relative places of destruction, power,
-    radar and tech-tree work" becomes medium for the same, since V12 parts a and b measure them,
-    and the final tick that commits them, in the network-game form. Claim 8 keeps its rating:
-    its backing (V12 part c and V6) gives no surrender.
+    radar and tech-tree work" becomes low for the same, since V12 parts a and b measure them,
+    and the final tick that commits them, only in the network-game form, unless a skirmish run
+    also backs them. Claim 8 keeps its rating: its backing (V12 part c and V6) gives no
+    surrender.
   - Scenario V14. "Procedure: surrender and sample during the destruction interval" becomes
     "Procedure: surrender in the network-game form and sample during the destruction interval".
-    Claim 17's confidence "high for the health-independent count and deletion rule" becomes
-    medium for the same.
+    Claim 17's confidence "high for the health-independent count and deletion rule" becomes low
+    for the same, unless a skirmish run also backs it.
   - Scenario V15, part a. "Apply surrender in tick 7" becomes "Surrender in the network-game
     form, the order carried out in a tick 8*m* − 1 for a whole number *m* (machine 1's choice
     made in tick 8*m* − 1 − *W*, with *W* from the run's reading); a run whose order is carried
@@ -1549,31 +1582,39 @@ run drops to medium at most.
     "tick 16" becomes "tick 8*m* + 8", in the end-delay sentence and in the counter run, which
     also surrenders in this form. Part c's comparison "unlike surrender in part a" needs no
     change. Claim 18's confidence "high for the relative places and continued raises after
-    defeat" becomes "high for what V15 parts b and c measure in a skirmish; medium for the
+    defeat" becomes "high for what V15 parts b and c measure in a skirmish; low for the
     surrender's place relative to the assigned-tag raise and the raises after that defeat, which
-    part a measures in the network-game form".
+    part a measures only in the network-game form, unless a skirmish run also backs them".
   - Scenario V17. "No-attacker surrender gives losses only" gains "(the surrender given in the
-    network-game form; machine 2's house gains no kill)". Claim 21's confidence gains "medium for
-    the counts after a surrender, which V17 measures in the network-game form".
+    network-game form; machine 2's house gains no kill)". Claim 21's confidence gains "low for
+    the counts after a surrender, which V17 measures only in the network-game form, unless a
+    skirmish run also backs them".
   - Claim 5's backing ("V4 does not arrange an object under an erasing weapon at surrender"),
     the rule text of claims 15 to 18 and State and ordering describe the order's effect rather
     than how it is given, and need no change.
 
-  Reason: in a skirmish the menu's leave choice ends the game with no tick after it, and no
-  choice of that menu marks the house to die (S-0703 claim 13, MU11 parts e and h), so a run that
-  left through the menu would end the game at once; no other input of the original's skirmish
-  gives a surrender, and scripted input acts only through the game's normal input (glossary,
-  *measurement setup*).
+  Reason as in this section's opening paragraph.
 - **S-0313 (the defeat variant of its firing-index scenario), S-0308 (scenario part g, own-house
   defeat) and S-0508 (scenario G15).** "surrender the human house through ordinary input",
   "surrender the occupants' house" and "surrender A through normal input" become a surrender of
   that house, the human's, in the network-game form of S-0414's Measurement scenarios (the entry
   above); the house that receives the building and the third contender are computer players of
-  machine 2's lobby team. A rating of these specs that comes to rest on such a run is medium at
-  most. Reason as for S-0414 above.
+  machine 2's lobby team. A rating of these specs that comes to rest on such a run alone drops to
+  low, unless a skirmish run also backs the same rule. Reason as in this section's opening
+  paragraph.
+- **S-0311 claim 15 and S-0601 claim 14.** S-0311 claim 15's confidence "high for whole-building
+  actions, defeat's off-map inclusion and the engine safety rule" keeps high where X15 or S-0508
+  G14 back the rule and for the engine safety rule; a part that rests only on S-0508 G15 (the
+  defeat hits with an unchanged numeric index in a surviving foreign-owned building) drops to low,
+  unless a skirmish run also backs it, since G15 gives its surrender in the network-game form
+  (the entry above). S-0601 claim 14's confidence "high" keeps high where S-0414 V2 variant j or
+  MC10 backs the rule in a skirmish; a part that rests only on S-0414 V4 parts a and b drops to
+  low, unless a skirmish run also backs it, since V4 gives its surrender in the network-game form.
+  Reason as in this section's opening paragraph.
 - **S-0109 (the death fixture's after-pass surrender destruction).** The surrender is given in the
-  network-game form of S-0414's Measurement scenarios (the entry above). A rating that comes to
-  rest on that run is medium at most. Reason as for S-0414 above.
+  network-game form of S-0414's Measurement scenarios. A rating that comes to rest on that run
+  alone drops to low, unless a skirmish run also backs it. Reason as in this section's opening
+  paragraph.
 - **S-0413 (scenario C3, part a).** "at the end of a game that the human ends by resigning at tick
   300" becomes "at the end of a game that ends with the human's defeat at a fixed tick: a timed
   action of the test map removes the human's last counted object (as in S-0414 scenario V12,
@@ -1594,50 +1635,111 @@ run drops to medium at most.
   of the note needs no change: its ticks 16 and 17 belong to parts b and c, which give no
   surrender. Claim 8's backing (S-0414 scenarios V7, V8, V11, V12 and V15) needs no change, but
   its confidence "S-0414's high for destruction creation order and within-update ordering"
-  becomes "high for what S-0414 scenarios V7 and V15 parts b and c measure in a skirmish; medium
-  for destruction creation order and within-update ordering where they rest on V8, V11, V12 and
-  V15 part a, which run in the network-game form", since how the original ends a network game is
-  left to the future multiplayer spec (S-0201 claim 15). Reason as for S-0414 above.
+  becomes "high for what S-0414 scenarios V7 and V15 parts b and c measure in a skirmish; low for
+  destruction creation order and within-update ordering where they rest only on V8, V11, V12 and
+  V15 part a, which run in the network-game form, unless a skirmish run also backs them", since
+  how the original ends a network game is left to the future multiplayer spec (S-0201 claims 13
+  and 15). Reason as in this section's opening paragraph.
 - **S-0011 claim 35.** Its backing "S-0414 V15 for within-update timing and continued raises
   after defeat" needs no change, but its confidence "high for within-update timing and continued
   raises after defeat" becomes "high for the within-update timing that S-0414 V15 parts b and c
-  measure in a skirmish; medium for the raise's place relative to the surrender destruction and
-  for continued raises after that defeat, which V15 part a measures in the network-game form",
-  since how the original ends a network game is left to the future multiplayer spec (S-0201
-  claim 15). Reason as for S-0414 above.
-- **S-0201 claim 1.** Its bullet "Which of the menu's choices ends the game at once and which one
-  resigns is not established (Open questions)." becomes, for a skirmish: "In a skirmish the
-  options menu offers one way to leave, and it ends the game at once; no choice of that menu
-  resigns (S-0703 claim 13)." Its backing gains `measurable` (S-0703 MU11 parts e and h) for that
-  mapping in a skirmish, and its low rating for which menu choice is which becomes medium for a
-  skirmish until those parts are made. Reason as for S-0414 above.
+  measure in a skirmish; low for the raise's place relative to the surrender destruction and for
+  continued raises after that defeat, which V15 part a measures only in the network-game form,
+  unless a skirmish run also backs them", since how the original ends a network game is left to
+  the future multiplayer spec (S-0201 claims 13 and 15). Reason as in this section's opening paragraph.
+- **S-0201 claim 1.** The sentence "A resignation counts here: it makes the player's house lose in
+  a later tick, followed by the end delay, rather than ending play immediately." becomes "A
+  resignation counts here: it does not end play immediately. What it does to the player's house is
+  S-0414 claim 11's (it may change nothing, or bring the house's defeat in a later tick); a defeat
+  it brings ends the game only through the end test and the end delay, as above." The bullets
+  "**Left from the options menu.** When the player leaves the game through an options-menu choice
+  that ends it at once, the game ends between two cycles and no further tick runs. The tick
+  number stays at the count of ticks run, one more than the number of the last tick." and "Which
+  of the menu's choices ends the game at once and which one resigns is not established (Open
+  questions). Our engine reproduces both rules." become one bullet: "**Left from the options menu,
+  in a skirmish.** In a skirmish the options menu offers one way to leave, and no choice of that
+  menu resigns (S-0703 claim 13). Leaving through it ends the game at once, between two cycles,
+  and no further tick runs. The tick number stays at the count of ticks run, one more than the
+  number of the last tick. Our engine reproduces the ending by a rule of game state and this
+  skirmish leave." In the backing, "`unmeasured` for the exact menu-choice mapping, since no
+  button-to-result mapping has been established" becomes "`measurable` (S-0703 scenario MU11,
+  parts e and h) for the menu's one leave choice in a skirmish, ending the game at once; claim 15
+  gives a network game's choices", and the confidence's "low for which menu choice is which"
+  becomes "medium for the skirmish menu's one leave choice, until S-0703 MU11 parts e and h are
+  made". The Open questions entry on which menu choice is which is settled for a skirmish by
+  claim 13. Reason as in this section's opening paragraph.
 - **S-0201 claim 15.** Its sentence "After the player has resigned through the menu, it does not
-  open again until the player's house is defeated" holds for a network game only: in a skirmish
-  the menu's abort is no resignation (S-0703 claim 13). The backing's "`unmeasured` for the menu after
-  resigning in a skirmish" and the confidence's "medium for the menu after resigning in a
-  skirmish" are dropped, since the case cannot arise in a skirmish. Its "a skirmish player cannot
-  surrender during the end delay" stays, and gains "nor at any other time: a skirmish's options
-  menu sends no surrender order; its abort ends the game at once (S-0703 claim 13)". The claim gains a bullet:
+  open again until the player's house is defeated;" becomes "In a network game, after the player
+  has resigned through the menu, it does not open again until the player's house is defeated (in
+  a skirmish the menu's abort is no resignation, S-0703 claim 13);". In *A surrender during the
+  end delay*, "a skirmish player cannot surrender during the end delay" becomes "a skirmish player
+  cannot surrender through the options menu during the end delay, nor at any other time: a
+  skirmish's options menu sends no surrender order; its abort ends the game at once (S-0703 claim
+  13)", and "choosing surrender in it then still sends the surrender order" becomes "choosing the
+  surrender that keeps the player watching in it then still sends the surrender order". The
+  backing's "`unmeasured` for the menu after resigning in a skirmish" with its reason, and the
+  confidence's "medium for the menu after resigning in a skirmish", are dropped, since the case
+  cannot arise in a skirmish. The claim gains a bullet after *A surrender during the end delay*:
   "**What leaving offers in a network game.** While at least two houses of human participants
-  are undefeated, the player's own among them, leaving through the options menu offers two
-  choices that send the surrender order (S-0414 claim 11): one then leaves the game, the other
-  keeps the player watching. Otherwise the menu offers only a leave, which sends no surrender
-  order. Backing: `measurable` for the choice that keeps the player watching (part F of scenario
-  T8, and S-0414's network-game form in each of its runs), and for the condition on the
-  undefeated human houses and the leave-only menu otherwise through a run added to part F, in
-  which machine 2's house is defeated before machine 1's player opens the options menu
-  (expected: only a leave is offered; falsified by a choice that surrenders); `unmeasured` for
-  what the two leave choices do on the other machines, since no part records them there.
-  Confidence: medium, and medium for the condition and the leave-only menu until that run is
-  made." The bullet's premise, the two choices in a network game, is not measured yet: until
-  part F's runs are made it rests on the original's program alone. Reason as for S-0414
-  above; S-0414's network-game form rests on this bullet.
-- **S-0201 scenario T1, part D.** "trying each menu choice that leaves the game in its own runs"
-  is, in a skirmish, the one leave choice (S-0703 claim 13); the sentence "A choice that resigns
-  lets ticks run on through the defeat and its end delay, and its final tick then behaves as in
-  part C." holds for a network game only. The sentence of claim 1 "A resignation counts here"
-  then concerns a network game's resignation. Scenario T9 needs no change. Reason as for S-0414
-  above.
+  are undefeated, the player's own among them, and the player is not an observer, leaving
+  through the options menu offers two choices that send the surrender order (S-0414 claim 11):
+  one then leaves the game, the other keeps the player watching. Otherwise the menu offers only
+  a leave, which sends no surrender order, and an observer is offered no surrender (S-0414 claim
+  11, `unmeasured`, see the backing). Backing: `measurable` for the choice that keeps the player
+  watching (part F of scenario T8, and the network-game form of S-0414's Measurement scenarios,
+  in each of its runs), and for the condition on the undefeated human houses and the leave-only
+  menu otherwise through three readings of scenario T8: part F's first reading (both human houses
+  undefeated: two surrender choices), part F's further run (the opener's house undefeated, the
+  other human house defeated: a leave only) and part D's capture (the opener's house defeated, the
+  other undefeated: a leave only), with part F's three-machine run for a game of three human
+  participants; `unmeasured` that the choice that surrenders and leaves sends the surrender order
+  and then leaves the game, since no part takes it (T8 tells it from the other choice by its
+  label only), and for what the two leave choices do on the other machines, since no part records
+  them there; `unmeasured` that the leave-only choice sends no surrender order, since no part
+  takes it; `unmeasured` that an observer is offered no surrender choice, since no part has an
+  observer open the menu. Confidence: medium for the choice that keeps the player watching, and
+  for the condition and the leave-only menu until those readings are made; low for what the
+  choice that surrenders and leaves does, for what the two choices do on the other machines, for
+  the leave-only choice sending no surrender order and for the observer's menu (unmeasured)."
+  S-0414's network-game form rests on this bullet. Reason as in this section's opening
+  paragraph.
+- **S-0201 scenario T8, parts D and F.** Part F's first sentence, "machine 2's player resigns
+  through the options menu, and the scripted input tries to open the menu once every 100 ms until
+  it opens.", becomes "machine 2's player opens the options menu and leaves through the choice
+  that surrenders and keeps the player watching, and the scripted input then tries to open the
+  menu once every 100 ms until it opens." Its observable gains, first, "the leave choices the
+  menu offers before the resignation (screen capture)"; its expected gains, first, "two choices
+  that send the surrender order are offered, one leaving the game and one keeping the player
+  watching"; and it is falsified also if "the menu does not offer exactly two choices that send
+  the surrender order, one that leaves the game and one that keeps the player watching (a missing
+  choice of either kind, or two of one kind)". It gains: "The kind of the choice that is not
+  taken is read from its label only: this part does not take it, so what it does is not tested
+  (claim 15, `unmeasured`). *Further run (the leave-only menu):* in the same game, after part D's
+  reading, machine 1's player opens the options menu, machine 2's house now being defeated.
+  *Observable:* the leave choices offered (screen capture). *Expected:* only a leave is offered.
+  *Falsified if:* a choice that surrenders is offered." and, after its void-run sentence:
+  "*Three-machine run:* if a third machine is available, a game of its own with a third human
+  participant on machine 3, set up as machine 2. Machine 3's player leaves through the choice
+  that surrenders and keeps the player watching; once machine 3's house is defeated, machine 1's
+  player opens the options menu. *Observable:* the leave choices offered (screen capture).
+  *Expected:* the two choices that send the surrender order, as in part F's first reading (two
+  human houses, machine 1's among them, are undefeated). *Falsified if:* only a leave is offered.
+  Without a third machine the run is not made and the condition's case of three or more human
+  participants stays unconfirmed." Part D's observable gains "and the leave choices it offers
+  (screen capture)", its expected gains "and offers only a leave (claim 15: the opener's own house
+  is defeated)", and it is falsified also if "a choice that surrenders is offered". Reason as in
+  this section's opening paragraph.
+- **S-0201 scenario T1, part D.** "and leave the game, trying each menu choice that leaves the game
+  in its own runs" becomes "and leave the game through the menu's one leave choice of a skirmish
+  (claim 1, S-0703 claim 13)"; "*Runs:* 2 per choice" becomes "*Runs:* 2"; the expected "at least
+  one choice ends the game with neither value changing after the menu closes" becomes "the choice
+  ends the game with neither value changing after the menu closes"; the sentence "A choice that
+  resigns lets ticks run on through the defeat and its end delay, and its final tick then behaves as
+  in part C." becomes "A choice that resigns, which only a network game offers (claim 15), is
+  outside this part."; and "*Falsified if:* every choice that leaves the game lets at least one more
+  tick run after the menu closes and ends as in part C" becomes "*Falsified if:* the leave choice
+  lets at least one more tick run after the menu closes". Scenario T9 needs no change. Reason as in
+  this section's opening paragraph.
 
 ## Open questions
 
@@ -1712,16 +1814,6 @@ run drops to medium at most.
 - (Terms, Import mapping.) What a track entry's display name and campaign scenario number do
   outside a skirmish: where the name is shown, and whether the number limits the entry in a
   campaign.
-- (Edge cases; for the project lead.) Accept or reject the end screen opening when the game is over
-  (claim 12, S-0414 claim 8), a departure with no switch. Our engine keeps the end delay's ticks
-  with their music updates and picks, as the original does, and drops only the original's real-time
-  wait for the result announcement, in which the original plays the track on and can make a pick
-  before its score screen opens: no music update runs after the cycle that runs the end delay's
-  final tick. Until the lead decides, the departure stands as this spec's design choice with its
-  stated reason.
-- (Edge cases; for the project lead.) Accept or reject the music held in the options menu (claim
-  13), a departure with no switch. The alternative is the original's behaviour: the music plays on
-  in the menu and picks go on there. That alternative needs S-0701 claim 30 to gain music-only audio
-  passes during the options menu's stand-still, and it makes the unsynchronised stream's later
-  positions depend on how long the menu stays open in real time. Until the lead decides, the
-  departure stands as this spec's design choice with its stated reason.
+- (Edge cases, claim 13; settled.) The project lead has accepted the end screen opening when
+  the game is over (Edge cases). The project lead has also accepted that the music plays on
+  while the options menu is open, as in the original (claim 13). Neither is still open.
