@@ -2221,7 +2221,7 @@ Yuri's superweapons, first tick ready, against round 3 on the same tree: the med
 | Soviet, 2 | Yuri 43 126 | 10 702 | 13 820 | 25 641 |
 | Soviet, 8 | Yuri 44 208 | 13 925 | 16 830 | 29 658 |
 
-In the six games the dominator launched 7 times, 4 sweeps changed an owner and 4 objects were taken (B6: 13 / 11 / 12). Most games end sooner than in B6, so there are fewer charges.
+In the six games the dominator launched 7 times, 4 sweeps changed an owner and 4 objects were taken (B6: 13 / 11 / 12, counted the same way from the games' final reports). Four of the six games end sooner than in B6, and the six together play 275 121 ticks against B6's 330 285. Whether the shorter games account for the drop was not checked.
 
 **Exit B7: missed on the dominator's tempo and, narrowly, on the wins.**
 - Met: all six full games have a winner. Force shield and psychic reveal are at round 3's tempo (median 0). The think tick is no longer over the frame in every period (above).
@@ -2233,7 +2233,9 @@ In the six games the dominator launched 7 times, 4 sweeps changed an owner and 4
 - `deployers.rs`, 7 in all. New: `does_not_deploy_a_rifleman_out_of_range`, `packs_up_a_deployed_rifleman_with_no_enemy_in_range` and `deploys_a_radiation_immune_unit_near_an_enemy_and_packs_it_up_without_one`. `deploys_deploy_fire_vehicles_and_firing_infantry` now puts the enemy in the rifle's range.
 - Goldens: all six duel goldens were regenerated once. The AI game format is in the hashed state from the first tick, and duel-diagonal ends about 1 300 ticks later. duel-m6c was regenerated again for the radiation-immune deployer, with the hashes differing from line 41 and the same length.
 
-**Arena and duel sweeps.** The oracle arena attaches no brain, and its CSVs are byte-identical to main's. The M6c, M7a and M7b seed sweeps 1 to 16 move with the AI's play. The smallest minimum stays the same: M6c 4, M7a 1 and M7b drain 3.
+**B6's anti-air count and C4's memos.** The anti-air tests changed only to wait for Beta's think phase (`scripted::thinks_at`) instead of a multiple of 15, with no assertion changed, and all 12 pass. `Brain::think_with` opens the placement memo (`Script::begin_think`) at its top in every tick and closes it at its end, whether or not the plan runs, so a memo never outlives a tick. `the_kept_and_once_asked_placement_answers_match_the_three_passes` passes.
+
+**Arena and duel sweeps.** The oracle arena attaches no brain, and its CSVs are byte-identical to main's. M-0001: 31 of 96 pairings failing, 152 of 172 reproduced. M-0002: 13 of 24, 43 of 47. M-0003: 2 of 35, 61 of 64. The M6c, M7a and M7b seed sweeps 1 to 16 move with the AI's play. The smallest minimum stays the same: M6c 4, M7a 1 and M7b drain 3.
 - M6c: radiation exits 6 / 41 → 5 / 19 (min / median), radiation in the field 2 300 / 4 646 → 4 936 / 7 216, deploy orders 49 / 82 → 52 / 122.
 - M7b: dominator launches 7 / 7 → 6 / 7, objects taken 14 / 18 → 13 / 17, mutator launches 5 / 7 → 5 / 8, drain orders 4 / 6 → 3 / 3.
 
