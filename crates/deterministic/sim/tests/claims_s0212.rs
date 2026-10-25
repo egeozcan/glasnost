@@ -2193,6 +2193,14 @@ fn a_computation_keeps_nothing_for_the_next() {
                 regions::ensure(&mut w);
                 let mut fresh = w.clone();
                 fresh.scratch = Default::default();
+                // Another destination first: the computations between differ
+                // in their goal too.
+                let other = cell(8, -3);
+                assert_eq!(
+                    path::corridor_find(&w, id, other),
+                    path::corridor_find(&fresh, id, other),
+                    "stone in {at:?}, the other destination"
+                );
                 let kept = path::corridor_find(&w, id, to);
                 assert_eq!(kept, path::corridor_find(&fresh, id, to), "stone in {at:?}");
                 // And the copy, which carries this computation's memory,

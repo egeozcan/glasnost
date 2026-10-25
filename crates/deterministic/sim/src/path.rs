@@ -296,8 +296,9 @@ pub fn step_outcome_of(
 /// over from one search to the next.
 ///
 /// It also keeps what one path computation with the corridor has asked of
-/// the claim 13 exemption, by dense cell index (our tooling for speed, M8
-/// C4 part 5). A computation's searches all read the one world it was
+/// the world: the claim 13 exemption and the estimate h by dense cell
+/// index, the entry outcome of a step by search pair and direction (our
+/// tooling for speed, M8 C4 part 5). A computation's searches all read the one world it was
 /// asked on (the world does not change while it runs), so an answer kept
 /// is the answer asked again. A computation starts from a fresh stamp of
 /// its own, so nothing carries over from one computation to the next; a
@@ -320,6 +321,15 @@ pub struct SearchScratch {
     /// [`corridor::exempt`] in this computation's world.
     exempt_at: Vec<u32>,
     exempt: Vec<bool>,
+    /// `outcome_at[i] == computation`: `outcomes[i][d]` is the entry
+    /// outcome of the step from pair i in direction d, once asked.
+    outcome_at: Vec<u32>,
+    // spec: S-0212 claim 7 (candidates in step directions 0 through 7)
+    outcomes: Vec<[Option<Outcome>; 8]>,
+    /// `estimate_at[i] == computation`: `estimates[i]` is cell i's
+    /// estimate h towards the computation's destination.
+    estimate_at: Vec<u32>,
+    estimates: Vec<F32>,
 }
 
 impl SearchScratch {
@@ -341,6 +351,12 @@ impl SearchScratch {
             self.computation = 0;
             self.exempt_at = vec![0; cells];
             self.exempt = vec![false; cells];
+            // spec: S-0212 Terms (two search layers per cell: ground and deck)
+            self.outcome_at = vec![0; 2 * cells];
+            // spec: S-0212 Terms and claim 7 (two search layers per cell; step directions 0 through 7)
+            self.outcomes = vec![[None; 8]; 2 * cells];
+            self.estimate_at = vec![0; cells];
+            self.estimates = vec![F32::ZERO; cells];
         }
         self.computation += 1;
         self.open = true;
@@ -367,6 +383,43 @@ impl SearchScratch {
             self.exempt[i] = v;
         }
         v
+    }
+
+    /// The entry outcome of the step from search pair `pair` in direction
+    /// `d`, in the world of the current path computation: `ask` is asked
+    /// once per step and computation.
+    fn outcome(&mut self, pair: usize, d: usize, ask: impl FnOnce() -> Outcome) -> Outcome {
+        if !self.open {
+            return ask();
+        }
+        let Some(at) = self.outcome_at.get_mut(pair) else {
+            return ask();
+        };
+        if *at != self.computation {
+            *at = self.computation;
+            // spec: S-0212 claim 7 (step directions 0 through 7)
+            self.outcomes[pair] = [None; 8];
+        }
+        *self.outcomes[pair][d].get_or_insert_with(ask)
+    }
+
+    /// The estimate h of cell `c` of `w` towards the current path
+    /// computation's destination (all its searches share it): `ask` is
+    /// asked once per cell and computation.
+    fn estimate(&mut self, w: &World, c: CellXY, ask: impl FnOnce() -> F32) -> F32 {
+        let Some(i) = w.cells.idx(c).filter(|_| self.open) else {
+            return ask();
+        };
+        match self.estimate_at.get_mut(i) {
+            Some(at) if *at == self.computation => self.estimates[i],
+            Some(at) => {
+                *at = self.computation;
+                let h = ask();
+                self.estimates[i] = h;
+                h
+            }
+            None => ask(),
+        }
     }
 
     fn g(&self, i: usize) -> Option<F32> {
@@ -615,7 +668,12 @@ fn counted_search(
                     continue;
                 }
                 // spec: S-0209 Terms (reference height level in a path search: the expanded pair's, plus 4 on its deck layer, with the start-pair adjustment of S-0212 claim 7; the step starts from that pair's cell)
-                let v = step_outcome_of(w, &mover, next.cell, c, here_level);
+                // The step from a pair in a direction has one outcome in the
+                // computation's one world (the start pair's level is the
+                // computation's too): asked once for all its searches.
+                let v = sc.outcome(ni, d, || {
+                    step_outcome_of(w, &mover, next.cell, c, here_level)
+                });
                 if v == Outcome::Blocked {
                     // spec: S-0212 claim 15 (a blocked destination is approached from a neighbour whose search layer is within 1 level of the destination's; not for passive vehicles)
                     if c == to && !passive && (here_level - to_level).abs() <= 1 {
@@ -682,7 +740,7 @@ fn counted_search(
                 sc.pred[ci] = (next.cell, next.layer, d as u8);
                 seq += 1;
                 // spec: S-0212 F2 (f = trunc₂₄(g + h))
-                let h = est(c);
+                let h = sc.estimate(w, c, || est(c));
                 let f = t24(gn.to_f64().add(h.to_f64(), mode), mode).0;
                 // spec: S-0212 claim 12a (pairs recorded in expansion order, an expansion's candidates in generation order)
                 heap.push(Pending {
