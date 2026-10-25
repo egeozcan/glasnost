@@ -431,6 +431,21 @@ fn in_friendly_gap(
     cells: &std::collections::BTreeSet<u32>,
     on_flat_grid: bool,
 ) -> bool {
+    // spec: S-0410 claim 6 (in a friendly gap field only when its candidate cells are covered by one: with no covered cell, none is)
+    if cells.is_empty() {
+        return false;
+    }
+    in_friendly_gap_cells(w, c, cells, on_flat_grid)
+}
+
+/// The friendly-gap test of claim 6 for cell `c` against the covered cells
+/// `cells`, asked whatever `cells` holds.
+fn in_friendly_gap_cells(
+    w: &World,
+    c: CellXY,
+    cells: &std::collections::BTreeSet<u32>,
+    on_flat_grid: bool,
+) -> bool {
     if !w.cells.usable(c) {
         return false;
     }
@@ -606,17 +621,21 @@ pub struct Arrivals {
     pub at: BTreeMap<(ObjectId, (i32, i32)), (i32, usize)>,
 }
 
+/// Each pixel's listed arrivals (object and arrival), in the order of
+/// [`Arrivals::at`].
+type ByPixel = BTreeMap<(i32, i32), Vec<(ObjectId, (i32, usize))>>;
+
 impl Arrivals {
     /// Brings the arrivals up to date for house `h`.
     pub fn observe(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
+        // spec: S-0410 Terms (arrivals ordered by tick, then by the order in which the objects' turns run, S-0203: each object's first place in the update order, as a scan of it finds)
+        let mut places: BTreeMap<ObjectId, usize> = BTreeMap::new();
+        for (i, &id) in w.update.order.iter().enumerate() {
+            places.entry(id).or_insert(i);
+        }
         let mut now = BTreeMap::new();
         for &id in w.objects.keys() {
-            let place = w
-                .update
-                .order
-                .iter()
-                .position(|&x| x == id)
-                .unwrap_or(usize::MAX);
+            let place = places.get(&id).copied().unwrap_or(usize::MAX);
             for px in listed(w, h, id, g, img) {
                 // spec: S-0410 Terms (an object that stays listed at one pixel keeps its arrival; arrivals ordered by tick, then by turn order)
                 let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
@@ -626,9 +645,40 @@ impl Arrivals {
         self.at = now;
     }
 
+    /// The arrivals listed at each pixel (object and arrival), each pixel's
+    /// in the order of [`Arrivals::at`].
+    fn by_pixel(&self) -> ByPixel {
+        let mut out = ByPixel::new();
+        for (&(id, px), &arr) in &self.at {
+            out.entry(px).or_default().push((id, arr));
+        }
+        out
+    }
+
+    /// [`Arrivals::observe`] finding each object's place by a scan of the
+    /// update order, as before M8 C4 part 4: the equivalence tests' old form.
+    #[cfg(test)]
+    pub(crate) fn observe_by_scan(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
+        let mut now = BTreeMap::new();
+        for &id in w.objects.keys() {
+            let place = w
+                .update
+                .order
+                .iter()
+                .position(|&x| x == id)
+                .unwrap_or(usize::MAX);
+            for px in listed(w, h, id, g, img) {
+                let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
+                now.insert((id, px), arr);
+            }
+        }
+        self.at = now;
+    }
+
     /// The object whose colour a pixel shows (claim 8): the shown house's
     /// own objects first, latest arrival first; then the others, earliest
-    /// arrival first; the first that passes the draw-time tests.
+    /// arrival first; the first that passes the draw-time tests. [`compose`]
+    /// sorts every pixel's arrivals out at once instead, with the same order.
     pub fn winner(
         &self,
         w: &World,
@@ -637,26 +687,43 @@ impl Arrivals {
         g: &Grid,
         img: &Image,
     ) -> Option<ObjectId> {
-        let mut own = Vec::new();
-        let mut other = Vec::new();
-        for (&(id, px), &arr) in &self.at {
-            if px != pixel {
-                continue;
-            }
-            if w.obj(id).is_some_and(|o| o.owner == Some(h)) {
-                own.push((arr, id));
-            } else {
-                other.push((arr, id));
-            }
-        }
-        // spec: S-0410 claim 8 (own objects first, the latest arrival first; then the others, the earliest first)
-        own.sort_by(|a, b| b.cmp(a));
-        other.sort();
-        own.into_iter()
-            .chain(other)
-            .map(|(_, id)| id)
-            .find(|&id| shown(w, h, id, pixel, g, img))
+        let at = self
+            .at
+            .iter()
+            .filter(|&(&(_, px), _)| px == pixel)
+            .map(|(&(id, _), &arr)| (id, arr));
+        winner_among(w, h, pixel, g, img, at)
     }
+}
+
+/// The object whose colour a pixel shows (claim 8) among the arrivals
+/// listed at it, `at` (object and arrival): the shown house's own objects
+/// first, latest arrival first; then the others, earliest arrival first; the
+/// first that passes the draw-time tests.
+fn winner_among(
+    w: &World,
+    h: HouseId,
+    pixel: (i32, i32),
+    g: &Grid,
+    img: &Image,
+    at: impl Iterator<Item = (ObjectId, (i32, usize))>,
+) -> Option<ObjectId> {
+    let mut own = Vec::new();
+    let mut other = Vec::new();
+    for (id, arr) in at {
+        if w.obj(id).is_some_and(|o| o.owner == Some(h)) {
+            own.push((arr, id));
+        } else {
+            other.push((arr, id));
+        }
+    }
+    // spec: S-0410 claim 8 (own objects first, the latest arrival first; then the others, the earliest first)
+    own.sort_by(|a, b| b.cmp(a));
+    other.sort();
+    own.into_iter()
+        .chain(other)
+        .map(|(_, id)| id)
+        .find(|&id| shown(w, h, id, pixel, g, img))
 }
 
 /// Inputs of the radar map that are not game state: house colours, the
@@ -744,17 +811,16 @@ fn compose_by(
 ) -> Vec<RadarColour> {
     let h = view.house;
     let gaps = friendly_gap_cells(w, h);
-    // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner)
-    let listed: std::collections::BTreeSet<(i32, i32)> =
-        arrivals.at.keys().map(|&(_, px)| px).collect();
+    // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner, among the objects listed there)
+    let listed = arrivals.by_pixel();
     let mut out = Vec::with_capacity(terrain.len());
     for q in 0..img.height {
         for p in 0..img.width {
             let i = (q * img.width + p) as usize;
             let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
-            if listed.contains(&(p, q))
-                && let Some(id) = arrivals.winner(w, h, (p, q), g, img)
+            if let Some(at) = listed.get(&(p, q))
+                && let Some(id) = winner_among(w, h, (p, q), g, img, at.iter().copied())
             {
                 let o = w.obj(id);
                 // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
@@ -906,5 +972,174 @@ impl Zoom {
         }
         // spec: S-0410 F9 (|ρ − M| ≥ 0.01: ωₙ₊₁ = ωₙ)
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // The radar's faster forms give the plain forms' answers (S-0410 claims 6
+    // and 8; M8 C4 part 4) on synthetic data: the synthetic ruleset with an
+    // invented sight tower and gap generator.
+
+    use glasnost_rules::schema::Ruleset;
+    use glasnost_rules::sim::BuildingType;
+
+    use super::*;
+    use crate::testkit;
+
+    const SIZE: i32 = 40;
+
+    /// TOWER (sight 4) and GAP (gap generator, radius 3), both 1 × 1.
+    fn rules() -> Ruleset {
+        let mut r = testkit::ruleset();
+        r.registries.insert(
+            "buildings".into(),
+            ["TOWER", "GAP"].iter().map(|s| s.to_string()).collect(),
+        );
+        let b = |sight: i32| {
+            let mut b = BuildingType {
+                strength: Some(500),
+                foundation: Some([1, 1]),
+                ..Default::default()
+            };
+            b.econ.sight = Some(sight);
+            b
+        };
+        r.sim.buildings.insert("TOWER".into(), b(4));
+        let mut gap = b(0);
+        gap.gap_generator = Some(true);
+        gap.econ.gap_radius_in_cells = Some(3);
+        r.sim.buildings.insert("GAP".into(), gap);
+        r
+    }
+
+    fn spawn(w: &mut World, kind: Kind, name: &str, h: u8, dx: i32, dy: i32) -> ObjectId {
+        testkit::spawn(w, kind, name, h, testkit::mid(SIZE, dx, dy), 0)
+    }
+
+    /// Towers of both houses, and carts of both houses crowded on a few cells,
+    /// so that pixels list several objects of each house.
+    fn world() -> World {
+        let mut w = testkit::game_with(&rules(), SIZE, 5);
+        spawn(&mut w, Kind::Building, "TOWER", 0, 0, 0);
+        spawn(&mut w, Kind::Building, "TOWER", 1, 3, 1);
+        for (h, dx, dy) in [
+            (0, 1, 1),
+            (0, 1, 1),
+            (1, 1, 1),
+            (1, 2, 0),
+            (0, 2, 0),
+            (1, 2, 0),
+        ] {
+            spawn(&mut w, Kind::Vehicle, "CART", h, dx, dy);
+        }
+        testkit::run(&mut w, 2);
+        w
+    }
+
+    /// Every pixel's winner by the composition's pixel lists and by the scan of
+    /// every arrival, for house `h`.
+    fn assert_winners_agree(w: &World, arr: &Arrivals, h: HouseId, label: &str) {
+        let g = grid(w).expect("usable cells");
+        let img = image(&g);
+        let by_pixel = arr.by_pixel();
+        let mut found = 0;
+        for q in 0..img.height {
+            for p in 0..img.width {
+                let kept = by_pixel
+                    .get(&(p, q))
+                    .and_then(|at| winner_among(w, h, (p, q), &g, &img, at.iter().copied()));
+                assert_eq!(
+                    kept,
+                    arr.winner(w, h, (p, q), &g, &img),
+                    "{label}: pixel ({p}, {q})"
+                );
+                found += usize::from(kept.is_some());
+            }
+        }
+        assert!(found > 0, "{label}: some pixel shows an object");
+    }
+
+    // spec: S-0410 Terms and claim 8 (the arrivals with each object's first place in the update order looked up give the scan's arrivals, also with an object twice in the order, an object missing from it and an entry for no live object; every pixel's winner from its own list is the scan's)
+    #[test]
+    fn kept_places_and_pixel_lists_match_the_scans() {
+        let mut w = world();
+        let g = grid(&w).expect("usable cells");
+        let img = image(&g);
+        for h in [HouseId(0), HouseId(1)] {
+            let (mut kept, mut plain) = (Arrivals::default(), Arrivals::default());
+            let ids: Vec<ObjectId> = w.objects.keys().copied().collect();
+            for round in 0..4 {
+                match round {
+                    // An object twice in the order (its first place counts), one
+                    // missing from it and an id of no object.
+                    1 => {
+                        let o = &mut w.update.order;
+                        let late = *o.last().expect("an update order");
+                        o.insert(0, late);
+                        o.push(ids[2]);
+                        o.retain(|&x| x != ids[4]);
+                        o.insert(1, ObjectId(9999));
+                    }
+                    // A tick moves the carts on and rebuilds the order.
+                    2 => {
+                        for (i, &id) in ids.iter().enumerate().skip(2) {
+                            if let Some(o) = w.obj_mut(id) {
+                                o.dest = Some(crate::world::Target::Cell(testkit::mid(
+                                    SIZE,
+                                    i as i32 % 3,
+                                    -(i as i32 % 2),
+                                )));
+                            }
+                        }
+                        testkit::run(&mut w, 6);
+                    }
+                    3 => testkit::run(&mut w, 6),
+                    _ => {}
+                }
+                kept.observe(&w, h, &g, &img);
+                plain.observe_by_scan(&w, h, &g, &img);
+                let label = format!("house {}, round {round}", h.0);
+                assert_eq!(kept.at, plain.at, "{label}");
+                assert!(!kept.at.is_empty(), "{label}: objects are listed");
+                assert_winners_agree(&w, &kept, h, &label);
+            }
+        }
+    }
+
+    // spec: S-0410 claim 6 (with no covered cell the friendly-gap test is false at every cell, as the full test answers; with gap fields the two answers agree at every cell, under both settings of quirks.shroud_on_flat_grid)
+    #[test]
+    fn friendly_gap_short_cut_matches_the_full_test() {
+        let mut w = world();
+        let cells = |w: &World| -> Vec<CellXY> {
+            let s = 2 * SIZE + 4;
+            (0..s)
+                .flat_map(|y| (0..s).map(move |x| CellXY::new(x, y)))
+                .filter(|&c| w.cells.idx(c).is_some())
+                .collect()
+        };
+        let none = std::collections::BTreeSet::new();
+        for c in cells(&w) {
+            for flat in [true, false] {
+                assert!(!in_friendly_gap(&w, c, &none, flat));
+                assert!(!in_friendly_gap_cells(&w, c, &none, flat), "{c:?}");
+            }
+        }
+        spawn(&mut w, Kind::Building, "GAP", 1, 2, 2);
+        spawn(&mut w, Kind::Building, "GAP", 0, -3, 0);
+        testkit::run(&mut w, 3);
+        for h in [HouseId(0), HouseId(1)] {
+            let covered = friendly_gap_cells(&w, h);
+            assert!(!covered.is_empty(), "house {} has a friendly field", h.0);
+            let mut inside = 0;
+            for c in cells(&w) {
+                for flat in [true, false] {
+                    let a = in_friendly_gap(&w, c, &covered, flat);
+                    assert_eq!(a, in_friendly_gap_cells(&w, c, &covered, flat), "{c:?}");
+                    inside += usize::from(a);
+                }
+            }
+            assert!(inside > 0, "house {}: some cell is in a field", h.0);
+        }
     }
 }

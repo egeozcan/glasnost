@@ -251,6 +251,17 @@ fn reach_point(w: &World, t: Target) -> Pos {
 /// Whether `viewer` sees the hostile-intent line of `unit` (claim 10), and
 /// the line when it does. Eligibility is tested afresh at each call.
 pub fn intent_line(w: &World, viewer: HouseId, unit: ObjectId) -> Option<IntentLine> {
+    intent_line_with(w, viewer, unit, &sensors(w, viewer))
+}
+
+/// [`intent_line`] with the viewer's sensors that count now, `sensors`
+/// ([`sensors`] of the same world and house), worked out by the caller.
+fn intent_line_with(
+    w: &World,
+    viewer: HouseId,
+    unit: ObjectId,
+    sensors: &[ObjectId],
+) -> Option<IntentLine> {
     let o = w.obj(unit)?;
     // spec: S-0610 claim 10 (an infantry, vehicle or aircraft in play)
     if !matches!(o.kind, Kind::Infantry | Kind::Vehicle | Kind::Aircraft)
@@ -272,7 +283,6 @@ pub fn intent_line(w: &World, viewer: HouseId, unit: ObjectId) -> Option<IntentL
     }
     // spec: S-0610 claim 10 (the destination: the last waypoint of a queued path, else the current destination; queued paths are not modelled, so the current destination)
     let (target, dest) = (o.target, o.dest);
-    let sensors = sensors(w, viewer);
     let reach = |t: Option<Target>| {
         t.is_some_and(|t| {
             let p = reach_point(w, t);
@@ -319,12 +329,14 @@ pub fn intent_line(w: &World, viewer: HouseId, unit: ObjectId) -> Option<IntentL
 /// Visibility plays no part with `quirks.psychic_intent_ignores_visibility`
 /// on (the original).
 pub fn intent_lines(w: &World, viewer: HouseId) -> Vec<IntentLine> {
-    if sensors(w, viewer).is_empty() {
+    // spec: S-0610 claim 9 and claim 10 (the sensors that count now, the same for every unit of one drawing: nothing between the units' tests changes the world)
+    let sensors = sensors(w, viewer);
+    if sensors.is_empty() {
         return Vec::new();
     }
     w.objects
         .keys()
-        .filter_map(|&id| intent_line(w, viewer, id))
+        .filter_map(|&id| intent_line_with(w, viewer, id, &sensors))
         .collect()
 }
 

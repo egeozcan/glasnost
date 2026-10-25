@@ -2544,6 +2544,95 @@ The tick (13.2 to 14.9 ms a frame on average), the scene (3.2 to 3.6) and every 
 
 Seams: the radar's per-pixel shroud test and the composition that remains (about 0.8 ms a frame); the psychic intent lines (about 0.5 ms of the interface's drawing in this game); the radar's object update (`Arrivals::observe`, which finds each object's position in the update order by a scan, about 0.3 ms); the scene build's mobile and building painting; the client's cost in the browser (about 14 ms a frame here, over budget with any tick).
 
+#### The browser client's frame cost (M8 C4 part 4)
+
+**Where the time went (this machine; Firefox headed in a headless `cage` compositor, hardware WebGL2; the frame benchmark's default spec with 4 views of 300 frames; main bfa4575).** Two runs of the same build were used to find out. One ran under Firefox's sampling profiler (started through its `MOZ_PROFILER_STARTUP` environment variables, 1 ms interval, JS and wasm frames). The other ran with a page script that counts WebGL2 calls, buffer bytes and texture pixels per frame. Neither change is committed: both are our own tooling. The profiler makes frames slower (mean 44.9 ms against 36.8 to 38.1 in part 3's runs), and the counting script makes the submit slower, so the shares come from the profile and the counts from the counting run. The milliseconds below scale each share to the client's 14 ms a frame in part 3's unprofiled runs, so read them as estimates. The profile has 25 304 samples of client work (every timed frame's sample not under `Game::step`); a share is that part's samples over those.
+
+| Client part (Firefox, share of client samples) | share | about ms a frame |
+|---|---|---|
+| The scene build (`mapview::live::Live::redraw`) | 31.3 % | 4.4 |
+| of which the buildings' painting (`Painter::buildings`, almost all `Builder::building_items`) | 9.1 % | 1.3 |
+| of which the mobile objects' painting (`Painter::mobiles`) | 8.9 % | 1.2 |
+| of which SHP parsing (`fmt::shp::Shp::parse`, again for every sprite drawn: most of it from `Builder::place_sprite`) | 7.1 % | 1.0 |
+| of which INI lookups (`ini::Document::value`: animation slots read per frame by `slots::read_anim`, 3.4 %, and art values) | 4.4 % | 0.6 |
+| of which the overlay scan, the voxel vehicles and the tick's bookkeeping (`live_overlays`, `vehicle_voxels`, `after_tick`) | 5.4 % | 0.8 |
+| The radar's picture (`Radar::rgba` → `minimap::compose_kept`, S-0410; in the draw list) | 10.7 % | 1.5 |
+| of which the friendly gap test (`in_friendly_gap`), the objects' colour (`Arrivals::winner`) and the shown cells | 6.0 % | 0.8 |
+| The radar's object update (`Arrivals::observe`, each object's place in the update order by a scan) | 9.1 % | 1.3 |
+| The map's instance list (`map_gpu::MapRenderer::render_lit`, its own code) | 10.0 % | 1.4 |
+| The queue submit (wgpu's GL backend replaying the frame's commands into WebGL2) | 12.5 % | 1.7 |
+| of which texture uploads (`texSubImage2D`), buffer uploads (`bufferSubData`), vertex attribute setup and buffer binds, the final blit | 7.4 % | 1.0 |
+| The interface's drawing (`Session::draw`) | 6.5 % | 0.9 |
+| of which the psychic intent lines (`psychic::intent_lines`: `sensors` again for each unit) | 5.1 % | 0.7 |
+| of which the sidebar (`hud::model`, with `sidebar::darkened` 1.1 %) | 1.4 % | 0.2 |
+| The covers of shroud and fog (`mapview::cover::covers`, every cell of the grid) | 3.9 % | 0.5 |
+| The light alpha (`render::shroud::light_alpha`) | 3.9 % | 0.5 |
+| The command encoder's finish, the present, the sound mixer, the benchmark's save | 4.4 % | 0.6 |
+| Memory allocation and freeing (`dlmalloc`, spread over the parts above) | 2.4 % | 0.3 |
+
+Per frame, the counting run saw about 12 000 WebGL2 calls: 345 instanced draws, 361 program changes, about 1 720 each of vertex attribute pointer, divisor and enable calls and 1 756 buffer binds (wgpu's GL backend sets up five instance attributes again for every draw, because WebGL2 cannot start a draw at an instance other than 0), about 335 each of depth, stencil and colour mask changes, 87 framebuffer attachment changes, 12 copies of the target and one blit. Uploads were 240 KB of buffer data and 20.7 thousand texture pixels a frame. Nothing is read back.
+
+So the costs that are cheap natively and dear in wasm are work done again every frame on data that does not change during a game: SHP headers parsed again for every sprite, INI values looked up by name again, and the whole grid scanned for covers. Next come the scans in the radar and the psychic lines, which are pure functions in the simulation crate (part 3 changed `minimap` the same way, with the main session's approval). The WebGL2 calls cost about as much as one of the larger client parts, and most of them come from wgpu's GL backend rather than from our draws.
+
+**The fixes.** Each one does less work for the same result; none changes what is drawn.
+
+- **Sprite files** (`mapview::build`): the painter keeps each SHP file's canvas size and frame headers, parsed on first use, and each frame's decoded scene image (`Painter::shp_heads`, `Builder::sprite_frame`). The file's bytes do not change during a game. Asset lookups upper-case the name on the stack (`with_upper`) instead of allocating.
+- **Animation fields and type art** (`mapview::build`): an animation type's playback and drawing fields, read from its own art section (S-0007 claim 34), are kept by registration index (`Builder::anim_fields`); a type's art is borrowed from the import (`Builder::type_art`) instead of cloned for every drawing.
+- **Covers** (`mapview::cover::covers`, S-0110): only the cells whose canvas can reach the view are asked. A canvas's column depends on *x* − *y* and its row on *x* + *y* and the level (S-0110 F2, S-0101 F1), so the candidates are a band of each, widened by every level a cell can have (none with the flat-grid quirk). Every candidate still takes the full view test, the result is sorted as before, and each cell's explored state is read once.
+- **The map's instance list** (`render::map_gpu::MapRenderer::render_lit`): its instance and rectangle buffers are kept between frames, and a stack's first copy is drawn from the item itself rather than from a copy of it.
+- **The live map** (`mapview::live`): the overlay comparison walks a list of the grid's legal cells made once, and the map buildings that keep their cell-pass drawing are found through a set rather than a scan per building.
+- **The radar and the psychic lines** (`crates/deterministic/sim`, approved by the main session; client-only callers, no tick phase calls them). `minimap::Arrivals::observe` finds each object's place in the update order through a map of each id's first place, the same first match as the scan. `minimap::compose_by` asks `Arrivals::winner`'s test (now `winner_among`) with the arrivals listed at that pixel, grouped once a composition (`Arrivals::by_pixel`), not by scanning all arrivals per pixel. `minimap::in_friendly_gap` returns at once when no gap field exists (S-0410 claim 6), else runs the full test (`in_friendly_gap_cells`). `psychic::intent_lines` finds the viewer's sensors once for all units (`intent_line_with`, S-0610 claims 9 and 10); `intent_line` keeps its meaning.
+
+How drawing was checked unchanged:
+
+- **Natively**: all 24 view pictures of the six runs below are byte-identical (`cmp`), and the 8 pictures of two short runs (60 frames a view, one with part and one with all of the client fixes) match those of a short run of main. Every run ends with the same state hash. The per-frame renderer counts in the CSV (map items, instances, vertices, draw calls, passes, backdrop copies and copied pixels, uploads and their bytes, batch quads, vertices, draws and uploads, rebuilds), with each frame's view, tick and object count, are equal row by row.
+- **In Firefox**: all six runs end with the same state hash, and their CSVs' renderer counts are equal row by row in the same way. A canvas screenshot taken by Playwright at the end of each run (our own tooling, not committed) is byte-identical across all six.
+- **Tests**: `mapview::cover::tests::covers_of_the_view_band_match_the_full_scan` compares the band with the old full scan (kept in the test) for levels −128 to 127, both settings of the flat-grid quirk, and many view origins and sizes. `econ::minimap::tests::kept_places_and_pixel_lists_match_the_scans` compares the kept places and pixel lists with the old scans, with an id twice in the update order, an id missing from it, a dead id and moving carts over several rounds for both houses. `econ::minimap::tests::friendly_gap_short_cut_matches_the_full_test` checks the gap short cut. `claims_s0610::intent_lines_with_the_sensors_found_once` compares the intent lines with the old one-by-one form for both settings of the visibility quirk, over rounds with a sensor building switched off and with the houses allied. Making the first-match test or the band wrong makes these fail.
+
+**Before and after, natively (this machine; native offscreen; default spec: 4 views of 600 frames at tick 9000; three interleaved runs each of main bfa4575's binary and this branch's at 179fb64, both clean builds; load average 4.7 to 17.9).**
+
+| Frame time, all views (ms) | before | after |
+|---|---|---|
+| mean | 21.78 to 26.33 | 19.32 to 19.73 |
+| median | 11.40 to 12.54 | 8.84 to 9.08 |
+| p95 | 79.65 to 93.53 | 78.76 to 81.12 |
+| p99 | 86.11 to 128.51 | 83.46 to 84.52 |
+| worst | 112.2 to 160.6 | 116.1 to 120.6 |
+| frames over 16.7 ms (of 2399) | 440 to 883 | 416 to 417 |
+| client (work minus tick), mean | 7.64 to 9.15 | 5.13 to 5.23 |
+| scene, mean | 3.48 to 4.10 | 2.11 to 2.15 |
+| draw list (hud), mean | 1.64 to 2.01 | 1.04 to 1.06 |
+| radar's object update, mean | 0.32 to 0.41 | 0.19 |
+| light alpha, mean | 0.57 to 0.69 | 0.23 to 0.24 |
+| map draw recording, mean | 0.66 to 0.80 | 0.57 to 0.58 |
+
+The tick is 14.2 to 14.5 ms a frame on average after, 14.2 to 17.2 before (the before run with 883 frames over budget ran at a load of 12.7 to 17.9). Of the frames still over 16.7 ms after, 410 to 412 have a tick over 16.7 ms by itself.
+
+**Before and after, in the browser (this machine; Firefox headed in a headless `cage` compositor, hardware WebGL2; 4 views of 300 frames; three interleaved runs each of main bfa4575's `dist/web` and this branch's at 179fb64, clean release builds; load average 3.9 to 15.6).**
+
+| Frame time, all views (ms) | before | after |
+|---|---|---|
+| mean | 38.37 to 42.83 | 32.11 to 37.11 |
+| median | 19.98 to 20.62 | 14.12 to 16.12 |
+| p95 | 135.1 to 143.8 | 127.7 to 144.1 |
+| p99 | 175.0 to 216.4 | 132.2 to 208.9 |
+| worst | 213.9 to 276.1 | 170.9 to 232.0 |
+| frames over 16.7 ms (of 1199) | 1135 to 1199 | 393 to 551 |
+| client (work minus tick), mean | 14.16 to 15.98 | 8.75 to 10.44 |
+| client, median | 13.62 to 14.08 | 8.12 to 9.30 |
+| scene, mean | 5.04 to 5.51 | 2.80 to 3.26 |
+| draw list (hud), mean | 2.47 to 2.92 | 1.32 to 1.58 |
+| radar's object update, mean | 1.45 to 1.51 | 0.27 to 0.31 |
+| light alpha, mean | 1.16 to 1.55 | 0.68 to 0.86 |
+| map draw recording, mean | 1.58 to 1.75 | 1.32 to 1.57 |
+| submit and present, mean | 1.81 to 2.01 | 1.74 to 2.10 |
+
+The tick is 22.9 to 26.6 ms a timed frame on average in both. Of the frames still over 16.7 ms after, 203 have a tick over 16.7 ms by itself; in the rest the client (about 8 to 9 ms at the median) and a tick of about 6 to 8 ms pass the budget together. The after run with 551 frames over budget (after 2) ran while the load rose from 6 to 15.6.
+
+**What is left (Firefox profile of this branch's build, same spec; 15 455 client samples; ms scale the shares to the client's 9.3 ms mean).** The queue submit (wgpu's GL backend replaying commands into WebGL2) 19.3 %, about 1.8 ms; the map's instance list (`render_lit`, which walks about 38 700 items a frame, of which about 2 800 are drawn) 13.2 %, about 1.2 ms; the radar's composition (`compose_kept`: the per-pixel shroud and terrain work) 10.7 %, about 1.0 ms; the buildings' painting (`Builder::building_items`: art and rules values, protection masks and the deployed image looked up again for every building every frame) 7.3 %, about 0.7 ms; the light alpha (a 2 MB buffer made and filled each frame) 5.6 %, about 0.5 ms; the mobile objects' painting 4.8 %, about 0.45 ms. SHP parsing and the animation fields' reading are gone from the profile (under 0.1 %); finding a sprite file's kept headers by name (`Painter::shp_heads`) takes 2.2 %, about 0.2 ms; the radar's object update is 2.6 %, the covers 1.3 %, the intent lines 1.0 %.
+
+Seams: the GL backend's per-draw attribute setup (inside wgpu); a spatial index for the map's items; the radar's per-pixel composition; per-type caches for `building_items`' lookups; a cheaper key for the kept sprite headers; reusing the light-alpha buffer. A web-only release profile (`lto = "fat"`) was not tried.
+
 ## Electric bolts (M8 step C5 part 1)
 
 S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md).

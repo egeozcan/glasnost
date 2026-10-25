@@ -328,6 +328,10 @@ pub struct Live {
     /// the grid's dense index (a lookup per cell and tick in a map was a
     /// large part of a late game's redraw, M8 step C4).
     start_overlays: Vec<(u8, u8)>,
+    /// The grid's legal cells with their dense indices, in the grid's
+    /// order: the overlay comparison walks these instead of the whole
+    /// coordinate square (M8 step C4 part 4).
+    legal_cells: Vec<(CellXY, usize)>,
     /// The cells whose overlay changed since the start (S-0112 claim 7,
     /// S-0210 claim 8, S-0406 claim 10, S-0408 claim 12, harvesting), with
     /// their overlay and data value as last drawn.
@@ -883,9 +887,11 @@ impl Live {
         }
         let grid = &world.cells.grid;
         let mut start_overlays = vec![(0, 0); grid.len()];
+        let mut legal_cells = Vec::new();
         for (c, cell) in grid.iter() {
             if let Some(i) = grid.index(c) {
                 start_overlays[i] = (cell.overlay, cell.overlay_data);
+                legal_cells.push((c, i));
             }
         }
         let static_ground = std::mem::take(&mut built.ground);
@@ -1016,6 +1022,7 @@ impl Live {
             map_start,
             overlay_codes,
             start_overlays,
+            legal_cells,
             changed_overlays: BTreeMap::new(),
             live_overlays: Vec::new(),
             objects_end: built.scene.items.len(),
@@ -2665,10 +2672,10 @@ impl Live {
                 *v = (cell.overlay, cell.overlay_data);
             }
         }
-        for (c, cell) in grid.iter() {
+        for &(c, i) in &self.legal_cells {
+            let Some(cell) = grid.get(c) else { continue };
             let now = (cell.overlay, cell.overlay_data);
-            let start = grid.index(c).and_then(|i| self.start_overlays.get(i));
-            if start != Some(&now) {
+            if self.start_overlays.get(i) != Some(&now) {
                 changed.insert(c, now);
             }
         }
@@ -2746,20 +2753,22 @@ impl Live {
                 self.slot_defs.insert(idx, defs);
             }
         }
+        // The map's buildings that keep their cell-pass drawing.
+        let kept_map: BTreeSet<ObjectId> = self
+            .building_ids
+            .iter()
+            .filter(|(code, _)| {
+                !self.live_gates.contains(code)
+                    && !protected_map.contains(code)
+                    && !changed_map.contains(code)
+            })
+            .map(|(_, id)| *id)
+            .collect();
         let own: Vec<(ObjectId, LiveBuilding)> = self
             .world
             .objects
             .values()
-            .filter(|o| {
-                o.kind == SimKind::Building
-                    && o.on_map
-                    && !self.building_ids.iter().any(|(code, id)| {
-                        *id == o.id
-                            && !self.live_gates.contains(code)
-                            && !protected_map.contains(code)
-                            && !changed_map.contains(code)
-                    })
-            })
+            .filter(|o| o.kind == SimKind::Building && o.on_map && !kept_map.contains(&o.id))
             .filter_map(|o| {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
                 let owner = o

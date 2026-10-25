@@ -253,6 +253,10 @@ pub struct MapRenderer {
     backdrop: wgpu::Texture,
     /// The counters since the last [`MapRenderer::take_stats`].
     stats: MapStats,
+    /// The last frame's instance list and their view rectangles, kept for
+    /// their room.
+    list: Vec<Instance>,
+    rects: Vec<[u32; 4]>,
 }
 
 /// Why the scene could not be uploaded.
@@ -524,6 +528,8 @@ impl MapRenderer {
             alpha_held: Vec::new(),
             backdrop,
             stats: MapStats::default(),
+            list: Vec::new(),
+            rects: Vec::new(),
         })
     }
 
@@ -674,10 +680,14 @@ impl MapRenderer {
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&uniform));
         let (ox, oy) = view.origin;
         let (w, h) = (view.size.0 as i32, view.size.1 as i32);
-        let mut list: Vec<Instance> = Vec::new();
+        // The buffers of the last frame, emptied, so that a frame does not
+        // grow them again.
+        let mut list: Vec<Instance> = std::mem::take(&mut self.list);
+        list.clear();
         // The view rectangle each instance draws into, for placing the
         // backdrop copies (`passes`).
-        let mut rects: Vec<[u32; 4]> = Vec::new();
+        let mut rects: Vec<[u32; 4]> = std::mem::take(&mut self.rects);
+        rects.clear();
         // A spot instance draws its own pixel.
         let spot_rects = |list: &[Instance], rects: &mut Vec<[u32; 4]>| {
             for i in &list[rects.len()..] {
@@ -689,12 +699,11 @@ impl MapRenderer {
         let mut batches: Vec<Batch> = Vec::new();
         let mut spot_groups = scene.spots.iter().peekable();
         // spec: S-0109 claim 27 (a stack's copies, lowest first, as many as the view's top row allows)
-        let copies = scene
-            .items
-            .iter()
-            .enumerate()
-            .flat_map(|(n, i)| i.copies(oy).map(move |c| (n, c)));
-        for (n, item) in copies {
+        let copies = scene.items.iter().enumerate().flat_map(|(n, i)| {
+            let count = i.stack.map_or(1, |s| s.copies(oy));
+            (0..count).map(move |j| (n, i, j))
+        });
+        for (n, base, j) in copies {
             self.stats.items += 1;
             while let Some(g) = spot_groups.next_if(|g| g.at <= n) {
                 if filter.shows_spots(g) {
@@ -702,10 +711,17 @@ impl MapRenderer {
                     spot_rects(&list, &mut rects);
                 }
             }
-            if !filter.shows(&item) {
+            // Copy 0 is the item itself; a higher copy moves only its row and bias.
+            let moved;
+            let item = if j == 0 {
+                base
+            } else {
+                moved = base.copies(oy).nth(j as usize).unwrap_or(*base);
+                &moved
+            };
+            if !filter.shows(item) {
                 continue;
             }
-            let item = &item;
             let (l, t, r, b) = scene.bounds(item);
             // spec: S-0101 F4b (an image is drawn iff its drawn extent meets the view; a bounds miss draws no pixel)
             if r <= ox || b <= oy || l >= ox + w || t >= oy + h {
@@ -930,7 +946,10 @@ impl MapRenderer {
                 pass.draw(0..6, range);
             }
         }
-        list.len()
+        let drawn = list.len();
+        self.list = list;
+        self.rects = rects;
+        drawn
     }
 }
 

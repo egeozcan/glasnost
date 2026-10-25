@@ -890,3 +890,86 @@ fn p3_berserk_hit_in_an_inert_game_has_zero_duration() {
         }
     }
 }
+
+/// `psychic::intent_lines` as before M8 C4 part 4: each unit's line asked
+/// with [`psychic::intent_line`], which finds the sensors again for each.
+fn intent_lines_one_by_one(w: &World, viewer: HouseId) -> Vec<psychic::IntentLine> {
+    if psychic::sensors(w, viewer).is_empty() {
+        return Vec::new();
+    }
+    w.objects
+        .keys()
+        .filter_map(|&id| psychic::intent_line(w, viewer, id))
+        .collect()
+}
+
+// spec: S-0610 claims 9 to 11 and Edge cases (the lines with the sensors found once are the lines asked unit by unit: two sensors, one switched off and on, targets and destinations in and out of reach, own, allied and hidden units, both settings of quirks.psychic_intent_ignores_visibility, for both houses)
+#[test]
+fn intent_lines_with_the_sensors_found_once() {
+    for on in [true, false] {
+        let mut r = sensor_rules();
+        r.globals.quirks.psychic_intent_ignores_visibility = on;
+        building(&mut r, "WATCH", |b| b.econ.sight = Some(4));
+        let mut w = testkit::game_with(&r, SIZE, 1);
+        let eye = put(&mut w, Kind::Building, "EYE", ALPHA, 0, 0);
+        put(&mut w, Kind::Building, "EYE", BETA, 9, 9);
+        // Each house sees one corner of the fight, so with the quirk off some
+        // units are seen and some are not.
+        put(&mut w, Kind::Building, "WATCH", ALPHA, -7, 2);
+        put(&mut w, Kind::Building, "WATCH", BETA, 7, 7);
+        let mut units = Vec::new();
+        for (i, (house, dx, dy)) in [
+            (BETA, -8, 0),
+            (BETA, 8, 0),
+            (BETA, 0, 2),
+            (BETA, -10, -10),
+            (ALPHA, 1, 1),
+            (ALPHA, 7, 9),
+            (ALPHA, -6, 5),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let name = if i % 2 == 0 { "BOX" } else { "TANK" };
+            units.push(put(&mut w, Kind::Vehicle, name, house, dx, dy));
+        }
+        testkit::run(&mut w, 2);
+        let dests = [
+            at(2, 0),
+            at(9, 9),
+            at(8, 8),
+            at(1, 1),
+            at(-9, 0),
+            at(0, 1),
+            at(9, 8),
+        ];
+        for (k, (&u, &d)) in units.iter().zip(&dests).enumerate() {
+            let o = w.obj_mut(u).unwrap();
+            o.dest = Some(Target::Cell(d));
+            if k % 3 == 1 {
+                o.target = Some(Target::Object(units[(k + 3) % units.len()]));
+            }
+        }
+        let mut seen = 0;
+        for round in 0..3 {
+            match round {
+                1 => w.obj_mut(eye).unwrap().econ.building.switched_off = true,
+                2 => {
+                    w.obj_mut(eye).unwrap().econ.building.switched_off = false;
+                    sw_common::ally(&mut w, HouseId(BETA), HouseId(ALPHA));
+                }
+                _ => {}
+            }
+            for h in [ALPHA, BETA] {
+                let lines = psychic::intent_lines(&w, HouseId(h));
+                assert_eq!(
+                    lines,
+                    intent_lines_one_by_one(&w, HouseId(h)),
+                    "quirk {on}, round {round}, house {h}"
+                );
+                seen += lines.len();
+            }
+        }
+        assert!(seen > 0, "quirk {on}: some lines are drawn");
+    }
+}

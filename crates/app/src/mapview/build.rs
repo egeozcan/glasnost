@@ -75,9 +75,7 @@ impl Assets {
 
     /// A file by name, ignoring case.
     pub fn get(&self, name: &[u8]) -> Option<&[u8]> {
-        self.files
-            .get(&name.to_ascii_uppercase())
-            .map(Vec::as_slice)
+        with_upper(name, |k| self.files.get(k)).map(Vec::as_slice)
     }
 
     /// Number of files.
@@ -345,6 +343,30 @@ mod notes {
 
 fn upper(name: &[u8]) -> Vec<u8> {
     name.to_ascii_uppercase()
+}
+
+/// Calls `f` with `name` in upper case, without allocating for names of up
+/// to 64 bytes (a cache lookup on every drawing).
+fn with_upper<R>(name: &[u8], f: impl FnOnce(&[u8]) -> R) -> R {
+    let mut buf = [0u8; 64]; // nocite: our own stack buffer size
+    match buf.get_mut(..name.len()) {
+        Some(b) => {
+            b.copy_from_slice(name);
+            b.make_ascii_uppercase();
+            f(b)
+        }
+        None => f(&upper(name)),
+    }
+}
+
+/// A sprite file's canvas size and frame headers, read once, with each
+/// frame's scene image once it is decoded (`None` before; `Some(None)` for
+/// an empty or undecodable frame).
+#[derive(Clone, Debug)]
+struct ShpHeads {
+    canvas: (i32, i32),
+    frames: Vec<(i32, i32)>,
+    images: Vec<Option<Option<u32>>>,
 }
 
 /// The registration index of `name` in `kind` (names compared as S-0003
@@ -1069,6 +1091,15 @@ pub struct Painter {
     lights: Lights,
     rows: Rows,
     images: BTreeMap<(Vec<u8>, usize, u8), Option<u32>>,
+    /// Sprite files' headers and decoded frames, by upper-case name (`None`
+    /// for a missing or unreadable file). A file's bytes do not change
+    /// during a game ([`Assets`] changes only when it is loaded, and for the
+    /// cursor's palette, which is no sprite).
+    shps: BTreeMap<Vec<u8>, Option<ShpHeads>>,
+    /// Animation types' drawing fields, read from their own art sections
+    /// (S-0007 claim 34) once, by import registration index: the art file
+    /// does not change during a game.
+    anim_types: BTreeMap<usize, std::rc::Rc<slots::AnimType>>,
     /// Each type's image cache of voxel part and shadow images (S-0105
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
@@ -1365,7 +1396,25 @@ pub fn build_parts_with(
     (b.built, b.p)
 }
 
-impl Builder<'_> {
+impl<'a> Builder<'a> {
+    /// Animation type `idx`'s drawing fields, from its own art section.
+    fn anim_fields(&mut self, idx: usize) -> std::rc::Rc<slots::AnimType> {
+        let import = self.import;
+        let p = &mut self.p;
+        p.anim_types
+            .entry(idx)
+            .or_insert_with(|| {
+                // spec: S-0007 claim 34 (the playback and drawing fields come from the animation's own art section)
+                std::rc::Rc::new(slots::read_anim(&p.art, anim_own_section(import, idx)))
+            })
+            .clone()
+    }
+
+    /// A type's art, borrowed from the import rather than from the builder.
+    fn type_art(&self, key: (Kind, usize)) -> Option<&'a glasnost_convert::art::TypeArt> {
+        self.import.arts.get(&key)
+    }
+
     fn note(&mut self, n: &str) {
         self.built.notes.insert(n.to_owned());
     }
@@ -1470,30 +1519,30 @@ impl Builder<'_> {
     /// An image of a sprite file's frame, decoded once, with its frame
     /// rectangle's offset on the canvas and the canvas size.
     fn sprite_frame(&mut self, file: &[u8], frame: usize) -> Option<SpriteFrame> {
-        let bytes = self.assets.get(file)?;
-        let shp = Shp::parse(bytes).ok()?;
-        let f = *shp.frames.get(frame)?;
-        let canvas = (i32::from(shp.width), i32::from(shp.height));
-        let key = (upper(file), frame, 0u8);
-        let id = match self.p.images.get(&key) {
-            Some(id) => *id,
+        let assets = self.assets;
+        let scene = &mut self.built.scene;
+        let heads = self.p.shp_heads(assets, file)?;
+        let offset = *heads.frames.get(frame)?;
+        let canvas = heads.canvas;
+        let id = match heads.images[frame] {
+            Some(id) => id,
             None => {
-                let id = shp
-                    .decode_frame(frame)
-                    .ok()
+                let id = assets
+                    .get(file)
+                    .and_then(|b| Shp::parse(b).ok())
+                    .and_then(|shp| shp.decode_frame(frame).ok())
                     .filter(|i| i.width() > 0 && i.height() > 0)
-                    .map(|i| self.built.scene.add_image(i));
-                self.p.images.insert(key, id);
+                    .map(|i| scene.add_image(i));
+                heads.images[frame] = Some(id);
                 id
             }
         };
-        Some((id?, (i32::from(f.x), i32::from(f.y)), canvas))
+        Some((id?, offset, canvas))
     }
 
-    fn sprite_frames(&self, file: &[u8]) -> Option<usize> {
-        Shp::parse(self.assets.get(file)?)
-            .ok()
-            .map(|s| s.frames.len())
+    fn sprite_frames(&mut self, file: &[u8]) -> Option<usize> {
+        let assets = self.assets;
+        self.p.shp_heads(assets, file).map(|h| h.frames.len())
     }
 
     /// Places a sprite frame with its canvas centred on world pixel `p`
@@ -2408,7 +2457,7 @@ impl Builder<'_> {
                 self.drop_object("wall building placed as its wall overlay");
                 continue;
             }
-            let Some(art) = self.import.arts.get(&(Kind::Buildings, i)).cloned() else {
+            let Some(art) = self.type_art((Kind::Buildings, i)) else {
                 self.drop_object("building without art");
                 continue;
             };
@@ -2439,7 +2488,7 @@ impl Builder<'_> {
             let items = self.building_items(
                 // spec: S-0105 claim 16 and S-0609 claim 14 (a map-placed building has not spun: counter 0)
                 i,
-                &art,
+                art,
                 p.cell,
                 cell.level,
                 &p.owner,
@@ -2849,7 +2898,7 @@ impl Builder<'_> {
             };
         let mut any = false;
         for (def, a, at) in entries {
-            let Some(art) = self.import.arts.get(&(Kind::Animations, a)).cloned() else {
+            let Some(art) = self.type_art((Kind::Animations, a)) else {
                 continue;
             };
             let Some(sprite) = art.sprite.clone() else {
@@ -2857,7 +2906,7 @@ impl Builder<'_> {
             };
             any = true;
             // spec: S-0007 claim 34 (the playback and drawing fields come from the animation's own art section, whatever section its image name names)
-            let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a));
+            let t = self.anim_fields(a);
             // spec: S-0109 claim 19 (detail field above the player's level: not drawn)
             if !slots::shown_at(&t, self.options.detail.number()) {
                 continue;
@@ -3042,10 +3091,10 @@ impl Builder<'_> {
     /// ground-layer sort key and its items, or `None` when it draws
     /// nothing (no art, no sprite, or above the player's detail level).
     fn live_anim(&mut self, a: &AnimDraw) -> Option<(slots::Layer, i64, Vec<Item>)> {
-        let art = self.import.arts.get(&(Kind::Animations, a.idx)).cloned()?;
+        let art = self.type_art((Kind::Animations, a.idx))?;
         let sprite = art.sprite.clone()?;
         // spec: S-0007 claim 34 (the animation's own art section)
-        let t = slots::read_anim(&self.p.art, anim_own_section(self.import, a.idx));
+        let t = self.anim_fields(a.idx);
         // spec: S-0109 claim 19 (detail field above the player's level: not drawn, still updated)
         if !slots::shown_at(&t, self.options.detail.number()) {
             return None;
@@ -3055,7 +3104,7 @@ impl Builder<'_> {
         // art flags; row 3 is only for an object's own animation)
         let unowned = slots::AnimType {
             cell_drawer: false,
-            ..t.clone()
+            ..(*t).clone()
         };
         let cell = CellXY::new(a.pos.0 >> 8, a.pos.1 >> 8);
         let row = if let Some((house, light)) = &a.carrier {
@@ -3063,7 +3112,7 @@ impl Builder<'_> {
             let (hsv, _) = self.owner_colour(house);
             let carried = slots::AnimType {
                 cell_drawer: true,
-                ..t.clone()
+                ..(*t).clone()
             };
             self.anim_row(&carried, hsv, *light, cell)
         } else {
@@ -3097,7 +3146,7 @@ impl Builder<'_> {
     /// drawn for it (no art, a frame the sprite does not hold, or no
     /// general palette for a body that needs it).
     fn live_projectile(&mut self, d: &ProjectileDraw) -> Vec<Item> {
-        let Some(art) = self.import.arts.get(&(Kind::Projectiles, d.idx)).cloned() else {
+        let Some(art) = self.type_art((Kind::Projectiles, d.idx)) else {
             return Vec::new();
         };
         let Some(look) = art.projectile.clone() else {
@@ -3110,7 +3159,7 @@ impl Builder<'_> {
         // spec: S-0306 claim 28 and S-0101 F1 (the draw point: the screen point of its position, height lift included, no further shift)
         let point = project_lifted(d.pos.0, d.pos.1, d.pos.2);
         if look.voxel {
-            return self.voxel_projectile(d, &art, &look, point);
+            return self.voxel_projectile(d, art, &look, point);
         }
         // spec: S-0306 claim 28 (a sprite projectile without a sprite draws nothing)
         let Some(sprite) = art.sprite.clone() else {
@@ -4205,7 +4254,7 @@ impl Builder<'_> {
     /// vehicle a sprite (S-0102 claims 21 and 22). An aircraft whose art is
     /// not a voxel model shows no body (claim 21).
     fn vehicle_items(&mut self, m: &Mobile, point: (i32, i32), u: i32, row: Shade) -> Vec<Item> {
-        let Some(art) = self.import.arts.get(&(m.kind, m.idx)).cloned() else {
+        let Some(art) = self.type_art((m.kind, m.idx)) else {
             return Vec::new();
         };
         let group = if m.kind == Kind::Aircraft {
@@ -4214,7 +4263,7 @@ impl Builder<'_> {
             Group::Vehicles
         };
         if art.voxels.contains_key("body") {
-            self.vehicle_voxels(m, &art, point, u, row, group)
+            self.vehicle_voxels(m, art, point, u, row, group)
         } else if m.kind == Kind::Vehicles
             && let Some(sprite) = art.sprite.clone()
         {
@@ -5114,6 +5163,27 @@ impl Painter {
             .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
     }
 
+    /// A sprite file's headers, read from `assets` the first time it is
+    /// asked for.
+    fn shp_heads(&mut self, assets: &Assets, file: &[u8]) -> Option<&mut ShpHeads> {
+        if !with_upper(file, |k| self.shps.contains_key(k)) {
+            let heads = assets
+                .get(file)
+                .and_then(|b| Shp::parse(b).ok())
+                .map(|shp| ShpHeads {
+                    canvas: (i32::from(shp.width), i32::from(shp.height)),
+                    frames: shp
+                        .frames
+                        .iter()
+                        .map(|f| (i32::from(f.x), i32::from(f.y)))
+                        .collect(),
+                    images: vec![None; shp.frames.len()],
+                });
+            self.shps.insert(upper(file), heads);
+        }
+        with_upper(file, |k| self.shps.get_mut(k))?.as_mut()
+    }
+
     fn new(art: Document, canvas: voxel::VoxelCanvas) -> Self {
         Self {
             art,
@@ -5123,6 +5193,8 @@ impl Painter {
             },
             rows: Rows::default(),
             images: BTreeMap::new(),
+            shps: BTreeMap::new(),
+            anim_types: BTreeMap::new(),
             voxels: BTreeMap::new(),
             cutouts: BTreeMap::new(),
             canvas,
@@ -5610,7 +5682,7 @@ impl Painter {
         };
         let mut out = Vec::new();
         for d in list {
-            let Some(art) = b.import.arts.get(&(Kind::Buildings, d.idx)).cloned() else {
+            let Some(art) = b.type_art((Kind::Buildings, d.idx)) else {
                 out.push(Vec::new());
                 continue;
             };
@@ -5627,7 +5699,7 @@ impl Painter {
             b.live_slots = Some(d.slots.clone());
             let mut items = b.building_items(
                 d.idx,
-                &art,
+                art,
                 d.cell,
                 level,
                 &d.owner,
