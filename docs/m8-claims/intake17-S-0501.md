@@ -46,7 +46,8 @@ the top layer. It now files such an aircraft in the ground layer (below).
     - A released aircraft with no destination and a current fraction of 0 rests: no step, no
       height change.
     - Claim 48 (b) case 3 is applied at the start of the update, case 2 at its end.
-    - The interim of Q-1875 clears its mark at its first update toward a destination.
+    - The interim of Q-1875 cleared its mark at its first update toward a destination
+      (retired at intake 23, [intake23-S-0501.md](intake23-S-0501.md)).
   - `sector_update` takes in a released aircraft whatever its height, with the corner switch still
     applying.
   - `guard`: the claim 29 pad search tests `h != cruise`, and the cruise-height branch tests
@@ -166,4 +167,6 @@ the top layer. It now files such an aircraft in the ground layer (below).
 Q-1875 was filed (block Q-1875 to Q-1879). It asks where the object-present mark of an aircraft
 released above its pad is, and when it is cleared. Interim: the aircraft keeps its ground
 placement's mark, moved to its docking cell, until its first movement update toward a destination.
+S-0501 r55 answered it (claim 48 (e)), and intake 23 retired the interim
+([intake23-S-0501.md](intake23-S-0501.md)).
 Q-1876 to Q-1879 are unused. Q-1841 was answered, and its interim is retired.

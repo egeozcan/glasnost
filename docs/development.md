@@ -3008,8 +3008,19 @@ S-0501 r52 claims 24, 40, 47 and 48 (Q-1841). The ledger, [m8-claims/intake17-S-
 - `guard` compares height with the cruise height for equality only (claim 48 (d)).
 - The take-off test reads height (Terms, claim 8). An aircraft at height 0 that is neither settled nor landing takes off at a new destination. The gate's M6c air-strike aircraft does this, which changed duel-m6c and the M6c sweep: its smallest minimum fell from 4 to 2, with no counter at 0.
 - Goldens duel, duel-diagonal, duel-naval, duel-m6c and skirmish regenerated (causes in the ledger). The arena CSVs are byte-identical, and so are the M7a and M7b sweeps.
-- Q-1875 (the released aircraft's object-present mark) is open; interim in `released_docked` and `tick_flight`.
+- Q-1875 (the released aircraft's object-present mark) was answered by S-0501 r55; the interim is retired at intake 23 (below).
 - New hashed state (`released`, `ground_filed`): save format 77, AI game format 39.
+
+### Object-present flag of a released aircraft (M8 step A3 intake 23)
+
+S-0501 r55 claim 48 (e) (Q-1875). The ledger, [m8-claims/intake23-S-0501.md](m8-claims/intake23-S-0501.md), holds the notes.
+- `released_docked` sets no flag for an aircraft it leaves above its pad, and clears the object-present flag of the docking position's cell's ground record outright (`others = 0`), whatever another object had contributed, because the flags are not counts (S-0209 claim 1). A release at or below the terrain, or with `quirks.aircraft_released_above_pad` off, still rests holding its flag there.
+- `air::tick` notes whether the aircraft was released before its movement update, and at the end of that update `released_mark` brings the flag in line: none above height 0, and at height 0 the flag in the cell that then holds it, moved out of a cell it has left. That covers the low release, which stays at height 0 with a target fraction below 1, and its touchdown.
+- The Q-1875 interim (the mark kept on the docking cell until the first update toward a destination) is gone.
+- F7 (`landing_cell_ok`) accepts a cell whose first listed occupant is the lander itself, as F7 states; our search used to skip the lander, so its own flag refused the low release's touchdown. A refused touchdown now clears the flag as take-off restarts.
+- Q-1905 (does the low release turn toward its destination at height 0?): interim, claim 42 as written (no guidance at height 0).
+- Arena CSVs and the M6c, M7a and M7b sweeps 1–16 identical before and after.
+- No new state: save format 78, AI game format 40. No golden changes: no gate pad docks above the terrain.
 
 ### Turret table and selected turret index (M8 step A3 intake 19)
 
