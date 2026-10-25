@@ -2,11 +2,11 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 73
+revision: 77
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-25
 measurements: []
 requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610]
 supersedes: []
@@ -35,6 +35,8 @@ still settled then and stands still (claim 6). If it is not settled, a vehicle s
 case is `unmeasured` and rated medium (claim 21). Claim 6's *production* slot hold, or a hovering
 vehicle's wait to come down, can delay the step. The step comes at the first processing that
 meets the completed-settling condition of S-0504 claim 8 (Changes for other specs).
+A hovering vehicle lost over water at a naval yard has the quirk switch
+`quirks.docked_hover_water_loss` (claim 21, Edge cases), whose default is the original's loss.
 
 ## Terms
 
@@ -1074,34 +1076,39 @@ only the vehicle in that place.
       *enter* (claim 17). The vehicle
       queues *sleep* on reaching the docking point (claim 17), so which behaviour is current
       during these ticks follows its starts (S-0215 claim 11).
-    - *Over water, at a naval yard.* No switch-off of this claim is skipped or changed over
-      water: a switch-off that takes S-0503 claim 10's two draws starts a spin, and the end of
-      that spin brings S-0503 claim 11's water test, at a depot or a naval yard as anywhere. A
-      building leaves the land type of the cells under it unchanged, so the docking cell of a
-      naval yard standing on water is a water cell. A hovering vehicle docked there (S-0504
-      claim 7 says which can dock; one whose movement zone is plain amphibious, for example)
-      whose spin ends while it is less than
-      104 leptons above the water is given the bomb mark, falls and is lost (S-0503 claim 11), and the
-      yard then meets the loss of a vehicle in contact (claim 6's rows with no contact). The
-      spin ends at the latest on the first tick on which the vehicle is no longer powered
-      (S-0503 claim 10), so one that takes the draws while still above the water is given the
-      bomb mark when its spin ends, on the tick it comes down at the latest, and is lost when its
-      fall ends (S-0503 claim 11, which leaves the fall's end to S-0312), unless the spin ends while it is
-      still at least 104 leptons above the water (S-0503 claim 11: no fall then), and one that takes them while down but switched on (as at a
-      disabling before the settling step, below) is given the bomb mark within a tick of the switch-off. This
-      applies to every switch-off here that takes the draws: the repeated switch-off above, the
-      one after an enabling and the disabling below. A switch-off that takes no draws (current
-      behaviour *sleep* or *enter*, or a vehicle that is down and already switched off) starts
-      no spin; with no spin active, no water test is made, and the vehicle rests on the water
-      and is serviced as at a land depot. So whether an ordinary repair visit to such a yard,
-      with no disabling or enabling, loses the craft turns on its current behaviour at the
-      switch-offs during settling while it is above the water, which is open (above: *Draws of
-      the repeated switch-off*, H4 part i run 1); run 6 (ii) records it at the yard. At a land
-      depot the spin ends over land and the vehicle survives it.
+    - *Over water, at a naval yard.* No switch-off of this claim is skipped or changed over water:
+      a switch-off that takes S-0503 claim 10's two draws starts a spin, and the end of that spin
+      brings S-0503 claim 11's water test, at a depot or a naval yard as anywhere. A building
+      leaves the land type of the cells under it unchanged, so the docking cell of a naval yard
+      standing on water is a water cell. A hovering vehicle docked there (S-0504 claim 7 says which
+      can dock; one whose movement zone is plain amphibious, for example) whose spin ends while it
+      is less than 104 leptons above the water is given the bomb mark, falls and is lost (S-0503
+      claim 11), and the yard then meets the loss of a vehicle in contact (claim 6's rows with no
+      contact). The spin ends at the latest on the first tick on which the vehicle is no longer
+      powered (S-0503 claim 10), so one that takes the draws while still above the water is given
+      the bomb mark when its spin ends, on the tick it comes down at the latest, and is lost when
+      its fall ends (S-0503 claim 11, which leaves the fall's end to S-0312), unless the spin ends
+      while it is still at least 104 leptons above the water (S-0503 claim 11: no fall then), and
+      one that takes them while down but switched on (as at a disabling before the settling step,
+      below) is given the bomb mark within a tick of the switch-off. This applies to every
+      switch-off here that takes the draws: the repeated switch-off above, the one after an
+      enabling and the disabling below. A switch-off that takes no draws (current behaviour *sleep*
+      or *enter*, or a vehicle that is down and already switched off) starts no spin; with no spin
+      active, no water test is made, and the vehicle rests on the water and is serviced as at a
+      land depot. So whether an ordinary repair visit to such a yard, with no disabling or
+      enabling, loses the craft turns on its current behaviour at the switch-offs during settling
+      while it is above the water, which is open (above: *Draws of the repeated switch-off*, H4
+      part i run 1); run 6 (ii) records it at the yard. At a land depot the spin ends over land and
+      the vehicle survives it. This loss is the original's behaviour and the default of quirk
+      `quirks.docked_hover_water_loss` (Edge cases). With the switch off, a spin end that comes
+      while the vehicle has contact with a depot (Terms) or is settled makes no water test: the
+      vehicle is not given the bomb mark and does not fall. Once its contact has ended and it is
+      not settled, a later spin end is tested as usual by S-0503 claim 11.
       - Backing: `measurable` (H4 part i run 6: a disabling at a naval yard while the vehicle
         is above the water, a no-draw control in working, and a land-depot control). That
         buildings leave their cells' land type unchanged is shown there only for the yard in
-        that run.
+        that run. The behaviour with `quirks.docked_hover_water_loss` off is our engine's rule:
+        `unmeasured` (design, as the original has no such setting), confidence medium.
       - Confidence: medium until run 6 runs, which uses a named test type that no stock type
         matches and may be reported unreached.
     - *Enabling while settled.* An enabling of S-0405 claim 20 switches a settled vehicle on
@@ -1113,7 +1120,9 @@ only the vehicle in that place.
       processing and a hovering vehicle's waits until it is down again. The later
       switch-off follows the powered and current-behaviour conditions above; the enabling's guard
       reset alone does not guarantee that it takes the two draws. When it takes them at a naval
-      yard standing on water, the spin's end loses the vehicle, unless it ends at least 104 leptons above the water (*Over water, at a naval yard*). In the working phase
+      yard standing on water, the spin's end by default loses the vehicle (unless
+      `quirks.docked_hover_water_loss` is off), unless it ends at least 104 leptons above the water
+      (*Over water, at a naval yard*). In the working phase
       nothing at the depot switches it off: it stays raised for the rest of that phase, and its
       height does not defer its steps (only movement does, claim 6).
     - *Disabling while docked.* When S-0405 claim 20 disables a vehicle in contact (one not
@@ -1132,7 +1141,8 @@ only the vehicle in that place.
         vehicle takes the two draws.
       - *After the settling step,* in settling or working, its order-level destination is
         already empty (claim 21). Unless a destination-refresh state is present (only during
-        placement and a teleporting dock approach, S-0207 claim 27), the cleared destination is rejected as unchanged and switches nothing on: a hovering
+        placement and a teleporting dock approach, S-0207 claim 27), the cleared destination is
+        rejected as unchanged and switches nothing on: a hovering
         vehicle already down on the ground takes no draws and stays down; one not yet down takes
         the two draws.
       - *At a docking point outside the depot's foundation* (claim 18's displacement, as in H19
@@ -1141,8 +1151,10 @@ only the vehicle in that place.
         (Terms); the draws then follow the previous case.
 
       The one exception to the same net result is a water cell: at a naval yard standing on
-      water, a disabling that takes the two draws starts a spin whose end loses the vehicle
-      unless it ends at least 104 leptons above the water (*Over water, at a naval yard*, above), so its contact ends with its loss and the yard
+      water, a disabling that takes the two draws starts a spin whose end by default loses the
+      vehicle (unless `quirks.docked_hover_water_loss` is off) unless it ends at least 104 leptons
+      above the water (*Over water, at a naval yard*, above), so its contact ends with its loss and
+      the yard
       does not go on servicing it.
       The behaviour condition of S-0503 claim 10 always holds at the disabling, because claim 20's
       guard reset forces *guard* (or keeps *wait*, S-0215 claim 9). A vehicle that does not hover
@@ -1770,6 +1782,18 @@ alternatives are design rules, not claims of oracle measurements.
   losing contact with a depot ends its being settled, so the vehicle is switched on again and
   rises to its hover height (claim 21). S-0504 owns the same
   question for naval yards.
+- **Hovering vehicle lost at a naval yard** (quirk `quirks.docked_hover_water_loss`, default: the
+  original's behaviour). The loss can cost the player a vehicle docked for service; whether an
+  ordinary repair visit, with no disabling or enabling, reaches it is open (claim 21). The switch
+  is a design choice recorded here with that reason; it was decided at the delegated sign-off,
+  2026-10-25. A hovering vehicle docked at a naval yard standing on water, whose switch-off there
+  starts a spin (S-0503 claim 10) that ends while it is less than 104 leptons above the water, is
+  lost (claim 21, *Over water, at a naval yard*; S-0503 claim 11). With the switch off, a spin end
+  that comes while the vehicle has contact with a depot (Terms) or is settled makes no water test:
+  the vehicle is not given the bomb mark and does not fall. Once its contact has ended and it is
+  not settled, a later spin end is tested as usual by S-0503 claim 11. Everywhere else S-0503 claim
+  11's water test is unchanged. The behaviour with the switch off is our engine's rule:
+  `unmeasured` (design), confidence medium.
 - **Several contact places** (departure). The original services only place 0 (claims 20 to
   23). With an imported docking-place count above 1, a queued second vehicle can take place 1.
   It is then accepted, approaches its own docking point and docks, but receives no step while
@@ -3037,14 +3061,16 @@ The measurement scenario requires a read-only record of the ordered events; end-
   the ground takes the two draws again whenever those conditions hold at it (none while its
   current behaviour is *sleep* or *enter*)". Claims 8, 10 and 11's effects of being switched
   off then apply unchanged, claim 11's water test at the end of a spin included: a depot's
-  switch-off that starts a spin over water, at a naval yard standing on water, ends in the
-  vehicle's loss unless the spin ends at least 104 leptons above the water (S-0314 claim 21).
-- S-0503 claim 11, "Thus ordinary switch-off over flat water leads to loss after settling"
-  becomes "Thus a switch-off over flat water that starts a spin (claim 10) leads to loss after
-  settling, a repair depot's or naval yard's switch-off included (S-0314 claim 21). A
-  switch-off that starts no spin, while no spin is active, makes no such test, and the vehicle
-  rests on the water". Its backing and confidence are unchanged; S-0314 scenario H4 part i run
-  6 adds the naval-yard case.
+  switch-off that starts a spin over water, at a naval yard standing on water, ends by default
+  in the vehicle's loss (unless `quirks.docked_hover_water_loss` is off) unless the spin ends at
+  least 104 leptons above the water (S-0314 claim 21).
+- S-0503 claim 11, after "A switch-off that starts no spin, while no spin is active, makes no such
+  test, and the vehicle rests on the water.", gains: "With S-0314's quirk
+  `quirks.docked_hover_water_loss` off, a spin end that comes while the vehicle has contact with a
+  repair depot or naval yard or is settled makes no water test: the vehicle is not given the bomb
+  mark and does not fall. Once its contact has ended and it is not settled, a later spin end is
+  tested as usual by this claim (S-0314 claim 21 and Edge cases). The default is the original's
+  loss." S-0314 scenario H4 part i run 6 tests the default loss at a naval yard.
 
 - S-0405 claim 20, *Movement and turning*: "a scatter request is refused because its
   locomotor is off" becomes "a scatter request is refused because its locomotor is off, unless a
@@ -3094,9 +3120,3 @@ The measurement scenario requires a read-only record of the ordered events; end-
     locomotor test as the choice of starting distance by locomotor kind. If that rating also
     covers the completed-settling condition, it should be narrowed to medium for when that
     condition is first met, as in S-0314 claim 6.
-
-## Questions for the project lead
-
-- Claim 21, *Over water, at a naval yard*: should the loss of a hovering vehicle docked at a
-  naval yard on water, after a switch-off that starts a spin, get a quirk switch? The draft has
-  none (S-0503 claim 11 applied); fixed, a docked vehicle would get no water test.
