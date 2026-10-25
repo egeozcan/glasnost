@@ -4,7 +4,9 @@
 
 use super::*;
 use crate::catalog::{SoundCatalog, SoundEntry};
+use crate::mixer::PASS_MS;
 use crate::output::NullOutput;
+use crate::stand::Stand;
 use crate::{Audio, Where};
 use glasnost_fmt::pcm::Pcm;
 use glasnost_rules::quirks::Quirks;
@@ -1480,10 +1482,14 @@ fn mu11e_leaving_through_the_options_menu() {
         a.service(p * PASS, &mut u);
     }
     // The options menu opens and the game is left through it.
-    a.hold_music(true, 4 * PASS);
+    a.service_in(4 * PASS, Stand::Menu, &mut u);
+    assert!(a.sounds_held());
     let taken = u.taken();
     a.main_menu_music();
-    assert!(!a.music_held(), "the main menu holds nothing");
+    assert!(
+        !a.music_held() && !a.sounds_held(),
+        "the main menu holds nothing"
+    );
     assert_eq!(a.music().unwrap().playing(), Some(M));
     a.music_mut().unwrap().take_log();
     assert!(render(&mut a, 400).iter().any(|&x| x != 0), "M is heard");
@@ -1523,9 +1529,114 @@ fn mu11g_score_screen_to_the_main_menu_and_into_a_game() {
     assert_eq!(a.music().unwrap().playing(), None);
 }
 
-// spec: S-0703 claim 13 and S-0701 claim 30 (MU11 part f, our engine: the track is held, silent, while the options menu is open, and resumes from the same point; no pick or draw in the menu; the next pick comes at the pass at which the resumed track finishes, the menu's time not counted)
+// spec: S-0703 claim 13 and S-0701 claim 30 (MU11 part f, our engine: while the options menu is open the music plays on and is heard; music time advances with the host clock's readings; a music-only pass at each reading with M − K > 33 ms, at most one per reading; a track that completes there on music time is followed by its pick at that pass; the picks' ranged draws are the only draws in the menu; sound stands still)
 #[test]
-fn mu11f_the_options_menu_holds_the_music() {
+fn mu11f_the_options_menu_plays_the_music_on() {
+    let d = db(&plain(3));
+    for s in [LIST, SHUFFLE] {
+        // T = 100 ms for each track.
+        let files = [(0, 800), (1, 800), (2, 800)];
+        let w = testkit::combat_game(3);
+        let mut a = audio_with_music(&w, player(&plain(3), &files, s, on()));
+        let mut u = Rng::new(7);
+        // The first start at M = 0, then an audio pass at 40: K = 40.
+        a.service(0, &mut u);
+        let first = a.music().unwrap().playing();
+        a.service(PASS, &mut u);
+        assert!(a.music_mut().unwrap().take_log().len() == 1);
+        // The menu opens; it draws a frame every 11 ms, so a reading 33 ms
+        // after K makes no pass and the next one does.
+        let mut expect = u.clone();
+        let (mut k, mut m0, mut ended) = (PASS, 0, first);
+        let mut picks = Vec::new();
+        let mut passes = 0;
+        for r in (PASS + 11..=600).step_by(11) {
+            a.service_in(r, Stand::Menu, &mut u);
+            assert_eq!(a.stand(), Stand::Menu);
+            assert!(a.sounds_held() && !a.music_held());
+            if r - k > PASS_MS {
+                passes += 1;
+                k = r;
+                if r >= m0 + 100 {
+                    ended = pick(&d, &[true; 3], ended, s, on(), &mut expect);
+                    picks.push(ended.unwrap());
+                    m0 = r;
+                }
+            }
+            assert_eq!(u, expect, "only the picks' ranged draws, at {r}");
+            assert_eq!(a.music().unwrap().playing(), ended);
+        }
+        assert!(passes >= 12, "{passes}");
+        assert!(picks.len() >= 4, "{picks:?}");
+        assert_eq!(started(&a.music_mut().unwrap().take_log()), picks);
+        assert!(
+            render(&mut a, 400).iter().any(|&x| x != 0),
+            "the track picked is heard in the menu"
+        );
+        // The menu closes. The track playing goes on counting on music
+        // time: it completes at the first audio pass with M ≥ M0 + T. The
+        // sound clock left the menu out, so the first audio pass after it
+        // comes one cadence after the return.
+        let back = 620;
+        a.service(back, &mut u);
+        assert!(!a.sounds_held());
+        assert!(a.music_mut().unwrap().take_log().is_empty(), "no pass yet");
+        let mut r = back;
+        let due = loop {
+            r += PASS;
+            if r >= m0 + 100 {
+                break r;
+            }
+        };
+        for t in (back + PASS..due).step_by(PASS as usize) {
+            a.service(t, &mut u);
+        }
+        assert!(a.music_mut().unwrap().take_log().is_empty());
+        a.service(due, &mut u);
+        let next = pick(&d, &[true; 3], ended, s, on(), &mut expect);
+        assert_eq!(started(&a.music_mut().unwrap().take_log()), [next.unwrap()]);
+        assert_eq!(u, expect);
+    }
+}
+
+// spec: S-0701 claim 30 (H2's focus control: with the options menu open, focus lost for longer than the time left in the track adds nothing to music time; no music-only pass and no draw while focus is lost, the music held silent; the reading at the return becomes the previous reading; the track then completes at the first music-only pass with M ≥ M0 + T)
+#[test]
+fn h2_lost_focus_in_the_options_menu_adds_nothing_to_music_time() {
+    for s in [LIST, SHUFFLE] {
+        let files = [(0, 800), (1, 800), (2, 800)];
+        let w = testkit::combat_game(3);
+        let mut a = audio_with_music(&w, player(&plain(3), &files, s, on()));
+        let mut u = Rng::new(3);
+        // Started at M0 = 0 (T = 100); the menu's first pass at M = 40.
+        a.service(0, &mut u);
+        a.service_in(40, Stand::Menu, &mut u);
+        a.music_mut().unwrap().take_log();
+        let taken = u.taken();
+        for r in (60..5000).step_by(20) {
+            a.service_in(r, Stand::Unfocused, &mut u);
+            assert!(a.music_held() && a.sounds_held());
+            assert!(render(&mut a, 160).iter().all(|&x| x == 0), "held silent");
+        }
+        assert!(a.music_mut().unwrap().take_log().is_empty(), "no pass");
+        assert_eq!(u.taken(), taken, "no draw");
+        // Focus returns with the menu open: M is still 40 at 5000.
+        for r in [5000, 5020, 5040, 5060] {
+            a.service_in(r, Stand::Menu, &mut u);
+            assert!(!a.music_held());
+            assert!(
+                a.music_mut().unwrap().take_log().is_empty(),
+                "M < 100 at {r}"
+            );
+        }
+        // 5080: M = 120, a music-only pass (120 − 80 > 33) at which it completes.
+        a.service_in(5080, Stand::Menu, &mut u);
+        assert_eq!(a.music_mut().unwrap().take_log().len(), 1);
+    }
+}
+
+// spec: S-0701 claim 30 (lost focus outside the options menu is a full stand-still for music: the track is held, silent, and resumes from the point it had reached; no music update, pick or draw; its logical duration does not run down, and the return causes no catch-up)
+#[test]
+fn lost_focus_holds_the_music() {
     for s in [LIST, SHUFFLE] {
         let files = [(0, 800), (1, 800), (2, 800)];
         let w = testkit::combat_game(3);
@@ -1539,23 +1650,25 @@ fn mu11f_the_options_menu_holds_the_music() {
         assert_eq!(first, reference.music().unwrap().playing());
         assert_eq!(render(&mut a, 400), render(&mut reference, 400));
         a.music_mut().unwrap().take_log();
-        // The menu opens at 80 ms of host time and stays open for 1000 ms.
-        a.hold_music(true, 80);
+        // Focus is lost from 80 ms of host time to 1080 ms.
         let taken = u.taken();
         for c in (80..1080).step_by(40) {
-            a.service(c, &mut u);
+            a.service_in(c, Stand::Unfocused, &mut u);
             assert!(render(&mut a, 320).iter().all(|&x| x == 0), "held silent");
         }
-        assert_eq!(a.music().unwrap().playing(), first, "no pick in the menu");
+        assert_eq!(a.music().unwrap().playing(), first, "no pick");
         assert!(a.music_mut().unwrap().take_log().is_empty());
-        assert_eq!(u.taken(), taken, "no draw in the menu");
-        a.hold_music(false, 1080);
-        // Resumes from the same point.
-        assert_eq!(render(&mut a, 200), render(&mut reference, 200));
-        // Logical time 80 at 1080: not finished; 120 at 1120: finished.
+        assert_eq!(u.taken(), taken, "no draw");
+        // The return: M is still 0, the music resumes from the same point.
         a.service(1080, &mut u);
-        assert!(a.music_mut().unwrap().take_log().is_empty());
-        a.service(1120, &mut u);
+        assert!(!a.music_held() && !a.sounds_held());
+        assert_eq!(render(&mut a, 200), render(&mut reference, 200));
+        // M = 40 and 80 at 1120 and 1160: not finished; 120 at 1200.
+        for c in [1120, 1160] {
+            a.service(c, &mut u);
+            assert!(a.music_mut().unwrap().take_log().is_empty());
+        }
+        a.service(1200, &mut u);
         let log = a.music_mut().unwrap().take_log();
         assert_eq!(log.len(), 1, "{log:?}");
         if s.shuffle {

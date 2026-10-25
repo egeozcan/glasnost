@@ -20,6 +20,7 @@ use glasnost_audio::events::{Audio, local_voice_set};
 use glasnost_audio::mixer::View as SoundView;
 use glasnost_audio::music::{Music, Phase as MusicPhase};
 use glasnost_audio::speech::SpeechCatalog;
+use glasnost_audio::stand::Stand;
 use glasnost_render::batch2d::CpuImage;
 use glasnost_sim::rng::Rng;
 use glasnost_sim::targeting::{KeyCommand, Modifiers};
@@ -572,9 +573,10 @@ impl Client {
 
     /// The music for the screen shown, off the game's own frames (S-0703
     /// claims 11 to 13): the end screen's score track and the menus' track
-    /// are fed to the output, the music is held on our settings screen
-    /// opened from a game, and music left over from a game is stopped on a
-    /// screen it does not belong to.
+    /// are fed to the output, our settings screen opened from a game counts
+    /// as the options menu (the music plays on, sound stands still), and
+    /// music left over from a game is stopped on a screen it does not belong
+    /// to.
     fn screen_music(&mut self, now_ms: i64) {
         let Some(a) = self.audio.as_mut() else {
             return;
@@ -583,9 +585,18 @@ impl Client {
             return;
         };
         let loading = self.session.is_none();
+        let networked = self.net.as_ref().is_some_and(|n| n.begin.is_some());
         match &self.shell.screen {
-            // spec: S-0703 claim 13 (our engine: the music is held on our own settings screen opened from a game, as in the options menu)
-            Screen::Settings if self.settings_from_game => a.hold_music(true, now_ms),
+            // spec: S-0703 claim 13 and S-0701 claim 30 (our engine's own settings screen opened from a game counts as the options menu: the music plays on with music-only passes, sound stands still, and lost focus stops both)
+            Screen::Settings if self.settings_from_game => {
+                // design: a network game's settings screen does not stand still for lost focus, as its game does not (S-0201 claim 16)
+                let stand = if self.focused || networked {
+                    Stand::Menu
+                } else {
+                    Stand::Unfocused
+                };
+                a.frame_in(now_ms, stand, &mut self.unsync);
+            }
             // A game loading: its loading track, with no audio pass.
             Screen::Game if loading => a.menu_frame(),
             Screen::Game => {}
@@ -1140,9 +1151,19 @@ impl Client {
                 // spec: S-0701 F2 (the position's place on screen: S-0101's projection with its height)
                 project: glasnost_render::projection::project_lifted,
             });
-            // spec: S-0703 claim 13 (our engine: the options menu of a skirmish is a stand-still for music; a network game does not stand still for it, S-0201 claim 15)
-            a.hold_music(!networked && s.paused, now_ms);
-            a.frame(now_ms, &mut self.unsync);
+            let stand = if networked {
+                // design: a network game stands still neither for its options menu nor for lost focus (S-0201 claims 15 and 16: the ticks go on), so its audio stays play; S-0701 claim 30 covers a skirmish
+                Stand::Play
+            } else if !self.focused {
+                // spec: S-0701 claim 30 (lost focus is a full stand-still, for music as for sound, also while the options menu is open)
+                Stand::Unfocused
+            } else if s.paused {
+                // spec: S-0701 claim 30 and S-0703 claim 13 (the options menu of a skirmish is a stand-still for sound, while the music plays on with music-only passes)
+                Stand::Menu
+            } else {
+                Stand::Play
+            };
+            a.frame_in(now_ms, stand, &mut self.unsync);
             // spec: S-0701 claim 26 (each started announcement's caption: its text key when nonempty, otherwise its entry's name)
             for name in a.take_started() {
                 if self.settings.captions {

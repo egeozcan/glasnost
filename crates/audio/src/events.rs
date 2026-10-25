@@ -26,11 +26,12 @@ use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 use crate::bank::SoundBank;
 use crate::catalog::{EntryId, FULL, SoundCatalog};
-use crate::mixer::{InstanceId, MixQuirks, Mixer, Prepared, View, Where};
+use crate::mixer::{InstanceId, MixQuirks, Mixer, PASS_MS, Prepared, View, Where};
 use crate::music::Music;
 use crate::names::{Announcement, SoundNames, TypeSounds};
 use crate::output::{Output, OutputState};
 use crate::speech::{Announcer, Requested, SpeechCatalog, voice_set};
+use crate::stand::{HeldClock, Stand};
 
 /// The feedback chance: a draw below this of R(0, 99) (S-0701 Constants).
 const FEEDBACK_CHANCE: i32 = 30; // spec: S-0701 claim 20 and Constants (30 in 100)
@@ -198,11 +199,18 @@ pub struct Audio {
     /// The next game's map's stored `[Basic]` `Theme` value (S-0703 claim
     /// 11).
     theme: Option<Vec<u8>>,
-    /// The host time a music hold began (S-0703 claim 13), while held.
-    music_hold: Option<i64>,
-    /// The host time spent in music holds, which the music's logical time
-    /// leaves out.
-    music_offset: i64,
+    /// What the last frame of the game was: play, the options menu or lost
+    /// focus (S-0701 claim 30).
+    stand: Stand,
+    /// The sound side's clock, host time less the stand-stills (S-0701
+    /// claim 30: neither logical audio time nor sound playback advances in
+    /// one).
+    sound_clock: HeldClock,
+    /// Music time *M*, host time less the stretches without focus (S-0701
+    /// claim 30, *Music time*).
+    music_clock: HeldClock,
+    /// The music time *K* of the last audio pass or music-only pass.
+    music_pass: Option<i64>,
 }
 
 /// The side of the local player's country (S-0004 claim 9), by index.
@@ -279,8 +287,10 @@ impl Audio {
             music: None,
             sides: Vec::new(),
             theme: None,
-            music_hold: None,
-            music_offset: 0,
+            stand: Stand::Play,
+            sound_clock: HeldClock::default(),
+            music_clock: HeldClock::default(),
+            music_pass: None,
         }
     }
 
@@ -413,33 +423,28 @@ impl Audio {
         self.mixer.set_music(v);
     }
 
-    /// Holds the music at host time `now_ms` (`held`), or resumes it
-    /// (S-0703 claim 13: our engine's options menu and its settings screen
-    /// opened from a game are a stand-still for music). While held the
-    /// track is silent at the point it had reached, no music update runs,
-    /// and the held time does not count towards its logical duration.
-    pub fn hold_music(&mut self, held: bool, now_ms: i64) {
-        match (held, self.music_hold) {
-            (true, None) => self.music_hold = Some(now_ms),
-            (false, Some(t)) => {
-                // spec: S-0703 claim 13 and S-0701 claim 30 (logical time does not advance in a stand-still, and resuming causes no catch-up)
-                self.music_offset = self.music_offset.saturating_add((now_ms - t).max(0));
-                self.music_hold = None;
-            }
-            _ => {}
-        }
-        self.mixer.hold_music(self.music_hold.is_some());
+    /// What the last frame of the game was ([`Audio::frame_in`]).
+    pub fn stand(&self) -> Stand {
+        self.stand
     }
 
-    /// Whether the music is held ([`Audio::hold_music`]).
+    /// Whether the music is held, silent at the point it had reached (lost
+    /// focus, S-0701 claim 30).
     pub fn music_held(&self) -> bool {
-        self.music_hold.is_some()
+        self.mixer.music_held()
     }
 
-    /// Ends a hold that a screen change made moot.
+    /// Whether sound playback is held (the options menu or lost focus,
+    /// S-0701 claim 30).
+    pub fn sounds_held(&self) -> bool {
+        self.mixer.sounds_held()
+    }
+
+    /// Ends the holds of a stand-still that a screen change made moot.
     fn release_music(&mut self) {
-        self.music_hold = None;
+        self.stand = Stand::Play;
         self.mixer.hold_music(false);
+        self.mixer.hold_sounds(false);
     }
 
     /// Services the music off the audio passes (the end screen, the menus,
@@ -501,6 +506,7 @@ impl Audio {
         // spec: S-0703 claim 11 (our engine: the loading track is stopped when the game starts)
         self.release_music();
         self.mixer.set_music(None);
+        self.music_pass = None;
         if let Some(m) = self.music.as_mut() {
             m.start_game(&self.sides, side, self.theme.as_deref());
         }
@@ -523,29 +529,75 @@ impl Audio {
 
     /// Services the audio at host time `now_ms` (the audio clock): an audio
     /// pass when one is due (claim 12), the next announcement (claim 27),
-    /// then the output. Call once per drawn frame, after the frame's events.
-    /// The per-instance draws of the pass and of the rendered samples take
-    /// `unsync`, the client's unsynchronised stream.
+    /// then the output. Call once per drawn frame of play, after the frame's
+    /// events. The per-instance draws of the pass and of the rendered samples
+    /// take `unsync`, the client's unsynchronised stream.
     pub fn frame(&mut self, now_ms: i64, unsync: &mut Rng) {
+        self.frame_in(now_ms, Stand::Play, unsync);
+    }
+
+    /// [`Audio::frame`] for a frame of a loaded game that is play, the
+    /// options menu or lost focus (S-0701 claim 30): the options menu makes
+    /// no audio pass and holds sound playback, while music time runs on with
+    /// its music-only passes; lost focus holds both. Call once per drawn
+    /// frame of a loaded game, our settings screen opened from one included.
+    pub fn frame_in(&mut self, now_ms: i64, stand: Stand, unsync: &mut Rng) {
         // spec: S-0701 claim 30 (per-instance choices on the shared unsynchronised stream; no separate presentation generator)
         std::mem::swap(self.mixer.rng_mut(), unsync);
-        self.serve(now_ms);
+        self.serve(now_ms, stand);
         self.output.pump(&mut self.mixer);
         std::mem::swap(self.mixer.rng_mut(), unsync);
     }
 
     /// [`Audio::frame`] without feeding the output (offline rendering).
     pub fn service(&mut self, now_ms: i64, unsync: &mut Rng) {
+        self.service_in(now_ms, Stand::Play, unsync);
+    }
+
+    /// [`Audio::frame_in`] without feeding the output (offline rendering,
+    /// tests).
+    pub fn service_in(&mut self, now_ms: i64, stand: Stand, unsync: &mut Rng) {
         // spec: S-0701 claim 30 (per-instance choices on the shared unsynchronised stream)
         std::mem::swap(self.mixer.rng_mut(), unsync);
-        self.serve(now_ms);
+        self.serve(now_ms, stand);
         std::mem::swap(self.mixer.rng_mut(), unsync);
     }
 
-    fn serve(&mut self, now_ms: i64) {
-        self.now_ms = now_ms;
-        let pass = self.mixer.service(now_ms);
-        if let Some(id) = self.announcer.next(now_ms, self.mixer.speaking()) {
+    fn serve(&mut self, now_ms: i64, stand: Stand) {
+        self.stand = stand;
+        // spec: S-0701 claim 30 (during a stand-still, the options menu or lost focus, neither logical audio time nor sound playback advances; resumption causes no catch-up)
+        self.mixer.hold_sounds(stand != Stand::Play);
+        // spec: S-0701 claim 30 (lost focus remains a full stand-still, for music as for sound, also while the options menu is open)
+        self.mixer.hold_music(stand == Stand::Unfocused);
+        let pass = match stand {
+            Stand::Play => {
+                let c = self.sound_clock.run(now_ms);
+                self.music_clock.run(now_ms);
+                self.serve_sound(c)
+            }
+            Stand::Menu => {
+                self.sound_clock.stop();
+                // spec: S-0701 claim 30 (Music time: while the options menu is open, music time advances with the host's monotonic clock, read once for each frame the menu draws)
+                self.music_clock.run(now_ms);
+                false
+            }
+            Stand::Unfocused => {
+                self.sound_clock.stop();
+                // spec: S-0701 claim 30 (Music time: from the loss of focus music time stops; no reading is taken until focus returns, and the reading at the return becomes the previous reading)
+                self.music_clock.stop();
+                false
+            }
+        };
+        self.serve_music(stand, pass);
+    }
+
+    /// The sound side of a frame of play at sound-clock time `c`: an audio
+    /// pass when one is due, then the next announcement. Returns whether a
+    /// pass ran.
+    fn serve_sound(&mut self, c: i64) -> bool {
+        self.now_ms = c;
+        let pass = self.mixer.service(c);
+        if let Some(id) = self.announcer.next(c, self.mixer.speaking()) {
             // Kept for captions whether or not its file plays: a player
             // without sound still reads it.
             // spec: S-0701 claim 26 (the caption: the entry's text key when nonempty, otherwise its name)
@@ -563,12 +615,13 @@ impl Audio {
                 self.mixer.speak(clip);
             }
         }
-        self.serve_music(pass, now_ms);
+        pass
     }
 
-    /// The music: a read that finished starts its track; at a pass, the
-    /// music update (S-0703 claim 10).
-    fn serve_music(&mut self, pass: bool, now_ms: i64) {
+    /// The music: a read that finished starts its track; at an audio pass
+    /// (`pass`), or at a music-only pass of the options menu, the music
+    /// update (S-0703 claim 10).
+    fn serve_music(&mut self, stand: Stand, pass: bool) {
         let Some(m) = self.music.as_mut() else {
             return;
         };
@@ -576,17 +629,25 @@ impl Audio {
         if let Some(v) = m.poll(rate) {
             self.mixer.set_music(Some(v));
         }
-        // spec: S-0703 claim 13 and S-0701 claim 30 (no music update in a stand-still)
-        if self.music_hold.is_some() {
+        let at = self.music_clock.time();
+        let due = match stand {
+            // spec: S-0703 claim 10 (one music update at the end of every audio pass, after that pass's sound choices; its draws take the same unsynchronised stream)
+            Stand::Play => pass,
+            // spec: S-0701 claim 30 (Music time: a music-only pass at a reading exactly when M − K > 33 ms, so at most one per reading)
+            // design: a menu opened before the game's first audio pass, with no K yet, makes its music-only pass at its first reading (our host-time clock has no K = 0 at loading)
+            Stand::Menu => self.music_pass.is_none_or(|k| at - k > PASS_MS),
+            // spec: S-0701 claim 30 (Music time: no music-only pass while focus is lost)
+            Stand::Unfocused => false,
+        };
+        if !due {
             return;
         }
-        // spec: S-0703 claim 10 (one music update at the end of every audio pass, after that pass's sound choices; its draws take the same unsynchronised stream)
-        if pass {
-            let half_span = self.quirks.ranged_draw_half_span;
-            let c = now_ms.saturating_sub(self.music_offset);
-            if let Some(v) = m.update(c, self.mixer.rng_mut(), half_span, rate) {
-                self.mixer.set_music(v);
-            }
+        // spec: S-0701 claim 30 (Music time: K becomes M at each audio pass and at each music-only pass)
+        self.music_pass = Some(at);
+        let half_span = self.quirks.ranged_draw_half_span;
+        // spec: S-0703 claim 10 (a track's logical duration is counted on music time from the pass at which it started; a music-only pass runs one music update and nothing else)
+        if let Some(v) = m.update(at, self.mixer.rng_mut(), half_span, rate) {
+            self.mixer.set_music(v);
         }
     }
 

@@ -205,45 +205,108 @@ fn the_map_theme_starts_first() {
     assert_eq!(playing(&c), Some(INTRO));
 }
 
-// spec: S-0703 claim 13 (MU11 part f, our engine, through the client: the options menu and our settings screen opened from the game hold the music, with no music update; it resumes on the return)
+fn stand(c: &Client) -> Stand {
+    c.audio.as_ref().unwrap().stand()
+}
+
+// spec: S-0703 claim 13 and S-0701 claim 30 (MU11 part f, our engine, through the client: the music plays on while the options menu is open, and a track that completes there on music time is followed by its pick, heard in the menu; our settings screen opened from the game counts as the options menu; sound stands still in both)
 #[test]
-fn the_options_menu_and_the_settings_screen_hold_the_music() {
+fn the_options_menu_and_the_settings_screen_play_the_music_on() {
     let mut c = client();
     start(&mut c, None);
+    // T0 (2 s) starts at music time 1000.
     c.update(1_000);
-    log(&mut c);
+    assert_eq!(log(&mut c), [Update::Started(T0)]);
     open_menu(&mut c);
-    c.update(1_040);
-    assert!(c.audio.as_ref().unwrap().music_held());
-    // Far past T0's 2 s: no pick while held.
-    for t in (1_080..10_000).step_by(40) {
+    for t in (1_040..3_000).step_by(40) {
         c.update(t);
+        assert_eq!(stand(&c), Stand::Menu);
+        let a = c.audio.as_ref().unwrap();
+        assert!(a.sounds_held() && !a.music_held());
     }
-    assert!(log(&mut c).is_empty(), "no music update in the menu");
+    assert!(log(&mut c).is_empty(), "T0 still plays");
+    // A music-only pass at 3000: T0 has completed, T1 is picked in the menu.
+    c.update(3_000);
+    assert_eq!(log(&mut c), [Update::Started(1)]);
+    assert_eq!(playing(&c), Some(1));
     press_pause(&mut c, PauseHit::Settings);
     assert_eq!(c.shell.screen, Screen::Settings);
-    for t in (10_000..20_000).step_by(40) {
+    for t in (3_040..5_000).step_by(40) {
         c.update(t);
+        assert_eq!(
+            stand(&c),
+            Stand::Menu,
+            "the settings screen is the options menu"
+        );
     }
-    assert!(c.audio.as_ref().unwrap().music_held());
-    assert!(log(&mut c).is_empty(), "none on the settings screen");
-    // Back to the game, its options menu still open.
+    assert!(log(&mut c).is_empty());
+    c.update(5_000);
+    assert_eq!(
+        log(&mut c),
+        [Update::Started(T0)],
+        "a pick on the settings screen"
+    );
+    // Back to the game, its options menu still open, then play.
     c.settings_from_game = false;
     c.shell.screen = Screen::Game;
     press_pause(&mut c, PauseHit::Resume);
-    c.update(20_000);
-    assert!(!c.audio.as_ref().unwrap().music_held());
-    assert_eq!(playing(&c), Some(T0), "it resumes");
-    // T0 had played 40 ms when the menu opened (1000 to 1040 ms of host
-    // time): it finishes 1960 ms after the return, at 21960.
-    for t in (20_040..21_920).step_by(40) {
+    c.update(5_040);
+    assert_eq!(stand(&c), Stand::Play);
+    assert!(!c.audio.as_ref().unwrap().sounds_held());
+    // T0 started at 5000 goes on counting on music time: it ends at 7000.
+    for t in (5_080..7_000).step_by(40) {
         c.update(t);
     }
     assert!(log(&mut c).is_empty());
-    for t in (21_920..22_200).step_by(40) {
+    for t in (7_000..7_200).step_by(40) {
         c.update(t);
     }
     assert_eq!(started_of(&log(&mut c)), [1]);
+}
+
+// spec: S-0701 claim 30 (through the client: lost focus in a skirmish is a full stand-still for music, with the options menu closed or open; the track is held, no pick is made, and the unfocused stretch adds nothing to music time)
+#[test]
+fn lost_focus_holds_the_music() {
+    let mut c = client();
+    start(&mut c, None);
+    // T0 (2 s) starts at music time 1000: it ends at music time 3000.
+    c.update(1_000);
+    log(&mut c);
+    c.focus(false);
+    for t in (1_040..20_000).step_by(40) {
+        c.update(t);
+        assert_eq!(stand(&c), Stand::Unfocused);
+        assert!(c.audio.as_ref().unwrap().music_held());
+    }
+    assert!(log(&mut c).is_empty(), "no pick without focus");
+    // Focus returns: 19 s left out, so T0 ends at host time 22000.
+    c.focus(true);
+    for t in (20_000..22_000).step_by(40) {
+        c.update(t);
+        assert!(!c.audio.as_ref().unwrap().music_held());
+    }
+    assert!(log(&mut c).is_empty());
+    c.update(22_000);
+    assert_eq!(log(&mut c), [Update::Started(1)]);
+    // The options menu open, then focus lost and found again: T1, started
+    // at music time 3000, ends at 5000, after 2 s more with focus.
+    open_menu(&mut c);
+    c.update(22_040);
+    c.focus(false);
+    for t in (22_080..40_000).step_by(40) {
+        c.update(t);
+        assert_eq!(stand(&c), Stand::Unfocused, "menu open, focus lost");
+        assert!(c.audio.as_ref().unwrap().music_held());
+    }
+    c.focus(true);
+    // Music time 3040 again at 40000: T1 ends at host time 41960.
+    for t in (40_000..41_960).step_by(40) {
+        c.update(t);
+        assert_eq!(stand(&c), Stand::Menu);
+    }
+    assert!(log(&mut c).is_empty());
+    c.update(41_960);
+    assert_eq!(log(&mut c), [Update::Started(T0)]);
 }
 
 fn started_of(log: &[Update]) -> Vec<usize> {
