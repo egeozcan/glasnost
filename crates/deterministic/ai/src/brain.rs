@@ -5,7 +5,8 @@
 //! It plays in two layers:
 //!
 //! - **the plan** ([`Script`], the M5a scripted builder and attack waves),
-//!   every [`THINK_PERIOD`] ticks: build-up, harvesters, army, waves; it
+//!   every [`THINK_PERIOD`](scripted::THINK_PERIOD) ticks at its house's
+//!   phase ([`scripted::think_phase`]): build-up, harvesters, army, waves; it
 //!   rebuilds what the house lost of its power, refineries, factories and
 //!   harvesters, because it asks for them whenever the house has none (or
 //!   fewer harvesters than the plan keeps);
@@ -13,7 +14,7 @@
 //!   building at once, defend the base against seen enemies near its
 //!   buildings, and rebuild a lost construction yard (build a unit that
 //!   deploys into one, then deploy it);
-//! - **the ferry** (S-0507), every [`THINK_PERIOD`] ticks: one unarmed
+//! - **the ferry** (S-0507), with the plan: one unarmed
 //!   hovering transport carries idle infantry from home to land near the
 //!   next wave's goal, across water when they cannot walk there, loading
 //!   and unloading with the clicks a person gives;
@@ -64,8 +65,8 @@ use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
-    self, CLIMB_DEPTH, Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, can_attack,
-    deploys_into_yard, dist2, idle, is_yard,
+    self, CLIMB_DEPTH, Plan, Role, SPIRAL_RINGS, Script, all_types, can_attack, deploys_into_yard,
+    dist2, idle, is_yard,
 };
 use crate::skirmish::start_cells;
 
@@ -272,6 +273,14 @@ impl Brain {
         s
     }
 
+    /// Whether the brain's plan and the parts that go with it think in tick
+    /// `tick`: every [`THINK_PERIOD`](scripted::THINK_PERIOD) ticks, at the
+    /// house's phase ([`scripted::think_phase`]). The reactions run in every
+    /// tick.
+    pub fn thinks_at(&self, tick: i32) -> bool {
+        scripted::thinks_at(self.house(), tick)
+    }
+
     /// Thinks at the start of the world's current tick; returns the orders
     /// to issue, in the order to issue them (a later order to the same unit
     /// replaces an earlier one, so the reactions come last).
@@ -292,16 +301,19 @@ impl Brain {
         // The world does not change during the think: placement answers are kept for it.
         self.script.begin_think();
         mark(p, "ai:script");
-        let mut out = if w.tick % THINK_PERIOD == 0 {
+        let thinks = self.thinks_at(w.tick);
+        let mut out = if thinks {
             self.script.think(w)
         } else {
             let mut v = Vec::new();
             self.place_done(w, &mut v);
             v
         };
-        if w.tick % THINK_PERIOD == 0 {
+        let mut short = false;
+        if thinks {
             mark(p, "ai:economy_first");
-            let paying = self.economy_first(w, &mut out);
+            let paying;
+            (paying, short) = self.economy_first(w, &mut out);
             mark(p, "ai:drop_expansion");
             self.drop_expansion(w, &mut out);
             mark(p, "ai:send_for_repair");
@@ -331,9 +343,17 @@ impl Brain {
                 self.expand(w, &mut out);
             }
         }
-        if w.tick % THINK_PERIOD == 0 {
+        if thinks {
             mark(p, "ai:special");
             self.special.think(&self.script, w, &mut out);
+            if short {
+                // No new non-fighter while the superweapon building waits
+                // for money: `economy_first` would cancel it (M8 step B7).
+                let has_yard = self.has_yard(w);
+                out.retain(
+                    |o| !matches!(o, Order::Build { what } if non_fighter(w, *what, has_yard)),
+                );
+            }
             mark(p, "ai:plant_first");
             if !self.script.selling() {
                 let plant = self.script.plant_type(w);
@@ -373,6 +393,24 @@ impl Brain {
         if kept > 0 {
             self.special.count_spins_kept(kept);
         }
+        // S-0213 claims 3 and 10: the deploy order queues unload, and a
+        // behaviour order of the same tick for the same actor determines
+        // that state whatever the issue order; a unit given the deploy order
+        // (`deployers`) takes no behaviour order in the same think, as a
+        // person who packs a unit up does not click it elsewhere in the same
+        // moment (M8 step B7).
+        let deploying: std::collections::BTreeSet<ObjectId> = out
+            .iter()
+            .filter_map(|o| match o {
+                Order::Deploy { actor } => Some(*actor),
+                _ => None,
+            })
+            .collect();
+        if !deploying.is_empty() {
+            out.retain(
+                |o| !matches!(o, Order::Behaviour { actor, .. } if deploying.contains(actor)),
+            );
+        }
         // S-0607 claims 9 and 12: a lifter takes only the lifter part's orders, and a holding lifter only its drop (`lifter`)
         out.retain(|o| crate::lifter::keeps_order(w, o));
         // S-0608 claims 3 b and 12: a draining drainer takes no order (a move off the foundation ends the link), one on its way to drain only drain orders, and no second drainer goes for a building (`drain`)
@@ -410,8 +448,10 @@ impl Brain {
     /// superweapon building and two army lines, and the miner stood on its
     /// line for 6 000 ticks.
     /// Returns whether the house is paying for its economy (no new
-    /// building of its own choosing is started then).
-    fn economy_first(&mut self, w: &World, out: &mut Vec<Order>) -> bool {
+    /// building of its own choosing is started then), and whether a
+    /// superweapon building waits for money (no non-fighter is started
+    /// then).
+    fn economy_first(&mut self, w: &World, out: &mut Vec<Order>) -> (bool, bool) {
         use glasnost_sim::econ::production::Hold;
         let h = self.house();
         let economy = |t: TypeRef| is_economy(w, t);
@@ -446,22 +486,19 @@ impl Brain {
         // an engineer and 8 into a tank while the mutator building waited
         // for money. Held, the engineer's share went to the tank instead
         // (the earlier line is paid first, S-0404 claim 1), and that game's
-        // mutator did not come sooner.
-        let has_yard = self
-            .script
-            .own(w)
-            .iter()
-            .any(|&id| w.obj(id).is_some_and(|o| is_yard(w, o)));
-        let army = |t: TypeRef| {
-            (t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army))
-                || (has_yard && deploys_into_yard(w, t.kind, t.index))
-        };
+        // mutator did not come sooner. M8 step B7: a held item keeps its
+        // line and the queue does not advance (S-0404 claim 5), so the held
+        // engineer kept the infantry line from the fighters for thousands of
+        // ticks (B6's 12-2-13: 8 400 to 19 666), the base was raided and the
+        // dominator waited for money. While the house is short and not
+        // safe, a non-fighter is now cancelled (the refund at an unchanged
+        // price is everything paid, S-0404 claim 6), as a person clears the
+        // barracks for the soldiers the base needs, and none is started
+        // while the building is short.
+        let has_yard = self.has_yard(w);
+        let army = |t: TypeRef| army_item(w, t, has_yard);
         let short = !paying && !self.script.selling() && self.superweapon_short(w);
         let saving = short && self.safe(w);
-        let fights = |t: TypeRef| {
-            !deploys_into_yard(w, t.kind, t.index)
-                && w.rules().unit(t.kind, t.index).is_some_and(|u| !u.engineer)
-        };
         for l in w.econ.lines.lines.iter().filter(|l| l.house == h) {
             let Some(i) = &l.item else { continue };
             if i.done() || economy(i.t) {
@@ -473,30 +510,60 @@ impl Brain {
                     out.push(Order::Hold { what: i.t });
                     self.special.count_economy_hold();
                 }
-            } else if army(i.t) && (saving || (short && !fights(i.t))) {
+            } else if army(i.t) && saving {
                 // Only an item that still owes money competes for it.
                 if i.hold == Hold::None && i.owed > 0 {
                     // spec: S-0404 claim 5 (the hold order)
                     out.push(Order::Hold { what: i.t });
                     self.special.count_superweapon_hold();
                 }
+            } else if short && non_fighter(w, i.t, has_yard) {
+                // A non-fighter is cancelled, not held: a held item keeps
+                // its line (S-0404 claim 5), and the fighters the house
+                // needs now come from that line.
+                if i.owed > 0 {
+                    // spec: S-0404 claim 6 (the cancel-all order; at an unchanged price the refund is everything paid)
+                    out.push(Order::CancelAll { what: i.t });
+                    self.special.count_non_fighter_cancel();
+                }
             } else if i.hold == Hold::Player && tech::buildable(w, h, i.t) {
                 out.push(Order::Build { what: i.t });
                 self.special.count_resume();
             }
         }
-        paying
+        (paying, short)
+    }
+
+    /// Whether the house owns a construction yard.
+    fn has_yard(&self, w: &World) -> bool {
+        self.script
+            .own(w)
+            .iter()
+            .any(|&id| w.obj(id).is_some_and(|o| is_yard(w, o)))
     }
 
     /// Whether the house is safe enough to save for a superweapon
     /// building: not selling out, no seen enemy near its base, its army not
     /// outnumbered by the enemy units it sees, and no fight it is losing
-    /// ([`Self::losing`]).
+    /// ([`Self::losing`]). M8 step B7 tried a fight lost far off (more than
+    /// [`RECALL`] cells from home) as no end to the saving, the army lines
+    /// then waiting while an attack abroad went badly; the lane played
+    /// worse (wins 29 to 24, the dominator ready in 26 games to 19), so a
+    /// lost fight anywhere still ends it. The probe keeps the split
+    /// ([`Self::losing_at_home`]).
     fn safe(&self, w: &World) -> bool {
         !self.script.selling()
             && self.intruders(w).is_empty()
             && !self.outnumbered(w)
             && !self.losing(w)
+    }
+
+    /// Whether the house is losing a fight ([`Self::losing`]) within
+    /// [`RECALL`] cells of home (the expansion probe's view, M8 step B7).
+    fn losing_at_home(&self, w: &World) -> bool {
+        self.script
+            .home(w)
+            .is_some_and(|h| self.losing_where(w, |c| dist2(c, h) <= RECALL * RECALL))
     }
 
     /// The balance owed (S-0404 Terms) of the running item of a building
@@ -542,6 +609,11 @@ impl Brain {
     /// lost fight, they ended the saving in about two of every five lane
     /// samples.
     fn losing(&self, w: &World) -> bool {
+        self.losing_where(w, |_| true)
+    }
+
+    /// [`Self::losing`] for the shooters standing where `at` holds.
+    fn losing_where(&self, w: &World, at: impl Fn(CellXY) -> bool) -> bool {
         let house = self.house();
         let army = |o: &glasnost_sim::world::Object| {
             o.kind != Kind::Building && scripted::role_of(w, tech::type_of(o)) == Some(Role::Army)
@@ -560,6 +632,7 @@ impl Brain {
                     if w.obj(v).is_some_and(|v| v.owner == Some(house)))
             })
             .map(|o| o.pos.cell())
+            .filter(|&c| at(c))
             .collect();
         if shooters.is_empty() {
             return false;
@@ -2090,6 +2163,23 @@ impl Brain {
     }
 }
 
+/// Whether a line item of type `t` belongs to the army that
+/// `Brain::economy_first` holds while the house saves: a unit of the army
+/// role, and a yard vehicle bought to expand (the house has a yard); one
+/// bought with no yard is the house's way back and runs on.
+fn army_item(w: &World, t: TypeRef, has_yard: bool) -> bool {
+    (t.kind != Kind::Building && scripted::role_of(w, t) == Some(Role::Army))
+        || (has_yard && deploys_into_yard(w, t.kind, t.index))
+}
+
+/// Whether such an item does not fight: an engineer, or a yard vehicle
+/// bought to expand (M8 steps B5 and B7).
+fn non_fighter(w: &World, t: TypeRef, has_yard: bool) -> bool {
+    army_item(w, t, has_yard)
+        && (deploys_into_yard(w, t.kind, t.index)
+            || w.rules().unit(t.kind, t.index).is_none_or(|u| u.engineer))
+}
+
 /// The vehicle types house `h` can build now that deploy into a
 /// construction yard, cheapest first.
 pub fn yard_units(w: &World, h: HouseId) -> Vec<TypeRef> {
@@ -2181,6 +2271,9 @@ pub struct ExpansionProbe {
     pub harvesters_kept: bool,
     /// Seen enemies near its buildings.
     pub intruders: usize,
+    /// Those by kind: army units, workers (harvesters, slave miners,
+    /// slaves), buildings, other units (M8 step B7).
+    pub intruders_by: std::collections::BTreeMap<&'static str, usize>,
     /// Whether it sells out.
     pub selling: bool,
     /// Whether it pays for its economy first.
@@ -2191,6 +2284,8 @@ pub struct ExpansionProbe {
     pub outnumbered: bool,
     /// Whether it is losing a fight.
     pub losing: bool,
+    /// Whether it is losing one near home (M8 step B7).
+    pub losing_at_home: bool,
     /// Whether it saves for a superweapon building.
     pub saving: bool,
     /// Whether a building that gives a superweapon it fires runs on its
@@ -2311,11 +2406,34 @@ impl Brain {
             field: fields.far.is_some(),
             harvesters_kept: self.script.harvesters_kept(w),
             intruders: self.intruders(w).len(),
+            intruders_by: self.intruders(w).iter().fold(
+                std::collections::BTreeMap::new(),
+                |mut m, &(id, _)| {
+                    let kind = w.obj(id).map_or("other", |o| {
+                        let t = tech::type_of(o);
+                        if o.kind == Kind::Building {
+                            "building"
+                        } else if o.econ.slave.is_some()
+                            || o.econ.harvest.is_some()
+                            || scripted::role_of(w, t) == Some(Role::Harvester)
+                        {
+                            "worker"
+                        } else if scripted::role_of(w, t) == Some(Role::Army) {
+                            "army"
+                        } else {
+                            "other"
+                        }
+                    });
+                    *m.entry(kind).or_default() += 1;
+                    m
+                },
+            ),
             selling: self.script.selling(),
             paying: self.paying(w),
             economy_kept: self.script.economy_kept(w),
             outnumbered: self.outnumbered(w),
             losing: self.losing(w),
+            losing_at_home: self.losing_at_home(w),
             saving: self.saving(w),
             superweapon_building: self.superweapon_owed(w).is_some(),
             superweapon_owed: self.superweapon_owed(w).map_or(0, i64::from),

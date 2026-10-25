@@ -82,7 +82,9 @@ fn game(rules: Arc<SimRules>) -> Game {
         kit::setup(5),
     )
     .expect("the M7b skirmish loads");
-    while g.world.tick <= g.world.orders_blocked_through || g.world.tick % 15 != 0 {
+    while g.world.tick <= g.world.orders_blocked_through
+        || !glasnost_ai::scripted::thinks_at(BETA, g.world.tick)
+    {
         g.step();
     }
     g
@@ -117,7 +119,7 @@ fn drained(rules: Arc<SimRules>) -> (World, ObjectId) {
         weapon::airborne_by_height(&w, disc),
         "the disc is in the air"
     );
-    while w.tick % 15 != 0 {
+    while !glasnost_ai::scripted::thinks_at(BETA, w.tick) {
         testkit::run(&mut w, 1);
     }
     (w, disc)
@@ -325,7 +327,7 @@ const WATCH: i32 = 120;
 /// Plays Beta's brain for `ticks` ticks through the tick.
 fn play(w: &mut World, br: &mut Brain, ticks: i32) {
     for _ in 0..ticks {
-        if w.tick % 15 == 0 {
+        if br.thinks_at(w.tick) {
             for o in br.think(w) {
                 orders::issue(w, BETA, o);
             }
@@ -490,7 +492,7 @@ fn an_anti_air_unit_standing_off_the_drainer_does_not_answer() {
     let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
     let mut br = Brain::new(&w, &kit::map(), BETA);
     drain_it(&mut w, &mut br, d, proc_);
-    while w.tick % 15 != 0 {
+    while !glasnost_ai::scripted::thinks_at(BETA, w.tick) {
         tick::step(&mut w);
     }
     let o = w.obj_mut(flak).unwrap();

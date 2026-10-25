@@ -184,6 +184,11 @@ pub struct Uses {
     /// seen airborne drainer (S-0306 claim 23, `antiair`).
     #[serde(default)]
     pub anti_air_builds: u32,
+    /// Engineers and expansion yard vehicles cancelled on their line while
+    /// a superweapon building waits for money and the house is not safe
+    /// (S-0404 claim 6, `Brain::economy_first`, M8 step B7).
+    #[serde(default)]
+    pub non_fighter_cancels: u32,
 }
 
 /// The special-ability part of one AI house's brain.
@@ -263,6 +268,12 @@ impl Special {
     /// superweapon building (`Brain::economy_first`).
     pub(crate) fn count_superweapon_hold(&mut self) {
         self.uses.superweapon_holds += 1;
+    }
+
+    /// Counts one cancel order for a non-fighter on its line while the
+    /// house is short for a superweapon building (`Brain::economy_first`).
+    pub(crate) fn count_non_fighter_cancel(&mut self) {
+        self.uses.non_fighter_cancels += 1;
     }
 
     /// Counts one construction-yard vehicle ordered to expand the base.

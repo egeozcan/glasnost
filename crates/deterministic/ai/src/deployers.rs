@@ -1,9 +1,10 @@
 //! The own AI and deployable units (S-0517; PLAN §4.7): a person deploys a
 //! vehicle that fights from the deployed form when the enemy comes near,
 //! and packs it up again when the enemy is gone, so that it can move with the
-//! army; a deployed infantry unit that fires from its deployed form is
-//! deployed in the same way; a deploy-fire vehicle is told to deploy when an
-//! enemy it can fire at is near.
+//! army; an infantry unit that fires from its deployed form is deployed
+//! when an enemy it can fire at stands in its range, and packed up when none
+//! does; a deploy-fire vehicle is told to deploy when an enemy it can fire
+//! at is near.
 //!
 //! The brain reads only what a person in the house's seat sees (the enemy
 //! objects on cells the house has explored) and gives its orders through
@@ -17,7 +18,7 @@ use glasnost_sim::infantry::Seq;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting;
-use glasnost_sim::world::{ObjectId, World};
+use glasnost_sim::world::{ObjectId, Target, World};
 
 use crate::scripted::{self, Script, dist2};
 use crate::special::Special;
@@ -62,8 +63,20 @@ pub fn firing_infantry(w: &World, id: ObjectId) -> bool {
         })
 }
 
+/// Whether the firing infantry unit is immune to radiation: deployed, it
+/// fires its secondary weapon at its own cell (S-0215 claim 31 rows 3 to 5)
+/// and does not follow the deployed-firing rule of S-0517 claim 16, so no
+/// enemy needs to stand in its range.
+fn own_cell_firer(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.immune_to_radiation.unwrap_or(false))
+    })
+}
+
 /// Whether the infantry unit stands in its deployed form.
-fn infantry_deployed(w: &World, id: ObjectId) -> bool {
+pub(crate) fn infantry_deployed(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.infantry.as_ref())
         .and_then(|s| s.seq)
@@ -86,6 +99,24 @@ fn standing(w: &World, id: ObjectId) -> bool {
     })
 }
 
+/// Whether a seen enemy that `id` can attack stands in the range of the
+/// weapon it would use against it from where it stands (S-0307's range
+/// test, as the approach step asks it, S-0215 claim 37 b).
+fn enemy_in_range(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)]) -> bool {
+    enemies.iter().any(|&(e, _)| {
+        // spec: S-0215 claim 37 (b) (the range test of S-0307 with the weapon chosen for the target)
+        glasnost_sim::approach::in_range(w, id, Target::Object(e)) && scripted::can_attack(w, id, e)
+    })
+}
+
+/// Whether any seen enemy stands within `r` cells of `id`.
+fn any_enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64) -> bool {
+    let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
+        return false;
+    };
+    enemies.iter().any(|&(_, c)| dist2(c, at) <= r * r)
+}
+
 /// Whether a seen enemy that `id` can attack stands within `r` cells.
 fn enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64) -> bool {
     let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
@@ -97,9 +128,21 @@ fn enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64)
 }
 
 impl Special {
-    /// Deployable units (S-0517): a standing in-place vehicle, a deploy-fire
-    /// vehicle or a firing infantry unit that has a seen enemy near deploys;
-    /// a deployed in-place vehicle that has none near packs up.
+    /// Deployable units (S-0517): a standing in-place vehicle or a
+    /// deploy-fire vehicle that has a seen enemy near deploys; a deployed
+    /// in-place vehicle that has none near packs up. A standing firing
+    /// infantry unit deploys when a seen enemy it can attack stands in its
+    /// range, and a deployed one packs up when none stands in the range of
+    /// its deployed weapon; a radiation-immune one, which fires at its own
+    /// cell (S-0215 claim 31 rows 3 to 5), deploys with a seen enemy near
+    /// and packs up when none is near, as a vehicle does. M8 step B7: deployed infantry takes no step
+    /// towards a target (S-0517 claim 16) and drops its destination
+    /// (S-0215 claim 22), and this part packed none up; in the lane's
+    /// 02-0-7 the Allied riflemen, deployed out of range of the enemy's
+    /// last buildings and at home, stood so from tick 37 500 to the end,
+    /// every wave's order dropped, and the game had no winner. A person
+    /// deploys a rifleman when the enemy is in its sights and packs it up
+    /// to move it.
     pub(crate) fn deployers(
         &mut self,
         script: &Script,
@@ -123,8 +166,20 @@ impl Special {
                 }
             } else if deploy_fire_vehicle(w, id) {
                 standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+            } else if firing_infantry(w, id) && own_cell_firer(w, id) {
+                if infantry_deployed(w, id) {
+                    // Packing up: no seen enemy is near (its own-cell shot
+                    // has no target to range; S-0215 claim 31 rows 3 to 5).
+                    !any_enemy_within(w, id, &enemies, GONE)
+                } else {
+                    standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                }
             } else if firing_infantry(w, id) {
-                !infantry_deployed(w, id) && standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                if infantry_deployed(w, id) {
+                    !enemy_in_range(w, id, &enemies)
+                } else {
+                    standing(w, id) && enemy_in_range(w, id, &enemies)
+                }
             } else {
                 false
             };

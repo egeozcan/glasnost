@@ -1,8 +1,8 @@
 //! The own AI's use of deployable units (S-0517, PLAN §4.7): it deploys an
 //! in-place vehicle when a seen enemy is near and packs it up when none is,
-//! deploys deploy-fire vehicles and firing infantry, never gives such an
-//! order without a seen enemy, and does not send a deployed vehicle with a
-//! wave.
+//! deploys deploy-fire vehicles, deploys firing infantry when an enemy is in
+//! its range and packs it up when none is, never gives such an order without
+//! a seen enemy, and does not send a deployed unit with a wave.
 
 use std::sync::Arc;
 
@@ -18,7 +18,9 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 /// The fixture's rules with DEPT (a gun vehicle that deploys in place), FIRE
-/// (a deploy-fire vehicle) and DEPI (a rifleman that deploys to fire).
+/// (a deploy-fire vehicle), DEPI (a rifleman that deploys to fire, with
+/// its rifle) and DEPR (DEPI immune to radiation, which deployed fires at
+/// its own cell).
 fn rules() -> Arc<SimRules> {
     let mut r = fixture::ruleset();
     r.registries
@@ -28,7 +30,7 @@ fn rules() -> Arc<SimRules> {
     r.registries
         .entry("infantry".into())
         .or_default()
-        .push("DEPI".into());
+        .extend(["DEPI".to_string(), "DEPR".to_string()]);
     let gun = r.sim.vehicles["GUNR"].clone();
     let mut dept = gun.clone();
     dept.is_simple_deployer = Some(true);
@@ -43,6 +45,8 @@ fn rules() -> Arc<SimRules> {
     inf.deployer = Some(true);
     inf.deploy_fire = Some(true);
     inf.undeploy_delay = Some(-1);
+    // Deployed, it fires its primary (S-0308 claim 8: the deploy weapon index).
+    inf.deploy_fire_weapon = Some(0);
     inf.tech_level = Some(99);
     for (k, n) in [
         ("deploy", 4),
@@ -60,7 +64,10 @@ fn rules() -> Arc<SimRules> {
             },
         );
     }
+    let mut depr = inf.clone();
+    depr.immune_to_radiation = Some(true);
     r.sim.infantry.insert("DEPI".into(), inf);
+    r.sim.infantry.insert("DEPR".into(), depr);
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
 }
 
@@ -196,13 +203,13 @@ fn packs_up_when_the_enemy_is_gone() {
     assert_eq!(inplace::form(&w, unit), Form::Mobile);
 }
 
-// S-0517, PLAN §4.7: a deploy-fire vehicle and a firing infantry unit are deployed when a seen enemy is near, each once.
+// S-0517, PLAN §4.7: a deploy-fire vehicle is deployed when a seen enemy is near, and a firing infantry unit when a seen enemy is in its range (the fixture rifle reaches 4 cells), each once.
 #[test]
 fn deploys_deploy_fire_vehicles_and_firing_infantry() {
     let mut g = game(5);
     ready(&mut g);
-    for (kind, name) in [(Kind::Vehicle, "FIRE"), (Kind::Infantry, "DEPI")] {
-        let (mut w, unit) = scene(&g, kind, name, Some(5));
+    for (kind, name, d) in [(Kind::Vehicle, "FIRE", 5), (Kind::Infantry, "DEPI", 3)] {
+        let (mut w, unit) = scene(&g, kind, name, Some(d));
         let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
         let orders = brain.think(&w);
         assert!(deploys(&orders, unit), "{name}: {orders:?}");
@@ -217,5 +224,85 @@ fn deploys_deploy_fire_vehicles_and_firing_infantry() {
         }
         let again = brain.think(&w);
         assert!(!deploys(&again, unit), "{name}: once");
+    }
+}
+
+fn deployed(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.infantry.as_ref())
+        .and_then(|s| s.seq)
+        .is_some_and(glasnost_sim::infantry::Seq::is_deploy)
+}
+
+fn ordered(orders: &[Order], who: ObjectId) -> bool {
+    orders
+        .iter()
+        .any(|o| matches!(o, Order::Behaviour { actor, .. } if *actor == who))
+}
+
+// S-0517 claim 16 and S-0215 claim 22, PLAN §4.7 (M8 step B7): deployed infantry takes no step towards its target and drops a destination, so a firing infantry unit is not deployed for a seen enemy beyond its range (the fixture rifle reaches 4 cells; this enemy stands 6 away).
+#[test]
+fn does_not_deploy_a_rifleman_out_of_range() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (w, unit) = scene(&g, Kind::Infantry, "DEPI", Some(6));
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert!(!deploys(&brain.think(&w), unit));
+}
+
+// S-0517 claim 16, S-0215 claim 22 and S-0213 claims 3 and 10, PLAN §4.7 (M8 step B7): a deployed firing infantry unit with a seen enemy in its range stays deployed; with none in its range it is packed up, with no wave order beside the deploy order (that would replace the unload), and then it can go with a wave.
+#[test]
+fn packs_up_a_deployed_rifleman_with_no_enemy_in_range() {
+    let mut g = game(5);
+    ready(&mut g);
+    let mut plan = default_plan();
+    plan.wave = 1;
+    for (d, packs) in [(3, false), (7, true)] {
+        let (mut w, unit) = scene(&g, Kind::Infantry, "DEPI", Some(d));
+        glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Deploy { actor: unit });
+        for _ in 0..30 {
+            testkit::run(&mut w, 1);
+        }
+        assert!(deployed(&w, unit), "{d}: deployed");
+        while w.tick % 15 != 0 {
+            testkit::run(&mut w, 1);
+        }
+        let mut brain = Brain::with_plan(&w, &fixture::map(), HouseId(0), plan.clone());
+        let orders = brain.think(&w);
+        assert_eq!(deploys(&orders, unit), packs, "{d}: {orders:?}");
+        if !packs {
+            continue;
+        }
+        assert!(!ordered(&orders, unit), "{orders:?}");
+        for o in orders {
+            glasnost_sim::orders::issue(&mut w, HouseId(0), o);
+        }
+        for _ in 0..30 {
+            testkit::run(&mut w, 1);
+        }
+        assert!(!deployed(&w, unit), "packed up");
+    }
+}
+
+// S-0215 claim 31 rows 3 to 5, PLAN §4.7 (M8 step B7): a radiation-immune firing infantry unit fires at its own cell when deployed, so it is deployed with a seen enemy near though beyond its rifle's range, stays deployed while one is near, and is packed up when none is.
+#[test]
+fn deploys_a_radiation_immune_unit_near_an_enemy_and_packs_it_up_without_one() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (w, unit) = scene(&g, Kind::Infantry, "DEPR", Some(6));
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert!(deploys(&brain.think(&w), unit), "deploys near an enemy");
+    for (enemy, packs) in [(Some(7), false), (None, true)] {
+        let (mut w, unit) = scene(&g, Kind::Infantry, "DEPR", enemy);
+        glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Deploy { actor: unit });
+        for _ in 0..30 {
+            testkit::run(&mut w, 1);
+        }
+        assert!(deployed(&w, unit), "{enemy:?}: deployed");
+        while w.tick % 15 != 0 {
+            testkit::run(&mut w, 1);
+        }
+        let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+        assert_eq!(deploys(&brain.think(&w), unit), packs, "{enemy:?}");
     }
 }

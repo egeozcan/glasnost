@@ -615,12 +615,39 @@ fn cancels_an_expansion_yard_vehicle_while_broke() {
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn reads_income_off_the_credits_and_the_lines() {
+    income_over_a_window(H);
+}
+
+// PLAN §4.7 (M8 step B7): a house whose brain thinks off the window's ticks (its phase, `scripted::think_phase`) reads its income at its first think after each window's end, the same sum.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn a_house_thinking_off_the_window_ticks_reads_its_income_too() {
+    let beta = HouseId(1);
+    assert_ne!(glasnost_ai::scripted::think_phase(beta), 0);
+    income_over_a_window(beta);
+}
+
+/// Plays `h`'s brain over one income window from its first think at or
+/// after a window's end, counting the income tick by tick as
+/// `GLASNOST_AI_ECON` does, and compares the brain's reading with it.
+fn income_over_a_window(h: HouseId) {
     let map = fixture::map();
     let mut w = settled(&map, 5000);
-    let soldier = first(&w, Role::Army, Kind::Infantry);
+    let hi = usize::from(h.0);
+    let soldier = all_types(&w)
+        .into_iter()
+        .find(|&t| {
+            t.kind == Kind::Infantry
+                && role_of(&w, t) == Some(Role::Army)
+                && tech::buildable(&w, h, t)
+        })
+        .expect("an infantry army type the house can build");
     let window = glasnost_ai::scripted::INCOME_WINDOW;
-    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let mut brain = Brain::with_plan(&w, &map, h, plan(2));
     while w.tick % window != 0 {
+        testkit::run(&mut w, 1);
+    }
+    while !brain.thinks_at(w.tick) {
         testkit::run(&mut w, 1);
     }
     brain.think(&w);
@@ -630,17 +657,17 @@ fn reads_income_off_the_credits_and_the_lines() {
             .lines
             .lines
             .iter()
-            .filter(|l| l.house == H)
+            .filter(|l| l.house == h)
             .filter_map(|l| l.item.as_ref())
             .map(|i| (i.object, (i.owed, i.start_price)))
             .collect()
     };
     let mut earned = 0i64;
     let mut last = owed(&w);
-    let mut credits = w.houses[0].credits;
+    let mut credits = w.houses[hi].credits;
     for _ in 0..window {
         if w.tick % 300 == 0 {
-            assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+            assert!(orders::issue(&mut w, h, Order::Build { what: soldier }));
         }
         testkit::run(&mut w, 1);
         let now = owed(&w);
@@ -653,10 +680,10 @@ fn reads_income_off_the_credits_and_the_lines() {
                 paid += i64::from(o);
             }
         }
-        earned += (i64::from(w.houses[0].credits - credits) + paid).max(0);
-        credits = w.houses[0].credits;
+        earned += (i64::from(w.houses[hi].credits - credits) + paid).max(0);
+        credits = w.houses[hi].credits;
         last = now;
-        if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
+        if brain.thinks_at(w.tick) {
             brain.think(&w);
         }
     }
@@ -668,17 +695,22 @@ fn reads_income_off_the_credits_and_the_lines() {
 /// two enemy soldiers that see each other; returns the own soldier and the
 /// enemy ones, which shoot at nothing yet.
 fn a_fight(w: &mut World) -> (ObjectId, Vec<ObjectId>) {
+    a_fight_at(w, 4)
+}
+
+/// [`a_fight`] with the fight `dx` cells east of the map's middle.
+fn a_fight_at(w: &mut World, dx: i32) -> (ObjectId, Vec<ObjectId>) {
     for d in 0..4 {
         testkit::spawn(w, Kind::Infantry, "WALKER", 0, fixture::at(-10, 12 + d), 0);
     }
-    let mine = testkit::spawn(w, Kind::Infantry, "WALKER", 0, fixture::at(4, 3), 0);
+    let mine = testkit::spawn(w, Kind::Infantry, "WALKER", 0, fixture::at(dx, 3), 0);
     let shooters: Vec<_> = (0..2)
-        .map(|d| testkit::spawn(w, Kind::Infantry, "WALKER", 1, fixture::at(4, d), 0))
+        .map(|d| testkit::spawn(w, Kind::Infantry, "WALKER", 1, fixture::at(dx, d), 0))
         .collect();
     glasnost_sim::econ::shroud::area_reveal(
         w,
         H,
-        glasnost_sim::world::Pos::centre(fixture::at(4, 0), 0),
+        glasnost_sim::world::Pos::centre(fixture::at(dx, 0), 0),
         5,
     );
     to_think(w);
@@ -711,27 +743,99 @@ fn keeps_training_while_losing_a_fight() {
     assert!(!holds(&w));
 }
 
-// PLAN §4.7 (M8 step B5): while the superweapon building owes more than the money in hand, a house losing a fight resumes the army that can join it, but its yard vehicle and an engineer, which do not fight, stay held.
+// PLAN §4.7 (M8 step B7): a fight the house loses far from home (more than the recall distance from its home cell, as an attack going badly in the enemy's base) ends the saving as one at home does (B7 tried otherwise and the lane played worse); the probe tells the two apart.
 #[test]
-fn keeps_a_yard_vehicle_and_an_engineer_held_while_losing_a_fight() {
+fn stops_saving_while_losing_a_fight_far_from_home() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    let (mine, shooters) = a_fight_at(&mut w, 14);
+    shoot(&mut w, mine, &shooters);
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let probe = brain.expansion_probe(&w);
+    assert!(probe.losing && !probe.losing_at_home, "{probe:?}");
+    assert!(probe.intruders == 0 && !probe.outnumbered, "{probe:?}");
+    assert!(!brain.think(&w).contains(&Order::Hold { what: soldier }));
+}
+
+// S-0404 claims 5 and 6 and PLAN §4.7 (M8 steps B5 and B7): while the superweapon building owes more than the money in hand, a house losing a fight resumes the army that can join it, and cancels its yard vehicle and an engineer, which do not fight (held, they would keep their line from the fighters); while it saves, it holds them with the army.
+#[test]
+fn cancels_a_yard_vehicle_and_an_engineer_while_losing_a_fight() {
     let map = fixture::map();
     let (mut w, _, soldier) = saving_for_a_silo();
     let mcv = line_mcv(&mut w);
     let (mine, shooters) = a_fight(&mut w);
-    shoot(&mut w, mine, &shooters);
-    let held = |w: &World| {
+    let answer = |w: &World, losing: bool| {
         let mut brain = Brain::with_plan(w, &map, H, plan(2));
-        assert!(brain.expansion_probe(w).losing);
+        assert_eq!(brain.expansion_probe(w).losing, losing);
         let orders = brain.think(w);
+        let of = |t: TypeRef| {
+            (
+                orders.contains(&Order::Hold { what: t }),
+                orders.contains(&Order::CancelAll { what: t }),
+                orders.contains(&Order::Build { what: t }),
+            )
+        };
         (
-            orders.contains(&Order::Hold { what: soldier }),
-            orders.contains(&Order::Hold { what: mcv }),
+            of(soldier),
+            of(mcv),
+            brain.special_uses().non_fighter_cancels,
         )
     };
-    assert_eq!(held(&w), (false, true));
+    // Saving: both held.
+    assert_eq!(
+        answer(&w, false),
+        ((true, false, false), (true, false, false), 0)
+    );
+    shoot(&mut w, mine, &shooters);
+    // Losing: the soldier runs on, the yard vehicle is cancelled.
+    assert_eq!(
+        answer(&w, true),
+        ((false, false, false), (false, true, false), 1)
+    );
     // The soldier's type made an engineer (test data of our own).
     let mut r = (*w.rules_arc()).clone();
     r.infantry[soldier.index as usize].engineer = true;
     w.rules = Some(std::sync::Arc::new(r));
-    assert_eq!(held(&w), (true, true));
+    assert_eq!(
+        answer(&w, true),
+        ((false, true, false), (false, true, false), 2)
+    );
+}
+
+// S-0404 claim 6 (the cancel-all order: the item goes and, with an empty queue, its line) and PLAN §4.7 (M8 step B7): the engineer a house losing a fight cancels while the superweapon building waits leaves its line free, and the brain starts no engineer while the building owes more than the money in hand.
+#[test]
+fn a_cancelled_engineer_leaves_its_line_and_is_not_started_again() {
+    let map = fixture::map();
+    let (mut w, _, soldier) = saving_for_a_silo();
+    let (mine, shooters) = a_fight(&mut w);
+    shoot(&mut w, mine, &shooters);
+    let mut r = (*w.rules_arc()).clone();
+    r.infantry[soldier.index as usize].engineer = true;
+    w.rules = Some(std::sync::Arc::new(r));
+    assert!(item_of(&w, soldier).owed > 0);
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let orders = brain.think(&w);
+    assert!(
+        orders.contains(&Order::CancelAll { what: soldier }),
+        "{orders:?}"
+    );
+    assert!(orders::issue(&mut w, H, Order::CancelAll { what: soldier }));
+    // Applied at the end of the tick (S-0213 claim 2).
+    testkit::run(&mut w, 1);
+    let lined = |w: &World| {
+        w.econ.lines.lines.iter().any(|l| {
+            l.house == H
+                && (l.item.as_ref().is_some_and(|i| i.t == soldier) || l.queue.contains(&soldier))
+        })
+    };
+    assert!(!lined(&w), "{:?}", w.econ.lines.lines);
+    // Still short and losing at the next think: no engineer is started.
+    to_think(&mut w);
+    shoot(&mut w, mine, &shooters);
+    assert!(brain.expansion_probe(&w).losing);
+    let orders = brain.think(&w);
+    assert!(
+        !orders.contains(&Order::Build { what: soldier }),
+        "{orders:?}"
+    );
 }
