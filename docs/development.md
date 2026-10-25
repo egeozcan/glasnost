@@ -2966,9 +2966,8 @@ S-0105 r35 claims 12, 16, 31 and 43, state table S3, the turret table pairs and 
   - any other type gives *none*.
 - The static map view uses `creation_turret_index`. A numbered turret is drawn in frame *f_b*, and an index outside 0 … *N* − 1 draws neither turret nor barrel.
 - The renderer's `ConsideredAircraft` default is now yes for an aircraft type and no otherwise, which closes the intake 16 seam.
-- Seams:
-  - A sprite body's voxel barrel is not drawn (Q-1885, filed).
-  - The derived charge index also follows the countdown in ticks without a turn.
+- A sprite-body vehicle with the turret flag draws its single voxel barrel (`sprite_body_barrel`), over or under the sprite turret frame by claim 11. Its place in the scene is our design (Q-1885 open): the sprite body's depth row *U* − 2 and colour row, and the frame of a barrel drawn with a voxel turret.
+- Seam: the derived charge index also follows the countdown in ticks without a turn. The view cannot see a turn, so this is a limit of the view, not a case the spec leaves open.
 - No new state: save format 78, AI game format 40.
 
 ### Bouncing animations (M8 step A3 intake 15 part 1)
