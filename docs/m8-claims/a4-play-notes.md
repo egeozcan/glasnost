@@ -212,3 +212,84 @@ question for the lead, not for the code.
 
 Note 7 (seen again): the lead's statement and Q-1850 are in note 7's Round 1 row; nothing more is
 filed and the code keeps to S-0417 claims 10 and 14 until Q-1850 is answered.
+
+## Pathing report 2 (2026-10-25)
+
+The lead's second batch, "especially the ore miners": two reports played on their native build of
+2026-10-25, lane `local-lane/m8/a4-path2/`. Both name the build d31775d (the merge of C4 part 4),
+built for the replay in a detached worktree with its own target folder: both replays reproduce
+their capture's state hash. Neither has a mark. The two windows overlap and show one chain at the
+person's refinery on raised ground: foundation (52..55, 98..100), docking cell (55,99) (S-0402
+Terms: the foundation's top-left cell + (3,1)), the ore field west of the base at (36..38, 91..96),
+more buildings between them, among them (50..53, 94..96) and (46..49, 96..99).
+
+- **Report `path-20040-1`** (ticks 18750 to 20040, 29 orders, no selection). The clicks are on
+  harvester #4984 on the docking cell. It has rested there in *guard* since tick 16657, after
+  unloading. At tick 19693 it is ordered to harvest at (36,95): the computation at 19694 makes 5
+  cell searches inside a corridor, all fail, and it gives up (destination cleared, *guard*). Moved
+  to (56,102) at 19782 and again at 19795, it is refused 49 step checks into (56,100), ticks 19789
+  to 19837, all *moving blocker* with nothing listed in the cell. Moved to (54,103) at 19837 it
+  leaves by (55,100) at 19869, and harvesting from (56,102) at 19971 it finds a 20-step path in
+  one cell search. The other units ordered in the window (a group of six vehicles of one tank
+  type, #1119, #1120, #1121, #5497, #5832 and #5897, sent to attack and move, and harvester #5187,
+  crowded by them on a bridge deck at (69,89), then sent to attack, move and harvest) are refused
+  steps only by moving or standing units in the way, and all arrive.
+- **Report `path-20828-2`** (ticks 19375 to 20828, 14 orders, selection #4553). Harvester #4553
+  holds the refinery as its contact in *enter* from tick 16979, loaded, and drives round the
+  docking cell, (56,98) → (57,99) → (56,100) → (57,99) → … from the snapshot to tick 19985, while
+  #4984 stands on it. Once #4984 has left, #4553 docks at 19985 and unloads; its harvest at 20089
+  to (38,91) fails with 5 corridor searches and it rests on the docking cell in *guard*. The
+  lead's click on it at 20528 and the 7 harvest orders to (36,93), (37,93) and (36,94), ticks 20586
+  to 20777, all fail the same way.
+
+**Cause and class.** No departure from the specs; the case is pathing report 1's, for a vehicle
+starting on a refinery's docking cell, and the rest follows from approved claims:
+
+- The give-ups: S-0212 claim 13's cap (Q-1771, open). The coarse searches see through buildings
+  (claim 1), so the first level-0 corridor runs west through the refinery's own cells. The
+  progress cell of the first retry is the start (55,99); claim 13a's probe cell (56,100) lies in
+  another sector, so the sector is *whole*. The later progress cells are (51,97), (53,97), (55,97)
+  and (54,95); at the second search the level-2 retry reads its sector as *split* (probe (54,98))
+  and closes its connections west, so the later corridors run north into the other buildings, and
+  the 5th fails. Claim 23 row 2 then gives up: the destination is cleared and, with a
+  human-controlled owner, the harvester queues *guard* (claim 27a), on the docking cell, where
+  nothing moves it (S-0402 claim 3a). A diagnostic build (not committed) showed that a 6th search
+  still fails and the 7th finds a path of 21 to 23 steps; that `quirks.corridor_retry_no_fallback`
+  or `quirks.corridor_split_probe` flipped alone changes nothing; and that both flipped together
+  find the way (the fallback search without a corridor, once a repeated coarse search fails).
+- The circling: #4553's destination is the docking cell, which #4984 holds standing. S-0402
+  claim 10 row 2 offers the dock again at each processing and claim 10a has no eviction, timeout or
+  scatter, so #4553 keeps driving to it; S-0212 claim 24 substitutes a cell for the occupied
+  destination, and claim 25's nearby search rejects its own cell (its own occupancy) and the
+  building's cells, so it takes (56,98) and (56,100) in turn. Record only: claim 24's distance
+  Dᵤ counts the unit's full height under `quirks.substitution_distance_flat_destination`'s
+  default; measured from the surface, it would not reach the substitution here.
+- The refused steps: #4553's two-cell curves (S-0207 claim 7) set the vehicle-present flag on both
+  cells at once (S-0209 claim 1), (56,100) among them; claim 5 row VR5 gives *moving blocker*, and
+  S-0207 claim 15 T4 sends that to S-0212 claim 22: wait and re-path, no scatter request.
+
+No request is filed: Q-1771 covers the cap, and the main session or the lead may want to add this
+case (a harvester on a docking cell, its refinery between it and the field) to it. Interim, pinned
+by three tests in `crates/deterministic/sim/tests/claims_s0212_cap.rs` on a layout of our own
+(a 3 × 3 block, a vehicle on the cell east of its middle row, two more blocks west, the
+destination far west): from that cell 5 corridor searches fail, the destination is cleared at once
+and the vehicle rests in *guard*; a search without a corridor finds the way; from a cell south of
+the blocks the first corridor search finds it.
+
+**Tool.** A *moving blocker* refusal whose cell lists nothing named no blocker (a seam of the
+capture step). The report now names the vehicles whose vehicle-present flag is set on the cell at
+the end of the tick, from their claimed cells (`path_report::flag_holders`), in the timeline and in
+the summary ("nothing listed in the cell; its vehicle-present flag held by #4553 … at (56,98),
+moving"). A failed computation whose 5th cell search, inside a corridor, failed now says "the 5th
+cell search inside a corridor failed, which ends the computation (the cap of 5)". Replayed with
+the change (`--any-build`), both reports reproduce their hashes and give the blockages above. The
+holders are read at the end of the tick, so a vehicle that cleared the flag later in that tick is
+missed and one that set it after the check is named; a refusal with nothing listed and another
+outcome still names nobody.
+
+**By eye.** Nothing is fixed, so this shows the case, on the lead's map and base or any base where
+the refinery stands between its docking cell and the ore field with other buildings beyond it. Let
+a harvester unload there: its way back to the field fails at once and it stays on the docking cell
+in *guard*, and a harvester ordered to harvest from there does the same. A second harvester that
+comes to unload drives round the docking cell until the first is moved off. Move the first a few
+cells south and give the same harvest order: it goes.
