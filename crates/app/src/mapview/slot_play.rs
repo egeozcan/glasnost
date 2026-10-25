@@ -329,8 +329,8 @@ impl<A> Slots<A> {
     }
 
     /// The disablings and re-enablings since the last update (claims 13,
-    /// 26 and 28), in a placeholder order (interim of Q-1890, question 3):
-    /// the ownership change, the switch, the pulse.
+    /// 26 and 28), in our design's order while Q-1890 (question 3) is
+    /// open: the ownership change, the switch, the pulse.
     fn enablings(&mut self, defs: &Defs, st: &State, last: Seen) {
         // spec: S-0108 claim 26 (as part of every ownership change the building is re-enabled, whether or not it is in operation after the change; also at every later change of a building already manned)
         if last.owner != st.owner {
