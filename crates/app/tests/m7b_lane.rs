@@ -122,6 +122,13 @@
 //! whether its locomotor draws the lean. Ids, cells, counts, ticks and
 //! pitches only.
 //!
+//! M8 step A3 intake 27 (S-0105 r39 claim 12, Q-1885 answered):
+//! `sprite-barrel` puts a sprite-body vehicle with the turret flag and a
+//! barrel part (found by flags; when no such type exists, the lane's copy
+//! of the import loads a voxel type as a sprite body) on the four sides of
+//! a small building and on a high bridge's deck, its turret turned through
+//! the four 4-step facings, one screen each.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -180,6 +187,7 @@ const SCENES: &[Scene] = &[
     ("derrick-look", derrick_look),
     ("derrick-paths", derrick_paths),
     ("ifv-turrets", ifv_turrets),
+    ("sprite-barrel", sprite_barrel),
     ("sinking-list", sinking_list),
 ];
 
@@ -2569,6 +2577,246 @@ fn ifv_turrets(lane: &mut Lane) {
         lane.world().obj(c).is_some(),
         lane.world().obj(t).is_some()
     );
+}
+
+/// The subject of `sprite-barrel` (S-0105 claim 12, *Sprite body*): the
+/// first vehicle type with the turret flag, a barrel part and no voxel body
+/// (a sprite body), found by its art and rules flags. Prints the counts of
+/// turret-flag vehicle types by body and barrel part. Without such a type,
+/// MS-33 part k's way is taken in this lane's own copy of the import: the
+/// first IFV-class type (a gunner multi-turret type with a filled turret
+/// table) with a barrel part, else the first turret-flag type with one, has
+/// its voxel body cleared, and where it has no sprite file it borrows the
+/// one of the first vehicle type drawn as a sprite. The scene says so.
+fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
+    use glasnost_convert::kinds::Kind as CKind;
+    let s = lane.c.session.as_mut().unwrap();
+    let r = s.play.world().rules();
+    let import = &s.loaded.import;
+    let registry = &import.outcome.registries[&CKind::Vehicles];
+    // (sim type name, import index, voxel body, barrel part, sprite file, IFV class)
+    let mut types = Vec::new();
+    let mut donor = None;
+    for (i, t) in r.vehicles.iter().enumerate() {
+        let Some(u) = r.unit(Kind::Vehicle, i as u32).filter(|u| u.strength > 0) else {
+            continue;
+        };
+        let Some(x) = registry
+            .iter()
+            .position(|e| e.name.eq_ignore_ascii_case(t.name.as_bytes()))
+        else {
+            continue;
+        };
+        let Some(art) = import.arts.get(&(CKind::Vehicles, x)) else {
+            continue;
+        };
+        let body = art.voxels.contains_key("body");
+        if !body && donor.is_none() {
+            donor = art.sprite.clone();
+        }
+        if !u.turret {
+            continue;
+        }
+        let c = &u.combat;
+        let ifv = c.gunner
+            && c.turret_count > 0
+            && !c.gattling
+            && !c.charge_turret
+            && import.turret_tables.contains_key(&x);
+        types.push((
+            t.name.clone(),
+            x,
+            body,
+            art.voxels.contains_key("barrel"),
+            art.sprite.is_some(),
+            ifv,
+        ));
+    }
+    type T = (String, usize, bool, bool, bool, bool);
+    let count = |f: &dyn Fn(&T) -> bool| types.iter().filter(|t| f(t)).count();
+    if print {
+        println!(
+            "turret-flag vehicle types {}: sprite body with a barrel part {}, sprite body without {}, \
+             voxel body with a barrel part {} (with a sprite file {}, IFV class {}); \
+             a sprite-body vehicle type to borrow a sprite file from {}",
+            types.len(),
+            count(&|t| !t.2 && t.3 && t.4),
+            count(&|t| !t.2 && !t.3 && t.4),
+            count(&|t| t.2 && t.3),
+            count(&|t| t.2 && t.3 && t.4),
+            count(&|t| t.2 && t.3 && t.5),
+            donor.is_some()
+        );
+    }
+    if let Some(t) = types.iter().find(|t| !t.2 && t.3 && t.4) {
+        return Some(t.0.clone());
+    }
+    let t = types
+        .iter()
+        .find(|t| t.2 && t.3 && t.5)
+        .or_else(|| types.iter().find(|t| t.2 && t.3))?
+        .clone();
+    let art = s.loaded.import.arts.get_mut(&(CKind::Vehicles, t.1))?;
+    art.voxels.remove("body");
+    let borrowed = art.sprite.is_none();
+    if borrowed {
+        art.sprite = Some(donor?);
+    }
+    if print {
+        println!(
+            "lane copy: the subject (IFV class {}) has its voxel body cleared; sprite file borrowed {borrowed}",
+            t.5
+        );
+    }
+    Some(t.0)
+}
+
+/// M8 step A3 intake 27 (S-0105 r39 claim 12, *One image* and *Depth*; Q-1885
+/// answered): a sprite-body vehicle with the turret flag and a barrel part
+/// ([`sprite_barrel_subject`]) placed round the local start's first
+/// building, behind it and in front of it, its turret turned through the
+/// four 4-step facings, one screen each; then on the deck of the first high
+/// bridge with banks at deck level of the maps tried (`GLASNOST_LANE_MAPS`,
+/// default 8), driven there by a click, and turned through the same
+/// facings. Counts, cells, layers and ticks only.
+fn sprite_barrel(lane: &mut Lane) {
+    let Some(name) = sprite_barrel_subject(lane, true) else {
+        println!("sprite-barrel: no turret-flag vehicle type with a barrel part");
+        return;
+    };
+    let local = lane.local();
+    // A small building of the local house near its start (our pick), with room round it.
+    let Some(bi) = small_building(lane.world()) else {
+        println!("sprite-barrel: no small building type");
+        return;
+    };
+    let (bname, (fw, fh)) = {
+        let r = lane.world().rules();
+        (r.buildings[bi].name.clone(), r.buildings[bi].foundation)
+    };
+    let home = lane.home();
+    let Some(at) = lane.area(CellXY::new(home.x + 8, home.y + 8), (fw, fh), 3, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("sprite-barrel: no room for the building");
+        return;
+    };
+    lane.spawn(Kind::Building, &bname, local, at);
+    let (x0, y0, x1, y1) = (at.x, at.y, at.x + fw - 1, at.y + fh - 1);
+    println!("sprite-barrel: building of {fw}x{fh} cells at {at:?}");
+    // Behind the building (map north and west of it) and in front of it (south and east).
+    let places = [
+        ("north", CellXY::new((x0 + x1) / 2, y0 - 1)),
+        ("west", CellXY::new(x0 - 1, (y0 + y1) / 2)),
+        ("south", CellXY::new((x0 + x1) / 2, y1 + 1)),
+        ("east", CellXY::new(x1 + 1, (y0 + y1) / 2)),
+    ];
+    let mut cars = Vec::new();
+    for (side, at) in places {
+        let v = lane.spawn(Kind::Vehicle, &name, local, at);
+        let placed = lane.world().obj(v).map(|o| o.pos.cell());
+        println!("sprite-barrel: vehicle {v:?} {side} of the building at {placed:?}");
+        cars.push(v);
+    }
+    lane.ticks(2);
+    lane.look_at(CellXY::new((x0 + x1) / 2, (y0 + y1) / 2));
+    turn_and_save(lane, &cars, "building");
+    // On a high bridge's deck.
+    let mut found = None;
+    for map in 0..env_num("GLASNOST_LANE_MAPS", 8) {
+        let mut l = Lane::start_on(map).expect("the install is set");
+        if let Some(&ab) = lane_bridges(l.world()).first() {
+            let Some(name) = sprite_barrel_subject(&mut l, false) else {
+                return;
+            };
+            println!(
+                "sprite-barrel: bridge on map {map} from {:?} to {:?}",
+                ab.0, ab.1
+            );
+            found = Some((l, ab, name));
+            break;
+        }
+    }
+    let Some((mut l, (a, b), name)) = found else {
+        println!("sprite-barrel: no high bridge with banks at deck level on the maps tried");
+        return;
+    };
+    let local = l.local();
+    let mid = CellXY::new((a.x + b.x) / 2, (a.y + b.y) / 2);
+    let v = l.spawn(Kind::Vehicle, &name, local, a);
+    l.ticks(2);
+    let n = l.order(local, v, ClickOn::Cell(mid));
+    let mut on_deck = None;
+    for _ in 0..1500 {
+        l.ticks(1);
+        let w = l.world();
+        let Some(o) = w.obj(v) else { break };
+        if o.layer == Layer::Deck && o.pos.cell() == mid && o.dest.is_none() {
+            on_deck = Some((w.tick, o.pos.z - w.surface_at(o.pos.x, o.pos.y)));
+            break;
+        }
+    }
+    println!(
+        "sprite-barrel: {n} orders; on the deck's middle at (tick, height above ground) {on_deck:?}"
+    );
+    let o = l.world().obj(v).map(|o| (o.pos.cell(), o.layer));
+    println!("sprite-barrel: vehicle at {o:?}");
+    l.look_at(mid);
+    turn_and_save(&mut l, &[v], "bridge");
+}
+
+/// Sets each of `cars`' turret to the four 4-step facings (north, east,
+/// south, west) in turn, saving a screen at each.
+fn turn_and_save(lane: &mut Lane, cars: &[ObjectId], what: &str) {
+    for (k, facing) in [0u16, 16384, 32768, 49152].into_iter().enumerate() {
+        for &v in cars {
+            if let Some(o) = lane.world_mut().obj_mut(v) {
+                o.turret = glasnost_sim::turning::Turning::at(facing);
+            }
+        }
+        lane.ticks(1);
+        lane.save(&format!("sprite-barrel-{what}-{k}"));
+    }
+}
+
+/// High bridges of the world whose both ends are banks at deck level: the
+/// (bank, bank) pairs along each deck run (as `fix_lane.rs`).
+fn lane_bridges(w: &World) -> Vec<(CellXY, CellXY)> {
+    use glasnost_sim::cells::Axis;
+    let cells = &w.cells;
+    let level = |c: CellXY| cells.cell(c).map(|c| i32::from(c.level));
+    let deck = |c: CellXY| cells.idx(c).is_some_and(|i| cells.deck[i]);
+    let mut out = Vec::new();
+    for y in 0..512 {
+        for x in 0..512 {
+            let start = CellXY::new(x, y);
+            let Some(i) = cells.idx(start) else { continue };
+            if !cells.deck[i] {
+                continue;
+            }
+            let (dx, dy) = match cells.bridge_axis[i] {
+                Axis::X => (1, 0),
+                Axis::Y => (0, 1),
+                Axis::None => continue,
+            };
+            if deck(CellXY::new(x - dx, y - dy)) {
+                continue;
+            }
+            let mut end = start;
+            while deck(CellXY::new(end.x + dx, end.y + dy)) {
+                end = CellXY::new(end.x + dx, end.y + dy);
+            }
+            let (a, b) = (
+                CellXY::new(x - dx, y - dy),
+                CellXY::new(end.x + dx, end.y + dy),
+            );
+            let ground = level(start).unwrap_or(0);
+            if level(a) == Some(ground + 4) && level(b) == Some(ground + 4) && end != start {
+                out.push((a, b));
+            }
+        }
+    }
+    out
 }
 
 fn files(dir: &std::path::Path) -> Vec<PickedFile> {
