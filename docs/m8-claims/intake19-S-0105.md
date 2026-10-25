@@ -142,6 +142,10 @@ or after the turret frame by claim 11, and the frame of a barrel drawn with a vo
 Q-1886 to Q-1889 are unused. Q-1760 is answered by this revision, and its interim (no index for
 any object) is retired.
 
+Later: S-0105 r39 answers Q-1885, and intake 27 ([intake27-S-0105.md](intake27-S-0105.md))
+retires this design. The barrel now joins one composed image with the body and turret frames at
+the voxel row *U*, and it is always drawn in frame 0.
+
 ## Checks
 
 *Before* is main a32dbdc, built before any edit of this branch; *after* is this branch on a32dbdc,
