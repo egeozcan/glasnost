@@ -474,6 +474,9 @@ enum Tilt {
     },
     /// A flying-locomotor body (claim 42).
     Flying(voxel::FlightAttitude),
+    /// A sinking vessel listed by our interim of Q-1871, past its first
+    /// step (a level one is [`Tilt::Plain`]).
+    Listed(super::sinking::List),
 }
 
 fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
@@ -1103,6 +1106,10 @@ pub struct Painter {
     /// Each type's image cache of voxel part and shadow images (S-0105
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
+    /// The images of sinking vessels drawn listed (the interim of Q-1871),
+    /// a cache of their own per type and list, so that a listed image is
+    /// never taken for a level one, nor a level one for a listed one.
+    listed: BTreeMap<(Kind, usize, super::sinking::List), voxel::ImageCache<Option<PlacedPart>>>,
     /// Vehicle shadows with the current part image excluded, by unmasked
     /// shadow image and part images (S-0105 claim 39): a memo of the
     /// per-appearance exclusion, bounded by the cached images it combines.
@@ -4653,16 +4660,51 @@ impl<'a> Builder<'a> {
         key: voxel::ImageKey,
         draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
     ) -> Option<(u32, [i32; 2])> {
-        if let Some(p) = self.p.voxels.get(&(kind, idx)).and_then(|c| c.get(&key)) {
+        self.cached_part_in(kind, idx, None, key, draw)
+    }
+
+    /// [`Self::cached_part`] in the type's cache for `list`: the level one
+    /// for `None`, else that list's own (the interim of Q-1871).
+    fn cached_part_in(
+        &mut self,
+        kind: Kind,
+        idx: usize,
+        list: Option<super::sinking::List>,
+        key: voxel::ImageKey,
+        draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
+    ) -> Option<(u32, [i32; 2])> {
+        if let Some(p) = self.image_cache(kind, idx, list).and_then(|c| c.get(&key)) {
             return *p;
         }
         let part = draw(self).and_then(|img| self.add_part(&img));
-        self.p
-            .voxels
-            .entry((kind, idx))
-            .or_default()
-            .insert(key, part);
+        self.image_cache_mut(kind, idx, list).insert(key, part);
         part
+    }
+
+    /// The image cache of type `(kind, idx)` for `list` (`None`: level).
+    fn image_cache(
+        &self,
+        kind: Kind,
+        idx: usize,
+        list: Option<super::sinking::List>,
+    ) -> Option<&voxel::ImageCache<Option<PlacedPart>>> {
+        match list {
+            None => self.p.voxels.get(&(kind, idx)),
+            Some(l) => self.p.listed.get(&(kind, idx, l)),
+        }
+    }
+
+    /// [`Self::image_cache`], made when missing.
+    fn image_cache_mut(
+        &mut self,
+        kind: Kind,
+        idx: usize,
+        list: Option<super::sinking::List>,
+    ) -> &mut voxel::ImageCache<Option<PlacedPart>> {
+        match list {
+            None => self.p.voxels.entry((kind, idx)).or_default(),
+            Some(l) => self.p.listed.entry((kind, idx, l)).or_default(),
+        }
     }
 
     /// How a body is posed: its heading alone, a rocket's nose pitch or a
@@ -4670,6 +4712,9 @@ impl<'a> Builder<'a> {
     fn tilt(&self, m: &Mobile, q: &VoxelQuirks) -> Tilt {
         match m.attitude {
             Attitude::None => Tilt::Plain,
+            // design: Q-1871 interim (a sinking vessel's list; level at step 0, drawn as any level body)
+            Attitude::Sinking(l) if l.level() => Tilt::Plain,
+            Attitude::Sinking(l) => Tilt::Listed(l),
             Attitude::Rocket {
                 pitch,
                 initial,
@@ -4772,6 +4817,20 @@ impl<'a> Builder<'a> {
             Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
             // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
             Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
+            // design: Q-1871 interim (D = Rz(θ_body) · Ry(pitch) · Rx(roll); turret, barrel and shadow from that D)
+            Tilt::Listed(l) => voxel::vehicle_parts_posed(
+                body_raw,
+                turret_raw,
+                offset,
+                elevation,
+                &l.rotation(&q),
+                &q,
+            ),
+        };
+        // design: Q-1871 interim (a listed vessel's images are kept in its list's own cache)
+        let list = match tilt {
+            Tilt::Listed(l) => Some(l),
+            _ => None,
         };
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
@@ -4816,7 +4875,8 @@ impl<'a> Builder<'a> {
         // An aircraft's shadow comes before the body, which covers it.
         if kind != Kind::Vehicles
             && let Some(s) = shadow
-            && let Some(part) = self.cached_part(kind, idx, shadow_key, |b| draw_shadow(b, s))
+            && let Some(part) =
+                self.cached_part_in(kind, idx, list, shadow_key, |b| draw_shadow(b, s))
         {
             // spec: S-0102 claim 18 (the voxel shadow: bias U, upright, a reader, in the object's
             // own drawing; it never paints over its own aircraft)
@@ -4836,11 +4896,13 @@ impl<'a> Builder<'a> {
         // claim 12's alternative body while no spawned aircraft is docked)
         // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
         let key = match tilt {
-            Tilt::Plain => voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame),
+            Tilt::Plain | Tilt::Listed(_) => {
+                voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame)
+            }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
             Tilt::Flying(a) => voxel::flying_body_key(heading, body_frame, &a),
         };
-        if let Some(part) = self.cached_part(kind, idx, key, |b| {
+        if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
             let body = b.voxel_model(&body_file)?;
             let vpl = b.vpl();
             let img = b.p.canvas.draw_part(
@@ -4931,7 +4993,7 @@ impl<'a> Builder<'a> {
                 let Some(file) = art.voxels.get(part_name).cloned() else {
                     continue;
                 };
-                if let Some(part) = self.cached_part(kind, idx, key, |b| {
+                if let Some(part) = self.cached_part_in(kind, idx, list, key, |b| {
                     let model = b.voxel_model(&file)?;
                     let vpl = b.vpl();
                     let p = pose();
@@ -4968,14 +5030,16 @@ impl<'a> Builder<'a> {
             && let Some(s) = shadow
         {
             let cached = self
-                .p
-                .voxels
-                .get(&(kind, idx))
+                .image_cache(kind, idx, list)
                 .is_some_and(|c| c.get(&shadow_key).is_some());
             let fresh = (!cached).then(|| draw_shadow(self, s));
+            let cache = match list {
+                None => self.p.voxels.entry((kind, idx)).or_default(),
+                Some(l) => self.p.listed.entry((kind, idx, l)).or_default(),
+            };
             let part = vehicle_shadow(
                 &mut self.built.scene,
-                self.p.voxels.entry((kind, idx)).or_default(),
+                cache,
                 &mut self.p.cutouts,
                 shadow_key,
                 &placed,
@@ -5281,8 +5345,8 @@ pub(crate) fn multi_turret(import: &Import, kind: Kind, idx: usize) -> bool {
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
-/// claims 41 and 42). Single and double precision values travel as bit
-/// patterns.
+/// claims 41 and 42), or a sinking vessel's list (our interim of Q-1871).
+/// Single and double precision values travel as bit patterns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Attitude {
     /// Heading only: a vehicle, or an aircraft without a game state.
@@ -5309,6 +5373,9 @@ pub enum Attitude {
         /// Crashing (S-0312): drawn level here, the crash attitude is not built.
         crashing: bool,
     },
+    /// A vehicle the simulation marks sinking (S-0504 Terms), with the list
+    /// our interim of Q-1871 gives it ([`super::sinking::list`]).
+    Sinking(super::sinking::List),
 }
 
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40).
@@ -5402,6 +5469,7 @@ impl Painter {
             shps: BTreeMap::new(),
             anim_types: BTreeMap::new(),
             voxels: BTreeMap::new(),
+            listed: BTreeMap::new(),
             cutouts: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
