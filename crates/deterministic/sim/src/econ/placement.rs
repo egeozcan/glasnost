@@ -222,6 +222,11 @@ pub fn foundation_cells(w: &World, t: u32, top_left: CellXY) -> Vec<CellXY> {
     cells_of(&p, top_left)
 }
 
+/// [`foundation_cells`] for placement fields `p`.
+pub fn foundation_cells_of(p: &PlaceType, top_left: CellXY) -> Vec<CellXY> {
+    cells_of(p, top_left)
+}
+
 fn cells_of(p: &PlaceType, top_left: CellXY) -> Vec<CellXY> {
     let mut v = crate::objects::foundation_cells(top_left, p.size);
     if p.refinery {
@@ -481,18 +486,39 @@ fn tileset_passes(w: &World, c: CellXY) -> bool {
 /// The cell test (S-0406 claims 3 and 8) of type `t` at top-left cell
 /// `top_left`.
 pub fn cell_test(w: &World, t: u32, top_left: CellXY, test: &Test) -> bool {
-    let p = place_type(w, t);
+    cell_test_with(w, t, &place_type(w, t), top_left, test)
+}
+
+/// [`cell_test`] with type `t`'s placement fields `p` already read.
+pub fn cell_test_with(w: &World, t: u32, p: &PlaceType, top_left: CellXY, test: &Test) -> bool {
     if test.anywhere && p.anywhere {
         // spec: S-0406 claim 3 (place-anywhere: none of (a) to (d) is asked; it takes precedence over a to-tile field)
         return true;
     }
-    let cells = cells_of(&p, top_left);
+    // The foundation cells of `cells_of`, in its order, without a list.
+    let (fw, fh) = p.size;
+    let mut cells = (0..fh.max(0)).flat_map(|dy| {
+        // spec: S-0406 claim 2 and Constants (the 8-cell 3 × 3 word lacks the cell (2, 1))
+        let lacks = move |dx: i32| p.refinery && (dx, dy) == (2, 1);
+        (0..fw.max(0))
+            .filter(move |&dx| !lacks(dx))
+            .map(move |dx| CellXY::new(top_left.x + dx, top_left.y + dy))
+    });
     if p.to_tile {
         // spec: S-0406 claim 3 (to-tile rule: one foundation cell passing is enough; no cells passes)
-        return cells.is_empty() || cells.iter().any(|&c| cell_passes(w, t, &p, c, test, true));
+        let mut any = false;
+        let mut none = true;
+        for c in cells {
+            none = false;
+            if cell_passes(w, t, p, c, test, true) {
+                any = true;
+                break;
+            }
+        }
+        return none || any;
     }
     // spec: S-0406 claim 3 (every foundation cell passes; no cells passes every condition, claim 2)
-    cells.iter().all(|&c| cell_passes(w, t, &p, c, test, false))
+    cells.all(|c| cell_passes(w, t, p, c, test, false))
 }
 
 /// Whether the build-off-ally option is on (S-0406 claim 4; the setup
@@ -504,21 +530,23 @@ pub fn build_off_ally(w: &World) -> bool {
 /// The adjacency condition (S-0406 claim 4, F1).
 pub fn adjacent(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
     let ally_option = build_off_ally(w);
-    adjacent_by(w, t, top_left, |c| supports(w, house, ally_option, c))
+    adjacent_by(&place_type(w, t), top_left, |c| {
+        supports(w, house, ally_option, c)
+    })
 }
 
-/// [`adjacent`] with the cell test `support` (whether a cell holds a
-/// building the house may build next to).
-fn adjacent_by(
-    w: &World,
-    t: u32,
-    top_left: CellXY,
-    mut support: impl FnMut(CellXY) -> bool,
-) -> bool {
-    let p = place_type(w, t);
+/// The adjacency rectangle's margin *d* of F1 and the foundation's
+/// width and height of placement fields `p`.
+fn adjacency_reach(p: &PlaceType) -> (i32, i32, i32) {
     // spec: S-0406 F1 (d = A + 1; the zero-size word's rectangle is 0 × 0)
     let d = p.adjacent.saturating_add(1);
-    let (fw, fh) = (p.size.0.max(0), p.size.1.max(0));
+    (d, p.size.0.max(0), p.size.1.max(0))
+}
+
+/// [`adjacent`] for placement fields `p`, with the cell test `support`
+/// (whether a cell holds a building the house may build next to).
+fn adjacent_by(p: &PlaceType, top_left: CellXY, mut support: impl FnMut(CellXY) -> bool) -> bool {
+    let (d, fw, fh) = adjacency_reach(p);
     let (x0, y0) = (top_left.x, top_left.y);
     for y in (y0 - d)..=(y0 + fh - 1 + d) {
         for x in (x0 - d)..=(x0 + fw - 1 + d) {
@@ -557,92 +585,197 @@ fn supports(w: &World, house: HouseId, ally_option: bool, c: CellXY) -> bool {
     })
 }
 
-/// The answers of [`supports`] for one house on an unchanged world, kept
-/// by cell while a search asks the place order's conditions of many
-/// top-left cells whose adjacency rectangles overlap (our tooling for
-/// speed, M8 C4 part 2: the same answers, each cell looked at once).
-pub struct SupportMemo {
+/// The place order's conditions ([`place_legal`]) and the cell test of a
+/// place order ([`cell_test`] with [`Test::order`]) of one building type
+/// for one house on an unchanged world, asked of many top-left cells (our
+/// tooling for speed, M8 C4 parts 2 and 6; nothing here is game state).
+/// The type's placement fields are read once, and the adjacency condition
+/// of each top-left cell in the window of the cells the search was made for
+/// is read off running sums of the cells that hold a building the house
+/// may build next to, each such cell asked once: the same answers as
+/// asking the functions themselves, cell by cell.
+pub struct PlaceSearch {
     house: HouseId,
-    ally_option: bool,
-    /// By dense cell index: the answer, once asked.
-    known: Vec<Option<bool>>,
+    t: TypeRef,
+    p: PlaceType,
+    table: Option<SupportTable>,
 }
 
-impl SupportMemo {
-    /// An empty memo for `house` on `w`.
-    pub fn new(w: &World, house: HouseId) -> Self {
-        Self {
-            house,
-            ally_option: build_off_ally(w),
-            known: vec![None; w.cells.grid.len()],
+/// The running sums behind [`PlaceSearch`]'s adjacency answers.
+struct SupportTable {
+    /// The window of top-left cells the table answers for: least and
+    /// greatest x and y.
+    window: (i32, i32, i32, i32),
+    /// The area's first cell (the window's least corner less the margin).
+    x0: i32,
+    y0: i32,
+    /// The area's width.
+    aw: i32,
+    /// `sums[(y + 1) × (aw + 1) + x + 1]`: the supporting cells of the
+    /// area with offsets at most (x, y).
+    sums: Vec<u32>,
+}
+
+/// The largest adjacency margin for which [`PlaceSearch`] keeps a table
+/// (a wider one is answered cell by cell).
+const TABLE_MARGIN: i32 = 64; // nocite: our tooling's bound (M8 C4 part 6), not game behaviour
+
+impl SupportTable {
+    fn new(w: &World, house: HouseId, p: &PlaceType, cells: &[CellXY]) -> Option<Self> {
+        let (d, fw, fh) = adjacency_reach(p);
+        if !(1..=TABLE_MARGIN).contains(&d) || cells.is_empty() {
+            return None;
         }
+        let lx = cells.iter().map(|c| c.x).min()?;
+        let hx = cells.iter().map(|c| c.x).max()?;
+        let ly = cells.iter().map(|c| c.y).min()?;
+        let hy = cells.iter().map(|c| c.y).max()?;
+        let (x0, y0) = (lx - d, ly - d);
+        let aw = hx + fw - 1 + d - x0 + 1;
+        let ah = hy + fh - 1 + d - y0 + 1;
+        let row = usize::try_from(aw + 1).ok()?;
+        let mut sums = vec![0u32; row * usize::try_from(ah + 1).ok()?];
+        let ally_option = build_off_ally(w);
+        for y in 0..ah {
+            let mut run = 0u32;
+            for x in 0..aw {
+                let c = CellXY::new(x0 + x, y0 + y);
+                // Off the grid a cell's list is empty, so it supports nothing.
+                if w.cells.idx(c).is_some() && supports(w, house, ally_option, c) {
+                    run += 1;
+                }
+                let (ux, uy) = (x as usize, y as usize);
+                sums[(uy + 1) * row + ux + 1] = sums[uy * row + ux + 1] + run;
+            }
+        }
+        Some(Self {
+            window: (lx, ly, hx, hy),
+            x0,
+            y0,
+            aw,
+            sums,
+        })
     }
 
-    fn supports(&mut self, w: &World, c: CellXY) -> bool {
-        let Some(i) = w.cells.idx(c) else {
-            // Off the grid: an empty list.
-            return false;
+    /// The supporting cells in the rectangle from (`ax`, `ay`) to (`bx`,
+    /// `by`), inclusive, which lies inside the area; 0 when it is empty.
+    fn count(&self, ax: i32, ay: i32, bx: i32, by: i32) -> u32 {
+        if ax > bx || ay > by {
+            return 0;
+        }
+        let row = (self.aw + 1) as usize;
+        let at = |x: i32, y: i32| self.sums[(y - self.y0) as usize * row + (x - self.x0) as usize];
+        at(bx + 1, by + 1) + at(ax, ay) - at(ax, by + 1) - at(bx + 1, ay)
+    }
+
+    /// [`adjacent_by`]'s answer for top-left cell `c`, when `c` lies in the
+    /// window.
+    fn adjacent(&self, p: &PlaceType, c: CellXY) -> Option<bool> {
+        let (lx, ly, hx, hy) = self.window;
+        if c.x < lx || c.x > hx || c.y < ly || c.y > hy {
+            return None;
+        }
+        let (d, fw, fh) = adjacency_reach(p);
+        // spec: S-0406 F1 (the rectangle around the foundation, less the foundation rectangle itself)
+        let around = self.count(c.x - d, c.y - d, c.x + fw - 1 + d, c.y + fh - 1 + d);
+        let inside = self.count(c.x, c.y, c.x + fw - 1, c.y + fh - 1);
+        Some(around > inside)
+    }
+}
+
+impl PlaceSearch {
+    /// A search for type `t` of `house` on `w`, whose adjacency table
+    /// covers the top-left cells `cells` (other cells are answered without
+    /// it).
+    pub fn new(w: &World, house: HouseId, t: TypeRef, cells: &[CellXY]) -> Self {
+        let p = if t.kind == Kind::Building {
+            place_type(w, t.index)
+        } else {
+            PlaceType::default()
         };
-        if let Some(Some(yes)) = self.known.get(i).copied() {
-            return yes;
-        }
-        let yes = supports(w, self.house, self.ally_option, c);
-        if let Some(k) = self.known.get_mut(i) {
-            *k = Some(yes);
-        }
-        yes
+        let table = (t.kind == Kind::Building && p.upgrade_of.is_none())
+            .then(|| SupportTable::new(w, house, &p, cells))
+            .flatten();
+        Self { house, t, p, table }
     }
-}
 
-/// [`place_legal`] for `memo`'s house, its adjacency read through `memo`
-/// (the same answer).
-pub fn place_legal_kept(w: &World, memo: &mut SupportMemo, t: TypeRef, cell: CellXY) -> bool {
-    place_legal_by(w, memo.house, t, cell, |w, t, c| {
-        adjacent_by(w, t, c, |k| memo.supports(w, k))
-    })
+    /// The type's placement fields.
+    pub fn place_type(&self) -> &PlaceType {
+        &self.p
+    }
+
+    /// [`place_legal`] of the search's house and type at `cell`.
+    pub fn place_legal(&self, w: &World, cell: CellXY) -> bool {
+        place_legal_by(w, self.house, self.t, &self.p, cell, |c| {
+            self.table
+                .as_ref()
+                .and_then(|k| k.adjacent(&self.p, c))
+                .unwrap_or_else(|| {
+                    let ally_option = build_off_ally(w);
+                    adjacent_by(&self.p, c, |k| supports(w, self.house, ally_option, k))
+                })
+        })
+    }
+
+    /// [`cell_test`] of the search's type at `cell`, as a place order of
+    /// its house asks it ([`Test::order`]).
+    pub fn cell_test(&self, w: &World, cell: CellXY) -> bool {
+        cell_test_with(w, self.t.index, &self.p, cell, &Test::order(self.house))
+    }
 }
 
 /// The explored-ground condition (S-0406 claim 5): every cell of the
 /// foundation rectangle is explored by `house`; a to-tile type is exempt.
 pub fn explored(w: &World, house: HouseId, t: u32, top_left: CellXY) -> bool {
-    let p = place_type(w, t);
+    explored_with(w, house, &place_type(w, t), top_left)
+}
+
+/// [`explored`] for placement fields `p`.
+fn explored_with(w: &World, house: HouseId, p: &PlaceType, top_left: CellXY) -> bool {
     if p.to_tile {
         // spec: S-0406 claim 5 (a type with a to-tile field is exempt)
         return true;
     }
     // spec: S-0406 claim 5 (every cell of the foundation rectangle, 9 cells for the 8-cell word)
-    crate::objects::foundation_cells(top_left, p.size)
-        .into_iter()
-        .all(|c| crate::econ::shroud::explored(w, house, c))
+    (0..p.size.1).all(|dy| {
+        (0..p.size.0).all(|dx| {
+            crate::econ::shroud::explored(w, house, CellXY::new(top_left.x + dx, top_left.y + dy))
+        })
+    })
 }
 
 /// The conditions judged when a place order is issued (S-0406 claims 4 to
 /// 6 and 12): adjacency, or for an upgrade type a building it can go on,
 /// and explored ground. Applying the order does not judge them again.
 pub fn place_legal(w: &World, house: HouseId, t: TypeRef, cell: CellXY) -> bool {
-    place_legal_by(w, house, t, cell, |w, t, c| adjacent(w, house, t, c))
-}
-
-/// [`place_legal`] with the adjacency test `adjacent`.
-fn place_legal_by(
-    w: &World,
-    house: HouseId,
-    t: TypeRef,
-    cell: CellXY,
-    adjacent: impl FnOnce(&World, u32, CellXY) -> bool,
-) -> bool {
     if t.kind != Kind::Building {
         return false;
     }
     let p = place_type(w, t.index);
+    place_legal_by(w, house, t, &p, cell, |c| adjacent(w, house, t.index, c))
+}
+
+/// [`place_legal`] for type `t` with placement fields `p` and the
+/// adjacency test `adjacent` of a top-left cell.
+fn place_legal_by(
+    w: &World,
+    house: HouseId,
+    t: TypeRef,
+    p: &PlaceType,
+    cell: CellXY,
+    adjacent: impl FnOnce(CellXY) -> bool,
+) -> bool {
+    if t.kind != Kind::Building {
+        return false;
+    }
     let support = if p.upgrade_of.is_some() {
         // spec: S-0406 claim 12 (an upgrade order that names such a building passes claim 4)
         upgrade_target(w, house, t.index, cell).is_some()
     } else {
-        adjacent(w, t.index, cell)
+        adjacent(cell)
     };
     // spec: S-0406 claims 5 and 12 (the shroud condition is asked of an upgrade type's rectangle too)
-    support && explored(w, house, t.index, cell)
+    support && explored_with(w, house, p, cell)
 }
 
 /// The cell a click on `click` names in placement mode (S-0406 claim 7,

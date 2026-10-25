@@ -303,7 +303,7 @@ impl Brain {
         mark(p, "ai:script");
         let thinks = self.thinks_at(w.tick);
         let mut out = if thinks {
-            self.script.think(w)
+            self.script.think_with(w, p)
         } else {
             let mut v = Vec::new();
             self.place_done(w, &mut v);

@@ -8,7 +8,7 @@
 //! connections; the coarse end cells of bridge cells are
 //! [`crate::path`]'s.
 
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeSet, BinaryHeap};
 
 use glasnost_map::CellXY;
 use glasnost_num::{F32, F64};
@@ -72,7 +72,11 @@ fn level_of(w: &World, c: CellXY) -> i32 {
 }
 
 fn block_of(c: CellXY, b: i32) -> (i32, i32) {
-    (c.x.div_euclid(b), c.y.div_euclid(b))
+    // The block size is a power of two, so the floored division is a shift
+    // (our tooling for speed, M8 C4 part 6).
+    debug_assert!(b > 0 && b.count_ones() == 1);
+    let k = b.trailing_zeros();
+    (c.x >> k, c.y >> k)
 }
 
 /// Builds the sectors and connections of S-0212 claim 13b from the regions.
@@ -90,18 +94,33 @@ pub fn build(w: &World) -> Sectors {
         .collect();
     cells.sort_by_key(|&(c, _)| (c.y, c.x));
     let n = w.cells.grid.len();
+    // Each legal cell's level and usable-area answer, by dense index, and
+    // each listed cell's neighbours' dense indices in step order, asked once
+    // for the three levels (our tooling for speed, M8 C4 part 6).
+    let mut level = vec![0; n];
+    let mut usable = vec![false; n];
+    for (c, _) in w.cells.grid.iter() {
+        if let Some(i) = w.cells.idx(c) {
+            level[i] = level_of(w, c);
+            usable[i] = w.cells.usable(c);
+        }
+    }
+    let around: Vec<[Option<usize>; STEPS.len()]> = cells
+        .iter()
+        .map(|&(c, _)| STEPS.map(|(dx, dy)| w.cells.idx(CellXY::new(c.x + dx, c.y + dy))))
+        .collect();
     let mut levels: Vec<SectorLevel> = Vec::with_capacity(LEVELS);
     for l in 0..LEVELS {
         let b = block_size(l);
         let mut dsu = Dsu::new(n);
-        for &(c, i) in &cells {
-            for (dx, dy) in STEPS {
+        for (&(c, i), around) in cells.iter().zip(&around) {
+            for (&(dx, dy), &j) in STEPS.iter().zip(around) {
+                let Some(j) = j else { continue };
                 let nc = CellXY::new(c.x + dx, c.y + dy);
-                let Some(j) = w.cells.idx(nc) else { continue };
                 // spec: S-0212 claim 13b (one region, one block, neighbours at most 1 level apart; no join across 2 or 3 levels)
                 if region[j] == region[i]
                     && block_of(c, b) == block_of(nc, b)
-                    && (level_of(w, c) - level_of(w, nc)).abs() <= 1
+                    && (level[i] - level[j]).abs() <= 1
                 {
                     dsu.union(i as u32, j as u32);
                 }
@@ -111,11 +130,16 @@ pub fn build(w: &World) -> Sectors {
             of_cell: vec![NONE; n],
             ..Default::default()
         };
-        let mut label: BTreeMap<u32, u32> = BTreeMap::new();
+        // A root's sector is the count of roots met before it (by root, in a
+        // table rather than a map: our tooling for speed, M8 C4 part 6).
+        let mut label = vec![NONE; n];
         for &(c, i) in &cells {
-            let root = dsu.find(i as u32);
+            let root = dsu.find(i as u32) as usize;
             let next = lv.category.len() as u32;
-            let id = *label.entry(root).or_insert(next);
+            if label[root] == NONE {
+                label[root] = next;
+            }
+            let id = label[root];
             if id == next {
                 // spec: S-0212 claim 13b (a sector's category is its region's)
                 lv.category.push(w.cells.category[i]);
@@ -126,27 +150,28 @@ pub fn build(w: &World) -> Sectors {
         }
         // Connections: true while some qualifying pair is not a diagonal pair
         // across a block's left or right edge.
-        let mut straight: BTreeMap<(u32, u32), bool> = BTreeMap::new();
-        for &(c, i) in &cells {
+        // Each pair of sectors met with its flag, merged below (a list rather
+        // than a map: our tooling for speed, M8 C4 part 6).
+        let mut met: Vec<(u32, u32, bool)> = Vec::with_capacity(cells.len());
+        for (&(c, i), around) in cells.iter().zip(&around) {
             let s = lv.of_cell[i];
-            if !w.cells.usable(c) {
+            if !usable[i] {
                 continue;
             }
-            for (d, (dx, dy)) in STEPS.iter().enumerate() {
+            for (d, (&(dx, dy), &j)) in STEPS.iter().zip(around).enumerate() {
+                let Some(j) = j else { continue };
                 let nc = CellXY::new(c.x + dx, c.y + dy);
-                let Some(j) = w.cells.idx(nc) else { continue };
                 let t = lv.of_cell[j];
                 // spec: S-0212 claim 13b (connected: neighbouring cells, both inside the usable area, at most 1 level apart, whatever the categories)
-                if t == NONE
-                    || t == s
-                    || !w.cells.usable(nc)
-                    || (level_of(w, c) - level_of(w, nc)).abs() > 1
-                {
+                if t == NONE || t == s || !usable[j] || (level[i] - level[j]).abs() > 1 {
                     continue;
                 }
                 // spec: S-0212 claim 13b (a diagonal pair whose cells lie in different block columns crosses a left or right edge on the slant)
                 let slant = d % 2 == 1 && block_of(c, b).0 != block_of(nc, b).0;
-                *straight.entry((s, t)).or_insert(false) |= !slant;
+                // A repeat of the last pair met adds nothing to the merge.
+                if met.last() != Some(&(s, t, !slant)) {
+                    met.push((s, t, !slant));
+                }
             }
         }
         // spec: S-0212 claim 13b (an enabled link adds straight connections at every level, with no height or usable-area condition)
@@ -158,15 +183,11 @@ pub fn build(w: &World) -> Sectors {
                     continue;
                 }
                 // spec: S-0212 claim 13b (two sectors share at most one connection: joined by a link, it is straight)
-                straight.insert((s, t), true);
-                straight.insert((t, s), true);
+                met.push((s, t, true));
+                met.push((t, s, true));
             }
         }
-        lv.conns = vec![Vec::new(); lv.category.len()];
-        for (&(s, t), &st) in &straight {
-            // spec: S-0212 claim 13b (diagonal when every such pair crosses on the slant, straight otherwise)
-            lv.conns[s as usize].push((t, !st));
-        }
+        lv.conns = merge_met(lv.category.len(), met);
         levels.push(lv);
     }
     // spec: S-0212 claim 13b (each sector lies inside one sector of the next level, its parent)
@@ -180,6 +201,45 @@ pub fn build(w: &World) -> Sectors {
     }
     levels[LEVELS - 1].parent = vec![NONE; levels[LEVELS - 1].category.len()];
     Sectors { levels }
+}
+
+/// The connections of `n` sectors from the pairs met, each (sector, other
+/// sector, whether that pair was straight): by sector, ordered by the other
+/// sector, one each, straight when any of its pairs was.
+fn merge_met(n: usize, met: Vec<(u32, u32, bool)>) -> Vec<Vec<(u32, bool)>> {
+    // Bucketed by sector (counted, then placed), each bucket sorted alone.
+    let mut start: Vec<usize> = vec![0; n + 1];
+    for &(s, _, _) in &met {
+        start[s as usize + 1] += 1;
+    }
+    for s in 0..n {
+        start[s + 1] += start[s];
+    }
+    let mut at = start.clone();
+    let mut by = vec![(0u32, false); met.len()];
+    for (s, t, st) in met {
+        by[at[s as usize]] = (t, st);
+        at[s as usize] += 1;
+    }
+    (0..n)
+        .map(|s| {
+            let bucket = &mut by[start[s]..start[s + 1]];
+            bucket.sort_unstable();
+            // Merged in place, then copied out at its size.
+            let mut k = 0;
+            for r in 0..bucket.len() {
+                let (t, st) = bucket[r];
+                if k > 0 && bucket[k - 1].0 == t {
+                    bucket[k - 1].1 |= st;
+                } else {
+                    bucket[k] = (t, st);
+                    k += 1;
+                }
+            }
+            // spec: S-0212 claim 13b (diagonal when every such pair crosses on the slant, straight otherwise)
+            bucket[..k].iter().map(|&(t, st)| (t, !st)).collect()
+        })
+        .collect()
 }
 
 /// The two side displacements of S-0212 claim 13b's table for the place
@@ -550,4 +610,158 @@ pub fn retry(
         closed.insert(pair(a, t));
     }
     true
+}
+
+#[cfg(test)]
+mod build_tests {
+    use super::*;
+    use crate::testkit;
+    use std::collections::BTreeMap;
+
+    /// The sectors' build as it was before M8 C4 part 6 (maps by root and
+    /// by pair of sectors).
+    fn build_as_before(w: &World) -> Sectors {
+        let region = &w.regions.region;
+        // Cells of a region, row by row (increasing y, then x): sectors are
+        // numbered in the order of their first cells (claim 12a).
+        let mut cells: Vec<(CellXY, usize)> = w
+            .cells
+            .grid
+            .iter()
+            .filter_map(|(c, _)| w.cells.idx(c).map(|i| (c, i)))
+            .filter(|&(_, i)| region.get(i).is_some_and(|&r| r != u32::MAX))
+            .collect();
+        cells.sort_by_key(|&(c, _)| (c.y, c.x));
+        let n = w.cells.grid.len();
+        let mut levels: Vec<SectorLevel> = Vec::with_capacity(LEVELS);
+        for l in 0..LEVELS {
+            let b = block_size(l);
+            let mut dsu = Dsu::new(n);
+            for &(c, i) in &cells {
+                for (dx, dy) in STEPS {
+                    let nc = CellXY::new(c.x + dx, c.y + dy);
+                    let Some(j) = w.cells.idx(nc) else { continue };
+                    if region[j] == region[i]
+                        && block_of(c, b) == block_of(nc, b)
+                        && (level_of(w, c) - level_of(w, nc)).abs() <= 1
+                    {
+                        dsu.union(i as u32, j as u32);
+                    }
+                }
+            }
+            let mut lv = SectorLevel {
+                of_cell: vec![NONE; n],
+                ..Default::default()
+            };
+            let mut label: BTreeMap<u32, u32> = BTreeMap::new();
+            for &(c, i) in &cells {
+                let root = dsu.find(i as u32);
+                let next = lv.category.len() as u32;
+                let id = *label.entry(root).or_insert(next);
+                if id == next {
+                    lv.category.push(w.cells.category[i]);
+                    let (bx, by) = block_of(c, b);
+                    lv.block.push(CellXY::new(bx * b, by * b));
+                }
+                lv.of_cell[i] = id;
+            }
+            // Connections: true while some qualifying pair is not a diagonal pair
+            // across a block's left or right edge.
+            let mut straight: BTreeMap<(u32, u32), bool> = BTreeMap::new();
+            for &(c, i) in &cells {
+                let s = lv.of_cell[i];
+                if !w.cells.usable(c) {
+                    continue;
+                }
+                for (d, (dx, dy)) in STEPS.iter().enumerate() {
+                    let nc = CellXY::new(c.x + dx, c.y + dy);
+                    let Some(j) = w.cells.idx(nc) else { continue };
+                    let t = lv.of_cell[j];
+                    if t == NONE
+                        || t == s
+                        || !w.cells.usable(nc)
+                        || (level_of(w, c) - level_of(w, nc)).abs() > 1
+                    {
+                        continue;
+                    }
+                    let slant = d % 2 == 1 && block_of(c, b).0 != block_of(nc, b).0;
+                    *straight.entry((s, t)).or_insert(false) |= !slant;
+                }
+            }
+            for link in w.cells.links.iter().filter(|x| x.enabled) {
+                for (a, b) in link_pairs(w, link) {
+                    let s = lv.sector(w, a);
+                    let t = lv.sector(w, b);
+                    if s == NONE || t == NONE || s == t {
+                        continue;
+                    }
+                    straight.insert((s, t), true);
+                    straight.insert((t, s), true);
+                }
+            }
+            lv.conns = vec![Vec::new(); lv.category.len()];
+            for (&(s, t), &st) in &straight {
+                lv.conns[s as usize].push((t, !st));
+            }
+            levels.push(lv);
+        }
+        for l in 0..LEVELS - 1 {
+            let mut parent = vec![NONE; levels[l].category.len()];
+            for &(_, i) in &cells {
+                let s = levels[l].of_cell[i];
+                parent[s as usize] = levels[l + 1].of_cell[i];
+            }
+            levels[l].parent = parent;
+        }
+        levels[LEVELS - 1].parent = vec![NONE; levels[LEVELS - 1].category.len()];
+        Sectors { levels }
+    }
+
+    /// Our tooling for speed (M8 C4 part 6): over a map of mixed
+    /// categories and levels, the sectors and connections (S-0212 claim
+    /// 13b) are those the build as it was before gives, level by level.
+    #[test]
+    fn the_sectors_are_built_as_before() {
+        const SIZE: i32 = 30; // nocite: test data of our own
+        let mut w = testkit::game_with(&testkit::ruleset(), SIZE, 3);
+        // A small generator of our own (test data): mixed categories and levels.
+        let mut r: u32 = 12345;
+        let mut next = move |m: u32| {
+            r = r.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            (r >> 16) % m
+        };
+        let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+        for c in cells {
+            let i = w.cells.idx(c).expect("a legal cell");
+            if w.cells.category[i] != category::OFF_MAP {
+                w.cells.category[i] = [
+                    category::OPEN,
+                    category::WATER,
+                    category::BLOCKED,
+                    category::OPEN,
+                ][next(4) as usize];
+            }
+            if let Some(cell) = w.cells.grid.get_mut(c) {
+                cell.level = (next(5) as i8).min(3);
+            }
+        }
+        crate::regions::rebuild(&mut w);
+        let want = build_as_before(&w);
+        let got = &w.regions.sectors;
+        assert_eq!(got.levels.len(), want.levels.len());
+        let mut conns = 0;
+        for (l, (g, e)) in got.levels.iter().zip(&want.levels).enumerate() {
+            assert_eq!(g.of_cell, e.of_cell, "level {l}");
+            assert_eq!(g.parent, e.parent, "level {l}");
+            assert_eq!(g.category, e.category, "level {l}");
+            assert_eq!(g.block, e.block, "level {l}");
+            assert_eq!(g.conns, e.conns, "level {l}");
+            conns += e.conns.iter().map(Vec::len).sum::<usize>();
+            assert!(
+                e.conns.iter().flatten().any(|c| c.1),
+                "level {l}: a diagonal connection"
+            );
+        }
+        assert!(conns > 0);
+    }
 }
