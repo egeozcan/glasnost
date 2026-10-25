@@ -426,3 +426,26 @@ fn q1876_interim_disabled_far_from_a_depot() {
         assert_eq!(hover::bomb_mark(&w, v), loss, "loss {loss}");
     }
 }
+
+// spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: once the vehicle is no longer settled and has no contact, a later spin end is tested as usual by S-0503 claim 11); S-0405 claim 20 and S-0314 Terms (the enabling ends being settled); S-0503 claim 10 (switched on, an active spin is not cancelled) and claim 11 (the test belongs to the spin's end)
+#[test]
+fn quirk_off_a_spin_outliving_the_disabling_is_tested() {
+    let (mut w, k, v) = on_the_lake(false);
+    power_order(&mut w, k, false);
+    assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+    assert_ne!(
+        spin(&w, v),
+        0,
+        "the disabling above the water started a spin"
+    );
+    assert!(depot::settled(&w, v));
+    power_order(&mut w, k, true);
+    assert!(run_until(&mut w, 30, |w| !power::unit_disabled(w, v)));
+    assert_ne!(spin(&w, v), 0, "the spin outlives the disabling");
+    assert!(!depot::settled(&w, v), "the enabling ends being settled");
+    assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
+    assert!(
+        hover::bomb_mark(&w, v),
+        "neither settled nor in contact at the spin's end: tested and marked"
+    );
+}
