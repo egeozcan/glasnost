@@ -22,12 +22,12 @@ use crate::world::{HouseId, Layer, ObjectId, Pos, World};
 
 /// The gravity *g* of every piece (S-0317 claim 5, F3, Constants): the
 /// single-precision 1.4 widened to a double.
-fn gravity() -> F64 {
+pub(crate) fn gravity() -> F64 {
     crate::gas::nearest_single("1.4").to_f64() // spec: S-0317 F3 and Constants (g = 1.4 leptons per tick per tick, the single-precision value widened)
 }
 
 /// The deck height above the ground (S-0317 claims 10 and 11, Constants).
-const DECK: i32 = 416; // spec: S-0317 claim 10 and Constants (the deck height: the ground height plus 416 leptons, 4 height levels)
+pub(crate) const DECK: i32 = 416; // spec: S-0317 claim 10 and Constants (the deck height: the ground height plus 416 leptons, 4 height levels)
 
 /// One piece type (a voxel-animation type, S-0317 Import mapping), with the
 /// spans of F1, F2 and F5 formed once.
@@ -347,18 +347,18 @@ pub fn create_named(w: &mut World, name: &str, at: Pos, house: Option<HouseId>) 
 /// The ground height at a position (S-0317 claim 10: S-0106 claim 2's
 /// surface height at the position truncated toward zero). Off the map it
 /// is 0 (interim, Q-1836).
-fn ground(w: &World, p: Pos) -> i32 {
+pub(crate) fn ground(w: &World, p: Pos) -> i32 {
     w.surface_at(p.x, p.y)
 }
 
 /// A cell's height level; 0 off the map (interim, Q-1836).
-fn level(w: &World, c: CellXY) -> i32 {
+pub(crate) fn level(w: &World, c: CellXY) -> i32 {
     w.cells.cell(c).map_or(0, |x| i32::from(x.level))
 }
 
 /// Whether a cell has the water land type (claims 8 and 11); a cell off
 /// the map is not water (interim, Q-1836).
-fn water(w: &World, c: CellXY) -> bool {
+pub(crate) fn water(w: &World, c: CellXY) -> bool {
     w.cells.cell(c).is_some_and(|x| x.land == land::WATER)
 }
 
@@ -549,7 +549,14 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
 
 /// F6: whether the piece stops.
 // nocite: vector and matrix dimensions (three axes)
-fn stopped(w: &World, p: &[F32; 3], v: &[F32; 3], g: F64, mode: Rounding, table: bool) -> bool {
+pub(crate) fn stopped(
+    w: &World,
+    p: &[F32; 3],
+    v: &[F32; 3],
+    g: F64,
+    mode: Rounding,
+    table: bool,
+) -> bool {
     let fp = {
         let [x, y, z] = p.map(|c| c.to_f64().to_i32_common());
         Pos::new(x, y, z)
@@ -590,6 +597,22 @@ fn land_impact(w: &mut World, t: &PieceType, old: Pos, cell: CellXY, at: Pos, on
         } else {
             Layer::Ground
         };
+    ground_hits(w, cell, layer, at, t.radius, t.damage, t.warhead);
+}
+
+/// The hits of a ground impact (S-0317 claim 7 and F4), which a bouncing
+/// animation's impact landing shares (S-0319 claim 7): each object listed
+/// in `layer` of `cell` within `radius` of `at` by |Δx| + |Δy| receives a
+/// hit of `damage` with `warhead`, at the lifted distance.
+pub(crate) fn ground_hits(
+    w: &mut World,
+    cell: CellXY,
+    layer: Layer,
+    at: Pos,
+    radius: i32,
+    damage: i32,
+    warhead: Option<WarheadId>,
+) {
     let mode = w.rules().mode;
     // spec: S-0317 claim 7 and S-0209 claim 13 (the objects listed in the cell's layer, in listing order; the list as it stands when the hits begin)
     let list: Vec<ObjectId> = w.cells.list(cell, layer).to_vec();
@@ -599,14 +622,14 @@ fn land_impact(w: &mut World, t: &PieceType, old: Pos, cell: CellXY, at: Pos, on
         let sum = (o.pos.x.wrapping_sub(at.x))
             .wrapping_abs()
             .wrapping_add(o.pos.y.wrapping_sub(at.y).wrapping_abs());
-        if sum > t.radius {
+        if sum > radius {
             continue;
         }
         // spec: S-0317 F4 (D = L(|xₒ − x| + |yₒ − y|), S-0409 F2's lift applied to the horizontal sum, as S-0613 F7)
         let distance = crate::econ::shroud::height_lift(sum, mode);
         let hit = crate::combat::damage::Hit {
-            amount: t.damage,
-            warhead: t.warhead,
+            amount: damage,
+            warhead,
             distance,
             // spec: S-0317 claims 1 and 7 and S-0312 claim 4 (no attacker, no attacking house whatever the piece's own house, defences not ignored, no no-escape marker; S-0302 claim 1's table row)
             attacker: None,

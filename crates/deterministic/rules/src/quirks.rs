@@ -624,27 +624,27 @@ pub struct Quirks {
     // spec: S-0317 claim 11 and Edge cases
     #[serde(default = "on")]
     pub voxel_debris_expiry_needs_animation: bool,
-    /// A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field. Not consulted yet (S-0319 is taken in at the next intake).
+    /// A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field.
     // spec: S-0319 claim 2, F1, Edge cases
     #[serde(default = "on")]
     pub anim_fixed_upper_vertical_speed: bool,
-    /// A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0. Not consulted yet (S-0319 is taken in at the next intake).
+    /// A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0.
     // spec: S-0319 claim 8, Edge cases
     #[serde(default = "on")]
     pub bouncing_anim_expiry_needs_animation: bool,
-    /// An impact landing on a high-bridge deck hits the objects under the deck in that cell; off: a landing at deck height on a high-bridge cell hits the deck layer, every other impact landing the ground layer. Not consulted yet (S-0319 is taken in at the next intake).
+    /// An impact landing on a high-bridge deck hits the objects under the deck in that cell; off: a landing at deck height on a high-bridge cell hits the deck layer, every other impact landing the ground layer.
     // spec: S-0319 claim 7, Edge cases
     #[serde(default = "on")]
     pub bouncing_anim_deck_impact_layer: bool,
-    /// A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order. Not consulted yet (S-0319 is taken in at the next intake).
+    /// A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order.
     // spec: S-0319 claim 10, F5, Edge cases
     #[serde(default = "on")]
     pub anim_resource_spread_neighbours_only: bool,
-    /// A move that ends 100 leptons or more below the ground height is not put back on the ground, so the landing point and what is made there lie below it; off: every ground landing is put at the ground height and claim 7 counts a height of 0. Not consulted yet (S-0319 is taken in at the next intake).
+    /// A move that ends 100 leptons or more below the ground height is not put back on the ground, so the landing point and what is made there lie below it; off: every ground landing is put at the ground height and claim 7 counts a height of 0.
     // spec: S-0319 claims 6 and 7, Edge cases
     #[serde(default = "on")]
     pub bouncing_anim_deep_landing: bool,
-    /// An impact landing on water makes its bounce animation and hits before the splash; off: one on water and not at deck height makes no bounce animation and no hits. Not consulted yet (S-0319 is taken in at the next intake).
+    /// An impact landing on water makes its bounce animation and hits before the splash; off: one on water and not at deck height makes no bounce animation and no hits.
     // spec: S-0319 claim 7, Edge cases
     #[serde(default = "on")]
     pub bouncing_anim_water_impact_hits: bool,

@@ -1159,6 +1159,70 @@ fn animation_fields() {
     );
 }
 
+/// spec: S-0319 Import mapping (the bouncing keys: decimals kept as text, integers, IsTiberium a boolean, the named types canonicalised and none naming none) and claims 9, 12 and 14 (the importer's warnings)
+#[test]
+fn bouncing_animation_fields() {
+    let base = "[Animations]\n0=DROP\n1=FLAT\n2=PUFF\n3=TRAIL\n[Warheads]\n0=Boom\n[OverlayTypes]\n0=Ore1\n";
+    let art = "[DROP]\nBouncer=yes\nMaxXYVel=2.5\nMinZVel=1.25\nMaxZVel=4\nElasticity=0.5\n\
+               DamageRadius=96\nWarhead=BOOM\nBounceAnim=puff\nExpireAnim=<none>\nTrailerAnim=trail\n\
+               TrailerSeperation=3\nSpawns=PUFF\nSpawnCount=2\nIsTiberium=yes\nTiberiumSpawnType=ORE1\n\
+               TiberiumSpreadRadius=2\n\
+               [FLAT]\nBouncer=yes\nMaxXYVel=0.25\nMinZVel=4.5\nMaxZVel=3.5\nTrailerAnim=TRAIL\nSpawnCount=2147483647\n";
+    let (s, w) = sim(base, "", art);
+    let drop = &s.animations["DROP"];
+    assert_eq!(dec(&drop.max_xy_vel), Some("25e-1"));
+    assert_eq!(dec(&drop.min_z_vel), Some("125e-2"));
+    assert_eq!(dec(&drop.max_z_vel), Some("4"));
+    assert_eq!(dec(&drop.elasticity), Some("5e-1"));
+    assert_eq!(drop.damage_radius, Some(96));
+    assert_eq!(drop.warhead.as_deref(), Some("Boom"));
+    assert_eq!(drop.bounce_anim.as_deref(), Some("PUFF"));
+    assert_eq!(drop.expire_anim, None, "<none> names no type");
+    assert_eq!(drop.trailer_anim.as_deref(), Some("TRAIL"));
+    assert_eq!(drop.trailer_separation, Some(3));
+    assert_eq!(drop.spawns.as_deref(), Some("PUFF"));
+    assert_eq!(drop.spawn_count, Some(2));
+    assert_eq!(drop.is_tiberium, Some(true));
+    assert_eq!(drop.tiberium_spawn_type.as_deref(), Some("Ore1"));
+    assert_eq!(drop.tiberium_spread_radius, Some(2));
+    // DROP's spans are 5 and 3, and its trailer has a separation.
+    assert!(!w.iter().any(|w| w.message.contains("animations DROP")));
+    // FLAT: trunc(0.5) = 0 horizontally, trunc(3.5 − 4.5 + 1) = 0 vertically under either setting.
+    assert!(warned(
+        &w,
+        "animations FLAT: its horizontal speed span is 0"
+    ));
+    assert!(warned(
+        &w,
+        "animations FLAT: its vertical speed span is 0, which"
+    ));
+    assert!(warned(
+        &w,
+        "animations FLAT: a trailer animation with no TrailerSeperation"
+    ));
+    assert!(warned(&w, "animations FLAT: SpawnCount 2147483647"));
+    assert_eq!(s.animations["PUFF"].spawn_count, None);
+}
+
+/// spec: S-0319 claim 2 and claim 14 (the importer checks the vertical span under both settings of quirks.anim_fixed_upper_vertical_speed and names the one that gives 0)
+#[test]
+fn bouncing_span_names_the_upper_vertical_switch() {
+    let base = "[Animations]\n0=HIGH\n1=LOW\n";
+    // HIGH: 3.5 − 4.5 + 1 = 0 with the fixed limit, 9 − 4.5 + 1 = 5 with its own.
+    // LOW: 3.5 − 1 + 1 = 3 with the fixed limit, 0.5 − 1 + 1 = 0 with its own.
+    let art =
+        "[HIGH]\nBouncer=yes\nMinZVel=4.5\nMaxZVel=9\n[LOW]\nBouncer=yes\nMinZVel=1\nMaxZVel=0.5\n";
+    let (_, w) = sim(base, "", art);
+    assert!(warned(
+        &w,
+        "animations HIGH: its vertical speed span is 0 under quirks.anim_fixed_upper_vertical_speed (the default)"
+    ));
+    assert!(warned(
+        &w,
+        "animations LOW: its vertical speed span is 0 with quirks.anim_fixed_upper_vertical_speed off"
+    ));
+}
+
 /// spec: S-0007 claim 34 (an animation's playback and drawing properties come exclusively from its own art section, even when its image name names another section; a missing or empty own property does not inherit the image-named section's value)
 #[test]
 fn animation_properties_are_the_own_sections() {

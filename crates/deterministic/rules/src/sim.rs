@@ -445,6 +445,62 @@ pub struct AnimationType {
     /// (S-0109 Terms and F2); absent: no.
     #[serde(default)]
     pub new_theater: Option<bool>,
+    /// `MaxXYVel`, the horizontal speed limit *M* of a bouncing animation,
+    /// a double, leptons per tick (S-0319 F1, F2; absent 15.0).
+    #[serde(default)]
+    pub max_xy_vel: Option<Decimal>,
+    /// `MinZVel`, the lower vertical limit *Z*ₘᵢₙ, a double (S-0319 F1,
+    /// F2; absent 3.5).
+    #[serde(default)]
+    pub min_z_vel: Option<Decimal>,
+    /// `MaxZVel`, the type's upper vertical speed, a double, read only
+    /// under `quirks.anim_fixed_upper_vertical_speed` off (S-0319 claim 2;
+    /// absent 3.5).
+    #[serde(default)]
+    pub max_z_vel: Option<Decimal>,
+    /// `Elasticity`, the elasticity *e*, single precision (S-0319 claim 7;
+    /// absent 0.8).
+    #[serde(default)]
+    pub elasticity: Option<Decimal>,
+    /// `DamageRadius`, the landing hits' radius in leptons (S-0319 claim
+    /// 7; absent 0).
+    #[serde(default)]
+    pub damage_radius: Option<i32>,
+    /// `Warhead`, the landing hits' and expiry damage's warhead, by name
+    /// (S-0319 claims 7 and 8; absent none).
+    #[serde(default)]
+    pub warhead: Option<String>,
+    /// `BounceAnim`, an animation name (S-0319 claim 7; absent none).
+    #[serde(default)]
+    pub bounce_anim: Option<String>,
+    /// `ExpireAnim`, an animation name (S-0319 claim 8; absent none).
+    #[serde(default)]
+    pub expire_anim: Option<String>,
+    /// `TrailerAnim`, an animation name (S-0319 claim 12; absent none).
+    #[serde(default)]
+    pub trailer_anim: Option<String>,
+    /// `TrailerSeperation`, the trailer separation *s* in ticks (S-0319
+    /// claim 12; absent 0, which acts as 1).
+    #[serde(default)]
+    pub trailer_separation: Option<i32>,
+    /// `Spawns`, the spawn type, an animation name (S-0319 claim 9; absent
+    /// none).
+    #[serde(default)]
+    pub spawns: Option<String>,
+    /// `SpawnCount`, the spawn count *c* (S-0319 claim 9; absent 0).
+    #[serde(default)]
+    pub spawn_count: Option<i32>,
+    /// `IsTiberium`, the resource flag (S-0319 claim 10; absent no).
+    #[serde(default)]
+    pub is_tiberium: Option<bool>,
+    /// `TiberiumSpawnType`, the resource spawn overlay type, by name
+    /// (S-0319 claim 10; absent none).
+    #[serde(default)]
+    pub tiberium_spawn_type: Option<String>,
+    /// `TiberiumSpreadRadius`, the resource spread radius *R* in cells
+    /// (S-0319 claim 10, F5; absent 0).
+    #[serde(default)]
+    pub tiberium_spread_radius: Option<i32>,
 }
 
 /// A particle type's fields that its creation draws read (S-0202 claim 15

@@ -146,7 +146,10 @@ fn spawn_count_and_resource_warnings() {
     let (_, w) = sim(base, "");
     assert!(warned(&w, "Meteor: SpawnCount 2147483647"));
     assert!(warned(&w, "the list has fewer than 128 entries"));
-    assert!(warned(&w, "neither does a debris piece that ends in water"));
+    assert!(warned(
+        &w,
+        "neither does a debris piece or a bouncing animation that ends in water"
+    ));
 }
 
 /// spec: S-0317 Import mapping (the voxel-animation keys appear as fields

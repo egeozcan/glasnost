@@ -38,7 +38,7 @@ S-0522 claim 13). State: `World::anims` (save format 69). Client: `app::mapview:
 | 11 | tested | `claims11_13_29_trailer_loop_delay_defers_the_start_event` (a creator's delay: start event on update *D* + 1, no advance, the clock not restarted), `claims11_28_loop_delay_draw_from_the_scenario_stream` (between passes: one ranged draw, *D* updates without advance). |
 | 12 | tested | Every fixture starts at frame 0 (`claims5_16_first_update_and_lifetime`). |
 | 13 | tested | `claim13_start_event_at_creation_with_mu_zero`, `claim14_middle_event_on_the_advance_to_mu` (μ ≠ 0: no draw at creation); the start event after a loop delay in `claims11_13_29_trailer_loop_delay_defers_the_start_event`; after a follow-up switch coded (`AnimEnv::switched`). |
-| 14 | tested | `claim14_middle_event_on_the_advance_to_mu` (one ranged draw over 0 … 2147483646 on the advance to μ, none after). Bouncing types make no middle event on an advance (coded); their motion is not modelled (seam below). The order against the same advance's damage: interim rule of Q-1716. |
+| 14 | tested | `claim14_middle_event_on_the_advance_to_mu` (one ranged draw over 0 … 2147483646 on the advance to μ, none after). Bouncing types make no middle event on an advance (coded); their motion and landing are S-0319's (`bounce`, built in A3 intake 15 part 1, ledger [intake15a-S-0319.md](intake15a-S-0319.md)). The order against the same advance's damage: interim rule of Q-1716. |
 | 15 | tested | `claim15_follow_up_restarts_the_accumulator_at_zero` (the type switch, A = 0.0), `claim8_15_reverse_request_is_kept_at_a_follow_up`. |
 | 16 | tested | `claims5_16_first_update_and_lifetime` (lifetime *E* × *d*, removed in its own turn, out of the update order). Infantry creation at the end stays with S-0611's model (`mutation`). |
 | 17 | tested | `claim17_damage_over_time_pattern` (δ = 0.375: 1, 0, 1, 0, 0, 1, 0, 1), `claim17_damage_accumulator_quirk_off`, `claim15_follow_up_restarts_the_accumulator_at_zero`. The area detonation allows resource reduction with no attacker or house (`area::detonate`, coded). The factor 5 for an animation attached to a terrain object is coded (no creator attaches one yet). The warhead: `FlameDamage2` for every type, interim rule of Q-1717. A trigger-played animation: seam (below). |
@@ -58,7 +58,7 @@ S-0312, claim 18 (survivors of a destroyed building):
 
 Seams of this step:
 - **Specialised models keep their own playback.** Infantry-making animations (S-0611, `mutation`), virus-death clouds (S-0613, `gas`), burning walkers (S-0615, `walker`), domination, depot slot animations and storm clouds (S-0513, `superweapons::storm`, played by the storm model with `load::anim_created(…, true)`) are not entered twice.
-- **Bouncing motion.** A bouncing type's flight and landing effects are not modelled; it plays its stages without damage or advance middle events.
+- **Bouncing motion.** Built in A3 intake 15 part 1 (S-0319, `bounce`; ledger [intake15a-S-0319.md](intake15a-S-0319.md)): a bouncing type now flies, lands and ends there. Its stages still play without damage or advance middle events (claim 14, claim 17).
 - **Trigger-played animations.** Map triggers that play animations (S-0011 claim 36) are not built, so no animation is trigger-played.
 - **A warp source marker's end on leaving aiming** is a sidebar action the simulation does not see; the marker ends at a new pick or at launch.
 - **Rocket trailers** (`rocket.rs`) are made as ordinary animations without the trailer's loop delay: a rocket is not a projectile of S-0306.

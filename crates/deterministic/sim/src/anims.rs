@@ -12,6 +12,12 @@
 //! (claim 16), a removal from the update order (S-0203 claim 10). An
 //! attached animation follows its owner and is deleted at its next update
 //! once the owner has left the game (claim 22).
+//!
+//! An animation whose type is a bouncing type at its creation also carries
+//! a flight (S-0319, [`crate::bounce`]): its creation places it, and each
+//! of its turns takes the motion step first, ending it at a landing with
+//! the landing's effects; otherwise the trailer of any type that names one
+//! (S-0319 claim 12) and then the stage update follow.
 
 use std::collections::BTreeMap;
 
@@ -71,6 +77,11 @@ pub struct Anim {
     pub acc: F64,
     /// What it is to the rest of the game.
     pub role: Role,
+    /// Its flight, when its type was a bouncing type at its creation (S-0319
+    /// claim 1): it moves by S-0319 for as long as it is in play, whatever
+    /// type it switches to (claim 11).
+    #[serde(default)]
+    pub flight: Option<crate::bounce::Flight>,
 }
 
 /// What a creator gives a new ordinary animation besides its type and
@@ -114,7 +125,16 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
         return Spawned::default();
     };
     // spec: S-0109 claim 29 and S-0202 claim 10 (the creation draws are taken at the creation)
-    let drawn = crate::load::creation_draws(w, a);
+    let (drawn, raws) = crate::load::creation_draws(w, a);
+    // spec: S-0319 claims 1 to 3 (a bouncing type at creation: the first velocity from the three raw values; a falling animation is placed at its creation point, a meteor animation at its start position)
+    let (at, flight) = match (raws, at) {
+        (Some(r), Some(p)) => {
+            let (placed, f) = crate::bounce::create(w, a, r, p);
+            (Some(placed), Some(f))
+        }
+        // An animation whose position is not carried (a resource glint) has no point to fly from.
+        _ => (at, None),
+    };
     if s.creation.loop_delay <= 0 {
         // spec: S-0109 claim 13 and State and ordering (created with no loop delay: the start event in the same tick)
         crate::load::start_event(w, a, at.map(|p| (p.x, p.y, p.z)), true);
@@ -155,6 +175,7 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
             owner: s.owner,
             acc,
             role: s.role,
+            flight,
         },
     );
     // spec: S-0109 claim 29 and S-0203 claims 3 and 4 (appended; eligible for its first update later in the same pass)
@@ -378,6 +399,34 @@ pub fn turn(w: &mut World, id: ObjectId) {
             // spec: S-0109 claim 17 and F5 (c = 5 when attached to a terrain object)
             factor = TERRAIN_FACTOR;
         }
+    }
+    let rules = w.rules_arc();
+    let missing;
+    // spec: S-0319 claim 11 (claims 4 and 7 to 10 read the type the animation has now; a follow-up name no type is registered under has absent-key defaults)
+    let current = match a.anim.and_then(|i| rules.animations.get(i as usize)) {
+        Some(t) => t,
+        None => {
+            missing = AnimRules::default();
+            &missing
+        }
+    };
+    if let (Some(f), Some(p)) = (a.flight.as_mut(), a.pos.as_mut()) {
+        // spec: S-0319 claim 4 and State and ordering (the motion step first, in every turn, the first update and a loop delay's included)
+        if let Some(landing) = crate::bounce::step(w, f, p, current) {
+            let at = *p;
+            // spec: S-0319 claims 7 and 8 (the landing's effects at the landing point, then the end in the same turn: no stage advance, trailer or follow-up switch)
+            crate::bounce::land(w, current, at, landing);
+            ended(w, id, &a);
+            // spec: S-0319 State and ordering and S-0203 claim 10 (it leaves play: a removal from the update order)
+            w.update.leave(id, skip);
+            return;
+        }
+    }
+    if let Some(p) = a.pos
+        && let Some(name) = crate::bounce::trailer_due(current, w.tick)
+    {
+        // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
+        crate::combat::effects::trailer(w, &name, p);
     }
     w.anims.current = Some((id, false));
     let t = w.tick;
