@@ -24,6 +24,16 @@ gives, it files a request and stops that part.
   integrated GPU of a typical Intel laptop (Iris Xe class). Step C4 needs such a laptop
   for its measurement.
 
+## Decisions of 2026-10-25
+
+- **Track B is done.** The lead accepts B7's exit misses: the dominator's tempo (+1 167 ticks) and
+  the wins against saving off (28 where the exit asked for 30). There is no step B8.
+- **Autonomy:** from here to the end of M9, the main session decides on its own, aiming for a result
+  that is fun, bug free and maintainable, and accepts small divergences for that. The rules of
+  CLAUDE.md and PROVENANCE.md still bind (approved specs and records only, citations, requests for
+  what no spec gives). Where a spec leaves a case open, an interim chosen for play and stated as our
+  design in the step's ledger goes ahead without waiting on the lead.
+
 ## Lead rulings of 2026-10-24 (awaiting spec revisions)
 
 The lead's rulings, relayed by the speccer. Each reaches the code only when the spec revision that
