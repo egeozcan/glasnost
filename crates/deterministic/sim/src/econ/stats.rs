@@ -4,8 +4,10 @@
 //! These are the result screen's own counters, apart from the
 //! destroyed-object counts and the kill-value score of S-0302 claim 14 and
 //! S-0311 claim 7 (`combat::state::HouseCombat`): S-0414 claim 21 gives no
-//! kill for a destruction without an attacking object, adds ownership
-//! gains, and excludes not-scored victims and insignificant buildings.
+//! kill for a destruction with neither an attacking object nor an
+//! attacking house, adds ownership gains, and excludes not-scored victims
+//! and insignificant buildings from the kills; claim 22 scores a
+//! destruction credited to a house alone with no flag exclusion.
 //!
 //! The counters are kept while play runs ([`destruction`],
 //! [`owner_changed`], [`resource`]); [`finish`] fixes the displayed scores
@@ -80,29 +82,54 @@ fn current_price(w: &World, id: ObjectId, house: Option<HouseId>) -> i32 {
     super::production::price(w, h, super::tech::type_of(o))
 }
 
+/// Who a destruction is credited to (S-0302 claim 14), as the result
+/// screen's counters tell the cases apart (S-0414 claims 21 and 22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Credit {
+    /// Neither an attacking object nor an attacking house.
+    Nobody,
+    /// An attacking object: by a hit whose kill S-0302 claim 14 credits to
+    /// it, or by another destruction S-0311 claim 9 credits to it.
+    Object(ObjectId),
+    /// An attacking house alone: a hit with an attacking house and no
+    /// attacking object, or one whose attacking house differs from its
+    /// attacking object's owner.
+    House(HouseId),
+}
+
+impl Credit {
+    /// The credit of a destruction to an attacking object, if any (the
+    /// callers whose rule allows no house credit, S-0312 claim 30).
+    pub fn object(object: Option<ObjectId>) -> Self {
+        object.map_or(Self::Nobody, Self::Object)
+    }
+}
+
 /// A destruction (S-0414 claims 21 and 22), at the registration of S-0302
-/// claim 14: `object` is the credited attacking object, if any. Called
-/// before the destruction's other bookkeeping, with the victim still in
-/// the world.
-pub fn destruction(w: &mut World, victim: ObjectId, object: Option<ObjectId>) {
+/// claim 14, credited as `credit` says. Called before the destruction's
+/// other bookkeeping, with the victim still in the world.
+pub fn destruction(w: &mut World, victim: ObjectId, credit: Credit) {
     let Some(v) = w.obj(victim).cloned() else {
         return;
     };
-    // spec: S-0414 claims 21 and 22 (a not-scored victim: neither kill, loss nor destruction score)
-    if not_scored(w, victim) {
-        return;
-    }
-    // spec: S-0414 claim 21 (an insignificant building gives neither a kill nor a loss; an insignificant unit still does)
-    let counted = !insignificant_building(w, victim);
-    if counted
+    let scored = !not_scored(w, victim);
+    // spec: S-0414 claim 21 (an insignificant building gives neither a kill nor a loss, whether or not it is also not scored; an insignificant unit still does)
+    let significant = !insignificant_building(w, victim);
+    let (scorer, by_house) = match credit {
+        Credit::Nobody => (None, false),
+        Credit::Object(a) => (w.obj(a).and_then(|a| a.owner), false),
+        Credit::House(h) => (Some(h), true),
+    };
+    // spec: S-0414 claim 21 (a loss to the victim's house, also with neither an attacking object nor an attacking house; a not-scored victim gives none, except by a hit whose kill S-0302 claim 14 credits to the attacking house)
+    if significant
+        && (scored || by_house)
         && let Some(vh) = v.owner
         && let Some(s) = stats_mut(w, vh)
     {
-        // spec: S-0414 claim 21 (the victim's house a loss, also without an attacking object)
         s.losses = s.losses.wrapping_add(1);
     }
-    // spec: S-0414 claims 21 and 22 (a destruction without an attacking object: no kill and no destruction score)
-    let Some(attacker_house) = object.and_then(|a| w.obj(a)).and_then(|a| a.owner) else {
+    // spec: S-0414 claims 21 and 22 (a destruction with neither an attacking object nor an attacking house: no kill and no destruction score)
+    let Some(scorer) = scorer else {
         return;
     };
     // spec: S-0414 claim 22 (the victim's rank: 1 rookie, 2 veteran, 3 elite)
@@ -111,19 +138,21 @@ pub fn destruction(w: &mut World, victim: ObjectId, object: Option<ObjectId>) {
         crate::combat::veterancy::Rank::Veteran => 2,
         crate::combat::veterancy::Rank::Elite => 3,
     };
-    // spec: S-0414 claim 22 (0 when the attacker's house allies the victim's house; else the victim type's current price for the victim's house times the rank multiplier)
-    let value = if w.allied(Some(attacker_house), v.owner) {
+    // spec: S-0414 claim 22 (0 when the scoring house allies the victim's house, as the scoring house sees its alliances; else the victim type's current price for the victim's house times the rank multiplier)
+    let value = if w.allied(Some(scorer), v.owner) {
         0
     } else {
         current_price(w, victim, v.owner).wrapping_mul(mult)
     };
-    if let Some(s) = stats_mut(w, attacker_house) {
-        if counted {
-            // spec: S-0414 claim 21 (kills: credited destructions of every victim house, allies and the same house included)
+    if let Some(s) = stats_mut(w, scorer) {
+        if scored && significant {
+            // spec: S-0414 claim 21 (kills: credited destructions of every victim house, allies and the same house included; to the attacking house for a hit S-0302 claim 14 credits to it; a not-scored victim and an insignificant building give none, whoever is credited)
             s.kills = s.kills.wrapping_add(1);
         }
-        // spec: S-0414 claim 22 (an insignificant building still gives destruction score)
-        s.score = s.score.wrapping_add(value);
+        if scored || by_house {
+            // spec: S-0414 claim 22 (the object-credit row excludes not-scored victims; the two attacking-house rows exclude nothing; an insignificant building still gives destruction score)
+            s.score = s.score.wrapping_add(value);
+        }
     }
 }
 
