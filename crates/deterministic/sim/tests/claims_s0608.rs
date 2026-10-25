@@ -1405,3 +1405,51 @@ fn claim_19_non_player_houses_and_parasite_drainers_are_refused() {
         Answer::Illegal
     );
 }
+
+// spec: S-0109 State and ordering (an animation that leaves play in its own detonation: nothing more happens to it in that update, no middle event, pass end, follow-up switch or end; our engine's rule) and S-0608 claims 13 and 14 (the drain animation's own damage kills the drainer: the link ends and the drain animation is removed in its own turn)
+#[test]
+fn the_drain_animation_leaves_play_in_its_own_detonation() {
+    let run = |next: Option<&str>| {
+        let mut r = rules();
+        register(&mut r, "warheads", "KILL");
+        r.sim.warheads.insert(
+            "KILL".into(),
+            WarheadType {
+                verses: Some(vec![dec("1"); 11]),
+                ..Default::default()
+            },
+        );
+        r.sim.general.flame_damage2 = Some("KILL".into());
+        let suck = r.sim.animations.get_mut("SUCK").unwrap();
+        suck.damage = Some(dec("5000"));
+        suck.end = Some(1);
+        suck.next = next.map(Into::into);
+        register(&mut r, "animations", "AFTER");
+        r.sim.animations.insert(
+            "AFTER".into(),
+            AnimationType {
+                frame_count: Some(8),
+                random_rate: Some([450, 150]),
+                ..Default::default()
+            },
+        );
+        let (mut w, d, b) = linked_in(game_of(&r), "REF");
+        let ids = glasnost_sim::anims::with_role(&w, glasnost_sim::anims::Role::Drain(d));
+        assert_eq!(ids.len(), 1, "the drain animation");
+        let id = ids[0];
+        assert!(
+            until(&mut w, 40, |w| !w.anims.anims.contains_key(&id)),
+            "the drain animation is removed"
+        );
+        assert!(!drain::draining(&w, d) && !drain::being_drained(&w, b));
+        let t = w.tick;
+        (w, t)
+    };
+    let (w, t) = run(Some("AFTER"));
+    let (reference, tr) = run(None);
+    assert_eq!(t, tr, "removed in the same tick");
+    assert_eq!(
+        w.rng, reference.rng,
+        "no follow-up switch and its delay draw"
+    );
+}

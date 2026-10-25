@@ -650,6 +650,26 @@ fn a4_counts(
         "A4: of those, imported with no dock types (an importer bug)",
         raw_dock_lost,
     );
+    // M8 A3 intake 22: the built-in invisibility-animation type of S-0109 Import mapping, by the
+    // simulation's own exact-name test, and whether its damage and C4Warhead reach play.
+    let sim = glasnost_sim::rules::SimRules::new(ruleset, "local-lane");
+    let named = sim.animations.iter().filter(|a| a.invisibility);
+    let (mut exact, mut damaging) = (0, 0);
+    for a in named {
+        exact += 1;
+        if a.damage.gt(glasnost_num::F64::ZERO) {
+            damaging += 1;
+        }
+    }
+    report.count(
+        "A3-22: animation types named exactly as the invisibility-animation type",
+        exact,
+    );
+    report.count("A3-22: of those, with damage above 0", damaging);
+    report.count(
+        "A3-22: C4Warhead names a warhead in play",
+        u64::from(sim.combat.general.c4_warhead.is_some()),
+    );
 }
 
 /// Counts what the art lookup (S-0007, temperate theater) found, per kind.

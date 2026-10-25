@@ -35,10 +35,10 @@ pub struct AnimWorld {
     /// The animations, by number in the update order.
     pub anims: BTreeMap<ObjectId, Anim>,
     /// The animation taking its turn, while its playback runs (it is out of
-    /// [`AnimWorld::anims`] then), and whether something removed it during
-    /// that turn. Never set between turns.
+    /// [`AnimWorld::anims`] then), its role, and whether something removed
+    /// it during that turn. Never set between turns.
     #[serde(skip)]
-    current: Option<(ObjectId, bool)>,
+    current: Option<(ObjectId, Role, bool)>,
 }
 
 /// What an animation is to the rest of the game, beyond its playback.
@@ -203,7 +203,7 @@ fn anim_index(w: &World, name: &[u8]) -> Option<u32> {
 pub fn remove(w: &mut World, id: ObjectId) {
     let present = w.anims.anims.remove(&id).is_some();
     let current = match &mut w.anims.current {
-        Some((c, gone)) if *c == id => {
+        Some((c, _, gone)) if *c == id => {
             *gone = true;
             true
         }
@@ -215,14 +215,41 @@ pub fn remove(w: &mut World, id: ObjectId) {
     }
 }
 
-/// The animations of role `role`, in update-order number order.
+/// The animations of role `role` in play, in update-order number order,
+/// the one taking its turn included (a drain link that its own damage ends
+/// removes it, S-0608 claim 14).
 pub fn with_role(w: &World, role: Role) -> Vec<ObjectId> {
-    w.anims
+    let mut ids: Vec<ObjectId> = w
+        .anims
         .anims
         .iter()
         .filter(|(_, a)| a.role == role)
         .map(|(&id, _)| id)
-        .collect()
+        .collect();
+    if let Some((id, r, false)) = w.anims.current
+        && r == role
+    {
+        ids.push(id);
+        ids.sort_unstable();
+    }
+    ids
+}
+
+/// The warhead of a delivery of S-0109 claim 17 by an animation of current
+/// type `a`: the demolition warhead for the built-in invisibility-animation
+/// type, the game-wide flame warhead for every other type; `None` when the
+/// chosen one is not given (the amount is still taken, no damage is done).
+pub fn damage_warhead(
+    rules: &crate::rules::SimRules,
+    a: &AnimRules,
+) -> Option<crate::combat::data::WarheadId> {
+    if a.invisibility {
+        // spec: S-0109 claim 17 and Import mapping (C4Warhead for the built-in invisibility-animation type, chosen on each delivery by the current type's name)
+        rules.combat.general.c4_warhead
+    } else {
+        // spec: S-0109 claim 17 and Import mapping (FlameDamage2 for every other type, and always when no type has exactly that name)
+        rules.combat.general.flame_damage2
+    }
 }
 
 /// Removes every first-pass tile animation (S-0010 claim 19: none that the
@@ -300,15 +327,15 @@ impl AnimEnv<'_> {
             self.w.note("S-0109 claim 17: an animation whose position is not carried (a resource glint) takes its damage from the accumulator but delivers none");
             return;
         };
-        // Interim rule of Q-1717: FlameDamage2 for every type, the invisibility-animation type's name not being given.
-        // spec: S-0109 claim 17 and Import mapping (the game-wide flame warhead; absent: the amount is taken, no damage)
+        // spec: S-0109 claim 17 and Import mapping (one of two game-wide warheads by the current type's name; absent: the amount is taken, no damage)
+        let warhead = damage_warhead(&rules, a);
         // spec: S-0109 claim 17 and S-0302 claim 1 (an area detonation with resource reduction allowed, no attacker and no attacking house)
         area::detonate(
             self.w,
             Detonation {
                 point,
                 damage: n,
-                warhead: rules.combat.general.flame_damage2,
+                warhead,
                 source: None,
                 house: None,
                 resources: true,
@@ -347,14 +374,21 @@ impl Env for AnimEnv<'_> {
         let Some(a) = self.anim.and_then(|i| rules.animations.get(i as usize)) else {
             return;
         };
-        // Interim rule of Q-1716: the damage of an advance comes before its middle event.
-        // spec: S-0109 claim 17 and State and ordering (damage due on the advance is delivered, the ending advance included)
+        // spec: S-0109 claim 17 and State and ordering (Q-1716: the damage due on the advance first, its whole detonation, draws and kills included, the ending advance and the advance before a follow-up switch too)
         self.damage(a);
-        // spec: S-0109 claim 14 (the middle event on every advance after which a + k = μ, μ ≠ 0; not for a bouncing type; also on an ending advance)
+        if self.left_play() {
+            // spec: S-0109 State and ordering (an animation that leaves play in its own detonation: nothing more of its update, no middle event, pass end, follow-up switch or end; our engine's rule)
+            return;
+        }
+        // spec: S-0109 claim 14 and State and ordering (then the middle event, on every advance after which a + k = μ, μ ≠ 0; not for a bouncing type; also on an ending advance, before the end or a follow-up switch)
         if !a.bouncing && a.mu.is_some_and(|m| m != 0 && p.start.wrapping_add(k) == m) {
             let at = self.pos.map(|q| (q.x, q.y, q.z));
             crate::load::middle_event(self.w, a, at);
         }
+    }
+
+    fn left_play(&self) -> bool {
+        matches!(self.w.anims.current, Some((_, _, true)))
     }
 
     fn switched(&mut self, _name: &[u8]) {
@@ -394,6 +428,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
             return;
         };
         // spec: S-0109 claim 22 (its position is the owner's plus its displacement at attachment, height included)
+        // spec: S-0109 Open questions (an owner its own detonation removes: the update goes on at the owner's last position; our engine's design)
         a.pos = Some(Pos::new(o.pos.x + d.x, o.pos.y + d.y, o.pos.z + d.z));
         if o.kind == Kind::Terrain {
             // spec: S-0109 claim 17 and F5 (c = 5 when attached to a terrain object)
@@ -428,7 +463,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // spec: S-0319 claim 12 (every animation whose type names a trailer, after its motion step and before its stage update, at its position in play, with S-0109 claim 29's trailer settings)
         crate::combat::effects::trailer(w, &name, p);
     }
-    w.anims.current = Some((id, false));
+    w.anims.current = Some((id, a.role, false));
     let t = w.tick;
     let mut env = AnimEnv {
         w: &mut *w,
@@ -440,9 +475,10 @@ pub fn turn(w: &mut World, id: ObjectId) {
     let playing = a.player.update(t, &mut env, &AnimQuirks::default());
     a.anim = env.anim;
     a.acc = env.acc;
-    let gone = w.anims.current.take().is_some_and(|(_, g)| g);
+    let gone = w.anims.current.take().is_some_and(|(_, _, g)| g);
     if gone {
-        // Removed by another rule during its own turn (a drain link ended by its damage, say).
+        // Removed by another rule during its own turn (a drain link ended by its damage, say): its
+        // playback stopped there (S-0109 State and ordering).
         ended(w, id, &a);
         return;
     }
