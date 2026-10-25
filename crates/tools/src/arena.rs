@@ -17,7 +17,12 @@
 //!   types; the middle cells of the two front rows are `start_distance`
 //!   cells apart on the x axis, centred on the map's middle cell, and
 //!   further rows stand one cell further back. Every unit faces the enemy
-//!   front cell.
+//!   front cell, as the nearest facing value (a 256th of a turn; the
+//!   direction is along the x axis, so exact). Units are put on the map
+//!   by S-0216's play-time placement (`objects::place_in_play`), as a
+//!   harness that adds units to a running game: an infantry unit stands at
+//!   the standing position its draw gives, and a refused placement is an
+//!   error of the scenario.
 //! - **Alternation**: a trial with an odd seed has group A as house 0, on
 //!   the lower-x side, created first (so first in the update order, S-0203
 //!   claim 3) and ordered first; a trial with an even seed is
@@ -475,11 +480,11 @@ pub fn setup_trial(rules: Arc<SimRules>, sc: &Scenario, seed: u32) -> Result<Are
                         sc.map_size
                     ));
                 }
-                let id = testkit::spawn(&mut w, kind, ty, h as u8, cell, facing);
+                // The nearest facing value (a tool rule; exact along the x axis).
+                let v = (u32::from(facing).wrapping_add(128) >> 8) as u8;
+                let id = testkit::spawn_in_play(&mut w, kind, ty, h as u8, cell, v, None)
+                    .ok_or_else(|| format!("{ty}: could not be placed"))?;
                 let o = w.obj(id).ok_or_else(|| format!("{ty}: not created"))?;
-                if !o.on_map {
-                    return Err(format!("{ty}: could not be placed"));
-                }
                 full[side] += i64::from(o.health);
                 units[side].push(id);
                 i += 1;

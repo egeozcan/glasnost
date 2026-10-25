@@ -40,7 +40,10 @@
 //!   to the even number, as the CSVs show), at least 1, infantry at most 60. Unit *i* of side A on
 //!   cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map east, side B on
 //!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west; infantry at
-//!   the cell's centre standing point. Side A's group is created first.
+//!   the cell's centre standing point, with no standing-position draw and
+//!   no entry test: A1's interim, not S-0216's play-time placement, while
+//!   Q-1711 question 5 (how the stock harness placed them) is open. The
+//!   facings are those of S-0216 claim 1. Side A's group is created first.
 //!   Every unit starts in the hunt behaviour, as a map object whose entry
 //!   names it (S-0009 claim 41); no order is given.
 //! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
@@ -722,6 +725,9 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
                     types[s], cell.x, cell.y
                 ));
             }
+            // Our design (Q-1711 question 5 open): A1's interim, the cell's centre, no draw and
+            // no entry test; S-0216 claims 2, 3 and 5 are not applied (claim 5 would refuse the
+            // infantry on the cliff cells). spec: S-0216 claim 1 (FACINGS are 256 × 64 and 256 × 192)
             let id =
                 glasnost_sim::testkit::spawn(&mut w, kind, types[s], houses[s].0, cell, FACINGS[s]);
             let tick = w.tick;
