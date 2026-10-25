@@ -165,6 +165,8 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `barrel_only_no_recoil` | S-0105 claim 37 | recoil placement is not applied; a barrel without a turret never recoils, as with the switch on |
 | `voxel_single_pixel` | S-0105 claim 22 | the on state is drawn; the off state (no gaps in magnified sections) is not implemented |
 | `voxel_no_intersection_depth` | S-0105 claim 23 | the on state is drawn; the off state (a depth test between sections) is not implemented |
+| `turret_table_fixed_type_only` | S-0105 claim 43 | the turret table is not read yet (S-0105 r35 is taken in at the next intake); no multi-turret vehicle draws a turret (the Q-1760 interim) |
+| `turret_pair_no_weapon_sets_charge_flag` | S-0105 claim 43, Import mapping | the turret table is not read yet (S-0105 r35 is taken in at the next intake), so no pair sets the charge-turret flag |
 | `no_turret_shadow` | S-0105 claim 29 | turrets and barrels cast no shadow, as with the switch on; the off state's shadow is not specified |
 | `tilter_flag_ignored` | S-0106 claim 10 | voxel bodies are not tilted on slopes |
 | `full_state_unmaxed` | S-0108 claim 2 | buildings are drawn in their idle state only |
