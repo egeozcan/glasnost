@@ -2462,7 +2462,7 @@ GLASNOST_GAME_DIR=DIR cargo run --release -p glasnost-tools --bin glasnost-headl
 cargo run --release -p glasnost-tools --bin glasnost-headless -- tick-bench synthetic 2000 probe=on
 ```
 
-Words: `map` (9), `seed` (7), `players` (8), `ticks` (9000), `probe` (off), `hash` (a state hash every N ticks, 500), `save` (save and load the game at this tick and go on from the loaded game), `worst` (worst ticks listed, 20), `out` (`local-lane/m8/c4-2`), `label` (`ticks`). Outputs: `<label>.txt` (mean, median, p95, p99, worst and ticks over 16.7 ms; the same by 1000 ticks with the object count and the update order's length; with the probe the share of each phase and part, the turns a tick by kind and the worst ticks' largest parts), `<label>.csv` (one row per tick) and `<label>-hashes.txt`.
+Words: `map` (9), `seed` (7), `players` (8), `ticks` (9000), `probe` (off), `hash` (a state hash every N ticks, 500), `save` (save and load the game at this tick and go on from the loaded game), `worst` (worst ticks listed, 20), `searches` (off; on lists every path computation, M8 C4 part 5), `out` (`local-lane/m8/c4-2`), `label` (`ticks`). Outputs: `<label>.txt` (mean, median, p95, p99, worst and ticks over 16.7 ms; the same by 1000 ticks with the object count and the update order's length; with the probe the share of each phase and part, the turns a tick by kind and the worst ticks' largest parts), `<label>.csv` (one row per tick) and `<label>-hashes.txt`.
 
 **Where the time went (this machine; map 9, seed 7, 8 AI houses, 11399 ticks: the frame benchmark's 9000 ticks before timing and one tick for each of its 2399 timed frames (the frame benchmark's own end hash differs from this game's, so the two do not play exactly the same ticks); main 8dcc429 with the probe).** Plain run: mean 45.9 ms a tick, median 3.0, p95 355, p99 763, worst 1068; 1524 of 11399 ticks over 16.7 ms. The first 4000 ticks average 4 to 6 ms; from tick 4000 the mean is 55 to 79 ms with spikes of 0.4 to 1.1 s. The spikes fall on two tick classes: the AI's think (tick ≡ 0 mod 15, the main parts' period) and Movement on ticks ≡ 4, 9 and 14 mod 15.
 
@@ -2632,6 +2632,68 @@ The tick is 22.9 to 26.6 ms a timed frame on average in both. Of the frames stil
 **What is left (Firefox profile of this branch's build, same spec; 15 455 client samples; ms scale the shares to the client's 9.3 ms mean).** The queue submit (wgpu's GL backend replaying commands into WebGL2) 19.3 %, about 1.8 ms; the map's instance list (`render_lit`, which walks about 38 700 items a frame, of which about 2 800 are drawn) 13.2 %, about 1.2 ms; the radar's composition (`compose_kept`: the per-pixel shroud and terrain work) 10.7 %, about 1.0 ms; the buildings' painting (`Builder::building_items`: art and rules values, protection masks and the deployed image looked up again for every building every frame) 7.3 %, about 0.7 ms; the light alpha (a 2 MB buffer made and filled each frame) 5.6 %, about 0.5 ms; the mobile objects' painting 4.8 %, about 0.45 ms. SHP parsing and the animation fields' reading are gone from the profile (under 0.1 %); finding a sprite file's kept headers by name (`Painter::shp_heads`) takes 2.2 %, about 0.2 ms; the radar's object update is 2.6 %, the covers 1.3 %, the intent lines 1.0 %.
 
 Seams: the GL backend's per-draw attribute setup (inside wgpu); a spatial index for the map's items; the radar's per-pixel composition; per-type caches for `building_items`' lookups; a cheaper key for the kept sprite headers; reusing the light-alpha buffer. A web-only release profile (`lto = "fat"`) was not tried.
+
+#### The Movement tick (M8 C4 part 5)
+
+The tick benchmark's `searches=on` (our own tooling) switches on the movement trace (`glasnost_sim::trace`, which the simulation never reads) and writes `<label>-searches.csv`: one row per path computation with its tick, unit, kind, owner, start, goal, the mode asked and run, whether the corridor was used, the expansions of each cell search, the result, and for a failed one whether the unit gave up and its retry tick. A run with it on ends with the same state hash as a run without. Lane outputs: `local-lane/m8/c4-5/` (cells and type indexes stay there).
+
+**Where the time went (this machine; the tick benchmark's game, map 9, seed 7, 8 AI houses, 11 399 ticks, probe on; main 0b935c1, after B7's think spread).** Mean 4.40 ms a tick, median 2.15, p95 13.4, p99 18.0, worst 68.0; 143 ticks over 16.7 ms. Movement is 12.3 % of the probed time but has 97 of those 143 ticks; the AI's thinks have 38, the houses' phase 5 (one of 58 ms at tick 7750), the regions' rebuild 2 (about 36 ms) and the crates' phase 1 (about 36 ms).
+
+| Over-budget Movement ticks (97) | ticks | Movement in each | what runs |
+|---|---|---|---|
+| ticks 4247 to 4939, at a regular interval | 49 | 35 to 44 ms | one vehicle of house 3: a failed computation of 5 corridor searches, about 5 350 expansions each (about 26 700 in all) |
+| ticks 6366 to 6716 at a regular interval, and 6789, 6796 | 38 | 25 to 66 ms, rising as more units join | two to five infantry units of house 0 (one type, standing within two cells of each other, the same goal): a failed computation each, of 3 corridor searches of about 5 930 expansions |
+| ticks 5087 to 5104 | 3 | 22 ms | another vehicle of house 3, failed, 3 searches |
+| the rest (6 ticks) | 6 | 12 to 23 ms | a single found computation of 12 000 to 24 000 expansions, or a group of found ones |
+
+- In the whole game 3 414 computations ran 4.55 M expansions. The 206 that failed (149 by infantry, 57 by vehicles; 134 in house 0) ran 3.62 M of them, 80 %. All used the corridor, and none of their cell searches ran without it; 189 of them ran 3 or 5 cell searches (5 is the limit of S-0212 claim 13). Every unit gave up (claim 23 row 2: its destination cleared, guard queued).
+- **Why they are asked again.** Each of these units is in guard with a target it cannot reach. Guard's processing (S-0215 claim 24) runs the approach step (claim 37), which gives the unit a destination towards its target again; the computation fails, the destination is cleared and the target stays (S-0212 claim 23). The repeats come at the guard processing's rate, not at the retry delay. This is the specified behaviour, so the searches stay.
+- **The same question, the same world?** 89 % of all expansions fall in (unit, start, goal, mode) keys asked more than once. But of the 188 failed computations asked again with the same key, 170 expanded a different number of pairs in some search than the previous ask (5 933 against 5 932, say): something in the searched area had changed between the two asks, so the world the search read was not the same, and no cache could have served the earlier answer. That leaves 18 that may have read the same world, and showing that they did would need every outcome input of every cell the search touched. A cache kept across ticks is therefore not built.
+- **The cost of one expansion.** A stack-sampling profile (our own, not committed: a scratch program timing these computations again and again on the same world, sampled with `eu-stack`) of the vehicle's computation: the entry outcome is 60 % of the time, and most of it (37 % of the whole) is `occupancy::primary_warhead_flag`, which clones the weapon's name, its warhead's name and the whole warhead record for every candidate cell, to read one flag of the mover's own weapon. Of the infantry's: the corridor's exemption test (`corridor::exempt`, S-0212 claim 13: eight neighbours' overlays and object lists) 35 %, asked for every candidate outside the corridor from each neighbour and in each of the 3 searches; the entry outcome 22 %; the pending heap about 10 %; the soft-float step cost about 10 %.
+
+**The fixes.** Each one does less work for the same answers; none changes which searches run, in what order, or what they return. Nothing is kept from one path computation to the next.
+
+- **The mover's weapon, read once** (`occupancy`, S-0209 claims 4 and 5). `primary_warhead_flag`, `primary_hits_ground` and `walker_armed` borrow the rules instead of cloning names and records, and `occupancy::Mover` keeps what the outcomes read of its primary weapon (`Primary`: has one, harms walls, harms wood, hits ground) from the first cell that asks; a mover is read once per cell search.
+- **The corridor test before the outcome** (`path::counted_search`, S-0212 claim 7). A candidate other than the destination that lies outside the corridor is passed over before its entry outcome is asked: a blocked outcome and an outside candidate both only skip it, and neither question changes anything. The destination's outcome is still asked first, because a blocked destination ends the search from a neighbour (claim 15).
+- **One computation, one world** (`path::corridor_search`, `path::SearchScratch`). The cell searches of one computation with the corridor (S-0212 claim 13: up to 5, with retries) all read the world the computation was asked on, which does not change while it runs; they share the start pair and the destination. So the search scratch keeps, for that computation only, each cell's exemption (`corridor::exempt`), each cell's estimate h, and the entry outcome of each step from a search pair in each direction. `corridor_search` starts a computation stamp before its searches and closes it after; a search outside a computation asks everything afresh. The scratch is not saved or hashed, starts empty on load, and a copy of the world starts with empty scratch (`impl Clone for SearchScratch`).
+
+How the answers were checked unchanged: the search listing (`searches=on`) of the benchmark game is byte-identical before and after (`cmp`), so every computation ran the same cell searches with the same number of expansions each and the same result and steps; the state hashes every 500 ticks are identical, also with a save and load at tick 6000; and the identity runs below. Tests: `claims_s0209::a_mover_read_once_answers_as_a_mover_read_afresh` asks a mover read once and one read afresh about walls, trees, enemy and allied units and an empty cell in every order, for walkers and vehicles whose weapons harm walls, wood or neither, or whose projectile does not hit ground. `claims_s0212::a_computation_keeps_nothing_for_the_next` moves a stone (a second car) round the map between computations, with and without a wall of enemy huts that makes the computation retry and an enemy hut on the destination (claim 15), alternates two destinations, and compares every answer with a copy of the world, whose scratch is empty; a computation stamp that does not move, an outcome slot that is not cleared for a new computation, or an estimate kept across destinations each make it fail.
+
+**The identity runs (main 0b935c1 against this branch; the base's binaries built from 0b935c1's simulation).** The oracle arena (`glasnost-headless arena --record all --threads 8 --out …`) writes byte-identical `ours-M-0001.csv` to `ours-M-0003.csv` on both (M-0001 31 of 96 pairings failing, 152 of 172 stock outcomes reproduced; M-0002 13 of 24, 43 of 47; M-0003 2 of 35, 61 of 64). The M6c, M7a and M7b seed sweeps 1 to 16 print the same output line for line (smallest minimum M6c 4, M7a 1, M7b 3, the drain orders). B4's 32-seed default margins sweep writes a byte-identical CSV. The goldens are unchanged and `cargo xtask gate` passes; the save and AI formats are unchanged. All of it was run again after rebasing on main 23d450b (whose own commits change no output of these runs): the search listing, the hashes with and without the save, the sweeps, the margins and the arena outputs are again identical on both sides, and the gate passes.
+
+**The search's own time (the scratch program again, the same computations on the same world, ms a round; main, then each fix in turn).**
+
+| Computations | main | weapon read once | + corridor test first, exemption kept | + outcomes kept | + estimates kept |
+|---|---|---|---|---|---|
+| the four infantry units of the large ticks (3 corridor searches each) | 49.6 | 50.5 | 30.7 | 26.7 | 24.5 |
+| the vehicle of the regular ticks (5 corridor searches) | 34.9 | 20.2 | 13.2 | 10.5 | 8.8 |
+| every unit with a goal at that tick (mostly found at once) | 2.97 | 2.71 | 2.57 | 2.56 | 2.82 (noise) |
+
+**Before and after (this machine; the tick benchmark's game as above; main 0b935c1's binary and this branch's on it, interleaved, pinned to the same four cores; load average 8.5 to 17.2, other sessions' runs on the machine).** The Movement phase's own time, which the load moves little, is the measure; the whole tick's figures move with the load.
+
+| Movement (probe on) | before | after |
+|---|---|---|
+| share of the probed time | 12.3 % (load 2.6 to 3.8), 12.5 % | 7.4 % |
+| mean a tick | 539 µs, 612 µs | 329 µs, 332 µs |
+| worst tick's Movement | 65.8 ms, 73.4 ms | 37.5 ms, 33.4 ms |
+| ticks whose Movement alone is over 16.7 ms | 95 | 21 |
+
+| Whole tick, probe off (three pairs, run in the order A B A B A B) | before | after |
+|---|---|---|
+| mean (ms) | 4.45 to 4.54 | 4.29 to 4.88 |
+| median | 2.10 to 2.17 | 2.15 to 2.75 |
+| p95 | 13.8 to 13.9 | 13.5 to 15.7 |
+| p99 | 18.6 to 19.0 | 16.9 to 24.0 |
+| worst | 71.8 to 82.8 | 60.9 to 82.6 |
+| ticks over 16.7 ms (of 11 399) | 171 to 181 | 134 to 412 |
+
+The third *after* run (412 ticks over, median 2.75) ran while the load rose from 8.5 to 12.3; a fourth pair, under a load of 8.9 to 17.2, gave 318 before and 354 after. Under the first two pairs' load (9.0 to 11.4) the after runs had 134 and 154 ticks over against 180 and 181. All runs end with the same state hash.
+
+The vehicle's regular ticks (4247 to 4939, 38 to 47 ms of Movement before) are no longer over budget, nor the other vehicle's (5087 to 5104), the infantry group's earlier ticks (6366 to 6506, 26 to 34 ms) or the six scattered ticks of 18 to 25 ms later in the game. All 21 left are the infantry group's ticks between 6516 and 6716, at 19.5 to 37.5 ms of Movement (42 to 73 ms before): four or five units' failed computations of 3 corridor searches each in one tick still cost more than a frame.
+
+**The native game benchmark** (`--game --bench default --offscreen`, three interleaved runs each; load 4.2 to 18.4). All frames, before: mean 7.83 to 7.86 ms, median 5.94 to 6.00, p95 18.2 to 18.6, p99 20.9 to 22.0, worst 47.0 to 47.2, 179 to 186 frames over 16.7 ms of 2399. After: mean 7.75 to 9.24, median 5.99 to 7.23, p95 18.3 to 20.2, p99 20.7 to 23.3, worst 47.9 to 54.2, 177 to 239. The third after run's load rose from 4.2 to 9.3; the first two match the before runs. The benchmark times frames from tick 9000, after the Movement spikes, so its frames were not expected to move. Its 9000 untimed ticks ran in 41.9 to 42.6 s before and 39.5 to 41.2 s after. Every view's picture is byte-identical before and after, and every run ends with the same state hash.
+
+Seams: the infantry group's ticks (soft-float step costs and the pending heap are now the larger parts of a search; spreading one tick's failed computations over several ticks would change behaviour and needs a spec); the AI's think ticks (the largest group of over-budget ticks after this step); the houses' phase (57 to 61 ms, five ticks a game), the regions' rebuilds (40 to 46 ms, twice) and the crates' phase (about 38 ms, once).
 
 ## Electric bolts (M8 step C5 part 1)
 

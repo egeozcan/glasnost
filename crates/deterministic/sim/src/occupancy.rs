@@ -111,20 +111,18 @@ fn walker_armed(w: &World, id: ObjectId) -> bool {
     let Some(u) = w.rules().unit(o.kind, o.type_index) else {
         return false;
     };
-    let weapons: Vec<&String> = [&u.primary, &u.secondary].into_iter().flatten().collect();
-    if weapons.is_empty() {
+    let (mut sum, mut n) = (0i64, 0i64);
+    for name in [&u.primary, &u.secondary].into_iter().flatten() {
+        let wt = w.rules().weapons.get(name);
+        sum += i64::from(wt.and_then(|x| x.damage).unwrap_or(0))
+            + i64::from(wt.and_then(|x| x.ambient_damage).unwrap_or(0));
+        n += 1;
+    }
+    if n == 0 {
         return false;
     }
-    let sum: i64 = weapons
-        .iter()
-        .map(|n| {
-            let wt = w.rules().weapons.get(*n);
-            i64::from(wt.and_then(|x| x.damage).unwrap_or(0))
-                + i64::from(wt.and_then(|x| x.ambient_damage).unwrap_or(0))
-        })
-        .sum();
     // spec: S-0209 Terms (mean damage = trunc(Σ (d + a) / n); armed when positive)
-    sum / weapons.len() as i64 > 0
+    sum / n > 0
 }
 
 /// Whether a unit has a primary weapon (S-0209 Terms).
@@ -147,19 +145,18 @@ fn primary_warhead_flag(w: &World, id: ObjectId, wall: bool) -> bool {
     let Some(p) = w
         .rules()
         .unit(o.kind, o.type_index)
-        .and_then(|u| u.primary.clone())
+        .and_then(|u| u.primary.as_ref())
     else {
         return false;
     };
-    let wh = w.rules().weapons.get(&p).and_then(|x| x.warhead.clone());
-    wh.and_then(|h| w.rules().warheads.get(&h).cloned())
-        .is_some_and(|h| {
-            if wall {
-                h.wall.unwrap_or(false)
-            } else {
-                h.wood.unwrap_or(false)
-            }
-        })
+    let wh = w.rules().weapons.get(p).and_then(|x| x.warhead.as_ref());
+    wh.and_then(|h| w.rules().warheads.get(h)).is_some_and(|h| {
+        if wall {
+            h.wall.unwrap_or(false)
+        } else {
+            h.wood.unwrap_or(false)
+        }
+    })
 }
 
 fn primary_hits_ground(w: &World, id: ObjectId) -> bool {
@@ -167,13 +164,13 @@ fn primary_hits_ground(w: &World, id: ObjectId) -> bool {
     let Some(p) = w
         .rules()
         .unit(o.kind, o.type_index)
-        .and_then(|u| u.primary.clone())
+        .and_then(|u| u.primary.as_ref())
     else {
         return false;
     };
-    let pj = w.rules().weapons.get(&p).and_then(|x| x.projectile.clone());
+    let pj = w.rules().weapons.get(p).and_then(|x| x.projectile.as_ref());
     // spec: S-0214 Import mapping (projectile AG absent: yes)
-    pj.and_then(|n| w.rules().projectiles.get(&n).cloned())
+    pj.and_then(|n| w.rules().projectiles.get(n))
         .is_none_or(|x| x.ag.unwrap_or(true))
 }
 
@@ -270,6 +267,31 @@ pub struct Mover<'a> {
     crusher: bool,
     /// For a walker: [`walker_armed`], [`mission_target`] and its master.
     walker: Option<(bool, Option<Target>, Option<ObjectId>)>,
+    /// What the outcomes read of its primary weapon, read when first
+    /// asked (a single outcome need not read it at all).
+    primary: std::cell::OnceCell<Primary>,
+}
+
+/// What the entry outcomes read of a mover's primary weapon (S-0209
+/// claims 4 and 5): [`has_primary`], [`primary_warhead_flag`] for walls and
+/// for wood, and [`primary_hits_ground`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Primary {
+    has: bool,
+    wall: bool,
+    wood: bool,
+    ground: bool,
+}
+
+impl Primary {
+    fn of(w: &World, id: ObjectId) -> Self {
+        Self {
+            has: has_primary(w, id),
+            wall: primary_warhead_flag(w, id, true),
+            wood: primary_warhead_flag(w, id, false),
+            ground: primary_hits_ground(w, id),
+        }
+    }
 }
 
 impl<'a> Mover<'a> {
@@ -288,7 +310,13 @@ impl<'a> Mover<'a> {
                     crate::econ::slaves::master_of(w, id),
                 )
             }),
+            primary: std::cell::OnceCell::new(),
         })
+    }
+
+    /// The mover's [`Primary`] in `w` (the world it was read from).
+    fn primary(&self, w: &World) -> Primary {
+        *self.primary.get_or_init(|| Primary::of(w, self.id))
     }
 }
 
@@ -331,17 +359,15 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
         && o.wall
     {
         // spec: S-0209 claim 4 (rows WO2 to WO4: walls by primary weapon and owner)
-        overlay_value = Some(
-            if !(has_primary(w, mover) && primary_warhead_flag(w, mover, true)) {
-                Outcome::Blocked
-            } else if wall_allied(w, mover, c) {
-                // spec: S-0209 claim 4 (row WO3: a wall owned by an allied house)
-                Outcome::FriendlyObstacle
-            } else {
-                // spec: S-0209 claim 4 (row WO4: a wall of another house, or without an owner)
-                Outcome::EnemyObstacle
-            },
-        );
+        overlay_value = Some(if !(mv.primary(w).has && mv.primary(w).wall) {
+            Outcome::Blocked
+        } else if wall_allied(w, mover, c) {
+            // spec: S-0209 claim 4 (row WO3: a wall owned by an allied house)
+            Outcome::FriendlyObstacle
+        } else {
+            // spec: S-0209 claim 4 (row WO4: a wall of another house, or without an owner)
+            Outcome::EnemyObstacle
+        });
     }
     let mut override_value: Option<(usize, Outcome)> = None;
     let mut excused = false;
@@ -576,9 +602,7 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
         } else if u.primary.is_none() {
             // spec: S-0209 claim 5 (row VO4)
             Some(Outcome::Blocked)
-        } else if primary_warhead_flag(w, mover, true)
-            || (o.wood && primary_warhead_flag(w, mover, false))
-        {
+        } else if mv.primary(w).wall || (o.wood && mv.primary(w).wood) {
             // spec: S-0209 claim 5 (row VO5: friendly obstacle for an allied owner, enemy obstacle for another)
             Some(if allied_wall {
                 Outcome::FriendlyObstacle
@@ -694,7 +718,7 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
             // spec: S-0209 claim 5 (rows VP26 and VP29: unarmed blocked; the weapon against wood decides)
             v = Some(if !armed {
                 Outcome::Blocked
-            } else if primary_warhead_flag(w, mover, false) {
+            } else if mv.primary(w).wood {
                 Outcome::EnemyObstacle
             } else {
                 Outcome::Blocked
@@ -827,7 +851,7 @@ pub fn vehicle_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32) 
         return Outcome::Blocked;
     }
     // spec: S-0209 claim 5 (row VR10)
-    if primary_hits_ground(w, mover) {
+    if mv.primary(w).ground {
         Outcome::EnemyObstacle
     } else {
         Outcome::Blocked
