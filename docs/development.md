@@ -2749,8 +2749,9 @@ S-0317 revision 34 (answers Q-1702). Ledger [docs/m8-claims/c5-S-0317.md](m8-cla
   - S-0007 claim 30's shared part (a share flag draws nothing and warns), and with it
     `quirks.voxel_anim_share_afresh`.
   - The warhead's light flash at a piece's end, which is drawing only.
-- **Sprite debris.** The sprite path (bouncing animations, Q-1762) is unchanged. Play notes 6, 10
-  and 12: see [m8-claims/a4-play-notes.md](m8-claims/a4-play-notes.md).
+- **Sprite debris.** The sprite path (bouncing animations) was unchanged here. It is built at M8
+  step A3 intake 15 part 1 (S-0319 r9, Q-1762 answered in part; section *Bouncing animations*
+  below). Play notes 6, 10, 12 and 13: see [m8-claims/a4-play-notes.md](m8-claims/a4-play-notes.md).
 
 ## Music (M8 step C1 part 1)
 
@@ -2951,6 +2952,16 @@ S-0501 r52 claims 24, 40, 47 and 48 (Q-1841). The ledger, [m8-claims/intake17-S-
 - Goldens duel, duel-diagonal, duel-naval, duel-m6c and skirmish regenerated (causes in the ledger). The arena CSVs are byte-identical, and so are the M7a and M7b sweeps.
 - Q-1875 (the released aircraft's object-present mark) is open; interim in `released_docked` and `tick_flight`.
 - New hashed state (`released`, `ground_filed`): save format 77, AI game format 39.
+
+### Bouncing animations (M8 step A3 intake 15 part 1)
+
+S-0319 r9 (Q-1762 answered in part). The ledger, [m8-claims/intake15a-S-0319.md](m8-claims/intake15a-S-0319.md), holds the notes.
+- A sprite animation whose type is a bouncing type at its creation carries a flight (`glasnost_sim::bounce`, `Anim::flight`). Its creation takes the three raw values of S-0202 claim 10's row and places it (F1, F2). Each turn takes the motion step first; a stopping or impact landing ends it in the same turn with its effects (claims 6 to 10). This fills A5's "bouncing motion" seam: sprite debris now ends (play notes 6, 10, 12 and 13).
+- Any animation type that names a trailer makes it on ticks divisible by its separation (claim 12), bouncing or not; 0 or absent acts as 1 and the importer warns. A zero span takes the remainder 0 and the importer warns (claim 14); the importer checks the vertical span under both settings of `quirks.anim_fixed_upper_vertical_speed`, which it cannot see.
+- All six S-0319 switches are consulted. `pieces::land_impact`'s hits are shared as `pieces::ground_hits`, unchanged.
+- **Interim rules.** **Q-1846:** every ground-layer building counts for the building band and no overlay does; the cliff turn and the flat rebound on slopes are Q-1834's; off the map is Q-1836's (ground 0, level 0, not water, no bridge, never removed). **Q-1847:** a new resource cell enters neither of S-0401's lists; a place past the overlay list places nothing, takes both draws, and bars the cell for the rest of the landing.
+- **Seams.** The start sound does not follow the flight (claim 5, presentation only). The warhead's light flash at the end is not drawn.
+- Save format 78, AI game format 40.
 
 ### Pathing reports (M8 A4)
 
