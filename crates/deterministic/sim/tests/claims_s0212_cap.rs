@@ -181,3 +181,137 @@ fn corridor_retry_no_fallback_off_does_not_lift_the_cap() {
     assert_eq!(off.searches, on.searches);
     assert_eq!(off.cleared, Some(1));
 }
+
+// The shape of the lead's pathing report 2 (M8 step A4), our own layout: a
+// vehicle stands on the cell east of a 3 × 3 block of buildings (a
+// refinery's docking cell), two more blocks lie west of it, and it is sent
+// to a cell far west of all three. Every corridor runs into the blocks
+// (claim 1), the 5th cell search inside a corridor fails, and the vehicle
+// gives up although a way round exists. From a start south of the blocks
+// the first corridor search finds the way. Q-1771 asks whether the
+// original's unit walks round.
+
+/// The cells of report 2's shape, on a map of size 64 shifted so that the
+/// blocks sit against the sector grid (claim 13b) as in the report: the
+/// 3 × 3 block at (52..=54, 98..=100), a 4 × 3 block at (50..=53, 94..=96)
+/// and a 4 × 4 block at (46..=49, 96..=99).
+fn dock_blocks() -> Vec<(i32, i32)> {
+    let mut b = Vec::new();
+    for (x0, x1, y0, y1) in [(52, 54, 98, 100), (50, 53, 94, 96), (46, 49, 96, 99)] {
+        for x in x0..=x1 {
+            for y in y0..=y1 {
+                b.push((x, y));
+            }
+        }
+    }
+    b
+}
+
+const DOCK: (i32, i32) = (55, 99);
+const SOUTH: (i32, i32) = (56, 102);
+const WEST: (i32, i32) = (36, 95);
+
+fn dock_cell((x, y): (i32, i32)) -> glasnost_map::CellXY {
+    glasnost_map::CellXY::new(x + 16, y - 32)
+}
+
+/// Report 2's shape with a vehicle of house 0 at `from`, the trace on and
+/// orders accepted.
+fn dock_layout(from: (i32, i32)) -> (World, glasnost_sim::world::ObjectId) {
+    let mut w = testkit::game_with(&rules(true), 64, 7);
+    testkit::run(&mut w, 2);
+    for b in dock_blocks() {
+        testkit::spawn(&mut w, Kind::Building, "BLOCK", 0, dock_cell(b), 0);
+    }
+    testkit::run(&mut w, 2);
+    let id = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 0, dock_cell(from), 0);
+    testkit::run(&mut w, 1);
+    while w.tick <= w.orders_blocked_through {
+        testkit::run(&mut w, 1);
+    }
+    trace::switch_on(&mut w);
+    (w, id)
+}
+
+fn dock_move(from: (i32, i32)) -> Outcome {
+    let (mut w, id) = dock_layout(from);
+    orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: id,
+            behaviour: Behaviour::Move,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(dock_cell(WEST))),
+        },
+    );
+    let mut cleared = None;
+    for t in 0..3 {
+        tick::step(&mut w);
+        if w.obj(id).unwrap().dest.is_none() {
+            cleared = Some(t);
+            break;
+        }
+    }
+    let (searches, result) = trace::take(&w)
+        .into_iter()
+        .find_map(|e| match e.what {
+            What::Search {
+                searches, result, ..
+            } if e.unit == id => Some((searches, Some(result))),
+            _ => None,
+        })
+        .unwrap_or_default();
+    let o = w.obj(id).unwrap();
+    Outcome {
+        cleared,
+        cell: o.pos.cell(),
+        behaviour: o.beh.current,
+        searches,
+        result,
+    }
+}
+
+// spec: S-0212 claim 13 (the 5th failed cell search inside a corridor fails the computation) and claim 23 row 2 (the unit gives up: its destination is cleared and, with a human-controlled owner, it queues guard); claim 1 (the coarse search sees through buildings)
+#[test]
+fn claim_13_cap_for_a_vehicle_on_a_docking_cell() {
+    let x = dock_move(DOCK);
+    assert_eq!(x.result, Some(Search::SearchFailed));
+    assert_eq!(x.searches.len(), 5, "five cell searches: {:?}", x.searches);
+    assert!(
+        x.searches.iter().all(|s| s.corridor && s.found.is_none()),
+        "all inside a corridor, none found: {:?}",
+        x.searches
+    );
+    assert_eq!(x.cleared, Some(1), "the destination is cleared at once");
+    assert_eq!(x.cell, dock_cell(DOCK), "the vehicle does not move");
+    assert_eq!(x.behaviour, Some(Behaviour::Guard));
+}
+
+// spec: S-0212 claim 13 (a cell search without a corridor is confined by nothing but the search limits) and claim 1 (buildings leave cells open): the way round exists from the docking cell
+#[test]
+fn claim_13_the_way_west_exists_from_the_docking_cell() {
+    let (w, id) = dock_layout(DOCK);
+    let found = S0212.find(
+        &w,
+        &Request {
+            unit: id,
+            from: dock_cell(DOCK),
+            to: dock_cell(WEST),
+            mode: Mode::Fresh,
+            congested: Default::default(),
+        },
+    );
+    assert!(found.is_some(), "a path round the blocks exists");
+}
+
+// spec: S-0212 claim 13 (the first cell search inside the corridor finds the path): from south of the blocks the vehicle goes
+#[test]
+fn claim_13_from_south_of_the_blocks_the_first_search_finds_the_way() {
+    let x = dock_move(SOUTH);
+    assert_eq!(x.result, Some(Search::Found));
+    assert_eq!(x.searches.len(), 1, "one cell search: {:?}", x.searches);
+    assert!(x.searches[0].corridor && x.searches[0].found.is_some());
+    assert_eq!(x.cleared, None, "the destination stays");
+}

@@ -132,6 +132,10 @@ struct Noted {
     event: Event,
     /// The blockers of a step check, described then.
     blockers: Vec<String>,
+    /// For a moving-blocker outcome with nothing listed in the cell: the
+    /// vehicles that held the cell's vehicle-present flag at the end of the
+    /// tick, described then.
+    flag: Vec<String>,
 }
 
 /// What a replay found.
@@ -636,7 +640,16 @@ pub fn analyse(b: &Bundle, inputs: &Inputs, o: &Options) -> Result<Analysis, Ref
                     e.0 += 1;
                     e.2 = n.event.tick;
                 }
-                if n.blockers.is_empty() {
+                for holder in &n.flag {
+                    let e = by
+                        .entry(format!(
+                            "nothing listed in the cell; its vehicle-present flag held by {holder}"
+                        ))
+                        .or_insert((0, n.event.tick, n.event.tick, outcome_text(outcome)));
+                    e.0 += 1;
+                    e.2 = n.event.tick;
+                }
+                if n.blockers.is_empty() && n.flag.is_empty() {
                     let e = by.entry("nothing listed in the cell".into()).or_insert((
                         0,
                         n.event.tick,
@@ -890,34 +903,89 @@ fn same_step(a: &What, b: &What) -> bool {
     }
 }
 
+/// The vehicles other than `mover` whose vehicle-present flag (S-0209
+/// claim 1, driving vehicles) is set on cell `c`: a driving vehicle's
+/// claimed cells (both cells of a two-cell curve) and a hovering vehicle's.
+fn flag_holders(w: &World, c: CellXY, mover: ObjectId) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.id != mover)
+        .filter(|o| {
+            o.drive.as_ref().is_some_and(|d| d.claims.contains(&c))
+                || o.hover
+                    .as_ref()
+                    .is_some_and(|h| h.claims.iter().any(|&(x, _)| x == c))
+        })
+        .map(|o| o.id)
+        .collect()
+}
+
+/// An object, where it stands, and whether it is on the move.
+fn placed(w: &World, namer: &Namer, b: ObjectId) -> String {
+    let mut s = namer.id(w, b);
+    if let Some(o) = w.obj(b) {
+        let _ = write!(
+            s,
+            " at {}, {}",
+            cell_text(o.pos.cell()),
+            if o.dest.is_some() || !o.path.steps.is_empty() {
+                "moving"
+            } else {
+                "standing"
+            }
+        );
+    }
+    s
+}
+
 /// Takes the trace's new events, describing their blockers from the world
 /// as it is now.
 fn note_events(w: &World, namer: &Namer, out: &mut Vec<Noted>) {
     for e in trace::take(w) {
-        let blockers = match &e.what {
-            What::Step { blockers, .. } => blockers
-                .iter()
-                .filter(|&&b| b != e.unit)
-                .map(|&b| {
-                    let mut s = namer.id(w, b);
-                    if let Some(o) = w.obj(b) {
-                        let _ = write!(
-                            s,
-                            " at {}, {}",
-                            cell_text(o.pos.cell()),
-                            if o.dest.is_some() || !o.path.steps.is_empty() {
-                                "moving"
-                            } else {
-                                "standing"
-                            }
-                        );
-                    }
-                    s
-                })
-                .collect(),
-            _ => Vec::new(),
+        let (blockers, flag) = match &e.what {
+            What::Step {
+                blockers,
+                to,
+                outcome,
+                ..
+            } => {
+                let listed: Vec<String> = blockers
+                    .iter()
+                    .filter(|&&b| b != e.unit)
+                    .map(|&b| placed(w, namer, b))
+                    .collect();
+                // A moving blocker with nothing listed comes from the
+                // cell's vehicle-present flag (S-0209 claim 5 row VR5):
+                // name the vehicles that hold it.
+                let flag = if listed.is_empty() && *outcome == Outcome::MovingBlocker {
+                    flag_holders(w, *to, e.unit)
+                        .into_iter()
+                        .map(|b| placed(w, namer, b))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                (listed, flag)
+            }
+            _ => (Vec::new(), Vec::new()),
         };
-        out.push(Noted { event: e, blockers });
+        out.push(Noted {
+            event: e,
+            blockers,
+            flag,
+        });
+    }
+}
+
+/// What the report says was in a refused step's cell.
+fn in_the_cell(n: &Noted) -> String {
+    match (n.blockers.is_empty(), n.flag.is_empty()) {
+        (false, _) => n.blockers.join("; "),
+        (true, true) => "nothing listed".into(),
+        (true, false) => format!(
+            "nothing listed; its vehicle-present flag held by {}",
+            n.flag.join("; ")
+        ),
     }
 }
 
@@ -999,6 +1067,18 @@ fn event_text(n: &Noted, _samples: &[Sample]) -> String {
                     }
                 }
             }
+            // spec: S-0212 claim 13 (the 5th failed cell search inside a corridor fails the path computation)
+            if *result == Search::SearchFailed
+                && searches.len() == 5
+                && searches
+                    .last()
+                    .is_some_and(|c| c.corridor && c.found.is_none())
+            {
+                let _ = write!(
+                    s,
+                    "; the 5th cell search inside a corridor failed, which ends the computation (the cap of 5)"
+                );
+            }
             if !congested.is_empty() {
                 let shown: Vec<String> = congested.iter().take(8).map(|c| cell_text(*c)).collect();
                 let _ = write!(
@@ -1048,11 +1128,7 @@ fn event_text(n: &Noted, _samples: &[Sample]) -> String {
             cell_text(*to),
             outcome_text(*outcome),
             if *repeated { " (a repeated check)" } else { "" },
-            if n.blockers.is_empty() {
-                "nothing listed".into()
-            } else {
-                n.blockers.join("; ")
-            }
+            in_the_cell(n)
         ),
         What::Blocked {
             since,
@@ -1513,6 +1589,7 @@ mod tests {
                 },
             },
             blockers: Vec::new(),
+            flag: Vec::new(),
         }
     }
 
@@ -1533,6 +1610,101 @@ mod tests {
         );
         assert!(
             t.contains("to (4,6) (the destination (5,6) was substituted)"),
+            "{t}"
+        );
+    }
+
+    // Pathing report 2: a computation that ends at the cap says so.
+    #[test]
+    fn a_computation_ended_by_the_cap_says_so() {
+        let failed = trace::CellSearch {
+            corridor: true,
+            expansions: 40,
+            recorded: 40,
+            found: None,
+            cost_bits: None,
+        };
+        let mut n = search_event(CellXY::new(5, 6), None, Search::SearchFailed);
+        let What::Search { searches, .. } = &mut n.event.what else {
+            unreachable!()
+        };
+        *searches = vec![failed.clone(); 5];
+        let t = event_text(&n, &[]);
+        assert!(t.contains("the cap of 5"), "{t}");
+        let What::Search { searches, .. } = &mut n.event.what else {
+            unreachable!()
+        };
+        searches.pop();
+        let t = event_text(&n, &[]);
+        assert!(!t.contains("the cap"), "{t}");
+    }
+
+    // Pathing report 2: a moving blocker with nothing listed in the cell
+    // names the vehicle whose vehicle-present flag is on the cell (the A4
+    // capture's seam "a refused step whose cell lists no object names no
+    // blocker").
+    #[test]
+    fn the_holder_of_a_vehicle_present_flag_is_named() {
+        use glasnost_sim::testkit;
+        let size = 20;
+        let mut w = testkit::game_with(&testkit::ruleset(), size, 7);
+        testkit::run(&mut w, 2);
+        let a = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "BUGGY",
+            0,
+            testkit::mid(size, 0, 0),
+            0,
+        );
+        let b = testkit::spawn(
+            &mut w,
+            Kind::Vehicle,
+            "BUGGY",
+            0,
+            testkit::mid(size, 4, 0),
+            0,
+        );
+        let ahead = testkit::mid(size, 1, 0);
+        w.obj_mut(a)
+            .unwrap()
+            .drive
+            .as_mut()
+            .expect("a driving vehicle")
+            .claims
+            .push(ahead);
+        assert_eq!(flag_holders(&w, ahead, b), vec![a]);
+        assert!(
+            flag_holders(&w, ahead, a).is_empty(),
+            "the mover is left out"
+        );
+        assert!(flag_holders(&w, testkit::mid(size, 2, 0), b).is_empty());
+        let namer = Namer { names: None };
+        let n = Noted {
+            event: Event {
+                tick: 1,
+                unit: b,
+                what: What::Step {
+                    mover: trace::Mover::Drive,
+                    from: testkit::mid(size, 2, 0),
+                    to: ahead,
+                    outcome: Outcome::MovingBlocker,
+                    repeated: false,
+                    blockers: Vec::new(),
+                },
+            },
+            blockers: Vec::new(),
+            flag: flag_holders(&w, ahead, b)
+                .into_iter()
+                .map(|x| placed(&w, &namer, x))
+                .collect(),
+        };
+        let t = event_text(&n, &[]);
+        assert!(
+            t.contains(&format!(
+                "in the cell: nothing listed; its vehicle-present flag held by #{} (vehicle",
+                a.0
+            )),
             "{t}"
         );
     }
