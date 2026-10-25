@@ -615,12 +615,39 @@ fn cancels_an_expansion_yard_vehicle_while_broke() {
 #[test]
 #[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
 fn reads_income_off_the_credits_and_the_lines() {
+    income_over_a_window(H);
+}
+
+// PLAN §4.7 (M8 step B7): a house whose brain thinks off the window's ticks (its phase, `scripted::think_phase`) reads its income at its first think after each window's end, the same sum.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn a_house_thinking_off_the_window_ticks_reads_its_income_too() {
+    let beta = HouseId(1);
+    assert_ne!(glasnost_ai::scripted::think_phase(beta), 0);
+    income_over_a_window(beta);
+}
+
+/// Plays `h`'s brain over one income window from its first think at or
+/// after a window's end, counting the income tick by tick as
+/// `GLASNOST_AI_ECON` does, and compares the brain's reading with it.
+fn income_over_a_window(h: HouseId) {
     let map = fixture::map();
     let mut w = settled(&map, 5000);
-    let soldier = first(&w, Role::Army, Kind::Infantry);
+    let hi = usize::from(h.0);
+    let soldier = all_types(&w)
+        .into_iter()
+        .find(|&t| {
+            t.kind == Kind::Infantry
+                && role_of(&w, t) == Some(Role::Army)
+                && tech::buildable(&w, h, t)
+        })
+        .expect("an infantry army type the house can build");
     let window = glasnost_ai::scripted::INCOME_WINDOW;
-    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let mut brain = Brain::with_plan(&w, &map, h, plan(2));
     while w.tick % window != 0 {
+        testkit::run(&mut w, 1);
+    }
+    while !brain.thinks_at(w.tick) {
         testkit::run(&mut w, 1);
     }
     brain.think(&w);
@@ -630,17 +657,17 @@ fn reads_income_off_the_credits_and_the_lines() {
             .lines
             .lines
             .iter()
-            .filter(|l| l.house == H)
+            .filter(|l| l.house == h)
             .filter_map(|l| l.item.as_ref())
             .map(|i| (i.object, (i.owed, i.start_price)))
             .collect()
     };
     let mut earned = 0i64;
     let mut last = owed(&w);
-    let mut credits = w.houses[0].credits;
+    let mut credits = w.houses[hi].credits;
     for _ in 0..window {
         if w.tick % 300 == 0 {
-            assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+            assert!(orders::issue(&mut w, h, Order::Build { what: soldier }));
         }
         testkit::run(&mut w, 1);
         let now = owed(&w);
@@ -653,10 +680,10 @@ fn reads_income_off_the_credits_and_the_lines() {
                 paid += i64::from(o);
             }
         }
-        earned += (i64::from(w.houses[0].credits - credits) + paid).max(0);
-        credits = w.houses[0].credits;
+        earned += (i64::from(w.houses[hi].credits - credits) + paid).max(0);
+        credits = w.houses[hi].credits;
         last = now;
-        if w.tick % glasnost_ai::scripted::THINK_PERIOD == 0 {
+        if brain.thinks_at(w.tick) {
             brain.think(&w);
         }
     }

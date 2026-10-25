@@ -5,7 +5,8 @@
 //! It plays in two layers:
 //!
 //! - **the plan** ([`Script`], the M5a scripted builder and attack waves),
-//!   every [`THINK_PERIOD`] ticks: build-up, harvesters, army, waves; it
+//!   every [`THINK_PERIOD`](scripted::THINK_PERIOD) ticks at its house's
+//!   phase ([`scripted::think_phase`]): build-up, harvesters, army, waves; it
 //!   rebuilds what the house lost of its power, refineries, factories and
 //!   harvesters, because it asks for them whenever the house has none (or
 //!   fewer harvesters than the plan keeps);
@@ -13,7 +14,7 @@
 //!   building at once, defend the base against seen enemies near its
 //!   buildings, and rebuild a lost construction yard (build a unit that
 //!   deploys into one, then deploy it);
-//! - **the ferry** (S-0507), every [`THINK_PERIOD`] ticks: one unarmed
+//! - **the ferry** (S-0507), with the plan: one unarmed
 //!   hovering transport carries idle infantry from home to land near the
 //!   next wave's goal, across water when they cannot walk there, loading
 //!   and unloading with the clicks a person gives;
@@ -64,8 +65,8 @@ use glasnost_sim::world::{HouseId, Layer, ObjectId, Target, World};
 use serde::{Deserialize, Serialize};
 
 use crate::scripted::{
-    self, CLIMB_DEPTH, Plan, Role, SPIRAL_RINGS, Script, THINK_PERIOD, all_types, can_attack,
-    deploys_into_yard, dist2, idle, is_yard,
+    self, CLIMB_DEPTH, Plan, Role, SPIRAL_RINGS, Script, all_types, can_attack, deploys_into_yard,
+    dist2, idle, is_yard,
 };
 use crate::skirmish::start_cells;
 
@@ -272,6 +273,14 @@ impl Brain {
         s
     }
 
+    /// Whether the brain's plan and the parts that go with it think in tick
+    /// `tick`: every [`THINK_PERIOD`](scripted::THINK_PERIOD) ticks, at the
+    /// house's phase ([`scripted::think_phase`]). The reactions run in every
+    /// tick.
+    pub fn thinks_at(&self, tick: i32) -> bool {
+        scripted::thinks_at(self.house(), tick)
+    }
+
     /// Thinks at the start of the world's current tick; returns the orders
     /// to issue, in the order to issue them (a later order to the same unit
     /// replaces an earlier one, so the reactions come last).
@@ -292,14 +301,15 @@ impl Brain {
         // The world does not change during the think: placement answers are kept for it.
         self.script.begin_think();
         mark(p, "ai:script");
-        let mut out = if w.tick % THINK_PERIOD == 0 {
+        let thinks = self.thinks_at(w.tick);
+        let mut out = if thinks {
             self.script.think(w)
         } else {
             let mut v = Vec::new();
             self.place_done(w, &mut v);
             v
         };
-        if w.tick % THINK_PERIOD == 0 {
+        if thinks {
             mark(p, "ai:economy_first");
             let paying = self.economy_first(w, &mut out);
             mark(p, "ai:drop_expansion");
@@ -331,7 +341,7 @@ impl Brain {
                 self.expand(w, &mut out);
             }
         }
-        if w.tick % THINK_PERIOD == 0 {
+        if thinks {
             mark(p, "ai:special");
             self.special.think(&self.script, w, &mut out);
             mark(p, "ai:plant_first");

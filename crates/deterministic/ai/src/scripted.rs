@@ -99,6 +99,30 @@ const ARMY_KINDS: [Kind; 3] = [Kind::Vehicle, Kind::Infantry, Kind::Aircraft]; /
 /// Ticks between two thinks.
 pub const THINK_PERIOD: i32 = 15; // nocite: tuning of our own opponent
 
+/// The tick within each [`THINK_PERIOD`] at which a house's brain thinks,
+/// by house number (houses beyond the table share its phases in turn).
+/// The brains of a game think in different ticks, so that no tick runs more
+/// than one think in a game of up to eight AI houses (M8 step B7: with every
+/// brain in the same tick, each think tick of an eight-house game took a
+/// median 57 ms, against a 16.7 ms frame). House 0 thinks where every house
+/// thought before. The phases leave out 4, 9 and 14, the ticks of the
+/// period on which the vehicle movement's cost peaked in the same game (M8
+/// C4 part 2), and spread a duel's two houses half a period apart. A phase
+/// is a function of the house number alone, so it is the same on every
+/// peer, needs no saving, and stays put when a house leaves the game.
+const THINK_PHASES: [i32; 8] = [0, 7, 11, 3, 13, 5, 10, 2]; // nocite: our own AI's schedule (M8 step B7)
+
+/// The phase of `house`'s thinks: it thinks in the ticks `t` with
+/// `t ≡ phase (mod THINK_PERIOD)`.
+pub fn think_phase(house: HouseId) -> i32 {
+    THINK_PHASES[usize::from(house.0) % THINK_PHASES.len()]
+}
+
+/// Whether `house`'s brain thinks in tick `tick` ([`think_phase`]).
+pub fn thinks_at(house: HouseId, tick: i32) -> bool {
+    (tick - think_phase(house)).rem_euclid(THINK_PERIOD) == 0
+}
+
 /// Cells within which an idle army unit attacks a seen enemy.
 const ENGAGE: i64 = 10; // nocite: tuning of our own opponent
 
@@ -939,7 +963,8 @@ impl Script {
         let gained = i64::from(credits) - i64::from(self.watch.credits) + paid;
         self.watch.earned += gained.max(0);
         self.watch.owed = now;
-        if w.tick % INCOME_WINDOW == 0 {
+        // A window ends at each multiple of INCOME_WINDOW; the watch reads it at the first think at or after it (thinks come every THINK_PERIOD ticks, at the house's phase).
+        if (w.tick - THINK_PERIOD).div_euclid(INCOME_WINDOW) != w.tick.div_euclid(INCOME_WINDOW) {
             if let Some(mark) = self.watch.mark {
                 self.watch.income = Some(self.watch.earned - mark);
             }
