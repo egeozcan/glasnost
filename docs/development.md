@@ -2172,6 +2172,75 @@ Soviet, map 0 is the one game aircraft tracking changed (main 2dc52af ends it at
 
 **Load-sensitive tests.** On 2dc52af the whole `cargo test --workspace` passed, `two_clients_meet_chat_and_play_in_lockstep` (glasnost-app) and `three_persons_and_a_computer_play_over_the_relay_and_survive_a_drop` (glasnost-relay) among them. On 7118390 the first failed under load and passed alone.
 
+## Own AI (M8 step B7: the dominator's grant and the think tick)
+
+Follow-up of B6 (above): the think tick of an eight-house game, and the three mechanisms B6 found behind the dominator's delay, in our own AI only (`glasnost_ai::brain`, `scripted`, `deployers`, `special`). Lane outputs are git-ignored under `local-lane/m8/b7/` (counts and ticks only). The lanes and binaries are B6's: the quick lane is seeds 7 to 14, maps 8, 2 and 0, Yuri (house 1) against Allied and against Soviet (48 games); the full games are the six of seed 7; *round 3* is the final tree with B1's, B2's and B5's brain changes reversed and *nosave* the final tree with both hold branches of `Brain::economy_first` forced off, each rebuilt on the tree it is compared with. Measured on main bfa4575.
+
+### The think tick
+
+Every brain thought in the ticks that are multiples of `THINK_PERIOD` (15). C4 part 2's benchmark (`glasnost-headless tick-bench`, map 9, seed 7, eight houses, 11 399 ticks; three interleaved runs of each binary) on main: all 760 of those ticks over a 16.7 ms frame, median 53.7 / 53.0 / 56.3 ms, 1 358 / 1 345 / 1 376 ticks over the frame in all, mean 9.02 / 8.93 / 9.61 ms, worst 90.6 / 92.8 / 117.3 ms.
+
+Now each house's brain plans in the ticks `t ≡ phase (mod THINK_PERIOD)`, `scripted::think_phase`: phases 0, 7, 11, 3, 13, 5, 10, 2 by house number (nocite: our own AI's schedule). House 0 keeps phase 0; the table leaves out 4, 9 and 14, where C4 part 2 found the vehicle movement's cost peaking, and puts a duel's two houses half a period apart. A phase is a function of the house number alone: it needs no saving, is the same on every peer and stays put when a house leaves. The reactions still run in every tick. `Script::watch_income` reads an income window at the first think at or after its end, whatever the phase. With the spread: 139 / 212 / 217 of the phase-0 ticks over the frame, median about 15 ms; phases 3 and 7 a mean of about 11 to 12 ms; 951 / 1 047 / 1 119 ticks over the frame in all; mean 8.63 / 8.95 / 9.24 ms. The worst tick, 123.1 / 129.1 / 138.1 ms, is now a movement tick (phase 4), not a think tick. The benchmark plays a different game with the spread (another end hash), the same one on every run.
+
+### The dominator's grant
+
+- **The line held by an engineer** (cause 1). B5 held a non-fighter (an engineer, a yard vehicle) while the house was short of a superweapon building's cost and not safe. A held item keeps its line, and the queue does not advance (S-0404 claim 5). Now `Brain::economy_first` cancels such an item with a refund (S-0404 claims 6 and 9; `Uses::non_fighter_cancels`), and the think orders no new non-fighter while the house is short. A person cancels the engineer to free the line, not keeps it paused. The army items are held as before. Cancels per house and game in the quick lane (96): none in 43, 1 in 33, 2 in 12, 3 in 3, 4 in 2, 6 in 3.
+- **The dominator item lost with its prerequisite** (cause 2). In the final lane, 6 dominator items ended before step 54 of 54, mostly in Yuri's games against Allied on map 8, while the base was being destroyed. That is not a cheap loss to avoid, and B7 changes nothing there.
+- **Saving that stops while the house is not safe** (cause 3). The final lane saved in 580 of 1 263 probe samples in which a superweapon building of Yuri was short (B6 on main: 128 of 268). *Tried and dropped:* not counting a fight lost far from home (more than `RECALL` cells) as an end to the saving (`Brain::losing_at_home`, kept for the probe). The army lines then waited while an attack abroad went badly. Against the same round 3 (the first tree, without the deployer fix below): wins 24 (7 against Allied, 17 against Soviet) against cause 1 alone's 29 (10, 19); dominator ready in 19 games against 26; dominator gap +3 356 against +1 167; two games without a winner. A lost fight anywhere still ends the saving.
+- **Deployed riflemen that never moved again.** With cause 1, the quick game 02-0-7 had no winner. The Allied riflemen had been deployed out of range of the enemy's last buildings and stood so from tick 37 500 to the end. Deployed infantry drops a destination (S-0215 claim 22) and takes no step towards its target (S-0517 claim 16), so every wave's order was dropped, and `deployers` packed no infantry up. Now:
+  - A firing infantry unit is deployed only when a seen enemy it can attack stands in the range of the weapon it would use (S-0215 claim 37 b, S-0307), and packed up when none does.
+  - The brain gives a unit it deploys or packs up no behaviour order in the same think: S-0213 claims 3 and 10 say the deploy order queues unload, and a behaviour order of the same tick for the same actor would determine that state.
+  - `Script::idle` does not count a deployed infantry unit as idle.
+- **The radiation-immune deployer** (a follow-up fix). The in-range rule also caught a radiation-immune deploy-fire infantry unit, which fires its secondary at its own cell when deployed (S-0215 claim 31 rows 3 to 5) and does not use the deployed-firing rule. It packed up at once and deployed only in its rifle's range. M6c's radiation exits fell from a median of 41 to 3, and B4's margins sweep had a required counter at zero (radiation exits, M6c). Now such a unit deploys when a seen enemy it can attack is within `NEAR` and packs up when no seen enemy is within `GONE`, as a deployed in-place vehicle does. The quick and full lanes play every game the same with and without this fix.
+- AI game format 38 (`Uses::non_fighter_cancels`). The probe line gains the intruders by kind and `losing at home`; the uses line gains the non-fighter cancels.
+
+### Results
+
+Yuri's superweapons, first tick ready, against round 3 on the same tree: the median difference, with games later / games compared.
+
+| Binary | Force shield | Mutator | Dominator | Psychic reveal | Yuri wins vs Allied / Soviet | No winner |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 3 | – | – | – | – | 8 / 18 (26) | 1 |
+| **final** | 0 (16 / 45) | +87 (18 / 29) | +1 167 (10 / 14) | 0 (0 / 48) | 9 / 19 (28) | 1 |
+| final, nosave | +3 032 (38 / 39) | +7 523 (27 / 28) | +19 395 (5 / 5) | +22 (29 / 48) | 9 / 21 (30) | 0 |
+
+- **Dominator against round 3:** final readies it in 24 games, round 3 in 19 (only round 3 in 5, only final in 10). B6's final readied it in 24 games too, against its round 3's 26.
+- **From the mutator granted to the dominator granted** (summed over the games with the mutator granted): Yuri earned 1 663 credits per 1 000 ticks against round 3's 1 856, and lost 243 refineries and 226 harvesters against 198 and 175.
+- **Final against nosave:** with saving, every superweapon is sooner (force shield −2 930.5, mutator −7 627, dominator −8 980, reveal −22), and the dominator is ready in 24 games against 7.
+- **The games without a winner:** final 02-2-13 is a live game at the 120 000-tick cap, with both houses building (23 and 18 buildings) and the map mined out. Round 3's 02-0-7 also reaches the cap.
+- **Dominator launches / sweeps that changed an owner / objects taken**, quick lane: round 3 34 / 20 / 25, final 33 / 21 / 28, nosave 9 / 5 / 7.
+
+**Full games, seed 7.** Every game has a winner. All six replay to the same state and survive save and load. Yuri wins 5 of 6 (B6: 4 of 6).
+
+| Opponent, map | Winner, tick | Force shield | Mutator | Dominator |
+| --- | --- | --- | --- | --- |
+| Allied, 0 | Yuri 52 061 | 13 558 | 21 793 | – |
+| Allied, 2 | Yuri 37 873 | 10 702 | 14 864 | 32 651 |
+| Allied, 8 | Allied 28 414 | 13 886 | 18 813 | – |
+| Soviet, 0 | Yuri 69 439 | 14 442 | 18 022 | 37 269 |
+| Soviet, 2 | Yuri 43 126 | 10 702 | 13 820 | 25 641 |
+| Soviet, 8 | Yuri 44 208 | 13 925 | 16 830 | 29 658 |
+
+In the six games the dominator launched 7 times, 4 sweeps changed an owner and 4 objects were taken (B6: 13 / 11 / 12). Most games end sooner than in B6, so there are fewer charges.
+
+**Exit B7: missed on the dominator's tempo and, narrowly, on the wins.**
+- Met: all six full games have a winner. Force shield and psychic reveal are at round 3's tempo (median 0). The think tick is no longer over the frame in every period (above).
+- Missed: the dominator is +1 167 ticks behind round 3 (10 later of 14), though it is ready in 24 games against round 3's 19. The mutator is +87 (18 later of 29). Wins with saving are 28, with saving off 30. Cause 1 is fixed. Cause 3's change was tried and played worse. Cause 2 happens while the base is being destroyed.
+
+**Tests** (synthetic data, through the real tick).
+- `crates/deterministic/ai/tests/game.rs`: new `the_brains_plan_in_different_ticks` and `a_save_between_the_houses_thinks_plays_on_alike`.
+- `economy.rs`, 17 in all. New: `a_house_thinking_off_the_window_ticks_reads_its_income_too`, `cancels_a_yard_vehicle_and_an_engineer_while_losing_a_fight`, `a_cancelled_engineer_leaves_its_line_and_is_not_started_again` and `stops_saving_while_losing_a_fight_far_from_home`.
+- `deployers.rs`, 7 in all. New: `does_not_deploy_a_rifleman_out_of_range`, `packs_up_a_deployed_rifleman_with_no_enemy_in_range` and `deploys_a_radiation_immune_unit_near_an_enemy_and_packs_it_up_without_one`. `deploys_deploy_fire_vehicles_and_firing_infantry` now puts the enemy in the rifle's range.
+- Goldens: all six duel goldens were regenerated once. The AI game format is in the hashed state from the first tick, and duel-diagonal ends about 1 300 ticks later. duel-m6c was regenerated again for the radiation-immune deployer, with the hashes differing from line 41 and the same length.
+
+**Arena and duel sweeps.** The oracle arena attaches no brain, and its CSVs are byte-identical to main's. The M6c, M7a and M7b seed sweeps 1 to 16 move with the AI's play. The smallest minimum stays the same: M6c 4, M7a 1 and M7b drain 3.
+- M6c: radiation exits 6 / 41 → 5 / 19 (min / median), radiation in the field 2 300 / 4 646 → 4 936 / 7 216, deploy orders 49 / 82 → 52 / 122.
+- M7b: dominator launches 7 / 7 → 6 / 7, objects taken 14 / 18 → 13 / 17, mutator launches 5 / 7 → 5 / 8, drain orders 4 / 6 → 3 / 3.
+
+In B4's 32-seed default margins sweep, no required counter is at zero. The smallest required minimums are duel 3, diagonal 4, naval 14, M6c 4, M7a 1 and M7b 3 (B6: 2, 5, 12, 1, 1, 3). Four duels now reach the 40 000-tick cap without a result: duel seeds 2 and 30 and naval seeds 2 and 28. B6 had none, and diagonal still has none. Bisected, the spread alone gives all four, and main's brain ends them. No AI code depends on the think phase beyond `thinks_at` and the income window. In duel seed 2, both houses are broke and mined out by tick 35 000. House 0 then destroys house 1's last buildings one jet sortie at a time from its one helipad (a power plant between 39 000 and 40 000) and is not done by the cap.
+
+**Left open.** The dominator's tempo gap. The long, broke endgames of the four duels above. The full-game dominator count is down (7 launches against B6's 13). No requests.
+
 ## Map triggers (M5b)
 
 `glasnost_sim::triggers` runs the map triggers of S-0011 in a skirmish; the converter
