@@ -1284,6 +1284,7 @@ impl Client {
         let kept = &mut net.checkpoints;
         let me = ls.me();
         let mut changed_by = Vec::new();
+        let mut surrendered = false;
         let ran = s.step_by(|g| {
             if let Some(ev) = ev.as_mut() {
                 ev.before_tick(ls.ran(), g);
@@ -1303,8 +1304,14 @@ impl Client {
                     .filter(|a| matches!(a.order, glasnost_sim::orders::Order::GameSpeed { .. }))
                     .map(|a| a.slot),
             );
+            // design: S-0201 claim 15's choice that surrenders and leaves waits until the lockstep has carried our own surrender order out, every peer then holding it
+            surrendered |= t
+                .orders
+                .iter()
+                .any(|a| a.slot == me && matches!(a.order, glasnost_sim::orders::Order::Surrender));
             true
         });
+        let leave = surrendered && s.leave_after_surrender;
         // spec: S-0201 claim 17, Our engine (from the cycle after a speed order is carried out, the cycles and the lockstep's delay go by the new index's period)
         let tick_ms = net_period_ms(s.speed).max(1) as u32;
         if ls.tick_ms() != tick_ms {
@@ -1331,6 +1338,10 @@ impl Client {
             net.line(now_ms, "", &format!("{who} changed the game speed."), true);
         }
         net.flush(now);
+        if leave {
+            // spec: S-0201 claim 15 (the choice that surrenders then leaves the game)
+            self.session_event(crate::game::session::SessionEvent::Leave);
+        }
         ran
     }
 

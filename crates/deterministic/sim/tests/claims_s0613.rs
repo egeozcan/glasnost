@@ -816,6 +816,48 @@ fn claim_14_credit() {
     assert!(w.gas.systems.values().any(|s| s.owner == Some(HouseId(0))));
 }
 
+/// spec: S-0613 claims 13 and 14 with S-0414 claims 21 and 22 (V17 part s in our engine: a warhead-made cloud's particle kills with the detonation's house and no attacker; the result screen credits that house with the kill and the victim's price, and the victim's house with the loss; the shared system's kill credits nobody)
+#[test]
+fn a_warhead_cloud_kill_is_credited_to_its_house() {
+    use glasnost_sim::econ::stats;
+    for owned in [true, false] {
+        let mut r = rules();
+        r.sim.particles.get_mut("FOG").unwrap().damage = Some(10_000);
+        r.sim.vehicles.get_mut("CRUSHER").unwrap().cost = Some(120);
+        let mut w = game(&r);
+        let c = testkit::mid(SIZE, 0, 0);
+        let victim = testkit::spawn(&mut w, Kind::Vehicle, "CRUSHER", 1, c, 0);
+        let s = if owned {
+            let before: Vec<ObjectId> = w.gas.systems.keys().copied().collect();
+            gas::warhead_system(&mut w, "CLOUD", Pos::centre(c, 0), Some(HouseId(0)));
+            *w.gas.systems.keys().find(|k| !before.contains(k)).unwrap()
+        } else {
+            puff(&mut w, "FOG", Pos::centre(c, 0));
+            shared(&w)
+        };
+        let last = w.gas.systems[&s].particles.len() - 1;
+        let p = &mut w.gas.systems.get_mut(&s).unwrap().particles[last];
+        p.life = 1000;
+        p.countdown = 1;
+        p.vel = [0, 0, 0];
+        gas::system_turn(&mut w, s);
+        assert!(
+            w.obj(victim).is_none_or(|o| o.health <= 0),
+            "owned {owned}: the cloud kills"
+        );
+        let (k, sc) = (
+            stats::of(&w, HouseId(0)).kills,
+            stats::of(&w, HouseId(0)).score,
+        );
+        if owned {
+            assert_eq!((k, sc), (1, 120), "the detonation's house is credited");
+        } else {
+            assert_eq!((k, sc), (0, 0), "the shared system credits no house");
+        }
+        assert_eq!(stats::of(&w, HouseId(1)).losses, 1);
+    }
+}
+
 /// spec: S-0613 claim 15 and F8 (the stage advances when (n + E_max − E) is divisible by (n mod 2) + A; at the end stage it resets to 0, or the particle dies with the delete flag)
 #[test]
 fn claim_15_stage_and_limit() {

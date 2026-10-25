@@ -593,23 +593,40 @@ pub enum PauseHit {
     Resume,
     /// Speed control step (S-0201 claim 8).
     Speed(i32),
-    /// Give up and see the end screen.
+    /// Surrender and keep watching (S-0414 claim 11).
     Surrender,
+    /// Surrender, then leave the game (S-0201 claim 15, a network game).
+    SurrenderLeave,
     /// Open the settings screen.
     Settings,
-    /// Leave to the main menu.
+    /// Leave to the main menu, sending no order.
     Leave,
+}
+
+impl PauseHit {
+    /// The label of a leave choice.
+    fn leave_label(self) -> &'static str {
+        match self {
+            Self::Surrender => "Surrender",
+            Self::SurrenderLeave => "Surrender and leave",
+            _ => "Leave game",
+        }
+    }
 }
 
 /// Draws the options menu over the game. `speed` is the index the speed
 /// control shows, or `None` when the menu offers no speed control (S-0201
-/// claim 17: once the local house is defeated). In a network game
-/// (`network`) the menu stops nothing (S-0201 claim 15), so its title does
-/// not say paused, and it offers no settings screen.
+/// claim 17: once the local house is defeated in a network game). In a
+/// network game (`network`) the menu stops nothing (S-0201 claim 15), so
+/// its title does not say paused, and it offers no settings screen.
+/// `leaves` are the leave choices offered, in order (S-0201 claims 1 and
+/// 15): any of [`PauseHit::Surrender`], [`PauseHit::SurrenderLeave`] and
+/// [`PauseHit::Leave`].
 pub fn pause_view(
     size: (i32, i32),
     speed: Option<u8>,
     network: bool,
+    leaves: &[PauseHit],
     hover: Option<Point>,
 ) -> (DrawList, Targets<PauseHit>) {
     let (w, h) = size;
@@ -641,10 +658,7 @@ pub fn pause_view(
     if !network {
         items.push((PauseHit::Settings, "Settings"));
     }
-    items.extend([
-        (PauseHit::Surrender, "Surrender"),
-        (PauseHit::Leave, "Leave game"),
-    ]);
+    items.extend(leaves.iter().map(|&l| (l, l.leave_label())));
     for (hit, label) in items {
         let br = Rect::new(r.x + 30, y, 180, 20);
         widget::button(&mut d, br, label, hot(br), true);
@@ -774,13 +788,14 @@ mod tests {
         assert_eq!(step_speed(0, 1), 0);
         assert_eq!(step_speed(0, -1), 1);
         assert_eq!(step_speed(6, -1), 6);
-        let (d, t) = pause_view((800, 600), Some(4), false, None);
+        let skirmish = [PauseHit::Surrender, PauseHit::Leave];
+        let (d, t) = pause_view((800, 600), Some(4), false, &skirmish, None);
         assert!(d.texts().contains(&"3 of 7"));
         assert!(d.texts().contains(&"OPTIONS (PAUSED)"));
         let r = t.rect_of(&PauseHit::Resume).unwrap();
         assert_eq!(t.hit(r.centre()), Some(PauseHit::Resume));
         assert!(t.rect_of(&PauseHit::Settings).is_some());
-        let (d, t) = pause_view((800, 600), Some(4), true, None);
+        let (d, t) = pause_view((800, 600), Some(4), true, &[PauseHit::Leave], None);
         assert!(t.rect_of(&PauseHit::Settings).is_none());
         assert!(
             d.texts().contains(&"OPTIONS"),
@@ -789,16 +804,30 @@ mod tests {
         assert!(t.rect_of(&PauseHit::Speed(1)).is_some());
     }
 
-    // spec: S-0201 claim 17 (no speed control once the local house is defeated: in a network game, and in our engine in a skirmish watched on)
+    // spec: S-0201 claim 17 (no speed control once the local house is defeated in a network game; the view draws none when given none)
     #[test]
     fn options_menu_without_the_speed_control() {
         for network in [false, true] {
-            let (d, t) = pause_view((800, 600), None, network, None);
+            let (d, t) = pause_view((800, 600), None, network, &[PauseHit::Leave], None);
             assert!(!d.texts().iter().any(|x| x.ends_with("of 7")));
             assert!(t.rect_of(&PauseHit::Speed(1)).is_none());
             assert!(t.rect_of(&PauseHit::Speed(-1)).is_none());
             assert!(t.rect_of(&PauseHit::Resume).is_some());
         }
+    }
+
+    // spec: S-0201 claim 15 (a network game's two choices that send the surrender order, one leaving and one keeping the player watching; otherwise a leave only)
+    #[test]
+    fn options_menu_offers_the_leave_choices_it_is_given() {
+        let both = [PauseHit::Surrender, PauseHit::SurrenderLeave];
+        let (d, t) = pause_view((800, 600), Some(3), true, &both, None);
+        assert!(d.texts().contains(&"Surrender"));
+        assert!(d.texts().contains(&"Surrender and leave"));
+        assert!(t.rect_of(&PauseHit::Leave).is_none());
+        let (d, t) = pause_view((800, 600), None, true, &[PauseHit::Leave], None);
+        assert!(d.texts().contains(&"Leave game"));
+        assert!(t.rect_of(&PauseHit::Surrender).is_none());
+        assert!(t.rect_of(&PauseHit::SurrenderLeave).is_none());
     }
 
     #[test]

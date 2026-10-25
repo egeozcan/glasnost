@@ -886,8 +886,13 @@ pub(crate) fn credit(w: &mut World, id: ObjectId, hit: &Hit) {
         (_, Some(h)) => (None, Some(h)),
         (None, None) => (None, None),
     };
-    // spec: S-0414 claims 21 and 22 (the result screen's kills, losses and destruction score)
-    crate::econ::stats::destruction(w, id, object);
+    // spec: S-0414 claims 21 and 22 (the result screen's kills, losses and destruction score: to the credited object's house, or to the attacking house that S-0302 claim 14 credits alone)
+    let to = match (object, house) {
+        (Some(a), _) => crate::econ::stats::Credit::Object(a),
+        (None, Some(h)) => crate::econ::stats::Credit::House(h),
+        (None, None) => crate::econ::stats::Credit::Nobody,
+    };
+    crate::econ::stats::destruction(w, id, to);
     crate::combat::veterancy::destruction_credited(w, id, object, house);
 }
 

@@ -996,7 +996,7 @@ fn claim_20_built_total() {
     assert_eq!(stats::built_total(&w, B), 0);
 }
 
-// spec: S-0414 claims 21 and 22 (a credited destruction: a kill and the victim's price × rank to the attacker's house, a loss to the victim's; a not-scored victim nothing; an insignificant building neither kill nor loss but still score; no attacking object: a loss only)
+// spec: S-0414 claims 21 and 22 (a credited destruction: a kill and the victim's price × rank to the attacker's house, a loss to the victim's; a not-scored victim nothing; an insignificant building neither kill nor loss but still score; neither an attacking object nor an attacking house: a loss only)
 #[test]
 fn claim_21_kills_and_losses() {
     let mut w = stats_scene().build();
@@ -1027,11 +1027,71 @@ fn claim_21_kills_and_losses() {
     );
     assert_eq!(st(&w, A).score, 250, "but gives destruction score");
     let n = spawn(&mut w, Kind::Vehicle, "TANK", 1, 8, 4);
-    lethal(&mut w, n, None, Some(A));
+    lethal(&mut w, n, None, None);
     assert_eq!(
         (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
-        (2, 250, 3)
+        (2, 250, 3),
+        "neither an attacking object nor an attacking house: a loss only"
     );
+}
+
+/// V17 part s in our engine: hits with an attacking house and no attacking
+/// object (as a gas system's particles deal), and a hit whose attacking
+/// house differs from its attacking object's owner.
+// spec: S-0414 claim 21 (a hit with an attacking house and no attacking object is credited to that house: a kill; a not-scored victim no kill but still its house's loss; an insignificant building neither, also when not scored; an attacking house that differs from the attacking object's owner gets the kill, the object's owner none) and claim 22 (the attacking-house rows: price × rank to that house, 0 when it allies the victim's house, no not-scored or insignificant exclusion)
+#[test]
+fn claims_21_and_22_a_kill_credited_to_the_attacking_house() {
+    let mut s = stats_scene();
+    let mut both = building([1, 1]);
+    both.combat.insignificant = Some(true);
+    both.combat.dont_score = Some(true);
+    both.cost = Some(70);
+    s.building("INSDS", both);
+    let mut w = s.build();
+    let [a, _, _] = armed(&mut w);
+    let t = spawn(&mut w, Kind::Vehicle, "TANK", 1, 0, 4);
+    lethal(&mut w, t, None, Some(A));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (1, 100, 1),
+        "an ordinary victim: a kill, its price and a loss"
+    );
+    let d = spawn(&mut w, Kind::Vehicle, "DS", 1, 2, 4);
+    lethal(&mut w, d, None, Some(A));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (1, 200, 2),
+        "a not-scored victim: no kill, but its price and its house's loss"
+    );
+    let ib = spawn(&mut w, Kind::Building, "INSB", 1, 6, 6);
+    lethal(&mut w, ib, None, Some(A));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (1, 250, 2),
+        "an insignificant building: its price, no kill and no loss"
+    );
+    let both = spawn(&mut w, Kind::Building, "INSDS", 1, 9, 6);
+    lethal(&mut w, both, None, Some(A));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, B).losses),
+        (1, 320, 2),
+        "an insignificant building also not scored: its price, no kill and no loss"
+    );
+    let own = spawn(&mut w, Kind::Vehicle, "TANK", 0, 0, 8);
+    let lost = st(&w, A).losses;
+    lethal(&mut w, own, None, Some(A));
+    assert_eq!(
+        (st(&w, A).kills, st(&w, A).score, st(&w, A).losses),
+        (2, 320, lost + 1),
+        "an allied victim (the house's own): a kill and a loss, no score"
+    );
+    // A hit whose attacking house (Gamma) differs from its attacking
+    // object's owner (Alpha): Gamma is credited, Alpha gains nothing.
+    let x = spawn(&mut w, Kind::Vehicle, "TANK", 1, 4, 8);
+    lethal(&mut w, x, Some(a), Some(C));
+    assert_eq!((st(&w, C).kills, st(&w, C).score), (1, 100));
+    assert_eq!((st(&w, A).kills, st(&w, A).score), (2, 320));
+    assert_eq!(st(&w, B).losses, 3);
 }
 
 // spec: S-0414 claims 21 and 22 (the same house's victim: a kill and a loss, but no destruction score since a house allies itself)
