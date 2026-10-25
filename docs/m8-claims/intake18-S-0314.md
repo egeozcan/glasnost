@@ -39,8 +39,22 @@ lake and these synthetic types:
   cell (2, 1) a water cell;
 - PLANT and CENTRE: the power plant and SKIMMER's control centre.
 
-**Goldens, arena and sweeps.** *Before* is main 14a0149; *after* is this branch. See the report
-section at the end of this file.
+**Goldens, arena and sweeps.** These were run twice: first with *before* = main 14a0149 and *after* =
+this branch, then again after the rebase, with *before* = main ea5c2bb (intake 15 part 1) and
+*after* = the rebased branch. Main a32dbdc changes no simulation code against ea5c2bb, so the
+second run holds for it too. Both runs give the same answer: with the switch on (the default) the
+change is byte-identical.
+- Goldens: unchanged. `cargo xtask gate` passes on every golden, none regenerated.
+- Oracle arena (local lane): the CSVs are byte-identical before and after in both runs. On
+  ea5c2bb:
+  - M-0001: 31 of 96 pairings failing; 151 of 172 unanimous stock outcomes reproduced.
+  - M-0002: 13 of 24 failing; 43 of 47 reproduced.
+  - M-0003: 2 of 35 failing; 61 of 64 reproduced.
+- M6c, M7a and M7b sweeps 1 to 16: every counter has the same minimum, median and maximum before
+  and after, in both runs, and intake 15 part 1 changed none of them.
+  - M6c's smallest minimum is 2 (jumpjet orders 2/51, charger orders 2/18).
+  - M7a's smallest minimum is 1 (takeover orders 1/6).
+  - M7b's smallest drain minimum is 3 (drain orders 3/3).
 
 | Claim or item | Status | Notes |
 |---|---|---|
