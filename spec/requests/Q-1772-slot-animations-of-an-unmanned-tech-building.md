@@ -1,9 +1,9 @@
 ---
 id: Q-1772
 title: Do the slot animations of a tech building run before its first ownership change, and what does the change do to them?
-status: open
+status: answered
 related: [S-0108, S-0109, S-0405, S-0515, S-0509]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need
