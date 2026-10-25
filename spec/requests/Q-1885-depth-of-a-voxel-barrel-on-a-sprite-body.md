@@ -17,8 +17,8 @@ and a profile (S-0102 claim 13). S-0102 claim 13's table has a row for "vehicle 
 sprite" (*U* − 2, upright) and a row for "vehicle or aircraft drawn as a voxel model" (*U*,
 upright), but none for a voxel part of a vehicle drawn as a sprite. Which row applies decides
 whether the barrel can be hidden by, or hide, other objects' pixels (a building, another
-vehicle, a terrain object) that the sprite body itself is not hidden by. The barrel is not drawn
-today (`crates/app/src/mapview/build.rs`, `sprite_vehicle`).
+vehicle, a terrain object) that the sprite body itself is not hidden by. Our engine's current
+choice is under *Current workaround*.
 
 ## Questions
 1. Where another object's pixels overlap the voxel barrel of a sprite-body vehicle, does the
@@ -39,7 +39,11 @@ their pixels overlap the barrel from the north, the south, the east and the west
 and on a bridge deck; and a barrel model whose HVA has several clearly different frames.
 
 ## Current workaround
-The barrel of a sprite-body vehicle is not drawn: the sprite body and sprite turret are drawn as
-before (S-0102 claim 22), and no voxel part is drawn on a sprite body. The selected turret index
-of such a vehicle is derived as for any vehicle (S-0105 claim 43, *Any body*) and reaches nothing
-drawn. The M8 intake 19 ledger lists this as a seam.
+Our design under the decisions of 2026-10-25, in `sprite_body_barrel`
+(`crates/app/src/mapview/build.rs`): the barrel is drawn as S-0105 claim 12 says, posed as for a
+voxel vehicle (claims 8 and 10), and placed with the sprite body's row of S-0102 claim 13 (*U* − 2,
+upright, a reader) at the same height lift and with the same colour row (questions 1 and 2). It is
+drawn between the body frame and the turret frame at 4-step turret facings 0 and 3, and after the
+turret frame at facings 1 and 2 (question 3). It takes the frame of a barrel drawn with a voxel
+turret, `quirks.barrel_frame_zero`, the loaded voxel turret part's frame standing in (question 4).
+It casts no shadow of its own. The M8 intake 19 ledger states it as our design.
