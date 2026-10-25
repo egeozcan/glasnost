@@ -55,9 +55,11 @@ pub struct Layers {
 impl Layers {
     /// No layer: the reference ruleset (the original's behaviour wherever a
     /// switch exists).
+    // nocite: our own option (no layer)
     pub const REFERENCE: Layers = Layers { play_fixes: false };
 
     /// The play-fixes layer on.
+    // nocite: our own option (the layer's entries cite their claims in its file)
     pub const PLAY_FIXES: Layers = Layers { play_fixes: true };
 
     /// The layers' sources, in application order, to follow the converted

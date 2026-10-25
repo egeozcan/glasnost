@@ -1137,7 +1137,11 @@ impl Client {
                     ls.receive(now, &bytes);
                 }
                 net.lockstep = Some(ls);
-                net.evidence = Some(evidence.with_perturb(self.perturb));
+                net.evidence = Some(
+                    evidence
+                        .with_perturb(self.perturb)
+                        .with_layers(s.play.capture.layers.describe()),
+                );
                 net.desynced = None;
                 s.network = true;
                 s.play.outbox = Some(Vec::new());
@@ -1204,7 +1208,9 @@ impl Client {
         );
         s.replace_game(game);
         net.evidence = Some(
-            Evidence::resume(&self.build, &info, me, &s.play.game, ran).with_perturb(self.perturb),
+            Evidence::resume(&self.build, &info, me, &s.play.game, ran)
+                .with_perturb(self.perturb)
+                .with_layers(s.play.capture.layers.describe()),
         );
         net.lockstep = Some(ls);
         net.desynced = None;

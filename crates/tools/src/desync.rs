@@ -430,6 +430,9 @@ fn describe(out: &mut String, side: char, b: &Bundle) {
         b.end().saturating_sub(1),
         b.base.ran
     );
+    if !b.layers.is_empty() {
+        let _ = writeln!(out, "   its rules, by its own account: {}", b.layers);
+    }
     match b.mismatch {
         Some(m) => {
             let _ = writeln!(

@@ -179,13 +179,7 @@ fn run_start(c: &mut Client) {
     let gs = ui_setup::game_setup(&lobby, &fixture::rules(), &offered, seed, seed)
         .expect("the room's setup makes a game setup");
     let s = Loaded::bare(map8(), fixture::rules(), fixture::catalogue(), &gs)
-        .and_then(|l| Session::bare(l, MAP_HASH.into(), local))
-        .map(|mut s| {
-            // As `Session::start` does with the lobby's layers (M8 step C7);
-            // the synthetic rules here take no layer.
-            s.play.capture.layers = lobby.layers;
-            s
-        });
+        .and_then(|l| Session::bare(l, MAP_HASH.into(), local));
     c.done(Done::Started(vfs, Box::new(s), SoundBank::new()));
 }
 
@@ -443,7 +437,8 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
 
 /// Our own *Pathing and other fixes* (M8 step C7) in a room: on when the
 /// host creates it, the host's box turns it off for every member, a guest
-/// has no box to press, and both games start with the room's choice.
+/// has no box to press, and every member's start carries the room's choice
+/// into the lobby values its game loads with.
 #[test]
 fn the_host_sets_the_fixes_layer_for_the_room() {
     let (_rt, relay) = relay(83);
@@ -489,13 +484,52 @@ fn the_host_sets_the_fixes_layer_for_the_room() {
         c.iter().all(|c| c.session.is_some())
     });
     for c in [&a, &b] {
-        let s = c.session.as_ref().unwrap();
-        assert_eq!(
-            s.play.capture.layers,
-            glasnost_rules::layers::Layers::REFERENCE
-        );
+        let begin = c.net.as_ref().unwrap().begin.as_ref().expect("the start");
+        let install = c.install.as_ref().unwrap();
+        let maps: Vec<MapEntry> = install.maps.iter().map(|(_, m)| m.clone()).collect();
+        let lobby = begin
+            .local_setup(0)
+            .lobby(&install.setup, &maps)
+            .expect("the room's setup starts");
+        assert_eq!(lobby.layers, glasnost_rules::layers::Layers::REFERENCE);
     }
     relay.stop();
+}
+
+/// Two peers whose played rules differ only in our own fixes layer (M8 step
+/// C7) are refused at the start, on the rules hash.
+#[test]
+fn a_peer_with_other_layers_is_refused_on_the_rules_hash() {
+    use glasnost_rules::layers::Layers;
+    use glasnost_rules::resolve::Source;
+    let base = Source {
+        layer: "base",
+        file: "base.jsonc",
+        text: r#"{"schema": 1}"#,
+    };
+    let hash = |layers: Layers| {
+        let mut sources = vec![base];
+        sources.extend(layers.sources());
+        glasnost_rules::resolve_ruleset(None, &sources)
+            .unwrap()
+            .sim_rules_hash
+    };
+    let setup = fixture::setup(1);
+    let info = |layers| {
+        glasnost_net::start::StartInfo::new(
+            "build",
+            &hash(layers),
+            MAP_HASH,
+            &setup,
+            Default::default(),
+        )
+    };
+    let (plain, fixed) = (info(Layers::REFERENCE), info(Layers::PLAY_FIXES));
+    assert_eq!(plain.mismatch(&info(Layers::REFERENCE)), None);
+    assert_eq!(
+        plain.mismatch(&fixed),
+        Some(glasnost_net::start::Field::RulesHash)
+    );
 }
 
 /// A client of another build is refused when it joins, and the refusal

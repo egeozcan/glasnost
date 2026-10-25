@@ -244,6 +244,7 @@ fn play_case(case: &Case, seed: u64, perturb: Option<(u8, Perturb)>) -> Played {
                     .expect("a person's slot"),
                 evidence: Evidence::new("test-build", &info, slot, &g)
                     .with_perturb(p)
+                    .with_layers(glasnost_rules::layers::Layers::REFERENCE.describe())
                     .with_tick_hashes(case.tick_hashes),
                 game: g,
                 rng: SplitMix::new(seed * 31 + u64::from(slot)),
@@ -586,6 +587,20 @@ fn without_a_perturbation_nothing_differs() {
     println!("{}", r.text);
     assert!(!r.differs);
     assert!(r.text.contains("No difference."));
+    // The report says which of our own layers each side played with, and
+    // which the rules found by the hash have (M8 step C7).
+    assert_eq!(
+        Bundle::from_bytes(&a.to_bytes()).unwrap().layers,
+        "Pathing and other fixes: off"
+    );
+    assert!(
+        r.text
+            .contains("its rules, by its own account: Pathing and other fixes: off")
+    );
+    assert!(
+        r.text
+            .contains("Rules: Pathing and other fixes: off (by the rules hash)")
+    );
     let dir = out_dir("none");
     let pa = write(&dir, &a.file_name("a-"), &a.to_bytes());
     let pb = write(&dir, &b.file_name("b-"), &b.to_bytes());
