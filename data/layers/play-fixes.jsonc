@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Glasnost's own rules patch layer "Pathing and other fixes" (M8 step C7). It holds no game
+// data: it only sets quirk switches of our rules format to their off position, the behaviour
+// each switch's spec states for that position (PLAN.md D6 and 4.6). The defaults in
+// crates/deterministic/rules/src/quirks.rs stay the original's behaviour (D6, D8); this layer
+// is an option of the client's new-game setup and network lobby, applied through
+// `glasnost_rules::resolve_ruleset` as a mod patch layer, so it is part of `sim_rules_hash`.
+//
+// An entry is admitted only when (1) an approved spec states the switch's off position and the
+// engine implements it, (2) the on position reads as a bug in play (a unit stuck, giving up,
+// never moving, or a visible glitch), named by a play note or a request, and (3) it is not a
+// balance change (D14). Each entry cites its claim and what it answers. The list is kept short;
+// docs/development.md (Pathing and other fixes, M8 step C7) gives the entries considered and
+// rejected.
+{
+  "globals": {
+    "quirks": {
+      // S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off): when the new
+      // coarse search after a corridor retry fails, one more cell search without a corridor is
+      // made, with the same limits as the others, and the path computation fails only if it
+      // fails too. On (the original), the computation fails and the unit gives up at once
+      // although an open way round exists (claim 23 row 2).
+      // Answers: pathing reports 1 and 2 (docs/m8-claims/a4-play-notes.md), Q-1771 (a unit at
+      // a factory's exit) and Q-1870 (a harvester on a refinery's docking cell). Works only
+      // together with the next entry: alone it changes neither report's computations.
+      "corridor_retry_no_fallback": false,
+      // S-0212 claim 13a and Edge cases (quirks.corridor_split_probe off): the progress sector
+      // counts as split when some cell of it inside the usable area is not in the free part,
+      // and as whole otherwise. In both reports' synthetic shapes a retry beside the buildings reads
+      // its sector as split and closes its connections, the new coarse search fails, and the
+      // search without a corridor of the entry above finds the way. On (the original), the
+      // retries keep running corridors into the buildings and the 5th cell search inside a
+      // corridor ends the computation (claim 13's cap).
+      // Answers: the same reports and requests (Q-1771, Q-1870).
+      "corridor_split_probe": false,
+    },
+  },
+}

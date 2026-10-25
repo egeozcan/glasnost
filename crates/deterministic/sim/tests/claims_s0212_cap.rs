@@ -12,7 +12,14 @@
 //! (claim 23). `quirks.corridor_retry_no_fallback` does not change this: it
 //! applies only when a repeated coarse search fails, never at the cap. Q-1771
 //! asks whether the original's unit walks round.
+//!
+//! The last tests apply our own patch layer *Pathing and other fixes*
+//! (`data/layers/play-fixes.jsonc`, M8 step C7), which turns
+//! `quirks.corridor_retry_no_fallback` and `quirks.corridor_split_probe` off:
+//! with both off the same shapes find the way, with either alone they do not.
 
+use glasnost_rules::layers::Layers;
+use glasnost_rules::quirks::Quirks;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::BuildingType;
 use glasnost_sim::orders::{self, Order};
@@ -45,6 +52,21 @@ fn rules(no_fallback: bool) -> Ruleset {
     r
 }
 
+/// The combat ruleset with BLOCK and the quirk switches of `layers` applied
+/// to the defaults (the file itself, through `Layers::apply_quirks`).
+fn rules_with(layers: Layers) -> Ruleset {
+    let mut r = rules(true);
+    assert_eq!(
+        r.globals.quirks,
+        Quirks::default(),
+        "the test ruleset keeps the defaults"
+    );
+    r.globals.quirks = layers
+        .apply_quirks(r.globals.quirks)
+        .expect("the layer applies");
+    r
+}
+
 /// The cells of the layout, as offsets from the map's middle: the 3 × 2
 /// block at (1..=3, 0..=1); the unit at its exit (2, 2); a row of ten
 /// buildings at y = −4 from x = −4 to x = 5, open ground round both ends;
@@ -73,7 +95,11 @@ fn at((dx, dy): (i32, i32)) -> glasnost_map::CellXY {
 
 /// The layout with an infantry unit of house 0 at the exit, the trace on.
 fn layout(no_fallback: bool) -> (World, glasnost_sim::world::ObjectId) {
-    let mut w = testkit::game_with(&rules(no_fallback), BIG, 7);
+    layout_with(&rules(no_fallback))
+}
+
+fn layout_with(r: &Ruleset) -> (World, glasnost_sim::world::ObjectId) {
+    let mut w = testkit::game_with(r, BIG, 7);
     testkit::run(&mut w, 2);
     for b in blocks() {
         testkit::spawn(&mut w, Kind::Building, "BLOCK", 0, at(b), 0);
@@ -98,7 +124,13 @@ struct Outcome {
 }
 
 fn order_move(no_fallback: bool) -> Outcome {
-    let (mut w, id) = layout(no_fallback);
+    order_move_with(&rules(no_fallback), 0).0
+}
+
+/// [`order_move`] under the rules `r`; then `more` further ticks, after
+/// which the unit's cell is given too.
+fn order_move_with(r: &Ruleset, more: i32) -> (Outcome, glasnost_map::CellXY) {
+    let (mut w, id) = layout_with(r);
     orders::issue(
         &mut w,
         HouseId(0),
@@ -128,13 +160,15 @@ fn order_move(no_fallback: bool) -> Outcome {
         })
         .unwrap_or_default();
     let o = w.obj(id).unwrap();
-    Outcome {
+    let out = Outcome {
         cleared,
         cell: o.pos.cell(),
         behaviour: o.beh.current,
         searches,
         result,
-    }
+    };
+    testkit::run(&mut w, more);
+    (out, w.obj(id).unwrap().pos.cell())
 }
 
 // spec: S-0212 claim 13 (the searches of a path computation with a corridor: the 5th failed cell search inside a corridor fails the computation, whatever the retry table would give) and claim 23 row 2 (the unit stops and gives up: its destination is cleared and, with a human-controlled owner, it queues guard); Edge cases (buildings do not separate regions, claim 1)
@@ -218,7 +252,11 @@ fn dock_cell((x, y): (i32, i32)) -> glasnost_map::CellXY {
 /// Report 2's shape with a vehicle of house 0 at `from`, the trace on and
 /// orders accepted.
 fn dock_layout(from: (i32, i32)) -> (World, glasnost_sim::world::ObjectId) {
-    let mut w = testkit::game_with(&rules(true), 64, 7);
+    dock_layout_with(from, &rules(true))
+}
+
+fn dock_layout_with(from: (i32, i32), r: &Ruleset) -> (World, glasnost_sim::world::ObjectId) {
+    let mut w = testkit::game_with(r, 64, 7);
     testkit::run(&mut w, 2);
     for b in dock_blocks() {
         testkit::spawn(&mut w, Kind::Building, "BLOCK", 0, dock_cell(b), 0);
@@ -234,7 +272,13 @@ fn dock_layout(from: (i32, i32)) -> (World, glasnost_sim::world::ObjectId) {
 }
 
 fn dock_move(from: (i32, i32)) -> Outcome {
-    let (mut w, id) = dock_layout(from);
+    dock_move_with(from, &rules(true), 0).0
+}
+
+/// [`dock_move`] under the rules `r`; then `more` further ticks, after which
+/// the vehicle's cell is given too.
+fn dock_move_with(from: (i32, i32), r: &Ruleset, more: i32) -> (Outcome, glasnost_map::CellXY) {
+    let (mut w, id) = dock_layout_with(from, r);
     orders::issue(
         &mut w,
         HouseId(0),
@@ -264,13 +308,15 @@ fn dock_move(from: (i32, i32)) -> Outcome {
         })
         .unwrap_or_default();
     let o = w.obj(id).unwrap();
-    Outcome {
+    let out = Outcome {
         cleared,
         cell: o.pos.cell(),
         behaviour: o.beh.current,
         searches,
         result,
-    }
+    };
+    testkit::run(&mut w, more);
+    (out, w.obj(id).unwrap().pos.cell())
 }
 
 // spec: S-0212 claim 13 (the 5th failed cell search inside a corridor fails the computation) and claim 23 row 2 (the unit gives up: its destination is cleared and, with a human-controlled owner, it queues guard); claim 1 (the coarse search sees through buildings)
@@ -314,4 +360,82 @@ fn claim_13_from_south_of_the_blocks_the_first_search_finds_the_way() {
     assert_eq!(x.searches.len(), 1, "one cell search: {:?}", x.searches);
     assert!(x.searches[0].corridor && x.searches[0].found.is_some());
     assert_eq!(x.cleared, None, "the destination stays");
+}
+
+// The play-fixes layer (M8 step C7, data/layers/play-fixes.jsonc).
+
+/// The test ruleset with only the two corridor switches as given (both
+/// `false` is what the play-fixes layer gives).
+fn with_switches(retry: bool, split: bool) -> Ruleset {
+    let mut r = rules(retry);
+    r.globals.quirks.corridor_split_probe = split;
+    r
+}
+
+/// A path computation that the layer lets through: the cell searches inside
+/// corridors fail, the new coarse search fails, and the one cell search
+/// without a corridor finds the path, before the cap.
+fn assert_found_by_the_fallback(x: &Outcome) {
+    assert_eq!(x.result, Some(Search::Found), "searches: {:?}", x.searches);
+    assert_eq!(x.cleared, None, "the destination stays");
+    let (last, before) = x.searches.split_last().expect("a cell search");
+    assert!(!last.corridor && last.found.is_some(), "{:?}", x.searches);
+    assert!(
+        before.iter().all(|s| s.corridor && s.found.is_none()),
+        "{:?}",
+        x.searches
+    );
+    assert!(x.searches.len() < 5, "{:?}", x.searches);
+}
+
+// spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off: after a failed repeated coarse search one cell search without a corridor, final) with claim 13a and Edge cases (quirks.corridor_split_probe off: split when some usable cell of the sector is not in the free part): with the play-fixes layer the vehicle on the docking cell finds its way west and leaves the cell (Q-1870, pathing report 2)
+#[test]
+fn play_fixes_the_vehicle_on_the_docking_cell_finds_its_way() {
+    let (x, later) = dock_move_with(DOCK, &rules_with(Layers::PLAY_FIXES), 40);
+    assert_found_by_the_fallback(&x);
+    assert_ne!(
+        later,
+        dock_cell(DOCK),
+        "the vehicle has left the docking cell"
+    );
+}
+
+// spec: S-0212 claims 13 and 13a and Edge cases (both switches off, as the play-fixes layer sets them): the unit at the factory's exit finds its way round the row and walks (Q-1771, pathing report 1)
+#[test]
+fn play_fixes_the_unit_at_the_factory_exit_finds_its_way() {
+    let (x, later) = order_move_with(&rules_with(Layers::PLAY_FIXES), 60);
+    assert_found_by_the_fallback(&x);
+    assert_ne!(later, at(UNIT), "the unit has left the exit");
+}
+
+// spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off alone: the cap of 5 still ends the computation) and claim 13a and Edge cases (quirks.corridor_split_probe off alone: the new coarse search fails and, with the other switch on, so does the computation): the layer needs both switches
+#[test]
+fn play_fixes_needs_both_switches() {
+    for (retry, split) in [(false, true), (true, false)] {
+        let r = with_switches(retry, split);
+        let dock = dock_move_with(DOCK, &r, 0).0;
+        let exit = order_move_with(&r, 0).0;
+        for x in [&dock, &exit] {
+            assert_eq!(
+                x.result,
+                Some(Search::SearchFailed),
+                "retry {retry}, split {split}: {:?}",
+                x.searches
+            );
+            assert_eq!(x.cleared, Some(1));
+        }
+    }
+    // Both off, set by hand, is what the layer gives.
+    let by_hand = dock_move_with(DOCK, &with_switches(false, false), 0).0;
+    let layer = dock_move_with(DOCK, &rules_with(Layers::PLAY_FIXES), 0).0;
+    assert_eq!(by_hand.searches, layer.searches);
+}
+
+// spec: S-0212 claim 13 (the first cell search inside the corridor finds the path): where the original finds the way at once the layer changes nothing
+#[test]
+fn play_fixes_change_nothing_where_the_first_search_finds_the_way() {
+    let plain = dock_move(SOUTH);
+    let fixed = dock_move_with(SOUTH, &rules_with(Layers::PLAY_FIXES), 0).0;
+    assert_eq!(fixed.result, Some(Search::Found));
+    assert_eq!(fixed.searches, plain.searches);
 }
