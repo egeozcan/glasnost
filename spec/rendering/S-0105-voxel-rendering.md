@@ -2,13 +2,13 @@
 id: S-0105
 title: Rendering of voxel models
 topic: rendering
-revision: 35
+revision: 39
 sources-class: [decomp, format-doc, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-25
 measurements: []
-requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950, Q-1760]
+requests: [Q-0014, Q-0056, Q-0210, Q-0211, Q-0213, Q-0215, Q-0216, Q-0470, Q-0799, Q-0950, Q-1760, Q-1885]
 supersedes: []
 ---
 
@@ -320,20 +320,129 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       turret flag it draws its body and turret image frames as S-0102 claim 22 says, at every
       index. Of the two voxel parts S-0007 claim 19 loads for it, only the barrel is drawn. The
       voxel turret part is loaded but never drawn, and without a barrel part no voxel part is drawn
-      at all. The barrel is drawn at the vehicle's turret position, turned with its turret facing
-      and pitched by its barrel elevation, as for a voxel vehicle (claims 8 and 10). Claim 11's
-      overlap rule, by the 4-step turret facing, decides whether the barrel or the sprite turret
-      wins where the two overlap.
+      at all; the body and turret frames are then still composed into one image (*One image*,
+      *Depth*).
       - Backing: `measurable` (MS-33 part k, whose sprite runs use the fixed-name type, so the
         filled turret table takes the index through 2, 0, 1 and *none*), for the parts drawn at
-        each index and the overlap rule. `unmeasured` for the barrel's exact position, turn and
-        pitch: part k does not compare them with claims 8 and 10
+        each index
       - Confidence: high (no numbered model and no voxel turret part drawn), low (the sprite turret
         shown at every index, no higher than S-0102 claim 22 rates the turret path it rests on, as
-        part k shows that a sprite turret is drawn at each index, not which frame), medium (that
-        the barrel's position, turn and pitch are exactly those of claims 8 and 10, unmeasured as
-        above), medium (the overlap rule by 4-step turret facing, which extends claim 11 to a
-        sprite turret, until MS-33 part k runs)
+        part k shows that a sprite turret is drawn at each index, not which frame)
+      - **Barrel pose.** The barrel is placed by claim 8's transform, the shift first and then the
+        turn about the shifted point, but with the displacement in claim 9's unit: *d =
+        trunc(δ / 8)* model units along the body's forward axis (integer division, truncated toward
+        zero; *δ* the imported turret displacement in leptons). It is turned by claim 4's relative
+        turret angle and pitched by claim 6's 32-step elevation about claim 10's axis, the lateral
+        axis through the shifted point. In the original the pitch pivot of this barrel lies off
+        claim 10's axis, at a point that also depends on the firing position of the vehicle's
+        weapon in slot 0, and moves with the turn. Our engine uses claim 10's axis, as the
+        departure for claim 10 does for other barrels (Lead-confirmed presentation departures),
+        extended to this barrel at the delegated sign-off, 2026-10-25. At level elevation the two
+        pivots give the same image.
+        - Backing: `measurable` (MS-33 part k's pose runs, for the displacement and the
+          turn); the pitch about claim 10's axis at an elevation other than level is our engine's
+          design rule, with no run cited, since the pose runs hold the barrel level and the
+          invisible runs check only the elevation step; `unmeasured` for the original's off-axis
+          pivot: it changes the image only at an elevation other than level, which the pose runs
+          do not set, and our engine does not reproduce it
+        - Confidence: medium (the displacement and the turn, until MS-33 part k runs), medium
+          (the pitch axis, a design rule), medium (the original's off-axis pivot)
+        - **Invisible slot-0 projectile (original glitch, fixed without a switch).** When the
+          projectile of the vehicle's weapon in slot 0 is invisible (S-0306 claim 9), the
+          original draws this barrel at a distorted elevation: a raised barrel is shown below
+          level and a lowered one stays below level, each at about a third of its angle from
+          level, so the absent-key fire angle of claim 6 shows level. The weapon in slot 0 is
+          the one S-0308 claim 2's per-slot replacement gives: while the vehicle is elite, the
+          weapon of its type's elite slot 0 when that elite slot holds a weapon, and the weapon
+          of slot 0 otherwise. Which slot S-0308 chooses against a target does not matter. Our
+          engine draws claim 6's elevation. It is a drawing artefact with no gameplay impact, so
+          it gets no switch, as decided at the delegated sign-off, 2026-10-25.
+          - Backing: `measurable` (MS-33 part k's invisible runs, for the original's raised
+            barrel and for our engine's elevation); `unmeasured` for the original's lowered
+            barrel: the invisible runs use raised elevations only, and the case describes a
+            drawing artefact our engine does not reproduce; for an elite vehicle, which slot-0
+            weapon applies rests on S-0308 claim 2 and is not run here, since the invisible runs
+            do not vary veterancy
+          - Confidence: medium (the original's raised barrel, until MS-33 part k runs), medium
+            (the original's lowered barrel), medium (the elite case, as S-0308 claim 2 states it)
+      - **Frame (Q-1885 question 4).** The barrel is always drawn in HVA frame 0, whatever the
+        walk-animation and animation-frame counters. `quirks.barrel_frame_zero` does not apply to
+        it: with no voxel turret drawn there is no turret frame to take, so it stays in frame 0
+        in both switch states (claim 16).
+        - Backing: `measurable` (MS-33 part k, frame run, for the original, which is the switch's
+          default state); in the other switch state, frame 0 is our engine's design rule, since
+          the switch covers barrels drawn with a voxel turret, and no run tests it
+        - Confidence: medium (the original, until MS-33 part k runs), medium (the other switch
+          state, a design rule)
+      - **One image (Q-1885 question 3).** The body frame, the barrel and the sprite turret frame
+        (without a barrel part, the body frame and the sprite turret frame) are composed into one
+        image, without any depth test between them and with transparent
+        pixels painting nothing. The body frame comes first; at 4-step turret facings 0 and 3
+        (Terms, the turret's own facing, not its facing relative to the body) the barrel follows
+        and then the turret frame, and at facings 1 and 2 the turret frame and then the barrel.
+        Later pixels win. So the barrel and the sprite turret both cover the body wherever they
+        have pixels, and claim 11's rule by the 4-step turret facing alone decides between barrel
+        and sprite turret. The composed image stands in the vehicle's render layer at the
+        vehicle's place in the drawing order (S-0102), drawn at the body's draw point, so on a
+        bridge deck the barrel is lifted with the body. The vehicle's own shadow (S-0102 claim 22)
+        is drawn before the composed image and keeps its own row.
+        - Backing: `measurable` (MS-33 part k, overlap runs)
+        - Confidence: medium (the overlap rule by 4-step turret facing, which extends claim 11 to a
+          sprite turret, until MS-33 part k runs)
+      - **Depth (Q-1885 questions 1 and 2).** A vehicle drawn as a sprite whose type has the
+        turret flag, with or without a barrel part, is drawn as one composed image (*One image*).
+        The composed image has one depth bias and profile for all its pixels: S-0102 claim 13's
+        row for a vehicle drawn as a voxel model, *U* with no further constant, upright, a reader,
+        at every height above the surface, on a bridge deck and in the air included. The one
+        exception is the split of a tall image (*Split of a tall image* below). Its rectangle,
+        whose last row is the anchor row *r*₁ of S-0102 F2, is the smallest rectangle holding the
+        rectangles of all its parts, each placed at the body's draw point: the body frame's stored
+        rectangle, the barrel's copy rectangle (claim 25, F6), where the type has a barrel part,
+        and the turret frame's stored rectangle. So while the barrel and the turret frame end
+        above the body frame's last row, *r*₁ is the body frame's last row, as for a vehicle drawn
+        as a sprite without the turret flag. In the original, when the barrel or the turret frame
+        reaches lower, or further right, than the body frame, the rectangle ends one row (or
+        column) past the last row (or column) of the lowest (or rightmost) such part. Our engine
+        takes the exact rectangle: the extension moves the anchor by at most one row, a drawing
+        detail with no gameplay impact, so it gets no switch, as decided at the delegated
+        sign-off, 2026-10-25. So another object's pixels (a building, a tree or a wall) hide or
+        show the barrel exactly as they hide or show the body and the sprite turret at the same
+        screen rows.
+        Neither of S-0102 claim 13's rows for a vehicle drawn as a sprite (*U* − 2 at height 0,
+        −*L(z)* − 2 otherwise) applies to a vehicle with the turret flag, whether or not it has a
+        barrel part. They apply to a sprite-body vehicle without the flag (Cross-spec
+        reconciliation). Another vehicle, also a reader, does not hide any part of it through
+        depth: their overlap follows the drawing order.
+        *Split of a tall image.* In the original, the composed image of a type too big to fit
+        under a bridge is split when it is taller than 16 rows and either the vehicle is near a
+        bridge with its column factor 0 (the condition of S-0102 claim 13's row for such a type,
+        claim 14 there) or one further situation holds that is not identified here (Open
+        questions). Its lowest 16 rows then keep *U*, upright, and the rows above them take
+        *U* − 5, flat. The image of a type without that flag is never split, whatever its height.
+        Vehicles drawn as voxel models are split in the same way. S-0102 owns the split
+        (Cross-spec reconciliation).
+        - Backing: `measurable` (MS-33 part k, depth runs: at height 0 for the bias and the shared
+          anchor row, with a barrel part and, in the depth run without a barrel, without one; on the
+          bridge deck for the one profile of all pixels); `unmeasured` for which row applies on the
+          bridge deck and in the air: there the voxel row and S-0102 claim 13's row for a sprite
+          with *h* not 0 differ by about one depth unit, inside F2's rounding, so the deck runs
+          cannot tell the two rows apart, and no run lifts the subject; `unmeasured` for a rectangle
+          whose last row is not the body frame's, where the barrel or the turret frame reaches lower
+          than the body frame: the depth runs build the test sprite file so that the body frame's
+          last row is lowest, and no run makes another part reach lower; `unmeasured` for the
+          original's one-row extension of the rectangle: the depth runs are built so that it does
+          not arise, and our engine does not reproduce it; `unmeasured` for the split of a tall
+          image: no scenario here sets up a type too big to fit under a bridge (the depth runs clear
+          that flag, so no split arises in them), and the split's second condition is not identified
+        - Confidence: medium (the row at height 0, with and without a barrel part, and the one
+          profile on the bridge deck, until MS-33 part k runs), medium (which row applies on the
+          bridge deck and in the air), medium (a rectangle whose last row belongs to the barrel or
+          the turret frame), medium (the original's one-row extension), low (the split of a tall
+          image, whose second condition is open)
+      - **No barrel shadow.** The barrel casts no shadow of its own. The vehicle's only shadow is
+        its sprite shadow frame (S-0102 claim 22), whose outline does not include the barrel.
+        - Backing: `measurable` (MS-33 part k, shadow observable)
+        - Confidence: medium, until MS-33 part k runs
 
 ### Sections and animation
 
@@ -367,10 +476,11 @@ turn per unit), to tell it apart from the coarser facings derived from it.
     HVA transforms drawn for a turret frame at or beyond *F_tur* are those of that frame modulo
     *F_tur*, by claim 13.) A building turret uses the building's
     animation-frame counter modulo the turret HVA's frame count. All "mod" here are non-negative
-    remainders of non-negative counters. **Barrels drawn together with a turret, of
+    remainders of non-negative counters. **Barrels drawn together with a voxel turret, of
     vehicles and buildings alike, are always drawn in HVA frame 0** (`quirks.barrel_frame_zero`). A
     building's barrel drawn without a turret uses the building's animation-frame counter instead
-    (claim 37). **A numbered turret model** of a multi-turret type (claim 12) is drawn in frame
+    (claim 37). The barrel of a sprite-body vehicle is drawn in frame 0 in both switch states
+    (claim 12, *Sprite body*). **A numbered turret model** of a multi-turret type (claim 12) is drawn in frame
     *f_b* whatever its value, so in frame 0 whenever *f_b* = 0: the animation-frame counter is
     never used for it. Claim 13 then reduces the frame modulo that model's own HVA frame count.
     Its turret image key (claim 26) records the same frame. Numbered barrels follow the barrel
@@ -760,8 +870,8 @@ turn per unit), to tell it apart from the coarser facings derived from it.
       scenario AC30 parts h (2) and j, and rated medium, as S-0501 rates it. MS-9 tests corrected
       mode isolation; MS-27 tests current-image exclusion with caching enabled and disabled, as
       lead-confirmed departures. Hovering unsettled shadow freshness is `unmeasured`: corrected
-      exclusions agree for cached and fresh footprints, so the old rocking comparison no longer
-      distinguishes freshness. The driving/naval unsettled case and exemption from cache-miss skip
+      exclusions agree for cached and fresh footprints, so a rocking comparison does not
+      distinguish freshness. The driving/naval unsettled case and exemption from cache-miss skip
       remain `unmeasured`: no scenario here isolates their freshness or the miss-skip event from
       changed keys and other fresh draws. Also `unmeasured` in two places. The look of a reused
       unmasked footprint: its key covers every input of that footprint, so fresh and reused unmasked
@@ -2017,8 +2127,9 @@ Every switch defaults to the original (YR) behaviour described; "Fixed" gives th
   Fixed: depth-test between sections.
 - **`quirks.voxel_depth_double_width`** (default: on). With the depth option every voxel is two pixels wide.
   Fixed: one pixel per voxel, as without the option.
-- **`quirks.barrel_frame_zero`** (default: on). Barrels drawn together with a turret always use HVA
-  frame 0 (claim 16; a building barrel without a turret is not affected, claim 37). Fixed: use the
+- **`quirks.barrel_frame_zero`** (default: on). Barrels drawn together with a voxel turret always
+  use HVA frame 0 (claim 16; a building barrel without a turret is not affected, claim 37, and a
+  sprite-body vehicle's barrel stays in frame 0 in both states, claim 12). Fixed: use the voxel
   turret's frame.
 - **`quirks.voxel_topdown_column_origin`** (default: on). Claim 36. Malformed columns, whose runs do not add
   up to exactly *Nz* cells (the condition of the importer's warning, claim 36). Three things
@@ -3325,7 +3436,7 @@ sharing the footprint must exclude its own current image, not inherit the first
 object's cutouts. Repeat with hovering resting and rocking poses: fresh and reused
 footprints have the same current exclusions. Wrong frame or changed key makes reuse
 inconclusive; darkened own pixels or persistent old cutouts otherwise falsify the fix.
-Rocking freshness itself is no longer distinguishable by this corrected-output test.
+Rocking freshness itself is not distinguishable by this corrected-output test.
 
 **MS-28, larger mixed-depth ties (claims 23, 24; Q-0215 question 7).** The four
 rows and repeats below are proposed stock-oracle tests, not completed measurements.
@@ -3596,6 +3707,32 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
     and single barrel names that S-0007 claim 19 gives are added, clearly different from each
     other and from the numbered models, which stay supplied. A second sprite run is the same
     except that the single barrel model is withheld.
+  - **Sprite-barrel runs (part k only).** Further runs of the first sprite run's subject, each
+    with the changes named, its test override setting all four depth fudges to 0 as in S-0102
+    D33 and its fire angle to a test value of 0, so that its barrel stands level (claim 6):
+    - *depth runs:* the map also holds a wall segment, a building, a tree, a voxel vehicle of the
+      tester's house and a bridge whose deck the subject can drive onto. A depth control, a further
+      test vehicle type with the subject's sprite file and fields but without the turret flag, is
+      added as the control is. The test override clears the subject's too-big-for-a-bridge flag,
+      which the depth control shares, so that no split of a tall image (claim 12, *Depth*) arises
+      for either. A further depth run, the *depth run without a barrel*, is the same with the single
+      barrel model withheld, as in the second sprite run, and has only the drive past the wall
+      segment at height 0. The test sprite file gives every body frame a stored rectangle whose last
+      row lies below the last row of every turret frame's stored rectangle and below the barrel's
+      copy rectangle (claim 25, F6) at the held turret facing, so that the subject's composed image
+      and the depth control's body frame share their last row (claim 12, *Depth*). The *compared
+      pixels* are the body pixels that neither the barrel nor the sprite turret covers at the held
+      facing and that lie over opaque pixels of the wall segment at every distance from −1 to 4 rows
+      (Procedure), in at least three consecutive rows, each holding at least one such pixel.
+    - *pose runs:* the subject's turret displacement field set to the test values 0, 200, −100
+      and −12 leptons, one run each.
+    - *frame run:* the single barrel model's HVA has 4 clearly different frames.
+    - *invisible runs:* the projectile of the subject's slot-0 weapon has the invisible flag, with
+      the fire angle left out (absent default 8) in one run and set to a test value of 20 in a
+      second; a third run, the visible control, sets 20 without the invisible flag. For these
+      runs the base rules copy (S-0004) also deletes the fire-angle key of the subject type's
+      section, besides its turret table keys, so that in the first run no rules layer gives a
+      fire angle and the absent default is the value imported.
   - Passenger types: override sections giving five infantry types the mode indices 0, 1, 2, 3
     and 17, and a sixth one mode index 20.
 - *Procedure and observable:* capture the turret and barrel area of every drawn frame, with the
@@ -3642,7 +3779,27 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
     its index goes through 2, 0, 1 and *none* as in part b. Then, in the first sprite run, with
     no passenger, turn the subject's turret through all 4-step turret facings while it attacks
     targets placed round it, capturing every drawn frame. A run in which the subject is drawn
-    with voxel parts as in part a (the voxel flag not cleared) is void.
+    with voxel parts as in part a (the voxel flag not cleared) is void. In the sprite-barrel runs,
+    with no passenger:
+    - *depth:* as S-0102 D33 (a), the subject and then the depth control drive toward the viewer
+      past the wall segment one step at a time on the same path, with no view jump between the
+      two drives, their images overlapping the wall's, the subject's turret held at one 4-step
+      facing. In every drawn frame record the distance *b* − *b*<sub>wall</sub> in rows (*b* the
+      shared last row of the subject's composed image or of the control's body frame), which
+      compared pixels are shown, and which other pixels of the overlap are shown. The switch
+      distance of each is the first distance at which all its compared pixels are shown. A run
+      in which two consecutive drawn frames differ by more than one row of *b* within three
+      rows of a switch is inconclusive. Then the subject stands still
+      while the building, the tree and the voxel vehicle are placed in turn so that their images
+      overlap its barrel from map north, south, east and west, at height 0 and again with the
+      subject on the bridge deck. Record which pixels of the overlap are shown, and the
+      vehicle's shadow region.
+    - *pose:* with the body facing held, turn the turret through the eight step directions and
+      capture the barrel at each.
+    - *frame:* drive the subject through at least 8 walk-counter steps, then let it attack the
+      target at rest, capturing the barrel in every drawn frame.
+    - *invisible:* place the subject and capture its barrel from placement until at least
+      8 ticks after it.
   - *Part l, magazine:* let the magazine subject attack the target while standing still until
     its magazine is empty. Go on capturing every tick, recording its ammunition, its rearm
     countdown and its reload countdown, until it has regained a round and fired it.
@@ -3683,7 +3840,39 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
     the single barrel model at the turret, turned with it, winning over the sprite turret where
     they overlap at 4-step turret facings 1 and 2 and losing at 0 and 3 (claim 11). In the second
     sprite run it shows no voxel part. Neither run ever shows the single turret model or a numbered
-    model.
+    model. In the sprite-barrel runs:
+    - *depth:* from S-0102 F2 with the shared last row (*U* = −1 for the subject and *U* − 2 =
+      −3 for the depth control, against the wall's −2, upright), the depth control switches at
+      0 to 2 rows, as in D33 (a), and the subject at 2 or 3 rows: the pair of switch distances
+      (control, subject) is (0, 2), (1, 3) or (2, 3), whichever the path's rows give. These pairs
+      follow from S-0102 *Comparing two drawings*: the control is shown once (4/3)·(*b* −
+      *b*<sub>wall</sub>) > −1 and the subject once it is > +1, two depth units (1.5 rows) later,
+      each within F2's rounding. At 3 rows the subject's margin, 4 units against a difference of
+      1, exceeds what the rounding Q and the floors can remove on any row, so the subject's
+      switch is never later than 3 rows, and its switch comes 1 or 2 rows after the control's.
+      Taking every alignment of the shared last row and the wall's last row modulo 3, with at
+      least three consecutive compared rows, gives exactly these three pairs, so a pair such as
+      (2, 4) does not arise. In the depth run without a barrel, the same holds for the drive.
+      At every distance, each compared pixel shown for the subject is also shown for the control; at
+      least one distance shows all the control's compared pixels and not all the subject's; and
+      once all the subject's compared pixels are shown, they stay shown at every greater
+      distance up to 4 rows. In every drawn frame, where pixels of another object that share
+      one writer depth (S-0102 F2) overlap the composed image on one screen row, the composed
+      image's pixels under them are shown or hidden alike, whether they belong to the barrel,
+      the body or the sprite turret. Against the building and the tree, from every side, the
+      barrel is hidden or shown exactly where the body and the sprite turret would be on the same
+      rows. The voxel vehicle
+      never cuts the subject along a row: whichever is drawn later covers the other, barrel
+      included. On the deck the same holds. The barrel never darkens or adds to the shadow
+      region.
+    - *pose:* the barrel's origin sits 0, 25, −12 and −1 model units ahead of the body's origin
+      in the four pose runs, on the body's forward axis, and the barrel turns with the turret's
+      32-step facing relative to the body.
+    - *frame:* frame 0 of the barrel's HVA in every drawn frame.
+    - *invisible (original):* once placement's turn is over, the barrel shows level with the
+      fire angle left out, and one step (11.25°) below level with 20, while the visible control
+      shows two steps above level. Our engine shows claim 6's elevation in all three runs: one
+      step above level, and two steps above level twice.
   - Part l: model 0 from the subject's first turn until its first shot, with a full magazine.
     After each shot, the shot made with the last round included, the steps of part f for that
     shot's countdown. Model 0 in every tick in which the magazine is empty and the countdown is
@@ -3702,7 +3891,18 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
   subject shows a turret in the first drawn frame that shows it, or shows no turret in a later
   frame before its first shot; in part k, the subject shows a voxel turret model, a
   numbered model, or no sprite turret in some frame, what is drawn changes at a hand-over, or
-  its barrel's overlap with the sprite turret follows another rule than claim 11's; in part l,
+  its barrel's overlap with the sprite turret follows another rule than claim 11's; in part k's
+  sprite-barrel runs, the subject's compared pixels are shown or hidden as the control's at
+  every distance (the sprite row *U* − 2), the pair of switch distances is none of (0, 2),
+  (1, 3) and (2, 3), a compared pixel is shown for the subject at a distance where it is hidden
+  for the control, a compared pixel of the subject is hidden again at a greater distance after
+  all were shown, barrel pixels on a row are hidden where body pixels on the same row, under
+  pixels of the same writer depth, are shown or the other way round, the voxel vehicle cuts the
+  barrel along a row, in the depth run without a barrel the subject's compared pixels are shown
+  or hidden as the control's at every distance, the barrel is
+  shifted by *δ* × ρ (about 33.1, −16.6 and −2.0 model units), rounded down (−13 for −100) or
+  not shifted, it shows a frame other than 0, the shadow region shows a barrel outline, or the
+  invisible runs show the visible control's elevation in the original; in part l,
   some tick shows a model other than the countdown gives, such as a turret other than 0, or no
   turret, while the magazine is empty and the countdown is over, or the model changes in the
   tick a round comes back.
@@ -3711,6 +3911,10 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
 
 ## Open questions
 
+- **Second condition of the tall-image split.** Claim 12 (*Depth*) splits the composed image of
+  a type too big to fit under a bridge when it is taller than 16 rows, near a bridge with its
+  column factor 0, or in one further situation that has not been identified. Until it is, that
+  situation is rated low and no scenario sets it up.
 - **Turretless vehicle with a barrel part.** A vehicle with a barrel part but no turret is drawn
   differently, with a shift derived from its weapon position and a pitch correction. Not yet
   understood; left out.
@@ -3801,8 +4005,25 @@ exact reuse contract inconclusive: pixel matches alone do not settle it.
   note that this barrel's overlap with the sprite turret follows claim 12 here, which extends
   claim 11's overlap rule, by the 4-step turret facing, to a sprite turret. MS-2 and MS-6 back
   claim 11 for voxel turrets only, so the extension is rated medium until MS-33 part k runs.
+- **S-0102 claims 13, 14 and 22 (Q-1885).** A vehicle drawn as a sprite whose type has the turret
+  flag, with or without a barrel part, is drawn as one composed image (claim 12 here, *Sprite body*:
+  body frame, voxel barrel where the type has one, turret frame), placed with the row of a vehicle
+  drawn as a voxel model: *U*, upright, a reader, at every height. S-0102 claim 13's rows "vehicle
+  drawn as a sprite, *h* = 0" and "*h* not 0" should say that they apply only to a vehicle drawn as
+  a sprite whose type lacks the turret flag, and the voxel row should name the turret-flag sprite
+  vehicle too. Claim 14's sentence "Infantry and vehicles drawn as sprites use *U* only while their
+  height above the surface is 0" should exclude it in the same way. Claim 22's "combined into one
+  image" should add that the voxel barrel, where the type has one, is part of that image, and cite
+  claim 12 here for its order and for its rectangle, which F2 anchors at its last row. The shadow
+  row there is unchanged. The row "vehicle drawn as a sprite whose type is too big to fit under a
+  bridge" (*U* − 18, flat) likewise applies only without the turret flag. With it, and for vehicles
+  drawn as voxel models too, the original instead splits the composed image when it is taller than
+  16 rows, under that row's condition (near a bridge, column factor 0) and in one further situation
+  not identified here (Open questions): its lowest 16 rows keep *U*, upright, and the rows above
+  them take *U* − 5, flat. Claim 12 here (*Depth*) rates this split low and `unmeasured`: no
+  scenario here sets it up, and S-0102 owns it.
 
-## Questions for the project lead
+## Decided
 
 - **Image invalidation.** Claim 26 keeps reuse for a whole game in our engine, while the original
   can invalidate earlier images together at an event not specified here. That departure, with no
