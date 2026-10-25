@@ -2,13 +2,13 @@
 id: S-0109
 title: Animation playback
 topic: rendering
-revision: 32
+revision: 41
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-25
 measurements: []
-requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425]
+requests: [Q-0046, Q-0418, Q-0770, Q-0771, Q-1425, Q-1716, Q-1717]
 supersedes: []
 ---
 
@@ -18,39 +18,34 @@ supersedes: []
 
 How an animation plays its sprite over time (stage delay, random rates, game-speed normalisation,
 passes, reversed and ping-pong play, loop delays, follow-up types, its end, and the start and middle
-events tied to its stages), which sprite its derived playback fields come from, and which image frame
-it draws and how (draw point, stacked copies, translucency, shadow, detail level, attachment to another object). Render layers
-and depth are S-0102's, palettes and brightness S-0103's and S-0104's, building slot animations
-S-0108's, and sprite lookup and the theater refresh S-0007's. This revision covers skirmish.
-Network games and campaigns are out of scope. Claim 24 preserves a deferred fog rule only.
-Burning-walker playback exceptions belong to S-0615 claims 4 to 11; infantry creation and
-placement retries at playback end belong to S-0611 claims 9 to 11.
+events tied to its stages), which sprite its derived playback fields come from, and which image
+frame it draws and how (draw point, stacked copies, translucency, shadow, detail level, attachment
+to another object). Render layers and depth are S-0102's, palettes and brightness S-0103's and
+S-0104's, building slot animations S-0108's, and sprite lookup and the theater refresh S-0007's.
+This spec covers skirmish. Network games and campaigns are out of scope. Claim 24 preserves a
+deferred fog rule only. Burning-walker playback exceptions belong to S-0615 claims 4 to 11; infantry
+creation and placement retries at playback end belong to S-0611 claims 9 to 11.
 
-**Joint hand-off.** Check S-0011 claim 36 and scenario T21 against claim 13 of this revision
-at sign-off, and hand the two revisions off together. Creation-time sound and resource chain
-reaction are enabled; their suppression applies only to later start events. Confirm S-0401
-claim 20 and scenario E17 in the same hand-off: trigger-played suppression is limited to later
-start events and does not suppress the creation-time chain reaction. Confirm S-0202 claim 15
-and scenario R14 against the crater request's taking 6 bales under S-0401 claim 3:
-a resource cell at stage 6 becomes stage 0, not empty.
-Also confirm S-0202 claims 10 and 15 and scenario R14 against claims 13, 14 and 25.
-S-0202 claim 15 completes the downstream particle creation and smudge selection and placement
-draw rules during map loading and play, including trigger-created animations and later playback
-middle events; those effects are not draw-free. This spec retains ownership of event timing,
-sprite-derived μ and the height gate. Confirm S-0011 claim 36 and its loading draw-order
-table include the supplied creation-time middle-event composition, and that claim 36's
-composition pointer covers that during-play scope too. Subsequent particle updates remain
-outside this hand-off, not draw-free; T21 does not establish particle or smudge draw counts.
+**Hand-off.** Creation-time sound and resource chain reaction are enabled; their suppression
+applies only to later start events. Under S-0401 claim 20 and scenario E17, trigger-played
+suppression is limited to later start events and does not suppress the creation-time chain
+reaction. Under the crater request's taking 6 bales (S-0401 claim 3; S-0202 claim 15 and scenario
+R14), a resource cell at stage 6 becomes stage 0, not empty. S-0202 claim 15 completes the
+downstream particle creation and smudge selection and placement draw rules during map loading and
+play, including trigger-created animations and later playback middle events; those effects are not
+draw-free. This spec retains ownership of event timing, sprite-derived μ and the height gate.
+Subsequent particle updates remain outside this hand-off, not draw-free; S-0011 scenario T21 does
+not establish particle or smudge draw counts.
 
 ## Terms
 
 *Tick*, *drawn frame*, *image frame*, *sprite*, *detail level*, *game speed* (index *s*), *scenario
-random stream*, *draw*, *ranged draw*, *fog of war*, *departure*, *importer
-warning*, *quirk switch*, *art database*, *type name*, *local player*, *house*,
-*trigger* and *trigger action* are used as in the glossary. *Render layer* and *slot animation* are as in S-0102 and S-0108, the slot kinds
-*freeze-unpowered* and *light-unpowered* (scenario AN16) as in S-0108,
-*waypoint marker* as in S-0009, *type read*, *theater refresh*, *theater flag* and *new-theater flag*
-as in S-0007, *turn pass* and *update order* as in S-0203.
+random stream*, *draw*, *ranged draw*, *fog of war*, *departure*, *importer warning*, *quirk
+switch*, *art database*, *type name*, *local player*, *house*, *trigger* and *trigger action* are
+used as in the glossary. *Render layer* and *slot animation* are as in S-0102 and S-0108, the slot
+kinds *freeze-unpowered* and *light-unpowered* (scenario AN16) as in S-0108, *waypoint marker* as in
+S-0009, *type read*, *theater refresh*, *theater flag* and *new-theater flag* as in S-0007, *turn
+pass* and *update order* as in S-0203.
 
 | Term | Meaning |
 |---|---|
@@ -100,12 +95,12 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
    - Confidence: high
 
 2. **Stage delay from the rate field.** The type's rate field ρ gives image frames per game minute.
-   The stage delay is *d* = ⌊900 / ρ⌋ ticks when ρ > 0 and *d* = 0 when ρ ≤ 0, except −1 (Formulas F1). A
-   type without the field has *d* = 1. The value −1 counts as not given and keeps the value held
-   (S-0006, claim 3). A delay of 0 means the animation never advances: it keeps its initial
-   stage and never ends through playback. Removal by an owner or creator, or landing of a
-   bouncing animation, can still end it. Consequently a rate above 900 also
-   freezes the animation, since ⌊900 / ρ⌋ = 0 (`quirks.anim_fast_rate_freezes`, Edge cases).
+   The stage delay is *d* = ⌊900 / ρ⌋ ticks when ρ > 0 and *d* = 0 when ρ ≤ 0, except −1 (Formulas
+   F1). A type without the field has *d* = 1. The value −1 counts as not given and keeps the value
+   held (S-0006, claim 3). A delay of 0 means the animation never advances: it keeps its initial
+   stage and never ends through playback. Removal by an owner or creator, or landing of a bouncing
+   animation, can still end it. Consequently a rate above 900 also freezes the animation, since ⌊900
+   / ρ⌋ = 0 (`quirks.anim_fast_rate_freezes`, Edge cases).
    - Backing: `measurable` (AN1, AN2) for positive rates and the absent field. Zero,
      negative and −1 layered rate cases are `unmeasured` here: neither scenario supplies
      those values in successive type reads.
@@ -130,9 +125,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
      rejected values included. With *d*<sub>1</sub>′ = *d*<sub>2</sub>′ the delay takes no raw
      value.
    - Backing: `measurable` (scenario AN3) for the delays and, through a recorder that reads the
-     state of the scenario random stream, for the number and order of creation-delay draws.
-     AN25 tests random follow-up delays, including their own-turn placement. The −1
-     layered endpoints remain `unmeasured`: neither scenario supplies them. The absence of a new-pass reroll is
+     state of the scenario random stream, for the number and order of creation-delay draws. AN25
+     tests random follow-up delays, including their own-turn placement. The −1 layered endpoints
+     remain `unmeasured`: neither scenario supplies them. The absence of a new-pass reroll is
      `measurable` through AN3's two-pass variant.
    - Confidence: high
 
@@ -206,8 +201,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
    An absent loop end takes the sprite end *E*<sub>s</sub>, not the end field *E* (claim 25,
    `quirks.anim_loop_end_from_sprite`). So a type that gives an end field but no loop end, and has
-   more than one pass (claim 7), plays every pass but the last up to image frame *E*<sub>s</sub> − 1, past its own end field,
-   and only its last pass stops at *a* + *E* − 1.
+   more than one pass (claim 7), plays every pass but the last up to image frame *E*<sub>s</sub> −
+   1, past its own end field, and only its last pass stops at *a* + *E* − 1.
    - Backing: `measurable` (scenarios AN1, AN5)
    - Confidence: high; medium for the absent loop end (scenario AN5 checks it)
 
@@ -244,9 +239,9 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
    *N* or more. Consequences:
    - a ping-pong animation that is neither a shadow type nor reversed never ends a pass, so its
      remaining passes never change and it never ends on its own,
-   - a shadow type still ends a pass when *k* is at or above λ<sub>e</sub> − *a* without turning (claim
-     10). On the last pass that happens when λ<sub>e</sub> − *a* < *E*; with absent end and loop-end
-     fields, that is whenever *a* > 0,
+   - a shadow type still ends a pass when *k* is at or above λ<sub>e</sub> − *a* without turning
+     (claim 10). On the last pass that happens when λ<sub>e</sub> − *a* < *E*; with absent end and
+     loop-end fields, that is whenever *a* > 0,
    - a reversed type still ends a pass when its stage comes down to 0 or below without turning,
    - with *a* > 0 and *r* ≥ 2, the lower turn needs *k* = *a* exactly. A stage coming down from the
      upper turn passes *a* only when it turned above *a*, so an animation that turns at
@@ -279,20 +274,20 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 
 11. **Loop delays.** A loop delay of *D* updates starts:
     - at creation, when the creator asks for one (*D* > 0), and
-    - at the end of every pass that is followed by a new pass (claim 7), when the type's random
-      loop delay pair (*D*<sub>1</sub>, *D*<sub>2</sub>) is not (0, 0). *D* is then a ranged draw
-      from the scenario random stream over the two values, in either order. The pair counts
-      updates (Terms), never normalised. A drawn *D* of 0 gives no loop delay: the new pass plays at once and has no
-      start event.
+    - at the end of every pass that is followed by a new pass (claim 7), when the type's random loop
+      delay pair (*D*<sub>1</sub>, *D*<sub>2</sub>) is not (0, 0). *D* is then a ranged draw from
+      the scenario random stream over the two values, in either order. The pair counts updates
+      (Terms), never normalised. A drawn *D* of 0 gives no loop delay: the new pass plays at once
+      and has no start event.
 
     During a loop delay the animation does not advance, and it is drawn at its current stage: the
     first image frame of the new pass, or image frame *a* (*a* + λ<sub>e</sub> − 1 if reversed) at
     creation. Each update counts *D* down by one. On the update that brings it to 0 the start event
     happens (claim 13), and the animation does not advance on that update. The clock of claim 5 is
     not restarted, so the first image frame of a pass that follows a loop delay of *D* is shown for
-    max(*d*, *D* + 1) ticks when *d* > 0, every tick receives an update and the animation is
-    not held after the delay. Missed updates or a continuing hold can extend it, and *d* = 0
-    prevents the advance altogether. A loop delay given at creation is counted only from the second update
+    max(*d*, *D* + 1) ticks when *d* > 0, every tick receives an update and the animation is not
+    held after the delay. Missed updates or a continuing hold can extend it, and *d* = 0 prevents
+    the advance altogether. A loop delay given at creation is counted only from the second update
     (claim 5), so its start event comes on update *D* + 1 after creation.
     - Backing: `measurable` (AN9) for its positive delays between passes, their draws and
       start sounds; AN25 for equal-endpoint and zero-pair draw allocation. The reversed
@@ -336,29 +331,31 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       middle-before-reaction order; the reaction's
       effects and composed draw sequence have the confidence of S-0401 claim 20
 
-14. **Middle event.** The middle event happens on every advance after which *a* + *k* = μ,
-    provided μ ≠ 0, so it can happen once per pass, and for reversed and ping-pong animations on the
-    way down as well. μ is ⌊*N* / 2⌋ of the sprite that claim 25 names, whatever the type's fields
-    say. It does not happen on the advances of a bouncing type (the start event's middle event of
-    claim 13 still does). An animation whose advances never reach image frame μ has no middle
-    event, except through claim 13. Reaching μ on an ending advance still produces the event,
-    even though that image frame is not drawn (State and ordering). Burning walkers do not
-    advance while running; S-0615 claims 4 to 11 govern their playback and expiry exceptions,
-    without suppressing claim 13's creation-time middle event.
-    These rules apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's
-    cell animation (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first
-    update. The event requests the type's particle count of its named particle type when a particle
-    type is given and the count is positive, otherwise none. These particles are created in the
-    shared gas system of S-0613 claim 1, regardless of their type's behaviour kind, as in
-    S-0613 claim 2. During map loading that system does not exist yet, so a loading-time
-    μ = 0 request meets no shared system and the original stops; our engine's departure is in
-    S-0613's edge cases. Particle creation is not gated by height. The particle requests precede any random choice between a scorch mark and a crater,
-    so their creation draws change the stream state used by that choice. S-0202 claim 15 owns
-    the particle creation draw groups during loading and play, including their conditional speed,
-    lifetime and colour draws. Its R14 A and D test their composition, including trigger-created
-    animations and middle events later in playback. The creator and loading/play phase do not
-    change the event gates or draw composition. Subsequent particle updates are outside this
-    composition, not draw-free; their draws must be accounted for separately.
+14. **Middle event.** The middle event happens on every advance after which *a* + *k* = μ, provided
+    μ ≠ 0, so it can happen once per pass, and for reversed and ping-pong animations on the way down
+    as well. μ is ⌊*N* / 2⌋ of the sprite that claim 25 names, whatever the type's fields say. It
+    does not happen on the advances of a bouncing type (the start event's middle event of claim 13
+    still does). An animation whose advances never reach image frame μ has no middle event, except
+    through claim 13. Reaching μ on an ending advance still produces the event, even though that
+    image frame is not drawn (State and ordering). On an advance that also delivers damage (claim
+    17), the middle event comes after the damage detonation. On an ending advance, and on the
+    advance before a follow-up switch, it comes before the end or that switch, as State and ordering
+    says. Burning walkers do not advance while running; S-0615 claims 4 to 11 govern their playback
+    and expiry exceptions, without suppressing claim 13's creation-time middle event. These rules
+    apply during map loading too. A tile animation (S-0010 claim 19) or an overlay's cell animation
+    (S-0009 claim 12) with μ = 0 produces this event at creation, not at its first update. The event
+    requests the type's particle count of its named particle type when a particle type is given and
+    the count is positive, otherwise none. These particles are created in the shared gas system of
+    S-0613 claim 1, regardless of their type's behaviour kind, as in S-0613 claim 2. During map
+    loading that system does not exist yet, so a loading-time μ = 0 request meets no shared system
+    and the original stops; our engine's departure is in S-0613's edge cases. Particle creation is
+    not gated by height. The particle requests precede any random choice between a scorch mark and a
+    crater, so their creation draws change the stream state used by that choice. S-0202 claim 15
+    owns the particle creation draw groups during loading and play, including their conditional
+    speed, lifetime and colour draws. Its R14 A and D test their composition, including
+    trigger-created animations and middle events later in playback. The creator and loading/play
+    phase do not change the event gates or draw composition. Subsequent particle updates are outside
+    this composition, not draw-free; their draws must be accounted for separately.
 
     The scorch marks and craters of the middle event are attempted only when the animation's
     height above the terrain (glossary) is less than 30 leptons. For world position (X, Y, Z),
@@ -379,23 +376,22 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     | passes | both | one scenario ranged draw over [0, 2147483646], scorch mark when the integer result is below 1073741824, crater otherwise |
 
     The choice range follows S-0202 claim 4, including any rejected raw values. The original
-    compares a floating-point product with 0.5: the integer result times the nearest binary64
-    value to 1 / 2147483646, multiplied with a 53-bit significand in round-toward-zero mode
-    (S-0205 claims 4 and 5). That constant lies slightly below the exact reciprocal. Thus even
-    result 1073741823 gives a product below 0.5, and the table's integer threshold is equivalent
-    in that mode. With `quirks.chop_rounding` off, use that floating-point comparison in the
-    selected mode instead of assuming the integer threshold remains equivalent. This choice is
-    made even if the chosen effect cannot subsequently be placed. S-0202 claim 15 owns the
-    smudge candidate preferences and selection draws during loading and play,
-    using S-0312 claim 26's footprint fit and draw-free placement rules. These draws are separate
-    from the scorch-or-crater choice. A crater request takes 6 bales from the animation's cell
-    under S-0401 claim 3 before placement is attempted. A resource cell at stage 6 remains
-    resource at stage 0; stages 0 through 5 are emptied. These are exact integer stage changes.
-    Any bales delivered follow that claim, so failure to place a crater does not undo the removal.
-    S-0202 claim 15 also owns the loading-phase relation to the overlay data stream and the conditional resource-removal effects before
-    smudge selection: tile-animation creation from recalculation and neighbour spread-offer
-    draws. The same conditional effects apply during play; they do not add a fixed draw count
-    to every crater request.
+    compares a floating-point product with 0.5: the integer result times the nearest binary64 value
+    to 1 / 2147483646, multiplied with a 53-bit significand in round-toward-zero mode (S-0205 claims
+    4 and 5). That constant lies slightly below the exact reciprocal. Thus even result 1073741823
+    gives a product below 0.5, and the table's integer threshold is equivalent in that mode. With
+    `quirks.chop_rounding` off, use that floating-point comparison in the selected mode instead of
+    assuming the integer threshold remains equivalent. This choice is made even if the chosen effect
+    cannot subsequently be placed. S-0202 claim 15 owns the smudge candidate preferences and
+    selection draws during loading and play, using S-0312 claim 26's footprint fit and draw-free
+    placement rules. These draws are separate from the scorch-or-crater choice. A crater request
+    takes 6 bales from the animation's cell under S-0401 claim 3 before placement is attempted. A
+    resource cell at stage 6 remains resource at stage 0; stages 0 through 5 are emptied. These are
+    exact integer stage changes. Any bales delivered follow that claim, so failure to place a crater
+    does not undo the removal. S-0202 claim 15 also owns the loading-phase relation to the overlay
+    data stream and the conditional resource-removal effects before smudge selection: tile-animation
+    creation from recalculation and neighbour spread-offer draws. The same conditional effects apply
+    during play; they do not add a fixed draw count to every crater request.
     - Backing: `measurable` (AN10, AN19, AN23) for their forward and creation-time
       events, height/flag cases, particle-before-choice order and resource removal.
       Shared-system membership regardless of particle behaviour kind is `measurable`
@@ -405,11 +401,19 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
       resource-removal recalculation composition.
       Reverse/ping-pong repeated events and bouncing-type suppression are `unmeasured`
       here: none of these scenarios supplies those playback types. A middle event on an
-      ending advance is also `unmeasured` here: none sets μ at the tested pass's end limit.
+      ending advance, before an end or a follow-up switch, and its order after the same
+      advance's damage detonation are `measurable` (AN28), through the detonation's resource
+      change, which decides whether the middle event's crater can be placed. The order of the
+      two effects' random draws within that tick follows from the same order but is
+      `unmeasured`: the random-state recorder reads the stream only between ticks, and no
+      outcome here depends on that draw order alone. AN28 does not test the middle event's
+      draws against a follow-up switch's delay draw; AN25's ordering variant does (claim 28).
       The exact floating-point
       threshold edge is also `unmeasured`: 32 observed incoming states need not produce
       either integer immediately beside it; AN23 tests predictions only for values reached.
-    - Confidence: high for event timing, the request gates, the choice and resource removal,
+    - Confidence: medium for the order of the draws within one advance (`unmeasured`, above),
+      medium for the delivery's detonation coming before the middle event (claim 17, until AN28
+      runs), high for event timing, the request gates, the choice and resource removal,
       medium for the terrain-height test
 
 15. **Follow-up type.** When an animation's last pass ends and its type names a follow-up type, the
@@ -447,23 +451,23 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     - Confidence: high
 
 16. **End of an animation.** An animation whose last pass ends and whose type names no follow-up
-    type normally ends in that update and is removed. For every infantry-making animation,
-    S-0611 claims 9 to 11 own creation, ownership, placement and retries: the terminal type
-    attempts creation then, but a refused placement keeps the animation alive, steps its stage
-    back by one and retries when that frame is next due. Burning-walker expiry and removal
-    instead follow S-0615 claims 4 to 11. In ordinary removal the last image frame drawn is
-    the one shown before that update.
-    The lifetime of an animation with one pass, no loop delay, delay *d* ≥ 1, *E* ≥ 1 and *a* = 0, that is
-    neither reversed, ping-pong nor a burning walker and, if it is a shadow type, has
-    λ<sub>e</sub> ≥ *E*, with no refused infantry placement, is therefore
-    *E* × *d* ticks when its first update is in the creation tick and no update is lost or held.
-    More generally, with creation tick *c*, first-update tick *u*, and uninterrupted updates
-    thereafter, it is max(*d*, *u* + 1 − *c*) + (*E* − 1)*d* ticks, in exact integer arithmetic.
-    This gives *E* × *d* + 1 ticks when *d* = 1 and *u* = *c* + 1 (claim 5).
-    - Backing: `measurable` (AN1) for ordinary removal and before-turn-pass lifetimes.
-      AN26 tests the late and lost-first-update extensions using claim 29's creators. Infantry creation and placement retries inherit S-0611 claims 9 to 11's backing
-      and confidence (including MU10); burning-walker exceptions inherit S-0615 claims 4 to 11's
-      backing and confidence
+    type normally ends in that update and is removed. For every infantry-making animation, S-0611
+    claims 9 to 11 own creation, ownership, placement and retries: the terminal type attempts
+    creation then, but a refused placement keeps the animation alive, steps its stage back by one
+    and retries when that frame is next due. Burning-walker expiry and removal instead follow S-0615
+    claims 4 to 11. In ordinary removal the last image frame drawn is the one shown before that
+    update. The lifetime of an animation with one pass, no loop delay, delay *d* ≥ 1, *E* ≥ 1 and
+    *a* = 0, that is neither reversed, ping-pong nor a burning walker and, if it is a shadow type,
+    has λ<sub>e</sub> ≥ *E*, with no refused infantry placement, is therefore *E* × *d* ticks when
+    its first update is in the creation tick and no update is lost or held. More generally, with
+    creation tick *c*, first-update tick *u*, and uninterrupted updates thereafter, it is max(*d*,
+    *u* + 1 − *c*) + (*E* − 1)*d* ticks, in exact integer arithmetic. This gives *E* × *d* + 1 ticks
+    when *d* = 1 and *u* = *c* + 1 (claim 5).
+    - Backing: `measurable` (AN1) for ordinary removal and before-turn-pass lifetimes. AN26
+      tests the late and lost-first-update extensions using claim 29's creators. Infantry
+      creation and placement retries inherit S-0611 claims 9 to 11's backing and confidence
+      (including MU10); burning-walker exceptions inherit S-0615 claims 4 to 11's backing and
+      confidence
     - Confidence: high for ordinary playback; delegated exceptions have their owning claims'
       confidence
 
@@ -473,14 +477,18 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     a terrain object), and when the accumulator is 1.0 or more its whole part is delivered and
     subtracted (Formulas F5). So after *n* advances the total delivered is close to ⌊1 + *n*δ⌋ for
     an unattached animation, and the first advance already delivers 1 when δ < 1
-    (`quirks.anim_damage_starts_at_one`). The advance that
-    ends the animation delivers too. Burning walkers deliver no such damage while running,
-    since their stage does not advance; expiring advances can deliver it, subject to S-0615
-    claims 4 to 11's playback and removal rules. A trigger-played animation delivers no damage. The warhead is
-    one of two game-wide warheads (Import mapping), chosen by the animation's type name; the type's
-    own warhead field plays no part here. When the chosen warhead is not given, the amount is still
-    taken from the accumulator but no damage is done. The area, warhead effect and damage rules
-    belong to the combat specs.
+    (`quirks.anim_damage_starts_at_one`). The advance that ends the animation delivers too. The
+    delivery precedes the same advance's middle event (claim 14) and its end test (State and
+    ordering). Burning walkers deliver no such damage while running, since their stage does not
+    advance; expiring advances can deliver it, subject to S-0615 claims 4 to 11's playback and
+    removal rules. A trigger-played animation delivers no damage. The warhead is one of two
+    game-wide warheads (Import mapping), chosen on each delivery by the name of the animation's
+    current type (claim 15), so a follow-up switch to or from the built-in invisibility-animation
+    type changes the warhead from the follow-up's first delivery on. When no type has exactly that
+    name, the other warhead is always chosen (Import mapping, the paragraph after the game-wide key
+    table). The type's own warhead field plays no part here. When the chosen warhead is not given,
+    the amount is still taken from the accumulator but no damage is done. The area, warhead effect
+    and damage rules belong to the combat specs.
 
     Each delivery is an area detonation with **resource reduction allowed**, no attacker and
     no supplied attacking house, including the expiring advances of a burning walker.
@@ -492,16 +500,25 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     total. This is distinct from the start-event resource chain reaction, whose detonation
     forbids resource reduction (S-0401 claim 20), and from a middle-event crater's removal
     (claim 14).
+    - Order (State and ordering, Q-1716): the delivery's detonation comes before the same
+      advance's middle event and end test, also on an ending advance and before a follow-up
+      switch. Backing `measurable` (AN28, through the detonation's resource change and the middle
+      event's crater); confidence medium until AN28 runs. The order of their random draws, and of
+      the detonation's kills against the middle event, within that tick follows from it and is
+      `unmeasured` (claim 14); confidence medium. An animation that leaves play in its own
+      detonation does nothing more in that update (State and ordering, which rates it).
     - Backing: `measurable` (AN27 for resource permission, including walker expiry,
       and S-0302 claim 1's scenario D33 for absent attacker and attacking house).
       AN4, AN12, and AN20 (for the factor 5) make the delivery patterns, trigger
       suppression and final-advance damage `measurable`. The type-name warhead choice,
-      ignored type warhead and missing game-wide warhead consumption are `unmeasured` here:
-      the scenarios use only an ordinary type and a present game-wide warhead, with no
-      distinguishing warhead fixtures.
-    - Confidence: high for the accumulator, the per-advance timing and the warhead choice; medium
-      for the factor 5 (the kind test is clear, which objects count as terrain objects is the terrain
-      specs' business)
+      including the change at a follow-up switch, is `measurable` (AN29). The ignored type
+      warhead and missing game-wide warhead consumption are `unmeasured` here: no scenario
+      gives the type's own warhead distinguishing verses or omits a game-wide warhead.
+    - Confidence: high for the accumulator and the per-advance timing; medium for the warhead
+      choice by the current type's name, until AN29 runs (Import mapping), and for its letter case
+      and for the case with no type of exactly that name (Import mapping, the paragraph after the
+      game-wide key table) and for the factor 5 (the kind test is clear, which objects count as
+      terrain objects is the terrain specs' business)
 
 18. **Playback timing reaches game state.** Several effects of an animation wait on its stages, so
     for a type marked normalised (claim 4) they depend on the game speed, as glossary claim G3
@@ -510,7 +527,8 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     - the middle event creates craters, which remove resource from cells, and decides between a
       scorch mark and a crater with a draw from the scenario random stream (claim 14,
       S-0202 claim 15 owns the composition during loading and play); its tick follows the stages,
-    - the start event at the end of a loop delay and the ranged draw of claim 11 happen at pass ends,
+    - the start event at the end of a loop delay and the ranged draw of claim 11 happen at pass
+      ends,
     - the follow-up switch, with its possible random rate, and the creation of infantry at the end
       (claim 16) happen at the end.
 
@@ -549,16 +567,15 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     table does not apply: the code is 0 and the animation is drawn even when *t* ≥ 15. In both cases
     the code is then combined (Terms) with the code of claim 21.
 
-    A building's slot animations take the building fade level of S-0516 claim 18 as *t*, except
-    that they take 16 while the building is cloaked from the viewer (Terms, S-0516 claim 28).
-    Other animations have *t* = 0. *t*
-    follows the fade level: it is set again when a slot animation of the building starts and when the
-    building refreshes its animations, which it does at each change of its fade level. So, at a
-    fade level of 15:
+    A building's slot animations take the building fade level of S-0516 claim 18 as *t*, except that
+    they take 16 while the building is cloaked from the viewer (Terms, S-0516 claim 28). Other
+    animations have *t* = 0. *t* follows the fade level: it is set again when a slot animation of
+    the building starts and when the building refreshes its animations, which it does at each change
+    of its fade level. So, at a fade level of 15:
     - a viewer from whom the building is cloaked sees none of its slot animations, whatever their
       type, as long as the table applies,
-    - a viewer who sees the building see-through (the player who owns it, for example) sees its translucent-flag
-      and translucency-field slot animations hidden and the others at 50 %,
+    - a viewer who sees the building see-through (the player who owns it, for example) sees its
+      translucent-flag and translucency-field slot animations hidden and the others at 50 %,
     - a slot animation whose type's translucency detail field is above the player's detail level is
       drawn opaque even while its building is cloaked from the viewer, since the table does not
       apply to it (`quirks.anim_low_detail_shows_cloaked`).
@@ -598,10 +615,10 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
 22. **Attached animations.** An animation can be attached to an owner object. While attached, its
     position is the owner's position plus the displacement it had from the owner when it was
     attached, in leptons and including height, so it follows the owner. It is in the ground render
-    layer (S-0102). When it is detached it stays where it is. When the owner is removed from the game,
-    the animation disappears at once and is deleted at its next update, whatever its stage. That
-    update does nothing else of this spec's: no advance, no damage, no start or middle event, no
-    loop-delay count, no follow-up switch and no infantry (claim 16).
+    layer (S-0102). When it is detached it stays where it is. When the owner is removed from the
+    game, the animation disappears at once and is deleted at its next update, whatever its stage.
+    That update does nothing else of this spec's: no advance, no damage, no start or middle event,
+    no loop-delay count, no follow-up switch and no infantry (claim 16).
     - Backing: `measurable` (scenario AN15) for the position, the removal and the absence of an
       advance; the absence of damage, events and infantry at that last update is `unmeasured` (it
       would need an attached animation due to deliver or end on the very tick its owner is removed,
@@ -614,13 +631,13 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     being erased (claim 21). The two causes are independent: the animation is released only when
     neither applies, so a slot animation of an unpowered building stays frozen when its building
     stops being erased. A held animation does not advance, so nothing that follows from an advance
-    happens: no damage, no middle event from an advance, no end of a pass, no follow-up switch and no
-    end. Everything else goes on as usual: its first update after creation is still skipped, a loop
-    delay still counts down, and the start event at the end of that delay still happens (with its
-    sound, chain reaction and, when μ = 0, middle event). Its clock (claim 5) keeps running, so
-    when it is released it advances on its first eligible update if *d* > 0 and at least *d*
-    ticks have passed since the last advance (or creation before any advance). The first-update
-    exclusion and any continuing or ending loop delay still apply (claim 5).
+    happens: no damage, no middle event from an advance, no end of a pass, no follow-up switch and
+    no end. Everything else goes on as usual: its first update after creation is still skipped, a
+    loop delay still counts down, and the start event at the end of that delay still happens (with
+    its sound, chain reaction and, when μ = 0, middle event). Its clock (claim 5) keeps running, so
+    when it is released it advances on its first eligible update if *d* > 0 and at least *d* ticks
+    have passed since the last advance (or creation before any advance). The first-update exclusion
+    and any continuing or ending loop delay still apply (claim 5).
     - Backing: `measurable` (AN16) for stage holds, independent causes, immediate release
       advance, and a delayed start sound while held. First-update exclusion while held,
       absence of damage, and continued chain reaction or μ = 0 effects at a delayed start
@@ -649,13 +666,13 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     > μ = ⌊*n* / 2⌋.
 
     At a type read, an end field or loop end given in the type's own art section takes precedence
-    over *E*⁺ or λ<sub>e</sub>⁺, and one it does not give is *E*⁺ or λ<sub>e</sub>⁺. The
-    image-named art section never supplies either field (S-0007 claim 34). At the new-theater refresh,
-    *E*⁺ and λ<sub>e</sub>⁺ stand. A type read that finds no sprite changes only the fields it
-    gives. The theater refresh of a type with the theater flag replaces the sprite that is drawn
-    (S-0007) but none of these values. A value of −1 counts as a value here, not as 0; it is
-    resolved from the sprite that is drawn, the first time an animation plays as the type in the
-    game. The consequences:
+    over *E*⁺ or λ<sub>e</sub>⁺, and one it does not give is *E*⁺ or λ<sub>e</sub>⁺. The image-named
+    art section never supplies either field (S-0007 claim 34). At the new-theater refresh, *E*⁺ and
+    λ<sub>e</sub>⁺ stand. A type read that finds no sprite changes only the fields it gives. The
+    theater refresh of a type with the theater flag replaces the sprite that is drawn (S-0007) but
+    none of these values. A value of −1 counts as a value here, not as 0; it is resolved from the
+    sprite that is drawn, the first time an animation plays as the type in the game. The
+    consequences:
     - an **absent end field** takes *E*<sub>s</sub> of the first sprite found for the type in the
       game, normally that of its first type read,
     - an **absent loop end** takes the same *E*<sub>s</sub> when the first type read found the
@@ -724,17 +741,16 @@ as in S-0007, *turn pass* and *update order* as in S-0203.
     > *C* = 1 when *pᵧ* − ⌊*h*/2⌋ < 0, otherwise
     > *C* = ⌊(*pᵧ* − ⌊*h*/2⌋) / *h*⌋ + 2.
 
-    All arithmetic here is integer and exact; the divisions take the floor. The
-    highest copy therefore has its unshifted centre strictly above the view's top
-    row; clipping removes pixels outside the view. The shift *v* moves every copy
-    but does not change this count. Copies are drawn from lowest to highest, so a
-    translucent upper copy blends with already-painted lower copies wherever they
-    overlap and pass their depth tests. No shadow image frame is drawn, even when
-    the type is a shadow type or is also flat (claim 10). S-0102 claim 13 owns the
-    depth of the copies, not their number or spacing.
-    With a zero-height first rectangle and a projected centre at or below the view's
-    top row, the original's stacking fails to terminate. Our engine draws at most one copy centred at (*pₓ*, *pᵧ* + *v*) and warns about
-    the sprite; this is a safe bad-data departure, not a quirk switch.
+    All arithmetic here is integer and exact; the divisions take the floor. The highest copy
+    therefore has its unshifted centre strictly above the view's top row; clipping removes pixels
+    outside the view. The shift *v* moves every copy but does not change this count. Copies are
+    drawn from lowest to highest, so a translucent upper copy blends with already-painted lower
+    copies wherever they overlap and pass their depth tests. No shadow image frame is drawn, even
+    when the type is a shadow type or is also flat (claim 10). S-0102 claim 13 owns the depth of the
+    copies, not their number or spacing. With a zero-height first rectangle and a projected centre
+    at or below the view's top row, the original's stacking fails to terminate. Our engine draws at
+    most one copy centred at (*pₓ*, *pᵧ* + *v*) and warns about the sprite; this is a safe bad-data
+    departure, not a quirk switch.
     - Backing: `measurable` (AN24) for positive-height placement, count and spacing.
       The zero-height failure is `unmeasured`: the oracle cannot produce a completed
       drawn frame in that case; the safe result is a design rule.
@@ -928,10 +944,10 @@ product is 0.
 
 For *E* > 0 the ≥ of code 3 is a consequence of the constant lying below 0.6 and of the rounding
 mode: the product stays just below 0.6 *E* when 0.6 *E* is a whole number. With round-to-nearest
-(`quirks.chop_rounding` off, S-0205) the product would round up to exactly 0.6 *E*, and code 3
-would need 5*k* > 3*E*. For *E* < 0 rounding toward zero raises each product, so it lies at or just
-above the exact multiple 0.6 *E*, 0.4 *E* or 0.2 *E*, and all three comparisons are strict. A negative *E* comes only from an explicit negative
-end field, which the importer warns about.
+(`quirks.chop_rounding` off, S-0205) the product would round up to exactly 0.6 *E*, and code 3 would
+need 5*k* > 3*E*. For *E* < 0 rounding toward zero raises each product, so it lies at or just above
+the exact multiple 0.6 *E*, 0.4 *E* or 0.2 *E*, and all three comparisons are strict. A negative *E*
+comes only from an explicit negative end field, which the importer warns about.
 
 **F5. Damage accumulator** (floating point, binary64, round-toward-zero mode of S-0205, claim
 5). With δ the damage value (S-0003 decimal form, so a single-precision value
@@ -946,12 +962,13 @@ held exactly in binary64) and *c* = 1 (unattached) or 5 (attached to a terrain o
 > *A*<sub>*j*</sub> = *B*<sub>*j*</sub> − *n*<sub>*j*</sub> when *B*<sub>*j*</sub> ≥ 1.0, and
 > *A*<sub>*j*</sub> = *B*<sub>*j*</sub> when *B*<sub>*j*</sub> < 1.0
 
-Each product, sum and difference is a binary64 value rounded toward zero. In exact arithmetic the total after
-*j* advances would be ⌊1 + *jc*δ⌋; the binary64 sums can differ from it by one when *jc*δ lies
-within rounding error of a whole number. For example δ = 0.375 or 0.25 (exact in binary) gives the
-delivery patterns 1, 0, 1, 0, 0, 1, 0, 1, 0, 0 and 1, 0, 0, 1, 0, 0, 0, 1 over the first advances,
-and δ written as 0.4 gives 1, 0, 1, 0, 1, 0, 0, 1, 0, 1. After a follow-up switch the accumulator
-restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*<sub>0</sub> = 0.0.
+Each product, sum and difference is a binary64 value rounded toward zero. In exact arithmetic the
+total after *j* advances would be ⌊1 + *jc*δ⌋; the binary64 sums can differ from it by one when
+*jc*δ lies within rounding error of a whole number. For example δ = 0.375 or 0.25 (exact in binary)
+gives the delivery patterns 1, 0, 1, 0, 0, 1, 0, 1, 0, 0 and 1, 0, 0, 1, 0, 0, 0, 1 over the first
+advances, and δ written as 0.4 gives 1, 0, 1, 0, 1, 0, 0, 1, 0, 1. After a follow-up switch the
+accumulator restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off,
+*A*<sub>0</sub> = 0.0.
 
 ## Constants
 
@@ -986,7 +1003,7 @@ restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*
 | created | no loop delay | start event in the same tick; *playing* |
 | *delayed* | count reaches 0 | start event; no advance on that update; *playing*. The count and the start event go on while the animation is held (claim 23) |
 | *playing* | held (claim 23) | no advance on that update; the clock of claim 5 keeps running |
-| *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The next image frame is shown if it is in range; damage due on this advance is delivered, and the middle event occurs when the resulting stage satisfies *a* + *k* = μ. A turn or pass end has the consequences specified in claims 6, 8, 9 and 10: in particular, the image frame at an ending limit is not drawn, and any same-update event or follow-up switch remains observable as those claims state. |
+| *playing* | *d* ticks have passed since the last advance, the update is not skipped, the animation is not held, and *d* > 0 | The next image frame is shown if it is in range; damage due on this advance is delivered first, and then the middle event occurs when the resulting stage satisfies *a* + *k* = μ (Observable order within one update). A turn or pass end has the consequences specified in claims 6, 8, 9 and 10: in particular, the image frame at an ending limit is not drawn, and any same-update event or follow-up switch remains observable as those claims state. |
 | *playing* | pass ends with *r* ≥ 2 | new pass (F3); if the random loop delay pair is not (0, 0), ranged draw of *D*, and *delayed* when *D* > 0 |
 | *playing* | pass ends with *r* ≤ 1, follow-up type named | follow-up switch of claim 15, start event, *playing* |
 | *playing* | pass ends with *r* ≤ 1, no follow-up type | removed, except that a refused infantry placement keeps the animation for a retry under S-0611 claims 9 to 11 |
@@ -994,12 +1011,38 @@ restarts at 0.0 instead of 1.0. With `quirks.anim_damage_starts_at_one` off, *A*
 | any | owner removed | not drawn from then on; removed at the next update, which has no advance, damage, event, follow-up switch or infantry (claim 22) |
 
 **Observable order within one update.** Damage, the middle event and the end test all follow the
-advance of the same update. So:
+advance of the same update, in this order (Q-1716):
+- first the damage due on the advance (claim 17). AN28 observes that its detonation's resource
+  change comes before the middle event. The rest of that detonation, every random draw and any
+  kill it causes, is complete before the middle event begins too; that order within the tick is
+  `unmeasured`, medium (claim 14).
+- then the middle event, when the resulting stage satisfies *a* + *k* = μ (claim 14): its particle
+  requests, then its scorch-or-crater choice and any crater's resource removal.
+- last the turn and pass tests (claims 6 to 10). A pass end then gives a new pass with its
+  loop-delay draw (claim 11), the follow-up switch with its delay draw and start event (claims 13
+  and 15), or the end (claim 16).
+
+The same order holds on the advance that ends the animation and on the advance just before a
+follow-up switch: the old type's damage and middle event both come before the switch, and the
+follow-up type's start event, with any immediate middle event of its own when its μ is 0, comes
+after them. So:
 - an animation delivers damage on the advance that ends it,
 - when μ lies at the end limit, the middle event and the end (or the follow-up switch) happen in the
   same tick,
 - the image frame at the end limit of a pass that ends there is never drawn, and the follow-up
   type's first image frame is drawn from the tick of the switch.
+
+**An animation that leaves play in its own detonation.** When an animation leaves play during its
+own damage detonation, nothing else of this spec happens to it in that update: no middle event, no
+pass end, no follow-up switch and no end. One way is known: the animation plays in a tank bunker's
+*special-1* or *special-2* slot (S-0606, Terms), and its detonation destroys the bunkered vehicle,
+so the walls-down effects stop those two animations at once (S-0606 claims 12 and 14). In the
+original the result of the rest of that update is undefined; our engine stops (design). An owner
+removed by the detonation is a different case: the animation stays in play until its next update,
+so its update goes on (claim 22; Open questions).
+- Backing: `unmeasured`: the original's result is undefined, so no measurement can show a
+  behaviour to copy, and the stop is our engine's rule.
+- Confidence: medium.
 
 ## Edge cases and quirks
 
@@ -1022,10 +1065,10 @@ advance of the same update. So:
   max(1, *L* × max(*m*, 1)) when *L* ≥ 0, and the animation is endless when *L* < 0. Every pass end
   with *r* ≥ 2 lowers it by 1, so 255 is an ordinary count. At a follow-up switch *r* = *L*′ when
   *L*′ ≥ 0, and endless when *L*′ < 0.
-- **`quirks.anim_reverse_raw_loop_end`** (default: on). A reversed animation starts at
-  λ<sub>e</sub> − 1 and restarts at λ<sub>e</sub>, without subtracting *a*, and never shows image
-  frame *a* (claim 8). Off: it starts and restarts at *k* = λ<sub>e</sub> − *a* − 1 and its pass ends
-  when *k* < 0, so it shows λ<sub>e</sub> − 1 down to *a*.
+- **`quirks.anim_reverse_raw_loop_end`** (default: on). A reversed animation starts at λ<sub>e</sub>
+  − 1 and restarts at λ<sub>e</sub>, without subtracting *a*, and never shows image frame *a* (claim
+  8). Off: it starts and restarts at *k* = λ<sub>e</sub> − *a* − 1 and its pass ends when *k* < 0,
+  so it shows λ<sub>e</sub> − 1 down to *a*.
 - **`quirks.anim_pingpong_lower_turn`** (default: on). While *r* ≥ 2 the lower turn of a ping-pong
   animation compares the stage with the start field instead of with the loop start, so it can miss
   the turn and run blank (claim 9). Off: the lower turn while *r* ≥ 2 happens when *k* ≤
@@ -1039,9 +1082,9 @@ advance of the same update. So:
   type: *k* = 0, or *k* = λ<sub>e</sub>′ − 1 when the animation is reversed under the follow-up
   type (Terms).
 - **`quirks.anim_followup_keeps_step`** (default: on). At a follow-up switch σ keeps its sign while
-  the reversed test follows the follow-up type (claim 15), so an animation reversed by its old type's
-  flag can run down for ever, invisible. Off: σ is set afresh at the switch, −1 when the animation
-  is reversed under the follow-up type and +1 otherwise.
+  the reversed test follows the follow-up type (claim 15), so an animation reversed by its old
+  type's flag can run down for ever, invisible. Off: σ is set afresh at the switch, −1 when the
+  animation is reversed under the follow-up type and +1 otherwise.
 - **`quirks.anim_translucency_levels`** (default: on). Translucency levels 11 to 15 give code 2,
   like 6 to 10 (claim 20). Off: 11 to 15 give code 3.
 - **`quirks.anim_hide_at_level_15`** (default: on). Translucent-flag and translucency-field types
@@ -1053,31 +1096,31 @@ advance of the same update. So:
   drawn, opaque. Off: an animation with *t* > 15 is not drawn at any detail level; below the
   translucency detail field the code stays 0 otherwise.
 - **`quirks.anim_damage_starts_at_one`** (default: on). The damage accumulator starts at 1.0 when an
-  animation is created, so the first advance delivers at least 1, but at 0.0 after a follow-up switch
-  (claim 17, F5). Off: it starts at 0.0 in both cases, so the total after *n* advances is close to
-  ⌊*n c* δ⌋.
+  animation is created, so the first advance delivers at least 1, but at 0.0 after a follow-up
+  switch, by claim 17 and F5. Off: it starts at 0.0 in both cases, so the total after *n* advances
+  is close to ⌊*n c* δ⌋.
 - **`quirks.speed_normalised_delays`** (default: on, shared with S-0107, S-0108 and S-0111; glossary
   claim G3). Claims 4 and 18.
   Off: every animation uses its unnormalised delay at every game speed.
 - **Round-toward-zero mode** (no switch here). F4 and F5 depend on the mode; the switch
   `quirks.chop_rounding` belongs to S-0205 (claim 5).
 - **Reduced drawing on slow machines** (departure, no switch). Claim 19.
-- **Unknown follow-up or missing type.** A follow-up name that names no animation in the list creates
-  an animation type of that name with absent-key defaults (S-0004). If no sprite resolves for it, it
-  draws nothing and its end field is 0 (claim 25), so after the switch it ends on its first advance,
-  unless it keeps σ = −1 without being reversed (claim 15), in which case it never ends.
-  An animation created with no type at all has no ordinary playback. This does not imply
-  immediate loss of every attachment effect: S-0522 claim 13 owns the absent-parachute
-  lifecycle, including its release-tick fall-rate exception and the alternative under
-  `quirks.paratrooper_any_animation_slow_fall`. A defined type with no sprite instead follows
-  claim 25 and the missing-sprite rule below. The importer warns about invalid references
-  where their cause is in the data; a genuinely absent parachute type is allowed.
+- **Unknown follow-up or missing type.** A follow-up name that names no animation in the list
+  creates an animation type of that name with absent-key defaults (S-0004). If no sprite resolves
+  for it, it draws nothing and its end field is 0 (claim 25), so after the switch it ends on its
+  first advance, unless it keeps σ = −1 without being reversed (claim 15), in which case it never
+  ends. An animation created with no type at all has no ordinary playback. This does not imply
+  immediate loss of every attachment effect: S-0522 claim 13 owns the absent-parachute lifecycle,
+  including its release-tick fall-rate exception and the alternative under
+  `quirks.paratrooper_any_animation_slow_fall`. A defined type with no sprite instead follows claim
+  25 and the missing-sprite rule below. The importer warns about invalid references where their
+  cause is in the data; a genuinely absent parachute type is allowed.
 - **Sprite missing.** An animation whose sprite cannot be resolved is updated but draws nothing; by
   claim 25 an absent end field is then 0, so an animation created as such a type, with one pass and
-  without the ping-pong flag, ends on its first advance (claims 7 and 9 give the other cases). An end field or loop
-  end of −1 on a type that has no sprite when an animation first plays as it makes the original
-  crash. Our engine resolves it with *N* = 0, so *E* = 0, and the importer warns. This is a departure,
-  with no switch.
+  without the ping-pong flag, ends on its first advance (claims 7 and 9 give the other cases). An
+  end field or loop end of −1 on a type that has no sprite when an animation first plays as it makes
+  the original crash. Our engine resolves it with *N* = 0, so *E* = 0, and the importer warns. This
+  is a departure, with no switch.
 
 ## Import mapping
 
@@ -1160,15 +1203,35 @@ behaviour, not additional imported settings. These rows do not enable the separa
 reaction; that uses `TiberiumChainReaction` above. The delegated gates have S-0303 claim 17's
 backing and confidence; AN27 tests their composition with animation damage.
 
-The built-in invisibility-animation type is identified by an exact, byte-for-byte comparison against its built-in type name.
+The built-in invisibility-animation type is identified by an exact, byte-for-byte comparison of the
+current type's name with the name `INVISO` (six ASCII capital letters, letter case included). Types
+are found by name without regard to letter case, and a type keeps the spelling it was first
+registered with (S-0004 claims 2 and 7). A type first registered as `Inviso` is the same type as any
+later mention in other cases, and it never matches, so it takes `FlameDamage2`. When the rules
+register no type of exactly that name, `C4Warhead` is never chosen for animation damage (Q-1717).
+The stock rules' animation list registers a type of exactly that spelling, so in stock play the type
+exists and is first registered in capitals.
+- Backing: `measurable` (AN29) for the exact-name choice and the switch at a follow-up type,
+  and `measurable` (AN29 part b) for the letter case and for the case with no type of exactly
+  that name, since a test copy of the rules that spells that one list entry in other letter case
+  registers the type in that spelling and leaves no type of the exact name. The stock
+  registration is `measurable` through AN29's main run, which keeps the stock spelling: its
+  building loses health only if the stock data first registers the type in exactly that
+  spelling, and part b shows that any other first spelling gives no loss. AN29 part b's pilot
+  check, a search of the whole installed rules file and not only its animation list, confirms
+  the fixture: the list entry is spelled in capitals and no other value or section heading
+  names the type.
+- Confidence: medium for the name, the current-type rule and the stock registration until AN29
+  runs, and for the case-sensitive comparison and for the no-type case until AN29 part
+  b runs; the kept first spelling has S-0004's confidence.
 
 Import defaults and sentinel cases not explicitly exercised by the named scenarios are
-`unmeasured` here (confidence: high): no scenario systematically omits each key in each layer
+`unmeasured` here (confidence: medium): no scenario systematically omits each key in each layer
 or supplies every sentinel value. Playback effects of the selected test values use the
 numbered claims' backings. Quirk-off alternatives, importer warnings and safe bad-data
 results are design rules (confidence: high), not oracle measurements. The absent-parachute
 lifecycle in Edge cases inherits S-0522 claim 13's backing and confidence (its scenario P8).
-Other missing-type creators remain `unmeasured` here (confidence: high): no scenario here
+Other missing-type creators remain `unmeasured` here (confidence: medium): no scenario here
 creates an animation without a type. Missing-sprite ordinary playback is `measurable` through AN25
 (confidence: high); the crash with missing-sprite −1 limits remains `unmeasured` here
 because AN25 deliberately avoids those limits.
@@ -1192,35 +1255,37 @@ The importer warns about the following inputs, including quirk-sensitive values,
 ## Measurement scenarios
 
 **Common setup.** The glossary's *measurement setup*. Animations are played on open flat ground of a
-tiny purpose-made skirmish map by a trigger action that plays an animation at a waypoint marker (the trigger
-specs own its form), or by the object that normally creates them. Include a human measuring
-player and one bystander computer player, kept away under the glossary's void rule. The
-observed area is the test waypoint cells and the cells occupied or crossed by named test
-objects. No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Trigger-played animations have a
-creation start sound but no later start sounds and no damage (claims 13 and 17), so scenarios that
-observe repeated sounds or damage use another creator:
-the explosion animation of one stock weapon, fired by a unit. Such scenarios assume the weapon's
-explosion is created with a repeat factor of 1, no loop delay and no reverse play; a pilot run with
-the unchanged animation (its pass count and first image frame) checks that. Because rules layers
-cannot change animation fields (S-0006, claim 8), every scenario that needs particular field values
-uses named test data: a **test expansion archive** holding a copy of the art database with the
-listed test sections added (as in S-0103 and S-0007), each naming a stock sprite; the archive is
+tiny purpose-made skirmish map by a trigger action that plays an animation at a waypoint marker (the
+trigger specs own its form), or by the object that normally creates them. Include a human measuring
+player and one bystander computer player, kept away under the glossary's void rule. The observed
+area is the test waypoint cells and the cells occupied or crossed by named test objects. No engine
+add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). No
+helper that changes rules, houses or computer players during the game is active, and no scenario
+here needs one. Trigger-played animations have a creation start sound but no later start sounds and
+no damage (claims 13 and 17), so scenarios that observe repeated sounds or damage use another
+creator: the explosion animation of one stock weapon, fired by a unit. Such scenarios assume the
+weapon's explosion is created with a repeat factor of 1, no loop delay and no reverse play; a pilot
+run with the unchanged animation (its pass count and first image frame) checks that. Because rules
+layers cannot change animation fields (S-0006, claim 8), every scenario that needs particular field
+values uses named test data: a **test expansion archive** holding a copy of the art database with
+the listed test sections added (as in S-0103 and S-0007), each naming a stock sprite; the archive is
 removed after the run. Record per tick, with a recorder that reads the running game's state (the
 animation's image frame, a target's health) at the same point of every tick, or with a screen
 capture that keeps every drawn frame together with the tick counter. The *hold* of an image frame is
 the number of consecutive ticks on which it is recorded. A sprite with *N* image frames whose image
-frames are visibly different is chosen for each test section; *N* is read from the sprite at measurement
-time. Game speed 4 unless stated. Runs: one run per listed case, since playback is deterministic,
-unless a scenario gives another number. Where a scenario needs particular rules values (a
-building that can cloak), it sets them in the test map's override section, which rules layering allows.
+frames are visibly different is chosen for each test section; *N* is read from the sprite at
+measurement time. Game speed 4 unless stated. Runs: one run per listed case, since playback is
+deterministic, unless a scenario gives another number. Where a scenario needs particular rules
+values (a building that can cloak), it sets them in the test map's override section, which rules
+layering allows.
 
-- **AN1 (claims 1, 2, 5, 6, 10, 16).** Test types T1 (rate 100, no loop fields), T2 (rate 300, end 6),
-  T3 (rate 300, end *N* + 2), T4 (rate 300, shadow flag, a sprite with shadows), T5 (rate 900),
-  T6 (rate absent from every read, one pass, end 6). Play
-  each once, in a run of its own, by a trigger action of a one-time polled trigger whose only event is
-  elapsed-time (S-0011, claim 13). The polling of map triggers sets it off, so the animation is
-  created before the turn pass of its tick (S-0203, claim 1), and no object leaves play on the test map during the
-  run, so no removal costs it a turn (S-0203, claim 10).
+- **AN1 (claims 1, 2, 5, 6, 10, 16).** Test types T1 (rate 100, no loop fields), T2 (rate 300, end
+  6), T3 (rate 300, end *N* + 2), T4 (rate 300, shadow flag, a sprite with shadows), T5 (rate 900),
+  T6 (rate absent from every read, one pass, end 6). Play each once, in a run of its own, by a
+  trigger action of a one-time polled trigger whose only event is elapsed-time (S-0011, claim 13).
+  The polling of map triggers sets it off, so the animation is created before the turn pass of its
+  tick (S-0203, claim 1), and no object leaves play on the test map during the run, so no removal
+  costs it a turn (S-0203, claim 10).
   - Observable: the sequence of image frames, the hold of each, lifetime in ticks.
   - Runs: one per type; T5 three times, with different event values.
   - Expected: T1 shows 0 … *N* − 1 with every image frame, the first included, held ⌊900/100⌋ = 9
@@ -1232,12 +1297,12 @@ building that can cloak), it sets them in the test map's override section, which
     For T5 and T6, record creation tick *c*: the initial image is present at the end of tick *c*,
     image frame 1 first appears at the end of tick *c* + 1. This directly tests that the
     excluded first update is in *c*, not the following tick.
-  - Falsified if: T5 or T6 advances in its creation tick or first advances after *c* + 1,
-    T6's hold or lifetime differs, any hold of T1 or T2 differs from ⌊900/ρ⌋, T5's first hold is not 1 in any run
-    (a first hold of 2 would mean that the animation took its first turn only in the next tick) or a
-    later hold is not 1, the image frame at the end limit is ever drawn, T3 ends without showing
-    nothing for exactly 2 × 3 ticks after image frame *N* − 1, or T4 plays into its shadow image
-    frames.
+  - Falsified if: T5 or T6 advances in its creation tick or first advances after *c* + 1, T6's hold
+    or lifetime differs, any hold of T1 or T2 differs from ⌊900/ρ⌋, T5's first hold is not 1 in any
+    run (a first hold of 2 would mean that the animation took its first turn only in the next tick)
+    or a later hold is not 1, the image frame at the end limit is ever drawn, T3 ends without
+    showing nothing for exactly 2 × 3 ticks after image frame *N* − 1, or T4 plays into its shadow
+    image frames.
 - **AN2 (claim 2).** Test type with rate 1000, played by a trigger action.
   - Observable: the image frame per tick for 600 ticks, and whether the animation is removed.
   - Runs: one.
@@ -1253,9 +1318,10 @@ building that can cloak), it sets them in the test map's override section, which
 - **AN3 (claims 3, 12).** Test types R1 (random rate 225, 450: ascending) and R2 (random rate 450,
   225: descending), played by a trigger action.
   - Observable: the hold per image frame of each run, and its first image frame; with a recorder
-    that reads the state of the scenario random stream, the raw values the scenario random stream consumes between the tick
-    before the run's animation is created and the tick it is created, compared with the
-    raw values S-0202's range rule predicts for the state recorded before that tick.
+    that reads the state of the scenario random stream, the raw values the scenario random stream
+    consumes between the tick before the run's animation is created and the tick it is created,
+    compared with the raw values S-0202's range rule predicts for the state recorded before that
+    tick.
   - Runs: 30 per type, in separate games or at separate times. Repeat R2 with two passes,
     no loop delay and loop start 0, in 30 further runs; record stream state at its pass end.
     No other random playback or middle/start effect is enabled in these tests.
@@ -1267,10 +1333,10 @@ building that can cloak), it sets them in the test map's override section, which
     values of one ranged draw over its converted range, which the recorded state before creation
     predicts value for value. The two-pass R2 variant uses the same delay in both passes
     and consumes no raw value for a delay at the pass boundary.
-  - Falsified if: the two-pass variant rerolls or consumes a delay draw at a new pass,
-    R1 consumes a raw value for the delay, R2 consumes values the range rule does not
-    predict from the recorded state, R1 ever holds 3 or 4 ticks, an R2 run holds a value outside 2 to 4, fewer than
-    three distinct values occur in R2's 30 runs, or a run starts elsewhere.
+  - Falsified if: the two-pass variant rerolls or consumes a delay draw at a new pass, R1 consumes a
+    raw value for the delay, R2 consumes values the range rule does not predict from the recorded
+    state, R1 ever holds 3 or 4 ticks, an R2 run holds a value outside 2 to 4, fewer than three
+    distinct values occur in R2's 30 runs, or a run starts elsewhere.
 - **AN4 (claims 4, 17, 18).** Test types U (rate 90, not normalised) and V (rate 90, normalised),
   played by a trigger action at game speeds 0, 3 and 6. In a second part, the test copy of the art
   database gives the explosion animation of one stock weapon the fields of V plus damage 0.25, end
@@ -1334,14 +1400,15 @@ building that can cloak), it sets them in the test map's override section, which
   - Runs: 20 animations per run.
   - Expected: every gap is max(3, *D* + 1) with *D* from 30 to 60, the loop start image frame is
     shown during the gap, and the sound plays at creation and after each of the two gaps (three
-    times per animation). The trigger-played run shows the same gaps and image frames, with its start sound only at creation. Each pass end consumes exactly the
-    raw values predicted for one ranged draw over [30, 60] updates, with no other playback
-    draw; the measured gap is *D* + 1 ticks for that predicted *D*.
-  - Falsified if: the stream transition differs from that one draw or the gap differs from
-    the predicted *D* + 1, a gap lies outside 31 … 61, the animation vanishes during a gap, the weapon run's
-    sound plays once per animation, or the trigger-played run has no creation sound or plays a
-    sound after a gap. A contrary trigger-played result calls for investigation of claim 13,
-    not adoption of creation-time suppression as an alternative rule.
+    times per animation). The trigger-played run shows the same gaps and image frames, with its
+    start sound only at creation. Each pass end consumes exactly the raw values predicted for one
+    ranged draw over [30, 60] updates, with no other playback draw; the measured gap is *D* + 1
+    ticks for that predicted *D*.
+  - Falsified if: the stream transition differs from that one draw or the gap differs from the
+    predicted *D* + 1, a gap lies outside 31 … 61, the animation vanishes during a gap, the weapon
+    run's sound plays once per animation, or the trigger-played run has no creation sound or plays a
+    sound after a gap. A contrary trigger-played result calls for investigation of claim 13, not
+    adoption of creation-time suppression as an alternative rule.
 - **AN10 (claims 13, 14).** A test type with the scorch flag (no crater flag), rate 300, on a sprite
   with *N* ≥ 4, played by a trigger action, once with start 0 (M1) and once with start ⌊*N*/2⌋ + 1
   (M2).
@@ -1358,10 +1425,10 @@ building that can cloak), it sets them in the test map's override section, which
     Expected: in both runs the requested particles belong to the existing, ownerless shared
     gas system of S-0613 claim 1; the event creates no new particle system. Falsified by
     either type using a different system, or by the event creating a system.
-- **AN11 (claim 15).** Test types F (rate 300, end 4, follow-up G) and G (start 2, loop count 0, rate
-  150, no end field, sprite with *N*<sub>G</sub> image frames); a second pair F2 (reverse flag, end
-  4, loop end 4, rate 300, follow-up G2) and G2 (start 2, end 6, rate 300, no reverse flag). F and F2
-  are played by a trigger action.
+- **AN11 (claim 15).** Test types F (rate 300, end 4, follow-up G) and G (start 2, loop count 0,
+  rate 150, no end field, sprite with *N*<sub>G</sub> image frames); a second pair F2 (reverse flag,
+  end 4, loop end 4, rate 300, follow-up G2) and G2 (start 2, end 6, rate 300, no reverse flag). F
+  and F2 are played by a trigger action.
   - Observable: the image frames shown, their holds, and whether the animation is removed within
     2000 ticks.
   - Runs: one per pair.
@@ -1380,8 +1447,9 @@ building that can cloak), it sets them in the test map's override section, which
     to put a nonzero delivery on the ending advance.
   - Expected: apart from the weapon's own impact tick, health drops on the 1st, 3rd, 6th and 8th
     advances and on no others (F5's pattern 1, 0, 1, 0, 0, 1, 0, 1, 0, 0), each on the tick of an
-    image frame change except an ending advance, recorded through removal instead. In the end-8 variant the 8th advance removes the animation and
-    still delivers its damage in that tick. The control run delivers nothing.
+    image frame change except an ending advance, recorded through removal instead. In the end-8
+    variant the 8th advance removes the animation and still delivers its damage in that tick. The
+    control run delivers nothing.
   - Falsified if: the ending advance in the end-8 variant delivers nothing,
     the first advance delivers nothing, a drop falls on another advance or between
     advances, or the control run delivers damage. (Totals are not compared, since warhead scaling of
@@ -1427,8 +1495,8 @@ building that can cloak), it sets them in the test map's override section, which
     translucency detail field of 0. The blend check is a departure test against this spec on
     our engine, not an oracle measurement; the held-stage check remains an oracle measurement.
   - Part (d), loop delay while held: a *freeze-unpowered* slot of a test type with loop count −1,
-    random loop delay 200, 200, a start sound and rate 300; power is cut within the 200 ticks after a
-    pass ends and restored 400 ticks later.
+    random loop delay 200, 200, a start sound and rate 300; power is cut within the 200 ticks after
+    a pass ends and restored 400 ticks later.
   - Observable: the slot animations' image frames per tick, their blend (screen capture), start
     sounds, and the ticks at which the erasing weapon fires (recorder).
   - Runs: one per part, except (c), one per flag case on each engine.
@@ -1509,14 +1577,15 @@ building that can cloak), it sets them in the test map's override section, which
     the control removes it. A contrary trigger-played result calls for investigation of claim 13:
     creation-time suppression is not an established alternative behaviour.
 - **AN22 (claim 20, cloaked buildings).** A skirmish on a test map whose override section makes a
-  stock building type that has slot animations able to cloak. The test copy of the art database gives
-  its slot animations three test types: K1 with neither the translucent flag nor a translucency field,
-  K2 with the translucent flag, K3 like K1 but with a translucency detail field above the detail
-  level, played at detail level 1 (so K3's translucency detail field is 2, the others' 0). Three
-  copies of the building stand on the map: one owned by the measuring player, one by a computer
-  house allied with the measuring player in both directions, one by an enemy computer house; each
-  stands where the measuring player sees it, and no sensors of the measuring player cover it. A pilot run confirms that
-  the building cloaks (it is drawn see-through to its owner once cloaked).
+  stock building type that has slot animations able to cloak. The test copy of the art database
+  gives its slot animations three test types: K1 with neither the translucent flag nor a
+  translucency field, K2 with the translucent flag, K3 like K1 but with a translucency detail field
+  above the detail level, played at detail level 1 (so K3's translucency detail field is 2, the
+  others' 0). Three copies of the building stand on the map: one owned by the measuring player, one
+  by a computer house allied with the measuring player in both directions, one by an enemy computer
+  house; each stands where the measuring player sees it, and no sensors of the measuring player
+  cover it. A pilot run confirms that the building cloaks (it is drawn see-through to its owner once
+  cloaked).
   - Observable: per drawn frame, whether each slot animation's pixels appear and their blend
     against the ground (screen capture), once each building is fully cloaked; in the enemy view also
     during the cloaking steps, together with whether the building itself is drawn.
@@ -1527,17 +1596,18 @@ building that can cloak), it sets them in the test map's override section, which
     (recorded for the cloaking specs; it does not falsify this spec).
   - Falsified if: any K1 or K2 of the enemy building is drawn, the own or allied building's K1 is
     not drawn at 50 % or its K2 is drawn, or K3 is hidden. If the building does not cloak in the
-    pilot run, the scenario is inconclusive. Campaign visibility is outside this revision.
+    pilot run, the scenario is inconclusive. Campaign visibility is outside this spec.
 
-- **AN23 (claims 14 and 25; Q-0046 map-load events).** Common measurement setup, skirmish at
-  speed 4, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). A tiny test map names one test animation
-  on a tile (S-0010 claim 19), and a separate run gives an overlay a cell animation (S-0009
-  claim 12). Record each creation separately, including creations removed later during loading,
-  rather than counting only animations left at the first drawn frame. Use the read-only recorder
-  for animation positions, event times, cell resource levels and scenario-stream state. Take one
-  valid run per deterministic case and 32 independently started games for the choice cases,
-  recording their actual seeds and incoming stream states rather than setting either. Void a run if an
-  unrelated effect acts on the observed cells before recording finishes.
+- **AN23 (claims 14 and 25; Q-0046 map-load events).** Common measurement setup, skirmish at speed
+  4, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps
+  excepted). A tiny test map names one test animation on a tile (S-0010 claim 19), and a separate
+  run gives an overlay a cell animation (S-0009 claim 12). Record each creation separately,
+  including creations removed later during loading, rather than counting only animations left at the
+  first drawn frame. Use the read-only recorder for animation positions, event times, cell resource
+  levels and scenario-stream state. Take one valid run per deterministic case and 32 independently
+  started games for the choice cases, recording their actual seeds and incoming stream states rather
+  than setting either. Void a run if an unrelated effect acts on the observed cells before recording
+  finishes.
   - Part A, height: use a sprite with one image frame, so μ = 0, no particles or chain reaction,
     and scorch only, then crater only. Put the animation position on clear, smudge-placeable
     ground and repeat with world heights giving Z − H of −1, 0, 29 and 30 leptons. The tile
@@ -1561,16 +1631,18 @@ building that can cloak), it sets them in the test map's override section, which
     absent. Read stream state immediately before and after the scorch-or-crater choice, separately
     from smudge placement. Expected: only both flags below the height boundary take the choice
     ranged draw. Apply S-0202's range rule to the recorded incoming state: the predicted result
-    below 1073741824 requests scorch, otherwise crater. Repeat with a positive particle count, created by a play-time creator (a weapon-impact animation, or a
-    trigger-played animation) and not by a map-placed tile or cell animation. At map load the original stops
-    at the particle request (claim 14), so that repeat is not a map-load observation. Record the state after
-    particle creation and before the choice: that later state must predict the choice. A choice draw in another flag/height case, a different request from the
-    predicted result, or particle creation after that choice falsifies the rule. Do not infer the
-    full event's draw count from the choice alone. S-0202 scenario R14 A to E supplies the
-    complementary full-composition tests during loading and play: per-particle draw groups,
-    smudge candidate selection without placement draws, and conditional tile-animation and
-    neighbour spread-offer draws caused by resource removal before smudge selection. Its D
-    includes trigger-created animations and later playback events; E tests the shared height gate.
+    below 1073741824 requests scorch, otherwise crater. Repeat with a positive particle count,
+    created by a play-time creator (a weapon-impact animation, or a trigger-played animation) and
+    not by a map-placed tile or cell animation. At map load the original stops at the particle
+    request (claim 14), so that repeat is not a map-load observation. Record the state after
+    particle creation and before the choice: that later state must predict the choice. A choice draw
+    in another flag/height case, a different request from the predicted result, or particle creation
+    after that choice falsifies the rule. Do not infer the full event's draw count from the choice
+    alone. S-0202 scenario R14 A to E supplies the complementary full-composition tests during
+    loading and play: per-particle draw groups, smudge candidate selection without placement draws,
+    and conditional tile-animation and neighbour spread-offer draws caused by resource removal
+    before smudge selection. Its D includes trigger-created animations and later playback events; E
+    tests the shared height gate.
   - Part C, sprite: use named copies of stock sprites with different image-frame counts, one
     with a single image frame and the other with at least four. Use the lookup fixtures of AN18
     and S-0007 A8 to make the last successful type read find the first sprite and the theater
@@ -1583,17 +1655,16 @@ building that can cloak), it sets them in the test map's override section, which
     sprite rule. A fixture that does not produce the intended two successful sprite finds is
     inconclusive.
 
-- **AN24 (claims 10, 26 and 27; Q-0418 placement).** Common setup at speed 4,
-  800×600, maximum detail, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted).
-  Use a long-lived test animation with labelled canvas points and a distinct shadow
-  rectangle overlapping part of the body. Play it by trigger at a recorded position
-  on flat ground and on raised ground; also use it as a building slot with a known
-  slot displacement. Record world position and view origin with the read-only
-  recorder and capture pixels in a full-view redraw. Use one valid run per case.
-  On raised ground, account for the original height-lift discrepancy documented
-  by S-0101 claim 3 and its Formulas F2 when interpreting oracle captures; engine
-  acceptance uses that spec's fixed lift. That known discrepancy is not a failure
-  of the additional image or shadow placement asserted here.
+- **AN24 (claims 10, 26 and 27; Q-0418 placement).** Common setup at speed 4, 800×600, maximum
+  detail, no engine add-on and no mods (the named test files of a scenario and the purpose-made test
+  maps excepted). Use a long-lived test animation with labelled canvas points and a distinct shadow
+  rectangle overlapping part of the body. Play it by trigger at a recorded position on flat ground
+  and on raised ground; also use it as a building slot with a known slot displacement. Record world
+  position and view origin with the read-only recorder and capture pixels in a full-view redraw. Use
+  one valid run per case. On raised ground, account for the original height-lift discrepancy
+  documented by S-0101 claim 3 and its Formulas F2 when interpreting oracle captures; engine
+  acceptance uses that spec's fixed lift. That known discrepancy is not a failure of the additional
+  image or shadow placement asserted here.
   - Ordinary and flat variants: compare shifts 0, +7 and −7 pixels, with the same
     playback frame and view. Expected: the image follows claim 26's projection and
     moves by exactly the chosen shift, including the slot displacement where present.
@@ -1653,14 +1724,14 @@ building that can cloak), it sets them in the test map's override section, which
     of the spriteless positive-limit type, any extra ordinary clock draw, a type switch
     at the wrong advance, or any outcome assigned a value outside the stated order.
 
-- **AN26 (claims 5, 16 and 29; Q-0771).** Common tiny skirmish setup, speed 4,
-  800 × 600. Named test art gives each tested shot, warhead, death, projectile-trailer
-  and wake animation a distinguishable stock sprite, explicit end 3, one ordinary
-  forward pass, delay 1, no random rate, no normalisation, no follow-up and no event
-  or damage effects. Named map test data selects these types through their creators'
-  import mappings. No engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Use the read-only recorder
-  for creation tick, update order, actual first update, stage and removal tick, plus
-  end-of-tick captures for visible types. Run each fixture three times.
+- **AN26 (claims 5, 16 and 29; Q-0771).** Common tiny skirmish setup, speed 4, 800 × 600. Named test
+  art gives each tested shot, warhead, death, projectile-trailer and wake animation a
+  distinguishable stock sprite, explicit end 3, one ordinary forward pass, delay 1, no random rate,
+  no normalisation, no follow-up and no event or damage effects. Named map test data selects these
+  types through their creators' import mappings. No engine add-on and no mods (the named test files
+  of a scenario and the purpose-made test maps excepted). Use the read-only recorder for creation
+  tick, update order, actual first update, stage and removal tick, plus end-of-tick captures for
+  visible types. Run each fixture three times.
   - During-pass fixtures: one firer launches a long-flight projectile, testing its
     shot animation; the still-flying projectile creates one trailer; a surface ship
     moves on open water and creates a wake. Keep them alive, with no other removal
@@ -1695,7 +1766,8 @@ building that can cloak), it sets them in the test map's override section, which
     explosion should then first update in *c*, advance in *c* + 1 and end in *c* + 3.
 
 - **AN27 (claim 17; Q-1425: animation damage and resources).** Use the common tiny
-  skirmish setup at speed 2, director off and mods off except the named test data. A named
+  skirmish setup at speed 2, with mods off except the named test data and no helper that
+  changes rules, houses or computer players during the game. A named
   art fixture gives an ordinary weapon-created explosion animation damage 20, rate 300,
   start 0, end 3 and one forward pass, with no follow-up, particles, craters, scorch marks
   or start-event resource reaction. The weapon's own impact must not reduce resources.
@@ -1730,6 +1802,76 @@ building that can cloak), it sets them in the test map's override section, which
     contract. Neither a running walker nor a trigger-played animation is a damaging
     control for this purpose.
 
+- **AN28 (claims 14, 15 and 17; Q-1716: damage before the middle event).** Use AN27's common setup,
+  resource fixture and flag settings at speed 2, with mods off except the named test data and no
+  helper that changes rules, houses or computer players during the game: the observed cell's
+  resource overlay has its chain-reaction flag, the game-wide warhead that an ordinary type's damage
+  uses (claim 17, Import mapping) has its resource flag, resource growth, spreading and secondary
+  explosions are off, harvesters are kept out, and the creating weapon's own impact neither reduces
+  resources nor leaves a smudge. A named art fixture gives an ordinary weapon-created animation
+  damage 9.0, rate 300, start 1, a sprite of 4 image frames (so μ = 2, reached by the first
+  advance), the crater flag but not the scorch flag (so the middle event requests a crater and, by
+  claim 14's table, takes no choice draw), no particles, no start-event resource reaction and one
+  pass. By F5 the first advance delivers 10 damage points, so the detonation takes trunc(10 / 10) =
+  1 bale from each permitted scanned resource cell (S-0303 claim 17). The animation stands on open
+  flat ground at terrain height, so the height test passes, in a cell *C* holding resource at stage
+  6; every other cell within three cells of *C* is flat, holds no overlay and no smudge, and has a
+  morphable tile, so that a crater's fit at *C* depends only on whether *C* still holds its overlay
+  (S-0312 claim 26).
+  - Why the order shows: under damage first, the detonation leaves *C* at stage 5, the crater
+    request's 6 bales then empty it (S-0401 claim 3), and the crater fits and appears. Under
+    the middle event first, the crater request leaves *C* at stage 0 with its overlay, the crater
+    does not fit, and the detonation then empties *C*. Both orders end with *C* empty; only the
+    crater differs.
+  - Variants: (a) end field 3, so the advance reaching μ is not the last and image frame 2 is
+    drawn; (b) end field 1, so the advance reaching μ ends the animation; (c) as (b), with a
+    follow-up type that has neither the crater nor the scorch flag, no damage and a random rate
+    pair, so the follow-up's own first advances make no smudge.
+  - Controls, run first as a pilot of the fixture: (d) as (a) with no damage field, *C* at stage
+    6: expected no crater and *C* left at stage 0; (e) as (d) with *C* at stage 5: expected a
+    crater and *C* empty. A fixture in which (d) shows a crater or (e) shows none is not judged.
+  - Procedure: snapshot *C*'s stage after the impact and before the first advance, and record
+    with the read-only recorder and frame capture *C*'s stage and any smudge at *C* in the tick
+    of the advance that reaches μ and the tick after. Three runs of each variant.
+  - Expected: in (a), (b) and (c) a crater appears at *C* in the tick of the advance that reaches
+    μ, and *C* is empty from that tick. In (b) and (c) image frame 2 (at μ) is never drawn, and in
+    (c) the follow-up type's first image frame is drawn from that tick.
+  - Falsified by no crater at *C* in any of (a) to (c) while the controls behave as expected
+    (the middle event before the detonation), by a crater with *C* not empty, or, in (b) and (c),
+    by no crater at all (no middle event on the ending advance, or a follow-up switch before
+    it).
+
+- **AN29 (claim 17, Import mapping; Q-1717: the type-name warhead choice).** Use the common setup
+  at speed 2, with mods off except the named test data and no helper that changes rules, houses or
+  computer players during the game. Test rules give the two game-wide warheads of Import mapping
+  different verses against the armour of a stock building whose type is not undemolishable (S-0302
+  claim 7): 100 % for the invisibility-animation type's warhead and 0 % for the other, both with no
+  area beyond the building's cell. A named art fixture gives the built-in invisibility-animation
+  type (Import mapping) and an ordinary test type the same damage value 1.0, rate 300 and one pass
+  of 8 image frames, with no follow-up, particles, craters or scorch marks. Each is created by its
+  own test weapon on its own building of a third house, and the creating weapons' warhead has 0 %
+  verses against that building's armour, so the impact itself does no damage. Snapshot each
+  building's health after the impact and before the first advance, and judge only the losses after
+  it. Variant: an ordinary test type with damage 1.0 and one 4-frame pass whose follow-up type is
+  the invisibility-animation type.
+  - Procedure: record each building's health after every advance with the read-only recorder.
+    Three runs each of the main run, the variant and part b.
+  - Expected: the building under the invisibility-animation type loses health on every
+    advance by the F5 deliveries under 100 % verses (S-0302); the building under the ordinary
+    type loses none. In the variant, no loss during the ordinary type's advances and a loss
+    from the follow-up's first delivery on, with the accumulator reset of claim 15.
+  - Falsified by the ordinary type's building losing health, the invisibility-animation type's
+    building losing none, or a loss during the variant's first type.
+  - Part b (letter case and no type of the exact name): repeat the main run with a test copy of the
+    rules in which the animation list's entry for the built-in invisibility-animation type is
+    spelled with only its first letter capital, and a test copy of the art in which that type's
+    section heading is spelled the same way. Pilot check: the installed rules file's animation list
+    spells that entry in capitals, a search of the whole installed rules file finds no other value
+    or section heading that names the type (key names do not count), and every other mention of the
+    name in the test rules and the map used is spelled the same new way, so the type is first
+    registered in the new spelling. Expected: the building under that type loses no health, like the
+    ordinary type's. A loss falsifies the exact, case-sensitive comparison and the no-type rule.
+
 - **Companion section-selection scenario (Import mapping).** S-0007 scenario A25 supplies
   the tiny skirmish setup, conflicting own/image-section values, omitted and empty own keys,
   damaged and normal building slots, independent effects, preceding-sprite/read-count variants,
@@ -1754,12 +1896,42 @@ building that can cloak), it sets them in the test map's override section, which
   expiry damage and early removal. Use those scenarios for the burning-walker exceptions:
   they retain their owning specs' setup, expected results and falsifiers.
 
+## Changes for other specs
+
+None. These statements in other specs already agree with this spec:
+- S-0011 claim 36 points to claims 13, 14 and 25 here for the creation-time and later middle
+  events, and to S-0202 claims 10 and 15 for the creation draws and the middle-event draw
+  composition during map loading and during play; its table *Load-time draw order* places the
+  creation draws.
+- S-0202 claims 10 and 15 and scenario R14 agree with claims 13, 14 and 25.
+- S-0103 claim 8 gives the palette exception for tiled copies (claim 27).
+
 ## Open questions
 
+- Q-1717 is answered by claim 17 and Import mapping: the name is the one given there, compared
+  exactly with the current type's name on each delivery; with no type of that name the other
+  warhead is always used. AN29 tests it, its part b the letter case and the no-type case.
+  Decided by the project lead (2026-10-24): Import mapping may give the literal name of the
+  built-in invisibility-animation type (Q-1717 question 1), as a name the importer must recognise
+  in the user's data. It appears there only; the rest of this spec names the type by its role.
+- Q-1716 is answered by State and ordering, claims 14 and 17 and AN28: an advance's damage
+  detonation comes before its middle event, and both come before the end test, a new pass or a
+  follow-up switch, on ending advances too. AN28 observes the order through a resource cell that
+  the detonation's bale decides a crater on; the order of the draws within the tick is left
+  `unmeasured` (claim 14).
+- An attached animation whose own damage detonation removes its owner, such as a damaging fire on a
+  building it destroys, which leaves play at once (S-0203 claim 6 (b)). Unlike an animation that
+  leaves play in its own detonation (State and ordering), it goes on with the rest of that update
+  after the detonation, since the owner's removal only marks the animation for deletion at its next
+  update (claim 22); `unmeasured`, confidence medium, since no scenario here has an animation's own
+  damage destroy its owner on an advance that reaches μ. Not settled: which position the rest of
+  that update's effects use (a middle event's height test, its particles and its scorch mark or
+  crater). Our engine uses the owner's last position as the owner's position of claim 22 (design).
+  Backing `unmeasured`, confidence low, for the same reason.
 - Q-1425 is answered by claim 17 and AN27. The existing approved S-0303 claim 17 already
   permits resource reduction for damaging-animation detonations, and S-0302 claim 1
   already specifies no attacker or attacking house, even for an owned animation.
-  S-0615 claim 11 already delegates expiring-walker damage to claim 17 here. This revision
+  S-0615 claim 11 already delegates expiring-walker damage to claim 17 here. This spec
   makes the composition explicit; it changes neither those gates nor walker expiry timing.
 - Q-0418 questions 1 to 4 are answered by claims 10, 26 and 27. S-0108 claim 10
   already supplies the building-slot world position, and S-0102 claim 19 already
@@ -1767,8 +1939,7 @@ building that can cloak), it sets them in the test map's override section, which
   S-0102 claim 32 and Formulas F8; claims 20 and 21 here choose the code only, and
   S-0103 claim 9 supplies the pixel layouts. S-0102 claim 13 already specifies
   corrected tiled depth and records the original drawing-only defect without a
-  quirk switch. Confirm these pointers and S-0103 claim 8's tiled palette exception
-  at joint hand-off.
+  quirk switch.
 - Q-0046 is answered across specs. Claim 25 answers Q2c, including animations created during
   map loading. Claim 14 answers Q2b's event gates, height condition and scorch-or-crater choice.
   S-0202 claim 15 and R14 complete the downstream particle creation draws, smudge candidate
@@ -1794,9 +1965,10 @@ building that can cloak), it sets them in the test map's override section, which
   making their current pass the last (the fire on a burning tree). When that happens is theirs to
   say and to measure.
 - A creator can also ask for translucent drawing of its own, which would combine with the codes of
-  claims 20 and 21 as in Terms. No creator is known to ask for one; the creators' specs should confirm it.
-- A "random start" of animations has been suggested. No random starting image frame exists (claim 12); if a
-  measurement shows one, this spec needs a revision.
+  claims 20 and 21 as in Terms. No creator is known to ask for one; the creators' specs should
+  confirm it.
+- A "random start" of animations has been suggested. No random starting image frame exists (claim
+  12); if a measurement shows one, this spec needs a revision.
 - When an erasing weapon locks onto a building and lets go, and how several erasing weapons on one
   building interact, belong to the combat specs; this spec uses only the resulting *being erased*
   state (claims 21 and 23).
