@@ -435,6 +435,79 @@ pub fn place_with(w: &mut World, id: ObjectId, pos: Pos, facing: Facing, by_orde
     crate::econ::events::entered_map(w, id, by_order);
 }
 
+/// A play-time placement (S-0216 Terms): puts the created vehicle or
+/// infantry unit `id`, not yet on the map, at the centre of `cell` on the
+/// ground of that cell with facing value `v`, after the game's set-up.
+/// Returns whether it was placed. A refused unit stays off the map, with
+/// every draw its attempt took; what to do with it is the placing step's
+/// (S-0216 Open questions, *A failed placement*).
+///
+/// The game's own rules that put units on the map during play follow their
+/// own specs (S-0216 Terms): no spec yet names this placement, so its
+/// callers are placing steps of our own, such as the testkit's harness
+/// (`crate::testkit::spawn_in_play`). Set-up placement by the map is
+/// S-0009's and S-0208's (claim 5).
+pub fn place_in_play(w: &mut World, id: ObjectId, cell: CellXY, v: u8) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let kind = o.kind;
+    // spec: S-0216 Terms (a newly created vehicle or infantry unit, not yet on the map)
+    if o.on_map || !matches!(kind, Kind::Infantry | Kind::Vehicle) {
+        return false;
+    }
+    // Our design: a cell that is not a legal map cell refuses (no S-0209 entry outcome exists for it).
+    let Some(level) = w.cells.cell(cell).map(|c| i32::from(c.level)) else {
+        return false;
+    };
+    let centre = Pos::centre(cell, 0);
+    // spec: S-0216 Terms (at the centre of the stated cell, on the ground of that cell)
+    let mut pos = Pos::new(centre.x, centre.y, w.surface_at(centre.x, centre.y));
+    if kind == Kind::Infantry && w.cells.usable(cell) {
+        // spec: S-0216 claim 2 (a usable cell: S-0208 claim 3's choice for a desired point of class centre, one R(0, 3) unless the vehicle-present or object-present refusal applies, on the ground record with the units already in the cell; no free position of row Rk, or no position: the placement fails, the draw kept)
+        let Some(k) = walk::choose_position(
+            w,
+            cell,
+            Layer::Ground,
+            crate::cells::position::CENTRE,
+            false,
+        ) else {
+            return false;
+        };
+        let (u, sv) = walk::standing_point(k);
+        let (x, y) = (256 * cell.x + u, 256 * cell.y + sv); // spec: S-0204 claim 2 (a position within the cell)
+        pos = Pos::new(x, y, w.surface_at(x, y));
+    }
+    // A cell outside the usable area: S-0216 claim 2 leaves the position and
+    // the draw unestablished (PT2 part c). Our design, as S-0614 claim 20's
+    // placement: no position choice and no draw, the centre, then the entry
+    // test, which for a unit not yet on the map applies no usable-area check.
+    // spec: S-0216 claim 5 (the unit's entry outcome for the cell, S-0209 claims 4 and 5 with S-0211 claim 10, asked without an approach direction or source elevation, against the ground occupants and record; only clear accepts, after the standing-position choice)
+    let outcome = if kind == Kind::Infantry {
+        crate::occupancy::infantry_outcome(w, id, cell, level)
+    } else {
+        crate::occupancy::vehicle_outcome(w, id, cell, level)
+    };
+    if outcome != crate::occupancy::Outcome::Clear {
+        return false;
+    }
+    // spec: S-0216 claims 3 and 5 (a vehicle of a type with either visceroid flag: one R(0, 29), only once the entry test has accepted it; any other vehicle: no draw)
+    visceroid_draw(w, id);
+    if let Some(ob) = w.obj_mut(id) {
+        ob.layer = Layer::Ground;
+    }
+    // spec: S-0216 claim 1 and S-0206 claim 5 (body and turret facings both 256 × v, set at once; the conversion of S-0009 claim 39)
+    let facing = facing_from_value(i32::from(v));
+    // Infantry facing at play time is S-0216's open question; our design gives it the same conversion.
+    place(w, id, pos, facing);
+    // spec: S-0216 claim 4 (a unit ready to change, S-0215 claim 11, when it is placed has the placement fall-back's resting behaviour current and nothing queued; one not ready keeps it queued)
+    if crate::process::ready(w, id) {
+        let (tick, stale) = (w.tick, w.rules().quirks.stale_suspended_revert); // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.beh.start_next(tick, stale);
+        }
+    }
+    true
+}
+
 /// Takes an infantry unit off the map for a while without ending it: a
 /// slave that goes inside its master (S-0402 claim 14). Like [`remove`] it
 /// leaves the update order, a counting removal during the turn pass

@@ -646,6 +646,44 @@ pub fn spawn(
     id
 }
 
+/// A placing step of S-0216's scenarios: creates an infantry unit or a
+/// vehicle of type `name` for house `house` (its creation draw, S-0202
+/// claim 10) and places it at play time at the centre of `cell` with
+/// facing value `v` ([`crate::objects::place_in_play`]); then, when given,
+/// queues `behaviour` without starting it (S-0216 claim 4, S-0215 claim 7).
+/// A refused unit is discarded with its creation set (our harness's choice,
+/// S-0216 Open questions *A failed placement*): it never enters play, and
+/// its draws and creation numbers stay used. Returns the placed unit.
+pub fn spawn_in_play(
+    w: &mut World,
+    kind: crate::rules::Kind,
+    name: &str,
+    house: u8,
+    cell: CellXY,
+    v: u8,
+    behaviour: Option<Behaviour>,
+) -> Option<ObjectId> {
+    let ti = w
+        .rules()
+        .index_of(kind, name)
+        .unwrap_or_else(|| panic!("no {kind:?} type {name}"));
+    let id = crate::objects::create(w, kind, ti, Some(HouseId(house)));
+    if !crate::objects::place_in_play(w, id, cell, v) {
+        let made: Vec<ObjectId> = w.objects.range(id..).map(|(&k, _)| k).collect();
+        for x in made {
+            w.mind.controllers.remove(&x);
+            w.spawned.launcher.remove(&x);
+            w.objects.remove(&x);
+        }
+        return None;
+    }
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0216 claim 4 (a behaviour the placing step gives is queued by S-0215 claim 7 without being started)
+        o.beh.queue(behaviour);
+    }
+    Some(id)
+}
+
 /// Runs `n` ticks.
 pub fn run(w: &mut World, n: i32) {
     for _ in 0..n {
