@@ -92,6 +92,17 @@
 //! colour is the non-player grey (S-0103 claims 8 and 10; S-0515 claim 2;
 //! Q-1772).
 //!
+//! M8 step A4, note 18 reopened: `derrick-paths` counts, map by map, the
+//! map buildings that need an engineer and the non-player buildings that
+//! need none but share a body image or a slot animation with a type that
+//! does; on the first map with such a building it counts the art of its
+//! slots (the drawing-with-object, alternative-palette and tiled flags,
+//! and the pixels in the remap range, S-0103 claim 8 and Terms) and
+//! whether the drawing animates it after each reason that draws it live
+//! (a 1-point hit, protection, a charge flash; S-0108 claim 2, S-0102
+//! claim 34, S-0519 claim 25); then, on a map with four starts and four
+//! houses, a capture by the last house (S-0103 claim 10).
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -148,6 +159,7 @@ const SCENES: &[Scene] = &[
     ("carrier-death", carrier_death),
     ("mirage-click", mirage_click),
     ("derrick-look", derrick_look),
+    ("derrick-paths", derrick_paths),
 ];
 
 #[test]
@@ -2416,6 +2428,13 @@ impl Lane {
 
     /// Starts a skirmish on the `map`-th offered map.
     fn start_on(map: usize) -> Option<Lane> {
+        Lane::start_with(map, 0)
+    }
+
+    /// Starts a skirmish on the `map`-th offered map with `extra` more
+    /// computer houses in the lobby's third and later rows; `None` when the
+    /// map has too few starts for them.
+    fn start_with(map: usize, extra: usize) -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
         let out = png::lane_out("m7b");
         std::fs::create_dir_all(&out).unwrap();
@@ -2432,6 +2451,17 @@ impl Lane {
             let _ = c.frame();
             let r = c.setup_targets.rect_of(&SetupHit::Map(1)).unwrap();
             click(&mut c, r);
+        }
+        if extra > 0 {
+            let starts = c.install.as_ref().unwrap().maps[map].1.starts as usize;
+            if starts < 2 + extra {
+                return None;
+            }
+            for row in 2..2 + extra {
+                let _ = c.frame();
+                let r = c.setup_targets.rect_of(&SetupHit::Kind(row, 1)).unwrap();
+                click(&mut c, r);
+            }
         }
         let _ = c.frame();
         let r = c.setup_targets.rect_of(&SetupHit::Start_).unwrap();
@@ -3116,4 +3146,367 @@ fn derrick_state(l: &mut Lane, map: usize, what: &str, b: ObjectId) {
         live.slot_names(b).len(),
         hsv == grey,
     );
+}
+
+/// Note 18 reopened (S-0103 claims 8 and 10, Terms *remap range*; S-0108
+/// claims 2 and 11; S-0102 claim 34; S-0519 claim 25; S-0515 claim 2;
+/// Q-1772): over the first maps (of `GLASNOST_LANE_MAPS`, default 8) the
+/// buildings that need an engineer and the lookalikes that do not; on the
+/// first map with one, its art and each reason it is drawn live; then a
+/// capture by a fourth house. Counts only.
+fn derrick_paths(_: &mut Lane) {
+    let maps = env_num("GLASNOST_LANE_MAPS", 8);
+    let mut done = false;
+    for map in 0..maps {
+        let Some(mut l) = Lane::start_on(map) else {
+            return;
+        };
+        l.ticks(3);
+        let _ = l.c.frame_rgba();
+        lookalikes(&l, map);
+        if done {
+            continue;
+        }
+        let found = derricks(&l);
+        let Some(&b) = found.first() else { continue };
+        done = true;
+        derrick_art(&l, map, &found);
+        derrick_reasons(&mut l, map, b);
+    }
+    for map in 0..maps {
+        let Some(mut l) = Lane::start_with(map, 2) else {
+            continue;
+        };
+        l.ticks(3);
+        let _ = l.c.frame_rgba();
+        let Some(&b) = derricks(&l).first() else {
+            continue;
+        };
+        derrick_fourth_house(&mut l, map, b);
+        return;
+    }
+    println!("derrick-paths: no map with four starts and a derrick");
+}
+
+/// Whether type `t` needs an engineer (S-0515 Terms).
+fn needs_engineer(w: &World, t: u32) -> bool {
+    w.rules()
+        .econ
+        .power
+        .buildings
+        .get(t as usize)
+        .is_some_and(|p| p.needs_engineer)
+}
+
+/// The art document of the lane's import.
+fn art_doc(l: &Lane) -> glasnost_ini::Document {
+    let s = l.c.session.as_ref().unwrap();
+    let f = s.loaded.import.art_file.as_ref().expect("an art file");
+    glasnost_ini::Document::parse(&f.bytes, Default::default(), &mut Vec::new())
+}
+
+/// A building type's art image and the names of its five set-up slots'
+/// normal and damaged animations (S-0108 claim 11 and Import mapping).
+fn type_look(l: &Lane, doc: &glasnost_ini::Document, t: u32) -> Option<(Vec<u8>, Vec<Vec<u8>>)> {
+    use glasnost_app::mapview::{build, live, slots};
+    let s = l.c.session.as_ref().unwrap();
+    let import = &s.loaded.import;
+    let name = live::name_bytes(&l.world().rules().buildings.get(t as usize)?.name);
+    let idx = build::find_type(import, glasnost_convert::kinds::Kind::Buildings, &name)?;
+    let image = import
+        .arts
+        .get(&(glasnost_convert::kinds::Kind::Buildings, idx))?
+        .image
+        .clone();
+    let names = slots::SETUP_SLOTS
+        .iter()
+        .map(|base| slots::read_slot(doc, &image, base))
+        .flat_map(|d| [d.normal, d.damaged])
+        .filter(|n| !n.is_empty())
+        .collect();
+    Some((image, names))
+}
+
+/// Per map: the map buildings that need an engineer (with running slots,
+/// and gates or occupiable among them), and the non-player map buildings
+/// that need none, have running slots and share a body image or a slot
+/// animation with a type that needs one.
+fn lookalikes(l: &Lane, map: usize) {
+    let doc = art_doc(l);
+    let w = l.world();
+    let r = w.rules();
+    let tech: Vec<(Vec<u8>, Vec<Vec<u8>>)> = (0..r.buildings.len() as u32)
+        .filter(|&t| needs_engineer(w, t))
+        .filter_map(|t| type_look(l, &doc, t))
+        .collect();
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref().expect("a live game");
+    let (mut n_tech, mut n_tech_slots, mut n_tech_live_from_start) = (0, 0, 0);
+    let (mut n_other, mut same_image, mut shared_anim) = (0, 0, 0);
+    for &id in live.building_ids.values() {
+        let Some(o) = w.obj(id).filter(|o| o.on_map) else {
+            continue;
+        };
+        let running = !live.slot_names(id).is_empty();
+        if needs_engineer(w, o.type_index) {
+            n_tech += 1;
+            n_tech_slots += usize::from(running);
+            let b = r.buildings.get(o.type_index as usize);
+            n_tech_live_from_start +=
+                usize::from(b.is_some_and(|b| b.gate || b.building.can_be_occupied));
+            continue;
+        }
+        let player = o
+            .owner
+            .and_then(|h| w.houses.get(usize::from(h.0)))
+            .is_some_and(|h| h.role == glasnost_sim::world::HouseRole::Player);
+        if player || !running {
+            continue;
+        }
+        n_other += 1;
+        let Some((image, names)) = type_look(l, &doc, o.type_index) else {
+            continue;
+        };
+        same_image += usize::from(tech.iter().any(|(i, _)| *i == image));
+        shared_anim += usize::from(
+            tech.iter()
+                .any(|(_, t)| names.iter().any(|n| t.contains(n))),
+        );
+    }
+    println!(
+        "derrick-paths map {map}: map buildings needing an engineer {n_tech}, with running slots {n_tech_slots}, gate or occupiable {n_tech_live_from_start}; non-player map buildings needing none with running slots {n_other}, same body image as an engineer type {same_image}, sharing a slot animation with one {shared_anim}"
+    );
+}
+
+/// The opaque pixels and those in the remap range 16 … 31 (S-0103 Terms)
+/// of image frame `f` of sprite file `file`.
+fn remap_count(l: &Lane, file: &[u8], f: usize) -> Option<(usize, usize)> {
+    let s = l.c.session.as_ref().unwrap();
+    let bytes = s.loaded.assets.get(file)?;
+    let shp = glasnost_fmt::shp::Shp::parse(bytes).ok()?;
+    let img = shp.decode_frame(f).ok()?;
+    let px = img.pixels();
+    Some((
+        px.iter().filter(|&&p| p != 0).count(),
+        px.iter().filter(|&&p| (16..=31).contains(&p)).count(),
+    ))
+}
+
+/// The frame count of sprite file `file`.
+fn frame_count(l: &Lane, file: &[u8]) -> usize {
+    let s = l.c.session.as_ref().unwrap();
+    s.loaded
+        .assets
+        .get(file)
+        .and_then(|b| glasnost_fmt::shp::Shp::parse(b).ok())
+        .map_or(0, |shp| shp.frames.len())
+}
+
+/// The art of each type among `found`, numbered (no names): the body's
+/// image frames with their opaque and remap-range pixels, and for each
+/// set-up slot animation its palette flags (S-0103 claim 8 rows 3 to 5)
+/// and the remap-range pixels over its image frames.
+fn derrick_art(l: &Lane, map: usize, found: &[ObjectId]) {
+    use glasnost_app::mapview::{build, slots};
+    use glasnost_convert::kinds::Kind as CKind;
+    let doc = art_doc(l);
+    let w = l.world();
+    let types: std::collections::BTreeSet<u32> = found
+        .iter()
+        .filter_map(|&id| w.obj(id).map(|o| o.type_index))
+        .collect();
+    let s = l.c.session.as_ref().unwrap();
+    let import = &s.loaded.import;
+    for (k, &t) in types.iter().enumerate() {
+        let Some((image, _)) = type_look(l, &doc, t) else {
+            continue;
+        };
+        let name = glasnost_app::mapview::live::name_bytes(&w.rules().buildings[t as usize].name);
+        let Some(idx) = build::find_type(import, CKind::Buildings, &name) else {
+            continue;
+        };
+        if let Some(body) = import
+            .arts
+            .get(&(CKind::Buildings, idx))
+            .and_then(|a| a.sprite.clone())
+        {
+            let n = frame_count(l, &body);
+            let per: Vec<(usize, usize)> = (0..n / 2)
+                .filter_map(|f| remap_count(l, &body, f))
+                .collect();
+            println!(
+                "derrick-paths map {map} type {k}: body frames {n}, image frames (opaque, remap-range) pixels {per:?}"
+            );
+        }
+        for (si, base) in slots::SETUP_SLOTS.iter().enumerate() {
+            let def = slots::read_slot(&doc, &image, base);
+            for (variant, anim) in [("normal", &def.normal), ("damaged", &def.damaged)] {
+                if anim.is_empty() {
+                    continue;
+                }
+                let Some(a) = build::find_type(import, CKind::Animations, anim) else {
+                    println!("derrick-paths map {map} type {k} slot {si} {variant}: unknown type");
+                    continue;
+                };
+                let at = slots::read_anim(&doc, build::anim_own_section(import, a));
+                let sprite = import
+                    .arts
+                    .get(&(CKind::Animations, a))
+                    .and_then(|x| x.sprite.clone());
+                let (n, opaque, remap, with) = sprite.as_ref().map_or((0, 0, 0, 0), |f| {
+                    let n = frame_count(l, f);
+                    let images = if at.shadow { n / 2 } else { n };
+                    let c: Vec<(usize, usize)> =
+                        (0..images).filter_map(|i| remap_count(l, f, i)).collect();
+                    (
+                        n,
+                        c.iter().map(|x| x.0).sum::<usize>(),
+                        c.iter().map(|x| x.1).sum::<usize>(),
+                        c.iter().filter(|x| x.1 > 0).count(),
+                    )
+                });
+                println!(
+                    "derrick-paths map {map} type {k} slot {si} {variant}: drawn with its building {}, alternative palette {}, tiled {}, normal light {}, sprite {}, frames {n}, opaque pixels {opaque}, remap-range pixels {remap}, image frames with any {with}",
+                    at.cell_drawer,
+                    at.alt_palette,
+                    at.tiled,
+                    at.normal_light,
+                    sprite.is_some(),
+                );
+            }
+        }
+    }
+}
+
+/// The image ids the scene draws for building `b` (its cell-pass code or
+/// its simulation code), sorted.
+fn drawn_images(l: &Lane, b: ObjectId) -> Vec<u32> {
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref().expect("a live game");
+    let code = live
+        .building_ids
+        .iter()
+        .find(|(_, id)| **id == b)
+        .map(|(c, _)| *c);
+    let sim = glasnost_app::mapview::live::sim_code(b);
+    let mut v: Vec<u32> = s
+        .scene
+        .items
+        .iter()
+        .filter(|i| i.object == Some(sim) || (code.is_some() && i.object == code))
+        .map(|i| i.image)
+        .collect();
+    v.sort_unstable();
+    v
+}
+
+/// Over `n` ticks: whether `b` was drawn live and how many different image
+/// sets the scene drew for it (more than 1: the drawing animates it).
+fn watch_drawing(l: &mut Lane, b: ObjectId, n: usize) -> (bool, usize) {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut live_drawn = false;
+    for _ in 0..n {
+        l.ticks(1);
+        seen.insert(drawn_images(l, b));
+        let s = l.c.session.as_ref().unwrap();
+        live_drawn |= s.loaded.live.as_ref().unwrap().drawn_live(b);
+    }
+    (live_drawn, seen.len())
+}
+
+/// Each reason that draws a never-captured map building live, one at a
+/// time from its fresh state: nothing, a 1-point hit (no damage frame, a
+/// full-looking health bar), protection (S-0102 claim 34) and a charge
+/// flash (S-0519 claim 25). Prints whether the drawing animates it.
+fn derrick_reasons(l: &mut Lane, map: usize, b: ObjectId) {
+    use glasnost_sim::superweapons::{ProtectKind, Protection, Tint};
+    let cell = l.world().obj(b).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+    l.look_at(cell);
+    let full = l.world().obj(b).map_or(0, |o| o.health);
+    for reason in ["nothing", "1-point hit", "protection", "charge flash"] {
+        let tick = l.world().tick;
+        if let Some(o) = l.world_mut().obj_mut(b) {
+            match reason {
+                "1-point hit" => o.health = full - 1,
+                "protection" => {
+                    o.sw.protection = Some(Protection {
+                        start: tick - 1,
+                        duration: 200,
+                        kind: ProtectKind::Curtain,
+                        tint: Tint::Rise(tick - 1),
+                    })
+                }
+                "charge flash" => o.combat.look.flash = 200,
+                _ => {}
+            }
+        }
+        l.ticks(2);
+        let lost = full - l.world().obj(b).map_or(0, |o| o.health);
+        let (drawn_live, sets) = watch_drawing(l, b, 24);
+        let manned = l.world().obj(b).is_some_and(|o| o.econ.building.manned);
+        println!(
+            "derrick-paths map {map} {reason}: manned {manned}, health points lost {lost}, drawn live {drawn_live}, image sets drawn over 24 ticks {sets} (more than 1: animates)"
+        );
+        l.save(&format!("derrick-paths-{map}-{}", reason.replace(' ', "-")));
+        if let Some(o) = l.world_mut().obj_mut(b) {
+            o.health = full;
+            o.sw.protection = None;
+            o.combat.look.flash = 0;
+        }
+        l.ticks(2);
+    }
+}
+
+/// A capture by the last player house of a four-house skirmish, through
+/// a click of its engineer: its colour slot and whether its colour is the
+/// non-player grey (S-0103 claim 10).
+fn derrick_fourth_house(l: &mut Lane, map: usize, b: ObjectId) {
+    let w = l.world();
+    let Some(house) = (0..w.houses.len())
+        .rev()
+        .map(|i| HouseId(i as u8))
+        .find(|h| w.houses[usize::from(h.0)].role == glasnost_sim::world::HouseRole::Player)
+    else {
+        return;
+    };
+    let players = w
+        .houses
+        .iter()
+        .filter(|h| h.role == glasnost_sim::world::HouseRole::Player)
+        .count();
+    let name = live_name(w, house);
+    let slot = {
+        let s = l.c.session.as_ref().unwrap();
+        s.loaded
+            .options
+            .slots
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, s)| *s)
+    };
+    let Some(eng) = engineer(l) else { return };
+    let cell = l.world().obj(b).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+    l.look_at(cell);
+    let spot = l.open_land(CellXY::new(cell.x - 4, cell.y + 4));
+    let e = l.spawn(Kind::Infantry, &eng, house, spot);
+    l.ticks(2);
+    let orders = l.order(house, e, ClickOn::Object(b));
+    let took = until(l, 1500, |w| {
+        w.obj(b).is_some_and(|o| o.owner == Some(house))
+    });
+    l.ticks(20);
+    println!(
+        "derrick-paths map {map} four houses: player houses {players}, capturing house index {}, its lobby colour slot {slot:?}, order {orders}, ticks to the ownership change {took:?}",
+        house.0
+    );
+    derrick_state(l, map, "captured by the last house", b);
+    l.save(&format!("derrick-paths-{map}-last-house"));
+}
+
+/// A house's name as the drawing keys it.
+fn live_name(w: &World, h: HouseId) -> Vec<u8> {
+    w.houses
+        .get(usize::from(h.0))
+        .map(|h| h.name.as_bytes().to_vec())
+        .unwrap_or_default()
 }

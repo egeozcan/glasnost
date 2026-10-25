@@ -2422,6 +2422,19 @@ impl Live {
         Some(look.shrouded(shrouded))
     }
 
+    /// Whether `o` is a tech building that has never changed owner: its
+    /// type needs an engineer and it is not manned (S-0515 claim 2;
+    /// S-0405 claim 8, manned-when-required row).
+    fn unmanned_tech(&self, o: &Object) -> bool {
+        self.rules
+            .econ
+            .power
+            .buildings
+            .get(o.type_index as usize)
+            .is_some_and(|t| t.needs_engineer)
+            && !o.econ.building.manned
+    }
+
     /// The look of a building in the shown tick: its protection look, and
     /// its charge flash count and air-strike mark (S-0519 F7).
     fn building_look(&self, o: &Object) -> super::protection::BuildingLook {
@@ -2654,17 +2667,14 @@ impl Live {
         // first image frame. Whether the slots of a building that needs an
         // engineer run before it is manned (S-0405 claims 8 and 9, S-0515
         // claim 2) is open (Q-1772): such a building keeps its cell-pass
-        // drawing until its owner or health changes.
-        let power = &self.rules.econ.power.buildings;
+        // drawing until its owner or health changes; drawn live before that
+        // for its look (above), its slots stand still (`still_map` below).
         let changed_map: BTreeSet<u32> = self
             .building_ids
             .iter()
             .filter(|(code, id)| {
                 self.world.obj(**id).is_some_and(|o| {
-                    let unmanned_tech = power
-                        .get(o.type_index as usize)
-                        .is_some_and(|t| t.needs_engineer)
-                        && !o.econ.building.manned;
+                    let unmanned_tech = self.unmanned_tech(o);
                     o.on_map
                         && (self.map_start.get(code) != Some(&(o.owner, o.health))
                             || (!unmanned_tech
@@ -2780,6 +2790,22 @@ impl Live {
             })
             .map(|(_, id)| *id)
             .collect();
+        // The map's unmanned tech buildings drawn live only for their look
+        // (protected, flashing, marked or being erased; a gate or an
+        // occupiable type): their owner and health are as at the start, so
+        // under Q-1772's interim their slots stand at their first image
+        // frame, as the cell pass draws them (S-0108 claim 11 starts them;
+        // whether they run before the first ownership change is open).
+        let still_map: BTreeSet<ObjectId> = self
+            .building_ids
+            .iter()
+            .filter(|(code, id)| {
+                !changed_map.contains(code)
+                    && !kept_map.contains(id)
+                    && self.world.obj(**id).is_some_and(|o| self.unmanned_tech(o))
+            })
+            .map(|(_, id)| *id)
+            .collect();
         let own: Vec<(ObjectId, LiveBuilding)> = self
             .world
             .objects
@@ -2812,7 +2838,7 @@ impl Live {
                         object: sim_code(o.id),
                         unloading: self.unloading_of(o),
                         // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)
-                        slots: self.slot_draws(o.id, idx),
+                        slots: (!still_map.contains(&o.id)).then(|| self.slot_draws(o.id, idx)),
                         gate_door: (self
                             .rules
                             .buildings

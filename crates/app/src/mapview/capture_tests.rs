@@ -170,6 +170,12 @@ enum Act {
     Capture,
     /// It is damaged to 1 health point.
     Damage,
+    /// It loses 1 health point: no damage frame (S-0108 F3).
+    Chip,
+    /// It is protected (S-0102 claim 34): drawn live for its look.
+    Protect,
+    /// Its charge flash runs (S-0519 claim 25): drawn live for its look.
+    Flash,
     /// Nothing.
     Nothing,
 }
@@ -183,6 +189,8 @@ struct Seen {
     after: (usize, usize),
     /// The building's body pixels before (static) and after (live) the act.
     body: (Vec<u8>, Vec<u8>),
+    /// The building's slot-animation pixels in the cell pass before the act.
+    still: Vec<u8>,
     /// The building's body rows after the act.
     rows: BTreeSet<u32>,
     /// The body rows of a building of Alpha's own (drawn live).
@@ -280,6 +288,7 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
     live.redraw(&inputs, &mut scene);
     let before = counts(&scene);
     let body_before = pixels(&scene, code, BODY_FRAME);
+    let still = pixels(&scene, code, SLOT_FRAME);
     match act {
         Act::Capture => {
             let r = live.click(
@@ -306,6 +315,22 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
         Act::Damage => {
             live.world.obj_mut(b).unwrap().health = 1;
         }
+        Act::Chip => {
+            live.world.obj_mut(b).unwrap().health -= 1;
+        }
+        Act::Protect => {
+            use glasnost_sim::superweapons::{ProtectKind, Protection, Tint};
+            let tick = live.world.tick;
+            live.world.obj_mut(b).unwrap().sw.protection = Some(Protection {
+                start: tick - 1,
+                duration: 1000,
+                kind: ProtectKind::Curtain,
+                tint: Tint::Rise(tick - 1),
+            });
+        }
+        Act::Flash => {
+            glasnost_sim::mark::start_flash(&mut live.world, b, 1000);
+        }
         Act::Nothing => {}
     }
     live.step();
@@ -324,6 +349,7 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
         before,
         after,
         body: (body_before, body_after),
+        still,
         rows,
         reference,
         slots,
@@ -423,6 +449,51 @@ fn a_damaged_unmanned_tech_building_animates_in_the_neutral_colour() {
     assert_eq!(neutral.len(), 1, "{neutral:?}");
     assert_eq!(s.rows, neutral, "the neutral house's palette");
     assert_ne!(s.rows, s.reference, "not a player house's palette");
+}
+
+/// spec: S-0108 claim 2 and F3 (a building above the damaged ratio shows its normal body frame);
+/// S-0515 claim 2 (unmanned until its first ownership change); Q-1772 interim (any change of its
+/// health draws it live, and its slots play): the lead's note 18 of M8 step A4, reopened. A
+/// neutral tech building that loses a single point of health looks undamaged but animates
+#[test]
+fn a_chipped_unmanned_tech_building_looks_undamaged_but_animates() {
+    let s = scenario(true, true, Act::Chip);
+    assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+    assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
+    assert_eq!(s.body.0, s.body.1, "the normal body frame");
+    assert!(
+        slot_frames(&s).len() > 1,
+        "the slot animation plays: {:?}",
+        s.slots
+    );
+}
+
+/// spec: S-0102 claim 34 (a protected building's body shows the protection appearance) and
+/// S-0519 claim 25 (the charge flash repaints the body): such a map building is drawn live;
+/// S-0108 claim 11 and S-0515 claim 2; Q-1772 interim (an unmanned map tech building whose owner
+/// and health are as at the start keeps its slots at their first image frame, as the cell pass
+/// draws them): the lead's note 18 of M8 step A4, reopened. Before the fix its slots played
+#[test]
+fn an_unmanned_tech_building_drawn_live_for_its_look_keeps_its_slots_still() {
+    for act in [Act::Protect, Act::Flash] {
+        let s = scenario(true, true, act);
+        assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+        assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
+        assert_eq!(s.still.len(), 1, "one slot image in the cell pass");
+        assert_eq!(
+            slot_frames(&s),
+            s.still.iter().copied().collect::<BTreeSet<u8>>(),
+            "the slot stands at the cell pass's frame: {:?}",
+            s.slots
+        );
+    }
+    // A building that needs no engineer, protected, still animates (S-0108 claim 11).
+    let s = scenario(true, false, Act::Protect);
+    assert!(
+        slot_frames(&s).len() > 1,
+        "the slot animation plays: {:?}",
+        s.slots
+    );
 }
 
 /// Alpha's own HUTX with the slot animation, sellable (its type has a
