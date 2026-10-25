@@ -606,12 +606,25 @@ pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
 /// claims 41, 42): a rocket missile's current nose pitch (S-0506) and its set's
 /// pitch fractions, or a flying-locomotor aircraft's signed height, current
 /// speed fraction and unfinished aiming-facing turn; or, for a vehicle the
-/// simulation marks sinking, the list of our interim of Q-1871.
+/// simulation marks sinking, its pitch and roll (S-0504 claims 15, 16).
 pub fn attitude(w: &World, o: &Object) -> Attitude {
     if o.kind == SimKind::Vehicle && glasnost_sim::naval::sinking(w, o.id) {
-        // design: Q-1871 interim (a vehicle marked sinking, S-0504 Terms, is drawn listed by its depth below the surface, S-0504 claim 4's height, and its id)
-        let height = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
-        return Attitude::Sinking(super::sinking::list(height, o.id.0));
+        use glasnost_rules::sim::Locomotor as L;
+        // spec: S-0504 claim 16 (the lean is drawn for a type whose locomotor is the driving, ship, hovering or jumpjet one; S-0106 claims 5 and 9)
+        // design: the type's own locomotor (S-0207 claim 14), not a carrier's: a vehicle sinks only from its own movement, and no spec gives a lift or teleport carrier's drawing a lean
+        let drawn = w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
+            matches!(
+                u.type_locomotor(),
+                L::Drive | L::Ship | L::Hover | L::Jumpjet
+            )
+        });
+        return Attitude::Sinking {
+            // spec: S-0504 claim 15 and F4 (the pitch the simulation steps at each descent)
+            pitch: glasnost_sim::naval::pitch(w, o.id).0,
+            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0303 claim 20, is not modelled, so a sinking vessel's roll stays level)
+            roll: 0,
+            drawn,
+        };
     }
     if let Some(d) = glasnost_sim::rocket::drawing(w, o.id) {
         return Attitude::Rocket {

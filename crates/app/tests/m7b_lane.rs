@@ -109,16 +109,18 @@
 //! each mode, and lets the first charge-turret one attack, counting the
 //! selected turret indices it shows (never which mode shows which).
 //!
-//! M8 step A4, note 20 (Q-1871, our interim list): `sinking-list` counts
-//! the naval vehicle types by voxel or sprite body, underwater flag and
-//! whether a killing hit sinks them, then puts a vessel a killing hit sinks
-//! (a turreted one when there is one) and an underwater one on open water,
-//! facing different ways; it kills the first and sets the second sinking
-//! directly, as a cull would (S-0614 claim 11; an underwater type never
-//! sinks at a killing hit, S-0504 claim 6), and saves frames before the
-//! hit and at the start, onset, middle and end of the descent, printing each
-//! vessel's id, facing, list direction and step. Ids, cells, counts and
-//! ticks only.
+//! M8 step A3 intake 26 (S-0504 r26 claims 15 and 16, F4 and F5; Q-1871
+//! answered): `sinking-list` counts the naval vehicle types by voxel or
+//! sprite body, underwater flag and whether a killing hit sinks them, then
+//! puts two vessels of one type a killing hit sinks (a turreted one when
+//! there is one), with body facings 0 and 16384, and an underwater one on
+//! open water; it kills the first two and sets the third sinking directly,
+//! as a cull would (S-0614 claim 11; an underwater type never sinks at a
+//! killing hit, S-0504 claim 6), and saves the view and a crop centred on
+//! each vessel before the hit and after descents 1, 40, 79 and 80,
+//! printing each vessel's id, facing, the simulation's pitch and lean, and
+//! whether its locomotor draws the lean. Ids, cells, counts, ticks and
+//! pitches only.
 //!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
@@ -3724,15 +3726,41 @@ fn live_name(w: &World, h: HouseId) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// M8 step A4, note 20 (Q-1871: the sinking vessel's list, our interim)
+// M8 step A3 intake 26 (S-0504 r26 claims 15, 16: a sinking vessel's lean)
 
 /// A naval vehicle type: index, voxel body, turret flag, underwater, sinks
 /// at a killing hit.
 type NavalType = (u32, bool, bool, bool, bool);
 
-/// Note 20 (design: Q-1871 interim; S-0504 claims 4, 6; S-0312 claim 10;
-/// S-0614 claim 11): the naval vehicle types counted, and two vessels sunk
-/// on open water with frames of their descent. Counts, ids and ticks only.
+/// `w` × `h` pixels of the frame centred on `at` (kept inside the frame),
+/// scaled up three times.
+fn crop_at(
+    rgba: &[u8],
+    size: (usize, usize),
+    at: (i32, i32),
+    w: usize,
+    h: usize,
+) -> (u32, u32, Vec<u8>) {
+    let (fw, fh) = size;
+    let x0 = (at.0 - w as i32 / 2).clamp(0, (fw - w) as i32) as usize;
+    let y0 = (at.1 - h as i32 / 2).clamp(0, (fh - h) as i32) as usize;
+    let mut out = Vec::with_capacity(w * h * 36);
+    for y in 0..h * 3 {
+        for x in 0..w * 3 {
+            let i = ((y0 + y / 3) * fw + x0 + x / 3) * 4;
+            out.extend_from_slice(&rgba[i..i + 4]);
+        }
+    }
+    ((w * 3) as u32, (h * 3) as u32, out)
+}
+
+/// S-0504 claims 15 and 16 (F4, F5; S-0312 claim 10; S-0614 claim 11): the
+/// naval vehicle types counted, then two vessels of one type that a killing
+/// hit sinks, with body facings 0 and 16384 (8-directions 0 and 2: stern
+/// down and bow down), and an underwater one set sinking directly, as a
+/// cull would. Frames of the whole view and a crop centred on each vessel
+/// before the hit and after descents 1, 40, 79 and 80. Counts, ids, ticks
+/// and the simulation's pitch only.
 fn sinking_list(lane: &mut Lane) {
     use glasnost_app::mapview::build::Attitude;
     let types: Vec<NavalType> = {
@@ -3807,20 +3835,42 @@ fn sinking_list(lane: &mut Lane) {
     let local = l.local();
     let ship_name = type_name_of(l.world(), Kind::Vehicle, ship as usize);
     let sub_name = type_name_of(l.world(), Kind::Vehicle, sub as usize);
-    // Different facings: 8192 for the first, 40960 for the second.
-    let a =
-        glasnost_sim::testkit::spawn(l.world_mut(), Kind::Vehicle, &ship_name, local.0, at, 8192);
-    let b = glasnost_sim::testkit::spawn(
+    let cells = [
+        at,
+        CellXY::new(at.x + 3, at.y),
+        CellXY::new(at.x + 6, at.y + 1),
+    ];
+    let stern = glasnost_sim::testkit::spawn(
+        l.world_mut(),
+        Kind::Vehicle,
+        &ship_name,
+        local.0,
+        cells[0],
+        0,
+    );
+    let bow = glasnost_sim::testkit::spawn(
+        l.world_mut(),
+        Kind::Vehicle,
+        &ship_name,
+        local.0,
+        cells[1],
+        16384,
+    );
+    let under = glasnost_sim::testkit::spawn(
         l.world_mut(),
         Kind::Vehicle,
         &sub_name,
         local.0,
-        CellXY::new(at.x + 5, at.y + 1),
+        cells[2],
         40960,
     );
     l.look_at(CellXY::new(at.x + 3, at.y + 1));
     l.ticks(3);
-    let vessels = [("sinks at a hit", a), ("underwater", b)];
+    let vessels = [
+        ("facing-0", stern),
+        ("facing-16384", bow),
+        ("underwater", under),
+    ];
     let report = |l: &Lane, what: &str| {
         let w = l.world();
         for (name, id) in vessels {
@@ -3829,76 +3879,96 @@ fn sinking_list(lane: &mut Lane) {
                 continue;
             };
             let height = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
-            let att = glasnost_app::mapview::live::attitude(w, o);
-            let list = match att {
-                Attitude::Sinking(l) => format!(
-                    "step {} of {}, {} down, {} side down",
-                    l.step,
-                    glasnost_app::mapview::sinking::STEPS,
-                    if l.bow_down { "bow" } else { "stern" },
-                    if l.starboard_down {
-                        "starboard"
-                    } else {
-                        "port"
-                    }
+            let lean = match glasnost_app::mapview::live::attitude(w, o) {
+                Attitude::Sinking { pitch, roll, drawn } => format!(
+                    "pitch {} (bits {pitch:#010x}), roll {}, lean {:?}, drawn {drawn}",
+                    f32::from_bits(pitch),
+                    f32::from_bits(roll),
+                    o.naval.as_ref().and_then(|n| n.lean),
                 ),
                 _ => "level (not sinking)".to_string(),
             };
             println!(
-                "sinking-list {what} (tick {}): {name} id {} type {} cell ({}, {}) facing {} sinking {} submerged {} height {height}: {list}",
+                "sinking-list {what} (tick {}): {name} id {} type {} cell ({}, {}) facing {} (8-direction {}) sinking {} submerged {} height {height}: {lean}",
                 w.tick,
                 id.0,
                 o.type_index,
                 o.pos.cell().x,
                 o.pos.cell().y,
                 o.body.value(w.tick),
+                glasnost_num::geom::eight_direction(o.body.value(w.tick)),
                 glasnost_sim::naval::sinking(w, id),
                 glasnost_sim::naval::submerged(w, id),
             );
         }
     };
+    // The view stays put; each crop is centred on the vessel's own drawn
+    // point (its projected position, lifted by its height).
+    let frames = |l: &mut Lane, mark: &str| {
+        l.save(&format!("sinking-list-{mark}"));
+        let rgba = l.c.frame_rgba();
+        let size = (l.c.size.0 as usize, l.c.size.1 as usize);
+        let s = l.c.session.as_ref().unwrap();
+        let (r, c) = (s.map_rect(), s.centre());
+        for (name, id) in vessels {
+            let Some(o) = l.world().obj(id).filter(|o| o.on_map) else {
+                continue;
+            };
+            let (px, py) = glasnost_render::projection::project_lifted(o.pos.x, o.pos.y, o.pos.z);
+            let at = (r.w / 2 + px - c.0, r.h / 2 + py - c.1);
+            let (cw, ch, crop) = crop_at(&rgba, size, at, 120, 100);
+            let file = format!("sinking-list-{mark}-{name}.png");
+            std::fs::write(l.dir.join(&file), png::png(cw, ch, &crop)).unwrap();
+            println!("wrote {file} (centred on {}, {})", at.0, at.1);
+        }
+    };
     report(&l, "before");
-    l.save("sinking-list-0-before");
+    frames(&mut l, "0-before");
     let h = warhead_of_kind(l.world(), 0).unwrap_or(0);
-    kill_with(&mut l, a, h);
-    glasnost_sim::naval::start_sinking(l.world_mut(), b);
+    kill_with(&mut l, stern, h);
+    kill_with(&mut l, bow, h);
+    glasnost_sim::naval::start_sinking(l.world_mut(), under);
     let t0 = l.world().tick;
     report(&l, "hit");
-    // Frames at the start (depth 10, still level), the onset (60), the
-    // middle (200) and the end (390) of the first vessel's descent: 5
-    // leptons a tick (S-0504 claim 4).
-    let marks = [
-        (10, "1-start"),
-        (60, "2-onset"),
-        (200, "3-middle"),
-        (390, "4-end"),
-    ];
+    // Frames after descents 1, 40, 79 (the full lean, F4) and 80 (held); a
+    // vessel from height 0 leaves play at the 81st (S-0504 claim 15).
+    let marks = [(1, "1"), (40, "2"), (79, "3"), (80, "4")];
     let mut next = 0;
+    let mut descents = 0;
+    let mut z = l.world().obj(bow).map(|o| o.pos.z);
     for _ in 0..200 {
         l.ticks(1);
-        let w = l.world();
-        let depth = w
-            .obj(a)
-            .filter(|o| o.on_map)
-            .map(|o| w.surface_at(o.pos.x, o.pos.y) - o.pos.z);
-        let Some(depth) = depth else {
+        let now = l.world().obj(bow).filter(|o| o.on_map).map(|o| o.pos.z);
+        let Some(now) = now else {
             println!(
-                "sinking-list: the first vessel left play {} ticks after the hit",
-                w.tick - t0
+                "sinking-list: the facing-16384 vessel left play {} ticks after the hit, after {descents} descents",
+                l.world().tick - t0
             );
             break;
         };
-        if next < marks.len() && depth >= marks[next].0 {
-            let what = format!("{} ({} ticks after the hit)", marks[next].1, w.tick - t0);
+        if z.is_some_and(|z| now < z) {
+            descents += 1;
+        }
+        z = Some(now);
+        if next < marks.len() && descents == marks[next].0 {
+            let what = format!(
+                "descent {} ({} ticks after the hit)",
+                marks[next].0,
+                l.world().tick - t0
+            );
             report(&l, &what);
-            l.save(&format!("sinking-list-{}", marks[next].1));
+            frames(
+                &mut l,
+                &format!("{}-descent-{}", marks[next].1, marks[next].0),
+            );
             next += 1;
         }
     }
     let w = l.world();
     println!(
-        "sinking-list: after the descent, in play: first {}, second {}",
-        w.obj(a).is_some_and(|o| o.on_map),
-        w.obj(b).is_some_and(|o| o.on_map)
+        "sinking-list: after the descent, in play: facing-0 {}, facing-16384 {}, underwater {}",
+        w.obj(stern).is_some_and(|o| o.on_map),
+        w.obj(bow).is_some_and(|o| o.on_map),
+        w.obj(under).is_some_and(|o| o.on_map)
     );
 }

@@ -33,7 +33,6 @@ mod radar_tests;
 #[cfg(test)]
 mod shot_anim_tests;
 pub mod sidebar;
-pub mod sinking;
 #[cfg(test)]
 mod sinking_tests;
 pub mod slot_play;

@@ -12,6 +12,10 @@
 //! - **Sinking (claims 4 and 5).** [`start_sinking`] marks a vessel;
 //!   [`sinking_turn`] runs the descent at the start of each of its turns,
 //!   and the locomotor is not run while it lasts (`tick::object_turn`).
+//! - **The lean while sinking (claim 15, F4; Q-1871).** Each descent also
+//!   takes one pitch step ([`pitch_step`]) towards bow down or stern down,
+//!   the direction kept from the first step's body facing ([`lean_of`]).
+//!   Only drawing reads the pitch (claim 16; the map view).
 //! - **Underwater vessels (claim 6).** [`submerged`] is the Terms' state;
 //!   cloaking (S-0516) is not modelled, so no vessel is submerged yet.
 //! - **Docking (claims 7 and 8).** [`naval_match_refuses`] is the naval part
@@ -20,8 +24,8 @@
 //!   repair depots and docking at them are not built (Q-0641).
 
 use glasnost_map::terrain::land;
-use glasnost_num::F64;
-use glasnost_num::geom::root_floor;
+use glasnost_num::geom::{eight_direction, root_floor};
+use glasnost_num::{F32, F64, Rounding};
 use glasnost_rules::sim::{Locomotor as RsLocomotor, MovementZone};
 use serde::{Deserialize, Serialize};
 
@@ -53,12 +57,90 @@ pub const START_DISTANCE_OTHER: i32 = 100;
 // spec: S-0504 Constants (waiting-to-settling delay 3 ticks)
 pub const SETTLING_DELAY: i32 = 3;
 
+/// The sinking pitch step *c*, radians, as a decimal read to the nearest
+/// double (S-0504 claim 15, F4, Constants).
+// spec: S-0504 Constants (sinking pitch step 0.01 radians per own update, double precision)
+const PITCH_STEP: &str = "0.01";
+/// The sinking pitch limit *L*: π/4 rounded to single precision, exact as a
+/// decimal (S-0504 claim 15, F4, Constants).
+// spec: S-0504 F4 and Constants (L = 0.785398185253143310546875, π/4 in single precision; a step stops at it)
+const PITCH_LIMIT: &str = "0.785398185253143310546875";
+
+/// Which end of a sinking hull goes down (S-0504 claim 15).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Lean {
+    /// The bow goes down: the pitch grows towards +*L*.
+    BowDown,
+    /// The stern goes down: the pitch falls towards −*L*.
+    SternDown,
+}
+
 /// A vessel's naval state (S-0504 Terms).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NavalState {
     /// The vessel is sinking (S-0504 Terms; S-0312 claim 10; S-0614 claim 11).
     #[serde(default)]
     pub sinking: bool,
+    /// The body's pitch *p*, radians, single precision, positive lowering
+    /// the bow (S-0504 Terms, *Pitch and roll*; claim 15, F4). It starts
+    /// level: no rocking is modelled (S-0303 claim 20, S-0106 claim 9), so
+    /// nothing pitches a body before it sinks.
+    #[serde(default)]
+    pub pitch: F32,
+    /// The lean's direction, set at the first pitch step and kept for the
+    /// rest of the descent (S-0504 claim 15, *Direction*).
+    #[serde(default)]
+    pub lean: Option<Lean>,
+}
+
+/// The direction of the lean for a body facing at the first step (S-0504
+/// claim 15, *Direction*): bow down for the 8-directions 1 to 5 (map
+/// north-east, east, south-east, south, south-west), stern down for 0, 6
+/// and 7 (north, west, north-west). No random draw is taken.
+pub fn lean_of(body_facing: u16) -> Lean {
+    // spec: S-0504 claim 15 and Constants (bow down at 8-directions 1 to 5, S-0204 F4; stern down at 0, 6 and 7)
+    match eight_direction(body_facing) {
+        1..=5 => Lean::BowDown,
+        _ => Lean::SternDown,
+    }
+}
+
+/// One pitch step of a sinking vehicle (S-0504 claim 15, F4): *p* ± *c*
+/// formed in double precision and narrowed to single precision under the
+/// game's rounding mode (S-0205 claim 5, `quirks.chop_rounding`), then
+/// stopped at ±*L*. A pitch at the full lean stays there.
+pub fn pitch_step(p: F32, lean: Lean, mode: Rounding) -> F32 {
+    let c = crate::rules::nearest_double(PITCH_STEP);
+    let limit = crate::rules::nearest_double(PITCH_LIMIT);
+    match lean {
+        Lean::BowDown => {
+            // spec: S-0504 F4 (p′ = min(RZ₂₄(p + c), L) when 1 ≤ g ≤ 5)
+            let next = p.to_f64().add(c, mode).to_f32(mode);
+            if next.to_f64().gt(limit) {
+                limit.to_f32(mode)
+            } else {
+                next
+            }
+        }
+        Lean::SternDown => {
+            // spec: S-0504 F4 (p′ = max(RZ₂₄(p − c), −L) when g is 0, 6 or 7)
+            let next = p.to_f64().sub(c, mode).to_f32(mode);
+            if next.to_f64().lt(limit.negated()) {
+                limit.negated().to_f32(mode)
+            } else {
+                next
+            }
+        }
+    }
+}
+
+/// The pitch of a vehicle's body as drawn (S-0504 claims 15 and 16): its
+/// pitch while it sinks, else level. Radians, single precision.
+pub fn pitch(w: &World, id: ObjectId) -> F32 {
+    w.obj(id)
+        .and_then(|o| o.naval.as_ref())
+        .filter(|n| n.sinking)
+        .map_or(F32::ZERO, |n| n.pitch)
 }
 
 /// Sets a vessel sinking (S-0312 claim 10 at a killing hit; S-0614 claim 11
@@ -122,9 +204,22 @@ pub fn sinking_turn(w: &mut World, id: ObjectId) -> bool {
     if !sinking(w, id) {
         return false;
     }
+    let mode = w.rules().mode;
+    let tick = w.tick;
     let Some(o) = w.obj_mut(id) else { return false };
     // spec: S-0504 claim 4 and F1 (each own update first lowers it by 5 leptons)
     o.pos.z -= SINKING_DESCENT;
+    if o.kind == Kind::Vehicle {
+        // spec: S-0504 claim 15 (Which facing: the body facing for the tick number of the first step, S-0206 claim 1, also while a turn continues)
+        let facing = o.body.value(tick);
+        if let Some(n) = o.naval.as_mut() {
+            // spec: S-0504 claim 15 (Direction: set at the first step and kept for the rest of the descent; no random draw)
+            let lean = *n.lean.get_or_insert_with(|| lean_of(facing));
+            // spec: S-0504 claim 15 (Timing: the step comes in the same own update as the descent, so n descents take n steps until the full lean stops them) and F4
+            // design: S-0504 claim 15 (every sinking vehicle steps; the simulation does not know which types are drawn as voxel models, and only drawing reads the pitch, claim 16, so a sprite body's unread steps change nothing seen)
+            n.pitch = pitch_step(n.pitch, lean, mode);
+        }
+    }
     let pos = o.pos;
     let terrain = w.surface_at(pos.x, pos.y);
     let h = pos.z - terrain;
