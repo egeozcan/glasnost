@@ -141,7 +141,9 @@ a sprite body. Q-1886 to Q-1889 are unused. Q-1760 is answered by this revision,
 
 ## Checks
 
-*Before* is main a32dbdc, built before any edit of this branch; *after* is this branch. Outputs
+*Before* is main a32dbdc, built before any edit of this branch; *after* is this branch on a32dbdc,
+before its rebase onto intake 18. Of `crates/deterministic`, the branch touches only
+`sim/tests/claims_s0606.rs`. Outputs
 are in `local-lane/m8/a3-19/` (git-ignored).
 - Goldens: none regenerated. The simulation code is unchanged, and the gate's synthetic rules have
   no type with the fixed type name, so no imported field changes.
