@@ -1,9 +1,9 @@
 ---
 id: Q-1716
 title: Which comes first in one advance, an animation's damage or its middle event
-status: open
+status: answered
 related: [S-0109, S-0202, S-0203]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need
