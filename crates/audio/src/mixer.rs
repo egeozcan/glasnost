@@ -410,9 +410,13 @@ pub struct Mixer {
     /// 0 … 16384.
     music: Option<MusicVoice>,
     music_option: i32,
-    /// The music is held, silent at the point it had reached (S-0703
-    /// claim 13).
+    /// The music is held, silent at the point it had reached (lost focus,
+    /// S-0701 claim 30).
     music_held: bool,
+    /// Sound playback is held: the sound instances and the announcement
+    /// stay silent at the point they had reached (a stand-still, S-0701
+    /// claim 30).
+    sounds_held: bool,
     acc: Vec<i64>,
 }
 
@@ -441,6 +445,7 @@ impl Mixer {
             speech: None,
             music: None,
             music_held: false,
+            sounds_held: false,
             // nocite: our own UI (the music volume is at full unless the person sets it)
             music_option: FULL,
             acc: Vec::new(),
@@ -513,9 +518,27 @@ impl Mixer {
     }
 
     /// Holds the music track silent at the point it had reached, or lets
-    /// it play on (S-0703 claim 13).
+    /// it play on (S-0701 claim 30: lost focus).
     pub fn hold_music(&mut self, held: bool) {
         self.music_held = held;
+    }
+
+    /// Whether the music track is held ([`Mixer::hold_music`]).
+    pub fn music_held(&self) -> bool {
+        self.music_held
+    }
+
+    /// Holds sound playback, the sound instances and the announcement,
+    /// silent at the point it had reached, or lets it go on (S-0701 claim
+    /// 30: a stand-still). Held, rendering advances no sample, so no sample
+    /// ends and no per-instance draw is taken.
+    pub fn hold_sounds(&mut self, held: bool) {
+        self.sounds_held = held;
+    }
+
+    /// Whether sound playback is held ([`Mixer::hold_sounds`]).
+    pub fn sounds_held(&self) -> bool {
+        self.sounds_held
     }
 
     /// The master level g of F3.
@@ -1099,7 +1122,9 @@ impl Mixer {
         let frames = out.len() / 2;
         self.acc.clear();
         self.acc.resize(frames * 2, 0);
-        for c in 0..CHANNELS {
+        // spec: S-0701 claim 30 (during a stand-still sound playback does not advance)
+        let sounds = if self.sounds_held { 0 } else { CHANNELS };
+        for c in 0..sounds {
             let Some(id) = self.channels[c] else { continue };
             let Some(i) = self.instances.iter().position(|x| x.id == id) else {
                 self.channels[c] = None;
@@ -1133,7 +1158,7 @@ impl Mixer {
                 }
             }
         }
-        if let Some(s) = self.speech.as_mut() {
+        if let Some(s) = self.speech.as_mut().filter(|_| !self.sounds_held) {
             // spec: S-0701 claim 35 (announcements skip the master level and the sound volume option; the voice option is at full, centred)
             let unity = 1i64 << 16;
             // The player's voice option scales the announcement (a client setting; at full it is unity).
@@ -1144,7 +1169,7 @@ impl Mixer {
             }
         }
         if let Some(m) = self.music.as_mut().filter(|_| !self.music_held) {
-            // spec: S-0703 claim 13 (our engine: a held track is silent and resumes from the point it had reached)
+            // spec: S-0701 claim 30 (lost focus: the held track is silent and resumes from the point it had reached)
             // nocite: our own UI (music skips the master level and the sound option; only our music volume scales it, Q-1700 question 5 open)
             m.mix(&mut self.acc, crate::music::music_gain(self.music_option));
             if m.finished() {

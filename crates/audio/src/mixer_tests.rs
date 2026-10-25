@@ -655,3 +655,34 @@ fn voice_volume_option_scales_announcements() {
     assert_eq!(level(Some(FULL / 2)), full / 2);
     assert_eq!(level(Some(0)), 0);
 }
+
+// spec: S-0701 claim 30 (during a stand-still sound playback does not advance: held, the instances and the announcement are silent and resume from the point they had reached, with no sample ending and no per-instance draw)
+#[test]
+fn held_sounds_resume_from_the_same_point() {
+    let run = |hold: bool| {
+        let mut m = mixer();
+        let mut e = entry();
+        e.control.all = true;
+        let clips = vec![clip(100, 1000), clip(100, 2000), clip(100, 3000)];
+        let id = m
+            .request(prep_with(0, e, clips), Where::Screen, FULL)
+            .unwrap();
+        m.service(0);
+        m.speak(clip(300, 500));
+        let mut out = render(&mut m, 150);
+        let taken = m.rng().taken();
+        if hold {
+            m.hold_sounds(true);
+            assert!(m.sounds_held());
+            for _ in 0..10 {
+                assert!(render(&mut m, 100).iter().all(|&x| x == 0), "held silent");
+            }
+            assert_eq!(m.rng().taken(), taken, "no draw while held");
+            assert!(m.is_alive(id) && m.speaking());
+            m.hold_sounds(false);
+        }
+        out.extend(render(&mut m, 400));
+        (out, m.rng().taken())
+    };
+    assert_eq!(run(true), run(false));
+}

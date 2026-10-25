@@ -25,7 +25,8 @@
 //! 7. [`Audio`]: what the game client calls every frame
 //!    ([`Audio::tick`], [`Audio::selected`], [`Audio::ordered`],
 //!    [`Audio::key`], [`Audio::cue`], [`Audio::set_view`],
-//!    [`Audio::frame`], [`Audio::resume`]).
+//!    [`Audio::frame`] or, for the stand-stills of [`stand::Stand`],
+//!    [`Audio::frame_in`], [`Audio::resume`]).
 //!
 //! Sound never feeds back into the simulation. Every interim rule is listed
 //! in docs/development.md, "Audio (M5b)".
@@ -42,6 +43,7 @@ pub mod output;
 pub mod pipe;
 mod preview;
 pub mod speech;
+pub mod stand;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
 
@@ -49,3 +51,4 @@ pub use events::{Audio, UiCue};
 pub use mixer::{View, Where};
 pub use names::{Announcement, SoundNames};
 pub use preview::{Player, wav_bytes};
+pub use stand::Stand;
