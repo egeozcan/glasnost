@@ -51,8 +51,8 @@ revision. The intake that takes in each revision checks it against this list.
 - **S-0703:** the end screen opening at game over is accepted (built at intake 12).
 - **S-0703 and S-0701:** while the options menu is open in a loaded skirmish, the music plays on,
   as in the original, with music time on the host's monotonic clock and lost focus still a full
-  stand-still (S-0701 claim 30). This reverses intake 12's options-menu hold once the revisions
-  land. The glossary's *departure* and *audio clock* entries change with it.
+  stand-still (S-0701 claim 30). This reverses intake 12's options-menu hold (the revisions
+  landed as S-0701 r35 and S-0703 r58 and were built at intake 25). The glossary's *departure* and *audio clock* entries change with it.
 - **S-0314:** a docked hover unit lost at a naval yard gets `quirks.docked_hover_water_loss`,
   default the original behaviour.
 
