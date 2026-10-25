@@ -2007,7 +2007,7 @@ fn alternative_body_replaces_the_main_body_without_a_docked_spawn() {
 /// 16 (the numbered parts), claim 26 (the index is a turret key component) and claim 16 (a
 /// numbered turret is drawn in frame f_b, never from the animation-frame counter, and its key
 /// records that frame). The index is supplied by the test; claim 43's rules are
-/// `selected_index_follows_claim_43`.
+/// tested in `turret_index_tests`.
 #[test]
 fn multi_turret_draws_the_models_of_the_selected_index() {
     use glasnost_fmt::bytes::F32Bits;
