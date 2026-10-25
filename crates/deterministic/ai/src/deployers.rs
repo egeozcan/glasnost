@@ -63,6 +63,18 @@ pub fn firing_infantry(w: &World, id: ObjectId) -> bool {
         })
 }
 
+/// Whether the firing infantry unit is immune to radiation: deployed, it
+/// fires its secondary weapon at its own cell (S-0215 claim 31 rows 3 to 5)
+/// and does not follow the deployed-firing rule of S-0517 claim 16, so no
+/// enemy needs to stand in its range.
+fn own_cell_firer(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        w.rules()
+            .unit(o.kind, o.type_index)
+            .is_some_and(|u| u.raw.immune_to_radiation.unwrap_or(false))
+    })
+}
+
 /// Whether the infantry unit stands in its deployed form.
 pub(crate) fn infantry_deployed(w: &World, id: ObjectId) -> bool {
     w.obj(id)
@@ -97,6 +109,14 @@ fn enemy_in_range(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)]) -> bo
     })
 }
 
+/// Whether any seen enemy stands within `r` cells of `id`.
+fn any_enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64) -> bool {
+    let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
+        return false;
+    };
+    enemies.iter().any(|&(_, c)| dist2(c, at) <= r * r)
+}
+
 /// Whether a seen enemy that `id` can attack stands within `r` cells.
 fn enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64) -> bool {
     let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
@@ -113,7 +133,9 @@ impl Special {
     /// in-place vehicle that has none near packs up. A standing firing
     /// infantry unit deploys when a seen enemy it can attack stands in its
     /// range, and a deployed one packs up when none stands in the range of
-    /// its deployed weapon. M8 step B7: deployed infantry takes no step
+    /// its deployed weapon; a radiation-immune one, which fires at its own
+    /// cell (S-0215 claim 31 rows 3 to 5), deploys with a seen enemy near
+    /// and packs up when none is near, as a vehicle does. M8 step B7: deployed infantry takes no step
     /// towards a target (S-0517 claim 16) and drops its destination
     /// (S-0215 claim 22), and this part packed none up; in the lane's
     /// 02-0-7 the Allied riflemen, deployed out of range of the enemy's
@@ -144,6 +166,14 @@ impl Special {
                 }
             } else if deploy_fire_vehicle(w, id) {
                 standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+            } else if firing_infantry(w, id) && own_cell_firer(w, id) {
+                if infantry_deployed(w, id) {
+                    // Packing up: no seen enemy is near (its own-cell shot
+                    // has no target to range; S-0215 claim 31 rows 3 to 5).
+                    !any_enemy_within(w, id, &enemies, GONE)
+                } else {
+                    standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                }
             } else if firing_infantry(w, id) {
                 if infantry_deployed(w, id) {
                     !enemy_in_range(w, id, &enemies)

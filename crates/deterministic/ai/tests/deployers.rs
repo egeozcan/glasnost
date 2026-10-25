@@ -18,8 +18,9 @@ use glasnost_sim::testkit;
 use glasnost_sim::world::{HouseId, ObjectId, Pos, World};
 
 /// The fixture's rules with DEPT (a gun vehicle that deploys in place), FIRE
-/// (a deploy-fire vehicle) and DEPI (a rifleman that deploys to fire, with
-/// its rifle).
+/// (a deploy-fire vehicle), DEPI (a rifleman that deploys to fire, with
+/// its rifle) and DEPR (DEPI immune to radiation, which deployed fires at
+/// its own cell).
 fn rules() -> Arc<SimRules> {
     let mut r = fixture::ruleset();
     r.registries
@@ -29,7 +30,7 @@ fn rules() -> Arc<SimRules> {
     r.registries
         .entry("infantry".into())
         .or_default()
-        .push("DEPI".into());
+        .extend(["DEPI".to_string(), "DEPR".to_string()]);
     let gun = r.sim.vehicles["GUNR"].clone();
     let mut dept = gun.clone();
     dept.is_simple_deployer = Some(true);
@@ -63,7 +64,10 @@ fn rules() -> Arc<SimRules> {
             },
         );
     }
+    let mut depr = inf.clone();
+    depr.immune_to_radiation = Some(true);
     r.sim.infantry.insert("DEPI".into(), inf);
+    r.sim.infantry.insert("DEPR".into(), depr);
     Arc::new(SimRules::new(&r, "synthetic-skirmish"))
 }
 
@@ -277,5 +281,28 @@ fn packs_up_a_deployed_rifleman_with_no_enemy_in_range() {
             testkit::run(&mut w, 1);
         }
         assert!(!deployed(&w, unit), "packed up");
+    }
+}
+
+// S-0215 claim 31 rows 3 to 5, PLAN §4.7 (M8 step B7): a radiation-immune firing infantry unit fires at its own cell when deployed, so it is deployed with a seen enemy near though beyond its rifle's range, stays deployed while one is near, and is packed up when none is.
+#[test]
+fn deploys_a_radiation_immune_unit_near_an_enemy_and_packs_it_up_without_one() {
+    let mut g = game(5);
+    ready(&mut g);
+    let (w, unit) = scene(&g, Kind::Infantry, "DEPR", Some(6));
+    let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+    assert!(deploys(&brain.think(&w), unit), "deploys near an enemy");
+    for (enemy, packs) in [(Some(7), false), (None, true)] {
+        let (mut w, unit) = scene(&g, Kind::Infantry, "DEPR", enemy);
+        glasnost_sim::orders::issue(&mut w, HouseId(0), Order::Deploy { actor: unit });
+        for _ in 0..30 {
+            testkit::run(&mut w, 1);
+        }
+        assert!(deployed(&w, unit), "{enemy:?}: deployed");
+        while w.tick % 15 != 0 {
+            testkit::run(&mut w, 1);
+        }
+        let mut brain = Brain::new(&w, &fixture::map(), HouseId(0));
+        assert_eq!(deploys(&brain.think(&w), unit), packs, "{enemy:?}");
     }
 }
