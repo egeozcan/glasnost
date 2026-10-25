@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 60
+revision: 75
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-25
 measurements: []
-requests: [Q-0540, Q-1550, Q-1610, Q-1620]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772]
 supersedes: []
 ---
 
@@ -16,16 +16,17 @@ supersedes: []
 
 ## Summary
 
-How a building's sprite is put together: which sprite and image frame the body shows (build-up, normal,
-damaged, occupied, gate stages, selling, unloading), where the body is anchored relative to its
-foundation, the shadow, the bib and the door image, and the slot animations attached to a building. For the slot
-animations it covers the slots, the damaged and occupied variants, the power behaviour, and the
-building-specific rules that start and swap them (refinery and silo fill, infantry absorption,
-superweapon charge, turret, repair depot). When a slot is started while it already holds an
-animation, the new animation keeps the replaced one's stage and takes its own passes afresh
-(claim 25); that the stage, not the image frame, is what carries over when the two types' start
-fields differ is unmeasured and rated medium there. This spec covers skirmish only; network games and campaigns
-are out of scope.
+How a building's sprite is put together: which sprite and image frame the body shows (build-up,
+normal, damaged, occupied, gate stages, selling, unloading), where the body is anchored relative to
+its foundation, the shadow, the bib and the door image, and the slot animations attached to a
+building. For the slot animations it covers the slots, the damaged and occupied variants, the power
+behaviour, and the building-specific rules that start and swap them (refinery and silo fill,
+infantry absorption, superweapon charge, turret, repair depot), and what slots do on a building that
+needs an engineer before and at its ownership changes (claims 26 to 28). When a slot is started
+while it already holds an animation, the new animation keeps the replaced one's stage and takes its
+own passes afresh (claim 25); that the stage, not the image frame, is what carries over when the two
+types' start fields differ is unmeasured and rated medium there. Claims 26 to 28 answer Q-1772.
+Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
 
@@ -214,7 +215,9 @@ are out of scope.
    Selling uses the same range and delay, backwards including gates (claim 4), but need not play
    the full range: a type naming a vehicle to pack into, without a guard spot, can complete on
    advancing stage 23 before the last stage (S-0408 claim 17). That claim owns sale completion
-   timing; no build-up sprite uses S-0408 claim 4 instead of a build-down. The construction delay is never
+   timing. A building whose type has no build-up sprite has no build-down, because a sell order
+   does not sell it (S-0408 claim 4); a building that packs up has its build-down as in any sale
+   (S-0415 claim 9). The construction delay is never
    game-speed normalised when the state is entered (but see claim 6 for the wrap).
 
    The construction range is set whenever the build-up sprite is loaded, with *B* as it is held at
@@ -324,13 +327,28 @@ are out of scope.
 10. **Slot animation placement.** A slot animation is created at the image anchor of claim 8 (the
     foundation's top corner), moved by the slot's screen displacement (*x*, *y*) in pixels, which
     is converted to world units by the projection spec. Its depth adjustment and y-sort come from
-    the slot definition (S-0102). While the building is being sold during its *construction* state,
-    every slot animation is hidden.
-    - Backing: `measurable` (scenario B14)
-    - Confidence: medium
+    the slot definition (S-0102). While the building is being sold, every slot
+    animation is hidden from the first tick of its build-down until it is removed. Before that
+    tick the sale hides none of them; what the loss of operation at its first processing does to
+    them is claim 28's (the row *not building or selling*). A building that packs up is sold with
+    a build-down (S-0415 claim 9), so its slot animations are hidden from the first tick of that
+    build-down in the same way. A sell order to a building whose type has no build-up sprite
+    starts no sale (S-0408 claim 4): no slot animation is hidden and none changes, and a building
+    of such a type with the firestorm-wall flag is removed at once, its slot animations with it.
+    - Backing: `measurable` (scenario B14 for the placement and for the pack-up; B22 part (h) for
+      the slots staying drawn until the build-down: its per-tick capture tells this from hiding
+      for the whole sale on the one tick between the sale's first processing and the build-down's
+      start, S-0408 claim 6, even when no docked unit holds the sale; B14's screenshots need not
+      catch that tick). A type with no build-up sprite rests on S-0408 claim 4 and its scenario
+      S3, parts c and d, which show that no sale starts; with no sale there is nothing to hide
+      the slots.
+    - Confidence: medium until B22 part (h) runs; medium for the pack-up until B14's pack-up run
+      has run; medium for a type with no build-up sprite, and low for the firestorm-wall case, as
+      S-0408 claim 4 rates them.
 
 11. **Grand opening.** A building's grand opening brings it into service once: on construction
-    completion in play, or during placement at game set-up. These slots start:
+    completion in play, during placement at game set-up, or when trigger action code 125 (create a
+    building) creates the building in play. These slots start:
     - For a building that is not a refinery: *idle* (occupied variants allowed), *active-1*
       (occupied variants allowed), and *active-2*, *active-3* and *active-4* (no occupied variant).
     - For a refinery: only the *active* slot of its fill level (claim 15), with no occupied
@@ -358,18 +376,42 @@ are out of scope.
     grand-opening slot starts. The normal-name turret start can swap the variants of the slots
     already running, just as at construction completion. Set-up grants no free unit
     (S-0402 claim 18).
+
+    A building that trigger action code 125 creates in play has its grand opening at once, as part
+    of that action, in the tick the action runs. Its slots listed above start then, and its free unit
+    is created then when S-0402 claim 18 makes it eligible; such a building was not produced, so
+    it has no start price. Its placement also queues the construction behaviour, as any placement
+    in play does (S-0215 claim 1). A later completion of that behaviour, if it comes, is no second
+    grand opening: it starts and restarts no slot and creates no second free unit. What the
+    building shows while that behaviour lasts, and for how long, is an open question.
+
+    A replacement that trigger action code 130 (restore starting buildings) creates does not open
+    in the action's tick. It enters with its ready mark clear and *construction* queued, as
+    S-0524 claim 15 states, and its grand opening is the ordinary one at the completion of that
+    construction, with the slot starts listed above.
     - Backing: `measurable` (B6 for unoccupied completion starts, set-up slot presence and the
       turret case, S-0215 claim 1 for queued *guard* and readiness,
-      S-0402 scenario H13 for the free unit).
+      S-0402 scenario H13 for the free unit, B22 part (a) for the slots of a building created by
+      code 125 starting in the tick of the trigger action and not restarting later in the run,
+      except that a replacing start that keeps the stage (claim 25) shows the same frames, so that
+      no such start comes is `unmeasured` (no input is known that tells the two apart),
+      B22 part (j) for its free unit and for no second one within the run).
+      `unmeasured` for a later completion of the construction behaviour being no second grand
+      opening: no run here establishes that such a completion comes (Open questions). The
+      code-130 replacement rests on S-0524 claim 15 and its scenario.
       `unmeasured` for occupied grand-opening variants (normally no occupants at completion),
       below-15-tick charge at completion (B6 establishes no such setup), and repeated set-up
       body-state changes beyond the placement's idle entry (no input path selecting each
       additional set-up state is established). Unknown-name starts and empty
       upgrade names are also `unmeasured`: no start path for those slots is established here.
     - Confidence: high for the unoccupied completion starts, the set-up slot presence, the turret
-      case, the queued *guard* and the free unit; medium for the occupied grand-opening variants,
+      case, the queued *guard* and the free unit; medium for the grand opening of a building created
+      by code 125, its slots starting in the tick of the action, its free unit and no second
+      opening within the run, until B22 parts (a) and (j) run; medium for a later completion
+      being no second opening (`unmeasured`); medium for the occupied grand-opening variants,
       the below-15-tick charge case, repeated set-up body-state changes, unknown-name starts and
-      empty upgrade names (`unmeasured`)
+      empty upgrade names (`unmeasured`); medium for the slot starts of a code-130 replacement at
+      the completion of its construction, which rest on S-0524 claim 15's entry state
 
 12. **Damage swaps the variants.** Whenever the building's health changes through damage or repair
     and its damaged state then differs from its slot condition, the slot condition takes the new
@@ -414,8 +456,12 @@ are out of scope.
     art turns it off (import mapping), so *light-unpowered* or *effect-unpowered* takes effect only in
     a slot whose art sets *freeze-unpowered* off. The slots that have no power-flag keys
     (*pre-production*, *production*, *turret* and the three upgrade slots) always count
-    *freeze-unpowered*. A building reacts to a change of its powered state
-    in its next update, so on the same tick as the change or the next one. Both columns apply only
+    *freeze-unpowered*. A building's powered state here is its in-operation result (every row of
+    S-0405 claim 8, claim 28). A building reacts to a change of that state in its next update, so
+    on the same tick as the change or the next one, and it reacts once to each change. A newly
+    placed or completed building that is not in operation has no power-loss reaction; one that is
+    in operation has its power-return reaction in its first update. "Power is lost" below is a change from in operation to not
+    in operation, and "power comes back" the reverse. Both columns apply only
     to a building that needs and draws power.
 
     | Counting flag | Power is lost | Power comes back |
@@ -427,17 +473,32 @@ are out of scope.
 
     Slots started by these rules use the normal or damaged variant, never the occupied one.
 
-    A *freeze-unpowered* slot that starts while the building is disabled or unpowered starts frozen.
-    This applies only when the type itself needs power. Separately, disabling a building (for any
-    reason the disabling spec defines) freezes every running *freeze-unpowered* slot, whether or not
-    the type needs power. Re-enabling it unfreezes them, even when the building is still unpowered
-    (`quirks.enable_unfreezes_unpowered`).
-    - Backing: `measurable` (B7 for freeze/light/effect flags and super-low-power transitions,
-      B11 for disable/re-enable while unpowered). `unmeasured` for delayed-fire outage exceptions,
-      occupied-variant exclusion and disabling a type not needing power: neither scenario
-      exercises those cases or establishes a discriminating event path.
-    - Confidence: high (the power-loss and power-return rules), medium (the disable and enable
-      cases, whose triggers belong to other specs, and the same-or-next-tick timing)
+    A *freeze-unpowered* slot that starts while the building is disabled or not in operation (any
+    row of S-0405 claim 8, not only its powered row) starts frozen. This applies only when the type
+    itself needs power. Separately, disabling a building (for any reason the disabling spec
+    defines) freezes every running *freeze-unpowered* slot, whether or not the type needs power.
+    Re-enabling it unfreezes them, even when the building is still unpowered
+    (`quirks.enable_unfreezes_unpowered`). The end of a pulse is such a re-enabling whatever the
+    building's power switch: a building that is switched off when its pulse ends has its frozen
+    *freeze-unpowered* slots resume. The power-loss column applies only at a change from powered to
+    unpowered: a building that has not been powered since it was placed or completed has had no
+    such change, so its *light-unpowered* and *effect-unpowered* slots keep playing (claim 27).
+    - Backing: `measurable` (B7 for freeze/light/effect flags and super-low-power transitions, B11
+      for disable/re-enable while unpowered and, in its pulse run, for a pulse ending on a building
+      still switched off, B22 part g for a building never powered, B22 parts (a), (e) and (k) for
+      disabling and re-enabling a type that does not need power, and part (f)'s short-power run for
+      a capture that leaves a building not in operation, which is no change). `unmeasured` for
+      delayed-fire outage exceptions and occupied-variant exclusion: no scenario exercises those
+      cases or establishes a discriminating event path. `unmeasured` for the power-return reaction
+      of a building that is in operation when it is placed or completed: no scenario judges it
+      against no reaction.
+    - Confidence: high for the power-loss and power-return rules as they act at a change from
+      powered to unpowered and back; medium for the disable and enable cases, whose triggers belong
+      to other specs, for the same-or-next-tick timing, for the pulse ending on a building still
+      switched off until B11's pulse run runs, and for the rule that a building not powered since
+      it was placed or completed has had no such change, until B22 parts (f) and (g) run; medium
+      for the power-return reaction of a building in operation when placed or completed
+      (`unmeasured`, above)
 
 14. **Special outage.** For a type marked for special power behaviour, whether or not it needs
     power: when power comes back, the *low-power* slot stops and every slot with *special-outage* is
@@ -470,16 +531,18 @@ are out of scope.
     *L* = trunc(4·*m* / *S* + 0.5), clamped to 0 … 3 (Formulas F5). It is 0 when *S* ≤ 0. At level 0
     the *special-1* slot is stopped. Otherwise *special-1* is started if absent (normal or damaged
     variant), and its displayed image frame is forced to *L* on every tick. The animation's own timing
-    does not move it.
+    does not move it, and the setting wins over any hold of the slot's frame (claims 13 and 26).
     - Backing: `measurable` (B8 for *special-1* absent with empty storage). That level 0 stops a
       running *special-1* is `unmeasured`: B8 never makes the slot run first, so it cannot tell
       stopping from never starting. Claim 13's power-return row could start it on art that sets
       the matching flag, but no scenario here sets that up.
-      `unmeasured` for positive fill, its rounding and forced image frames: no known skirmish
+      `unmeasured` for positive fill, its rounding and forced image frames, including the forced
+      frame winning over a hold: no known skirmish
       path fills building storage. The missing-animation failure under Edge cases shares this
       limitation; our safe result and warning are defined departures.
     - Confidence: high (*special-1* absent with empty storage); medium (level 0 stopping a running
-      *special-1*, and positive fill, its rounding and forced image frames, `unmeasured`)
+      *special-1*, and positive fill, its rounding and forced image frames, the forced frame
+      winning over a hold included, `unmeasured`)
 
 17. **Infantry absorption.** For a type that absorbs infantry and gives a positive extra power per
     held infantry, once the building has completed and is not in the *construction* state, this is
@@ -521,12 +584,15 @@ are out of scope.
     advance on its own. Every tick its image frame is set to (28 − *j*) mod 32, a value from 0 to 31,
     where *j* is the turret facing rounded to 32 directions as in S-0107 Formulas F2
     (*j* = (⌊φ / 1024⌋ + 1) div 2 mod 32, with φ the turret facing in facing units). The turret sprite therefore stores 32 directions
-    counter-clockwise, with image frame 0 at turret facing 28 × 2048. When the turret art is voxel art,
+    counter-clockwise, with image frame 0 at turret facing 28 × 2048. The setting wins over any
+    hold of the slot's frame (claims 13 and 26). When the turret art is voxel art,
     the *turret* slot is not started at grand opening. When the barrel art is voxel art, a *turret*
     slot animation that does start is hidden.
-    - Backing: `measurable` (B17 for the sprite-turret formula). The voxel turret/barrel suppression
+    - Backing: `measurable` (B17 for the sprite-turret formula; B22 part (i) for the setting
+      winning over a hold). The voxel turret/barrel suppression
       is `unmeasured` here: B17 has neither voxel-art flag variant.
-    - Confidence: medium (the turret facing is defined in S-0206, Terms)
+    - Confidence: medium (the turret facing is defined in S-0206, Terms; the setting winning over
+      a hold, until B22 part (i) runs)
 
 20. **Repair-depot, recycling and delayed-fire slot rules.** These apply only to the building kinds named in
     each row. A repair depot here includes a naval yard with the repair flag (S-0504 claim 8); only
@@ -597,8 +663,7 @@ are out of scope.
     previous step sent a vehicle away. A settling depot with no contact stays in its repair
     behaviour from its first no-contact processing, the one already scheduled, checking every
     tick from then on, until *special-3* is no longer running, and only then returns to *guard*
-    (S-0314 claim 22 owns that return; its companion revision is listed under
-    Changes for other specs). The simulation models the slot animation's duration
+    (S-0314 claim 22 owns that return; see Changes for other specs). The simulation models the slot animation's duration
     from the art data as deterministic simulation state; this wait does not depend on drawing
     frames or whether the building is visible.
 
@@ -846,6 +911,180 @@ are out of scope.
       B18 part h runs (as claim 20 rates them), for the kept stage across types with different
       start fields (`unmeasured`), and for a kept stage beyond the new type's range (`unmeasured`)
 
+26. **Buildings that need an engineer (Q-1772).** This claim covers a building whose type has the
+    needs-engineer flag. *Manned* is S-0515 claim 2's state: a building is manned from its first
+    ownership change, so by S-0405 claim 8 such a building is not in operation before that change.
+    Not being manned does not itself hide its slots (the hiding rules of claim 10 and of other
+    specs still apply); what changes is whether they advance. Two further rules that Q-1772 asks
+    about apply to every building and are claims 27 and 28.
+    - **Placed by the map's building list while not manned.** This holds whatever the owner: the
+      neutral or special house, or a computer player's house that the map gives the building from
+      the start. (In skirmish the map's building list places nothing for a human player's house,
+      S-0009 claim 27.) Observable: from its placement on, every slot started at its set-up
+      (claim 11) whose counting flag is *freeze-unpowered* shows the image frame it was created
+      with (S-0109 claims 1, 8 and 12) and does not advance, whether or not the type needs power
+      (confidence medium until B22 part (a) runs). This is because such a building counts as
+      disabled in claim 13's sense from its placement on, a further cause of disabling beside the
+      switch-off and the pulse of S-0405 claim 9, which this claim adds. A slot whose art turns
+      *freeze-unpowered* off keeps playing. The *idle* slot and the *active-1* to *active-4* slots
+      follow the same rule; only each slot's counting flag decides. The *guard* order that becomes
+      current at the first per-tick start (claim 11) starts no slot, so it unfreezes nothing.
+      Two slots whose image frame another rule sets on every tick are not held at a frame: the
+      *turret* slot shows the frame claim 19 gives for the turret facing, and a running
+      *special-1* silo-fill slot shows the fill level of claim 16. That per-tick setting wins over
+      the hold, here and wherever else this claim or claim 13 holds a slot's frame.
+    - **Placed any other way.** A building of such a type that trigger action code 125 creates, or
+      that is produced, is not disabled at placement. Its slots play from its grand opening (claim
+      11): at the end of its build-up when produced, and in the tick the action runs when code 125
+      creates it. Unlike the map-placed case, this building not being disabled at placement is
+      `unmeasured` and rated medium: a disabling before its slots start would show the same frames,
+      and no input is known that tells the two apart. Whether a replacement that code 130 restores
+      is disabled at its placement is open (Open questions).
+      For a type that needs power, its *freeze-unpowered* slots start frozen: a building that is
+      not manned is not in operation (S-0405 claim 8's manned row), and claim 13's start rule
+      reads the in-operation result, whatever its house's power.
+    - **Slot starts while not manned.** A slot started while the building is not manned follows
+      claim 13's rule for a start: it starts frozen only when the type needs power. So, for a type
+      that does not need power, a damage swap (claim 12) or any other start restarts the slots it
+      touches running and unfrozen, and they play from then on, unless an independent hold such as
+      an erasure holds them (S-0109 claims 21 and 23), although the building is still not manned
+      and still disabled. For a type that needs power the restarted *freeze-unpowered* slots start
+      frozen. This is the original's behaviour, kept as our rule with no quirk switch (decided at
+      the delegated sign-off, 2026-10-25).
+    - **A pulse on a building that is not manned.** When the pulse ends, its re-enabling unfreezes
+      the *freeze-unpowered* slots as claim 13 states for any re-enabling, so they play from then on,
+      unless an independent hold such as an erasure holds them (S-0109 claim 23), although the
+      building is still not manned (`quirks.enable_unfreezes_unpowered`).
+    - **At every ownership change.** As part of every ownership change of such a building, on the
+      tick of the change, the building is re-enabled and every running *freeze-unpowered* slot that
+      is frozen, and that no independent hold still holds (an erasure, S-0109 claim 23), resumes
+      from the image frame it held. It does not start again from the frame it was
+      created with. In B22 the held frame is the frame the slot was created with, so the two
+      readings show the same frame there and differ in timing: a resumed slot advances at its
+      first eligible update, as below, while a slot started again would begin its first stage
+      afresh at the change. B22 part (b) records that timing, and part (k), which changes the
+      owner of a building whose slots a pulse froze after they had advanced, tells a resume from
+      a start at the slot's first frame by frame. Part (k) does not tell a resume from a replacing
+      start that keeps the replaced animation's stage (claim 25), which shows the same frame; that
+      no such start comes is `unmeasured` (no input is known that tells the two apart). No slot is started, stopped or restarted, so each slot keeps the variant it was
+      started with (normal or damaged, claim 12). This happens whether or not the building is in
+      operation after the change, for example under a pulse or when it is not powered under
+      S-0405 claim 8's power row (`quirks.enable_unfreezes_unpowered`). It also happens at every later ownership change of a
+      building that is already manned, where it changes nothing unless a slot was frozen at the
+      time, for example by a power loss or by disabling. A resumed slot advances at its first
+      eligible update (S-0109 claim 23): its clock ran while it was held, so this is normally its
+      first update after the change, on the tick of the change or the next. A slot that was already
+      playing before the change is not affected by it.
+    - **Afterwards.** The change of owner can change the building's in-operation result, its
+      powered state in claim 13's sense. Claims 13 and 14 then apply to that change in the
+      building's next update, as for any other change of powered state. A building that was not
+      manned has never been in operation, so before its first ownership change its powered state
+      is "not in operation". For a type that needs and draws power, a capture into a house with
+      enough power (every other row of S-0405 claim 8 holding) brings it into operation, and claim
+      13's power-return column applies in its next update; its resumed slots go on advancing. A
+      capture that leaves it not powered under S-0405 claim 8's power row (its new house has low
+      power and the building has fewer than two chargers), or under a pulse, leaves it not in
+      operation: its
+      powered state does not change, claim 13's power-loss column does not apply (claim 27), and
+      the resumed slots go on advancing, though it is not in operation. They freeze again only at
+      a later change from in operation to not in operation, or at a disabling. A
+      *freeze-unpowered* slot started while it is not in operation still starts frozen (claim
+      13). A type that neither needs and draws power nor is marked for special power behaviour is
+      not affected further.
+    - Backing: `measurable`: B22 part (a) for the freeze at map placement, the frame the slot was
+      created with held, the slots that keep playing, the *guard* order unfreezing nothing, and the
+      buildings created by code 125, including their slots starting in the tick of the trigger
+      action, but not their not being disabled at placement (below); part (i) for the *turret* slot's per-tick frame winning over the hold; parts (b) and
+      (c) for the resume at the first and at a later ownership change, and part (k) for the resume
+      from a held frame other than the first; part (d) for the damage swap; part (e) for the
+      pulse; part (f) for a type that needs power, captured into houses with ample and with short power,
+      including the short-power capture being no change of powered state. `unmeasured`: a produced building of such a type
+      (no scenario here builds one); the code-125 building's not being disabled at placement (a
+      disabling before its slots start shows the same frames in B22 part (a), and no input is
+      known that tells the two apart); claim 14's branch after the change (B22 has no type with
+      special power behaviour); a later ownership change resuming slots frozen by a power loss (B22 has no
+      needs-power type that loses power after it is manned); the silo-fill *special-1* slot's per-tick frame winning over
+      the hold (it runs only with storage above 0, and no skirmish path fills a building's own
+      storage, claim 16).
+    - Confidence: medium for the absence of a stop or a variant change at an ownership change,
+      until B22 parts (b) to (d) run, since it is the same rule as the resume (no slot is
+      started, stopped or restarted), which rests on claim 13's disable and enable cases. Medium
+      for the absence of a restart, which parts (b) and (c) tell from a resume only by timing,
+      until part (k) runs, and medium for the absence of a replacing start that keeps the stage
+      (`unmeasured`, as the backing says); medium for the *guard* order unfreezing nothing, which
+      rests on the freeze at map placement (above). Medium for the code-125 building's slots playing, at the level of claim
+      11, until B22 parts (a) and (j) run. Medium for the code-125 building's slots
+      starting in the tick of the action (claim 11), until B22 part (a) runs; medium for its not
+      being disabled at placement (`unmeasured`, as the backing says). Medium for the
+      per-tick frames of the *turret* and *special-1* slots winning over the hold, until B22
+      part (i) runs (*special-1* `unmeasured`), and medium for the *turret* frame's being set on
+      every tick rather than once at placement and then held, even after part (i) runs: part (i)
+      tells the setting from a hold at the frame the slot was created with, but the turret facing
+      of a building that is not manned does not change during the hold, and no input is known that
+      turns it. Medium for the parts that rest on claim 13's
+      disable and enable cases: the freeze at map placement, the frame the slot was created with held,
+      the slots that keep playing there, and the resume from the held frame at every ownership change,
+      until B22 parts (a), (b) and (k) run. Medium for the short-power capture being no change of
+      powered state, so that the resumed slots go on advancing, until B22 part (f) runs.
+      Medium also for the produced building (`unmeasured`), the restart running after a
+      damage swap, the unfreeze at the end of a pulse, the resume timing, the next-update effects
+      after the change (the claim 14 branch `unmeasured`), and a later change resuming slots
+      frozen by a power loss (`unmeasured`).
+
+27. **A building never powered (Q-1772).** Claim 13's power-loss column applies only at a change
+    from powered to unpowered. A building that has not been powered since it was placed or completed
+    has had no such change. Its *light-unpowered* and *effect-unpowered* slots started at its
+    grand opening therefore keep playing, and *super-low-power* has not started. This holds for a
+    building of a needs-engineer type that needs power while it is not manned, and after its
+    capture into a house short of power (claim 26). It holds as well for any building that needs and draws power and completes while its house is short of power.
+    Claim 13's rule for a start still decides whether its *freeze-unpowered* slots start frozen.
+    - Backing: `measurable` (B22 part (g) for its *light-unpowered* and *effect-unpowered*
+      slots). `unmeasured` for *super-low-power* not having started: it starts only from a running
+      *super-3* at a power loss, and B22 has no superweapon type.
+    - Confidence: medium until B22 part (g) runs, as claim 13 rates the rule; medium for
+      *super-low-power* (`unmeasured`)
+
+28. **The working animations of S-0405 claim 9 (Q-1772).** They are the slot rules of claims 13
+    and 14, applied at any change of the building's in-operation result whichever row of S-0405 claim 8
+    causes it, together with the rules below for particular rows. Per row of claim 8:
+    - *switched on*: switching off disables the building in claim 13's sense. Switching on
+      re-enables it, so its *freeze-unpowered* slots resume even under low power (claim 13). The
+      end of a pulse re-enables it too while it is still switched off (claim 13).
+    - *not under a pulse*: the pulse disables the building and its end re-enables it (claim 13).
+    - *powered*: claim 13.
+    - *no blackout*: claim 14.
+    - *manned when required*: claim 26.
+    - *not building or selling*: the sale's own processings start, stop and freeze none of the
+      sold building's slots. The building stops being in operation at the sale's first
+      processing, and claims 13 and 14 apply to that change like any other, in the building's
+      next update. So only a type that needs and draws power, or one marked for special power
+      behaviour, changes slots then. For any other type, such as a refinery without the
+      needs-power flag, each running slot that no rule independent of the sale holds (claim 13's
+      disabling, an erasure, S-0109 claim 23) is neither paused nor hidden by the sale from its first
+      processing, through every processing at which a docked unit holds the sale (S-0408 claim
+      6), up to the start of the build-down. From the tick the build-down starts, claim 10 hides
+      every slot for the rest of the sale. The slots
+      that a docked unit's unloading starts and stops follow the docking roles under their own
+      specs (claim 20), including when the sale tells that unit to leave. Claim 18's charge
+      check, which can start superweapon slots, does not run while the building is built or
+      sold. The build-up and build-down sprites themselves are claims 1 to 5.
+    - *alive*: this spec adds no slot rule.
+    An erased building's slots are held as S-0109 claim 23 states. Apart from these, no row of
+    S-0405 claim 8 stops, freezes or starts a slot animation. In particular, apart from the
+    docking-role slots (claim 20), a sale stops, freezes or starts no slot of a type that
+    neither needs and draws power nor is marked for special power behaviour before its
+    build-down starts.
+    - Backing: `measurable`: B22 part (h) for the sale of a building with no needs-power flag, its
+      slots drawn from its first processing to the build-down's start; the slots advancing through
+      a held sale are `unmeasured`, since no input is known that ensures a hold (S-0402 claim 11),
+      and part (h) reports that only when a hold arises; B14 covers the hiding during the
+      build-down. B11 covers switching off and on. The other rows rest on the claims they name
+      and their backings.
+    - Confidence: medium for a sale changing no slot before its build-down, until B22 part (h)
+      runs with a hold of at least 6 ticks: S-0402 claim 11 has the sale break off the unloading
+      harvester's contact, and no input is known that ensures a hold. Medium for the reading of
+      S-0405 claim 9 as a whole.
+
 ## Formulas
 
 Where a formula below says that a floating-point result is rounded toward zero, that is the
@@ -992,8 +1231,12 @@ outside construction; gates using the special gate image use claim 4, not this t
   normal art on all its running slot animations until its next damage or repair event, or the next
   slot start in the damaged condition (claims 11 and 12). Off: start the *turret* slot in the building's actual condition.
 - **`quirks.enable_unfreezes_unpowered`** (default: on). Re-enabling a disabled building unfreezes
-  its *freeze-unpowered* slot animations even when it has no power (claim 13). Off: they stay frozen
-  until power comes back.
+  its *freeze-unpowered* slot animations even when it has no power (claim 13). This includes the end
+  of a pulse on a building that is switched off or that needs an engineer and is not manned, and every ownership change of
+  such a building, whether or not it is then in operation (claim 26). Off: a re-enabling or an
+  ownership change unfreezes them only when the building is in operation right after it. Otherwise
+  they stay frozen until power comes back, or until a later re-enabling or ownership change after
+  which the building is in operation.
 - **`quirks.damage_swap_drops_occupied`** (default: on). Crossing the damaged threshold restarts the
   running slot animations as normal or damaged, never as occupied. An occupied building that is hurt
   and then repaired shows normal slot animations, not occupied ones, until something restarts them.
@@ -1359,7 +1602,7 @@ expected numbers are computed from the type's own fields at measurement time.
     frame differs, the door image is missing on a tick of the unload
     or shown outside it, or its door frames differ from F8 in any recorded door state, including the damaged
     copy's addition of *D* and the unmarked copy's unchanged frames.
-- **B11 (claims 6, 13, 21).**
+- **B11 (claims 6, 13, 21, 28).**
   - Setup: game speeds 0 and 4. Two named test-art copies of a stock non-turret building: each
     has an idle range of three frames with delay 3 ticks, invented test values, and a sprite with
     enough distinct body frames and matching shadows. One art copy is normalised, the other not.
@@ -1368,21 +1611,26 @@ expected numbers are computed from the type's own fields at measurement time.
   - Procedure: build each and log body stages from its deferred construction-to-idle change
     through at least three idle wraps.
     While its house remains short of power, switch that building off and then on through the
-    normal power-toggle order (S-0405 claim 10). Keep the house shortfall unchanged throughout. The toggled-flag run is required, since it is the only
+    normal power-toggle order (S-0405 claim 10). Keep the house shortfall unchanged throughout. In
+    a further pulse run at speed 4, with the house at ample power, switch the building off, hit it
+    with a pulse while it is switched off, and keep it switched off until at least 30 ticks after
+    the pulse's end; log the ticks of the switch-off, the hit and the pulse's end. The toggled-flag run is required, since it is the only
     backing of claim 21: run the copy through the same procedure as its original type, undamaged
     and then damaged past the yellow ratio, at both speeds.
   - Observable: idle body-frame period in ticks, whether the frozen slot animations advance, and,
     for the toggled copy and its original, every quantity of the common setup's per-tick record.
     The recorder also distinguishes initial state entry from the first idle wrap; the wrap's
     following delay is the period under test.
-  - Runs: one per building and speed, and one per speed for the toggled copy.
+  - Runs: one per building and speed, one per speed for the toggled copy, and one pulse run.
   - Expected: the deferred idle-entry delay and each delay after an idle wrap follow N(*d*, *s*)
     in both marked and unmarked cases. Use the imported stage count to separate an image-cycle
     period from one stage delay. The frozen slot animations resume
-    when the building is re-enabled although the power is still out. The toggled copy's record
-    matches its original's on every tick.
+    when the building is re-enabled although the power is still out. In the pulse run the frozen
+    slot animations resume on the tick the pulse ends or the next, although the building is still
+    switched off, and keep advancing. The toggled copy's record matches its original's on every tick.
   - Falsified if: either entry or post-wrap stage delay differs from N(*d*, *s*), the slot
-    animations stay frozen until power comes back, or the toggled copy's record differs.
+    animations stay frozen until power comes back, the pulse run's slots stay frozen after the
+    pulse ends while the building is switched off, or the toggled copy's record differs.
 - **B12 (claims 3, 9).** Damaged-frame clamp and corresponding-shadow checks are departures
   tested against this spec on our engine, not against the original; undamaged frames and
   per-type shadow suppression still use the original.
@@ -1419,16 +1667,30 @@ expected numbers are computed from the type's own fields at measurement time.
     differs from claim 4 for the recorded behaviour and door state, the rest-open image returns
     to the closed image, the rest-closed image differs from claim 2, or a bib shows with the
     special gate image.
-- **B14 (claim 10).**
+- **B14 (claims 10 and 28).**
   - Setup: test data. A test building with one slot animation whose displacement is (0, 0), and a
-    copy with displacement (10, −6).
-  - Procedure: place both, let them complete, screenshot them, then sell one.
+    copy with displacement (10, −6). For the pack-up, a test copy of the construction-yard type
+    with the same slot animation, which the human house deploys from its vehicle, with room
+    around it for the vehicle to return, and the game option that lets construction yards be
+    packed up again on (S-0213 claim 12).
+  - Procedure: place both, let them complete, screenshot them, then sell one. In a second run,
+    select the deployed yard copy and give a move click on an open cell, which sets its guard
+    spot and issues the sell order, so that it packs up (S-0213 claim 12); capture every tick
+    from the order to its removal.
   - Observable: the slot animation's screen position relative to the image anchor, and its
-    visibility during the sale.
-  - Runs: one.
+    visibility during the sale and the pack-up.
+  - Runs: two.
   - Expected: the first is centred on the anchor, the second is 10 pixels right and 6 pixels up of
-    it. All slot animations of the building being sold are hidden for the whole sale.
-  - Falsified if: the displacement differs from the given pixels, or a slot animation stays visible.
+    it. The slot animations of the building being sold stay drawn until the first tick of its
+    build-down and are hidden from that tick until the building is removed. The packing copy's
+    slot animation is drawn on every tick before its build-down starts and on none from then on.
+  - Falsified if: the displacement differs from the given pixels, or a slot animation of the
+    sold or the packing building is visible after the build-down starts, or hidden before it
+    while no other rule hides it (a slot whose art has ended its passes is not counted).
+  - Note: with no docked unit holding the sale, the build-down starts at the sale's second
+    processing, one tick after the first (S-0408 claim 6), so B14 tells "hidden from the
+    build-down" from "hidden for the whole sale" only on that one tick, which its screenshots need
+    not catch. B22 part (h) separates them over a longer hold.
 - **B15 (claim 14).**
   - Setup: a human house with a spy, and an enemy bystander owning a power plant and a building
     marked for special power behaviour, with *low-power* and a running *active-1* marked
@@ -1772,6 +2034,135 @@ expected numbers are computed from the type's own fields at measurement time.
   - Falsified if: a conflicting type-name or rules section determines the frames, either absent
     setting is derived from the sprite, the partial spellings give a different result, any frame
     differs from F8, or changing only the count changes door movement duration.
+- **B22 (claims 11, 13, 19, 26 to 28, buildings that need an engineer).**
+  - Setup: common setup with named test rules and art and a purpose-made test map; game speed 4.
+    Test type T is a copy of a stock tech building with the needs-engineer flag and no
+    needs-power flag. Test type P is the same with the needs-power flag and a positive power
+    drain. Test type Q is a copy of a stock building that needs and draws power, without the
+    needs-engineer flag. Each has named test slot art with deterministic playback, five visibly
+    distinct image frames and a stage delay of 3 ticks (invented test values). The test slot art
+    is not reversed, so a slot's first image frame is the frame it was created with (S-0109
+    claim 8), and it has no pass limit, so it keeps playing for the whole run and no slot ends on its own. The
+    *idle* and *active-1* slots keep *freeze-unpowered* on. The *active-2* slot turns it off and
+    sets *light-unpowered*. The *active-3* slot turns it off and sets *effect-unpowered*. Each
+    slot has a damaged variant with distinct art. Test type R is a copy of a stock refinery with
+    no needs-power flag and not marked for special power behaviour. Its *active-1* to *active-4*
+    slots all use the same test slot art, with *freeze-unpowered* on; its other slots keep their
+    stock art. Test type U is T with a turret whose turret art is a sprite: named test turret art
+    with 32 visibly distinct image frames, created at image frame 0. The map's building list
+    places T1, P1 and U1 for the neutral house, T2 for the bystander computer house, and T4, T5 and
+    T6 for the neutral house, all in view. A map trigger action of code 125 (create a building) creates T3 and P3 for the neutral house in the first tick,
+    and in the same tick creates, out of view, a power plant for the neutral house whose output
+    exceeds the neutral house's total drain, so that the neutral house is not short of power. The
+    record includes the neutral house's power output and drain on every tick.
+    For part (j), test type F is a copy of a stock building type that has a free unit, and a map
+    trigger action of code 125 creates F for the bystander computer house in the first tick, in view with open
+    cells around it.
+    The player has engineers, a unit that can damage a building, and a pulse weapon. A map
+    trigger action, fired at least 30 ticks after part (b)'s capture, gives T1 to the bystander
+    house. For parts (f) and (g) the player's house has no power plant, so any positive drain
+    leaves it short of power. In the ample-power run of (f), and in (h), a map trigger creates, in the first
+    tick, a power plant for the player's house whose output exceeds the house's total drain (a
+    structure in the map's building list owned by a human player's house is dropped, S-0009
+    claim 27).
+  - Procedure and parts:
+    - (a) Record from the first drawn frame of play for at least 30 ticks, before any capture,
+      and log the tick on which the trigger action creates T3 and P3.
+    - (b) Capture T1 with an engineer and log the tick of the ownership change.
+    - (c) After at least 30 ticks, change T1's owner again to the bystander house by the trigger
+      action.
+    - (d) Damage T4 below the yellow ratio while it is not manned, then, at least 30 ticks after
+      the damage tick, capture it.
+    - (e) Hit T5 with the pulse while it is not manned and record past the pulse's end.
+    - (f) Capture P1 once into a house with ample power and, in a second run, into a house short
+      of power.
+    - (g) With the player's house short of power, build Q and record from its completion.
+    - (h) At full power, build R and let a loaded harvester dock in it with its way out
+      blocked, as S-0405 scenario W6 sets up its refinery. Sell R. Log the tick of the sell
+      order, the tick of the sale's first processing and the first tick of the build-down.
+    - (i) Within part (a)'s record, read U1's *turret* slot and its turret facing on every tick.
+    - (j) Log the tick on which the trigger action creates F and the tick on which F's free unit
+      appears, and count F's free units at the end of the run.
+    - (k) Capture T6 with an engineer. Once its *idle* and *active-1* slots have advanced to an
+      image frame other than their first, hit T6 with the pulse, and while the pulse still holds,
+      give T6 to the bystander house by a second map trigger action, no sooner than the stage
+      delay of those slots (S-0109 claim 5) after the pulse hit. Log the ticks of the
+      capture, the pulse hit, the change and the pulse's end. If the pulse ends before the
+      change, or the slots are at their first or their last image frame when the pulse freezes
+      them, the run is repeated, so that the frame after the held one is not the first.
+    - Remove all named test files afterwards.
+  - Observable: per tick, for each test building and each of its four test slots (R: its running
+    *active* slot; U1: its *turret* slot and turret facing; F: its free units; T3 also its body
+    image frame), whether the slot is drawn, its
+    variant and image frame and whether it changed, the owner, and the health condition, from a screen
+    capture that keeps every drawn frame or a read-only recorder's tick-labelled log.
+  - Runs: part (a) records at the start of the run that parts (b) and (c) continue, before part
+    (b)'s capture; part (c) follows part (b) in that same run, and part (i) is read from part
+    (a)'s record. Part (j) shares that run, which lasts at least 300 ticks after the first tick.
+    Parts (d), (e), (g) and (k) take one run each, part (f) two, and part (h) up to five attempts, as its expected result says.
+  - Expected:
+    - (a) On T1, T2, T4, T5 and P1 the *idle* and *active-1* slots show their first image frame
+      on every tick, and *active-2* and *active-3* advance every 3 ticks. On T3 all four slots
+      are present and drawn from the tick on which the trigger action creates it, and advance; no
+      slot of T3 restarts at any later tick of the run.
+      On P3 *idle* and *active-1* hold their first image frame and *active-2* and *active-3*
+      advance, while the neutral house's recorded output is at least its drain. If that record
+      shows a shortfall in any tick, P3's result does not tell "not manned" from "short of power"
+      and is reported as inconclusive.
+    - (b) From the tick of the change or the next, T1's *idle* and *active-1* advance to the frame
+      after the held one; *active-2* and *active-3* go on without a break; no slot shows a
+      restart.
+    - (c) No slot's sequence changes at the second change.
+    - (d) On the damage tick T4's slots switch to damaged art and all four advance before the
+      capture. The capture changes none of them.
+    - (e) After the pulse ends T5's *idle* and *active-1* advance although T5 is not manned.
+    - (f) In both runs P1's *idle* and *active-1* resume at the capture. With ample power nothing
+      else changes. Short of power they keep playing at their stage delay (S-0109 claim 5) after the
+      capture, and do not hold again in the building's next update or later, while the house stays short of
+      power: the capture is no change of P1's powered state (claims 13 and 26). If the player's
+      house's recorded output reaches its drain in any tick of that run, the run is void.
+    - (g) Q's *active-2* and *active-3* advance from completion while its house stays short of
+      power; its *idle* and *active-1* hold their first frames.
+    - (h) R's *active* slot advances every 3 ticks, and is drawn, on every tick from the sell order
+      through the whole hold until the first tick of the build-down. From that tick on no slot of
+      R is drawn. Every run shows R's slots drawn on the tick of the sale's first processing,
+      which is at least 1 tick before the build-down starts (S-0408 claim 6), so every run tells
+      "hidden from the build-down" from "hidden for the whole sale". Only a hold of at least
+      6 ticks shows the slot advancing rather than held or stopped. No input is known that
+      ensures such a hold: the first processing tells every docked unit to leave (S-0408 claim 6),
+      and an unloading harvester breaks off at once (S-0402 claim 11). A run with a shorter hold
+      is kept for the hiding and repeated with the way out blocked more fully, up to five attempts
+      in all. If no attempt gives a hold of at least 6 ticks, the advancing part is reported
+      unreached and the sale changing no slot before its build-down stays medium.
+    - (i) On every tick U1's *turret* slot shows image frame (28 − *j*) mod 32 for its recorded
+      turret facing *j* (claim 19), not the held image frame 0. If the facing the map gives U1
+      makes that frame 0, the part is repeated with another map facing; if no facing tried gives
+      another frame, the part is reported unreached. The part tells the per-tick setting from a
+      hold at the frame the slot was created with. It does not tell it from a frame set once at
+      placement and then held, since U1's facing does not change while it is not manned (claim 26
+      rates that point medium).
+    - (j) F's free unit appears on the tick on which the trigger action creates F, and F has one
+      free unit at the end of the run.
+    - (k) From the pulse hit T6's *idle* and *active-1* hold the frame they had reached. From the
+      tick of the change or the next, while the pulse still holds, the first new frame each
+      shows is the frame after that held frame, not its first frame (later passes show the first
+      frame again, as any pass does); *active-2* and *active-3* go on without a
+      break. The pulse's end changes nothing.
+  - Falsified if: an unmanned map-placed building's *freeze-unpowered* slot advances or is not
+    drawn before any capture, damage or pulse, or its *active-2* or *active-3* holds; T3 holds,
+    its slots first appear on a later tick than the one on which the action creates it, or one of
+    them restarts later; F's free unit appears on a later tick than F's creation, or F has none or
+    a second one; U1's
+    *turret* slot holds image frame 0 while its turret facing gives another frame; P3's
+    *idle* or *active-1* advances or its *active-2* or *active-3* holds; a resumed slot
+    restarts from its first frame or changes variant at a capture; the second change alters any
+    slot; T4's damaged slots hold before the capture; T5 holds after the pulse; P1 holds after a
+    capture in either run, including a hold in a later update of the short-power run; the first new frame
+    that T6's *idle* or *active-1* shows after the change is its first image frame, or it still
+    holds after the change; Q's *active-2* or *active-3* holds while the house is short of
+    power; or R's *active* slot stops being drawn at or after the sale's first processing before
+    the build-down starts, or holds its frame through a hold of at least 6 ticks, or a slot of R is
+    drawn after the build-down starts.
 
 Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
 read-only per-tick observables and falsification criteria: placed buildings show two runs,
@@ -1785,15 +2176,10 @@ specified here.
 
 ## Changes for other specs
 
-- **S-0314 claims 6 and 22 — companion revision (Q-1610).** The companion revision of S-0314 adds the
-  per-phase processing spacing to claim 6. In claim 22 it keeps approved revision 31's "A depot
-  left without any contact reacts at its next repair processing", which does not say when that
-  processing comes, and adds that it is the processing claim 6's spacing table had already
-  scheduled and that a settling depot's every-tick checks start at it. The older claim 22 wording that this
-  spec's approved revision 17 asked to replace ("plays idle animations and returns to
-  *guard*") is already absent from S-0314 revision 31. S-0108 claim 20's timing sentence relies
-  on S-0314 claim 6's processing-spacing table and claim 22 as that companion revision states
-  them. Hand off this revision of S-0108 and that companion revision of S-0314 together.
+- **S-0314 claims 6 and 22 (Q-1610).** S-0108 claim 20's timing sentence relies on S-0314 claim
+  6's per-phase processing spacing and on claim 22's statement that a depot left without any
+  contact reacts at the repair processing that claim 6's spacing table had already scheduled, and
+  that a settling depot's every-tick checks start at it.
 - **S-0109 claim 1, cross-reference.** S-0109 claim 1 says that a new animation starts with
   *k* = 0. A start that replaces a running slot animation of this spec instead keeps the old
   one's stage (claim 25). S-0109 claim 28 already says that a building replacing a slot
@@ -1811,8 +2197,48 @@ specified here.
   row outside repair" should read "... including B18's naval-yard control; the every-tick row
   outside repair is `measurable` by B18 part i", since B18 part i now tests that row.
 
+- **S-0405 claim 9, working animations (Q-1772).** Where claim 9 says that a building out of
+  operation "changes its working animations only as S-0108 claims 13 and 14 give for a loss of
+  power", it should name S-0108 claims 13, 14, 26 and 28. Claim 26 states the slots of a building
+  that needs an engineer, before and at its ownership changes, and claim 28 states which slot
+  animations a loss of operation leaves alone. Claim 9's light paragraph and scenario W6 part (i)
+  need no change.
+- **S-0405 claim 10 and its Open question on a turret or silo-fill slot.** Claim 10 says that
+  whether a turret slot or a silo-fill slot, frozen by a switch-off, shows a held frame or the
+  frame S-0108 claims 19 and 16 give "is an Open question", and its Open questions list that
+  point. Claims 16, 19 and 26 here settle it: the per-tick setting from the turret facing or the
+  fill level wins over any hold of the slot's frame. Claim 10 should say so with a reference to
+  those claims, and the Open question should be removed. The silo case stays `unmeasured` here
+  (claim 16) and the turret case is `measurable` by scenario B22 part (i), both at medium.
+- **S-0402 Terms and claim 18, a grand opening in a trigger action's tick (noticed for
+  Q-1772).** S-0402's term reads "at construction completion in play or during placement at game
+  set-up". Claim 11 here adds a third case: a building that trigger action code 125 (create a
+  building) creates in play has its grand opening at once, as part of that action, in the tick
+  the action runs. The term should name that case. A replacement that trigger action code 130
+  restores is not this case: it opens at the completion of its construction (S-0524 claim 15),
+  which the term's first case already covers. Claim 18 should say that a code-125 building, if
+  its type has a free unit, gets it in that tick, with the exclusions of claim 18 applying as for any building that was not
+  produced (it has no start price), and that the construction behaviour it then runs gives no
+  second unit. Its scenario H13 could add a part in which trigger action code 125 creates the
+  free-unit building for a computer player's house, logging the tick of the action and of the unit's
+  appearance. S-0215's term needs no change: it names no case.
+- **S-0515 scenario TB3 part (c), setup (noticed for Q-1772).** Part (c) has the test map give
+  the derrick to H from the start. If H is the human player's house, S-0009 claim 27 drops that
+  map-listed structure in skirmish, so the part has no derrick to read. Give it to a computer
+  player's house, or create it by a trigger action as part (e) does.
+
 ## Open questions
 
+- **A code-125 building's construction behaviour.** Claim 11 has a building that trigger action
+  code 125 creates in play open at once, and its placement queues the construction
+  behaviour as any placement in play does. What the building shows while that behaviour lasts
+  (a build-up or its normal body), how long it lasts, and whether it ends at all when no build-up
+  sprite has been loaded for its type, are not established. While it lasts the building is not in
+  operation (S-0405 claim 8), so it cannot fire. Confidence: low. B22 part (a)'s per-tick record
+  of T3's body would show the first two.
+- Whether a replacement that trigger action code 130 restores (S-0524 claim 15) is disabled at its
+  placement when its type needs an engineer, as the map's building list disables one (claim 26),
+  is not established.
 - Which behaviours put a building into the *active*, *full*, *aux-1* and *aux-2* states, and when
   the *pre-production*, *production*, *special* and *upgrade* slots start, is for the production
   and upgrade specs. Only the image-frame mechanics are fixed here. A repair depot's slot starts
@@ -1859,5 +2285,7 @@ specified here.
 
 ## Questions for the project lead
 
-- Confirm the proposed deterministic *full* range in claim 6 at sign-off. Unlike the original's
-  unspecified range, its result is completely defined here; it adds no imported key.
+Decided (delegated sign-off, 2026-10-25):
+
+- Claim 6's deterministic *full* range. Unlike the original's unspecified range, its result is
+  completely defined here; it adds no imported key.
