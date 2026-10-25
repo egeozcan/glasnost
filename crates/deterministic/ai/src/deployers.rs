@@ -1,9 +1,10 @@
 //! The own AI and deployable units (S-0517; PLAN §4.7): a person deploys a
 //! vehicle that fights from the deployed form when the enemy comes near,
 //! and packs it up again when the enemy is gone, so that it can move with the
-//! army; a deployed infantry unit that fires from its deployed form is
-//! deployed in the same way; a deploy-fire vehicle is told to deploy when an
-//! enemy it can fire at is near.
+//! army; an infantry unit that fires from its deployed form is deployed
+//! when an enemy it can fire at stands in its range, and packed up when none
+//! does; a deploy-fire vehicle is told to deploy when an enemy it can fire
+//! at is near.
 //!
 //! The brain reads only what a person in the house's seat sees (the enemy
 //! objects on cells the house has explored) and gives its orders through
@@ -17,7 +18,7 @@ use glasnost_sim::infantry::Seq;
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting;
-use glasnost_sim::world::{ObjectId, World};
+use glasnost_sim::world::{ObjectId, Target, World};
 
 use crate::scripted::{self, Script, dist2};
 use crate::special::Special;
@@ -63,7 +64,7 @@ pub fn firing_infantry(w: &World, id: ObjectId) -> bool {
 }
 
 /// Whether the infantry unit stands in its deployed form.
-fn infantry_deployed(w: &World, id: ObjectId) -> bool {
+pub(crate) fn infantry_deployed(w: &World, id: ObjectId) -> bool {
     w.obj(id)
         .and_then(|o| o.infantry.as_ref())
         .and_then(|s| s.seq)
@@ -86,6 +87,16 @@ fn standing(w: &World, id: ObjectId) -> bool {
     })
 }
 
+/// Whether a seen enemy that `id` can attack stands in the range of the
+/// weapon it would use against it from where it stands (S-0307's range
+/// test, as the approach step asks it, S-0215 claim 37 b).
+fn enemy_in_range(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)]) -> bool {
+    enemies.iter().any(|&(e, _)| {
+        // spec: S-0215 claim 37 (b) (the range test of S-0307 with the weapon chosen for the target)
+        glasnost_sim::approach::in_range(w, id, Target::Object(e)) && scripted::can_attack(w, id, e)
+    })
+}
+
 /// Whether a seen enemy that `id` can attack stands within `r` cells.
 fn enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64) -> bool {
     let Some(at) = w.obj(id).map(|o| o.pos.cell()) else {
@@ -97,9 +108,19 @@ fn enemy_within(w: &World, id: ObjectId, enemies: &[(ObjectId, CellXY)], r: i64)
 }
 
 impl Special {
-    /// Deployable units (S-0517): a standing in-place vehicle, a deploy-fire
-    /// vehicle or a firing infantry unit that has a seen enemy near deploys;
-    /// a deployed in-place vehicle that has none near packs up.
+    /// Deployable units (S-0517): a standing in-place vehicle or a
+    /// deploy-fire vehicle that has a seen enemy near deploys; a deployed
+    /// in-place vehicle that has none near packs up. A standing firing
+    /// infantry unit deploys when a seen enemy it can attack stands in its
+    /// range, and a deployed one packs up when none stands in the range of
+    /// its deployed weapon. M8 step B7: deployed infantry takes no step
+    /// towards a target (S-0517 claim 16) and drops its destination
+    /// (S-0215 claim 22), and this part packed none up; in the lane's
+    /// 02-0-7 the Allied riflemen, deployed out of range of the enemy's
+    /// last buildings and at home, stood so from tick 37 500 to the end,
+    /// every wave's order dropped, and the game had no winner. A person
+    /// deploys a rifleman when the enemy is in its sights and packs it up
+    /// to move it.
     pub(crate) fn deployers(
         &mut self,
         script: &Script,
@@ -124,7 +145,11 @@ impl Special {
             } else if deploy_fire_vehicle(w, id) {
                 standing(w, id) && enemy_within(w, id, &enemies, NEAR)
             } else if firing_infantry(w, id) {
-                !infantry_deployed(w, id) && standing(w, id) && enemy_within(w, id, &enemies, NEAR)
+                if infantry_deployed(w, id) {
+                    !enemy_in_range(w, id, &enemies)
+                } else {
+                    standing(w, id) && enemy_in_range(w, id, &enemies)
+                }
             } else {
                 false
             };

@@ -393,6 +393,24 @@ impl Brain {
         if kept > 0 {
             self.special.count_spins_kept(kept);
         }
+        // S-0213 claims 3 and 10: the deploy order queues unload, and a
+        // behaviour order of the same tick for the same actor determines
+        // that state whatever the issue order; a unit given the deploy order
+        // (`deployers`) takes no behaviour order in the same think, as a
+        // person who packs a unit up does not click it elsewhere in the same
+        // moment (M8 step B7).
+        let deploying: std::collections::BTreeSet<ObjectId> = out
+            .iter()
+            .filter_map(|o| match o {
+                Order::Deploy { actor } => Some(*actor),
+                _ => None,
+            })
+            .collect();
+        if !deploying.is_empty() {
+            out.retain(
+                |o| !matches!(o, Order::Behaviour { actor, .. } if deploying.contains(actor)),
+            );
+        }
         // S-0607 claims 9 and 12: a lifter takes only the lifter part's orders, and a holding lifter only its drop (`lifter`)
         out.retain(|o| crate::lifter::keeps_order(w, o));
         // S-0608 claims 3 b and 12: a draining drainer takes no order (a move off the foundation ends the link), one on its way to drain only drain orders, and no second drainer goes for a building (`drain`)
