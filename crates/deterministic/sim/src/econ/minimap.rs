@@ -690,18 +690,72 @@ pub fn compose(
     img: &Image,
     terrain: &[Rgb],
 ) -> Vec<RadarColour> {
-    let h = view.house;
     let shift = w.rules().quirks.radar_pixel_cell_shift;
+    compose_by(w, view, arrivals, g, img, terrain, |p, q, _| {
+        cell_at_pixel(g, img, p, q, shift)
+    })
+}
+
+/// The cell shown at each pixel of the image, row-major (claim 6, F3, under
+/// `shift`, `quirks.radar_pixel_cell_shift`): it depends on the grid, the
+/// image and the switch only, so a caller may keep it for a game and pass it
+/// to [`compose_kept`].
+pub fn pixel_cells(g: &Grid, img: &Image, shift: bool) -> Vec<CellXY> {
+    let mut out = Vec::with_capacity((img.width.max(0) * img.height.max(0)) as usize);
+    for q in 0..img.height {
+        for p in 0..img.width {
+            // spec: S-0410 claim 6 and F3 (the cell shown at pixel (p, q), quirks.radar_pixel_cell_shift)
+            out.push(cell_at_pixel(g, img, p, q, shift));
+        }
+    }
+    out
+}
+
+/// [`compose`] with each pixel's cell read from `cells`, which must be
+/// [`pixel_cells`] of `g` and `img` under the world's
+/// `quirks.radar_pixel_cell_shift` (claim 6, F3); the same pixels as
+/// [`compose`]. Cells of the wrong length are worked out afresh.
+pub fn compose_kept(
+    w: &World,
+    view: &View,
+    arrivals: &Arrivals,
+    g: &Grid,
+    img: &Image,
+    terrain: &[Rgb],
+    cells: &[CellXY],
+) -> Vec<RadarColour> {
+    if cells.len() != (img.width.max(0) * img.height.max(0)) as usize {
+        return compose(w, view, arrivals, g, img, terrain);
+    }
+    // spec: S-0410 claim 6 (the same colours as compose: each pixel's cell is F3's, kept)
+    compose_by(w, view, arrivals, g, img, terrain, |_, _, i| cells[i])
+}
+
+/// The pixels of [`compose`], the cell of pixel (*p*, *q*) at row-major
+/// index *i* given by `cell`.
+fn compose_by(
+    w: &World,
+    view: &View,
+    arrivals: &Arrivals,
+    g: &Grid,
+    img: &Image,
+    terrain: &[Rgb],
+    cell: impl Fn(i32, i32, usize) -> CellXY,
+) -> Vec<RadarColour> {
+    let h = view.house;
     let gaps = friendly_gap_cells(w, h);
+    // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner)
+    let listed: std::collections::BTreeSet<(i32, i32)> =
+        arrivals.at.keys().map(|&(_, px)| px).collect();
     let mut out = Vec::with_capacity(terrain.len());
     for q in 0..img.height {
         for p in 0..img.width {
-            let t = terrain
-                .get((q * img.width + p) as usize)
-                .copied()
-                .unwrap_or([0, 0, 0]);
+            let i = (q * img.width + p) as usize;
+            let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
-            if let Some(id) = arrivals.winner(w, h, (p, q), g, img) {
+            if listed.contains(&(p, q))
+                && let Some(id) = arrivals.winner(w, h, (p, q), g, img)
+            {
                 let o = w.obj(id);
                 // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
                 let c = crate::cloak::view::radar_house(w, id, Some(h))
@@ -718,7 +772,7 @@ pub fn compose(
                 out.push(rc);
                 continue;
             }
-            let c = cell_at_pixel(g, img, p, q, shift);
+            let c = cell(p, q, i);
             if in_friendly_gap(w, c, &gaps, view.on_flat_grid) {
                 // spec: S-0410 claim 6 (in a friendly gap field: the pixel's own terrain colour, halved)
                 out.push(halved(radar_colour(t, view.bits)));
