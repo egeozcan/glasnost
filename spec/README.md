@@ -140,3 +140,4 @@ Topics: `simulation`, `combat`, `movement`, `production`, `economy`, `structures
 | [S-0318](combat/S-0318-shrapnel-fragments.md) | Shrapnel fragments (when a detonation bursts into further shots, how many, and where they go) | combat | 13 | approved | — |
 | [S-0317](combat/S-0317-voxel-debris.md) | Debris pieces with voxel models (creation, flight, bounces, end of life, removal) | combat | 34 | approved | — |
 | [S-0319](combat/S-0319-bouncing-animations.md) | Bouncing animations (sprite debris and meteors): motion, landing and end | combat | 9 | approved | — |
+| [S-0216](simulation/S-0216-units-placed-mid-game.md) | Units placed after the game has started | simulation | 20 | approved | — |
