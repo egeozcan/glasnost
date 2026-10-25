@@ -40,3 +40,45 @@ fn the_probe_leaves_an_ai_game_unchanged() {
     assert_eq!(a.state_hash(), b.state_hash());
     assert!(!clock.tick.is_empty(), "the probe was told of the parts");
 }
+
+/// `searches=on` (M8 C4 part 5): every path computation is listed, one
+/// row of the header's columns each, and the trace behind it changes
+/// nothing in the game (the scripted replay of the determinism gate).
+#[test]
+fn the_search_listing_has_a_row_per_computation_and_leaves_the_game_unchanged() {
+    use glasnost_sim::{load, save, testkit, tick};
+    let rep = testkit::scripted_replay(7, 1500);
+    let new = || {
+        load::new_game(
+            testkit::rules(),
+            &testkit::map(),
+            testkit::catalogue(),
+            &rep.setup,
+        )
+        .expect("the synthetic scenario loads")
+    };
+    let (mut a, mut b) = (new(), new());
+    glasnost_sim::trace::switch_on(&mut b);
+    let mut csv = String::from(tick_bench::SEARCHES_HEAD);
+    while tick::ticks_run(&a) < rep.ticks {
+        rep.issue_due(&mut a);
+        rep.issue_due(&mut b);
+        tick::step(&mut a);
+        tick::step(&mut b);
+        tick_bench::note_searches(&b, &mut csv);
+        assert_eq!(
+            save::state_hash(&a),
+            save::state_hash(&b),
+            "tick {}",
+            a.tick
+        );
+    }
+    let columns = tick_bench::SEARCHES_HEAD.trim_end().split(',').count();
+    let rows: Vec<&str> = csv.lines().skip(1).collect();
+    assert!(!rows.is_empty(), "the replay computes paths");
+    for r in &rows {
+        assert_eq!(r.split(',').count(), columns, "{r}");
+    }
+    let opts = tick_bench::Options::parse(&["searches=on".to_owned()]).expect("parses");
+    assert!(opts.searches);
+}

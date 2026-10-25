@@ -62,7 +62,8 @@
 //! - `GLASNOST_GAME_DIR=<install> glasnost-headless tick-bench [key=value
 //!   …]`: the tick benchmark (M8 C4 part 2, `glasnost_tools::tick_bench`):
 //!   the frame benchmark's AI game, ticks timed with nothing drawn, and
-//!   with `probe=on` split by the tick's parts; writes a summary, a
+//!   with `probe=on` split by the tick's parts (with `searches=on` also
+//!   every path computation, M8 C4 part 5); writes a summary, a
 //!   per-tick CSV and the state hashes to the git-ignored
 //!   `local-lane/m8/c4-2/` (or `out=`). `tick-bench synthetic [ticks]
 //!   [probe=on]` times the synthetic scripted replay instead.

@@ -22,11 +22,12 @@ use std::time::Instant;
 
 use glasnost_ai::game::Game;
 use glasnost_sim::probe::{Phase, Probe, TurnClass};
+use glasnost_sim::trace::{self, What};
 use glasnost_sim::world::World;
 use glasnost_sim::{load, save, testkit, tick};
 
 /// The usage line.
-pub const USAGE: &str = "tick-bench [map=9] [seed=7] [players=8] [ticks=9000] [probe=off|on] [hash=500] [save=TICK] [worst=20] [out=DIR] [label=NAME]";
+pub const USAGE: &str = "tick-bench [map=9] [seed=7] [players=8] [ticks=9000] [probe=off|on] [hash=500] [save=TICK] [worst=20] [searches=off|on] [out=DIR] [label=NAME]";
 
 /// The run's options (`key=value` words).
 #[derive(Clone, Debug)]
@@ -48,6 +49,10 @@ pub struct Options {
     pub save: Option<u32>,
     /// How many worst ticks the summary lists.
     pub worst: usize,
+    /// Whether every path computation is listed (`<label>-searches.csv`),
+    /// through the movement trace (`glasnost_sim::trace`, which the
+    /// simulation never reads).
+    pub searches: bool,
     /// Output folder.
     pub out: String,
     /// Output base name.
@@ -66,6 +71,7 @@ impl Default for Options {
             hash: 500,
             save: None,
             worst: 20,
+            searches: false,
             out: "local-lane/m8/c4-2".into(),
             label: "ticks".into(),
         }
@@ -90,6 +96,7 @@ impl Options {
                 "hash" => o.hash = v.parse().map_err(bad)?,
                 "save" => o.save = Some(v.parse().map_err(bad)?),
                 "worst" => o.worst = v.parse().map_err(bad)?,
+                "searches" => o.searches = v == "on",
                 "out" => o.out = v.into(),
                 "label" => o.label = v.into(),
                 _ => return Err(format!("unknown option {k}")),
@@ -167,16 +174,103 @@ fn stats(v: &[f64]) -> (f64, f64, f64, f64, f64) {
     (mean, rank(0.5), rank(0.95), rank(0.99), s[s.len() - 1])
 }
 
-/// Runs the ticks on `game`, returning the rows and the hash lines.
+/// The header of `<label>-searches.csv`.
+pub const SEARCHES_HEAD: &str = "tick,unit,kind,type,owner,from_x,from_y,goal_x,goal_y,to_x,to_y,asked,mode,corridor,congested,searches,expansions,each,result,steps,failed,gave_up,retry_at\n";
+
+/// Appends the path computations the trace recorded since the last call,
+/// one row each, to `csv`. A failed computation's row is completed by the
+/// `Failed` event that follows it, when one does.
+pub fn note_searches(w: &World, csv: &mut String) {
+    let cell = |c: Option<glasnost_map::CellXY>| {
+        c.map_or_else(|| ",".to_owned(), |c| format!("{},{}", c.x, c.y))
+    };
+    let mut open = false;
+    for e in trace::take(w) {
+        match e.what {
+            What::Search {
+                asked,
+                mode,
+                from,
+                goal,
+                to,
+                congested,
+                corridor,
+                searches,
+                result,
+                steps,
+            } => {
+                if open {
+                    csv.push_str(",,,\n");
+                }
+                let (kind, ty, owner) = w.obj(e.unit).map_or(("?".to_owned(), 0, -1), |o| {
+                    (
+                        format!("{:?}", o.kind),
+                        o.type_index,
+                        o.owner.map_or(-1, |h| i32::from(h.0)),
+                    )
+                });
+                let each: Vec<String> = searches
+                    .iter()
+                    .map(|s| format!("{}{}", if s.corridor { "c" } else { "w" }, s.expansions))
+                    .collect();
+                let _ = write!(
+                    csv,
+                    "{},{},{kind},{ty},{owner},{},{},{},{},{asked:?},{},{},{},{},{},{},{result:?},{}",
+                    e.tick,
+                    e.unit.0,
+                    from.x,
+                    from.y,
+                    cell(goal),
+                    cell(to),
+                    mode.map_or_else(|| "-".to_owned(), |m| format!("{m:?}")),
+                    corridor.map_or("-", |c| if c { "yes" } else { "no" }),
+                    congested.len(),
+                    searches.len(),
+                    searches
+                        .iter()
+                        .map(|s| u64::from(s.expansions))
+                        .sum::<u64>(),
+                    each.join(" "),
+                    steps.len()
+                );
+                open = result != glasnost_sim::path::Search::Found;
+                if !open {
+                    csv.push_str(",,,\n");
+                }
+            }
+            What::Failed {
+                result,
+                gave_up,
+                retry_at,
+                ..
+            } if open => {
+                let _ = writeln!(csv, ",{result:?},{gave_up},{retry_at}");
+                open = false;
+            }
+            _ => {}
+        }
+    }
+    if open {
+        csv.push_str(",,,\n");
+    }
+}
+
+/// Runs the ticks on `game`, returning the rows, the hash lines and (with
+/// `searches=on`) the path computations' CSV.
 fn play(
     game: &mut Game,
     o: &Options,
     mut each: impl FnMut(&mut Game) -> Result<(), String>,
-) -> Result<(Vec<Row>, Vec<String>), String> {
+) -> Result<(Vec<Row>, Vec<String>, String), String> {
     let mut rows = Vec::with_capacity(o.ticks as usize);
     let mut hashes = Vec::new();
+    let mut searches = String::from(SEARCHES_HEAD);
     let mut clock = Clock::default();
     for i in 0..o.ticks {
+        // A loaded game starts without the trace (it is never saved).
+        if o.searches && !trace::on(&game.world) {
+            trace::switch_on(&mut game.world);
+        }
         let tick = game.world.tick;
         let t0 = Instant::now();
         if o.probe {
@@ -188,6 +282,9 @@ fn play(
             game.step();
         }
         let us = t0.elapsed().as_secs_f64() * 1e6;
+        if o.searches {
+            note_searches(&game.world, &mut searches);
+        }
         // Nothing draws these ticks: their effects go, as in the frame benchmark.
         game.world.effects.clear();
         rows.push(Row {
@@ -211,7 +308,7 @@ fn play(
     if hashes.last() != Some(&end) {
         hashes.push(end);
     }
-    Ok((rows, hashes))
+    Ok((rows, hashes, searches))
 }
 
 /// The summary and CSV of a run.
@@ -361,7 +458,7 @@ pub fn run(o: &Options, dir: &str) -> Result<String, String> {
     let game = &mut session.play.game;
     let save_at = o.save;
     let mut saved = String::new();
-    let (rows, hashes) = play(game, o, |g| {
+    let (rows, hashes, searches) = play(game, o, |g| {
         if save_at == Some(g.world.tick as u32) {
             let bytes = g.save();
             let rules = g.world.rules_arc();
@@ -407,6 +504,9 @@ pub fn run(o: &Options, dir: &str) -> Result<String, String> {
         format!("{}-hashes.txt", o.label),
         &(hashes.join("\n") + "\n"),
     )?;
+    if o.searches {
+        write(format!("{}-searches.csv", o.label), &searches)?;
+    }
     Ok(summary)
 }
 
