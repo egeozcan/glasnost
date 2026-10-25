@@ -159,6 +159,14 @@
       "description": "An animation type's fields that its creation draws read (S-0109; S-0202\nclaim 10).",
       "type": "object",
       "properties": {
+        "bounce_anim": {
+          "description": "`BounceAnim`, an animation name (S-0319 claim 7; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "bouncer": {
           "description": "`Bouncer`.",
           "type": [
@@ -195,6 +203,26 @@
             }
           ]
         },
+        "damage_radius": {
+          "description": "`DamageRadius`, the landing hits' radius in leptons (S-0319 claim\n7; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "elasticity": {
+          "description": "`Elasticity`, the elasticity *e*, single precision (S-0319 claim 7;\nabsent 0.8).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "end": {
           "description": "`End`, the end field *E* as written (S-0109 Import mapping: absent\nor −1 take the sprite's value).",
           "type": [
@@ -202,6 +230,14 @@
             "null"
           ],
           "format": "int32",
+          "default": null
+        },
+        "expire_anim": {
+          "description": "`ExpireAnim`, an animation name (S-0319 claim 8; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "frame_count": {
@@ -223,6 +259,14 @@
         },
         "is_meteor": {
           "description": "`IsMeteor`.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "is_tiberium": {
+          "description": "`IsTiberium`, the resource flag (S-0319 claim 10; absent no).",
           "type": [
             "boolean",
             "null"
@@ -265,6 +309,28 @@
           "format": "int32",
           "default": null
         },
+        "max_xy_vel": {
+          "description": "`MaxXYVel`, the horizontal speed limit *M* of a bouncing animation,\na double, leptons per tick (S-0319 F1, F2; absent 15.0).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_z_vel": {
+          "description": "`MaxZVel`, the type's upper vertical speed, a double, read only\nunder `quirks.anim_fixed_upper_vertical_speed` off (S-0319 claim 2;\nabsent 3.5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "middle_frame": {
           "description": "μ: half the image-frame count of the sprite of the type's last\nsprite-found moment, 0 when none was found (S-0109 claims 14 and\n25); absent when the import had no art.",
           "type": [
@@ -273,6 +339,17 @@
           ],
           "format": "int32",
           "default": null
+        },
+        "min_z_vel": {
+          "description": "`MinZVel`, the lower vertical limit *Z*ₘᵢₙ, a double (S-0319 F1,\nF2; absent 3.5).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "new_theater": {
           "description": "A new-theater type: the new-theater flag without the theater flag\n(S-0109 Terms and F2); absent: no.",
@@ -385,6 +462,23 @@
           ],
           "default": null
         },
+        "spawn_count": {
+          "description": "`SpawnCount`, the spawn count *c* (S-0319 claim 9; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "spawns": {
+          "description": "`Spawns`, the spawn type, an animation name (S-0319 claim 9; absent\nnone).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "spawns_particle": {
           "description": "`SpawnsParticle`: the particle type the middle event requests, by\ntype name (S-0109 claim 14, S-0202 claim 15).",
           "type": [
@@ -406,6 +500,48 @@
           "description": "`TiberiumChainReaction`: the start event's resource chain reaction.",
           "type": [
             "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "tiberium_spawn_type": {
+          "description": "`TiberiumSpawnType`, the resource spawn overlay type, by name\n(S-0319 claim 10; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "tiberium_spread_radius": {
+          "description": "`TiberiumSpreadRadius`, the resource spread radius *R* in cells\n(S-0319 claim 10, F5; absent 0).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "trailer_anim": {
+          "description": "`TrailerAnim`, an animation name (S-0319 claim 12; absent none).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "trailer_separation": {
+          "description": "`TrailerSeperation`, the trailer separation *s* in ticks (S-0319\nclaim 12; absent 0, which acts as 1).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "warhead": {
+          "description": "`Warhead`, the landing hits' and expiry damage's warhead, by name\n(S-0319 claims 7 and 8; absent none).",
+          "type": [
+            "string",
             "null"
           ],
           "default": null
@@ -8532,7 +8668,7 @@
           "default": true
         },
         "anim_fixed_upper_vertical_speed": {
-          "description": "A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field.",
           "type": "boolean",
           "default": true
         },
@@ -8542,7 +8678,7 @@
           "default": true
         },
         "anim_resource_spread_neighbours_only": {
-          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order.",
           "type": "boolean",
           "default": true
         },
@@ -8612,22 +8748,22 @@
           "default": true
         },
         "bouncing_anim_deck_impact_layer": {
-          "description": "An impact landing on a high-bridge deck hits the objects under the deck in that cell; off: a landing at deck height on a high-bridge cell hits the deck layer, every other impact landing the ground layer. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "An impact landing on a high-bridge deck hits the objects under the deck in that cell; off: a landing at deck height on a high-bridge cell hits the deck layer, every other impact landing the ground layer.",
           "type": "boolean",
           "default": true
         },
         "bouncing_anim_deep_landing": {
-          "description": "A move that ends 100 leptons or more below the ground height is not put back on the ground, so the landing point and what is made there lie below it; off: every ground landing is put at the ground height and claim 7 counts a height of 0. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A move that ends 100 leptons or more below the ground height is not put back on the ground, so the landing point and what is made there lie below it; off: every ground landing is put at the ground height and claim 7 counts a height of 0.",
           "type": "boolean",
           "default": true
         },
         "bouncing_anim_expiry_needs_animation": {
-          "description": "A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0.",
           "type": "boolean",
           "default": true
         },
         "bouncing_anim_water_impact_hits": {
-          "description": "An impact landing on water makes its bounce animation and hits before the splash; off: one on water and not at deck height makes no bounce animation and no hits. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "An impact landing on water makes its bounce animation and hits before the splash; off: one on water and not at deck height makes no bounce animation and no hits.",
           "type": "boolean",
           "default": true
         },

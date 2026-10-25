@@ -594,6 +594,8 @@ pub struct AnimRules {
     pub next_index: Option<u32>,
     /// A new-theater type (S-0109 Terms).
     pub new_theater: bool,
+    /// The bouncing-animation and trailer fields (S-0319 Import mapping).
+    pub bounce: crate::bounce::BounceType,
 }
 
 impl Default for AnimRules {
@@ -628,6 +630,7 @@ impl Default for AnimRules {
             next: None,
             next_index: None,
             new_theater: false,
+            bounce: crate::bounce::BounceType::default(),
         }
     }
 }
@@ -1446,7 +1449,8 @@ impl SimRules {
         };
         let particle_names = registry("particles");
         let anim_names = registry("animations");
-        let animations: Vec<AnimRules> = anim_names
+        let overlay_names: Vec<String> = overlays.iter().map(|o| o.name.clone()).collect();
+        let mut animations: Vec<AnimRules> = anim_names
             .iter()
             .map(|n| {
                 let a = s.animations.get(n).cloned().unwrap_or_default();
@@ -1509,6 +1513,7 @@ impl SimRules {
                             .and_then(|i| u32::try_from(i).ok())
                     }),
                     new_theater: a.new_theater.unwrap_or(false),
+                    bounce: crate::bounce::BounceType::new(&a, &overlay_names, &quirks, mode),
                 }
             })
             .collect();
@@ -1527,6 +1532,9 @@ impl SimRules {
         missiles.warnings = crate::objects::creation_cycles(&missiles, &econ.harvest);
         let superweapons = crate::superweapons::SwRules::new(r, &names, &combat, &animations, mode);
         let warhead_names: Vec<String> = combat.warheads.iter().map(|h| h.name.clone()).collect();
+        for a in &mut animations {
+            a.bounce.resolve(&warhead_names);
+        }
         let gas = crate::gas::GasRules::new(r, &warhead_names, &quirks);
         let pieces = crate::pieces::PieceRules::new(r, &warhead_names, &gas, mode);
         Self {

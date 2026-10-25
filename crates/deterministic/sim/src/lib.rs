@@ -20,6 +20,7 @@ pub mod approach;
 pub mod base;
 pub mod behaviour;
 pub mod bomb;
+pub mod bounce;
 pub mod bridges;
 pub mod cells;
 pub mod cloak;

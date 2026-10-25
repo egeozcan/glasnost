@@ -171,8 +171,14 @@ fn tile_anim_due(
     Some(anim.clone())
 }
 
-/// The creation draws of S-0202 claim 10 before the start event.
-pub(crate) fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Option<i32> {
+/// The creation draws of S-0202 claim 10 before the start event: the stage
+/// delay the ranged draw gave, when one was taken, and a bouncing type's
+/// three raw values in the order taken (S-0319 claims 2 and 3 form its
+/// first velocity from them).
+pub(crate) fn creation_draws(
+    w: &mut World,
+    a: &crate::rules::AnimRules,
+) -> (Option<i32>, Option<crate::bounce::Raws>) {
     let q = w.rules().quirks;
     let (d1, d2) = a.random_delay;
     let mut delay = None;
@@ -182,15 +188,15 @@ pub(crate) fn creation_draws(w: &mut World, a: &crate::rules::AnimRules) -> Opti
     }
     if a.bouncing {
         // spec: S-0202 claim 10 (a bouncing type of a sprite animation of S-0109: three raw values, then three ranged draws R(−65535, 65535); revision 36: not a voxel-model debris piece, whose draws are S-0317's)
-        for _ in 0..3 {
-            let _ = w.rng.raw(); // spec: S-0202 Constants (animation bounce draws: 3 raw values)
-        }
-        // spec: S-0202 Constants (then 3 ranged draws over −65535 … 65535)
+        // spec: S-0202 Constants (animation bounce draws: 3 raw values) and S-0319 claims 2 and 3 (r₁, r₂, r₃, or q₁, q₂, q₃, in the order taken)
+        let raws = [w.rng.raw(), w.rng.raw(), w.rng.raw()];
+        // spec: S-0202 Constants (then 3 ranged draws over −65535 … 65535) and S-0319 claims 2 and 3 (their values have no effect)
         for _ in 0..3 {
             let _ = w.rng.ranged(-65535, 65535, q.ranged_draw_half_span);
         }
+        return (delay, Some(raws));
     }
-    delay
+    (delay, None)
 }
 
 /// The creation draws of an animation created with no loop delay at the
@@ -235,7 +241,8 @@ pub(crate) fn anim_created(
     }
     let rules = w.rules_arc();
     let a = rules.animation(name)?;
-    let delay = creation_draws(w, a);
+    // A caller that models the playback itself (a storm cloud, a virus death) does not move the animation: S-0319 moves the ordinary animations in play.
+    let (delay, _) = creation_draws(w, a);
     start_event(w, a, at, played);
     delay
 }

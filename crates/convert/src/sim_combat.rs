@@ -2124,7 +2124,30 @@ pub fn converted_keys() -> Vec<(&'static str, String, &'static str)> {
     keyed(&["weapons"], &s(&LASER_COLOURS.map(|(_, k)| k)), "S-0615");
     // spec: S-0615 Import mapping (IsFlamingGuy and RunningFrames: animation type keys of the art data); S-0109 Import mapping (Damage, δ)
     keyed(&["art"], &s(&["IsFlamingGuy", "RunningFrames"]), "S-0615");
-    keyed(&["art"], &s(&["Damage"]), "S-0109, S-0615");
+    keyed(&["art"], &s(&["Damage"]), "S-0109, S-0615, S-0319");
+    // spec: S-0319 Import mapping (the bouncing-animation and trailer keys of an animation type's own art section)
+    keyed(&["art"], &s(&["Bouncer", "IsMeteor"]), "S-0109, S-0319");
+    keyed(
+        &["art"],
+        &s(&[
+            "MaxXYVel",
+            "MinZVel",
+            "MaxZVel",
+            "Elasticity",
+            "DamageRadius",
+            "Warhead",
+            "BounceAnim",
+            "ExpireAnim",
+            "TrailerAnim",
+            "TrailerSeperation",
+            "Spawns",
+            "SpawnCount",
+            "IsTiberium",
+            "TiberiumSpawnType",
+            "TiberiumSpreadRadius",
+        ]),
+        "S-0319",
+    );
     keyed(&["art"], &s(&["TargetCoordOffset", "Height"]), "S-0306");
     keyed(&["art"], &s(&["Trailer", "SpawnDelay"]), "S-0306, S-0007");
     // spec: S-0313 claim 10 (the turret anchor pair: rules keys of the building type)
@@ -3712,8 +3735,8 @@ impl Builder<'_> {
             .unwrap_or_default()
             .is_empty()
         {
-            // spec: S-0312 Edge cases and S-0317 claim 11 (an empty splash list: no splash, a departure; the importer warns)
-            self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure), and neither does a debris piece that ends in water (S-0317 claim 11, a departure)".to_owned());
+            // spec: S-0312 Edge cases, S-0317 claim 11 and S-0319 claim 8 (an empty splash list: no splash, a departure; the importer warns)
+            self.warn_at(splash.as_ref(), "[CombatDamage] SplashList is empty: a vehicle dropped into water shows no splash (S-0312 claim 11, a departure), and neither does a debris piece or a bouncing animation that ends in water (S-0317 claim 11, S-0319 claim 8, departures)".to_owned());
         }
         let gravity = self.global(AUDIO_VISUAL, "Gravity");
         // spec: S-0306 Edge cases (the importer warns about a gravity of 0)

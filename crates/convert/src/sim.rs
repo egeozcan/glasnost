@@ -2277,6 +2277,124 @@ impl Builder<'_> {
             // spec: S-0202 Import mapping (NumParticles: an integer count; absent 0)
             rec.put("num_particles", int_node(n));
         }
+        self.bouncing_fields(rec, t, &sec);
+    }
+
+    /// An animation type's bouncing-animation and trailer keys (S-0319
+    /// Import mapping), from its own art section, and the importer warnings
+    /// of claims 9, 12 and 14.
+    fn bouncing_fields(&mut self, rec: &mut Rec, t: &TypeRec, sec: &Section) {
+        // spec: S-0319 Import mapping (MaxXYVel, MinZVel, MaxZVel, Elasticity: floating point; absent 15.0, 3.5, 3.5, 0.8, applied in the simulation)
+        for (field, key) in [
+            ("max_xy_vel", "MaxXYVel"),
+            ("min_z_vel", "MinZVel"),
+            ("max_z_vel", "MaxZVel"),
+            ("elasticity", "Elasticity"),
+        ] {
+            if let Some(d) = sec.value(key.as_bytes()).and_then(decimal_text) {
+                rec.put(field, jsonc::string(d));
+            }
+        }
+        // spec: S-0319 Import mapping (DamageRadius: integer leptons; TrailerSeperation: integer ticks; SpawnCount: integer; TiberiumSpreadRadius: integer cells; absent 0)
+        for (field, key) in [
+            ("damage_radius", "DamageRadius"),
+            ("trailer_separation", "TrailerSeperation"),
+            ("spawn_count", "SpawnCount"),
+            ("tiberium_spread_radius", "TiberiumSpreadRadius"),
+        ] {
+            if let Some(v) = sec.value(key.as_bytes()).and_then(value::integer) {
+                rec.put(field, int_node(v));
+            }
+        }
+        // spec: S-0319 Import mapping (IsTiberium: a boolean; absent no)
+        if let Some(b) = sec.value(b"IsTiberium").and_then(value::boolean) {
+            rec.put("is_tiberium", jsonc::boolean(b));
+        }
+        // spec: S-0319 Import mapping (Warhead a warhead name; BounceAnim, ExpireAnim, TrailerAnim, Spawns animation names; TiberiumSpawnType an overlay name; absent none) and S-0004 claim 2 (none and <none> name no type)
+        for (field, key, kind) in [
+            ("warhead", "Warhead", Kind::Warheads),
+            ("bounce_anim", "BounceAnim", Kind::Animations),
+            ("expire_anim", "ExpireAnim", Kind::Animations),
+            ("trailer_anim", "TrailerAnim", Kind::Animations),
+            ("spawns", "Spawns", Kind::Animations),
+            ("tiberium_spawn_type", "TiberiumSpawnType", Kind::Overlays),
+        ] {
+            if let Some(v) = sec.value(key.as_bytes()) {
+                let name = value::text(v, usize::MAX);
+                if !name.is_empty() && !value::is_no_type(name) {
+                    let k = self.type_key(kind, name).unwrap_or_else(|| show(name));
+                    rec.put(field, jsonc::string(k));
+                }
+            }
+        }
+        let line = t.reads.last().copied().unwrap_or(t.created_in);
+        let who = show(&t.name);
+        let flag = |k: &[u8]| sec.value(k).and_then(value::boolean).unwrap_or(false);
+        let meteor = flag(b"IsMeteor");
+        if meteor || flag(b"Bouncer") {
+            // The spans as F1 and F2 form them, under the default rounding (claim 14: the intervals hold up to that rounding).
+            let m = glasnost_num::Rounding::TowardZero;
+            let num = |s: &str| glasnost_num::decimal::nearest_double(s);
+            let dec = |k: &[u8], default: &str| {
+                sec.value(k)
+                    .and_then(decimal_text)
+                    .and_then(|d| {
+                        glasnost_num::decimal::parse(&d, glasnost_num::decimal::Field::Decimal, m)
+                            .ok()
+                    })
+                    .unwrap_or_else(|| num(default))
+            };
+            // spec: S-0319 Import mapping (MaxXYVel 15.0, MinZVel 3.5, MaxZVel 3.5 when absent)
+            let big_m = dec(b"MaxXYVel", "15.0");
+            let zmin = dec(b"MinZVel", "3.5");
+            // The switch is a simulation switch the importer does not see, so
+            // the vertical span is checked under both settings.
+            // spec: S-0319 claim 2 and Edge cases (the fixed upper vertical limit 3.5 under quirks.anim_fixed_upper_vertical_speed on; the type's MaxZVel, absent 3.5, off)
+            let fixed = num("3.5");
+            let given = dec(b"MaxZVel", "3.5");
+            let one = glasnost_num::F64::from_i64(1, m);
+            // spec: S-0319 F1 (W_xy = trunc(2M), W_z = trunc(Z_max − Z_min + 1))
+            let wxy = big_m
+                .mul(glasnost_num::F64::from_i64(2, m), m)
+                .to_i32_common();
+            let wz = |zmax: glasnost_num::F64| zmax.sub(zmin, m).add(one, m).to_i32_common();
+            let mut zero = vec![];
+            if wxy == 0 {
+                zero.push("horizontal speed span is 0".to_owned());
+            }
+            if !meteor {
+                // spec: S-0319 claim 14 (the vertical span is a falling animation's only)
+                match (wz(fixed) == 0, wz(given) == 0) {
+                    (true, true) => zero.push("vertical speed span is 0".to_owned()),
+                    (true, false) => zero.push("vertical speed span is 0 under quirks.anim_fixed_upper_vertical_speed (the default)".to_owned()),
+                    (false, true) => zero.push("vertical speed span is 0 with quirks.anim_fixed_upper_vertical_speed off".to_owned()),
+                    (false, false) => {}
+                }
+            }
+            for what in zero {
+                // spec: S-0319 claim 14 (a span of 0 is a departure: our engine takes the remainder as 0 and the importer warns)
+                self.warn(line, 0, format!(
+                    "animations {who}: its {what}, which stops the original with a division by zero; our engine takes the remainder as 0, so every animation of the type has the same speed on that axis (S-0319 claim 14, a departure)"
+                ));
+            }
+        }
+        let names_trailer = sec
+            .value(b"TrailerAnim")
+            .map(|v| value::text(v, usize::MAX))
+            .is_some_and(|n| !n.is_empty() && !value::is_no_type(n));
+        let separation = sec.value(b"TrailerSeperation").and_then(value::integer);
+        if names_trailer && separation.unwrap_or(0) == 0 {
+            // spec: S-0319 claim 12 (a type that names a trailer and no separation or a separation of 0: a departure, treated as 1, and the importer warns)
+            self.warn(line, 0, format!(
+                "animations {who}: a trailer animation with no TrailerSeperation or a separation of 0 stops the original with a division by zero; our engine treats it as 1 (S-0319 claim 12, a departure)"
+            ));
+        }
+        if sec.value(b"SpawnCount").and_then(value::integer) == Some(i32::MAX) {
+            // spec: S-0319 claim 9 and S-0202 claim 5 (a spawn count of 2147483647: each draw has the span of S-0202 claim 5, and the importer warns)
+            self.warn(line, 0, format!(
+                "animations {who}: SpawnCount 2147483647 gives each spawn draw the span of S-0202 claim 5 (S-0319 claim 9)"
+            ));
+        }
     }
 
     /// A particle type's fields that its creation draws read (S-0202 claim
