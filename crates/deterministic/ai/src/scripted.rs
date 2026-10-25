@@ -452,6 +452,31 @@ pub(crate) fn dist2(a: CellXY, b: CellXY) -> i64 {
     dx * dx + dy * dy
 }
 
+/// An object the free-gap test looks at ([`Script::known_objects`]).
+struct Known {
+    /// Its position's cell (a building's top-left cell).
+    top_left: CellXY,
+    /// A building's foundation; none for another object.
+    foundation: Option<(i32, i32)>,
+}
+
+/// Whether foundation cells `cells` hold none of `known` and keep a gap of
+/// `gap` cells to each of its buildings ([`Script::free_gap`]).
+fn free_among(known: &[Known], cells: &[CellXY], gap: i32) -> bool {
+    known.iter().all(|o| {
+        let tl = o.top_left;
+        match o.foundation {
+            Some((fw, fh)) => cells.iter().all(|k| {
+                k.x < tl.x - gap
+                    || k.x > tl.x + fw - 1 + gap
+                    || k.y < tl.y - gap
+                    || k.y > tl.y + fh - 1 + gap
+            }),
+            None => !cells.contains(&tl),
+        }
+    })
+}
+
 /// A scripted house.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Script {
@@ -1799,7 +1824,13 @@ impl Script {
     /// only the free-gap test depends on the gap: the order's legality and
     /// the cell test of each spiral cell are asked once, on its first pass,
     /// and remembered for the later ones (the same answer as asking every
-    /// pass, in the same order, with less work).
+    /// pass, in the same order, with less work). The legality and the cell
+    /// test are asked through one `placement::PlaceSearch` for the type,
+    /// the cell test first (both only read the world, so either order gives
+    /// the same answer, and a naval yard's wide spiral is mostly land,
+    /// where the cell test fails at once), and the free-gap test reads the
+    /// objects the house knows of, listed once for the search
+    /// ([`Script::known_objects`]).
     fn search_place_cell(&self, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
@@ -1808,14 +1839,19 @@ impl Script {
         };
         let cells: Vec<CellXY> = self.spiral(w, rings).collect();
         let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
-        let mut supports = placement::SupportMemo::new(w, self.house);
+        let search = placement::PlaceSearch::new(w, self.house, t, &cells);
+        let p = search.place_type();
+        let known = self.known_objects(w, None);
         // A cramped base (a start in a small clearing) has no cell with the
         // usual gap: the gap narrows, as a person squeezes a building in
         // when the room is short, down to none.
         (0..=GAP).rev().find_map(|gap| {
             cells.iter().zip(legal.iter_mut()).find_map(|(&c, l)| {
-                let ok = *l.get_or_insert_with(|| self.order_fits_kept(w, &mut supports, t, c));
-                (ok && self.free_gap(w, t, c, None, gap)).then_some(c)
+                let ok = *l.get_or_insert_with(|| {
+                    // The cell test of `cell_fits` (an upgrade needs only the place order's conditions).
+                    (p.upgrade_of.is_some() || search.cell_test(w, c)) && search.place_legal(w, c)
+                });
+                (ok && free_among(&known, &placement::foundation_cells_of(p, c), gap)).then_some(c)
             })
         })
     }
@@ -1869,18 +1905,6 @@ impl Script {
     fn order_fits(&self, w: &World, t: TypeRef, c: CellXY) -> bool {
         // The place order's conditions and the cell test (S-0406 claims 3 to 6, 8 and 12).
         placement::place_legal(w, self.house, t, c) && self.cell_fits(w, t, c)
-    }
-
-    /// [`Script::order_fits`], the adjacency answers kept in `supports`
-    /// (made for this house).
-    fn order_fits_kept(
-        &self,
-        w: &World,
-        supports: &mut placement::SupportMemo,
-        t: TypeRef,
-        c: CellXY,
-    ) -> bool {
-        placement::place_legal_kept(w, supports, t, c) && self.cell_fits(w, t, c)
     }
 
     /// The cell test of [`Script::order_fits`] (S-0406 claims 3 and 8); an
@@ -1972,9 +1996,14 @@ impl Script {
     /// [`Script::free_but`] with a gap of `gap` cells.
     fn free_gap(&self, w: &World, t: TypeRef, c: CellXY, but: Option<ObjectId>, gap: i32) -> bool {
         let cells = placement::foundation_cells(w, t.index, c);
-        // Only what the house knows: its own objects and those on cells it
-        // has explored (the AI sees only its own house's shroud; fog is off
-        // in a skirmish, S-0409 claim 19).
+        free_among(&self.known_objects(w, but), &cells, gap)
+    }
+
+    /// The objects the free-gap test looks at, in object order: only what
+    /// the house knows, its own objects and those on cells it has explored
+    /// (the AI sees only its own house's shroud; fog is off in a skirmish,
+    /// S-0409 claim 19), on the map, but `but`.
+    fn known_objects(&self, w: &World, but: Option<ObjectId>) -> Vec<Known> {
         w.objects
             .values()
             .filter(|o| {
@@ -1983,21 +2012,12 @@ impl Script {
                     && (o.owner == Some(self.house)
                         || shroud::explored(w, self.house, o.pos.cell()))
             })
-            .all(|o| {
+            .map(|o| Known {
                 // A building's position is its top-left cell's centre.
-                let tl = o.pos.cell();
-                if o.kind == Kind::Building {
-                    let (fw, fh) = o.foundation;
-                    cells.iter().all(|k| {
-                        k.x < tl.x - gap
-                            || k.x > tl.x + fw - 1 + gap
-                            || k.y < tl.y - gap
-                            || k.y > tl.y + fh - 1 + gap
-                    })
-                } else {
-                    !cells.contains(&tl)
-                }
+                top_left: o.pos.cell(),
+                foundation: (o.kind == Kind::Building).then_some(o.foundation),
             })
+            .collect()
     }
 
     /// A diagnostic of the house's plan, counts only (local-lane reports):
@@ -2092,29 +2112,131 @@ mod place_cell_tests {
     use crate::{fixture, game::Game};
 
     /// The placement search as it was before M8 C4 part 2: every pass asks
-    /// every spiral cell the whole test.
+    /// every spiral cell the whole test, the place order's conditions first
+    /// and the free gap as it was before M8 C4 part 6.
     fn three_passes(s: &Script, w: &World, t: TypeRef) -> Option<CellXY> {
         let rings = if naval_building(w, t) {
             WIDE_RINGS
         } else {
             SPIRAL_RINGS
         };
-        (0..=GAP)
-            .rev()
-            .find_map(|gap| s.spiral(w, rings).find(|&c| s.fits_gap(w, t, c, gap)))
+        (0..=GAP).rev().find_map(|gap| {
+            s.spiral(w, rings)
+                .find(|&c| s.order_fits(w, t, c) && free_gap_as_before(s, w, t, c, gap))
+        })
     }
 
-    /// Our tooling for speed (M8 C4 part 2): the search that asks each
-    /// cell's legality once, and the answers kept for a think, give every
-    /// house the cell the three passes give, for every building type, at
-    /// several points of a game, in a roomy base and in a cramped one (where
-    /// the gap narrows).
-    #[test]
-    fn the_kept_and_once_asked_placement_answers_match_the_three_passes() {
-        let maps = [
+    /// The free-gap test as it was before M8 C4 part 6: each object the
+    /// house knows asked in turn.
+    fn free_gap_as_before(s: &Script, w: &World, t: TypeRef, c: CellXY, gap: i32) -> bool {
+        let cells = placement::foundation_cells(w, t.index, c);
+        w.objects
+            .values()
+            .filter(|o| {
+                o.on_map && (o.owner == Some(s.house) || shroud::explored(w, s.house, o.pos.cell()))
+            })
+            .all(|o| {
+                let tl = o.pos.cell();
+                if o.kind == Kind::Building {
+                    let (fw, fh) = o.foundation;
+                    cells.iter().all(|k| {
+                        k.x < tl.x - gap
+                            || k.x > tl.x + fw - 1 + gap
+                            || k.y < tl.y - gap
+                            || k.y > tl.y + fh - 1 + gap
+                    })
+                } else {
+                    !cells.contains(&tl)
+                }
+            })
+    }
+
+    /// The skirmishes the placement tests play: a roomy base, a cramped one
+    /// (where the gap narrows), a sea along one side and a strait (where a
+    /// naval yard's wide spiral is mostly land and the cell test and the
+    /// adjacency disagree).
+    fn placement_maps() -> Vec<(&'static str, glasnost_map::Map)> {
+        vec![
             ("synthetic", fixture::map()),
             ("synthetic-cramped", fixture::map_cramped(5)),
-        ];
+            ("synthetic-naval", fixture::map_naval()),
+            ("synthetic-strait", fixture::map_strait()),
+        ]
+    }
+
+    /// Our tooling for speed (M8 C4 part 6): a placement search for a house
+    /// and a building type answers every cell of the map, inside its window
+    /// and outside it, as the place order's conditions (S-0406 claims 3 to
+    /// 6 and 12) and the cell test (claims 3 and 8) answer it asked afresh,
+    /// at several points of a game, for every house.
+    #[test]
+    fn the_placement_search_answers_every_cell_as_the_place_order_and_the_cell_test() {
+        let mut compared = 0;
+        let mut legal = 0;
+        let mut tested = 0;
+        for (name, map) in placement_maps() {
+            let mut g = Game::new(
+                fixture::rules(),
+                &map,
+                name,
+                fixture::catalogue(),
+                fixture::setup(3),
+            )
+            .expect("the skirmish loads");
+            for _ in 0..3 {
+                for _ in 0..800 {
+                    g.step();
+                }
+                let w = &g.world;
+                let all: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+                for h in 0..w.houses.len() {
+                    let house = HouseId(h as u8);
+                    let s = Script::new(house, Plan::default());
+                    for t in all_types(w)
+                        .into_iter()
+                        .filter(|t| t.kind == Kind::Building)
+                    {
+                        let rings = if naval_building(w, t) {
+                            WIDE_RINGS
+                        } else {
+                            SPIRAL_RINGS
+                        };
+                        let window: Vec<CellXY> = s.spiral(w, rings).collect();
+                        let search = placement::PlaceSearch::new(w, house, t, &window);
+                        let test = placement::Test::order(house);
+                        for &c in &all {
+                            let want = placement::place_legal(w, house, t, c);
+                            assert_eq!(
+                                search.place_legal(w, c),
+                                want,
+                                "{name}, house {h}, {t:?}, {c:?}"
+                            );
+                            let want_cell = placement::cell_test(w, t.index, c, &test);
+                            assert_eq!(
+                                search.cell_test(w, c),
+                                want_cell,
+                                "{name}, house {h}, {t:?}, {c:?}"
+                            );
+                            compared += 1;
+                            legal += usize::from(want);
+                            tested += usize::from(want_cell);
+                        }
+                    }
+                }
+            }
+        }
+        assert!(legal > 0 && legal < compared, "{legal} of {compared}");
+        assert!(tested > 0 && tested < compared, "{tested} of {compared}");
+    }
+
+    /// Our tooling for speed (M8 C4 parts 2 and 6): the search that asks
+    /// each cell's legality once, through one placement search and the
+    /// objects listed once, and the answers kept for a think, give every
+    /// house the cell the three passes give, for every building type, at
+    /// several points of a game, on each of the placement maps.
+    #[test]
+    fn the_kept_and_once_asked_placement_answers_match_the_three_passes() {
+        let maps = placement_maps();
         let mut compared = 0;
         let mut found = 0;
         let mut unblocked = 0;
