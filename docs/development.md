@@ -2100,7 +2100,7 @@ M6c's flipped zero games went from 10 (before the prism and charger reaches) to 
 
 ## Own AI (M8 step B6: the anti-air count and the tempo misses)
 
-Follow-up of B5 (above) and of B5's open finding, in `glasnost_ai::antiair`, the placement of a finished building (`Script::think`, `Brain::place_done`, `Script::place_near`) and the lane (`crates/tools/src/skirmish_lane.rs`). Lane outputs are git-ignored under `local-lane/m8/b6/` (counts and ticks only). The lanes are B5's: the quick lane is seeds 7 to 14, maps 8, 2 and 0, Yuri (house 1) against Allied and against Soviet (48 games); the six full games are seed 7 (quick unset: a full game plays the same game as the quick game of its seed and adds the replay and save checks). Binaries, each rebuilt on the tree it is compared with: *final* is the tree as it stands; *round 3* is the same tree with B1's, B2's and B5's brain changes reversed (B5's patch, rebased); *nosave* is the same tree with both hold branches of `Brain::economy_first` forced off (scratch only). The findings were made on main 8dcc429 (*main*); the branch was rebased onto 7118390, which changes tests only.
+Follow-up of B5 (above) and of B5's open finding, in `glasnost_ai::antiair`, the placement of a finished building (`Script::think`, `Brain::place_done`, `Script::place_near`) and the lane (`crates/tools/src/skirmish_lane.rs`). Lane outputs are git-ignored under `local-lane/m8/b6/` (counts and ticks only). The lanes are B5's: the quick lane is seeds 7 to 14, maps 8, 2 and 0, Yuri (house 1) against Allied and against Soviet (48 games); the six full games are seed 7 (quick unset: a full game plays the same game as the quick game of its seed and adds the replay and save checks). Binaries, each rebuilt on the tree it is compared with: *final* is the tree as it stands; *round 3* is the same tree with B1's, B2's and B5's brain changes reversed (B5's patch, rebased); *nosave* is the same tree with both hold branches of `Brain::economy_first` forced off (scratch only). The findings were made on main 8dcc429 (*main*); the branch was then rebased onto 7118390 (tests only changed) and measured there, and rebased again onto main 2dc52af (the map flags, the tick speed-ups, aircraft tracking) and measured again.
 
 **The anti-air probe** (`GLASNOST_AI_AAPROBE=<ticks>`, `antiair::probe`, `Brain::antiair_probe`, `Game::antiair_probes`): every so many ticks the lane prints, per house that sees an enemy drainer, the drainers in the air and what answers each (kind, type index, cell, distance, behaviour, destination, the firing check's answer with range, the weapon's range, both heights, whether it targets the drainer), the drainers linked to the house's buildings that are not in the air, the answers on its lines, the type `build_type` would order, the candidate types by test passed (hits, lit when placed, startable, line free), the army units and defences of a hitting type by test passed, and the first unit the firing check refuses (type, slot, answer).
 
@@ -2126,13 +2126,51 @@ Follow-up of B5 (above) and of B5's open finding, in `glasnost_ai::antiair`, the
 - **A type counts by the weapon a new object would choose** (`antiair::hits_air`, `antiair::air_slots`): its ordinary slots only (S-0311 claims 6 and 11, S-0308 claim 2); slot 0 for a deploy-fire infantry type (S-0308 claim 8) and for an empty or never-use secondary (claim 4, row 3); otherwise table P rows 6, 15, 16, 19 and 20 against an object in the air (`quirks.secondary_wins_against_air` read). A switching or gattling type (rows 1 and 5) and a draining secondary (row 8) choose by the object's own state, so every ordinary slot counts and the firing check decides once the object is on the map. The same test chooses the type to build and counts the answers on the lines.
 - **A defence type the blackout would keep dark** is neither counted on a line nor chosen (`antiair::lit_when_placed`: S-0405 claim 8's powered and no-blackout rows, claim 5's blackout; table T1's pulse cannon, occupiable and needs-engineer types).
 - **A finished anti-air defence goes beside the drainer it answers** (`antiair::place_goal`, `Script::place_near`, in both placement paths): the first legal cell of a square spiral around the drained building or the drainer, as a person drops a defence beside the building under attack.
-- No new brain state: the AI game format stays 36.
+- No new brain state: the AI game format stays at main's 37.
 
 **Left open.** A house too broke to finish its anti-air items keeps counting them on its lines (02-0-10: two or three items for thousands of ticks at credits under 20); a person could do no more. A type whose anti-air primary the firing check refuses for its warhead against the drainer (the 3 samples above) still counts when not on the map. The base defence (`Brain::defend`) still leaves a standing-off unit alone; only the anti-air count no longer takes it for an answer.
 
-### Results
+### Results on main 2dc52af
 
-RESULTS
+Yuri's superweapons, first tick ready, against round 3 on the same tree: the median difference, with games later / games compared. *Main* is main 2dc52af as it stands, compared with the same round 3.
+
+| Binary | Force shield | Mutator | Dominator | Psychic reveal | Yuri wins vs Allied / Soviet | No winner |
+| --- | --- | --- | --- | --- | --- | --- |
+| round 3 | – | – | – | – | 7 / 19 (26) | 0 |
+| main | 0 (15 / 43) | 0 (14 / 30) | +1 296 (16 / 23) | 0 (0 / 48) | 9 / 19 (28) | 1 |
+| **final** | 0 (15 / 43) | 0 (14 / 30) | +1 202 (14 / 21) | 0 (0 / 48) | 7 / 20 (27) | 1 |
+| final, nosave | +3 677 (37 / 37) | +7 642 (20 / 22) | +7 646 (3 / 3) | +22 (27 / 48) | 8 / 19 (27) | 1 |
+
+- **Dominator against round 3:** only round 3 readies it in 5 games, only final in 3 (main: 3 and 2). On main 8dcc429, against its own round 3, main was +1 827 (15 later of 21; only round 3 4 games, only main 4).
+- **Final against main:** force shield, mutator and reveal ready at the same tick in every game; dominator 0 (1 later of 23; only main readies it in 2 games, only final in 1). The anti-air fixes change the end tick or the winner of 29 of the 48 games and the superweapon ticks almost nowhere.
+- **Winners changed against main:** Allied now wins 02-2-12 and 02-8-9, Yuri now wins 12-2-9. The game without a winner is still 02-0-10, main's stall (both houses broke; see *Left open*). The nosave game without a winner is 02-2-10.
+- **Final against final, nosave:** every superweapon is earlier with saving: force shield −3 357.5 (0 later of 36), mutator −7 584 (0 of 22), dominator −2 481 (0 of 3), reveal −22. The dominator is ready in 24 games with saving and in 5 without.
+- **Dominator launches / sweeps that changed an owner / objects taken**, quick lane: round 3 43 / 28 / 32, main 39 / 26 / 29, final 44 / 25 / 32, nosave 8 / 7 / 8.
+- **On 7118390** (before main's map flags, tick speed-ups and aircraft tracking) every lane played the same games but one: 12-0-7 ended at 81 370 there and at 41 773 here (main likewise, 81 370 and 41 764), and in nosave 12-0-11 at 62 237 and 60 138. Every median and win count above is the same on both bases; the launch counts there were final 46 / 26 / 34 and main (8dcc429) 41 / 27 / 31.
+
+**Full games, seed 7, main 8dcc429 → final on 2dc52af.** Every game has a winner. All replay to the same state and survive save and load. Yuri wins 4 of 6 in both, the same games. Every superweapon is ready at the same tick as on main but the dominator of Soviet, map 0 (58 ticks sooner); three games end later, one sooner.
+
+| Opponent, map | Winner, tick | Force shield | Mutator | Dominator |
+| --- | --- | --- | --- | --- |
+| Allied, 0 | Allied 24 139 → Allied 24 139 | 13 485 | – | – |
+| Allied, 2 | Yuri 51 495 → Yuri 52 637 | 10 710 | 14 089 | 27 656 |
+| Allied, 8 | Allied 32 594 → Allied 32 594 | 14 211 | – | – |
+| Soviet, 0 | Yuri 81 370 → Yuri 41 773 | 15 163 | 18 631 | 31 911 → 31 853 |
+| Soviet, 2 | Yuri 66 572 → Yuri 119 145 | 10 710 | 13 828 | 24 257 |
+| Soviet, 8 | Yuri 50 054 → Yuri 59 697 | 13 896 | 17 910 | 28 504 |
+
+Soviet, map 0 is the one game aircraft tracking changed (main 2dc52af ends it at 41 764 too). Soviet, map 2 ends 855 ticks before the 120 000-tick cap (on 7118390 likewise; the quick game of seed 7 is the same game). The dominator launched 13 times in the six games, 11 sweeps changed an owner and 12 objects were taken (on 7118390 15 / 12 / 14; main 8dcc429 11 / 7 / 9; B5's final on d38748f 1 launch, 1 taken).
+
+**Exit B6: missed on the dominator's tempo.**
+- Met: wins with saving 27, with saving off 27. Force shield, mutator and psychic reveal ready no later than round 3 (median 0). All six full games have a winner (one by 855 ticks before the cap). B3's dominator numbers do not fall below B5's: 13 launches and 12 objects taken in the full games against B5's 1 and 1.
+- Missed: the dominator is ready +1 202 ticks behind round 3 (14 later of 21). The mechanisms are above (the held engineer, the item lost with its prerequisite, saving that stops while the house is not safe); B6 changes none of them, and B5's first revert was tried and dropped (above).
+- 02-0-10 still has no winner: the anti-air count there is now true (the drainer is unanswered), but neither house can pay for an answer.
+
+**Tests** (synthetic data, through the real tick), `crates/deterministic/ai/tests/antiair.rs`, 12 in all. New: `a_type_that_hits_the_air_only_when_elite_is_not_built`, `a_never_use_anti_air_secondary_is_not_built`, `a_deploy_fire_infantry_type_does_not_hit_the_air_with_its_secondary`, `a_dark_defence_does_not_answer_and_no_dark_defence_is_chosen`, `a_lit_defence_in_reach_answers_and_nothing_more_is_built`, `a_defence_out_of_reach_does_not_answer_and_the_new_one_goes_beside_the_drainer`, `an_anti_air_unit_near_home_answers`, `an_anti_air_unit_standing_off_the_drainer_does_not_answer`. Kept: `builds_an_anti_air_unit_against_a_drainer_in_the_air`, `builds_none_with_one_able_unit_per_drainer`, `builds_nothing_without_an_anti_air_type`, `only_the_anti_air_type_hits_the_disc`. Goldens unchanged.
+
+**Arena and duel sweeps.** The oracle arena attaches no brain; on 7118390 its CSVs are byte-identical to main 8dcc429's: M-0001 31 of 96 pairings failing, 152 of 172 reproduced; M-0002 13 of 24, 43 of 47; M-0003 2 of 35, 61 of 64. The M6c, M7a and M7b seed sweeps 1 to 16 print the same min and median before and after for every counter, on 7118390 against 8dcc429 and on 2dc52af against main 2dc52af, with the same values on both bases: smallest minimum M6c 4, M7a 1 (takeover orders), M7b drain 3; for M7b, dominator launches 7/7, objects taken 14/18, mutator 5/7, infantry mutated 15/23, berserk orders 9/29, drain orders 4/6, drain links 3/3. B4's 32-seed default margins sweep writes a byte-identical CSV before and after on both bases, with no asserted counter at zero.
+
+**Load-sensitive tests.** On 2dc52af the whole `cargo test --workspace` passed, `two_clients_meet_chat_and_play_in_lockstep` (glasnost-app) and `three_persons_and_a_computer_play_over_the_relay_and_survive_a_drop` (glasnost-relay) among them. On 7118390 the first failed under load and passed alone.
 
 ## Map triggers (M5b)
 
