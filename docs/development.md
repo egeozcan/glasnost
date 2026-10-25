@@ -2439,6 +2439,40 @@ The frame benchmark (native offscreen, default spec, one run each, before on mai
 
 Seams: the HUD draw list's cost since C4 part 1 (client); the think tick (eight brains in one tick); the repeated late-game Movement cost; the path search's per-step cost (the entry outcome is still most of a search).
 
+#### The HUD draw list (M8 C4 part 3)
+
+**The cause.** The frame benchmark's "draw list (hud)" lap times `Client::frame()`, and that includes the live radar's picture (`mapview::radar::Radar::rgba`, S-0410), which the session composes again on every frame whose tick changed: every benchmark frame ticks. The drawing of the interface itself takes 0.6 to 0.9 ms of it (most of that the psychic intent lines); the rest was the radar's composition, about 5 to 9 ms a frame. Its largest part was finding each pixel's cell (`minimap::cell_at_pixel`, S-0410 F3, whose divisions run in soft float): about 4.5 ms for the whole picture, against about 0.3 ms for the shroud test. Bisecting with the benchmark (`git bisect --first-parent` from C4 part 1's merge ebbd866 to 8dcc429, bad when the draw list is over 2 ms at tick 9000) gives merge d250715 (the M9 rehearsal's lost starts: a deploy order drops a driving vehicle's path; no crate runs for the yard vehicle), whose parent 3562ebc is good (0.18 ms). That merge changes no client code: it changes the game (its goldens move), and in the benchmark's game after it the watched house has radar at tick 9000 (`econ::radar::available`, S-0410 claim 1), so the radar is composed on every timed frame; before it the house had none, and a radar without it is black and composes nothing. So the cost was always there for a house with radar, and the benchmark started to show it.
+
+**The fix.** The composition must still follow the state on every drawn frame (S-0410), so it is made cheaper, not rarer:
+
+- The radar keeps each pixel's cell, worked out once when it is made (`minimap::pixel_cells`: `cell_at_pixel` for every pixel in row order, with the rules' `quirks.radar_pixel_cell_shift`). The cell of a pixel depends only on the grid, the picture's size and that switch, none of which changes during a game; if the switch read at drawing time differs, the radar composes the plain way.
+- `minimap::compose_kept` composes with the kept cells. It shares one body with `minimap::compose` (`compose_by`, which takes the pixel-to-cell lookup), so the friendly gap, shroud and terrain rules have one implementation; `compose` passes `cell_at_pixel` itself and its output is the same as before.
+- That body asks for an object's colour (`Arrivals::winner`) only at pixels where some object is listed (S-0410 claim 8: only such a pixel can have a winner), instead of at every pixel.
+
+These are in `crates/deterministic/sim/src/econ/minimap.rs` (the radar's pure composition) and `crates/app/src/mapview/radar.rs`. Nothing kept is saved or hashed: the radar is client state, and the change touches no simulation state, no tick phase and no golden (`cargo xtask gate` passes; `crates/sim-gate` is unchanged).
+
+How drawing was checked unchanged: in the A/B below every run plays the same game (the same state hash at the end), and all 24 view pictures (six runs, four views) are byte-identical (`cmp`); each picture includes the sidebar's radar, with terrain, shroud and objects on it. The listed-pixel test cannot change a pixel: `Arrivals::winner` looks only at arrivals listed at the pixel asked, so without one it has no winner. `mapview::radar_tests::radar_compose_matches_the_sim` compares `compose_kept` with `compose` for every pixel on a synthetic game with towers, moving vehicles and shroud, for both settings of `radar_pixel_cell_shift`, for houses 0 and 1 and both settings of the flat-grid shroud quirk, with flashing objects, first without and then with gap generators for both houses (it checks that the gap fields exist and cover each owner's own cells); keeping the cells with the switch flipped makes it fail. The S-0410 claim tests pass unchanged.
+
+**Before and after (this machine, native offscreen, default spec: 4 views of 600 frames at tick 9000; three interleaved runs each, before on main 639ff51 and after; load average 2.4 to 9.3).**
+
+| Frame time, all views (ms) | before | after |
+|---|---|---|
+| mean | 28.81 to 30.21 | 20.73 to 23.41 |
+| median | 18.94 to 19.95 | 10.92 to 11.68 |
+| p95 | 83.67 to 87.70 | 75.72 to 80.06 |
+| p99 | 85.79 to 90.60 | 77.92 to 122.19 |
+| worst | 114.2 to 122.5 | 109.4 to 242.9 |
+| frames over 16.7 ms (of 2399) | 2399 | 437 to 659 |
+| draw list (hud), mean | 9.54 to 9.85 | 1.51 to 1.72 |
+
+The tick (13.2 to 14.9 ms a frame on average), the scene (3.2 to 3.6) and every other part are the same before and after within the runs' spread. Of the frames still over 16.7 ms, 401 to 410 have a tick over 16.7 ms by itself; the rest (35, 43 and 248, rising with the load) are frames where the tick and the client together pass the budget. The run with the highest load (after 3) has most of those and the worst p99. The "after" binary of these runs was built from the change before it was committed (its summary reads 639ff51 "+dirty"). Proved again after rebasing onto main 9ef3f68, with clean builds of main and the branch, two interleaved runs each (load 3.5 to 12.9): the same state hash as above in all four, the 16 pictures byte-identical, draw list 10.93 to 10.97 → 1.57 to 1.79 ms, frame mean 29.84 to 29.91 → 20.85 to 23.93, median 20.02 to 20.27 → 10.87 to 12.33, frames over 16.7 ms 2399 → 420 to 475.
+
+**In the browser (this machine; Firefox headed in a headless `cage` compositor, hardware WebGL2; 4 views of 300 frames; three interleaved runs each of 639ff51's and ec7d999's `dist/web`; load average 3.3 to 8.5).** Frame mean 52.1 to 53.6 → 36.8 to 38.1 ms, median 34.6 to 35.5 → 19.4 to 20.4, p95 147.4 to 151.9 → 132.2 to 136.5, p99 153.7 to 157.3 → 137.1 to 149.1, worst 195.7 to 206.0 → 170.7 to 186.8; frames over 16.7 ms 1199 → 1137 to 1198 of 1199. The draw list goes from 17.6 to 18.0 ms to 2.5 to 2.6; every other part is unchanged, and all six runs end with the same state hash. Almost every frame is still over budget in the browser: 203 have a tick over 16.7 ms, and in the rest the client alone (work minus tick, about 14 ms on average after the fix, 29 before) with a tick of about 5.7 ms passes it. The client's largest parts there are the scene (5.0 ms), the draw list (2.5), the submit and present (1.8), the map's recording (1.5), the radar's object update (1.45) and the light alpha (1.2). Ticks average 23 ms a timed frame (14.8 ms a tick in the late run against about 8.2 natively).
+
+**Other client costs since part 1.** Against C4 part 1's run (a41bfbc, a different game: 1498 objects at tick 9000 against 1543 now) the parts after the fix are: draw list 0.11 to 1.5 ms (the radar above, which part 1's game never composed), scene 2.43 to 3.23, play 0.09 to 0.13, the radar's object update 0.23 to 0.30, light alpha, map recording and encode the same, submit and present 0.49 to 0.66. None of these is one clear regression: temporary spans in the scene build (not committed) spread its time over the mobile objects' painting (about 0.9 ms), the watched house's own buildings (about 0.9), the overlay scan (about 0.6) and smaller parts, which grow with the game's objects.
+
+Seams: the radar's per-pixel shroud test and the composition that remains (about 0.8 ms a frame); the psychic intent lines (about 0.5 ms of the interface's drawing in this game); the radar's object update (`Arrivals::observe`, which finds each object's position in the update order by a scan, about 0.3 ms); the scene build's mobile and building painting; the client's cost in the browser (about 14 ms a frame here, over budget with any tick).
+
 ## Electric bolts (M8 step C5 part 1)
 
 S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md).

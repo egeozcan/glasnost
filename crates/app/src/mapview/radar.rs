@@ -5,6 +5,12 @@
 //! sidebar draws. The point colours come from the cells' tile radar colours
 //! only (claim 9's tile case); terrain objects, bridges and overlays do not
 //! colour their points yet.
+//!
+//! The cell each pixel shows (F3) is pure in the grid, the image and
+//! `quirks.radar_pixel_cell_shift`, so it is worked out once per game too:
+//! [`minimap::compose_kept`] gives [`minimap::compose`]'s pixels with those cells kept
+//! (M8 step C4 part 3: worked out afresh for every pixel of every tick it was
+//! most of a late frame's interface time).
 
 use std::collections::BTreeMap;
 
@@ -33,6 +39,10 @@ pub struct Radar {
     colours: Vec<Rgb>,
     /// The neutral fallback colour (S-0410 claim 8, S-0516 claim 38).
     neutral: Rgb,
+    /// The cell shown at each pixel of the image, row-major ([`minimap::pixel_cells`]).
+    cells: Vec<CellXY>,
+    /// The `quirks.radar_pixel_cell_shift` that `cells` were worked out with.
+    shift: bool,
 }
 
 impl Radar {
@@ -70,6 +80,8 @@ impl Radar {
             }
         }
         let terrain = minimap::terrain_picture(&grid, &img, &points);
+        let shift = w.rules().quirks.radar_pixel_cell_shift;
+        let cells = minimap::pixel_cells(&grid, &img, shift);
         Some(Self {
             grid,
             img,
@@ -77,6 +89,8 @@ impl Radar {
             arrivals: Arrivals::default(),
             colours,
             neutral,
+            cells,
+            shift,
         })
     }
 
@@ -115,14 +129,26 @@ impl Radar {
             // spec: S-0410 claim 6 (the radar shares S-0110's quirks.shroud_on_flat_grid)
             on_flat_grid: glasnost_render::shroud::ShroudQuirks::default().shroud_on_flat_grid,
         };
-        let pixels = minimap::compose(
-            w,
-            &view,
-            &self.arrivals,
-            &self.grid,
-            &self.img,
-            &self.terrain,
-        );
+        let pixels = if self.shift == w.rules().quirks.radar_pixel_cell_shift {
+            minimap::compose_kept(
+                w,
+                &view,
+                &self.arrivals,
+                &self.grid,
+                &self.img,
+                &self.terrain,
+                &self.cells,
+            )
+        } else {
+            minimap::compose(
+                w,
+                &view,
+                &self.arrivals,
+                &self.grid,
+                &self.img,
+                &self.terrain,
+            )
+        };
         for q in 0..self.img.height {
             for p in 0..self.img.width {
                 let (x, y) = (self.img.left + p, self.img.top + q);
