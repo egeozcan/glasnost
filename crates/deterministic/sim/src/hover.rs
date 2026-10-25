@@ -1427,8 +1427,16 @@ fn spin(w: &mut World, id: ObjectId, settled: bool) {
 }
 
 /// Claim 11: at the end of a spin, over a water cell below 104 leptons above
-/// the surface, the vehicle is given the bomb mark and starts to fall.
+/// the surface, the vehicle is given the bomb mark and starts to fall. With
+/// `quirks.docked_hover_water_loss` off, a spin end while the vehicle has
+/// depot contact or is settled makes no test (S-0314 claim 21).
 fn sink_test(w: &mut World, id: ObjectId) {
+    // spec: S-0314 claim 21 (Over water, at a naval yard) and Edge cases (quirks.docked_hover_water_loss off: a spin end that comes while the vehicle has contact with a depot, Terms, or is settled makes no water test; judged at the spin's end, so once its contact has ended and it is not settled a later spin end is tested as usual); S-0503 claim 11 (changed by S-0314); Q-1876 interim (every disabling's settled state counts)
+    if !w.rules().quirks.docked_hover_water_loss
+        && (crate::depot::link(w, id).is_some() || crate::depot::settled(w, id))
+    {
+        return;
+    }
     let Some(o) = w.obj(id) else { return };
     let water = w
         .cells

@@ -9188,7 +9188,7 @@
           "default": true
         },
         "docked_hover_water_loss": {
-          "description": "A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual. Not consulted yet (S-0314 r77 is taken in at the next intake).",
+          "description": "A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual.",
           "type": "boolean",
           "default": true
         },
