@@ -2473,6 +2473,36 @@ The tick (13.2 to 14.9 ms a frame on average), the scene (3.2 to 3.6) and every 
 
 Seams: the radar's per-pixel shroud test and the composition that remains (about 0.8 ms a frame); the psychic intent lines (about 0.5 ms of the interface's drawing in this game); the radar's object update (`Arrivals::observe`, which finds each object's position in the update order by a scan, about 0.3 ms); the scene build's mobile and building painting; the client's cost in the browser (about 14 ms a frame here, over budget with any tick).
 
+#### The browser client's frame cost (M8 C4 part 4)
+
+**Where the time went (this machine; Firefox headed in a headless `cage` compositor, hardware WebGL2; the frame benchmark's default spec with 4 views of 300 frames; main bfa4575).** Two runs of the same build were used to find out. One ran under Firefox's sampling profiler (started through its `MOZ_PROFILER_STARTUP` environment variables, 1 ms interval, JS and wasm frames). The other ran with a page script that counts WebGL2 calls, buffer bytes and texture pixels per frame. Neither change is committed: both are our own tooling. The profiler makes frames slower (mean 44.9 ms against 36.8 to 38.1 in part 3's runs), and the counting script makes the submit slower, so the shares come from the profile and the counts from the counting run. The milliseconds below scale each share to the client's 14 ms a frame in part 3's unprofiled runs, so read them as estimates. The profile has 25 304 samples of client work (every timed frame's sample not under `Game::step`); a share is that part's samples over those.
+
+| Client part (Firefox, share of client samples) | share | about ms a frame |
+|---|---|---|
+| The scene build (`mapview::live::Live::redraw`) | 31.3 % | 4.4 |
+| of which the buildings' painting (`Painter::buildings`, almost all `Builder::building_items`) | 9.1 % | 1.3 |
+| of which the mobile objects' painting (`Painter::mobiles`) | 8.9 % | 1.2 |
+| of which SHP parsing (`fmt::shp::Shp::parse`, again for every sprite drawn: most of it from `Builder::place_sprite`) | 7.1 % | 1.0 |
+| of which INI lookups (`ini::Document::value`: animation slots read per frame by `slots::read_anim`, 3.4 %, and art values) | 4.4 % | 0.6 |
+| of which the overlay scan, the voxel vehicles and the tick's bookkeeping (`live_overlays`, `vehicle_voxels`, `after_tick`) | 5.4 % | 0.8 |
+| The radar's picture (`Radar::rgba` → `minimap::compose_kept`, S-0410; in the draw list) | 10.7 % | 1.5 |
+| of which the friendly gap test (`in_friendly_gap`), the objects' colour (`Arrivals::winner`) and the shown cells | 6.0 % | 0.8 |
+| The radar's object update (`Arrivals::observe`, each object's place in the update order by a scan) | 9.1 % | 1.3 |
+| The map's instance list (`map_gpu::MapRenderer::render_lit`, its own code) | 10.0 % | 1.4 |
+| The queue submit (wgpu's GL backend replaying the frame's commands into WebGL2) | 12.5 % | 1.7 |
+| of which texture uploads (`texSubImage2D`), buffer uploads (`bufferSubData`), vertex attribute setup and buffer binds, the final blit | 7.4 % | 1.0 |
+| The interface's drawing (`Session::draw`) | 6.5 % | 0.9 |
+| of which the psychic intent lines (`psychic::intent_lines`: `sensors` again for each unit) | 5.1 % | 0.7 |
+| of which the sidebar (`hud::model`, with `sidebar::darkened` 1.1 %) | 1.4 % | 0.2 |
+| The covers of shroud and fog (`mapview::cover::covers`, every cell of the grid) | 3.9 % | 0.5 |
+| The light alpha (`render::shroud::light_alpha`) | 3.9 % | 0.5 |
+| The command encoder's finish, the present, the sound mixer, the benchmark's save | 4.4 % | 0.6 |
+| Memory allocation and freeing (`dlmalloc`, spread over the parts above) | 2.4 % | 0.3 |
+
+Per frame, the counting run saw about 12 000 WebGL2 calls: 345 instanced draws, 361 program changes, about 1 720 each of vertex attribute pointer, divisor and enable calls and 1 756 buffer binds (wgpu's GL backend sets up five instance attributes again for every draw, because WebGL2 cannot start a draw at an instance other than 0), about 335 each of depth, stencil and colour mask changes, 87 framebuffer attachment changes, 12 copies of the target and one blit. Uploads were 240 KB of buffer data and 20.7 thousand texture pixels a frame. Nothing is read back.
+
+So the costs that are cheap natively and dear in wasm are work done again every frame on data that does not change during a game: SHP headers parsed again for every sprite, INI values looked up by name again, and the whole grid scanned for covers. Next come the scans in the radar and the psychic lines, which are pure functions in the simulation crate (part 3 changed `minimap` the same way, with the main session's approval). The WebGL2 calls cost about as much as one of the larger client parts, and most of them come from wgpu's GL backend rather than from our draws.
+
 ## Electric bolts (M8 step C5 part 1)
 
 S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md).
