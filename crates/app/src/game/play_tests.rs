@@ -1059,3 +1059,35 @@ fn a_gained_construction_yard_cancels_the_placement_in_progress() {
     p.captured_yard_cancels_placement();
     assert_eq!(p.tool, Tool::Select);
 }
+
+/// spec: S-0214 Terms (clicked object; can be selected; a fully cloaked object the viewer neither
+/// owns nor senses cannot be clicked) and S-0516 claims 26, 35 and 36 (the lead's note 17 of M8
+/// step A4, round 4): a click finds an enemy unit disguised as scenery, which cannot be selected,
+/// so the kind tables and the disguise rule decide; a fully cloaked enemy is not found
+#[test]
+fn a_click_finds_an_enemy_disguised_as_scenery_but_not_a_cloaked_one() {
+    use glasnost_sim::cloak::{CloakState, Disguise, DisguiseAs};
+    let mut p = start();
+    let e = others(&p)
+        .into_iter()
+        .find(|&id| p.world().obj(id).is_some_and(|o| o.kind == Kind::Vehicle))
+        .expect("an enemy vehicle");
+    let cell = p.world().obj(e).unwrap().pos.cell();
+    assert_eq!(p.target(Some(e), cell), ClickOn::Object(e));
+    let tick = p.world().tick;
+    p.game.world.obj_mut(e).unwrap().cloak.disguise = Some(Disguise {
+        what: Some(DisguiseAs::Terrain(0)),
+        house: None,
+        since: tick,
+    });
+    assert!(glasnost_sim::cloak::appears_disguised(
+        p.world(),
+        e,
+        Some(p.local)
+    ));
+    assert!(!targeting::selectable_by(p.world(), e, Some(p.local)));
+    assert_eq!(p.target(Some(e), cell), ClickOn::Object(e), "still clicked");
+    p.game.world.obj_mut(e).unwrap().cloak.disguise = None;
+    p.game.world.obj_mut(e).unwrap().cloak.state = CloakState::Cloaked;
+    assert_eq!(p.target(Some(e), cell), ClickOn::Cell(cell), "cloaked");
+}

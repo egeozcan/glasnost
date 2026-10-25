@@ -265,6 +265,16 @@ pub fn selectable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     selectable(w, id) && crate::cloak::view::pickable(w, id, v)
 }
 
+/// Whether a click of house `v` on the object finds it as the clicked
+/// object (S-0214 Terms, *clicked object*): [`selectable`] apart from the
+/// viewer, and not excluded from clicks by its cloak (S-0516 claim 26). A
+/// unit disguised as scenery is found: the kind tables decide what the
+/// click on it does, and the select rows ask [`selectable_by`].
+pub fn clickable_by(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
+    // spec: S-0214 Terms (clicked object; a fully cloaked object the viewer neither owns nor senses cannot be clicked) and S-0516 claims 26 and 36 (the scenery disguise excludes selection, not the click)
+    selectable(w, id) && crate::cloak::view::clickable(w, id, v)
+}
+
 /// A vehicle-like building: it undeploys into a vehicle and has a 1 × 1
 /// foundation (S-0214 Terms).
 pub(crate) fn vehicle_like(w: &World, id: ObjectId) -> bool {
@@ -906,11 +916,27 @@ fn moving(w: &World, id: ObjectId) -> bool {
     occupancy::in_progress(w, id)
 }
 
-/// The scenery check and fallback move (S-0214 Terms); nothing is
-/// disguised in our engine yet, so the scenery check gives *no-move*.
-fn fallback_move(w: &World, house: HouseId, actor: ObjectId) -> Action {
-    if movable(w, house, actor) {
+/// The scenery check (S-0214 Terms): *move* when the target is disguised
+/// as an overlay, else *no-move*.
+fn scenery_check(w: &World, t: ObjectId) -> Action {
+    // spec: S-0214 Terms (disguised as an overlay: disguised, the disguise belonging to no house, its type an overlay type)
+    let overlay = w.obj(t).and_then(|o| o.cloak.disguise).is_some_and(|d| {
+        d.house.is_none() && matches!(d.what, Some(crate::cloak::DisguiseAs::Overlay(_)))
+    });
+    // spec: S-0214 Terms (the scenery check gives move if T is disguised as an overlay, and no-move otherwise)
+    if overlay {
+        Action::Move
+    } else {
         Action::NoMove
+    }
+}
+
+/// The fallback move (S-0214 Terms): the scenery check for a movable
+/// actor, *nothing* for one that is not movable.
+fn fallback_move(w: &World, house: HouseId, actor: ObjectId, t: ObjectId) -> Action {
+    // spec: S-0214 Terms (fallback move: the scenery check's result for a movable actor, nothing otherwise)
+    if movable(w, house, actor) {
+        scenery_check(w, t)
     } else {
         Action::Nothing
     }
@@ -996,7 +1022,8 @@ fn generic(
     let is_own = own(w, house, actor);
     let only = sel.len() == 1 && sel[0] == actor;
     // No loaners exist before the topics that lend units: "not an own loaner" always holds.
-    let selectable_new = selectable(w, t) && !sel.contains(&t);
+    // spec: S-0214 Terms (can be selected: rows G2 and G10 ask it of the clicking house, with S-0516 claim 36's scenery exclusion)
+    let selectable_new = selectable_by(w, t, Some(house)) && !sel.contains(&t);
     // spec: S-0214 table G row G1 (berserk, or melee-linked without the keep-acting flag: nothing)
     if berserk(w, actor) || melee_held(w, actor) {
         return Action::Nothing;
@@ -1261,7 +1288,7 @@ fn infantry_on(
     }
     // spec: S-0214 table I row I25
     if infiltrator && !armed(w, actor) && g2 == Action::Attack {
-        return fallback_move(w, house, actor);
+        return fallback_move(w, house, actor, t);
     }
     // spec: S-0214 table I row I26 (a recycling building)
     if g2 == Action::Select
@@ -1280,7 +1307,7 @@ fn infantry_on(
     }
     // spec: S-0214 table I row I28
     if g2 == Action::Nothing {
-        return fallback_move(w, house, actor);
+        return fallback_move(w, house, actor, t);
     }
     // spec: S-0214 table I row I29
     g2
@@ -1450,7 +1477,7 @@ fn vehicle_on(w: &World, house: HouseId, actor: ObjectId, t: ObjectId, g: Action
     }
     // spec: S-0214 table V row V4
     if q == Action::Nothing {
-        return fallback_move(w, house, actor);
+        return fallback_move(w, house, actor, t);
     }
     // spec: S-0214 table V row V6
     if q == Action::Attack && immune(w, t) {
@@ -1491,13 +1518,16 @@ fn aircraft_on(
     match g {
         // spec: S-0214 table AC row AC1
         Action::ToggleSelect => Action::ToggleSelect,
-        // spec: S-0214 table AC rows AC5 and AC6 (the aircraft's action on the target's cell)
+        // spec: S-0214 table AC rows AC4 to AC6 (the aircraft's action on the target's cell)
         Action::Nothing => {
             let Some(c) = w.obj(t).map(|o| o.pos.cell()) else {
                 return Action::Nothing;
             };
             let a = cell_action(w, house, sel, actor, c, mods);
-            if a == Action::Attack && immune(w, t) {
+            // spec: S-0214 table AC row AC4 (that cell action is no-move and the target is disguised as an overlay: move)
+            if a == Action::NoMove && scenery_check(w, t) == Action::Move {
+                Action::Move
+            } else if a == Action::Attack && immune(w, t) {
                 Action::NoMove
             } else {
                 a
@@ -1871,7 +1901,8 @@ pub fn cursor(
     match representative(w, selection, on) {
         Some(id) => action_in(w, house, selection, id, on, mods),
         None => match on {
-            ClickOn::Object(t) if selectable(w, t) => Action::Select,
+            // spec: S-0214 Terms (can be selected, by the clicking house: S-0516 claims 26 and 36)
+            ClickOn::Object(t) if selectable_by(w, t, Some(house)) => Action::Select,
             _ => Action::Nothing,
         },
     }
@@ -1955,7 +1986,7 @@ pub fn click(
             let mut s: Vec<ObjectId> = selection.to_vec();
             if let Some(i) = s.iter().position(|&x| x == t) {
                 s.remove(i);
-            } else if selectable(w, t) {
+            } else if selectable_by(w, t, Some(house)) {
                 // spec: S-0214 Terms (can be selected: claim 12 adds only an object that can be selected) and claim 12 (the selection order of an addition; a removal keeps the others' order)
                 add_to_selection(w, &mut s, t);
             } else {
@@ -1965,14 +1996,14 @@ pub fn click(
         }
         // spec: S-0214 claim 12 (select replaces the selection; a toggle that does not act is a select) and Terms (only with an object that can be selected)
         (Action::Select | Action::ToggleSelect, ClickOn::Object(t)) => {
-            if !selectable(w, t) {
+            if !selectable_by(w, t, Some(house)) {
                 return ClickResult::default();
             }
             return reselect(vec![t]);
         }
         // spec: S-0214 claim 3 (nothing over a selectable object not selected yet acts as select; over a selected one, nothing)
         (Action::Nothing, ClickOn::Object(t)) => {
-            if selectable(w, t) && !selection.contains(&t) {
+            if selectable_by(w, t, Some(house)) && !selection.contains(&t) {
                 return reselect(vec![t]);
             }
             return ClickResult::default();

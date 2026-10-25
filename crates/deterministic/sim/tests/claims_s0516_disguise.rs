@@ -417,3 +417,60 @@ fn claim_39_fake_blink() {
     until(&mut w, 200, |w| w.obj(c).unwrap().cloak.disguise.is_some());
     assert_eq!(w.obj(c).unwrap().cloak.blink_until, 0);
 }
+
+/// The cursor that Alpha's armed CART shows over `t`, plain and with
+/// force-fire, and the cursor over `t` with nothing selected.
+fn cursors(w: &World, gun: ObjectId, t: ObjectId) -> [glasnost_sim::targeting::Action; 3] {
+    use glasnost_sim::targeting::{ClickOn, Modifiers, cursor};
+    let force = Modifiers {
+        force_fire: true,
+        ..Modifiers::default()
+    };
+    [
+        cursor(w, ALPHA, &[gun], ClickOn::Object(t), Modifiers::default()),
+        cursor(w, ALPHA, &[gun], ClickOn::Object(t), force),
+        cursor(w, ALPHA, &[], ClickOn::Object(t), Modifiers::default()),
+    ]
+}
+
+// spec: S-0214 claim 6 (the disguise rule: a target that appears disguised passes with the general attack-cursor-on-disguise rule, or while its fake blink runs), Terms (clicked object; can be selected; the scenery check and fallback move) and table G rows G8 to G11; S-0516 claims 35, 36 and 39 (the lead's note 17 of M8 step A4, round 4: a plain click on an enemy disguised as scenery)
+#[test]
+fn s0214_claim_6_cursor_over_an_enemy_disguised_as_scenery() {
+    use glasnost_sim::targeting::{Action, ClickOn, Modifiers, click, clickable_by, cursor};
+    for on in [true, false] {
+        let mut r = rules();
+        r.sim.general.attack_cursor_on_disguise = Some(on);
+        let mut w = game(&r);
+        let m = spawn(&mut w, "MIRAGE", BETA, 0, 0);
+        let gun = spawn(&mut w, "CART", ALPHA, -4, 0);
+        settle(&mut w, m);
+        assert!(appears_disguised(&w, m, Some(ALPHA)));
+        // The click finds it (S-0214 Terms, clicked object); only selection excludes it (S-0516 claim 36).
+        assert!(clickable_by(&w, m, Some(ALPHA)));
+        assert!(!glasnost_sim::targeting::selectable_by(&w, m, Some(ALPHA)));
+        let [plain, forced, empty] = cursors(&w, gun, m);
+        assert_eq!(forced, Action::Attack, "force-fire");
+        // spec: S-0214 claim 1 and Terms (with nothing selected, select only over an object that can be selected)
+        assert_eq!(empty, Action::Nothing);
+        let r0 = click(&w, ALPHA, &[], ClickOn::Object(m), Modifiers::default());
+        assert!(r0.selection.is_none(), "not selected by a click");
+        if on {
+            assert_eq!(plain, Action::Attack, "the attack-cursor-on-disguise rule");
+        } else {
+            // spec: S-0214 Terms (the fallback move of a movable actor: the scenery check, no-move for a terrain-object disguise)
+            assert_eq!(plain, Action::NoMove);
+            // spec: S-0214 Terms (the scenery check gives move for a target disguised as an overlay)
+            set_disguise(&mut w, m, DisguiseAs::Overlay(0), None);
+            assert_eq!(cursors(&w, gun, m)[0], Action::Move, "an overlay disguise");
+            // spec: S-0516 claim 39 and S-0214 claim 6 (a running fake blink passes the disguise rule)
+            let t = w.tick;
+            w.obj_mut(m).unwrap().cloak.blink_until = t + BLINK;
+            assert_eq!(cursors(&w, gun, m)[0], Action::Attack, "the fake blink");
+        }
+        // The owner still selects it (S-0516 claim 35: it does not appear disguised to its owner).
+        assert_eq!(
+            cursor(&w, BETA, &[], ClickOn::Object(m), Modifiers::default()),
+            Action::Select
+        );
+    }
+}
