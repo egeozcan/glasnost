@@ -67,8 +67,16 @@ Before is main 5c34005, the base of this branch; after is this branch. The branc
 `crates/render/src/voxel.rs`, `crates/app/src/mapview` and the lane test.
 `git diff main -- crates/deterministic crates/sim-gate` is empty. `glasnost-sim-gate` depends on
 neither `glasnost-app` nor `glasnost-render`. The arena and oracle modules of `glasnost-tools`
-use neither. So the sweeps and the arena run the same code before and after. The after sweeps
-were run (table in the step report). No goldens regenerated.
+use neither. So the sweeps and the arena run the same code before and after, and the after runs
+give the numbers intake 19 recorded. No goldens regenerated.
+- Oracle arena (local lane; it fails while the known discrepancies stand):
+  - M-0001: 31 of 96 pairings failing; 151 of 172 unanimous stock outcomes reproduced.
+  - M-0002: 13 of 24 failing; 43 of 47 reproduced.
+  - M-0003: 2 of 35 failing; 61 of 64 reproduced.
+- M6c, M7a and M7b sweeps 1 to 16 pass. The smallest minima are:
+  - M6c 2 (seed 3 charger orders, seed 12 jumpjet orders);
+  - M7a 1 (seed 7 psychic sensor orders, seed 9 takeover orders);
+  - M7b drain 3.
 
 Lane scene `sprite-barrel` (`crates/app/tests/m7b_lane.rs`; counts, cells and ticks only;
 outputs in `local-lane/m8/a3-27/`, git-ignored):
