@@ -1540,6 +1540,10 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,
+    /// A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual. Not consulted yet (S-0314 r77 is taken in at the next intake).
+    // spec: S-0314 claim 21, Edge cases; S-0503 claim 11
+    #[serde(default = "on")]
+    pub docked_hover_water_loss: bool,
     /// An engineer entering a building that is neither arrival-friendly nor capturable is used up and changes nothing; off: the entry is refused as in claim 4 and the engineer stays.
     // spec: S-0509 Edge cases (claim 3 row 5)
     #[serde(default = "on")]
@@ -2375,6 +2379,7 @@ impl Default for Quirks {
             depot_remote_repair: true,
             depot_loss_leaves_sleep: true,
             depot_loss_strands_hover: true,
+            docked_hover_water_loss: true,
             engineer_lost_on_uncapturable: true,
             engineer_repairs_during_sale: true,
             garrison_exit_skips_corner: true,
@@ -3456,6 +3461,7 @@ impl Quirks {
             ("depot_remote_repair", self.depot_remote_repair),
             ("depot_loss_leaves_sleep", self.depot_loss_leaves_sleep),
             ("depot_loss_strands_hover", self.depot_loss_strands_hover),
+            ("docked_hover_water_loss", self.docked_hover_water_loss),
             (
                 "engineer_lost_on_uncapturable",
                 self.engineer_lost_on_uncapturable,
