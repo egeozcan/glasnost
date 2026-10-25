@@ -453,6 +453,32 @@ fn claim_1_eligibility() {
     );
 }
 
+// spec: S-0105 claim 43 (Not a weapon choice: the bunker test of S-0606 claim 1 asks the weapon S-0308 chooses, that of the weapon number, whatever the selected turret index; a multi-turret type of another name than the fixed one shows no turret yet is taken in through its slot-0 weapon, MS-33 part i); S-0308 claim 5
+#[test]
+fn claim_1_multi_turret_vehicle_by_its_weapon_number() {
+    let mut r = rules();
+    let slots = |s: &[&str]| Some(s.iter().map(|x| x.to_string()).collect::<Vec<_>>());
+    vehicle(&mut r, "MULTI", |t| {
+        t.turret_count = Some(3);
+        t.weapon_count = Some(3);
+        t.gunner = Some(true);
+        t.combat.weapon_slots = slots(&["Gun", "Gun", "Gun"]);
+    });
+    vehicle(&mut r, "GAPPED", |t| {
+        t.turret_count = Some(3);
+        t.weapon_count = Some(3);
+        t.gunner = Some(true);
+        t.combat.weapon_slots = slots(&["", "Gun", "Gun"]);
+    });
+    let mut w = game_on(&r);
+    let multi = put(&mut w, Kind::Vehicle, "MULTI", 0, 5, 0);
+    let gapped = put(&mut w, Kind::Vehicle, "GAPPED", 0, 5, 2);
+    assert!(bunker::eligible(&w, multi), "slot 0 of weapon number 0");
+    assert!(!bunker::eligible(&w, gapped), "slot 0 is empty");
+    // spec: S-0308 claim 6 (a hand-over sets the weapon number: slot 1 is chosen)
+    glasnost_sim::combat::weapon::set_weapon_number(&mut w, gapped, 1);
+    assert!(bunker::eligible(&w, gapped), "slot 1 of weapon number 1");
+}
 // spec: S-0606 claim 2 (rows P1, P2, P6, P7, P8, P9 and P10; first match wins)
 #[test]
 fn claim_2_permission_rows() {

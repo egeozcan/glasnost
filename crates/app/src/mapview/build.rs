@@ -3958,8 +3958,8 @@ impl<'a> Builder<'a> {
             generic_shadow: None,
             // A map unit is not berserk before any tick (S-0610 claim 4).
             berserk: None,
-            // Without a game state there is no selected turret index (S-0105 claim 12; Q-1760).
-            turret_index: None,
+            // spec: S-0105 claim 43 and S3 (the index a vehicle is created with: no tick has run)
+            turret_index: creation_turret_index(self.rules, self.import, kind, i),
         };
         Some(self.mobile(&m))
     }
@@ -4689,7 +4689,14 @@ impl<'a> Builder<'a> {
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
         let shadow = (!rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
             let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
-            let aircraft_like = rule_bool(self.import, kind, idx, b"ConsideredAircraft", false);
+            // spec: S-0105 Import mapping (ConsideredAircraft absent: yes for an aircraft type, no for every other type)
+            let aircraft_like = rule_bool(
+                self.import,
+                kind,
+                idx,
+                b"ConsideredAircraft",
+                kind == Kind::Aircraft,
+            );
             (section, aircraft_like)
         });
         // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground), claims 41 and 42 (the 32-step flight drawing heading for a flying-locomotor aircraft, no pitch or bank class)
@@ -4757,23 +4764,37 @@ impl<'a> Builder<'a> {
         // spec: S-0105 claims 4, 8 (a turret part only with the turret flag)
         if rule_bool(self.import, kind, idx, b"Turret", false) {
             // spec: S-0105 claim 12 (a multi-turret type draws the turret and barrel models of its
-            // selected turret index instead of the ordinary ones; S-0007 claim 16 names them
-            // turret k and barrel k). Without an index none is drawn (Q-1760 open).
+            // selected turret index k, claim 43, instead of the ordinary ones; S-0007 claim 16 names
+            // them turret k and barrel k). With the index none, or k outside 0 … N − 1, neither a
+            // turret nor a barrel is drawn; a missing barrel k alone leaves turret k drawn.
             let multi = multi_turret(self.import, kind, idx);
-            let index = if multi { m.turret_index } else { None };
+            // spec: S-0007 claim 17 (the turret count, at most 18 numbered parts)
+            let count = rule_int(self.import, kind, idx, b"TurretCount", 0).clamp(0, 18);
+            let index = if multi {
+                m.turret_index
+                    .filter(|k| (0..count).contains(k))
+                    .and_then(|k| u8::try_from(k).ok())
+            } else {
+                None
+            };
             let (turret_part, barrel_part) = match (multi, index) {
                 (true, Some(k)) => (format!("turret{k}"), format!("barrel{k}")),
                 (true, None) => (String::new(), String::new()),
                 (false, _) => ("turret".to_string(), "barrel".to_string()),
             };
-            // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins; a numbered turret model takes the vehicle turret frame with its own frame count, the claim's interim rule)
-            let frames = art
-                .voxels
-                .get(turret_part.as_str())
-                .cloned()
-                .and_then(|f| self.voxel_model(&f))
-                .map(|t| t.frame_count() as u32);
-            let turret_frame = voxel::vehicle_turret_frame(body_frame, m.anim, frames);
+            let turret_frame = if multi {
+                // spec: S-0105 claim 16 (a numbered turret model is drawn in frame f_b whatever its value, never from the animation-frame counter; claim 13 reduces it modulo the model's own HVA frame count, and its turret key records the same frame)
+                body_frame
+            } else {
+                // spec: S-0105 claim 16 (body frame 0: the turret frame from the animation-frame counter, which S-0609 claim 14 advances while a gattling vehicle spins)
+                let frames = art
+                    .voxels
+                    .get(turret_part.as_str())
+                    .cloned()
+                    .and_then(|f| self.voxel_model(&f))
+                    .map(|t| t.frame_count() as u32);
+                voxel::vehicle_turret_frame(body_frame, m.anim, frames)
+            };
             // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
             let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
             // spec: S-0105 claim 26 (turret key; flat ground, the selected turret index of a multi-turret type, the alternative-model state off)
@@ -5042,24 +5063,106 @@ pub struct Mobile {
     /// state.
     pub berserk: Option<bool>,
     /// For a vehicle of a multi-turret type: its selected turret index
-    /// (S-0105 claim 12 and Terms), which picks the numbered turret and
-    /// barrel models and is a component of the turret image key (claim
-    /// 26). [`selected_turret_index`] gives it; `None` draws no numbered
-    /// turret.
-    pub turret_index: Option<u8>,
+    /// (S-0105 claim 43, state table S3), which picks the numbered turret
+    /// and barrel models (claim 12) and is a component of the turret image
+    /// key (claim 26). [`selected_turret_index`] gives it. `None` is the
+    /// index *none*; an index outside 0 … *N* − 1, which only an imported
+    /// turret table entry can hold, is kept, and neither draws a numbered
+    /// turret or barrel (claim 12).
+    pub turret_index: Option<i32>,
 }
 
-/// The selected turret index of a vehicle of a multi-turret type (S-0105
-/// claim 12 and Terms). No approved spec says what sets it (Q-1760 open),
-/// so it is `None` for every object until one does: the renderer then draws
-/// no numbered turret.
-pub(crate) fn selected_turret_index(
+/// The selected turret index of a vehicle (S-0105 claim 43, state table
+/// S3), derived from the game state in the shown tick `shown`:
+/// - a charge-turret type (a multi-turret type, so its turret count *N* is
+///   above 0 and it has no rotating-barrel weapon stages): S-0301 claim
+///   16's turret number *c*, from creation on in our engine;
+/// - any other gunner type: the turret table entry `table` holds for its
+///   weapon number, which S-0308 claims 5 and 6 set to 0 at creation and
+///   at every hand-over, so the entry for the number it holds now is the
+///   one its last setting chose;
+/// - every other type: *none* for life, as its weapon number is never set.
+///
+/// `table` is the type's imported turret table (`None`: all *none*).
+pub fn selected_turret_index(
     w: &glasnost_sim::world::World,
     id: glasnost_sim::world::ObjectId,
-) -> Option<u8> {
-    // Q-1760 open: no index rule is chosen.
-    let _ = (w, id);
+    shown: i32,
+    table: Option<&glasnost_convert::turrets::TurretTable>,
+) -> Option<i32> {
+    let o = w.obj(id)?;
+    if o.kind != SimKind::Vehicle {
+        return None;
+    }
+    let tc = glasnost_sim::combat::veterancy::type_combat(w, id)?;
+    turret_index_from(
+        tc,
+        glasnost_sim::combat::weapon::weapon_number(w, id),
+        (o.combat.rearm_until, o.combat.rearm_delay, shown),
+        table,
+    )
+}
+
+/// The selected turret index of a vehicle whose type has the combat
+/// fields `tc`, with weapon number `weapon` and rearm countdown
+/// (`until`, `delay`) in tick `tick` (S-0105 claim 43, S3).
+fn turret_index_from(
+    tc: &glasnost_sim::combat::data::TypeCombat,
+    weapon: usize,
+    (until, delay, tick): (i32, i32, i32),
+    table: Option<&glasnost_convert::turrets::TurretTable>,
+) -> Option<i32> {
+    // spec: S-0105 Terms (a multi-turret type: a turret count above 0 and no rotating-barrel weapon stages); S-0301 claim 16 (its scope)
+    if tc.turret_count <= 0 || tc.gattling {
+        return None;
+    }
+    if tc.charge_turret {
+        // spec: S-0105 claim 43 (a charge-turret type: in each of its turns the index becomes S-0301 claim 16's turret number c; our engine gives c from creation, fixed without a switch)
+        return Some(charge_turret_number(tc.turret_count, until, delay, tick));
+    }
+    if tc.gunner {
+        // spec: S-0105 claim 43 and S3 (each time the weapon number is set, the index becomes the turret table entry for the resulting number, in the same tick; a gunner type's number is set to 0 at creation and at every hand-over, S-0308 claims 5 and 6)
+        return table.and_then(|t| t.get(weapon).copied().flatten());
+    }
+    // spec: S-0105 claim 43 (neither a gunner type nor a charge-turret type: its weapon number is never set, so its index stays none for life)
     None
+}
+
+/// S-0301 claim 16's turret number *c* of a charge-turret vehicle with
+/// turret count `n` in tick `tick`: trunc(*N* × *r* / *D*) clamped to
+/// 0 … *N* − 1 while the rearm countdown runs (*r* = the time remaining,
+/// `until` − `tick`; *D* = `delay`, the delay last chosen), and 0 once it
+/// is over or whenever *D* ≤ 0.
+pub(crate) fn charge_turret_number(n: i32, until: i32, delay: i32, tick: i32) -> i32 {
+    // spec: S-0301 claim 1 (the countdown is over from its end tick on) and claim 16 (c = 0 with D ≤ 0 or once the countdown is over)
+    if delay <= 0 || tick >= until {
+        return 0;
+    }
+    let r = i64::from(until) - i64::from(tick);
+    // spec: S-0301 claim 16 (c = trunc(N × r / D) clamped to 0 … N − 1)
+    (i64::from(n) * r / i64::from(delay)).clamp(0, i64::from(n.max(1) - 1)) as i32
+}
+
+/// The selected turret index a vehicle of type `idx` is created with,
+/// for a map vehicle drawn before any tick (S-0105 claim 43, S3): turret
+/// 0 for a charge-turret type (our engine's *c* from creation), the turret
+/// table entry for weapon number 0 for a gunner type, *none* otherwise.
+/// `None` without typed rules.
+pub(crate) fn creation_turret_index(
+    rules: Option<&SimRules>,
+    import: &Import,
+    kind: Kind,
+    idx: usize,
+) -> Option<i32> {
+    if kind != Kind::Vehicles {
+        return None;
+    }
+    let r = rules?;
+    let name = &import.outcome.registries.get(&kind)?.get(idx)?.name;
+    let t = glasnost_sim::objects::type_index(r, SimKind::Vehicle, name)?;
+    let tc = &r.unit(SimKind::Vehicle, t)?.combat;
+    // spec: S-0105 claim 43 (a gunner type's weapon number is set to 0 when it is created, however it is made; a charge-turret type shows turret 0 from creation)
+    turret_index_from(tc, 0, (i32::MIN, 0, 0), import.turret_tables.get(&idx))
 }
 
 /// Whether a type draws numbered turret and barrel models (S-0105 claim 12,

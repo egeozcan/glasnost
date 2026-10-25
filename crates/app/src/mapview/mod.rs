@@ -37,4 +37,6 @@ pub mod slot_play;
 pub mod slots;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod turret_index_tests;
 pub mod unload;
