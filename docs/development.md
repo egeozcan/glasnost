@@ -2965,6 +2965,15 @@ S-0319 r9 (Q-1762 answered in part). The ledger, [m8-claims/intake15a-S-0319.md]
 - **Seams.** The start sound does not follow the flight (claim 5, presentation only). The warhead's light flash at the end is not drawn.
 - Save format 78, AI game format 40.
 
+### A docked hover lost at a naval yard (M8 step A3 intake 18)
+
+S-0314 r77 claim 21 (*Over water, at a naval yard*) and the Edge case *Hovering vehicle lost at a naval yard* carry the lead's ruling of 2026-10-24. The ledger, [m8-claims/intake18-S-0314.md](m8-claims/intake18-S-0314.md), holds the notes.
+- `quirks.docked_hover_water_loss` is now consulted, in `hover::sink_test` (S-0503 claim 11's water test at a spin's end). On, the default, nothing changes: a hovering vehicle docked at a naval yard on water whose switch-off took the two draws is lost when its spin ends below 104 leptons, as anywhere.
+- Off: a spin end that comes while the vehicle has depot contact (`depot::link`) or is settled (`depot::settled`) makes no water test, so no bomb mark and no fall. The draws, the spin and its rotation are the same in both positions. The test belongs to the spin's end, so a spin that ends after the contact and being settled have ended is tested as usual.
+- Q-1876 (open): every disabling of S-0405 claim 20 makes the vehicle settled (S-0314 Terms, as built at intake 6), so with the switch off a hover disabled by the loss of its control centre over open water is spared too. That is the interim.
+- Whether an ordinary repair visit reaches the loss stays open in the spec (claim 21). The code keeps to the stated rule: the switch-off at the movement arrival is in *enter* and takes no draws.
+- No new state: save format 78, AI game format 40. Goldens unchanged.
+
 ### Pathing reports (M8 A4)
 
 A pathing report is what the lead saves while playing when a unit moves strangely; the replay tool explains it from the simulation's own decisions. Everything here is our own diagnostics (`// nocite: our own diagnostics`): no game rule changes, the save format stays 70 and the AI game format 31, and every golden is unchanged.
