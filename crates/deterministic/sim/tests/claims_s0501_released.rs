@@ -202,8 +202,20 @@ fn run_until(w: &mut World, max: i32, mut done: impl FnMut(&World) -> bool) -> b
 /// Builds `name` at a fresh `pad` of house 0, in the middle of the map;
 /// returns (world, pad, aircraft) in the tick of the release.
 fn built_at(r: &Ruleset, pad: &str, name: &str) -> (World, ObjectId, ObjectId) {
+    built_rally(r, pad, name, None)
+}
+
+/// [`built_at`] with the pad's rally point at `rally` (S-0213 claim 20,
+/// S-0404 claim 13).
+fn built_rally(
+    r: &Ruleset,
+    pad: &str,
+    name: &str,
+    rally: Option<glasnost_map::CellXY>,
+) -> (World, ObjectId, ObjectId) {
     let mut w = game(r);
     let k = building(&mut w, pad, 0, 0, 0);
+    w.obj_mut(k).unwrap().guard_spot = rally.map(Target::Cell);
     ready(&mut w);
     set_credits(&mut w, 0, 100_000);
     let what = t(&w, Kind::Aircraft, name);
@@ -349,6 +361,37 @@ fn claim_48_quirk_off_settles_at_the_landing_height() {
     assert!(!air::ground_filed(&w, a));
 }
 
+// spec: S-0501 Terms and claim 8 (the take-off test reads height: an aircraft at height 0 that is neither settled nor landing is on the ground, and a new destination makes it take off)
+#[test]
+fn claim_8_take_off_test_reads_height() {
+    let r = rules();
+    let (mut w, _k, a) = built_at(&r, "FLATPAD", "SCOUT");
+    testkit::run(&mut w, 10);
+    assert_eq!(air::height(&w, a), 0, "{}", describe(&w, a));
+    move_to(&mut w, a, testkit::mid(SIZE, 10, 0));
+    // The order is applied; its movement update has not taken the
+    // destination yet.
+    step(&mut w);
+    assert!(w.obj(a).unwrap().dest.is_some() && st(&w, a).flying_to.is_none());
+    // Neither settled nor landing at height 0, and off its pad's contact
+    // so that no pad departure starts the take-off.
+    if let Some(o) = w.obj_mut(a) {
+        o.contact = None;
+        o.econ.exit = None;
+        if let Some(s) = o.air.as_mut() {
+            s.ground = false;
+            s.landing = false;
+        }
+    }
+    let off = run_until(&mut w, 20, |w| {
+        // spec: S-0501 claim 8 (the movement update that takes the destination takes off: no landing comes first)
+        assert!(!st(w, a).landing, "{}", describe(w, a));
+        st(w, a).taking_off
+    });
+    assert!(off, "it takes off: {}", describe(&w, a));
+    assert!(tracked(&w, a), "tracked from the take-off (claim 47 (a))");
+}
+
 /// Per-tick samples of `a` from the order on: (height, position, current
 /// fraction, tracked, listed, ground-filed).
 struct Sample {
@@ -485,6 +528,33 @@ fn claim_48_low_release() {
     assert_eq!(second.h, 20, "{}", describe(&w, a));
     assert!(!second.listed, "it left the ground listing");
     assert!(second.filed, "still filed in the ground render layer");
+    // spec: S-0501 claim 48 (c) (no landing has brought it to height 0: its second update climbs by (b) without a take-off, so nothing re-files it)
+    assert!(!st(&w, a).taking_off, "{}", describe(&w, a));
+}
+
+// spec: S-0501 claim 48 (c) and (d) and S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it at the release, which ends its contact with the pad in the same way as a person's order and starts no take-off; its first movement update descends from 100 to 80 by F2, and its second climbs)
+#[test]
+fn claim_48_rally_point_at_the_release() {
+    let r = rules();
+    let dest = testkit::mid(SIZE, 10, 0);
+    let (mut w, k, a) = built_rally(&r, "HIPAD", "SCOUT", Some(dest));
+    let o = w.obj(a).unwrap();
+    assert_eq!(o.dest, Some(Target::Cell(dest)), "{}", describe(&w, a));
+    assert_ne!(o.contact, Some(k), "the contact ended at the release");
+    assert_eq!(air::height(&w, a), 100);
+    assert!(!st(&w, a).taking_off && !tracked(&w, a));
+    let mut hs = Vec::new();
+    let moved = run_until(&mut w, 20, |w| {
+        hs.push(air::height(w, a));
+        air::height(w, a) != 100
+    });
+    assert!(moved, "{hs:?} {}", describe(&w, a));
+    assert_eq!(air::height(&w, a), 80, "{}", describe(&w, a));
+    assert!(!st(&w, a).taking_off, "no take-off: {}", describe(&w, a));
+    step(&mut w);
+    // spec: S-0501 F1 (a climb step of 20 without passengers)
+    assert_eq!(air::height(&w, a), 100, "{}", describe(&w, a));
+    assert!(tracked(&w, a), "{}", describe(&w, a));
 }
 
 // spec: S-0501 claim 24 and AC30 part k (1) (docking by landing at the raised pad: the height component of the docking displacement is never applied; it rests at the landing height 0 and area damage reaches it)
