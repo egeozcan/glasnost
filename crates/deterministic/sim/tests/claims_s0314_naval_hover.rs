@@ -165,7 +165,9 @@ fn run_until(w: &mut World, n: i32, mut f: impl FnMut(&World) -> bool) -> bool {
 }
 
 fn spin(w: &World, id: ObjectId) -> i32 {
-    w.obj(id).and_then(|o| o.hover.as_ref()).map_or(0, |h| h.spin)
+    w.obj(id)
+        .and_then(|o| o.hover.as_ref())
+        .map_or(0, |h| h.spin)
 }
 
 fn alive(w: &World, id: ObjectId) -> bool {
@@ -195,13 +197,7 @@ fn docked(loss: bool) -> (World, ObjectId, ObjectId, ObjectId) {
     let v = at(&mut w, "SKIMMER", -8, 3);
     w.obj_mut(v).unwrap().health = 200;
     common::open_orders(&mut w);
-    let r = targeting::click(
-        &mut w,
-        ALPHA,
-        &[v],
-        ClickOn::Object(yard),
-        Modifiers::default(),
-    );
+    let r = targeting::click(&w, ALPHA, &[v], ClickOn::Object(yard), Modifiers::default());
     assert!(!r.orders.is_empty(), "the click gives an enter order");
     for o in r.orders {
         assert!(orders::issue(&mut w, ALPHA, o));
@@ -279,7 +275,10 @@ fn quirk_docked_hover_water_loss_off_spares_the_docked_hover() {
     let draws = |w: &World| w.rng.taken();
     let a = draws(&w);
     spin_at_the_yard(&mut w, k, v);
-    assert!(draws(&w) > a, "the same draws are taken with the switch off");
+    assert!(
+        draws(&w) > a,
+        "the same draws are taken with the switch off"
+    );
     assert!(
         depot::link(&w, v).is_some() || depot::settled(&w, v),
         "the spin ended in contact or settled"
