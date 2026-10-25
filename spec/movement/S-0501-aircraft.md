@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 45
+revision: 52
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-25
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841]
 supersedes: []
 ---
 
@@ -71,19 +71,38 @@ Q-1845 in full, by claim 47: (1) an aircraft becomes a tracked flying object whe
 starts, on the ground at the height it has then, normally 0 leptons, or when it is placed on the
 map with its in-the-air answer *yes* and the counts-as-aircraft flag, which an aircraft type has
 unless its data turns it off; placement on the ground, from a factory, by the map or by a carrier's
-launch inside the usable area, does not track it, and leaving a pad is a take-off; (2) it stops
-being tracked at touchdown, not when its landing starts, on a pad as on open ground, at a crash
-impact, and when it leaves the map in any way, going inside a carrier, transport or building
-included; a dead aircraft stays tracked while it falls; (3) a
-landed aircraft is never tracked; (4) its sector is brought up to date at the start of each
-movement update in which it has changed cell and its speed fraction carried from the previous
+launch inside the usable area, does not track it, and leaving a pad is a take-off, except for an
+aircraft that a factory release has left above its pad, which starts no take-off and is first
+tracked at a movement update (claim 48); (2) it stops being tracked at touchdown, not when its
+landing starts, on a pad as on open ground, at a crash impact, and when it leaves the map in any
+way, going inside a carrier, transport or building included; a dead aircraft stays tracked while it
+falls; (3) a landed aircraft is never tracked; (4) its sector is brought up to date at the start of
+each movement update in which it has changed cell and its speed fraction carried from the previous
 update is not zero; it moves to the end of the new sector's list only when the sector changes, so
-the sector follows its position one movement update late and not at all while it stands still.
-(5) aircraft that start being tracked in one tick join in the order of the events that start
-their tracking, with no sorting; (6) hovering, waiting, circling and attacking in flight are
-ordinary flight and tracked, and no temporary effect that holds an aircraft in flight ends its
-tracking: one that switches its locomotor off makes it crash (claim 9), and it stays tracked until
-the impact.
+the sector follows its position one movement update late and not at all while it stands still. (5)
+aircraft that start being tracked in one tick join in the order of the events that start their
+tracking, with no sorting; (6) hovering, waiting, circling and attacking in flight are ordinary
+flight and tracked, and no temporary effect that holds an aircraft in flight ends its tracking: one
+that switches its locomotor off makes it crash (claim 9), and it stays tracked until the impact.
+Q-1841 in full, by claims 24, 47 and 48: (1) an aircraft that lands on a pad rests at the landing
+height above the terrain surface under it, whatever height its contact place's docking displacement
+has, so it is found as an aircraft landed on open ground is: by area damage through its cell and by
+a ground search's ground-layer pass; (2) through the ground cell layer of the cell that holds its
+horizontal position (S-0209 claim 13, listing height 0); (3) it never lands onto a docking height:
+the docking approach moves it horizontally only (claim 24). Its take-off from the pad is an
+ordinary one (claim 47 (b)): from the start of the take-off until its listing height becomes
+positive it is both tracked and listed in its cell's ground layer, so area damage can find it
+twice, through its cell and through the flying-object search (S-0303 claim 6); a range or area
+search can find it through its cell, and that search's airborne scan looks at it only once its
+height is above 0 (claim 47 (e)); after that it is found as a tracked aircraft in flight. Only a
+factory release puts an aircraft at a docking position with its height (S-0404 claim 15). When that
+position lies above the terrain under it, the released aircraft rests in the air, in neither cell
+layer and not tracked, so area damage and range and area searches pass over it; it stays in the
+ground render layer of its placement (claim 48 (a) for what a map-wide search does with it). How it
+then leaves is claim 48. Ratings: (1) medium, until AC30 part k (1) runs. (2) medium, until AC30
+parts i (2) and k (1) run. (3) medium, by AC30 part k (1) for the landing and by claim 47's
+`unmeasured` take-off overlap for the take-off. The released aircraft medium, until AC30 part k (2)
+to (5) run.
 Against the committed text, these rows of tables T1 and T2 change. In T1: the *approaching* row
 with no target or no ammunition goes to *done* after 1 tick, not after the standard delay (claim
 32, AC19 parts a and j); the spend of a pending round with the run lock turned off is stated
@@ -112,6 +131,14 @@ visiting aircraft (Terms, claim 1), and adds AC29 parts g (4) and j and a placem
 part h.
 Against revision 41, revision 45 adds claim 47 on when an aircraft is a tracked flying object, its
 quirk switch, the counts-as-aircraft flag in Import mapping, and scenario AC30.
+Against revision 45, revision 52 changes one behaviour: an aircraft docking by landing is no
+longer put at its docking position at touchdown; it is moved toward it horizontally, at most
+5 leptons along each map axis per processing while it lands, and keeps the landing height
+(claim 24, AC14). It adds claim 48 on an aircraft released above its pad, claim 47's
+exceptions for it, its quirk switch, AC30 part k and Open question 25, and Import mapping now
+reads the docking displacements from the art file, as S-0404 does, not from rules. Terms now
+says that the on-the-ground test reads height, not the render-layer list, and claim 7 says when
+that list is matched to the height.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -142,14 +169,18 @@ the original only; the neutral and special houses retain it (glossary, *AI house
   guidance can instead use its height above the terrain at that destination (claim 6).
 - **landing height**: the height at which an aircraft counts as landed for the fall-back rules:
   0 for every aircraft this spec covers (carrying aircraft that lift vehicles are out of scope).
-- **on the ground** (this spec's test): *h* ≤ landing height, or the aircraft is drawn in the
-  ground layer. **In flight** is the opposite. Wherever this spec says "in flight" it means this
-  test, not either sense of the glossary's *airborne*. Two other tests appear and are named where
-  used: *h* > 0 (claim 37), and the aircraft's **in-the-air answer**, which is S-0307's *airborne*
-  (height above the surface at least 208 leptons) for every aircraft except the game-wide
-  V3-rocket and dreadnought-missile types, which use their locomotor's own answer (S-0506 claim
-  22, and claim 18 here uses that answer). The in-the-air answer is the exact test that S-0308's
-  *airborne* leaves to this spec for aircraft.
+- **on the ground** (this spec's test): *h* ≤ landing height, or the render layer that its height
+  gives it (claim 7) is the ground layer, which for an aircraft of this spec is the same condition.
+  The test reads the aircraft's height, never the render layer's list that it was last filed in
+  (S-0102 claim 4): an aircraft still filed in the ground render layer at a positive height, such
+  as claim 48's released aircraft, is in flight. Claim 8's take-off test, claim 18's fall-back rows
+  and claim 47's tracking start read height in the same way. **In flight** is the opposite.
+  Wherever this spec says "in flight" it means this test, not either sense of the glossary's
+  *airborne*. Two other tests appear and are named where used: *h* > 0 (claim 37), and the
+  aircraft's **in-the-air answer**, which is S-0307's *airborne* (height above the surface at least
+  208 leptons) for every aircraft except the game-wide V3-rocket and dreadnought-missile types,
+  which use their locomotor's own answer (S-0506 claim 22, and claim 18 here uses that answer). The
+  in-the-air answer is the exact test that S-0308's *airborne* leaves to this spec for aircraft.
 - **strike aircraft**: an aircraft linked to a strike (S-0519 claims 17 and 20), not every
   visiting aircraft or every aircraft dispatched from outside the map.
 - **visiting aircraft**: an aircraft marked as not meant to stay on the map. Successful placement
@@ -209,7 +240,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    Its current speed fraction starts at 1 when it is placed exactly at cruise height and at 0
    otherwise. Ground placement replaces the requested world height with the terrain height.
    It does not preserve an elevated launch request or a docking displacement's height.
-   A later docking-position assignment is separate (claim 24; S-0404 claim 15).
+   A factory release then moves it to its docking position, height included, in the same tick
+   (S-0404 claim 15; claim 48). Docking by landing (claim 24) never applies that height.
    A type placed carrying passengers is marked as a passenger carrier for the rest of
    its life (claim 19). Where an aircraft factory puts a new aircraft is S-0404 claims 13 and 15,
    and its contact and tether at release are S-0417 claim 11.
@@ -223,7 +255,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    - Backing: `measurable` (scenario AC1; AC29 parts g (4) and h for a type that is not both
      selectable and landable)
    - Confidence: high; medium for the placement fall-back of a type marked visiting only by the
-     type test, until AC29 parts g (4) and h run
+     type test, until AC29 parts g (4) and h run; medium for the factory release's move to the
+     docking position, as S-0404 claim 15 rates it
 
 2. **Climbing.** In an ordinary movement tick with a living aircraft below its held height,
    height rises by min(*FL*ₕ − *h*, *c*) leptons, where *c* = 10 for an aircraft that carries
@@ -259,7 +292,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    A living descending aircraft with a destination additionally moves 5 leptons toward the
    centre of its destination cell in the same tick, except during *enter* toward a helipad
    building. This extra displacement follows the forward step and ordinary height reduction.
-   It retains the resulting world height. Take the direction to that centre by S-0204
+   It retains the resulting world height. Claim 24's docking approach is a separate movement
+   toward the docking position. Take the direction to that centre by S-0204
    claim 8, then use F3's facing conversion and table trigonometry
    with step length 5, truncating each coordinate sum toward zero. This is not a snap or a
    distance-clamped step: even a nearer cell centre does not reduce its length.
@@ -401,7 +435,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 7. **Landing and touchdown.** Landing sets the target speed fraction to 0; descent follows
    claim 3. The ground render layer applies exactly when height above the surface is at most
    0 leptons; any positive height uses the top layer. Both directions use that boundary,
-   with no hysteresis and no separate 208-lepton combat threshold.
+   with no hysteresis and no separate 208-lepton combat threshold. This is the layer its
+   height gives it. The list it is drawn from is matched to it only at S-0102 claim 4's moments
+   (claim 48 for an aircraft that leaves with no take-off).
    On changing into the ground render layer, its landing cell is tested (Formula F7).
    If the cell is refused the aircraft rises by 10 leptons and starts to take off again. The
    exceptions in F7 mean occupancy is not an unconditional refusal: its own contact, itself,
@@ -418,7 +454,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
    heading persists, which need not equal the current facing. These are take-off rules, not descent stages. The
    divisions are integer divisions toward zero, with heights in leptons. Setting no destination while it is in flight
    makes it land where it is (claim 6). An aircraft standing on a pad leaves its pad reservation
-   when it takes any destination other than that pad (claim 24).
+   when it takes any destination other than that pad (claim 24; claim 48 (c) for an aircraft that
+   a factory release has left above its pad).
    - Backing: `measurable` (scenario AC4)
    - Confidence: high
 
@@ -726,23 +763,42 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - Backing: `measurable` (scenario AC13)
     - Confidence: high
 
-24. **Docking.** An aircraft in *enter* with a pad as destination flies to it and asks the pad
-    each processing to be loaded, which the pad answers by confirming the contact and the
-    approach. When it is over the pad it lands (claims 6 and 7), and on touchdown it is put at its
-    contact place's docking position (S-0404 claim 15). It then reports that it has entered: the
-    pad starts servicing (claim 26) and the aircraft's behaviour becomes *sleep*, with *guard*
-    queued. A pad-bound aircraft that is on the ground but not on its destination pad leaves its
-    current contact and takes off toward the pad. If the reservation is refused or lost while it
-    approaches, the aircraft falls back to rest (claim 18).
-    Entry begins with a 1-tick delay. While in contact during the approaching stage it returns
-    3 ticks, including the processing that recognizes arrival and advances to docking.
-    The docking-position and entered-report stage returns 1 tick. The unlinked retry and
-    fallback paths also return 1 tick. None of these delays takes a standard-delay draw.
-    Ordinary aircraft pad landing, docking and departure add no entered-by raise on the pad's
-    object tag and no destroyed-by-anything raise on the aircraft's own tag merely for
-    docking (S-0524 claim 14). This does not suppress cell-tag effects during approach.
-    - Backing: `measurable` (scenarios AC14 and AC23; S-0524 claim 14, scenario C16)
-    - Confidence: high for docking; medium for absence of additional object-tag raises
+24. **Docking.** An aircraft in *enter* with a pad as destination flies to it and asks the pad each
+    processing to be loaded, which the pad answers by confirming the contact and the approach. When
+    it is over the pad it lands (claims 6 and 7). The processing of *enter* that finds it landing
+    while in contact only advances to the docking stage, 3 ticks later (below). From the next
+    processing until touchdown, each processing, 1 tick after the one before, moves it
+    horizontally toward its contact place's docking position (S-0404 claim 15): along each map
+    axis by the difference between that position's coordinate and its own, limited to the range
+    −5 to +5 leptons, each axis separately, with exact integer arithmetic. Its world height is
+    unchanged by this move, and the height component of the docking displacement is never
+    applied: descent and touchdown follow claims 3 and 7, so it rests at the landing height above
+    the terrain surface under it. If touchdown comes before the horizontal difference is used up,
+    it rests short of the docking position, in the cell that holds its own position; a touchdown
+    within those 3 ticks leaves no such move at all.
+    A contact that is not a building gives its centre instead of a docking position. An aircraft
+    already on the ground and not landing when it reaches this stage is not moved. After touchdown
+    it reports that it has entered: the pad starts servicing (claim 26) and the aircraft's
+    behaviour becomes *sleep*, with *guard* queued. A pad-bound aircraft that is on the ground but
+    not on its destination pad leaves its current contact and takes off toward the pad. If the
+    reservation is refused or lost while it approaches, the aircraft falls back to rest (claim 18).
+    Entry begins with a 1-tick delay. While in contact during the approaching stage it returns 3
+    ticks, including the processing that recognizes arrival and advances to docking. The
+    docking and entered-report stage returns 1 tick. The unlinked retry and fallback paths
+    also return 1 tick. None of these delays takes a standard-delay draw. Ordinary aircraft pad
+    landing, docking and departure add no entered-by raise on the pad's object tag and no
+    destroyed-by-anything raise on the aircraft's own tag merely for docking (S-0524 claim 14).
+    This does not suppress cell-tag effects during approach.
+    - Backing: `measurable` (scenarios AC14 and AC23, AC14 with its nonzero horizontal
+      displacement for the clamped steps and their start, AC30 part k (1) for the unapplied
+      height; S-0524 claim 14, scenario C16)
+    - Confidence: high for docking itself (the approach, the landing over the pad, the entered
+      report and the behaviour that follows); medium, until AC30 part k (1) and AC14 run, for a
+      horizontal approach that changes no height and for the unapplied height; medium, until
+      AC14 runs, for the exact −5 to +5 clamp per axis, its first application one processing
+      after the one that finds the aircraft landing, the 3-tick and 1-tick stage delays, and a
+      touchdown that leaves it short of the docking position; medium for absence of additional
+      object-tag raises
 
 25. **Landing-facing choice.** Where flight calls for the landing direction, an aircraft in
     contact uses its contact's current body facing rounded to 8 directions, not the direction
@@ -1197,7 +1253,9 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     a mobile object its next movement point or stationary position; for a building its
     centre or docking point as S-0506 claim 14 specifies. Claim 6 can replace the world
     height for an armed approach. Pad guidance can subsequently replace a building point
-    with the contacting aircraft's docking position (S-0404 claim 15).
+    with the contacting aircraft's docking position (S-0404 claim 15), but only its
+    horizontal location is used there: the docking position's height is not applied when an
+    aircraft docks by landing (claim 24).
 
     For *move* completion, **stopped** is not the zero-current-fraction test. A movement
     point accepted by the locomotor remains an
@@ -1640,18 +1698,21 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
     (a) **Start.** While it is not tracked, an aircraft becomes tracked, at the end of its
     current sector's list (S-0303 claim 11):
-    - when its take-off starts (claim 8), that is, when it accepts a destination while on the
-      ground or landing. This happens at the height it has at that moment, normally 0 leptons,
-      before it rises. Leaving a pad is such a take-off: the aircraft accepts its destination
-      while resting on the pad (claim 8). An aircraft that is already tracked, such as one taking
-      off again from a landing or after a refused touchdown (claim 7), is not added a second
-      time.
+    - when its take-off starts (claim 8), that is, when it accepts a destination while on the ground
+      or landing. This happens at the height it has at that moment, normally 0 leptons, before it
+      rises. Leaving a pad is such a take-off: the aircraft accepts its destination while resting on
+      the pad (claim 8). The exception is an aircraft that a factory release has left above its pad:
+      it is not on the ground by its height (Terms), although it is still filed in the ground render
+      layer, so its destination starts no take-off, and it is first tracked at a movement update by
+      (c) (claim 48 (c)). An aircraft that is already tracked, such as one taking off again from a
+      landing or after a refused touchdown (claim 7), is not added a second time.
     - when it is placed on the map (claim 1) with its in-the-air answer (Terms) *yes* and its
       type's counts-as-aircraft flag set (Import mapping). An aircraft placed on the ground,
       from a factory, by the map or by a carrier's launch inside the usable area (claim 35), is
-      therefore first tracked when its take-off starts. One placed at its cruise height, as a
-      visiting aircraft or outside the usable area, is tracked from its placement when that
-      height is at least 208 leptons.
+      therefore first tracked when its take-off starts, unless a factory release then puts it
+      above its pad (claim 48), when it is first tracked by (c). One placed at its cruise
+      height, as a visiting aircraft or outside the usable area, is tracked from its placement
+      when that height is at least 208 leptons.
     - at a sector update of (c), in the cases (c) states.
 
     A destination given while the aircraft is under an effect that disables vehicles, while it
@@ -1669,13 +1730,15 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     in flight, while its speed fraction is 0, and while it falls, dead or with its locomotor
     switched off, until the impact. Whether a dead object is a candidate of a search is S-0303's
     and S-0309's. A landed aircraft resting on the ground or on a pad is never tracked. It is
-    listed in its cell layer instead (S-0209 claim 13). Since tracking starts with the take-off
-    (a), an aircraft is both tracked and listed in a cell layer from the start of its take-off
-    until its listing height becomes positive, the dual membership of S-0303 claim 6; this
-    overlap stands or falls with the start at take-off and carries its rating (below). At an
-    accepted touchdown the listing returns and tracking ends in the same update, so such a landing
-    makes no overlap. A refused touchdown lists the aircraft again in its cell layer while it
-    stays tracked (claim 7), so it does make one.
+    listed in its cell layer instead (S-0209 claim 13). The one exception is an aircraft that a
+    factory release has put above the terrain under it (claim 48): it rests in neither. Since
+    tracking starts with the take-off (a), an aircraft is both tracked and listed in a cell layer
+    from the start of its take-off until its listing height becomes positive, the dual
+    membership of S-0303 claim 6; this overlap stands or falls with the start at take-off and
+    carries its rating (below). At an accepted touchdown the listing returns and tracking ends in
+    the same update, so such a landing makes no overlap. A refused touchdown lists the aircraft
+    again in its cell layer while it stays tracked (claim 7), so it does make one, and so does
+    claim 48 (c)'s low release, tracked at height 0 by (c) while it is listed in its cell layer.
 
     (c) **Sector update.** A tracked aircraft's sector is brought up to date at the start of
     each of its movement updates, before that update's forward step (claim 4), when it is in
@@ -1693,12 +1756,16 @@ the original only; the neutral and special houses retain it (glossary, *AI house
     - An aircraft in flight that is not tracked, such as one placed in the air below 208
       leptons or one whose type lacks the counts-as-aircraft flag, becomes tracked at its first
       movement update with a positive carried fraction, at the end of its current sector's list,
-      when its cell then lies outside sector (0, 0) of F7. While its cell lies in sector (0, 0),
-      cell (0, 0) itself included, it is not listed. It joins a list only at the first such
-      update after it has moved into another sector, at the end of that sector's list
-      (`quirks.aircraft_corner_sector_untracked`). An aircraft type that keeps the
-      counts-as-aircraft flag and has a cruise height of at least 208 leptons never reaches this
-      case.
+      when its cell then lies outside sector (0, 0) of F7. So does an aircraft that a factory
+      release has left above its pad (claim 48), whatever its height at that update. Claim 48
+      (c)'s low release is at height 0 then: on the ground by this spec's test (Terms), but no
+      landing has brought it there and it is not at rest, so (b)'s rule for a landed aircraft
+      resting on the ground does not reach it, and it becomes tracked all the same. While its
+      cell lies in sector (0, 0), cell (0, 0) itself included, it is not listed. It joins a list
+      only at the first such update after it has moved into another sector, at the end of that
+      sector's list (`quirks.aircraft_corner_sector_untracked`). Apart from claim 48's
+      released aircraft, an aircraft of a type that keeps the counts-as-aircraft flag and has a
+      cruise height of at least 208 leptons never reaches this case.
 
     (d) **Order.** Several aircraft that start being tracked in one tick, or move into the same
     sector in one tick, join that sector's list in the order of the events, within the tick's
@@ -1719,7 +1786,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
 
     With S-0303's `quirks.flying_search_sectors` off, (a), (b) and (d) are unchanged. Sector
     updates then change nothing observable (S-0303 claim 11), and (c) decides only when an
-    aircraft in flight that is not tracked starts being tracked.
+    aircraft in flight that is not tracked, or claim 48's released aircraft, starts being
+    tracked.
     - Backing: `measurable` (scenario AC30: parts a, b, d and e back tracking in flight after a
       take-off, bounded on both sides, the hover and the anti-air consequence of part (e); part c
       and part i (4) that tracking holds after the landing starts; part i (1) to (3) the end at
@@ -1750,6 +1818,8 @@ the original only; the neutral and special houses retain it (glossary, *AI house
         its next one, and no fixture places a search in that window.
       - the order of (d): no fixture here makes two aircraft start being tracked in one tick in
         one sector with distinguishable hits.
+      - the start by (c) of claim 48 (c)'s low release at height 0, and its overlap in (b): no
+        part of AC30 sets up that release (claim 48's backing).
     - Confidence: high that a landed aircraft at rest is not tracked, on open ground and on a pad
       alike, whether it landed after a move order or the map placed it on the ground (AC30 part
       i (1) to (3), through area damage). Medium for tracking in flight after a take-off, for the
@@ -1761,8 +1831,168 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       starts, but no part pins the update. Medium for the anti-air consequence of part (e), which
       can be no firmer than the airborne scan and its ground render layer rule in S-0309 claim 9,
       and for the absent default of the counts-as-aircraft flag (AC30 h (2), an attempt, and
-      part j, which rests on S-0004 claim 11's ranking); medium for each `unmeasured` point of (a)
-      and (b) above, the overlap at take-off included; medium for part (c) and for part (d).
+      part j, which rests on S-0004 claim 11's ranking); medium for each `unmeasured` point of
+      (a), (b) and (c) above, the overlap at take-off included, except the low release's start at
+      height 0 and its overlap, which are low, as claim 48 rates that release; medium for part
+      (c) and for part (d).
+
+48. **Released above its pad (Q-1841).** A factory release puts the aircraft at its docking
+    position, height included (S-0404 claim 15, claim 1). When its height there (Terms) is
+    positive, as when its contact place's displacement has a positive height component over
+    level ground, these rules follow (`quirks.aircraft_released_above_pad`, Edge cases).
+    Docking by landing never leads here (claim 24).
+
+    (a) **Resting.** The aircraft is in flight by this spec's test (Terms), which reads its
+    height and not the render-layer list it is filed in, but it is not landing and has no
+    take-off under way. Its listing height is positive, so it is in neither
+    cell layer (S-0209 claim 13), and nothing has made it a tracked flying object (claim 47 (a)).
+    Its height evaluates to the top render layer (claim 7), but no moment of S-0102 claim 4
+    re-files it: its placement on the ground put it in the ground render layer, and the release
+    raises it without a re-file, so it stays in the ground render layer
+    (`quirks.layer_change_on_events_only` of S-0102). So:
+    - Area damage (S-0303 claim 6) passes over it, since it reads only the cell layers and the
+      tracked flying objects.
+    - A range or area search passes over it: no cell offers it (S-0309 claim 10), and the
+      airborne scan (S-0309 claim 9) reads only the tracked flying objects.
+    - A map-wide search (S-0309 claim 7) considers it in its aircraft pass, which takes every
+      aircraft on the map when the search looks for aircraft. Its ground-layer pass takes the
+      objects filed in the ground render layer's list, whatever their height, so for a searcher
+      without the connected-region test it takes this aircraft too; for a mobile searcher other
+      than an aircraft that test's outcome was not traced (Open question 25). Table C of S-0309
+      then decides. With S-0102's switch off only the aircraft pass considers it.
+
+    The two readings, the filed list for the ground-layer pass and the height's layer for the
+    airborne scan, are this spec's finding (claim 7; (c); Changes for other specs, S-0309); they
+    differ only for an object whose layer changed without a re-file.
+
+    Its movement updates move it only toward a destination: while it has none, neither its height
+    nor its position changes. Its *guard* processings neither move it nor send it to a pad, and
+    its *area guard* processings send it to no pad (d), except at a released height exactly equal
+    to its cruise height (Open question 25).
+
+    (b) **Held height.** An aircraft placed on the ground (claim 1), as a factory release first
+    places it, starts with the landing height (0) as its held height, and the release does not
+    change it. Released at any height but its cruise height (Open question 25), its speed fractions
+    start at 0, so the third case below cannot apply to its first update. It takes the held height
+    of ordinary flight (claim 6, normally its cruise height) in three cases, which time its climb.
+    - A take-off (claim 8), which this aircraft does not make while it is above the terrain (c).
+    - A movement update that leaves it alive, with a destination, neither landing nor taking off,
+      and above the terrain. It climbs from its next movement update on, whatever its target
+      fraction and its distance to the destination.
+    - A movement update that it begins neither landing nor taking off, with held height 0 and a
+      target speed fraction of 1 (claim 5). It climbs in that same update.
+
+    (c) **Leaving.** A destination given while it rests here starts no take-off, since claim 8
+    takes off only an aircraft that is landing or on the ground by its height (Terms), whichever
+    render-layer list it is filed in; its held height stays 0 for now, and it is not tracked at
+    the order. For a destination outside claim 5's halving zone (Terms):
+    - in its first movement update after it accepts the destination it makes no forward step,
+      since its current fraction is still 0. It descends by F2 toward held height 0, by 20 to
+      50 leptons, and claim 4's descent nudge, where claim 4 applies it, moves it 5 leptons toward
+      the centre of its destination cell. Its target fraction follows claim 5 and its current
+      fraction becomes 0.1.
+    - if it is still above the terrain after that descent, its held height becomes that of ordinary
+      flight at the end of the same update by (b), whatever the distance to the destination. In its
+      second movement update it becomes tracked by claim 47 (c)'s rule for an aircraft in flight
+      that is not tracked (sector (0, 0) excepted), takes a forward step with its carried
+      fraction 0.1, and climbs by F1 if it is below that held height.
+    - if that descent reaches height 0, which happens exactly when the released height is at most
+      20 leptons (the *low release*), it is listed in its cell's ground layer at the end of that
+      update and (b)'s end-of-update rule does not apply. At the start of its second movement
+      update it becomes tracked by claim 47 (c)'s rule, at height 0 (sector (0, 0) excepted),
+      whichever way it then goes, so it is tracked and listed in its cell layer at once (claim 47
+      (b)). With a target fraction of 1 its held height becomes its cruise height at the start of
+      its second movement update by (b), and it climbs by F1 in that update, leaving the ground
+      listing once its height is positive. With a lower target fraction its held height stays 0: it
+      goes on at height 0, listed in the ground layer of each cell it is in, until claim 6's
+      landing trigger.
+
+    With no take-off, nothing re-files it as it leaves (S-0102 claim 4): it stays in the ground
+    render layer until a landing or a crash re-files it, so a map-wide search's ground-layer pass
+    reads it as in (a) while it flies. The airborne scan's test for the ground render layer
+    reads the layer its height gives (claim 7; claim 47 (e)), not that list, so once it is
+    tracked and above height 0 the scan looks at it as at any aircraft in flight (Changes for
+    other specs, S-0309).
+
+    *Pad contact.* Its contact with the pad ends at the order, when it takes a destination other
+    than the pad, as claim 8 and S-0417 claim 11 state for an aircraft standing on a pad. That
+    rule reads the cell that holds the aircraft's horizontal position, which must belong to the
+    pad it is in contact with, and not its height, so it applies to this aircraft whenever its
+    docking position lies in a cell of the pad's foundation, as in AC30 part k. A rally point's
+    move order at the release (d) ends the contact in the same way. From then on it is an
+    aircraft in flight without a contact: T2's in-flight rows and the pad search of claims 6 and
+    18 treat it as they treat an aircraft that has left its pad by a take-off. A docking position
+    outside the pad's foundation leaves the contact held after the order.
+
+    (d) **Behaviour while resting.** Its placement on the ground made its placement fall-back
+    (S-0215 Terms) before the release, so it took T2's ground row for an aircraft that is not
+    visiting, as claim 1 states for a type marked visiting only later: *guard*, or *area guard*
+    for an armed aircraft of a computer-controlled house outside a team. The release that follows
+    (S-0404 claims 13 and 15) gives it no other behaviour, except that, with a rally point, a type
+    that need not return to a dock gets a move order to it and leaves as in (c), its contact
+    ending with that order. Its contact and tether are S-0417 claim 11's; until it takes a
+    destination its contact is held.
+
+    In *guard*, an aircraft's processing compares its height (Terms) with its cruise height for
+    equality only, so every height other than the cruise height, above it as well as below it,
+    takes the same rules; claim 29 states some of them for heights below. For the released
+    aircraft, with its contact held and its ammunition full, as built, those rules come to the
+    following, and none of them looks for a pad, falls back to rest or moves it:
+    - unarmed: the processing does nothing else, and the next one comes 45 ticks later.
+    - armed, owned by a computer-controlled house (in *guard* only inside a team; outside one it
+      is in *area guard*, below): first a search by its house for a target near the aircraft's
+      own position runs. A target it finds becomes the aircraft's target and
+      *attack* is queued, whose movement leaves the pad as in (c). The processing then goes on as
+      S-0215 claim 24's *guard*, which stays where it is.
+    - armed, owned by a human player: with its in-the-air answer (Terms) *yes*, the processing
+      is S-0215 claim 24's *guard*; with *no*, as for a released height below 208 leptons, it
+      does nothing else, and the next one comes after the standard delay (S-0215 claim 6).
+
+    In *area guard*, the processing compares its height with its cruise height in the same way
+    (claim 45). At any other height, an armed aircraft that has ammunition left or a contact, as
+    the released one has both, makes no fall-back to rest and looks for no pad: with a target it
+    queues *attack*, and otherwise the processing is S-0215 claim 26's *area guard*. Its first
+    such processing takes the aircraft's own cell as its guard spot, and that claim's rows,
+    leash and search, measured from the released position, decide what follows.
+
+    At a released height exactly equal to its cruise height, *guard* takes claim 29's outcomes
+    at cruise height instead, and *area guard* claim 45's (Open question 25).
+    - Backing: `measurable` (scenario AC30 part k (2) for the rest at the release height, its
+      absence from both cell layers and from tracking through the count of area-damage entries,
+      its ground render layer through the recorded layer, and (d) for an armed aircraft of a
+      human player released below 208 leptons, which waits; parts k (3) and (4) for the
+      first-update descent, the second-update climb, for a far and for a near destination, and
+      the render layer kept while it leaves; part k (5) for the airborne scan, which looks at it
+      once it is tracked and flying off, by its height). `unmeasured`, each for its own reason:
+      - that a range or area search's cells do not offer it, and both passes of a map-wide search:
+        part k runs no such search against it, and for the ground-layer pass no observable consumer
+        without the region test can be set up in AC30. The first follows from its absence from both
+        cell layers, which part k (2) observes through area damage, by S-0309 claim 10; the second
+        is S-0309 claim 7's own rule for every aircraft; the third is the filed-list reading of (a).
+      - the end of its pad contact at the order: no part of AC30 separates it from what follows,
+        since a pad-bound aircraft that reaches its destination looks for a pad and returns
+        whether or not the contact was kept. S-0417's scenario U12 measures the same rule for an
+        aircraft standing on its pad. The docking position outside the pad's foundation: no part
+        of AC30 sets it up.
+      - (d) for an unarmed aircraft, for an armed one of a computer-controlled house in *guard*
+        or in *area guard*, and for an armed one of a human player with its in-the-air answer
+        *yes*: AC30's pad builds an armed type for a human-controlled house, and its docking
+        height is below 208 leptons.
+      - the *attack* that a target found in (d) starts, by its house's search in *guard* or by
+        S-0215 claim 26's search in *area guard*: AC30 gives its aircraft no target, so that
+        only the defence decides its observations, and no part puts a target within reach of the
+        resting aircraft.
+      - the low release: part k uses one test pad, whose docking height is chosen far above the
+        terrain, and no second pad for this narrow band of heights is proposed.
+    - Confidence: medium, until AC30 part k (2) runs, for the release position with its height,
+      its absence from both cell layers and from tracking, its ground render layer and its rest
+      while it has no destination. Medium, until part k (5) runs, for the airborne scan's reading in
+      (c); medium for the `unmeasured` search points, the filed-list reading among them. Medium for
+      the end of its pad contact at the order, whose rule is traced and has no height test, and for
+      the rules of (d), whose equality tests are traced and of which part k (2) observes only one.
+      Medium also for part (b), and for part (c) above the low release, until AC30 part k (3) and
+      (4) run. The start of tracking in (c) is claim 47 (c)'s and carries its rating. Low for the
+      low release and for a docking position outside the pad's foundation.
 
 ## Formulas
 
@@ -1943,6 +2173,8 @@ division truncated toward zero.
 | Edge push-back | 128 | leptons | claim 4 |
 | Edge random fallback radius | 64 | leptons | claim 4 |
 | Descent horizontal nudge | 5 | leptons per descending movement tick | claim 4 |
+| Docking approach step | −5 … 5 | leptons per axis per processing, 1 tick apart | claim 24 |
+| Docking stage start | 3 | ticks after the processing that finds the aircraft landing | claim 24 |
 | Flight-destination search radii | 0 … 31 | cells | claim 40 |
 | Firing-spot radius interval | 256 | leptons | claim 39 |
 | Firing-spot angular interval | 4096 | facing units | claim 39 |
@@ -2041,7 +2273,7 @@ it gets that pad and *enter*.
 
 | Aircraft state | Event | Result |
 |---|---|---|
-| flying to the pad (*enter*) | pad accepts, contact held | lands, put on its docking position; *sleep*, *guard* queued |
+| flying to the pad (*enter*) | pad accepts, contact held | lands; *sleep*, *guard* queued |
 | flying to the pad | pad refuses or is gone | destination cleared and falls back to rest (claim 46): always when the pad is gone; on a refusal, when no behaviour is queued, Open question 19 otherwise |
 | settled in *sleep* | service step, ammunition not full | +1 round (with a target: none once at ⌊*A*/2⌋) |
 | settled in *sleep* | service step, full, damaged, house can pay, no target | repair step |
@@ -2159,12 +2391,20 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
   retains the higher smoke chance for dead aircraft. This alternative is a design rule,
   not an oracle measurement.
 - **Untracked aircraft in sector (0, 0)** (`quirks.aircraft_corner_sector_untracked`, default on =
-  original). An aircraft in flight that is not tracked and whose cell is in sector (0, 0) of
-  S-0303's F7, cell (0, 0) itself included, is not listed until it moves into another sector, so
-  neither area damage nor the airborne scan finds it there through the flying-object search
-  (claim 47 (c)). Off: at its first movement update with a positive carried speed fraction it
-  joins the end of sector (0, 0)'s list, like an aircraft in any other sector.
-  This alternative is a design rule, not an oracle measurement.
+  original). An aircraft in flight that is not tracked, or one that a factory release has left
+  above its pad (claim 48), whose cell is in sector (0, 0) of S-0303's F7, cell (0, 0) itself
+  included, is not listed until it moves into another sector, so neither area damage nor the
+  airborne scan finds it there through the flying-object search (claim 47 (c)). Off: at its first
+  movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s
+  list, like an aircraft in any other sector. This alternative is a design rule, not an oracle
+  measurement.
+- **Aircraft released above its pad** (`quirks.aircraft_released_above_pad`, default on =
+  original). A factory release whose docking position lies above the terrain under it leaves the
+  aircraft resting in the air, in neither cell layer and not tracked, and its first movement update
+  descends (claim 48). Off: the release puts it at the docking position's horizontal location at
+  the landing height above the terrain there, so it rests listed in its cell layer like an aircraft
+  docked by landing (claim 24) and leaves by an ordinary take-off (claim 8). This alternative is a
+  design rule, not an oracle measurement.
 
 ## Import mapping
 
@@ -2199,7 +2439,7 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 | `UnitReload` | rules, building type | reload pad (services aircraft) | boolean | no |
 | `UnitRepair` | rules, building type | repair building: accepts aircraft for repair (S-0314) | boolean | no |
 | `NumberOfDocks` | rules, building type | docking-place count *d* | integer | 1 |
-| `DockingOffset0` … | rules, building type | S-0404 claim 15 | — | S-0404 |
+| `DockingOffset0` … | art, building type | S-0404 claim 15; claims 24 and 48 here | — | S-0404 |
 | `V3RocketType`, `DMislType` | rules, `[General]` | the two types whose in-the-air answer is their locomotor's (Terms) | type name | none |
 | `PadAircraft` | rules, `[General]` | pad-aircraft list | list of aircraft types | empty |
 | `ReloadRate` | rules, `[General]` | reload rate *r* | double, game minutes | 0.05 |
@@ -2414,7 +2654,23 @@ listed in Open questions are not claimed confirmed by these scenarios.
   enemy ownership and full contacts do. Keep a pad-bound aircraft's already accepted heading pad
   while a nearer pad becomes free: the original reservation choice is retained.
 - **AC14 Docking and facing (claims 24 and 25).** Record approach, touchdown, docking position,
-  contact, *sleep* and queued *guard*. Expected: position is S-0404 claim 15's pad position.
+  contact, *sleep* and queued *guard*, with the aircraft's horizontal position and height above
+  the terrain each tick from the start of its landing to touchdown. Use a named test copy of a
+  stock pad whose docking place has a horizontal displacement of 64 leptons along each map axis
+  and a height component of 0 (S-0404 Import mapping), and record the difference between the
+  docking position and the aircraft's position along each axis at the tick its landing starts,
+  and void a run in which that difference is at most 5 leptons along both axes, or in which
+  touchdown comes within 3 ticks of the landing's start with no step (claim 24 allows it). Let *d*
+  be the remaining difference along an axis and the step the tick's change along it, net of claim
+  4's forward step and descent move computed from the recorded facing and speed fraction. Expected:
+  no step in the first 2 ticks after the tick the landing starts; the first step 3 to 6 ticks after
+  it (the range allows for the 3-tick stage and the order within the tick); from then on, at every
+  tick until touchdown, a step of exactly *d* when |*d*| ≤ 5 and of 5 toward the docking position
+  otherwise, on each axis separately; it rests at height 0 above the terrain, at the docking
+  position when the descent outlasted the remaining difference and short of it otherwise. Falsified
+  by a step within the first 2 ticks, by a tick between the first step and touchdown whose step on
+  an axis differs from the clamped *d*, by a step of more than 5 leptons along an axis, or by a
+  resting height other than 0.
   Contact persists until departure. Use S-0524 claim 14, scenario C16's repeating pad entered-by
   tag, aircraft destroyed-by-anything tag and read-only raise recorder: expect neither raise
   merely for docking, servicing or departure. Any such extra object-tag raise falsifies this
@@ -3029,9 +3285,10 @@ listed in Open questions are not claimed confirmed by these scenarios.
     processing at exactly its cruise height, the fall-back to rest and 1 tick. Falsified by a
     1-tick delay with no target held at a processing above the cruise height. Void if the
     aircraft joins a team.
-- **AC30 Tracking as a flying object (claim 47, Q-1845).** A flat purpose-made map at least 60
-  cells along each axis, so that each sector of S-0303's F7 is at least 3 cells wide. The
-  recorded house owns one stock defence whose weapons can engage only aircraft. The enemy
+- **AC30 Tracking as a flying object (claims 24, 47 and 48, Q-1845, Q-1841).** A flat
+  purpose-made map at least 60 cells along each axis, so that each sector of S-0303's F7 is at
+  least 3 cells wide. The recorded house owns one stock defence whose weapons can engage only
+  aircraft. The enemy
   house is human-controlled, and its aircraft get only move orders, never a target: a stock
   landable aircraft, or a named test copy of it without weapons. Neither house takes damage
   from the other unless the defence fires. Record per tick the defence's target, turret
@@ -3112,16 +3369,63 @@ listed in Open questions are not claimed confirmed by these scenarios.
     with the absent default *yes*. Control: the same with the aircraft's key set to *no*, where
     the aircraft's icon is expected first, by display name. Falsified: the aircraft first with the
     key left out.
+  - k. A pad above the terrain (claims 24 and 48, Q-1841). Named test rules: a copy of the enemy
+    house's stock aircraft factory that is also its pad, placed on level ground, with one docking
+    place whose docking displacement (S-0404 Import mapping) has horizontal components of 0 and a
+    height component of 100 leptons; a pad-bound, armed stock aircraft type that it builds and
+    docks; no rally point. Use part i's detonation, warhead override and recorder, with the
+    aircraft's cell within the spread. The positive control is the header's landable aircraft, which
+    is not pad-bound and so lands on open ground (claim 6), landed after a move order inside the
+    same spread at least one search interval before the detonation, as in part i (1), with its
+    entries recorded apart: its one hit shows that the detonation reached its spread. Void any run
+    in which the control takes no hit. (1) and (2) are separate runs.
+    (1) *Docking:* an aircraft of that type, placed by the map on open ground, is ordered to the
+    test pad, flies there and docks (claim 24). Record its horizontal position and height above the
+    terrain each tick from the start of its landing. Expected: height 0 at touchdown and at rest,
+    and one hit on the aircraft, from the scanned cell, from a detonation at least one search
+    interval after touchdown. Falsified: a resting height of 100 leptons, or no hit on the aircraft.
+    (2) *Release:* the test pad builds an aircraft of that type. Record its height above the
+    terrain, its horizontal position and its render layer from the release tick. Expected: 100
+    leptons from the release tick on, height and position unchanged while it has no order, the
+    ground render layer while it rests, and no hit on it from a detonation at least one search
+    interval after the release. Falsified: a resting height of 0, a change of height or position
+    while it has no order, the top render layer while it rests, or any hit on the aircraft while it
+    rests at 100 leptons.
+    (3) *Leaving far:* give the aircraft of (2) a move order to a cell at least 8 cells away and
+    farther away than its slowdown distance. Record per tick its height, position and speed
+    fractions. Expected: in the first movement update after it accepts the destination, no forward
+    step, a descent of 20 leptons by F2, to 80, and claim 4's 5-lepton descent nudge toward the
+    destination cell's centre; in the next, a climb by F1 toward its cruise height and a forward
+    step with fraction 0.1; the ground render layer until its landing starts. Falsified: a climb
+    with no descent first, a descent that goes on past the first update, a horizontal change in the
+    first update other than the nudge, or a change to the top render layer before its landing
+    starts. A take-off at the order, which a test reading the filed list would give, shows as a
+    climb in the first update with no descent, and falsifies claim 48 (c) and the Terms test.
+    (4) *Leaving near:* as (3), from a fresh release, with a destination cell whose centre lies 512
+    to 767 leptons from the aircraft and nearer than its slowdown distance (a named test copy of the
+    type may raise that distance). Expected: the same as (3), the climb in the second update
+    included, although its target fraction stays below 1. Falsified: no climb in the second update,
+    or a descent below 80 leptons after the first.
+    (5) *Airborne scan:* a fresh release. The header's defence stands beside the path of a move
+    order as in (3), at least 8 cells from the pad and with the pad outside its range, the pad and
+    the whole path outside sector (0, 0) (claim 47 (c)), so that the aircraft enters its range
+    after it has reached its in-the-air answer *yes*. Record per tick the defence's target and the
+    aircraft's height, cell and render layer. Control: part a, on the same path after a take-off.
+    Expected: the ground render layer until its landing starts, and acquisition at the defence's
+    first search after the aircraft, tracked since its second movement update, is within its range
+    with its in-the-air answer *yes*, as in part a. Falsified: no acquisition while it crosses the
+    range at cruise height, which would mean that the scan reads the list the aircraft is filed in.
 
 ## Changes for other specs
 
-- **S-0303 Terms (*Tracked flying object*).** For aircraft, "an aircraft-kind object in
-  ordinary flight" could point to claim 47 here, which owns the events: tracking starts when
-  the take-off starts, at height 0, or at placement in the air, and ends at touchdown, at a
-  crash impact or on leaving the map. An aircraft placed in the air with the counts-as-aircraft
-  flag ends its placement registration at touchdown like any other aircraft, not only on
-  leaving the map. S-0303's Import mapping row for that flag gives "no" as its absent default,
-  but for an aircraft type the absent default is *yes* (Import mapping here).
+- **S-0303 Terms (*Tracked flying object*).** For aircraft, "an aircraft-kind object in ordinary
+  flight" could point to claim 47 here, which owns the events: tracking starts when the take-off
+  starts, at height 0, or at placement in the air, or, for an aircraft that neither of those
+  tracks, at its first movement update with a positive speed fraction (claim 47 (c), claim 48), and
+  ends at touchdown, at a crash impact or on leaving the map. An aircraft placed in the air with
+  the counts-as-aircraft flag ends its placement registration at touchdown like any other aircraft,
+  not only on leaving the map. S-0303's Import mapping row for that flag gives "no" as its absent
+  default, but for an aircraft type the absent default is *yes* (Import mapping here).
 - **S-0105 Import mapping.** The absent default of the counts-as-aircraft flag is *yes* for an
   aircraft type and *no* for other types, so S-0105's half-size shadow rule (claim 31) reads
   *yes* for an aircraft type whose data leaves the key out.
@@ -3159,11 +3463,22 @@ listed in Open questions are not claimed confirmed by these scenarios.
   the cloak and underground losses, are `unmeasured` here: no scenario of this spec sets them up.
   They are taken to follow the same loss, with no difference by the actor's kind, and are
   rated medium; S-0309's revision would back them itself.
+- **S-0309 claims 7 and 9 (clarification).** Both use "the ground render layer". Claim 9's
+  airborne scan reads the layer an object's state and height give it (S-0102 claim 3's table), and
+  claim 7's ground-layer pass reads the list an object was last filed in (S-0102 claim 4). They
+  differ only for an object whose layer changed without a re-file, such as claim 48's released
+  aircraft here. S-0309 could say which reading each pass uses. The scan's reading is backed by
+  AC30 part k (5) here; the pass's reading is `unmeasured` here (claim 48).
 - **S-0312 claim 16.** Its demolition damage for "a crash started without a kill" does not reach
   the fall-back crash of claim 46 here: that crash sets the aircraft's health to 0 at its start
   without a hit, so the aircraft falls and strikes the ground as one shot down. Its destruction is
   credited to nobody and counted among its house's losses, and it takes no
   killing-hit effects. Claim 16 could name this crash among those that start dead.
+- **S-0404 claim 15 (clarification).** The docking position's height component is applied only
+  at a factory release, which puts the aircraft at that position, height included (claim 48
+  here). An aircraft that docks by landing is moved toward the docking position horizontally
+  and rests at the landing height (claim 24 here). Claim 15 is right as written; it could say
+  that it governs the release only.
 - **S-0519 claims 5 to 7 and its state table, and S-0312 claim 7.** A carrier destroyed without a
   hit, as by claim 46's fall-back crash here, has no shared death effects, so its planted bomb
   does not detonate at the destruction. The bomb stays attached while the carrier stays on the
@@ -3259,3 +3574,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
     applies (claim 32). What its further burst attempts and the scatter then do, and whether
     its death's detonation can reach the target before the burst ends, was not traced. No
     scenario here gives an aircraft a suicide weapon.
+25. An aircraft released above its pad (claim 48) at a height exactly equal to its cruise
+    height takes claim 29's *guard* outcomes at cruise height: an armed one without destination
+    falls back to rest, an unarmed one is given its own cell and *move*; in *area guard* it falls
+    back to rest at each processing (claim 45). How T2's fall-back and that move then run from
+    the released height was not traced. Nor were a destination inside claim 5's halving zone
+    given to an aircraft resting above its pad, and S-0309 claim 7's connected-region test for it
+    when a mobile searcher other than an aircraft runs a map-wide search. No scenario here sets
+    up these cases.
