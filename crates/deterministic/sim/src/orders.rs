@@ -716,6 +716,9 @@ fn apply_behaviour(w: &mut World, o: &Order, dest_override: Option<Target>) {
         m.path.steps.clear();
         m.path.retry_at = 0;
     }
+    // spec: S-0501 claim 48 (c) (an aircraft that a factory release has left above its pad ends its pad contact at the order)
+    let taken = w.obj(actor).and_then(|m| m.dest);
+    crate::air::destination_taken(w, actor, taken);
     // spec: S-0213 claim 21 (the destination assignment of the applied order decides the prone get-up, S-0107 claim 15)
     crate::infantry::destination_assigned(w, actor, ob.dest);
     // spec: S-0314 claim 23 (an enter order on a depot that holds no contact asks for entry at once)

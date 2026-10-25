@@ -2940,6 +2940,18 @@ S-0501 r45 claim 47 (Q-1845). The ledger, [m8-claims/intake16-S-0501.md](m8-clai
 - The counts-as-aircraft flag left out of an aircraft type now reads yes (`econ::tech`), so such an aircraft also ranks as air in the sidebar (S-0004 claim 11). The client's shadow rule still reads S-0105's no.
 - No new state: save format 76, AI game format 37.
 
+### Aircraft released above a pad (M8 step A3 intake 17)
+
+S-0501 r52 claims 24, 40, 47 and 48 (Q-1841). The ledger, [m8-claims/intake17-S-0501.md](m8-claims/intake17-S-0501.md), holds the notes.
+- Docking by landing no longer puts the aircraft on its docking position at touchdown. `enter` sets the docking stage at the processing that finds it landing on its pad, and `docking_step` then moves it horizontally toward the docking position by at most 5 leptons per axis per processing, keeping the landing height. Pad guidance (`point_with`) reads only the docking position's horizontal location.
+- A factory release with `quirks.aircraft_released_above_pad` on (now consulted) puts the aircraft at its docking position, height included. Above the pad it rests with the `released` flag: in flight, in neither cell layer, not tracked, filed in the ground render layer (`ground_filed`). Its first movement update toward a destination descends by F2 and gives no forward step; it is tracked from its second. Its contact ends when it takes a destination other than the pad (`air::destination_taken`, from `assign_destination` and the behaviour orders).
+- `ground_filed` is cleared at every S-0102 claim 4 re-file moment (`combat::effects::layer_refile`). The map-wide search's ground-layer pass reads it. The renderer files such an aircraft in the ground layer at placement (it used to read the height there, which put it in the top layer).
+- `guard` compares height with the cruise height for equality only (claim 48 (d)).
+- The take-off test reads height (Terms, claim 8). An aircraft at height 0 that is neither settled nor landing takes off at a new destination. The gate's M6c air-strike aircraft does this, which changed duel-m6c and the M6c sweep: its smallest minimum fell from 4 to 2, with no counter at 0.
+- Goldens duel, duel-diagonal, duel-naval, duel-m6c and skirmish regenerated (causes in the ledger). The arena CSVs are byte-identical, and so are the M7a and M7b sweeps.
+- Q-1875 (the released aircraft's object-present mark) is open; interim in `released_docked` and `tick_flight`.
+- New hashed state (`released`, `ground_filed`): save format 77, AI game format 39.
+
 ### Pathing reports (M8 A4)
 
 A pathing report is what the lead saves while playing when a unit moves strangely; the replay tool explains it from the simulation's own decisions. Everything here is our own diagnostics (`// nocite: our own diagnostics`): no game rule changes, the save format stays 70 and the AI game format 31, and every golden is unchanged.

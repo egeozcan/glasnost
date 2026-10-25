@@ -1145,7 +1145,11 @@ pub fn search(
                 if pass == 0 && (o.kind != Kind::Aircraft || !c.aircraft) {
                     continue;
                 }
-                if pass == 1 && !crate::temporal::ground_layer(w, x) {
+                // spec: S-0501 claim 48 (a) and its Changes for S-0309 claim 7 (the ground-layer pass takes the objects filed in the ground render layer's list, whatever their height: an aircraft that a factory release left above its pad, not re-filed since, is among them)
+                if pass == 1
+                    && !crate::temporal::ground_layer(w, x)
+                    && !crate::air::ground_filed(w, x)
+                {
                     continue;
                 }
                 let allied = w.allied(ao.owner, o.owner);
