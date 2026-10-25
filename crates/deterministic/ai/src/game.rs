@@ -148,6 +148,15 @@ impl Game {
             .collect()
     }
 
+    /// What each brain's anti-air step sees now, in the order of the
+    /// brains (local-lane reports).
+    pub fn antiair_probes(&self) -> Vec<(HouseId, crate::antiair::Probe)> {
+        self.brains
+            .iter()
+            .map(|b| (b.house(), b.antiair_probe(&self.world)))
+            .collect()
+    }
+
     /// What each brain's expansion step sees now, in the order of the
     /// brains (local-lane reports).
     pub fn expansion_probes(&self) -> Vec<(HouseId, crate::brain::ExpansionProbe)> {

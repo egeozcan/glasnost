@@ -652,6 +652,12 @@ fn play_ai(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // `GLASNOST_AI_AAPROBE=n`: every n ticks, per house that sees a drainer,
+    // what the AI's anti-air step sees (`glasnost_ai::antiair::probe`).
+    let aa_probe: i32 = std::env::var("GLASNOST_AI_AAPROBE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -756,6 +762,14 @@ fn play_ai(
             }
         }
         expansion_and_superweapons(g, w);
+        if aa_probe > 0 && w.tick % aa_probe == 0 {
+            for (h, p) in game.antiair_probes() {
+                if p.drainers.is_empty() && p.draining_on_ground == 0 {
+                    continue;
+                }
+                println!("{}", aa_probe_line(w, h, &p));
+            }
+        }
         if ex_probe > 0 && w.tick % ex_probe == 0 {
             for (h, p) in game.expansion_probes() {
                 let blocked = p.blocked_by();
@@ -3037,6 +3051,65 @@ fn dominator_watch_line(w: &World, id: glasnost_sim::world::ObjectId, h: HouseId
             o.beh.current
         ),
     }
+}
+
+/// The line of `GLASNOST_AI_AAPROBE` for house `h`: each seen drainer in
+/// the air with its cell and what answers it (kind, type index, cell,
+/// distance in cells, behaviour), the drainers draining on the ground,
+/// what the lines hold, the type ordered now and the candidate counts.
+fn aa_probe_line(w: &World, h: HouseId, p: &glasnost_ai::antiair::Probe) -> String {
+    let mut parts = Vec::new();
+    for &(d, a) in &p.drainers {
+        let Some(o) = w.obj(d) else { continue };
+        let dc = o.pos.cell();
+        let what = match a.and_then(|a| w.obj(a)) {
+            Some(x) => {
+                let c = x.pos.cell();
+                let dist =
+                    ((i64::from(c.x - dc.x)).pow(2) + (i64::from(c.y - dc.y)).pow(2)).isqrt();
+                let t = Some(glasnost_sim::world::Target::Object(d));
+                let (slot, wp) = glasnost_sim::combat::weapon::would_use(w, x.id, t);
+                let full = glasnost_sim::combat::check::check(w, x.id, t, slot, true);
+                let reach = wp.map(|wp| w.rules().combat.weapon(wp).range);
+                format!(
+                    "answered by {:?} #{} at ({}, {}) {} cells {:?} dest {:?} check {:?} range {:?} heights {} {} target {}",
+                    x.kind,
+                    x.type_index,
+                    c.x,
+                    c.y,
+                    dist,
+                    x.beh.current,
+                    x.dest,
+                    full,
+                    reach,
+                    x.pos.z,
+                    o.pos.z,
+                    matches!(x.target, Some(glasnost_sim::world::Target::Object(t)) if t == d)
+                )
+            }
+            None => "unanswered".to_string(),
+        };
+        let link = glasnost_sim::drain::partner(w, d).is_some();
+        parts.push(format!(
+            "drainer at ({}, {}) linked {link} {what}",
+            dc.x, dc.y
+        ));
+    }
+    format!(
+        "aaprobe tick {} house {}: credits {} drainers {} on ground {} lined {} build {:?} candidates hit/lit/startable/free {:?} units hit/near/unberserk/check/there {:?} defences hit/operating/weapon/check/range {:?} refused {:?}; [{}]",
+        w.tick,
+        h.0,
+        w.houses[usize::from(h.0)].credits,
+        p.drainers.len(),
+        p.draining_on_ground,
+        p.lined,
+        p.build.map(|t| (t.kind, t.index)),
+        p.candidates,
+        p.units,
+        p.defences,
+        p.refused.map(|(t, slot, a)| (t.kind, t.index, slot, a)),
+        parts.join("; ")
+    )
 }
 
 /// The lines of `GLASNOST_AI_SWPROBE`: per house and mutator or dominator
