@@ -306,7 +306,7 @@ a screenshot. Lane scenes `carrier-death`, `mirage-click` and `derrick-look` (`m
 |---|---|---|---|---|---|
 | 16 | The aircraft of a carrier do not die when the ship dies | Code bug: a departure from S-0501 claim 36. Lane: the data's one ship spawner with three slots of a non-missile aircraft type, ordered onto an enemy vehicle, killed by a hit once all three slots were attacking (69 ticks after the order). All three aircraft were at health 0 one tick later, and none left play in 1500 ticks: they lay at height 0 on the water by the sinking ship, their fall counter still growing. The release crash (`spawn::start_crash`) set health 0 but not the killed mark, and our dead state is killed with no health left (`damage::dead`). So each fell as a living aircraft (counter +3 a tick), and at impact took the crash-without-kill hit of S-0312 claim 16 for its remaining health, 0, which killed nothing, again every tick. S-0501 claim 36: the release crash sets health 0, "not a new living disabled-fall state"; by claim 9 it falls as a dead aircraft and its impact follows S-0312 claim 16 for one shot down (its death weapon at the impact point, and it leaves play) | S-0506 claims 12, 13; S-0501 claims 9, 36; S-0312 claim 16 | none | Fixed: `spawn::start_crash` marks the released aircraft killed, with none of a killing hit's other effects (claim 36 gives the release none). Test `claim_36_released_aircraft_crash_and_leave_play` (`claims_s0501.rs`): a carrier killed by a damage hit; each flying slot aircraft is dead at health 0, its fall counter grows by 1 a tick, and it leaves play. Lane after: the three aircraft leave play 2, 15 and 22 ticks after the hit. The data's two other ship spawners of a non-missile type (one slot each) did not launch against the lane's ground target in 1500 ticks; their docked slot is removed silently at the death (claim 13), so nothing is left behind there |
 | 17 | A plain click does not attack an enemy mirage tank; ctrl+click does | Code bug in the client: a departure from S-0214 Terms (*clicked object*). Lane: the data's one disguise-when-still vehicle type takes a terrain-object disguise with no house one tick after it stops; it appears disguised to the local house and cannot be selected by it (S-0516 claims 35, 36); the general attack-cursor-on-disguise rule reads yes in the data. Before: for each of 89 armed own vehicle and infantry types the plain click went to its cell (no-move 88, move 1) and force-fire attacked the cell (89), the same with its fake blink running. `Play::target` kept only an object the local house can select, and claim 36 makes a unit disguised as scenery unselectable, so the click became a click on its cell. By S-0214 Terms only a fully cloaked object the viewer neither owns nor senses cannot be clicked; the scenery disguise excludes selection only. Clicked as the object, the disguise rule of claim 6 passes with the general rule (and with the fake blink, S-0516 claim 39) | S-0214 Terms (clicked object, can be selected, scenery check, fallback move), claim 6, table G rows G2, G8 to G11, table AC row AC4; S-0516 claims 26, 35, 36, 39 | none | Fixed: `Play::target` asks the new `targeting::clickable_by` (`cloak::view::clickable`, claim 26's cloak exclusions; `pickable` is it plus claim 36); the select rows (G2, G10, claims 3 and 12, the cursor with nothing selected) ask `selectable_by` for the clicking house, so the mirage is still never selected by a click. The scenery check is built (`targeting::scenery_check`: move for a target disguised as an overlay; `fallback_move` takes the target; row AC4). Tests `s0214_claim_6_cursor_over_an_enemy_disguised_as_scenery` (`claims_s0516_disguise.rs`: with the general rule on, attack; off, no-move for a terrain disguise, move for an overlay disguise, attack while the fake blink runs; nothing selected, no select; the owner selects it) and `a_click_finds_an_enemy_disguised_as_scenery_but_not_a_cloaked_one` (`play_tests.rs`). Lane after: plain click attack 74, bomb 2, no-move 13, all on the unit; force-fire attack 84, bomb 2, no-move 3; the same counts disguised, blinking and undisguised (the control), so the disguise no longer changes the click. The pass for a terrain-fire weapon (claim 6, low) stays a seam: the importer does not read the key |
-| 18 | An oil derrick animated with no house colour | Recorded, no code change: the colour follows the specs and the animation is Q-1772's. Lane, map 0: 5 map buildings need an engineer and have running slot animations; none has the terrain-palette art flag (S-0103 claim 8's exception). Fresh: neutral, unmanned, drawn in the cell pass (standing still), light grey. Damaged: drawn live, its 2 slots play, still light grey. Captured by the local house or by the enemy (277 ticks): manned, drawn live, slots play, the capturer's colour. So what the lead saw matches a derrick never captured but drawn live, most likely because it had been hit (or it was protected, flashing or being erased), animating in the neutral house's light grey (S-0103 claim 10). A captured derrick drawn without its capturer's colour was not seen in any case. Q-1772 question 1 asks whether an unmanned tech building's slots play at all; until it is answered the interim draws one live (and so animates it) once its owner or health changes, which is why a damaged one animates and a fresh one does not. If it is seen again, look at its health bar (damaged?), its owner in the hover name, its radar dot's colour, and whether income arrives | S-0103 claims 8, 10; S-0108 claims 2, 11; S-0405 claims 8, 9; S-0509 claim 8; S-0515 claim 2 | Q-1772 (open; covers the animation half). No new request | Recorded. Test `a_damaged_unmanned_tech_building_animates_in_the_neutral_colour` (`capture_tests.rs`) pins today's interim: drawn live after the damage, its slot plays, in the neutral house's palette and not a player's |
+| 18 | An oil derrick animated with no house colour | Recorded, no code change: the colour follows the specs and the animation is Q-1772's. Lane, map 0: 5 map buildings need an engineer and have running slot animations; none has the terrain-palette art flag (S-0103 claim 8's exception). Fresh: neutral, unmanned, drawn in the cell pass (standing still), light grey. Damaged: drawn live, its 2 slots play, still light grey. Captured by the local house or by the enemy (277 ticks): manned, drawn live, slots play, the capturer's colour. So what the lead saw matches a derrick never captured but drawn live, most likely because it had been hit (or it was protected, flashing or being erased), animating in the neutral house's light grey (S-0103 claim 10). A captured derrick drawn without its capturer's colour was not seen in any case. Q-1772 question 1 asks whether an unmanned tech building's slots play at all; until it is answered the interim draws one live (and so animates it) once its owner or health changes, which is why a damaged one animates and a fresh one does not. If it is seen again, look at its health bar (damaged?), its owner in the hover name, its radar dot's colour, and whether income arrives | S-0103 claims 8, 10; S-0108 claims 2, 11; S-0405 claims 8, 9; S-0509 claim 8; S-0515 claim 2 | Q-1772 (open; covers the animation half). No new request | Recorded. Test `a_damaged_unmanned_tech_building_animates_in_the_neutral_colour` (`capture_tests.rs`) pins today's interim: drawn live after the damage, its slot plays, in the neutral house's palette and not a player's. Reopened below (*Note 18, reopened*): one code fix (an unmanned one drawn live for its look no longer animates), and the art explains the "no colour" half |
 | 19 | "Some problems with debris still" (screenshot: small pieces near infantry and on open ground) | See intake 15 part 1 (S-0319, bouncing animations), which was not on the lead's build. S-0319 is not on main at this round's rebase (0d08efc). From the picture: small flat pieces lying still, one light one beside the infantry, one on the open ground to the north-east and two darker ones near the track, the same look as notes 12 and 13, which round 3's lane matched to sprite debris (bouncing animations); voxel debris ends since C5 part 2 (S-0317). So they are of the kind S-0319 ends | S-0109 Terms (bouncing type); S-0312 claim 4; S-0317; S-0319 | Q-1762 | Waits for intake 15 part 1; to be confirmed on a build with it |
 
 **By eye (note 16).** Build a carrier, let it send its planes at a target, and sink it while they
@@ -316,6 +316,89 @@ or two; none stays lying on the water or the ground.
 **By eye (note 17).** Select any armed unit and hover an enemy mirage standing still (it looks like
 a tree): the attack cursor shows, and a plain left click attacks it. With nothing selected, a click
 on it selects nothing. Your own mirage still selects with a click.
+
+**Note 18, reopened.** The lead disputed round 4's reading ("Once damaged, it starts animating ->
+this doesn't match my observation"). Lane scene `derrick-paths` (`m7b_lane.rs`, output
+`local-lane/m8/a4-n18/before` and `after`) and the code give every path we found by which a
+needs-engineer tech building is drawn live or animates, or a captured one shows no owner's colour:
+
+- *Reasons a map building leaves the cell pass and is drawn live* (`Live::redraw`): removed; a gate
+  or occupiable type (none of the needs-engineer map buildings on maps 0 to 7 is one); protected,
+  charge-flashing, air-strike-marked or being erased (S-0102 claim 34, S-0519 claims 25 and 26,
+  S-0514 claim 27); its owner or health differs from the start; running slots on a building that
+  is not an unmanned tech building. Nothing else: selection and hover change only the status extras
+  (`Live::set_marks`), the shroud only the protection masks, and the radar has its own colours.
+- *Code bug, fixed.* Q-1772's *Current workaround* lets an unmanned tech building's slots play only
+  once its owner or health changes. Drawn live for its look (protected, flashing, marked or being
+  erased) with its owner and health as at the start, it played its slots too. Lane before, map 0:
+  protection and a charge flash each drew it live, 12 and 13 different image sets over 24 ticks
+  (animating); after: 1 image set each (standing still), still drawn live with the look. Now such a
+  building is drawn live with the set-up slots at their first image frame, as the cell pass draws
+  them (`Live::redraw`'s `still_map`, `Live::unmanned_tech`; `LiveBuilding::slots` is `None` for
+  it, the still branch of the painter's `slot_animations`).
+- *Any health change, however small.* A 1-point hit draws it live and it animates (lane: 13 image
+  sets over 24 ticks), with its normal body frame (no damage shows above the damaged ratio, S-0108
+  F3) and a health bar that looks full. Any stray splash, a debris piece or a bomb's blast does
+  this. This follows the workaround's own words, so it stays; whether an unmanned tech building's
+  slots play at all is Q-1772 question 1. A repair back to its start health puts it back in the
+  cell pass.
+- *Ownership changes that leave it grey.* Every ownership change mans it for good (S-0515 claim 2),
+  so a tech building that goes back to a passive house (a map trigger, or the release of a
+  mind-controlled building, S-0601 claim 9; neither arises in a stock skirmish with stock weapons)
+  animates in the neutral light grey. That follows S-0515 claim 2 and S-0103 claim 10; Q-1772
+  question 4 asks about the slots. A house's defeat destroys its buildings (S-0414 claim 5), so a
+  captured derrick never falls back to the neutral house that way.
+- *The capturer's colour.* Captured by the local house (test
+  `a_captured_map_building_takes_its_new_owners_colour`) and (lane) by the last of four houses
+  (house index 3, lobby colour slot 6, 263 ticks): manned, drawn live, slots play, never the
+  non-player grey. A computer or allied capturer goes through the same owner lookup, which does not
+  depend on who plays the house (from reading the code; not run). One latent key mismatch was
+  fixed on the way: the lobby's colour slots were keyed by the importer's form of the house name
+  (`live::name_bytes`) while the drawing passes the name's own bytes, so a house name with a
+  character in U+F780 to U+F7FF would have drawn every object of that house in the fallback grey
+  (`load::load_with`). Our lobby names its houses in plain ASCII ("Player", "Computer 2" and so
+  on), so this never showed, and no test covers it. The map's own imported owner colours are used
+  only by the map viewer, outside a game. A network rejoin keeps the manned state (saved and hashed) and the start
+  record; the client has no saved-game load. A tech building a map gives a player house at start
+  is unmanned (S-0515 claim 2), stays in the cell pass, and shows that house's colour.
+- *Engineer failure.* An engineer entering a neutral tech building in a skirmish captures it (S-0509
+  claim 3 row 7; the multi-engineer rule's damaging hit of row 4 is unreachable in a skirmish,
+  claim 6); one is refused only while the building is being erased (row 6), when it is drawn live
+  for the erasure anyway. A refusal or a cancelled order changes neither health nor owner. A
+  neutral one is never offered for sale (S-0408 claim 3, the sell mode acts on own buildings only),
+  and a repair needs it to be one's own.
+- *Lookalikes.* Over maps 0 to 7 (98 map buildings that need an engineer, all with running slots),
+  no non-player building that needs no engineer shares a body image or a slot animation with a
+  needs-engineer type (62 such buildings animate from the start, S-0108 claim 11, in the grey).
+- *The art.* None of the slot animations of the two needs-engineer types on map 0 is drawn off its
+  building (all have the drawing-with-object flag on, alternative palette and tiled off), so all of
+  them use the owner's house-colour palette (S-0103 claim 8 row 3). But their pixels hardly use the
+  remap range (indices 16 to 31, S-0103 Terms): type 0's two slot animations have 0 remap-range
+  pixels in 8,325 and 7,374 opaque pixels over their frames; type 1's have 32 in 187,102 (one
+  pixel in each of 32 of 128 frames) and 0 in 8,463. Only the body carries the colour: type 0's
+  first frame 1,228 of 6,182 opaque pixels, its other two frames 420 of 5,675; type 1's frames
+  449 of 2,933 down to 163 of 3,286. So the moving parts of a captured derrick look the same for
+  every owner, and only a part of its body shows the capturer's colour, less on its later frames
+  (the lane did not read which body frame is the damaged one). This follows S-0103 claim 8; no request.
+
+So what the lead saw is one of: a never-captured derrick hit by as little as 1 point (it animates
+under Q-1772's interim and still looks undamaged, in grey), one protected, flashing or marked
+(fixed: it now stands still), or a captured one whose moving parts carry no house colour by their
+art. No new request: Q-1772 questions 1 and 4 cover the open slots, and S-0103 claim 8 covers the
+colour. Tests (`capture_tests.rs`): `an_unmanned_tech_building_drawn_live_for_its_look_keeps_its_slots_still`
+(protected and flashing: drawn live, the slot at the cell pass's frame; fails before the fix; a
+protected building that needs no engineer still animates) and
+`a_chipped_unmanned_tech_building_looks_undamaged_but_animates`. Round 4's
+`a_damaged_unmanned_tech_building_animates_in_the_neutral_colour` stays: it matches the workaround.
+
+**By eye (note 18).** When a derrick seems to animate without colour: hover it and look at its
+health bar (a hit as small as one point counts, and the bar may still look full; a damaged frame
+shows only below the damaged ratio); select an engineer and hover the derrick (the capture cursor
+means it is not yours or an ally's); look at its radar dot (grey: neutral; a house colour: owned);
+and, if you think you captured it, watch whether your credits rise at each income cycle. A
+captured derrick's colour is on its body's coloured panels only, never on its moving parts. A
+neutral derrick under protection, a planted bomb's flash or an air-strike mark now stands
+still while it shows that look.
 
 **Checks.** The simulation changed (notes 16 and 17; the computer player clicks through
 `targeting::click` and `cursor` too). Before on main 0b935c1; after, the arena on this branch on
