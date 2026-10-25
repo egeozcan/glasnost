@@ -2148,22 +2148,67 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
     assert_eq!(draw(gattling, Some(1), 0), (plain, plain_keys));
 }
 
-/// S-0105 claim 12, *Sprite body* (S-0007 claim 19): a sprite-body vehicle with the turret flag
-/// draws its single voxel barrel, never the voxel turret part nor a numbered model, at every
-/// selected turret index (claim 43, *Any body*); claim 11's overlap rule by the 4-step turret
-/// facing puts it over the sprite turret at facings 1 and 2 and under it at 0 and 3, always over
-/// the body; without the turret flag or without a barrel part no voxel part is drawn. Its place in
-/// the scene is our design (Q-1885 open): S-0102 claim 13's sprite-vehicle row, U − 2, upright, a
-/// reader, with the body's colour row.
+/// S-0105 claim 12, *Sprite body* (S-0007 claim 19; Q-1885 answered by r39): a sprite-body
+/// vehicle with the turret flag is drawn as one composed image (*One image*). The body frame comes
+/// first, then the single voxel barrel and the sprite turret frame at 4-step turret facings 0 and
+/// 3, the turret frame and the barrel at 1 and 2, later opaque pixels winning. It never draws the
+/// voxel turret part nor a numbered model, at any selected turret index (claim 43, *Any body*). The
+/// composed image takes the voxel-vehicle row *U*, upright, a reader (*Depth*), two units nearer
+/// than the sprite row *U* − 2 of a vehicle without the flag, and its rectangle is exactly the
+/// union of its parts'. The barrel is drawn in HVA frame 0 whatever the animation counter (*Frame*)
+/// and casts no shadow (*No barrel shadow*): the one shadow is the sprite shadow frame, *U* − 2,
+/// flat (S-0102 claim 22). Without a barrel part the body and turret frames are still composed;
+/// without the flag no voxel part is drawn.
 #[test]
-fn a_sprite_body_draws_its_single_voxel_barrel() {
+fn a_sprite_body_is_drawn_as_one_composed_image() {
     use glasnost_fmt::bytes::F32Bits;
     use glasnost_fmt::hva::synthetic_animation;
+    use glasnost_fmt::image::IndexedImage;
+    use glasnost_fmt::shp::{ShpWriter, WriteFrame};
     use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
-    // The lit items of one sprite vehicle: image size, depth and paint, in drawing order.
-    let draw = |extra: &str, parts: &[(&str, f32)], turret: u16, index: Option<i32>| {
+    use glasnost_render::scene::Item;
+    use glasnost_render::voxel;
+
+    use super::build::compose_parts;
+    // A test sprite on a 40 × 40 canvas: 16 body frames of 20 × 12 at (10, 14), 32 turret frames
+    // of 6 × 6 at (17, 16), inside the body, and 48 shadow frames of 12 × 4.
+    const BODY: u8 = 50;
+    const TURRET: u8 = 60;
+    let frame = |(x, y, w, h, v): (u16, u16, u32, u32, u8)| WriteFrame {
+        x,
+        y,
+        image: IndexedImage::new(w, h, vec![v; (w * h) as usize]).unwrap(),
+        compression: 1,
+    };
+    let sprite = ShpWriter {
+        width: 40,
+        height: 40,
+        frames: (0..96)
+            .map(|i| match i {
+                0..16 => frame((10, 14, 20, 12, BODY)),
+                16..48 => frame((17, 16, 6, 6, TURRET)),
+                _ => frame((14, 24, 12, 4, 70)),
+            })
+            .collect(),
+    }
+    .write();
+    struct Drawn {
+        lit: Vec<Item>,
+        shadows: Vec<Item>,
+        scene: Scene,
+        parts: Option<Vec<(u32, [i32; 2])>>,
+        cached: [bool; 2],
+    }
+    let point = project_lifted(2 * 256 + 128, 3 * 256 + 128, 0);
+    let draw = |extra: &str, parts: &[(&str, f32)], turret: u16, index: Option<i32>, anim: u32| {
         let rules = format!("{RULES}[CARX]\n{extra}");
         let (mut import, catalogue, mut assets) = context_with(&rules);
+        assets.insert(b"carx.shp", sprite.clone());
+        // A lighting table, so that the barrel's voxels have colours (S-0105 claim 38).
+        assets.insert(
+            super::build::VPL_FILE,
+            glasnost_fmt::vpl::synthetic_table(32).write(),
+        );
         let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
         assert!(!art.voxels.contains_key("body"), "a sprite body");
         for &(part, width) in parts {
@@ -2172,6 +2217,7 @@ fn a_sprite_body_draws_its_single_voxel_barrel() {
             let mut model = synthetic_model();
             model.limbs[0].max[0] = F32Bits::new(width);
             assets.insert(file.as_bytes(), VxlWriter { model: &model }.write());
+            // Four clearly different HVA frames (the frame run of MS-33 part k).
             let hva = file.replace(".vxl", ".hva");
             assets.insert(hva.as_bytes(), synthetic_animation().write());
         }
@@ -2205,8 +2251,8 @@ fn a_sprite_body_draws_its_single_voxel_barrel() {
             pos: (2 * 256 + 128, 3 * 256 + 128, 0),
             body: 0,
             turret,
-            elevation: 0,
-            anim: 3,
+            elevation: voxel::ELEVATION_LEVEL,
+            anim,
             infantry: None,
             object: sim_code(ObjectId(9)),
             harvesting: None,
@@ -2221,56 +2267,292 @@ fn a_sprite_body_draws_its_single_voxel_barrel() {
             turret_index: index,
         };
         let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
-        entries[0]
+        let (shadows, lit): (Vec<Item>, Vec<Item>) = entries[0]
             .items
             .iter()
-            .filter(|i| i.paint != Paint::Shadow)
-            .map(|i| {
-                let img = &scene.images[i.image as usize];
-                ((img.width(), img.height()), i.depth, i.test, i.paint)
-            })
-            .collect::<Vec<_>>()
+            .partition(|i| i.paint == Paint::Shadow);
+        let parts = lit.first().and_then(|i| painter.composed_parts(i.image));
+        // The barrel's image key (claim 26) in HVA frames 0 and 3; a single-turret type has no
+        // index in its key.
+        let barrel_key = |f| {
+            let index = index.filter(|_| extra.contains("TurretCount"));
+            let key = voxel::vehicle_turret_key(
+                voxel::RAMP_FLAT,
+                0,
+                turret,
+                0,
+                index.and_then(|k| u8::try_from(k).ok()),
+                false,
+                f,
+            );
+            painter.voxel_cached(
+                Kind::Vehicles,
+                0,
+                &voxel::barrel_key(key, voxel::ELEVATION_LEVEL),
+            )
+        };
+        let cached = [barrel_key(0), barrel_key(3)];
+        Drawn {
+            lit,
+            shadows,
+            scene,
+            parts,
+            cached,
+        }
+    };
+    let size = |d: &Drawn, id: u32| {
+        let i = &d.scene.images[id as usize];
+        (i.width(), i.height())
+    };
+    // Each part's opaque pixels as (world x, world y, index).
+    let opaque = |d: &Drawn, (id, [x, y]): (u32, [i32; 2])| {
+        let i = &d.scene.images[id as usize];
+        let mut v = Vec::new();
+        for iy in 0..i.height() {
+            for ix in 0..i.width() {
+                let p = i.get(ix, iy).unwrap();
+                if p != 0 {
+                    v.push((point.0 + x + ix as i32, point.1 + y + iy as i32, p));
+                }
+            }
+        }
+        v
+    };
+    let shown = |d: &Drawn, (x, y): (i32, i32)| {
+        let it = d.lit[0];
+        let i = &d.scene.images[it.image as usize];
+        i.get((x - it.x) as u32, (y - it.y) as u32).unwrap()
+    };
+    // A sprite vehicle without the turret flag: its body frame alone, S-0102 claim 13's U − 2.
+    let plain = draw("", &[("barrel", 20.0)], 0, None, 0);
+    assert_eq!(plain.lit.len(), 1, "the body alone");
+    assert_eq!(plain.parts, None, "not composed");
+    let ItemDepth::Profile {
+        bias: sprite_row, ..
+    } = plain.lit[0].depth
+    else {
+        panic!("a profile depth");
     };
     let turret = "Turret=yes\n";
     let all = [("turret", 12.0), ("barrel", 20.0), ("barrel1", 30.0)];
-    // 4-step turret facing 0: body, barrel, sprite turret (the turret wins over the barrel).
-    let west = draw(turret, &all, 0, None);
-    assert_eq!(west.len(), 3, "body, barrel and sprite turret");
-    let (body, barrel, top) = (west[0], west[1], west[2]);
-    assert_eq!(body.0, top.0, "two sprite frames");
-    assert_ne!(barrel.0, body.0, "the voxel barrel");
-    assert_eq!(
-        (barrel.1, barrel.2, barrel.3),
-        (body.1, body.2, body.3),
-        "the sprite body's depth row, test and colour row"
-    );
-    let ItemDepth::Profile { profile, .. } = barrel.1 else {
-        panic!("a profile depth");
-    };
-    assert_eq!(profile, Profile::Upright);
-    // 4-step facings 1 and 2: the barrel after the sprite turret; facing 3 as facing 0.
-    let east = draw(turret, &all, 16384, None);
-    assert_eq!(east.len(), 3, "facing 1");
-    assert_eq!(east[2].0, barrel.0, "facing 1: the barrel last");
-    // Facing 2's sprite turret frame (36) lies past the 32-frame test sprite, so the barrel
-    // follows the body alone.
-    let south = draw(turret, &all, 32768, None);
-    assert_eq!(south.last().map(|i| i.0), Some(barrel.0), "facing 2");
-    assert_eq!(draw(turret, &all, 49152, None)[1].0, barrel.0, "facing 3");
+    let mut barrel_pixels = None;
+    for (facing, barrel_last) in [(0, false), (16384, true), (32768, true), (49152, false)] {
+        let d = draw(turret, &all, facing, None, 0);
+        assert_eq!(d.lit.len(), 1, "facing {facing}: one composed image");
+        let item = d.lit[0];
+        // spec: S-0105 claim 12 (Depth: U, upright, a reader; the body's colour row)
+        assert_eq!(
+            item.depth,
+            ItemDepth::Profile {
+                profile: Profile::Upright,
+                bias: sprite_row + 2,
+                companion: None,
+            },
+            "facing {facing}: the voxel-vehicle row U"
+        );
+        assert_eq!(item.test, DepthTest::Reader);
+        assert_eq!(item.paint, plain.lit[0].paint);
+        let parts = d.parts.clone().expect("a composed image");
+        assert_eq!(
+            parts.len(),
+            3,
+            "facing {facing}: body, barrel and turret frame"
+        );
+        // spec: S-0105 claim 12 (One image: the body first; the barrel then the turret at 0 and 3,
+        // the turret then the barrel at 1 and 2)
+        let (barrel, top) = if barrel_last {
+            (parts[2], parts[1])
+        } else {
+            (parts[1], parts[2])
+        };
+        assert_eq!(size(&d, parts[0].0), (20, 12), "the body frame first");
+        assert_eq!(size(&d, top.0), (6, 6), "the sprite turret frame");
+        assert_ne!(size(&d, barrel.0), (6, 6), "the voxel barrel");
+        // The composed image is the parts painted in order, in exactly their union rectangle.
+        let composed = compose_parts(&d.scene, &parts).unwrap();
+        assert_eq!(
+            d.scene.images[item.image as usize].pixels(),
+            &composed.pixels[..]
+        );
+        let rects: Vec<_> = parts
+            .iter()
+            .map(|&(id, [x, y])| {
+                let (w, h) = size(&d, id);
+                (x, y, x + w as i32, y + h as i32)
+            })
+            .collect();
+        let l = rects.iter().map(|r| r.0).min().unwrap();
+        let t = rects.iter().map(|r| r.1).min().unwrap();
+        let r = rects.iter().map(|r| r.2).max().unwrap();
+        let b = rects.iter().map(|r| r.3).max().unwrap();
+        assert_eq!((item.x, item.y), (point.0 + l, point.1 + t));
+        assert_eq!(size(&d, item.image), ((r - l) as u32, (b - t) as u32));
+        // Later opaque pixels win, so each part covers the body where it has pixels, and the
+        // later of barrel and turret frame wins between them.
+        let (under, over) = if barrel_last {
+            (top, barrel)
+        } else {
+            (barrel, top)
+        };
+        let over_px = opaque(&d, over);
+        assert!(!over_px.is_empty());
+        for &(x, y, p) in &over_px {
+            assert_eq!(shown(&d, (x, y)), p, "facing {facing}: the later part wins");
+        }
+        let under_px = opaque(&d, under);
+        let covered: std::collections::BTreeSet<_> =
+            over_px.iter().map(|&(x, y, _)| (x, y)).collect();
+        for &(x, y, p) in under_px.iter().filter(|q| !covered.contains(&(q.0, q.1))) {
+            assert_eq!(shown(&d, (x, y)), p, "facing {facing}: over the body");
+        }
+        assert!(
+            opaque(&d, barrel)
+                .iter()
+                .any(|&(x, y, _)| opaque(&d, parts[0]).iter().any(|q| (q.0, q.1) == (x, y))),
+            "facing {facing}: the test barrel overlaps the body"
+        );
+        // spec: S-0105 claim 12 (No barrel shadow: the sprite shadow frame alone, U − 2, flat)
+        assert_eq!(d.shadows.len(), 1);
+        assert_eq!(
+            size(&d, d.shadows[0].image),
+            (12, 4),
+            "the sprite shadow frame"
+        );
+        assert_eq!(
+            d.shadows[0].depth,
+            ItemDepth::Profile {
+                profile: Profile::Flat,
+                bias: sprite_row,
+                companion: None,
+            }
+        );
+        if facing == 0 {
+            barrel_pixels = Some(d.scene.images[barrel.0 as usize].clone());
+        }
+    }
+    let barrel_pixels = barrel_pixels.unwrap();
+    // spec: S-0105 claim 12 (Frame: HVA frame 0 whatever the animation-frame counter): with the
+    // counter at 3 the barrel is the same image, kept under its frame-0 key.
+    let late = draw(turret, &all, 0, None, 3);
+    let parts = late.parts.clone().unwrap();
+    assert_eq!(late.scene.images[parts[1].0 as usize], barrel_pixels);
+    assert_eq!(late.cached, [true, false], "the frame-0 key only");
     // The single barrel at every index of a multi-turret type, none included, never barrel k.
     let multi = "Turret=yes\nTurretCount=2\n";
     for index in [None, Some(0), Some(1), Some(5)] {
-        let d = draw(multi, &all, 0, index);
-        assert_eq!(d.len(), 3, "index {index:?}");
-        assert_eq!(d[1].0, barrel.0, "index {index:?}: the single barrel");
+        let d = draw(multi, &all, 0, index, 0);
+        let parts = d.parts.clone().unwrap();
+        assert_eq!(parts.len(), 3, "index {index:?}");
+        assert_eq!(
+            d.scene.images[parts[1].0 as usize], barrel_pixels,
+            "index {index:?}: the single barrel"
+        );
+        assert_eq!(d.cached[0], true, "index {index:?}: keyed by its index");
     }
-    // Without a barrel part the voxel turret part is not drawn either.
-    let bare = draw(turret, &[("turret", 12.0)], 0, None);
-    assert_eq!(bare.len(), 2, "body and sprite turret");
-    assert!(bare.iter().all(|i| i.0 == body.0));
-    // Without the turret flag no voxel part is drawn.
-    let plain = draw("", &all, 0, None);
-    assert_eq!(plain.len(), 1, "the body alone");
+    // Without a barrel part the voxel turret part is not drawn either, and the body and turret
+    // frames are still composed into one image with the row U.
+    let bare = draw(turret, &[("turret", 12.0)], 0, None, 0);
+    assert_eq!(bare.lit.len(), 1);
+    assert_eq!(bare.lit[0].depth, late.lit[0].depth);
+    let parts = bare.parts.clone().unwrap();
+    assert_eq!(parts.len(), 2, "body and sprite turret");
+    assert_eq!(size(&bare, parts[0].0), (20, 12));
+    assert_eq!(size(&bare, parts[1].0), (6, 6));
+    // spec: S-0105 claim 12 (Depth: while the parts end above the body frame's last row, the
+    // composed rectangle's last row is the body frame's)
+    assert_eq!(
+        bare.lit[0].y + size(&bare, bare.lit[0].image).1 as i32,
+        plain.lit[0].y + 12
+    );
+    for &(x, y, p) in &opaque(&bare, parts[1]) {
+        assert_eq!(shown(&bare, (x, y)), p, "the turret frame over the body");
+    }
+}
+
+/// S-0105 claim 12 (*One image* and *Depth*): the composed image is the smallest rectangle holding
+/// every part's rectangle, exactly (no row or column past the lowest or rightmost part, the
+/// original's one-row extension fixed without a switch), so its last row, the anchor row of
+/// S-0102 F2, is the body's while the other parts end above it and the lowest part's otherwise;
+/// transparent pixels paint nothing and a later opaque pixel wins; the parts are painted body
+/// first, then barrel and turret frame at 4-step turret facings 0 and 3, turret frame and barrel at
+/// 1 and 2.
+#[test]
+fn composed_parts_fill_their_exact_union_in_order() {
+    use glasnost_fmt::image::IndexedImage;
+
+    use super::build::{compose_parts, sprite_turret_parts};
+    let mut scene = Scene::default();
+    // A 4 × 3 body of 1s, a 2 × 2 turret of 2s with a transparent corner, a 3 × 1 barrel of 3s.
+    let body = scene.add_image(IndexedImage::new(4, 3, vec![1; 12]).unwrap());
+    let turret = scene.add_image(IndexedImage::new(2, 2, vec![2, 2, 2, 0]).unwrap());
+    let barrel = scene.add_image(IndexedImage::new(3, 1, vec![3; 3]).unwrap());
+    let rows = |img: &glasnost_render::voxel::PartImage| {
+        img.pixels
+            .chunks(img.width as usize)
+            .map(<[u8]>::to_vec)
+            .collect::<Vec<_>>()
+    };
+    // Both parts end above the body's last row: the body's rectangle, its last row the anchor.
+    let parts = [(body, [-2, -3]), (barrel, [-1, -2]), (turret, [0, -3])];
+    let img = compose_parts(&scene, &parts).unwrap();
+    assert_eq!((img.width, img.height, img.offset), (4, 3, [-2, -3]));
+    assert_eq!(
+        rows(&img),
+        [vec![1, 1, 2, 2], vec![1, 3, 2, 3], vec![1, 1, 1, 1]],
+        "the turret over the barrel, its transparent corner showing the barrel"
+    );
+    // The barrel reaching one row lower: exactly one more row, no further one.
+    let parts = [(body, [-2, -3]), (turret, [0, -3]), (barrel, [-1, 0])];
+    let img = compose_parts(&scene, &parts).unwrap();
+    assert_eq!((img.width, img.height, img.offset), (4, 4, [-2, -3]));
+    assert_eq!(
+        rows(&img),
+        [
+            vec![1, 1, 2, 2],
+            vec![1, 1, 2, 1],
+            vec![1, 1, 1, 1],
+            vec![0, 3, 3, 3]
+        ]
+    );
+    let parts = [(body, [-2, -3]), (barrel, [1, -1])];
+    let img = compose_parts(&scene, &parts).unwrap();
+    assert_eq!(
+        (img.width, img.height, img.offset),
+        (6, 3, [-2, -3]),
+        "two columns further right"
+    );
+    assert_eq!(rows(&img)[2], [1, 1, 1, 3, 3, 3]);
+    assert_eq!(rows(&img)[0], [1, 1, 1, 1, 0, 0]);
+    assert!(compose_parts(&scene, &[]).is_none());
+    // The painting order by the 4-step turret facing (raw facings: 0 north, 16384 east, …).
+    let (b, r, t) = (
+        Some((body, [0, 0])),
+        Some((barrel, [0, 0])),
+        Some((turret, [0, 0])),
+    );
+    for (facing, barrel_last) in [(0, false), (16384, true), (32768, true), (49152, false)] {
+        let order = sprite_turret_parts(b, r, t, facing);
+        let want = if barrel_last {
+            [body, turret, barrel]
+        } else {
+            [body, barrel, turret]
+        };
+        assert_eq!(
+            order.iter().map(|p| p.0).collect::<Vec<_>>(),
+            want,
+            "{facing}"
+        );
+    }
+    assert_eq!(
+        sprite_turret_parts(b, None, t, 0).len(),
+        2,
+        "no barrel part"
+    );
+    assert_eq!(
+        sprite_turret_parts(b, r, None, 0).len(),
+        2,
+        "no turret frame"
+    );
 }
 
 /// S-0105 claims 41 and 42 (Q-0950): a rocket's body is drawn with its current nose pitch, an image is
