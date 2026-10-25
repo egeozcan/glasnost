@@ -1826,14 +1826,12 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         a.flying_to = None;
         a.raised = false;
     }
-    if alive && a.released {
-        if dest.is_none() && a.cur == F64::ZERO {
-            // spec: S-0501 claim 48 (a) (its movement updates move it only toward a destination: while it has none, neither its height nor its position changes)
-            if let Some(ob) = w.obj_mut(id) {
-                ob.air = Some(a);
-            }
-            return false;
+    if alive && a.released && dest.is_none() && a.cur == F64::ZERO {
+        // spec: S-0501 claim 48 (a) (its movement updates move it only toward a destination: while it has none, neither its height nor its position changes)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.air = Some(a);
         }
+        return false;
     }
     // The held height in ordinary flight (claim 6).
     let ordinary_held = |a: &AirState| {
