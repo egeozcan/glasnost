@@ -1,9 +1,9 @@
 ---
 id: Q-1875
 title: Where is the object-present mark of an aircraft that a factory release leaves above its pad, and when is it cleared?
-status: open
+status: answered
 related: [S-0501, S-0209, S-0404, Q-1841]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
