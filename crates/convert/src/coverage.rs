@@ -670,6 +670,10 @@ fn classify(category: &str, key: &str, sim: &SimKeys) -> (Outcome, String, Strin
     if let Some((_, _, outcome, spec)) = hit {
         return (*outcome, (*spec).to_owned(), String::new());
     }
+    // spec: S-0105 Import mapping (the turret table pairs of a vehicle type, read for the fixed type name only, quirks.turret_table_fixed_type_only)
+    if category == "vehicles" && crate::turrets::PAIR_KEYS.contains(&key) {
+        return (Outcome::Render, "S-0105".to_owned(), String::new());
+    }
     if let Some(spec) = sim.get(&(category.to_owned(), key.to_owned())) {
         return (Outcome::Field, (*spec).to_owned(), String::new());
     }
@@ -820,6 +824,7 @@ pub fn known_keys() -> std::collections::BTreeSet<&'static str> {
         .map(|(_, k, _, _)| *k)
         .filter(|k| *k != "*")
         .chain(NAMED.iter().flat_map(|(_, keys)| keys.iter().copied()))
+        .chain(crate::turrets::PAIR_KEYS)
         .chain(CASE_SENSITIVE_SPELLINGS)
         .collect()
 }

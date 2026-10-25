@@ -29,9 +29,12 @@ pub mod names;
 pub mod refs;
 pub mod sim;
 pub mod theater;
+pub mod turrets;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod turrets_tests;
 
 #[cfg(test)]
 mod refs_tests;
@@ -94,6 +97,11 @@ pub struct Import {
     pub arts: std::collections::BTreeMap<(kinds::Kind, usize), art::TypeArt>,
     /// The art database as read, for the art keys the renderer reads.
     pub art_file: Option<InputFile>,
+    /// Each vehicle type's turret table (S-0105 Terms, claim 43 and Import
+    /// mapping), by registration index, as
+    /// `quirks.turret_table_fixed_type_only` gives it; a type left out has
+    /// an all-*none* table.
+    pub turret_tables: std::collections::BTreeMap<usize, turrets::TurretTable>,
 }
 
 /// Imports the rules and art of the install mounted in `vfs`, whose search
@@ -315,6 +323,23 @@ async fn look_up_art(
     import.arts = arts;
 }
 
+/// The turret table of every vehicle type that has one with an entry set
+/// (S-0105 claim 43, Import mapping; `quirks.turret_table_fixed_type_only`).
+fn turret_tables(
+    outcome: &Outcome,
+    fixed_type_only: bool,
+) -> std::collections::BTreeMap<usize, turrets::TurretTable> {
+    outcome
+        .registries
+        .get(&kinds::Kind::Vehicles)
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(i, t)| (i, turrets::table_for(t, fixed_type_only)))
+        .filter(|(_, table)| *table != turrets::EMPTY)
+        .collect()
+}
+
 fn empty_layer(role: Role, file: &str, quirks: IniQuirks) -> Layer {
     Layer {
         role,
@@ -530,6 +555,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
     });
     sim::attach(&mut tree, sim_node);
     warnings.extend(sim_warnings);
+    let turret_tables = turret_tables(&outcome, options.sim.turret_table_fixed_type_only);
     let base_doc = layers.first().map(|l| &l.doc);
     let coverage = base_doc
         .map(|b| coverage::rows(b, &art, &outcome))
@@ -543,6 +569,7 @@ pub fn convert(inputs: &Inputs, options: &ImportOptions) -> Import {
         warnings,
         arts: Default::default(),
         art_file: inputs.art.clone(),
+        turret_tables,
     }
 }
 
