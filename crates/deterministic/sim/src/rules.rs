@@ -596,7 +596,16 @@ pub struct AnimRules {
     pub new_theater: bool,
     /// The bouncing-animation and trailer fields (S-0319 Import mapping).
     pub bounce: crate::bounce::BounceType,
+    /// The built-in invisibility-animation type: its stored name is exactly
+    /// [`INVISIBILITY_ANIM_NAME`], byte for byte (S-0109 claim 17 and
+    /// Import mapping). Its damage takes the demolition warhead.
+    pub invisibility: bool,
 }
+
+/// The name of the built-in invisibility-animation type, compared byte for
+/// byte, letter case included, with a type's stored name: the spelling it
+/// was first registered with (S-0004 claims 2 and 7).
+pub const INVISIBILITY_ANIM_NAME: &[u8] = b"INVISO"; // spec: S-0109 Import mapping (the built-in invisibility-animation type's name, six ASCII capital letters)
 
 impl Default for AnimRules {
     fn default() -> Self {
@@ -631,6 +640,7 @@ impl Default for AnimRules {
             next_index: None,
             new_theater: false,
             bounce: crate::bounce::BounceType::default(),
+            invisibility: false,
         }
     }
 }
@@ -1514,6 +1524,8 @@ impl SimRules {
                     }),
                     new_theater: a.new_theater.unwrap_or(false),
                     bounce: crate::bounce::BounceType::new(&a, &overlay_names, &quirks, mode),
+                    // spec: S-0109 claim 17 and Import mapping (an exact, byte-for-byte comparison with the stored name, the first-registered spelling: a type first registered in another letter case never matches)
+                    invisibility: n.as_bytes() == INVISIBILITY_ANIM_NAME,
                 }
             })
             .collect();

@@ -144,6 +144,36 @@ fn registration_index_one_follows_reference_order() {
     );
 }
 
+/// spec: S-0109 Import mapping (Q-1717: the built-in invisibility-animation
+/// type is found by an exact comparison with its stored name, the spelling
+/// it was first registered with, S-0004 claims 2 and 7: a later mention in
+/// other letter case finds the same type and keeps that spelling; the
+/// `C4Warhead` key feeds S-0109 claim 17 too)
+#[test]
+fn an_animation_keeps_its_first_registered_spelling() {
+    let base =
+        "[Animations]\n0=Inviso\n1=Mark\n[CombatDamage]\nC4Warhead=Bang\n[Warheads]\n0=Bang\n";
+    let art = "[Mark]\nNext=INVISO\n[Inviso]\nDamage=1\n";
+    let (r, _) = resolved(base, "", art);
+    let names = &r.registries["animations"];
+    assert_eq!(names, &["Inviso", "Mark"], "no second type for INVISO");
+    assert_eq!(r.sim.animations["Mark"].next.as_deref(), Some("INVISO"));
+    let (r, _) = resolved(
+        "[Animations]\n0=INVISO\n1=Mark\n",
+        "",
+        "[Mark]\nNext=inviso\n[INVISO]\nDamage=1\n",
+    );
+    assert_eq!(r.registries["animations"], ["INVISO", "Mark"]);
+    let i = import(base, "", art);
+    let row = i
+        .coverage
+        .iter()
+        .find(|r| r.category == "global:CombatDamage" && r.key == "C4Warhead")
+        .expect("C4Warhead is covered");
+    assert_eq!(row.outcome, crate::coverage::Outcome::Field);
+    assert!(row.spec.contains("S-0109"), "{}", row.spec);
+}
+
 /// spec: S-0615 Import mapping (the special-hit keys are converted fields)
 #[test]
 fn special_hit_coverage() {

@@ -209,11 +209,18 @@ pub trait Env {
     /// `quirks.speed_normalised_delays`.
     fn normalise(&self) -> bool;
     /// An advance has just set stage `k` of a type with fields `p`, before
-    /// any pass-boundary choice (the middle event of claim 14 precedes
-    /// either pass-boundary delay choice, claim 28). The drawing does
-    /// nothing here; the simulation plays the middle event.
+    /// any turn or pass test (State and ordering: the advance's damage, then
+    /// its middle event of claim 14, both before either pass-boundary delay
+    /// choice, claim 28). The drawing does nothing here; the simulation
+    /// delivers the damage and plays the middle event.
     fn advanced(&mut self, p: &Playback, k: i32) {
         let _ = (p, k);
+    }
+    /// Whether the animation left play during this update's advance (in its
+    /// own damage detonation): then nothing more of its update happens
+    /// (State and ordering). The drawing's animations never do.
+    fn left_play(&self) -> bool {
+        false
     }
     /// A follow-up switch to type `name` has just chosen its delay; the new
     /// type's start event follows (claims 15 and 28). The drawing does
@@ -492,8 +499,12 @@ impl Player {
         // spec: S-0109 Terms (an advance: one change of k by σ)
         self.k = self.k.saturating_add(self.step);
         self.last = tick;
-        // spec: S-0109 claims 14 and 28 (the middle event of an advance precedes either pass-boundary delay choice)
+        // spec: S-0109 claims 14 and 28 and State and ordering (the damage and middle event of an advance precede the turn and pass tests and either pass-boundary delay choice)
         env.advanced(&self.play, self.k);
+        if env.left_play() {
+            // spec: S-0109 State and ordering (an animation that leaves play in its own detonation: no pass end, follow-up switch or end in that update; our engine's rule)
+            return;
+        }
         let p = &self.play;
         let a = p.start;
         let more = self.r.more();

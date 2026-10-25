@@ -361,7 +361,8 @@ fn advance_damage(w: &mut World, wk: &mut Walker) {
     // spec: S-0109 F5 (n = trunc(B) delivered, A = B − n)
     let n = b.to_i32_common();
     wk.acc = b.sub(F64::from_i64(i64::from(n), mode), mode);
-    // spec: S-0109 claim 17 and Import mapping (FlameDamage2 for every type but the invisibility animation; absent: the amount is taken, no damage)
+    // spec: S-0109 claim 17 and Import mapping (C4Warhead for the built-in invisibility-animation type by the current type's name, FlameDamage2 for every other type; absent: the amount is taken, no damage)
+    let warhead = crate::anims::damage_warhead(&rules, a);
     // spec: S-0302 claim 1 (a damaging animation's area detonation: no attacker, no attacking house)
     // spec: S-0109 claim 17 (each delivery is an area detonation with resource reduction allowed, no attacker and no attacking house, the expiring advances of a burning walker included; S-0303 claim 17's gates)
     area::detonate(
@@ -369,7 +370,7 @@ fn advance_damage(w: &mut World, wk: &mut Walker) {
         Detonation {
             point: wk.pos,
             damage: n,
-            warhead: rules.combat.general.flame_damage2,
+            warhead,
             source: None,
             house: None,
             resources: true,
