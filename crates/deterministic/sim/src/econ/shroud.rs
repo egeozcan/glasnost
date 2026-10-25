@@ -39,6 +39,9 @@ const REFRESH_PERIOD: i32 = 15;
 const FIRE_RADIUS: i32 = 3;
 // spec: S-0409 Constants (a height level is 104 leptons)
 const LEVEL: i32 = 104;
+/// Above this many explored cells a reveal's discovery keeps grid-sized
+/// tables rather than sets.
+const DENSE_REVEAL: usize = 256; // nocite: our tooling's bound (M8 C4 part 6), not game behaviour
 
 /// The game-wide shroud rules (S-0409 Import mapping).
 #[derive(Clone, Debug, Default)]
@@ -732,13 +735,14 @@ fn candidate_explored(w: &World, house: HouseId, mut x: i32, mut y: i32) -> bool
 // Discovery (S-0409 Terms, *discovered by H*)
 
 /// The cover-piece key of a cell (S-0110 claims 1 and 2): 15 when it is not
-/// explored, else its reduced set of covered neighbours as a mask.
-fn piece_key(w: &World, h: HouseId, c: CellXY, flipped: &BTreeSet<u32>) -> u16 {
+/// explored, else its reduced set of covered neighbours as a mask. The
+/// cells `flipped` tells (by dense index) read as unexplored.
+fn piece_key(w: &World, h: HouseId, c: CellXY, flipped: impl Fn(u32) -> bool) -> u16 {
     let ex = |x: i32, y: i32| -> bool {
         let cc = CellXY::new(x, y);
         let e = explored(w, h, cc);
         // The state before the reveal: the cells it explored read as unexplored.
-        let f = idx(w, cc).is_some_and(|i| flipped.contains(&i));
+        let f = idx(w, cc).is_some_and(&flipped);
         e && !f
     };
     if !ex(c.x, c.y) {
@@ -767,17 +771,42 @@ fn discover(w: &mut World, h: HouseId, flipped: &BTreeSet<u32>) {
     if flipped.is_empty() {
         return;
     }
-    let mut changed = BTreeSet::new();
+    // Each cell's two keys are the same whichever flipped neighbour asks for
+    // them, so each cell is compared once and `changed` lists each changed
+    // cell once (its order does not matter: the discovered objects are a
+    // set). A large reveal (a defeat's whole-map reveal) keeps its cells and
+    // the compared cells in grid-sized tables, a small one (a unit's sight)
+    // in sets (our tooling for speed, M8 C4 part 6).
+    let dense = flipped.len() > DENSE_REVEAL;
+    let cells = if dense { w.cells.grid.len() } else { 0 };
+    let mut was = vec![false; cells];
+    for &i in flipped.iter().filter(|_| dense) {
+        was[i as usize] = true;
+    }
+    let was = |i: u32| {
+        if dense {
+            was.get(i as usize).copied().unwrap_or(false)
+        } else {
+            flipped.contains(&i)
+        }
+    };
+    let mut asked = vec![false; cells];
+    let mut asked_few = BTreeSet::new();
+    let mut changed = Vec::new();
     for &i in flipped {
         let c = cell_of(w, i);
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let a = CellXY::new(c.x + dx, c.y + dy);
-                if idx(w, a).is_none() {
+                let Some(ai) = idx(w, a) else {
                     continue;
-                }
-                if piece_key(w, h, a, flipped) != piece_key(w, h, a, &BTreeSet::new()) {
-                    changed.insert(a);
+                };
+                let first = match asked.get_mut(ai as usize) {
+                    Some(seen) => !std::mem::replace(seen, true),
+                    None => asked_few.insert(ai),
+                };
+                if first && piece_key(w, h, a, was) != piece_key(w, h, a, |_| false) {
+                    changed.push(a);
                 }
             }
         }
@@ -1321,11 +1350,11 @@ fn legal(w: &World) -> Vec<u32> {
 /// claim 15). `clear_pending`: also clear every pending mark.
 fn explored_only_reveal(w: &mut World, h: HouseId, clear_pending: bool) {
     let cells = legal(w);
-    let mut flipped = BTreeSet::new();
+    let mut flipped = Vec::new();
     if let Some(s) = hs_mut(w, h) {
         for &i in &cells {
             if !s.has(i as usize, EXPLORED) {
-                flipped.insert(i);
+                flipped.push(i);
             }
             // spec: S-0409 S1 row 10 (explored, not made seen; m kept)
             s.set(i as usize, EXPLORED, true);
@@ -1348,6 +1377,8 @@ fn explored_only_reveal(w: &mut World, h: HouseId, clear_pending: bool) {
             s.set(i as usize, SURROUNDED, true);
         }
     }
+    // Built at once from the list (our tooling for speed, M8 C4 part 6).
+    let flipped: BTreeSet<u32> = flipped.into_iter().collect();
     discover(w, h, &flipped);
 }
 
@@ -1708,4 +1739,116 @@ fn uncounted_sight(w: &mut World, h: HouseId, cells: &[u32]) {
         })
         .collect();
     add_cells(w, h, &todo);
+}
+
+#[cfg(test)]
+mod discover_tests {
+    use super::*;
+    use crate::testkit;
+
+    /// The discovery as it was before M8 C4 part 6: each flipped cell's nine
+    /// cells compared, whichever flipped neighbour asked before.
+    fn discover_as_before(w: &mut World, h: HouseId, flipped: &BTreeSet<u32>) {
+        let mut changed = BTreeSet::new();
+        for &i in flipped {
+            let c = cell_of(w, i);
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let a = CellXY::new(c.x + dx, c.y + dy);
+                    if idx(w, a).is_none() {
+                        continue;
+                    }
+                    if piece_key(w, h, a, |i| flipped.contains(&i)) != piece_key(w, h, a, |_| false)
+                    {
+                        changed.insert(a);
+                    }
+                }
+            }
+        }
+        let mut found = Vec::new();
+        for a in changed {
+            for n in 0..=6 {
+                let x = CellXY::new(a.x + n, a.y + n);
+                if idx(w, x).is_none() {
+                    continue;
+                }
+                let lv = level(w, x);
+                if !(2 * n - 1 <= lv && lv <= 2 * n + 1) {
+                    continue;
+                }
+                if let Some(id) = nearest_in_cell(w, x) {
+                    found.push(id);
+                }
+            }
+        }
+        if let Some(s) = hs_mut(w, h) {
+            s.discovered.extend(found);
+        }
+    }
+
+    /// Our tooling for speed (M8 C4 part 6): a small reveal (kept in sets)
+    /// and a whole-map one (in grid-sized tables) discover the objects the
+    /// discovery as it was before discovers (S-0409 Terms, *discovered by
+    /// H*; S-0110 claims 1 and 2), over a patchy explored state.
+    #[test]
+    fn small_and_whole_map_reveals_discover_as_before() {
+        const SIZE: i32 = 40; // nocite: test data of our own
+        let h = HouseId(0);
+        let mut w = testkit::game_with(&testkit::ruleset(), SIZE, 3);
+        for y in (-30..=30).step_by(3) {
+            for x in (-30..=30).step_by(2) {
+                testkit::spawn(
+                    &mut w,
+                    Kind::Vehicle,
+                    "CART",
+                    1,
+                    testkit::mid(SIZE, x, y),
+                    0,
+                );
+            }
+        }
+        for st in w.econ.shroud.houses.iter_mut().flatten() {
+            st.discovered.clear();
+        }
+        let cells = legal(&w);
+        // A patchy explored state.
+        let patch: BTreeSet<u32> = cells
+            .iter()
+            .copied()
+            .filter(|&i| {
+                let c = cell_of(&w, i);
+                (c.x * 7 + c.y * 3).rem_euclid(5) == 0 || (c.x / 6 + c.y / 4) % 3 == 0
+            })
+            .collect();
+        let small: BTreeSet<u32> = cells
+            .iter()
+            .copied()
+            .filter(|&i| {
+                let c = cell_of(&w, i);
+                (c.x - SIZE).abs() <= 6 && (c.y - SIZE).abs() <= 6 && !patch.contains(&i)
+            })
+            .collect();
+        let whole: BTreeSet<u32> = cells
+            .iter()
+            .copied()
+            .filter(|i| !patch.contains(i))
+            .collect();
+        assert!(!small.is_empty() && small.len() <= DENSE_REVEAL);
+        assert!(whole.len() > DENSE_REVEAL);
+        for flipped in [small, whole] {
+            let mut a = w.clone();
+            if let Some(s) = hs_mut(&mut a, h) {
+                for &i in &cells {
+                    let on = patch.contains(&i) || flipped.contains(&i);
+                    s.set(i as usize, EXPLORED, on);
+                }
+            }
+            let mut b = a.clone();
+            discover(&mut a, h, &flipped);
+            discover_as_before(&mut b, h, &flipped);
+            let found = &hs(&b, h).expect("a player house").discovered;
+            assert!(!found.is_empty());
+            assert_eq!(&hs(&a, h).expect("a player house").discovered, found);
+        }
+    }
 }
