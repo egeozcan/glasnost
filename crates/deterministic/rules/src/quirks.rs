@@ -3875,7 +3875,7 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     ),
     (
         "enable_unfreezes_unpowered",
-        "renderer (mapview::quirks), S-0108 claim 13; S-0405 claim 10 names it for a switched-on building's slots (S-0405 r36)",
+        "renderer (mapview::quirks), S-0108 claims 13 and 26; S-0405 claim 10 names it for a switched-on building's slots (S-0405 r36)",
     ),
     (
         "shroud_on_flat_grid",

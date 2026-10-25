@@ -321,7 +321,7 @@ mod notes {
     pub const VOXEL_SHADOW_POINT: &str = "a vehicle's voxel shadow is placed at the body's point: the vehicle shadow point has no spec (S-0105 claim 40 settles aircraft only)";
     pub const SLOT_ANIMS_STILL: &str = "the static scene's building slot animations (S-0108 claim 11) are drawn at their first image frame: they do not advance and power (S-0108 claim 13) does not change them";
     /// See [`SLOT_ANIMS_STILL`].
-    pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 15 (empty storage), 17 and 20 and S-0606's walls; power (S-0108 claims 13 and 14), silo fill, the superweapon, turret and upgrade slots are not modelled; a repair depot's production and special slots are the simulation's (S-0108 claim 20)";
+    pub const SLOT_ANIMS_LIVE: &str = "live buildings' slot animations play (S-0109) and follow S-0108 claims 11, 12, 13 (power, disabling and re-enabling), 15 (empty storage), 17, 20 and 26 to 28 and S-0606's walls; the special outage and low-power slot (S-0108 claim 14), silo fill, the superweapon slots and super-low-power, and the turret and upgrade slots are not modelled; a repair depot's production and special slots are the simulation's (S-0108 claim 20)";
     /// The importer warning of S-0102 claim 33: the shared building depth
     /// image file and why it is unavailable.
     pub fn no_companion(failure: &str) -> String {
@@ -5696,7 +5696,7 @@ impl Painter {
                 None => (false, false),
             };
             let mut ground = Vec::new();
-            b.live_slots = d.slots.clone();
+            b.live_slots = Some(d.slots.clone());
             let mut items = b.building_items(
                 d.idx,
                 art,
@@ -5765,11 +5765,8 @@ pub struct LiveBuilding {
     pub anim: u32,
     /// It holds at least one garrison occupant (S-0108 Terms, claim 2).
     pub occupied: bool,
-    /// Its running slot animations (S-0108 Terms), in slot order; `None`:
-    /// the slots its set-up starts, standing at their first image frame,
-    /// as the cell pass draws them (a map tech building that has not
-    /// changed, Q-1772's interim).
-    pub slots: Option<Vec<LiveSlot>>,
+    /// Its running slot animations (S-0108 Terms), in slot order.
+    pub slots: Vec<LiveSlot>,
     /// Item object code.
     pub object: u32,
     /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108

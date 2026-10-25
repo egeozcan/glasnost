@@ -90,7 +90,7 @@
 //! one fresh, damaged, captured by the local house and captured by the
 //! enemy: owner, manned state, drawn live, running slots and whether its
 //! colour is the non-player grey (S-0103 claims 8 and 10; S-0515 claim 2;
-//! Q-1772).
+//! S-0108 claim 26, which answers Q-1772), and how many slots are frozen.
 //!
 //! M8 step A4, note 18 reopened: `derrick-paths` counts, map by map, the
 //! map buildings that need an engineer and the non-player buildings that
@@ -2991,7 +2991,7 @@ fn mirage_actors(
 }
 
 /// Note 18 (S-0103 claims 8 and 10; S-0108 claims 2 and 11; S-0405
-/// claims 8 and 9; S-0509 claim 8; S-0515 claim 2; Q-1772): the map's
+/// claims 8 and 9; S-0509 claim 8; S-0515 claim 2; S-0108 claim 26): the map's
 /// buildings whose type needs an engineer and has slot animations, on the
 /// first map (of `GLASNOST_LANE_MAPS`, default 8) that has one: the art's
 /// terrain-palette flag; then one of them fresh, damaged, captured by the
@@ -3139,18 +3139,19 @@ fn derrick_state(l: &mut Lane, map: usize, what: &str, b: ObjectId) {
     let (hsv, ours) = glasnost_app::mapview::build::owner_definition(import, options, &name);
     let (grey, _) = glasnost_app::mapview::build::owner_definition(import, options, b"Neutral");
     println!(
-        "derrick-look map {map} {what}: owner role {:?}, manned {}, health per mille {permille}, drawn live {}, running slots {}, owner colour the non-player grey {}, ours {ours}",
+        "derrick-look map {map} {what}: owner role {:?}, manned {}, health per mille {permille}, drawn live {}, running slots {}, frozen {}, owner colour the non-player grey {}, ours {ours}",
         house.map(|h| h.role),
         o.econ.building.manned,
         live.drawn_live(b),
         live.slot_names(b).len(),
+        live.frozen_slots(b),
         hsv == grey,
     );
 }
 
 /// Note 18 reopened (S-0103 claims 8 and 10, Terms *remap range*; S-0108
 /// claims 2 and 11; S-0102 claim 34; S-0519 claim 25; S-0515 claim 2;
-/// Q-1772): over the first maps (of `GLASNOST_LANE_MAPS`, default 8) the
+/// S-0108 claims 13 and 26): over the first maps (of `GLASNOST_LANE_MAPS`, default 8) the
 /// buildings that need an engineer and the lookalikes that do not; on the
 /// first map with one, its art and each reason it is drawn live; then a
 /// capture by a fourth house. Counts only.
@@ -3340,6 +3341,12 @@ fn derrick_art(l: &Lane, map: usize, found: &[ObjectId]) {
         }
         for (si, base) in slots::SETUP_SLOTS.iter().enumerate() {
             let def = slots::read_slot(&doc, &image, base);
+            if !def.normal.is_empty() {
+                println!(
+                    "derrick-paths map {map} type {k} slot {si}: counting power flag {:?} (S-0108 claim 13)",
+                    def.power.counting()
+                );
+            }
             for (variant, anim) in [("normal", &def.normal), ("damaged", &def.damaged)] {
                 if anim.is_empty() {
                     continue;

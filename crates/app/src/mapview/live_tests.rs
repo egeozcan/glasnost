@@ -998,7 +998,7 @@ fn live_building_items(
             facing: 0,
             anim: 0,
             occupied: false,
-            slots: Some(Vec::new()),
+            slots: Vec::new(),
             object: sim_code(ObjectId(5)),
             unloading,
             gate_door,
@@ -3068,7 +3068,7 @@ fn protection_building_body_rows() {
                     gate_door: None,
                     protection,
                     adjust: Default::default(),
-                    slots: Some(Vec::new()),
+                    slots: Vec::new(),
                 }],
             );
             let body = drawn[0]
@@ -3195,7 +3195,7 @@ fn hut(protection: Option<super::protection::Look>, unloading: Option<Unloading>
         facing: 0,
         anim: 0,
         occupied: false,
-        slots: Some(Vec::new()),
+        slots: Vec::new(),
         object: sim_code(ObjectId(5)),
         unloading,
         gate_door: None,
@@ -3492,7 +3492,7 @@ fn protection_slot_animation_rows() {
     // The slot animation's shade: its item comes after the body's and the bib's.
     let anim = |look: Option<super::protection::Look>, art: &str, y: i32| {
         let mut b = hut(look, None);
-        b.slots = Some(vec![slot_a(y)]);
+        b.slots = vec![slot_a(y)];
         let items = protected_hut_items("", &[], art, b, hut_cells(look));
         lit_parts(&items)
             .last()
@@ -3547,7 +3547,7 @@ fn protection_claim29b_slot_animation_own_cell() {
     let draw = |protection: Option<super::protection::Look>, adjust, shrouded: &[(i32, i32)]| {
         let mut b = hut(protection, None);
         b.adjust = adjust;
-        b.slots = Some(vec![slot_a(0)]);
+        b.slots = vec![slot_a(0)];
         let look = super::protection::BuildingLook { protection, adjust };
         let parts = lit_parts(&protected_hut_items(
             MARK_SELECTORS,
@@ -3865,7 +3865,7 @@ fn protection_translucent_slot_animation_interim() {
     use glasnost_sim::superweapons::ProtectKind;
     let look = Some(bright(ProtectKind::ForceShield));
     let mut b = hut(look, None);
-    b.slots = Some(vec![slot_a(0)]);
+    b.slots = vec![slot_a(0)];
     let items = protected_hut_items("", &[], "Translucency=50\n", b, hut_cells(look));
     let blended: Vec<_> = items
         .iter()
@@ -3947,7 +3947,7 @@ fn marked_hut(
 ) {
     let mut b = hut(protection, None);
     b.adjust = adjust;
-    b.slots = Some(vec![slot_a(0)]);
+    b.slots = vec![slot_a(0)];
     let look = super::protection::BuildingLook { protection, adjust };
     let cells = if look.active() {
         hut_cells_with(look)

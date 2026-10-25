@@ -2,7 +2,9 @@
 //! step A4, round 2: a captured tech building kept its old colours and
 //! showed no animation). The map's buildings are drawn in the cell pass
 //! built when the game starts; one that no longer looks as drawn there is
-//! drawn live. Invented types and numbers, no game data.
+//! drawn live. A building that needs an engineer and is not manned holds
+//! its slots (S-0108 claim 26) until its owner changes. Invented types and
+//! numbers, no game data.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -18,10 +20,11 @@ use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Kind as SimKind, SimRules};
 use glasnost_sim::targeting::{ClickOn, Modifiers};
 use glasnost_sim::testkit;
-use glasnost_sim::world::{GameSetup, HouseId, HouseRole, HouseSetup};
+use glasnost_sim::world::{GameSetup, HouseId, HouseRole, HouseSetup, ObjectId};
 
 use super::build::{Assets, Inputs, Options, build_parts};
 use super::live::{Live, sim_code};
+use super::quirks::ViewQuirks;
 use super::tests::{ART, RULES, art_of, context_full, shp};
 
 const SIZE: i32 = 24;
@@ -35,6 +38,14 @@ const BODY_FRAME: u32 = 4;
 /// See [`BODY_FRAME`].
 const SLOT_FRAME: u32 = 3;
 
+/// HUTX's art keys that start the looping slot animation SLOTL in its
+/// *active-1* slot (S-0108 claim 11), counting *freeze-unpowered* (the
+/// default, claim 13).
+const SLOT: &str = "ActiveAnim=SLOTL\n";
+/// The same with *freeze-unpowered* off and *light-unpowered* on (S-0108
+/// Import mapping, claim 13).
+const LIGHT_SLOT: &str = "ActiveAnim=SLOTL\nActiveAnimPowered=no\nActiveAnimPoweredLight=yes\n";
+
 /// The import. With `slot`, HUTX's art starts the looping slot animation
 /// SLOTL in its *active-1* slot (S-0108 claim 11); SLOTL has 4 image
 /// frames and a stage delay of 1 tick (S-0109 Import mapping, `Rate`
@@ -46,15 +57,22 @@ fn import(
     glasnost_convert::theater::Catalogue,
     Assets,
 ) {
+    import_with(if slot { SLOT } else { "" })
+}
+
+/// The import with `keys` in HUTX's art section.
+fn import_with(
+    keys: &str,
+) -> (
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    Assets,
+) {
     let rules = format!("{RULES}[Animations]\n0=SLOTL\n");
-    let hut = if slot {
-        "[HUTX]\nActiveAnim=SLOTL\n"
-    } else {
-        "[HUTX]\n"
-    };
+    let hut = format!("[HUTX]\n{keys}");
     let art = format!(
         "{}[SLOTL]\nLayer=ground\nLoopCount=-1\n",
-        ART.replacen("[HUTX]\n", hut, 1)
+        ART.replacen("[HUTX]\n", &hut, 1)
     );
     let mut ctx = context_full(&rules, &art);
     ctx.0
@@ -176,6 +194,9 @@ enum Act {
     Protect,
     /// Its charge flash runs (S-0519 claim 25): drawn live for its look.
     Flash,
+    /// It is switched off (S-0108 claim 28 disables it), then an engineer
+    /// of Alpha's captures it.
+    SwitchOffThenCapture,
     /// Nothing.
     Nothing,
 }
@@ -187,10 +208,15 @@ struct Seen {
     before: (usize, usize),
     /// The same after the act.
     after: (usize, usize),
-    /// The building's body pixels before (static) and after (live) the act.
+    /// The building's body pixels before (in the cell pass or live) and
+    /// after (live) the act.
     body: (Vec<u8>, Vec<u8>),
-    /// The building's slot-animation pixels in the cell pass before the act.
+    /// The building's slot-animation pixels before the act, in the cell
+    /// pass or live.
     still: Vec<u8>,
+    /// For [`Act::SwitchOffThenCapture`], the slot-animation pixels redraw
+    /// by redraw over six ticks while it is switched off.
+    held: Vec<Vec<u8>>,
     /// The building's body rows after the act.
     rows: BTreeSet<u32>,
     /// The body rows of a building of Alpha's own (drawn live).
@@ -204,7 +230,43 @@ struct Seen {
 /// needing an engineer when `tech`) and an engineer of Alpha's; `act`
 /// happens to the building.
 fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
-    let (import, catalogue, assets) = import(slot);
+    scenario_with(
+        if slot { SLOT } else { "" },
+        tech,
+        act,
+        ViewQuirks::default(),
+    )
+}
+
+/// An engineer of Alpha's, ordered by a click on the building, captures
+/// it (S-0509 claims 1, 7 and 8).
+fn capture(live: &mut Live, engineer: ObjectId, b: ObjectId) {
+    let r = live.click(
+        ALPHA,
+        &mut vec![engineer],
+        ClickOn::Object(b),
+        Modifiers::default(),
+    );
+    assert_eq!(r.refused, 0, "the capture order is accepted");
+    let mut captured = false;
+    for _ in 0..800 {
+        live.step();
+        if live.world.obj(b).is_some_and(|o| o.owner == Some(ALPHA)) {
+            captured = true;
+            break;
+        }
+    }
+    assert!(captured, "the engineer captures the building");
+    assert!(
+        live.world.obj(engineer).is_none(),
+        "the engineer is used up"
+    );
+}
+
+/// [`scenario`] with `keys` in HUTX's art section and the drawing's quirk
+/// switches `quirks`.
+fn scenario_with(keys: &str, tech: bool, act: Act, quirks: ViewQuirks) -> Seen {
+    let (import, catalogue, assets) = import_with(keys);
     let mut map = testkit::empty_map(SIZE);
     let at = testkit::mid(SIZE, 2, 0);
     map.objects.structures.push(Structure {
@@ -269,6 +331,7 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
         painter,
         (world, rules.clone(), setup, Vec::new()),
     );
+    live.set_view_quirks(quirks);
     let mut scene = built.scene;
     let code = *live
         .building_ids
@@ -287,29 +350,28 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
     }
     live.redraw(&inputs, &mut scene);
     let before = counts(&scene);
-    let body_before = pixels(&scene, code, BODY_FRAME);
-    let still = pixels(&scene, code, SLOT_FRAME);
+    let either = |scene: &Scene, size| {
+        [pixels(scene, code, size), pixels(scene, sim_code(b), size)].concat()
+    };
+    let body_before = either(&scene, BODY_FRAME);
+    let still = either(&scene, SLOT_FRAME);
+    let mut held = Vec::new();
     match act {
-        Act::Capture => {
-            let r = live.click(
-                ALPHA,
-                &mut vec![engineer],
-                ClickOn::Object(b),
-                Modifiers::default(),
-            );
-            assert_eq!(r.refused, 0, "the capture order is accepted");
-            let mut captured = false;
-            for _ in 0..800 {
+        Act::Capture => capture(&mut live, engineer, b),
+        Act::SwitchOffThenCapture => {
+            // Two more ticks, so that the slot is held at a frame other than its first and its last.
+            live.step();
+            live.step();
+            live.world.obj_mut(b).unwrap().econ.building.switched_off = true;
+            for _ in 0..6 {
                 live.step();
-                if live.world.obj(b).is_some_and(|o| o.owner == Some(ALPHA)) {
-                    captured = true;
-                    break;
-                }
+                live.redraw(&inputs, &mut scene);
+                held.push(pixels(&scene, sim_code(b), SLOT_FRAME));
             }
-            assert!(captured, "the engineer captures the building");
+            capture(&mut live, engineer, b);
             assert!(
-                live.world.obj(engineer).is_none(),
-                "the engineer is used up"
+                live.world.obj(b).unwrap().econ.building.switched_off,
+                "the switch is kept at the ownership change (S-0405 claim 10)"
             );
         }
         Act::Damage => {
@@ -350,6 +412,7 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
         after,
         body: (body_before, body_after),
         still,
+        held,
         rows,
         reference,
         slots,
@@ -384,15 +447,16 @@ fn slot_frames(s: &Seen) -> BTreeSet<u8> {
 
 /// spec: S-0108 claim 11 (a building placed during the set-up starts its idle and active slots) and
 /// S-0109 claims 1 and 5 (a running slot animation shows its current image frame, which advances);
-/// S-0103 claim 8 (the new owner's palette); S-0405 claims 8 and 9 and S-0515 claim 2 (a building
-/// that needs an engineer is not in operation until its first ownership change): a captured map
-/// tech building's slot animation plays, drawn once. Before the capture it keeps its cell-pass
-/// drawing (Q-1772 asks whether its slots run then); S-0108 claim 13 (power) is not modelled
+/// S-0103 claim 8 (the new owner's palette); S-0108 claim 26 and S-0515 claim 2 (a map building
+/// that needs an engineer is not manned until its first ownership change and is disabled from its
+/// placement, so its freeze-unpowered slot holds the image frame it was created with; the
+/// ownership change re-enables it and the slot resumes): a captured map tech building's slot
+/// animation plays, drawn once. Before the capture it is drawn live, its slot at its first frame
 #[test]
 fn a_captured_map_building_animates() {
     let s = scenario(true, true, Act::Capture);
-    // Unmanned, the tech building stays in the cell pass (Q-1772 open).
-    assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+    assert!(s.before.0 == 0 && s.before.1 > 0, "{:?}", s.before);
+    assert_eq!(s.still, [1], "held at the frame it was created with");
     assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
     assert_eq!(s.rows, s.reference, "the capturing house's palette");
     assert!(
@@ -430,14 +494,17 @@ fn a_damaged_map_building_shows_its_damage() {
 
 /// spec: S-0103 claim 10 (the neutral house shows the light-grey definition) and claim 8 (a
 /// building is drawn with its owner's palette); S-0108 claim 2 (its damage changes its body
-/// frame); S-0515 claim 2 (it is manned only from its first ownership change); Q-1772 interim (an
-/// unmanned map tech building keeps its cell-pass drawing until its owner or health changes, and
-/// drawn live its slots play): the lead's note 18 of M8 step A4, round 4. A neutral tech building
-/// that is damaged but never captured animates, in the neutral house's colour, not a player's
+/// frame); S-0515 claim 2 (it is manned only from its first ownership change); S-0108 claims 12,
+/// 13 and 26 (the damage swap restarts its slots, and a start while not manned freezes a slot only
+/// when the type needs power, so the slots of a type that does not need power play from then on
+/// although the building is still disabled): the lead's note 18 of M8 step A4, round 4. A neutral
+/// tech building that is damaged but never captured animates, in the neutral house's colour, not a
+/// player's
 #[test]
 fn a_damaged_unmanned_tech_building_animates_in_the_neutral_colour() {
     let s = scenario(true, true, Act::Damage);
-    assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+    assert!(s.before.0 == 0 && s.before.1 > 0, "{:?}", s.before);
+    assert_eq!(s.still, [1], "held at the frame it was created with");
     assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
     assert!(
         slot_frames(&s).len() > 1,
@@ -452,38 +519,41 @@ fn a_damaged_unmanned_tech_building_animates_in_the_neutral_colour() {
 }
 
 /// spec: S-0108 claim 2 and F3 (a building above the damaged ratio shows its normal body frame);
-/// S-0515 claim 2 (unmanned until its first ownership change); Q-1772 interim (any change of its
-/// health draws it live, and its slots play): the lead's note 18 of M8 step A4, reopened. A
-/// neutral tech building that loses a single point of health looks undamaged but animates
+/// S-0515 claim 2 (unmanned until its first ownership change); S-0108 claims 12 and 26 (no damage
+/// swap, so no start: its freeze-unpowered slot keeps holding the image frame it was created
+/// with): the lead's note 18 of M8 step A4, reopened. A neutral tech building that loses a single
+/// point of health looks undamaged and its slot stands still
 #[test]
-fn a_chipped_unmanned_tech_building_looks_undamaged_but_animates() {
+fn a_chipped_unmanned_tech_building_looks_undamaged_and_holds_its_slot() {
     let s = scenario(true, true, Act::Chip);
-    assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+    assert!(s.before.0 == 0 && s.before.1 > 0, "{:?}", s.before);
     assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
     assert_eq!(s.body.0, s.body.1, "the normal body frame");
-    assert!(
-        slot_frames(&s).len() > 1,
-        "the slot animation plays: {:?}",
+    assert_eq!(s.still, [1], "held at the frame it was created with");
+    assert_eq!(
+        slot_frames(&s),
+        BTreeSet::from([1]),
+        "the slot stands still: {:?}",
         s.slots
     );
 }
 
 /// spec: S-0102 claim 34 (a protected building's body shows the protection appearance) and
-/// S-0519 claim 25 (the charge flash repaints the body): such a map building is drawn live;
-/// S-0108 claim 11 and S-0515 claim 2; Q-1772 interim (an unmanned map tech building whose owner
-/// and health are as at the start keeps its slots at their first image frame, as the cell pass
-/// draws them): the lead's note 18 of M8 step A4, reopened. Before the fix its slots played
+/// S-0519 claim 25 (the charge flash repaints the body); S-0108 claims 11 and 26 and S-0515 claim 2
+/// (a map building that needs an engineer and is not manned holds its freeze-unpowered slots at the
+/// image frame they were created with, whatever its look; the guard order starts no slot): the
+/// lead's note 18 of M8 step A4, reopened
 #[test]
-fn an_unmanned_tech_building_drawn_live_for_its_look_keeps_its_slots_still() {
-    for act in [Act::Protect, Act::Flash] {
+fn an_unmanned_tech_building_holds_its_slots_whatever_its_look() {
+    for act in [Act::Protect, Act::Flash, Act::Nothing] {
         let s = scenario(true, true, act);
-        assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+        assert!(s.before.0 == 0 && s.before.1 > 0, "{:?}", s.before);
         assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
-        assert_eq!(s.still.len(), 1, "one slot image in the cell pass");
+        assert_eq!(s.still, [1], "held at the frame it was created with");
         assert_eq!(
             slot_frames(&s),
-            s.still.iter().copied().collect::<BTreeSet<u8>>(),
-            "the slot stands at the cell pass's frame: {:?}",
+            BTreeSet::from([1]),
+            "the slot stands at the frame it was created with: {:?}",
             s.slots
         );
     }
@@ -494,6 +564,59 @@ fn an_unmanned_tech_building_drawn_live_for_its_look_keeps_its_slots_still() {
         "the slot animation plays: {:?}",
         s.slots
     );
+}
+
+/// spec: S-0108 claims 13 and 26 (a slot whose art turns freeze-unpowered off keeps playing while
+/// the building that needs an engineer is not manned; only each slot's counting flag decides) and
+/// claim 27 (it has never been powered, so no power-loss reaction stops its light-unpowered slot)
+#[test]
+fn a_light_unpowered_slot_of_an_unmanned_tech_building_plays() {
+    let s = scenario_with(LIGHT_SLOT, true, Act::Nothing, ViewQuirks::default());
+    assert!(s.before.0 == 0 && s.before.1 > 0, "{:?}", s.before);
+    assert!(
+        slot_frames(&s).len() > 1,
+        "the slot animation plays: {:?}",
+        s.slots
+    );
+}
+
+/// spec: S-0108 claim 28 (switching off disables the building: its freeze-unpowered slot holds its
+/// image frame) and claim 26 (at an ownership change the building is re-enabled and every frozen
+/// freeze-unpowered slot resumes from the image frame it held, not from the frame it was created
+/// with, advancing at its first eligible update, S-0109 claim 23, whether or not the building is in
+/// operation after the change, here still switched off: `quirks.enable_unfreezes_unpowered`); S-0108
+/// Edge cases (that switch off: the slot stays frozen, as the building is not in operation after the
+/// change)
+#[test]
+fn a_capture_resumes_a_held_slot_from_its_held_frame() {
+    for unfreezes in [true, false] {
+        let quirks = ViewQuirks {
+            enable_unfreezes_unpowered: unfreezes,
+            ..ViewQuirks::default()
+        };
+        let s = scenario_with(SLOT, false, Act::SwitchOffThenCapture, quirks);
+        let held: BTreeSet<u8> = s.held[1..].iter().flatten().copied().collect();
+        assert_eq!(held.len(), 1, "held while switched off: {:?}", s.held);
+        let frame = *held.first().unwrap();
+        assert_ne!(
+            frame, 1,
+            "held at a frame other than its first: {:?}",
+            s.held
+        );
+        if unfreezes {
+            // Resumed: the first redraw after the change shows the frame after the held one (not
+            // the first frame, as a start again would).
+            assert_eq!(s.slots[0], [frame + 1], "{:?}", s.slots);
+            assert!(slot_frames(&s).len() > 1, "it plays: {:?}", s.slots);
+        } else {
+            assert_eq!(
+                slot_frames(&s),
+                BTreeSet::from([frame]),
+                "still held: {:?}",
+                s.slots
+            );
+        }
+    }
 }
 
 /// Alpha's own HUTX with the slot animation, sellable (its type has a
@@ -624,4 +747,84 @@ fn a_packing_buildings_slots_stay_until_its_build_down() {
             "hidden from the build-down's first tick ({s:?}): {px:?}"
         );
     }
+}
+
+/// spec: S-0108 claim 11 (a building placed in play, like a replacement that trigger action code
+/// 130 restores, enters with *construction* queued, and its grand opening is at the completion of
+/// that construction, not at its placement) and S-0406 claim 17 (at entry no behaviour is current
+/// and *construction* is queued; a rule that asks for its behaviour then sees the queued one)
+#[test]
+fn a_building_placed_in_play_opens_at_its_completion() {
+    use glasnost_sim::econ::placement::{begin_construction, seen_behaviour};
+    use glasnost_sim::rules::Behaviour;
+    let (import, catalogue, assets) = import(true);
+    let map = testkit::empty_map(SIZE);
+    let mut r = ruleset(false);
+    {
+        let hut = r.sim.buildings.get_mut("HUTX").unwrap();
+        hut.econ.buildup = Some(true);
+        // spec: S-0108 claim 5 (a build-up of N_b frames has n = ⌊N_b / 2⌋ stages) and S-0406 claim 15 (a range of two stages or more hands over at its last stage)
+        hut.econ.buildup_frames = Some(8);
+    }
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = testkit::spawn(
+        &mut world,
+        SimKind::Building,
+        "HUTX",
+        0,
+        testkit::mid(SIZE, 0, 0),
+        0,
+    );
+    begin_construction(&mut world, b, false);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.redraw(&inputs, &mut scene);
+    assert!(
+        live.slot_names(b).is_empty(),
+        "no slot at its entry, while construction is only queued"
+    );
+    let mut building = 0;
+    let mut opened = None;
+    for t in 0..3000 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        let o = live.world.obj(b).expect("the building stays");
+        if seen_behaviour(o) == Some(Behaviour::Construction) {
+            building += 1;
+            assert!(
+                live.slot_names(b).is_empty(),
+                "no slot before its completion (tick {t})"
+            );
+        } else if !live.slot_names(b).is_empty() {
+            opened = Some(t);
+            break;
+        }
+    }
+    assert!(building > 1, "it was built up over {building} ticks");
+    assert!(
+        opened.is_some(),
+        "its slots start at its completion (built up over {building} ticks)"
+    );
 }
