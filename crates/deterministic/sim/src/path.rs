@@ -294,6 +294,14 @@ pub fn step_outcome_of(
 /// (twice the dense cell index, plus 1 for a deck).
 /// Not game state: a search starts from a fresh stamp, so nothing carries
 /// over from one search to the next.
+///
+/// It also keeps what one path computation with the corridor has asked of
+/// the claim 13 exemption, by dense cell index (our tooling for speed, M8
+/// C4 part 5). A computation's searches all read the one world it was
+/// asked on (the world does not change while it runs), so an answer kept
+/// is the answer asked again. A computation starts from a fresh stamp of
+/// its own, so nothing carries over from one computation to the next; a
+/// loaded game starts empty, and nothing here is saved or hashed.
 #[derive(Clone, Debug, Default)]
 pub struct SearchScratch {
     stamp: u32,
@@ -304,20 +312,61 @@ pub struct SearchScratch {
     g: Vec<F32>,
     /// The predecessor pair and the step direction from it.
     pred: Vec<(CellXY, Layer, u8)>,
+    /// The current path computation's stamp; 0 before the first.
+    computation: u32,
+    /// Whether a path computation is running (its memory may be kept).
+    open: bool,
+    /// `exempt_at[i] == computation`: `exempt[i]` is cell i's
+    /// [`corridor::exempt`] in this computation's world.
+    exempt_at: Vec<u32>,
+    exempt: Vec<bool>,
 }
 
 impl SearchScratch {
     fn begin(&mut self, len: usize) {
         if self.seen.len() != len || self.stamp == u32::MAX {
-            *self = Self {
-                stamp: 0,
-                seen: vec![0; len],
-                closed: vec![0; len],
-                g: vec![F32::ZERO; len],
-                pred: vec![(CellXY::new(0, 0), Layer::Ground, 0); len],
-            };
+            self.stamp = 0;
+            self.seen = vec![0; len];
+            self.closed = vec![0; len];
+            self.g = vec![F32::ZERO; len];
+            self.pred = vec![(CellXY::new(0, 0), Layer::Ground, 0); len];
         }
         self.stamp += 1;
+    }
+
+    /// Starts a path computation's memory for a map of `cells` cells: what
+    /// earlier computations kept is forgotten.
+    fn begin_computation(&mut self, cells: usize) {
+        if self.exempt_at.len() != cells || self.computation == u32::MAX {
+            self.computation = 0;
+            self.exempt_at = vec![0; cells];
+            self.exempt = vec![false; cells];
+        }
+        self.computation += 1;
+        self.open = true;
+    }
+
+    /// Ends the current path computation: until the next begins, every
+    /// question is asked afresh and nothing is kept.
+    fn end_computation(&mut self) {
+        self.open = false;
+    }
+
+    /// [`corridor::exempt`] for cell `c` of `w`, the world of the current
+    /// path computation: asked once per cell and computation.
+    fn exempt(&mut self, w: &World, c: CellXY) -> bool {
+        let Some(i) = w.cells.idx(c).filter(|_| self.open) else {
+            return corridor::exempt(w, c);
+        };
+        if self.exempt_at.get(i) == Some(&self.computation) {
+            return self.exempt[i];
+        }
+        let v = corridor::exempt(w, c);
+        if let Some(at) = self.exempt_at.get_mut(i) {
+            *at = self.computation;
+            self.exempt[i] = v;
+        }
+        v
     }
 
     fn g(&self, i: usize) -> Option<F32> {
@@ -557,6 +606,14 @@ fn counted_search(
                 if w.cells.cell(c).is_none() || behind.contains(&(c, cl)) {
                     continue;
                 }
+                // A candidate outside the corridor that is not the
+                // destination leads nowhere below whatever its outcome, so
+                // it is passed over before its outcome is asked: the same
+                // search with less work. The destination's outcome comes
+                // first (claim 15's blocked destination).
+                if c != to && outside_corridor(w, corr, &mut sc, c, cl) {
+                    continue;
+                }
                 // spec: S-0209 Terms (reference height level in a path search: the expanded pair's, plus 4 on its deck layer, with the start-pair adjustment of S-0212 claim 7; the step starts from that pair's cell)
                 let v = step_outcome_of(w, &mover, next.cell, c, here_level);
                 if v == Outcome::Blocked {
@@ -589,15 +646,8 @@ fn counted_search(
                     }
                     continue;
                 }
-                // spec: S-0212 claim 7 (with a corridor, a ground-layer candidate only in a corridor sector or with the exemption; deck candidates are not restricted)
-                if let Some(cf) = corr
-                    && cl == Layer::Ground
-                {
-                    let sec = cf.level0.sector(w, c);
-                    let on = cf.on.get(sec as usize).copied().unwrap_or(false);
-                    if !on && !corridor::exempt(w, c) {
-                        continue;
-                    }
+                if c == to && outside_corridor(w, corr, &mut sc, c, cl) {
+                    continue;
                 }
                 // spec: S-0212 F1 (c = trunc₂₄(b × τ + ε(d)); τ = 4 on a congestion mark)
                 let tau = if req.congested.contains(&c) { 4 } else { 1 };
@@ -653,6 +703,25 @@ fn counted_search(
             }
         }
     }
+}
+
+/// Whether candidate `c` on search layer `cl` lies outside the corridor
+/// `corr` (S-0212 claims 7 and 13). Without a corridor nothing is outside.
+fn outside_corridor(
+    w: &World,
+    corr: Option<&CorridorFilter<'_>>,
+    sc: &mut SearchScratch,
+    c: CellXY,
+    cl: Layer,
+) -> bool {
+    let Some(cf) = corr else { return false };
+    // spec: S-0212 claim 7 (with a corridor, a ground-layer candidate only in a corridor sector or with the exemption; deck candidates are not restricted)
+    if cl != Layer::Ground {
+        return false;
+    }
+    let sec = cf.level0.sector(w, c);
+    let on = cf.on.get(sec as usize).copied().unwrap_or(false);
+    !on && !sc.exempt(w, c)
 }
 
 /// The start pair of a search from `from` (S-0212 claim 7): its search layer
@@ -1895,6 +1964,23 @@ pub fn corridor_find(w: &World, id: ObjectId, to: CellXY) -> Option<Vec<u8>> {
 /// 13, the table of searches): the coarse search, a cell search inside the
 /// corridor, and up to 5 cell searches with retries.
 fn corridor_search(
+    w: &World,
+    req: &Request,
+    coarse_zone: MovementZone,
+    own_zone: MovementZone,
+    start_end: CellXY,
+    dest_end: CellXY,
+) -> Option<Vec<u8>> {
+    // One world for all the computation's searches: what they ask of it may
+    // be kept for the computation (our tooling for speed, M8 C4 part 5).
+    w.scratch.borrow_mut().begin_computation(w.cells.grid.len());
+    let found = corridor_searches(w, req, coarse_zone, own_zone, start_end, dest_end);
+    w.scratch.borrow_mut().end_computation();
+    found
+}
+
+/// [`corridor_search`]'s searches.
+fn corridor_searches(
     w: &World,
     req: &Request,
     coarse_zone: MovementZone,
