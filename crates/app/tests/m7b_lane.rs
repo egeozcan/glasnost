@@ -116,7 +116,7 @@
 //! facing different ways; it kills the first and sets the second sinking
 //! directly, as a cull would (S-0614 claim 11; an underwater type never
 //! sinks at a killing hit, S-0504 claim 6), and saves frames before the
-//! hit and at the start, middle and end of the descent, printing each
+//! hit and at the start, onset, middle and end of the descent, printing each
 //! vessel's id, facing, list direction and step. Ids, cells, counts and
 //! ticks only.
 //!
@@ -3864,9 +3864,15 @@ fn sinking_list(lane: &mut Lane) {
     glasnost_sim::naval::start_sinking(l.world_mut(), b);
     let t0 = l.world().tick;
     report(&l, "hit");
-    // Frames at the start (depth 10), middle (200) and end (390) of the
-    // first vessel's descent: 5 leptons a tick (S-0504 claim 4).
-    let marks = [(10, "1-start"), (200, "2-middle"), (390, "3-end")];
+    // Frames at the start (depth 10, still level), the onset (60), the
+    // middle (200) and the end (390) of the first vessel's descent: 5
+    // leptons a tick (S-0504 claim 4).
+    let marks = [
+        (10, "1-start"),
+        (60, "2-onset"),
+        (200, "3-middle"),
+        (390, "4-end"),
+    ];
     let mut next = 0;
     for _ in 0..200 {
         l.ticks(1);
