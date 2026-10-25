@@ -2973,6 +2973,16 @@ S-0314 r77 claim 21 (*Over water, at a naval yard*) and the Edge case *Hovering 
 - Whether an ordinary repair visit reaches the loss stays open in the spec (claim 21). The code keeps to the stated rule: the switch-off at the movement arrival is in *enter* and takes no draws.
 - No new state: save format 78, AI game format 40. Goldens unchanged.
 
+### Slot power, disabling and re-enabling (M8 step A3 intake 20)
+
+S-0108 r75 (claims 10, 11, 13 and 26 to 28; answers Q-1772). The ledger, [m8-claims/intake20-S-0108.md](m8-claims/intake20-S-0108.md), holds the notes.
+- Slots read their power flags (`mapview::slots`, claim 13: the first of freeze, light and effect that is on counts; *pre-production*, *production* and *turret* have none). `mapview::slot_play::Slots` keeps the disabled state: a disabling freezes every running freeze slot, a re-enabling unfreezes them (`ViewQuirks::enable_unfreezes_unpowered`, now consulted; off, only when the building is in operation right after), and a frozen slot is held through `glasnost_sim::anim_clock::Player::update_held` (S-0109 claim 23: its clock keeps running). The loss and return columns apply only to a type that needs and draws power.
+- A map-placed building that needs an engineer and is not manned is disabled at its placement and drawn live from the start; every ownership change re-enables it, and the held slots resume from the frame they held (claim 26). Its light and effect slots, and slots with no power flag on, keep playing (claims 13 and 27). Switching off and a pulse disable, switching on and a pulse's end re-enable (claim 28). Q-1772's interim (`Live::unmanned_tech`, the still map) is retired.
+- A building placed in play, or a code-130 replacement, opens at the completion of its construction: the slots' *completed* reads the seen behaviour (`econ::placement::seen_behaviour`, S-0406 claim 17), so a queued *construction* counts (claim 11). Code 125 is not in the simulation (seam).
+- **Interim rules, our design (Q-1890, open).** A building first seen switched off or under a pulse counts as disabled from then on, so its freeze slots hold as if it had been switched off after its placement. Disablings and re-enablings seen in the same update are applied in the order ownership change, switch, pulse; each is a single change, so the last one decides the state.
+- **Seams.** Claim 14's special outage and the *low-power* slot are not played; `power::under_pulse` always answers no until pulses reach the simulation.
+- No new state: save format 78, AI game format 40. Goldens unchanged.
+
 ### Pathing reports (M8 A4)
 
 A pathing report is what the lead saves while playing when a unit moves strangely; the replay tool explains it from the simulation's own decisions. Everything here is our own diagnostics (`// nocite: our own diagnostics`): no game rule changes, the save format stays 70 and the AI game format 31, and every golden is unchanged.
