@@ -1,9 +1,9 @@
 ---
 id: Q-1885
 title: Depth bias and drawing order of the voxel barrel on a sprite-body vehicle
-status: open
+status: answered
 related: [S-0102, S-0105, S-0007]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
