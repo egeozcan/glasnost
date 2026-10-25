@@ -2447,7 +2447,7 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             d.scene.images[parts[1].0 as usize], barrel_pixels,
             "index {index:?}: the single barrel"
         );
-        assert_eq!(d.cached[0], true, "index {index:?}: keyed by its index");
+        assert!(d.cached[0], "index {index:?}: keyed by its index");
     }
     // Without a barrel part the voxel turret part is not drawn either, and the body and turret
     // frames are still composed into one image with the row U.
