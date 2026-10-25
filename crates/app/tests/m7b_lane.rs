@@ -3726,13 +3726,16 @@ fn live_name(w: &World, h: HouseId) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 // M8 step A4, note 20 (Q-1871: the sinking vessel's list, our interim)
 
+/// A naval vehicle type: index, voxel body, turret flag, underwater, sinks
+/// at a killing hit.
+type NavalType = (u32, bool, bool, bool, bool);
+
 /// Note 20 (design: Q-1871 interim; S-0504 claims 4, 6; S-0312 claim 10;
 /// S-0614 claim 11): the naval vehicle types counted, and two vessels sunk
 /// on open water with frames of their descent. Counts, ids and ticks only.
 fn sinking_list(lane: &mut Lane) {
     use glasnost_app::mapview::build::Attitude;
-    // (index, voxel body, has a turret, underwater, sinks at a killing hit)
-    let types: Vec<(u32, bool, bool, bool, bool)> = {
+    let types: Vec<NavalType> = {
         let s = lane.c.session.as_ref().unwrap();
         let import = &s.loaded.import;
         let registry = &import.outcome.registries[&glasnost_convert::kinds::Kind::Vehicles];
@@ -3765,8 +3768,7 @@ fn sinking_list(lane: &mut Lane) {
             })
             .collect()
     };
-    let count =
-        |f: &dyn Fn(&(u32, bool, bool, bool, bool)) -> bool| types.iter().filter(|t| f(t)).count();
+    let count = |f: &dyn Fn(&NavalType) -> bool| types.iter().filter(|t| f(t)).count();
     println!(
         "sinking-list: naval vehicle types {}: voxel body {}, sprite body {}; underwater {} (voxel {}); sink at a killing hit {} (voxel {}, with a turret {})",
         types.len(),
