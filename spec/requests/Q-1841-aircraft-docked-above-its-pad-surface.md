@@ -1,9 +1,9 @@
 ---
 id: Q-1841
 title: Where an aircraft docked at a positive docking height is listed
-status: open
+status: answered
 related: [S-0501, S-0209, S-0404, S-0303]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
