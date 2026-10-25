@@ -10,15 +10,23 @@
 //! simulation's (`glasnost_sim::depot_anim`, S-0108 claim 20: their
 //! lifetime is game state); the drawing shows them from there and plays
 //! the depot's *idle* and *active-1* as the simulation's
-//! `Effect::DepotSlot` reports ([`Slots::depot`]). Not covered here: the
-//! power rules of claims 13 and 14 (no slot freezes or lights with power),
-//! silo fill (claim 16), the superweapon and turret slots (claims 11, 18
-//! and 19), the upgrade slots and the recycling building's row of claim
-//! 20.
+//! `Effect::DepotSlot` reports ([`Slots::depot`]).
+//!
+//! The power rules of claim 13 are played for these slots: a
+//! *freeze-unpowered* slot is frozen (held, S-0109 claim 23) by a loss of
+//! operation of a type that needs and draws power, by a disabling (a
+//! switch-off, a pulse, and the map's placement of a building that needs an
+//! engineer and is not manned, claim 26), and when it starts frozen; it
+//! resumes at a power return or a re-enabling (an ownership change among
+//! them, claim 26). The *light-unpowered* and *effect-unpowered* columns
+//! stop and start slots. Not covered here: claim 14's special outage and
+//! the *low-power* slot, silo fill (claim 16), the superweapon slots and
+//! *super-low-power* (claims 11, 13 and 18), the turret slot (claims 11 and
+//! 19), the upgrade slots and the recycling building's row of claim 20.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use super::slots::{self, SlotDef};
+use super::slots::{self, Counting, SlotDef};
 
 /// The slots this module starts or stops (S-0108 Terms).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -134,6 +142,12 @@ pub struct TypeKind {
     pub depot: bool,
     /// A delayed-fire type (claim 20).
     pub delayed_fire: bool,
+    /// The type needs power (claim 13: only then does a
+    /// *freeze-unpowered* slot start frozen).
+    pub needs_power: bool,
+    /// The type needs and draws power (Terms): claim 13's power-loss and
+    /// power-return columns apply.
+    pub draws_power: bool,
 }
 
 /// A building's state as the slot rules read it, each tick.
@@ -150,6 +164,18 @@ pub struct State {
     pub occupied: bool,
     /// The held infantry's total size *T* (claim 17, F9).
     pub held_size: i32,
+    /// The owner, as a house index (claim 26: every ownership change
+    /// re-enables the building).
+    pub owner: Option<u8>,
+    /// The in-operation result of S-0405 claim 8: the powered state of
+    /// claim 13 (Terms, claim 28).
+    pub in_operation: bool,
+    /// Its power switch is off (claim 28's switched-on row).
+    pub switched_off: bool,
+    /// It is under a pulse (claim 28's not-under-a-pulse row).
+    pub pulsed: bool,
+    /// Its type needs an engineer and it is not manned (claim 26).
+    pub unmanned: bool,
 }
 
 /// Makes a slot's animation of a type name.
@@ -167,6 +193,27 @@ pub struct Running<A> {
     pub name: Vec<u8>,
     /// Its playback.
     pub anim: A,
+    /// Frozen by claim 13: it holds its image frame (S-0109 claim 23).
+    pub frozen: bool,
+}
+
+/// What a building's last update saw of the causes that disable and
+/// re-enable it (claims 13, 26 and 28).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Seen {
+    owner: Option<u8>,
+    switched_off: bool,
+    pulsed: bool,
+}
+
+impl Seen {
+    fn of(st: &State) -> Self {
+        Self {
+            owner: st.owner,
+            switched_off: st.switched_off,
+            pulsed: st.pulsed,
+        }
+    }
 }
 
 /// One building's slots.
@@ -178,6 +225,25 @@ pub struct Slots<A> {
     condition_damaged: bool,
     /// The grand opening has been run (claim 11).
     opened: bool,
+    /// Disabled in claim 13's sense: by a switch-off, a pulse or, for a
+    /// building that needs an engineer, the map's placement while it is not
+    /// manned (claims 26 and 28); cleared by a re-enabling.
+    disabled: bool,
+    /// What the last update saw (claims 13, 26 and 28); `None` before the
+    /// first.
+    seen: Option<Seen>,
+    /// The powered state (the in-operation result) the last update saw
+    /// since the grand opening (claim 13); `None` before it.
+    powered: Option<bool>,
+    /// The slots stopped by the outage (claim 13, *effect-unpowered*).
+    outage: BTreeSet<Slot>,
+    /// The type needs power, as of the tick's [`Slots::prepare`].
+    needs_power: bool,
+    /// The building is in operation, as of the tick's [`Slots::prepare`].
+    in_operation: bool,
+    /// `quirks.enable_unfreezes_unpowered`, as of the tick's
+    /// [`Slots::prepare`].
+    enable_unfreezes: bool,
 }
 
 impl<A> Default for Slots<A> {
@@ -186,6 +252,14 @@ impl<A> Default for Slots<A> {
             running: BTreeMap::new(),
             condition_damaged: false,
             opened: false,
+            disabled: false,
+            seen: None,
+            powered: None,
+            outage: BTreeSet::new(),
+            needs_power: false,
+            in_operation: true,
+            // spec: S-0108 Edge cases (quirks.enable_unfreezes_unpowered defaults on)
+            enable_unfreezes: true,
         }
     }
 }
@@ -194,6 +268,186 @@ impl<A> Slots<A> {
     /// Whether `slot` holds a running animation.
     pub fn runs(&self, slot: Slot) -> bool {
         self.running.contains_key(&slot)
+    }
+
+    /// Whether `slot` holds a running animation that is frozen (claim 13).
+    pub fn frozen(&self, slot: Slot) -> bool {
+        self.running.get(&slot).is_some_and(|r| r.frozen)
+    }
+
+    /// Whether the building is disabled in claim 13's sense (tests).
+    pub fn disabled(&self) -> bool {
+        self.disabled
+    }
+
+    /// Takes in the building's state at the start of its turn in a tick,
+    /// before its slots play and before any start: whether its type needs
+    /// power, whether it is in operation, and
+    /// `quirks.enable_unfreezes_unpowered` as `enable_unfreezes`.
+    pub fn prepare(&mut self, kind: &TypeKind, st: &State, enable_unfreezes: bool) {
+        self.needs_power = kind.needs_power;
+        self.in_operation = st.in_operation;
+        self.enable_unfreezes = enable_unfreezes;
+    }
+
+    /// Whether a slot of definition `def` started now starts frozen.
+    fn starts_frozen(&self, def: &SlotDef) -> bool {
+        // spec: S-0108 claim 13 (a freeze-unpowered slot that starts while the building is disabled or not in operation, any row of S-0405 claim 8, starts frozen; only when the type itself needs power) and claim 26 (slot starts while not manned)
+        def.power.counting() == Counting::Freeze
+            && self.needs_power
+            && (self.disabled || !self.in_operation)
+    }
+
+    /// A disabling (claim 13): every running *freeze-unpowered* slot
+    /// freezes, whether or not the type needs power.
+    fn disable(&mut self, defs: &Defs) {
+        self.disabled = true;
+        for (slot, r) in &mut self.running {
+            // spec: S-0108 claim 13 (disabling a building freezes every running freeze-unpowered slot, whether or not the type needs power)
+            if defs
+                .get(slot)
+                .is_some_and(|d| d.power.counting() == Counting::Freeze)
+            {
+                r.frozen = true;
+            }
+        }
+    }
+
+    /// A re-enabling (claims 13 and 26): the frozen slots resume, even
+    /// when the building is not in operation
+    /// (`quirks.enable_unfreezes_unpowered`; off: only when it is in
+    /// operation right after it).
+    fn enable(&mut self, st: &State) {
+        self.disabled = false;
+        // spec: S-0108 claim 13 and Edge cases (quirks.enable_unfreezes_unpowered: re-enabling unfreezes the freeze-unpowered slots even when the building has no power; off: only when it is in operation right after it)
+        if self.enable_unfreezes || st.in_operation {
+            for r in self.running.values_mut() {
+                // spec: S-0108 claim 26 (each frozen slot resumes from the image frame it held: no slot is started, stopped or restarted, so it keeps its variant)
+                r.frozen = false;
+            }
+        }
+    }
+
+    /// The disablings and re-enablings since the last update (claims 13,
+    /// 26 and 28), in our design's order while Q-1890 (question 3) is
+    /// open: the ownership change, the switch, the pulse.
+    fn enablings(&mut self, defs: &Defs, st: &State, last: Seen) {
+        // spec: S-0108 claim 26 (as part of every ownership change the building is re-enabled, whether or not it is in operation after the change; also at every later change of a building already manned)
+        if last.owner != st.owner {
+            self.enable(st);
+        }
+        // spec: S-0108 claim 28 (switched-on row: switching off disables the building; switching on re-enables it)
+        match (last.switched_off, st.switched_off) {
+            (false, true) => self.disable(defs),
+            (true, false) => self.enable(st),
+            _ => {}
+        }
+        // spec: S-0108 claims 13 and 28 (a pulse disables the building and its end re-enables it, whatever its power switch)
+        match (last.pulsed, st.pulsed) {
+            (false, true) => self.disable(defs),
+            (true, false) => self.enable(st),
+            _ => {}
+        }
+    }
+
+    /// The slots whose power rules this module plays for a type: all of
+    /// them except a repair depot's *production* and *special-1* to
+    /// *special-3*, which are the simulation's (claim 20).
+    fn power_slots(kind: &TypeKind) -> Vec<Slot> {
+        Slot::ALL
+            .into_iter()
+            .filter(|s| {
+                !(kind.depot
+                    && matches!(
+                        s,
+                        Slot::Production | Slot::Special1 | Slot::Special2 | Slot::Special3
+                    ))
+            })
+            .collect()
+    }
+
+    /// Claim 13's power-loss column.
+    fn power_lost(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        for slot in Self::power_slots(kind) {
+            let Some(def) = defs.get(&slot) else { continue };
+            if !self.runs(slot) {
+                continue;
+            }
+            match def.power.counting() {
+                Counting::Freeze => {
+                    if let Some(r) = self.running.get_mut(&slot) {
+                        // spec: S-0108 claim 13 (freeze-unpowered, power lost: a running slot holds its image frame and stops advancing)
+                        r.frozen = true;
+                    }
+                }
+                Counting::Light => {
+                    // spec: S-0108 claim 13 (light-unpowered, power lost: a running slot is stopped)
+                    self.stop(slot);
+                    // spec: S-0108 claim 13 (special-1 of a delayed-fire type whose active-1 has freeze-unpowered: active-1 starts, and being unpowered starts frozen; normal or damaged variant)
+                    if slot == Slot::Special1
+                        && kind.delayed_fire
+                        && defs
+                            .get(&Slot::Active1)
+                            .is_some_and(|d| d.power.counting() == Counting::Freeze)
+                    {
+                        self.start_variant(Slot::Active1, defs, st.damaged, mk);
+                    }
+                }
+                Counting::Effect => {
+                    // spec: S-0108 claim 13 (effect-unpowered, power lost: a running slot is stopped and marked as stopped by the outage; super-3's super-low-power is not modelled here)
+                    self.stop(slot);
+                    self.outage.insert(slot);
+                }
+                Counting::Nothing => {}
+            }
+        }
+    }
+
+    /// Claim 13's power-return column.
+    fn power_back(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        for slot in Self::power_slots(kind) {
+            let Some(def) = defs.get(&slot) else { continue };
+            match def.power.counting() {
+                Counting::Freeze => {
+                    if let Some(r) = self.running.get_mut(&slot) {
+                        // spec: S-0108 claim 13 (freeze-unpowered, power comes back: it resumes)
+                        r.frozen = false;
+                    }
+                }
+                Counting::Light => {
+                    // spec: S-0108 claim 13 (light-unpowered, power comes back: the slot starts if it is not running and the building has completed; not the special-1 slot of a delayed-fire type; normal or damaged variant)
+                    if !self.runs(slot)
+                        && st.completed
+                        && !(slot == Slot::Special1 && kind.delayed_fire)
+                    {
+                        self.start_variant(slot, defs, st.damaged, mk);
+                    }
+                }
+                Counting::Effect => {
+                    // spec: S-0108 claim 13 (effect-unpowered, power comes back: marked slots start and are unmarked; normal or damaged variant)
+                    if self.outage.remove(&slot) {
+                        self.start_variant(slot, defs, st.damaged, mk);
+                    }
+                }
+                Counting::Nothing => {}
+            }
+        }
+    }
+
+    /// Claim 13's reaction to a change of the powered state since the last
+    /// update, once to each change, for a type that needs and draws power.
+    fn power(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        let was = self.powered.replace(st.in_operation);
+        // spec: S-0108 claim 13 (both columns apply only to a building that needs and draws power)
+        if !kind.draws_power {
+            return;
+        }
+        // spec: S-0108 claim 13 (a building reacts to a change of its in-operation result in its next update, once to each change) and claim 27 (a building not powered since it was placed or completed has had no change from powered to unpowered)
+        match (was, st.in_operation) {
+            (Some(true), false) => self.power_lost(kind, defs, st, mk),
+            (Some(false), true) => self.power_back(kind, defs, st, mk),
+            _ => {}
+        }
     }
 
     /// The names of the running slots, in slot order (tests and lanes).
@@ -233,7 +487,8 @@ impl<A> Slots<A> {
         let from = self.running.get(&slot).map(|r| &r.anim);
         // spec: S-0108 Terms and claim 25 (a running slot is replaced; the new one keeps its stage and takes its passes afresh)
         if let Some(anim) = mk.make(&name, from) {
-            self.running.insert(slot, Running { name, anim });
+            let frozen = self.starts_frozen(def);
+            self.running.insert(slot, Running { name, anim, frozen });
         }
     }
 
@@ -279,11 +534,14 @@ impl<A> Slots<A> {
             }
             let from = self.running.get(&slot).map(|r| &r.anim);
             if let Some(anim) = mk.make(name, from) {
+                // spec: S-0108 claim 26 (a restart by the swap is a start: frozen only by claim 13's start rule, so a type that does not need power restarts running and unfrozen although still disabled)
+                let frozen = self.starts_frozen(def);
                 self.running.insert(
                     slot,
                     Running {
                         name: name.clone(),
                         anim,
+                        frozen,
                     },
                 );
             }
@@ -323,15 +581,30 @@ impl<A> Slots<A> {
         }
     }
 
-    /// The building's update: the grand opening once it has completed, the
-    /// damage swap, and the periodic checks of S-0108 claims 17 and 20.
+    /// The building's update: its disablings and re-enablings, the grand
+    /// opening once it has completed, the damage swap, the periodic checks
+    /// of S-0108 claims 17 and 20, and the power rules of claim 13.
     pub fn update(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
-        if !st.completed {
-            return;
+        let last = self.seen.replace(Seen::of(st));
+        if let Some(last) = last {
+            self.enablings(defs, st, last);
         }
-        if !self.opened {
+        if st.completed && !self.opened {
             self.opened = true;
             self.grand_opening(kind, defs, st, mk);
+            if st.setup && st.unmanned {
+                // spec: S-0108 claim 26 (placed by the map's building list while not manned, whatever the owner: disabled in claim 13's sense from its placement on, so every freeze-unpowered slot its set-up starts holds the image frame it was created with, whether or not the type needs power)
+                self.disable(defs);
+            }
+            // spec: S-0108 claim 13 (a newly placed or completed building that is not in operation has no power-loss reaction; one in operation has its power-return reaction in its first update)
+            self.powered = Some(false);
+        }
+        if last.is_none() && (st.switched_off || st.pulsed) {
+            // Interim of Q-1890: a building first seen switched off or under a pulse (the map's switched-on field 0, S-0009 claim 40) is disabled from then on.
+            self.disable(defs);
+        }
+        if !st.completed {
+            return;
         }
         // spec: S-0108 claim 12 (the damaged state differs from the slot condition: the swap, on
         // the tick of the damage or repair)
@@ -351,6 +624,7 @@ impl<A> Slots<A> {
                 self.start_occupied(on, defs, st, mk);
             }
         }
+        self.power(kind, defs, st, mk);
     }
 
     /// A repair depot's *idle* or *active-1* start or stop that the
@@ -716,5 +990,373 @@ mod tests {
         o.start_variant(Slot::Special3, &d, false, &mut Maker);
         o.finished(Slot::Special3, &TypeKind::default(), &d, &st, &mut Maker);
         assert!(!o.runs(Slot::Active1) && !o.runs(Slot::Idle));
+    }
+
+    /// A slot named `n` whose art turns *freeze-unpowered* off and sets
+    /// *light-unpowered* to `light` and *effect-unpowered* to `effect`.
+    fn flagged(n: &str, light: bool, effect: bool) -> SlotDef {
+        SlotDef {
+            power: slots::PowerFlags {
+                freeze: false,
+                light,
+                effect,
+                special: false,
+            },
+            ..def(n, &format!("{n}D"), &format!("{n}G"))
+        }
+    }
+
+    /// One building turn as the live view runs it: `prepare`, then
+    /// `update`, with `unfreezes` as `quirks.enable_unfreezes_unpowered`.
+    fn turn(s: &mut Slots<Fake>, kind: &TypeKind, d: &Defs, st: &State, unfreezes: bool) {
+        s.prepare(kind, st, unfreezes);
+        s.update(kind, d, st, &mut Maker);
+    }
+
+    /// The names of the frozen running slots, in slot order.
+    fn frozen(s: &Slots<Fake>) -> Vec<String> {
+        s.running
+            .values()
+            .filter(|r| r.frozen)
+            .map(|r| String::from_utf8(r.name.clone()).unwrap())
+            .collect()
+    }
+
+    fn on() -> State {
+        State {
+            in_operation: true,
+            ..done()
+        }
+    }
+
+    /// spec: S-0108 claims 13 and 28 (switching off disables the building: every running
+    /// freeze-unpowered slot freezes, whether or not the type needs power, and a slot whose art
+    /// turns freeze-unpowered off keeps playing; switching on re-enables it and the frozen slots
+    /// resume, keeping their animation and stage)
+    #[test]
+    fn a_switch_off_freezes_and_a_switch_on_resumes() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        let kind = TypeKind::default();
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &on(), true);
+        assert!(frozen(&s).is_empty());
+        s.running.get_mut(&Slot::Idle).unwrap().anim.stage = 3;
+        let off = State {
+            switched_off: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut s, &kind, &d, &off, true);
+        assert!(s.disabled());
+        assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"]);
+        assert!(s.runs(Slot::Active2) && !s.frozen(Slot::Active2));
+        turn(&mut s, &kind, &d, &off, true);
+        assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"], "still held");
+        turn(&mut s, &kind, &d, &on(), true);
+        assert!(!s.disabled() && frozen(&s).is_empty());
+        assert_eq!(s.running[&Slot::Idle].anim.stage, 3);
+        assert_eq!(names(&s), ["I", "A1", "A2", "A3", "A4"]);
+    }
+
+    /// spec: S-0108 claims 13 and 26 (a freeze-unpowered slot that starts while the building is
+    /// disabled or not in operation starts frozen only when the type needs power; a damage swap
+    /// is a start, so for a type that does not need power it restarts the slots running and
+    /// unfrozen although the building is still disabled, and for one that needs power they
+    /// restart frozen)
+    #[test]
+    fn starts_while_disabled_follow_the_start_rule() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        let off = State {
+            switched_off: true,
+            in_operation: false,
+            ..on()
+        };
+        for needs_power in [false, true] {
+            let kind = TypeKind {
+                needs_power,
+                ..TypeKind::default()
+            };
+            let mut s = Slots::default();
+            turn(&mut s, &kind, &d, &on(), true);
+            turn(&mut s, &kind, &d, &off, true);
+            s.start_variant(Slot::Special1, &d, false, &mut Maker);
+            assert_eq!(s.frozen(Slot::Special1), needs_power);
+            let hurt = State {
+                damaged: true,
+                ..off
+            };
+            turn(&mut s, &kind, &d, &hurt, true);
+            assert_eq!(names(&s), ["ID", "A1D", "A2D", "A3D", "A4D", "S1D"]);
+            assert!(s.disabled());
+            let held: &[&str] = if needs_power {
+                &["ID", "A1D", "A3D", "A4D", "S1D"]
+            } else {
+                &[]
+            };
+            assert_eq!(frozen(&s), held, "needs power: {needs_power}");
+        }
+        // Not in operation without a disabling (a type that needs power, its house short of
+        // power): the start rule reads the in-operation result.
+        let kind = TypeKind {
+            needs_power: true,
+            ..TypeKind::default()
+        };
+        let low = done();
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &low, true);
+        assert!(!s.disabled());
+        assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"]);
+    }
+
+    /// spec: S-0108 claim 26 (placed by the map while not manned: disabled from its placement on,
+    /// so every freeze-unpowered slot its set-up starts holds the frame it was created with,
+    /// whether or not the type needs power, and a slot whose art turns freeze-unpowered off
+    /// plays; at an ownership change it is re-enabled and the frozen slots resume from the frame
+    /// they held, keeping their variant, whether or not it is then in operation)
+    #[test]
+    fn an_unmanned_map_building_holds_until_its_owner_changes() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        for needs_power in [false, true] {
+            let kind = TypeKind {
+                needs_power,
+                ..TypeKind::default()
+            };
+            let placed = State {
+                setup: true,
+                unmanned: true,
+                owner: Some(9),
+                ..done()
+            };
+            let mut s = Slots::default();
+            turn(&mut s, &kind, &d, &placed, true);
+            assert!(s.disabled());
+            assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"]);
+            assert!(s.runs(Slot::Active2));
+            turn(&mut s, &kind, &d, &placed, true);
+            assert_eq!(
+                frozen(&s),
+                ["I", "A1", "A3", "A4"],
+                "a later update changes nothing"
+            );
+            s.running.get_mut(&Slot::Idle).unwrap().anim.stage = 2;
+            // Captured: manned; for a type that needs power the new house is short of power
+            // here, so it is not in operation after the change.
+            let captured = State {
+                owner: Some(0),
+                unmanned: false,
+                in_operation: !needs_power,
+                ..placed
+            };
+            turn(&mut s, &kind, &d, &captured, true);
+            assert!(!s.disabled() && frozen(&s).is_empty());
+            assert_eq!(s.running[&Slot::Idle].anim.stage, 2);
+            assert_eq!(names(&s), ["I", "A1", "A2", "A3", "A4"]);
+        }
+    }
+
+    /// spec: S-0108 Edge cases (quirks.enable_unfreezes_unpowered, both positions: on, the end
+    /// of a pulse on a building that is not manned and an ownership change that leaves it not in
+    /// operation unfreeze its slots; off, a re-enabling or an ownership change unfreezes them
+    /// only when the building is in operation right after it) and claim 26
+    #[test]
+    fn the_enable_quirk_in_both_positions() {
+        let d = defs();
+        let kind = TypeKind {
+            needs_power: true,
+            ..TypeKind::default()
+        };
+        let placed = State {
+            setup: true,
+            unmanned: true,
+            owner: Some(9),
+            ..done()
+        };
+        let pulsed = State {
+            pulsed: true,
+            ..placed
+        };
+        // Captured into a house short of power: manned, not in operation.
+        let short = State {
+            owner: Some(0),
+            unmanned: false,
+            ..placed
+        };
+        // Captured again, into a house with enough power: in operation.
+        let ample = State {
+            owner: Some(1),
+            in_operation: true,
+            ..short
+        };
+        for unfreezes in [true, false] {
+            let mut s = Slots::default();
+            turn(&mut s, &kind, &d, &placed, unfreezes);
+            assert_eq!(frozen(&s).len(), 5);
+            turn(&mut s, &kind, &d, &pulsed, unfreezes);
+            turn(&mut s, &kind, &d, &placed, unfreezes);
+            assert_eq!(
+                frozen(&s).is_empty(),
+                unfreezes,
+                "pulse end, quirk {unfreezes}"
+            );
+            turn(&mut s, &kind, &d, &short, unfreezes);
+            assert_eq!(
+                frozen(&s).is_empty(),
+                unfreezes,
+                "capture, quirk {unfreezes}"
+            );
+            turn(&mut s, &kind, &d, &ample, unfreezes);
+            assert!(
+                frozen(&s).is_empty(),
+                "capture into operation, quirk {unfreezes}"
+            );
+        }
+    }
+
+    /// spec: S-0108 claims 13 and 28 (a pulse disables the building and its end re-enables it
+    /// whatever its power switch: a building still switched off when its pulse ends has its
+    /// frozen freeze-unpowered slots resume)
+    #[test]
+    fn a_pulse_end_resumes_a_switched_off_building() {
+        let d = defs();
+        let kind = TypeKind::default();
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &on(), true);
+        let off = State {
+            switched_off: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut s, &kind, &d, &off, true);
+        let both = State {
+            pulsed: true,
+            ..off
+        };
+        turn(&mut s, &kind, &d, &both, true);
+        assert_eq!(frozen(&s).len(), 5);
+        turn(&mut s, &kind, &d, &off, true);
+        assert!(frozen(&s).is_empty() && !s.disabled());
+    }
+
+    /// Q-1890's interim: a building first seen switched off is disabled from then on (S-0108
+    /// claim 28 names no rule for a building placed switched off).
+    #[test]
+    fn a_building_first_seen_switched_off_is_disabled() {
+        let d = defs();
+        let placed = State {
+            setup: true,
+            switched_off: true,
+            ..done()
+        };
+        let mut s = Slots::default();
+        turn(&mut s, &TypeKind::default(), &d, &placed, true);
+        assert!(s.disabled());
+        assert_eq!(frozen(&s).len(), 5);
+    }
+
+    /// spec: S-0108 claim 13 (a type that needs and draws power: at a loss of operation a running
+    /// freeze-unpowered slot freezes, a light-unpowered one stops, an effect-unpowered one stops
+    /// and is marked; when power comes back the frozen ones resume, a light-unpowered slot that is
+    /// not running starts and the marked ones start, in the normal or damaged variant; once to
+    /// each change; a type that needs but does not draw power has no reaction)
+    #[test]
+    fn the_power_columns() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        d.insert(Slot::Active3, flagged("A3", false, true));
+        let draws = TypeKind {
+            needs_power: true,
+            draws_power: true,
+            ..TypeKind::default()
+        };
+        let low = done();
+        let mut s = Slots::default();
+        turn(&mut s, &draws, &d, &on(), true);
+        assert_eq!(names(&s), ["I", "A1", "A2", "A3", "A4"]);
+        turn(&mut s, &draws, &d, &low, true);
+        assert_eq!(names(&s), ["I", "A1", "A4"]);
+        assert_eq!(frozen(&s), ["I", "A1", "A4"]);
+        turn(&mut s, &draws, &d, &low, true);
+        assert_eq!(names(&s), ["I", "A1", "A4"], "once to each change");
+        let hurt = State {
+            damaged: true,
+            occupied: true,
+            ..on()
+        };
+        turn(&mut s, &draws, &d, &hurt, true);
+        assert_eq!(names(&s), ["ID", "A1D", "A2D", "A3D", "A4D"]);
+        assert!(frozen(&s).is_empty());
+        let needs = TypeKind {
+            needs_power: true,
+            ..TypeKind::default()
+        };
+        let mut n = Slots::default();
+        turn(&mut n, &needs, &d, &on(), true);
+        turn(&mut n, &needs, &d, &low, true);
+        assert_eq!(names(&n), ["I", "A1", "A2", "A3", "A4"]);
+        assert!(frozen(&n).is_empty());
+    }
+
+    /// spec: S-0108 claim 27 (a building that needs and draws power and completes while not in
+    /// operation has had no change from powered to unpowered: its light-unpowered and
+    /// effect-unpowered slots keep playing, and claim 13's start rule freezes its
+    /// freeze-unpowered ones) and claim 13 (one in operation when completed has its power-return
+    /// reaction in its first update; power coming back later is a return)
+    #[test]
+    fn a_building_never_powered() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        d.insert(Slot::Active3, flagged("A3", false, true));
+        d.insert(Slot::Special2, flagged("S2", true, false));
+        let draws = TypeKind {
+            needs_power: true,
+            draws_power: true,
+            ..TypeKind::default()
+        };
+        let low = done();
+        let mut s = Slots::default();
+        turn(&mut s, &draws, &d, &low, true);
+        turn(&mut s, &draws, &d, &low, true);
+        assert_eq!(names(&s), ["I", "A1", "A2", "A3", "A4"]);
+        assert_eq!(frozen(&s), ["I", "A1", "A4"]);
+        let mut p = Slots::default();
+        turn(&mut p, &draws, &d, &on(), true);
+        assert!(
+            p.runs(Slot::Special2),
+            "the power return in the first update"
+        );
+        assert!(!s.runs(Slot::Special2));
+        turn(&mut s, &draws, &d, &on(), true);
+        assert!(frozen(&s).is_empty() && s.runs(Slot::Special2));
+    }
+
+    /// spec: S-0108 claim 13 (a light-unpowered special-1 of a delayed-fire type whose active-1
+    /// has freeze-unpowered: at a loss it stops and active-1 starts, unpowered so frozen; at the
+    /// return special-1 does not start)
+    #[test]
+    fn a_delayed_fire_outage() {
+        let mut d = defs();
+        d.insert(Slot::Special1, flagged("S1", true, false));
+        let fire = TypeKind {
+            delayed_fire: true,
+            needs_power: true,
+            draws_power: true,
+            ..TypeKind::default()
+        };
+        let mut s = Slots::default();
+        turn(&mut s, &fire, &d, &on(), true);
+        assert!(
+            !s.runs(Slot::Special1),
+            "no start at the first update's return"
+        );
+        s.stop(Slot::Active1);
+        s.start_variant(Slot::Special1, &d, false, &mut Maker);
+        turn(&mut s, &fire, &d, &done(), true);
+        assert!(!s.runs(Slot::Special1));
+        assert!(s.frozen(Slot::Active1));
+        turn(&mut s, &fire, &d, &on(), true);
+        assert!(!s.runs(Slot::Special1) && !s.frozen(Slot::Active1));
     }
 }

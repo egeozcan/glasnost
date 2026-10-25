@@ -1,8 +1,8 @@
 //! Building slot animations as the game's set-up starts them (S-0108
 //! claims 10 and 11, Terms and Import mapping), drawn as animations of
-//! their own (S-0102 claim 17, S-0109 claims 1, 8, 10, 12, 19 and 20).
-//! Only the initial image frame is drawn: animation playback is not
-//! implemented, so no slot animation advances.
+//! their own (S-0102 claim 17, S-0109 claims 1, 8, 10, 12, 19 and 20),
+//! with each slot's power flags (S-0108 claim 13). The cell pass draws
+//! the initial image frame; the live view plays them (`slot_play`).
 
 use glasnost_ini::Document;
 use glasnost_ini::value;
@@ -39,6 +39,63 @@ pub struct SlotDef {
     pub z_adjust: i32,
     /// Y-sort (S-0102 claim 17).
     pub y_sort: i32,
+    /// The four power flags (S-0108 Terms, claim 13).
+    pub power: PowerFlags,
+}
+
+/// A slot's four power flags (S-0108 Terms and Import mapping).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PowerFlags {
+    /// *freeze-unpowered*.
+    pub freeze: bool,
+    /// *light-unpowered*.
+    pub light: bool,
+    /// *effect-unpowered*.
+    pub effect: bool,
+    /// *special-outage* (claim 14).
+    pub special: bool,
+}
+
+impl Default for PowerFlags {
+    fn default() -> Self {
+        // spec: S-0108 Import mapping (defaults: freeze-unpowered on; light-unpowered, effect-unpowered and special-outage off)
+        Self {
+            freeze: true,
+            light: false,
+            effect: false,
+            special: false,
+        }
+    }
+}
+
+/// The power flag that counts for a slot (S-0108 claim 13).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Counting {
+    /// *freeze-unpowered*.
+    Freeze,
+    /// *light-unpowered*.
+    Light,
+    /// *effect-unpowered*.
+    Effect,
+    /// None of the three is on: power changes nothing.
+    Nothing,
+}
+
+impl PowerFlags {
+    /// The counting flag: the first of *freeze-unpowered*,
+    /// *light-unpowered* and *effect-unpowered* that is on.
+    pub fn counting(&self) -> Counting {
+        // spec: S-0108 claim 13 (only the first of its power flags in the order freeze-unpowered, light-unpowered, effect-unpowered counts)
+        if self.freeze {
+            Counting::Freeze
+        } else if self.light {
+            Counting::Light
+        } else if self.effect {
+            Counting::Effect
+        } else {
+            Counting::Nothing
+        }
+    }
 }
 
 fn key(base: &[u8], suffix: &[u8]) -> Vec<u8> {
@@ -81,9 +138,29 @@ pub fn read_slot(art: &Document, image: &[u8], base: &[u8]) -> SlotDef {
         def.y = int(b"Y");
         def.z_adjust = int(b"ZAdjust");
         def.y_sort = int(b"YSort");
+        // spec: S-0108 Import mapping (the pre-production, production and turret slots have no power-flag keys and keep the defaults)
+        if !NO_POWER_KEYS.contains(&base) {
+            let flag = |suffix: &[u8], held: bool| {
+                art.value(image, &key(base, suffix))
+                    .and_then(value::boolean)
+                    .unwrap_or(held)
+            };
+            // spec: S-0108 Import mapping (Powered, PoweredLight, PoweredEffect, PoweredSpecial: the four power flags)
+            def.power = PowerFlags {
+                freeze: flag(b"Powered", def.power.freeze),
+                light: flag(b"PoweredLight", def.power.light),
+                effect: flag(b"PoweredEffect", def.power.effect),
+                special: flag(b"PoweredSpecial", def.power.special),
+            };
+        }
     }
     def
 }
+
+/// The base keys of the slots that have no power-flag keys (S-0108
+/// Import mapping).
+// spec: S-0108 Import mapping (pre-production, production and turret: no power-flag keys)
+const NO_POWER_KEYS: [&[u8]; 3] = [b"PreProductionAnim", b"ProductionAnim", b"TurretAnim"];
 
 /// The name a start uses (S-0108 Terms, *variant choice*).
 pub fn variant(def: &SlotDef, damaged: bool, occupied: bool, allow_occupied: bool) -> &[u8] {
@@ -375,6 +452,34 @@ mod tests {
     fn values_without_a_name_keep_their_defaults() {
         let art = doc("[B]\nActiveAnimTwoX=9\nActiveAnimTwoZAdjust=5\n");
         assert_eq!(read_slot(&art, b"B", b"ActiveAnimTwo"), SlotDef::default());
+    }
+
+    /// spec: S-0108 Import mapping (Powered, PoweredLight, PoweredEffect and PoweredSpecial give
+    /// the four power flags, defaults freeze-unpowered on and the others off; they take effect
+    /// only when a name is non-empty; pre-production, production and turret have no power-flag
+    /// keys) and claim 13 (the first flag on, in the order freeze, light, effect, counts)
+    #[test]
+    fn power_flags() {
+        let art = doc(
+            "[B]\nIdleAnim=I\nActiveAnim=A\nActiveAnimPowered=no\nActiveAnimPoweredLight=yes\n\
+             ActiveAnimPoweredEffect=yes\nActiveAnimPoweredSpecial=yes\nActiveAnimTwo=A2\n\
+             ActiveAnimTwoPowered=no\nActiveAnimTwoPoweredEffect=yes\nActiveAnimThree=A3\n\
+             ActiveAnimThreePowered=no\nActiveAnimFourPowered=no\nProductionAnim=P\n\
+             ProductionAnimPowered=no\nPreProductionAnim=Q\nPreProductionAnimPowered=no\n",
+        );
+        let flags = |base: &[u8]| read_slot(&art, b"B", base).power;
+        assert_eq!(flags(b"IdleAnim"), PowerFlags::default());
+        assert_eq!(flags(b"IdleAnim").counting(), Counting::Freeze);
+        let a = flags(b"ActiveAnim");
+        assert!(!a.freeze && a.light && a.effect && a.special);
+        assert_eq!(a.counting(), Counting::Light);
+        assert_eq!(flags(b"ActiveAnimTwo").counting(), Counting::Effect);
+        assert_eq!(flags(b"ActiveAnimThree").counting(), Counting::Nothing);
+        // No name: the power keys keep their held values.
+        assert_eq!(flags(b"ActiveAnimFour"), PowerFlags::default());
+        // No power-flag keys: the defaults, so freeze-unpowered counts.
+        assert_eq!(flags(b"ProductionAnim").counting(), Counting::Freeze);
+        assert_eq!(flags(b"PreProductionAnim").counting(), Counting::Freeze);
     }
 
     /// spec: S-0108 Terms (variant choice)

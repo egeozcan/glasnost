@@ -1,6 +1,6 @@
 //! Quirk switches of the rendering specs that the map viewer's scene
 //! builder and live drawing implement (S-0102 draw order, S-0108 building
-//! frames), each defaulting to the original's behaviour, with the small
+//! frames and slot animations), each defaulting to the original's behaviour, with the small
 //! rules they switch.
 //!
 //! The switches of the render crate live with the code they govern
@@ -56,6 +56,12 @@ pub struct ViewQuirks {
     /// layer differs from the list it is in; claim 4's re-files happen in
     /// both states.
     pub layer_change_on_events_only: bool,
+    /// `quirks.enable_unfreezes_unpowered` (S-0108 claims 13 and 26):
+    /// re-enabling a disabled building (a switch-on, the end of a pulse, an
+    /// ownership change) unfreezes its *freeze-unpowered* slot animations
+    /// even when it is not in operation. Off: only when it is in operation
+    /// right after the re-enabling.
+    pub enable_unfreezes_unpowered: bool,
 }
 
 impl Default for ViewQuirks {
@@ -68,13 +74,14 @@ impl Default for ViewQuirks {
             roof_unload_no_fallback: true,
             unsorted_upper_layers: true,
             layer_change_on_events_only: true,
+            enable_unfreezes_unpowered: true,
         }
     }
 }
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 6] {
+    pub fn named(&self) -> [(&'static str, bool); 7] {
         [
             (
                 "cliff_fudge_far_cliff_weaker",
@@ -90,6 +97,10 @@ impl ViewQuirks {
             (
                 "layer_change_on_events_only",
                 self.layer_change_on_events_only,
+            ),
+            (
+                "enable_unfreezes_unpowered",
+                self.enable_unfreezes_unpowered,
             ),
         ]
     }
@@ -263,10 +274,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "S-0108 claims 11 and 12: building slot animations are not drawn",
     ),
     (
-        "enable_unfreezes_unpowered",
-        "S-0108 claim 13 and S-0405 claim 10: building slot animations play, but the power rules of S-0108 claims 13 and 14 are not applied to them, so no slot freezes and the switch is not consulted",
-    ),
-    (
         "damage_swap_drops_occupied",
         "S-0108 claims 11 and 12: building slot animations are not drawn",
     ),
@@ -310,6 +317,7 @@ mod tests {
             roof_unload_no_fallback: false,
             unsorted_upper_layers: false,
             layer_change_on_events_only: false,
+            enable_unfreezes_unpowered: false,
         }
     }
 

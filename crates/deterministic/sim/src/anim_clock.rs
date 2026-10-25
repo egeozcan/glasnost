@@ -441,6 +441,20 @@ impl Player {
     /// The animation's update in tick `tick` (S-0109 claims 5, 6, 9, 11, 15
     /// and 16). Returns whether it is still playing.
     pub fn update(&mut self, tick: i32, env: &mut dyn Env, q: &AnimQuirks) -> bool {
+        self.update_held(tick, env, q, false)
+    }
+
+    /// [`Player::update`] for an animation that is `held` (S-0109 claim
+    /// 23): a held one makes no advance, so nothing that follows from one
+    /// happens, but its first update is still skipped, a loop delay still
+    /// counts down with its start event, and its clock keeps running.
+    pub fn update_held(
+        &mut self,
+        tick: i32,
+        env: &mut dyn Env,
+        q: &AnimQuirks,
+        held: bool,
+    ) -> bool {
         if self.ended {
             return false;
         }
@@ -458,6 +472,10 @@ impl Player {
                 // spec: S-0109 claims 11 and 13 (on the update that brings it to 0 the start event happens)
                 env.delay_ended(&self.play);
             }
+            return true;
+        }
+        if held {
+            // spec: S-0109 claim 23 (a held animation does not advance; its clock keeps running, so it advances at its first eligible update after its release)
             return true;
         }
         // spec: S-0109 claim 5 (an advance when at least d ticks have passed since the last

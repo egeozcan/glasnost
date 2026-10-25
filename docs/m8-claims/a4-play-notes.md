@@ -400,6 +400,28 @@ captured derrick's colour is on its body's coloured panels only, never on its mo
 neutral derrick under protection, a planted bomb's flash or an air-strike mark now stands
 still while it shows that look.
 
+**Note 18 after S-0108 r75 (M8 A3 intake 20).** r75 answers Q-1772 and replaces its interim
+(`docs/m8-claims/intake20-S-0108.md`). A needs-engineer map building that is not manned is now
+disabled at its placement (S-0108 claim 26): its slots that count *freeze-unpowered* hold the
+frame they were created with, while a slot with no power flag on keeps playing (claim 13), and so
+do its light and effect slots (claim 27). It is drawn live from the start (the still-map special
+case is gone). A capture, or any other ownership change, re-enables it and the held slots resume
+from the frame they held (claim 26; `quirks.enable_unfreezes_unpowered` on). A damage swap starts
+the slots afresh (claim 12), so a damaged neutral derrick animates fully, still in the neutral
+grey. Lane `local-lane/m8/a3-20/before` and `after`, map 0: a fresh derrick was in the cell pass,
+1 image set over 24 ticks; now it is drawn live, 1 of its 2 slots frozen, 9 image sets over 24
+ticks (its type's second slot has no power flag on, so it plays). Protection and a charge flash:
+1 image set each before, 8 and 9 now (the same slots as a fresh one). A 1-point hit: 13 before,
+9 now (no damage swap above the damaged ratio, so its freeze slot stays held). Damaged by half and
+each capture (local house, enemy, the last of four houses; 277 and 263 ticks): unchanged, 0
+frozen, both slots play, the capturer's colour after a capture.
+
+**By eye (note 18, r75).** A neutral derrick never captured: one of its moving parts stands still
+and the other moves, in grey. Capture it with an engineer: the part that stood still starts
+moving from where it stood, and the body takes your colour. Hit a neutral one hard enough to show
+its damaged frame: both parts move, still grey. Placing or replacing a building in play shows no
+slot animation until its build-up ends.
+
 **Checks.** The simulation changed (notes 16 and 17; the computer player clicks through
 `targeting::click` and `cursor` too). Before on main 0b935c1; after, the arena on this branch on
 0b935c1 and the sweeps and goldens on it rebased on main 0d08efc (main's changes in between touch

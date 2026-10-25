@@ -1293,37 +1293,40 @@ impl Live {
     }
 
     /// The buildings' slot animations after a tick (S-0108 claims 11, 12,
-    /// 17 and 20; S-0606 claims 6, 12 and 16): each running one plays
-    /// (S-0109), those that finished on their own leave their slot, then
-    /// the building's update starts and stops slots and the walls' events
-    /// of the tick apply. A building whose type has not been drawn yet
-    /// waits for its slot definitions.
+    /// 13, 17, 20 and 26; S-0606 claims 6, 12 and 16): each running one
+    /// plays (S-0109), or is held while it is frozen or its building is
+    /// being erased (S-0109 claim 23), those that finished on their own
+    /// leave their slot, then the building's update starts, stops, freezes
+    /// and unfreezes slots and the walls' events of the tick apply. A
+    /// building whose type has not been drawn yet waits for its slot
+    /// definitions.
     fn update_slots(&mut self) {
         let now = self.shown_tick();
         let events = std::mem::take(&mut self.special_events);
         let depot_events = std::mem::take(&mut self.depot_events);
+        let enable_unfreezes = self.view_quirks.enable_unfreezes_unpowered;
         let w = &self.world;
         let mode = self.rules.mode;
-        let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State)> = w
+        let present: Vec<(ObjectId, usize, slot_play::TypeKind, slot_play::State, bool)> = w
             .objects
             .values()
             .filter(|o| o.kind == SimKind::Building && o.on_map)
             .filter_map(|o| {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
                 let r = self.rules.buildings.get(o.type_index as usize)?;
-                let extra = self
-                    .rules
-                    .econ
-                    .power
-                    .buildings
-                    .get(o.type_index as usize)
-                    .map_or(0, |p| p.extra_output);
+                let power = self.rules.econ.power.buildings.get(o.type_index as usize);
+                let extra = power.map_or(0, |p| p.extra_output);
+                let needs_power = power.is_some_and(|p| p.needs_power);
                 let kind = slot_play::TypeKind {
                     refinery: r.raw.econ.refinery.unwrap_or(false),
                     // spec: S-0108 claim 17 (absorbs infantry and gives a positive extra power per held infantry)
                     absorbs: r.absorb.infantry && extra > 0,
                     depot: r.building.unit_repair,
                     delayed_fire: r.building.anim_delayed_fire,
+                    // spec: S-0108 claim 13 and Import mapping (Powered: needs power)
+                    needs_power,
+                    // spec: S-0108 Terms (needs and draws power: the needs-power flag and a negative power field, a drain above 0)
+                    draws_power: needs_power && power.is_some_and(|p| p.drain > 0),
                 };
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)
@@ -1337,8 +1340,9 @@ impl Live {
                         })
                         .collect();
                 let st = slot_play::State {
-                    // spec: S-0108 claims 11 and 17 (completed and not in the construction state)
-                    completed: o.beh.current != Some(Behaviour::Construction),
+                    // spec: S-0108 claims 11 and 17 (completed and not in the construction state; a building placed in play, or a code-130 replacement, enters with construction queued and opens at its completion) and S-0406 claim 17 (while none is current, the queued behaviour is the one seen)
+                    completed: glasnost_sim::econ::placement::seen_behaviour(o)
+                        != Some(Behaviour::Construction),
                     // spec: S-0108 claim 11 (a building of the map was placed during the game's set-up)
                     setup: self.building_ids.values().any(|b| *b == o.id),
                     damaged: super::build::condition_of(&self.rules, o.health, r.strength).0,
@@ -1346,8 +1350,19 @@ impl Live {
                     occupied: !o.structure.occupants.is_empty(),
                     // spec: S-0108 claim 17, F9 (the held infantry's total size)
                     held_size: slot_play::held_size(&sizes, mode),
+                    owner: o.owner.map(|h| h.0),
+                    // spec: S-0108 Terms and claim 13 (powered: the in-operation test of S-0405 claim 8, every row)
+                    in_operation: glasnost_sim::econ::power::in_operation(w, o.id),
+                    // spec: S-0108 claim 28 (the switched-on row of S-0405 claim 8)
+                    switched_off: o.econ.building.switched_off,
+                    // spec: S-0108 claim 28 (the not-under-a-pulse row of S-0405 claim 8)
+                    pulsed: glasnost_sim::econ::power::under_pulse(w, o.id),
+                    // spec: S-0108 claim 26 (the needs-engineer flag and not manned, S-0515 claim 2)
+                    unmanned: power.is_some_and(|p| p.needs_engineer) && !o.econ.building.manned,
                 };
-                Some((o.id, idx, kind, st))
+                // spec: S-0109 claims 21 and 23 (a building being erased holds its slot animations, a hold independent of claim 13's freeze)
+                let erased = glasnost_sim::superweapons::being_erased(w, o.id);
+                Some((o.id, idx, kind, st, erased))
             })
             .collect();
         self.slot_anims
@@ -1359,16 +1374,19 @@ impl Live {
             speed: self.world.game_speed,
         };
         let q = AnimQuirks::default();
-        for (id, idx, kind, st) in present {
+        for (id, idx, kind, st, erased) in present {
             let Some(defs) = self.slot_defs.get(&idx) else {
                 continue;
             };
             let slots = self.slot_anims.entry(id).or_default();
+            slots.prepare(&kind, &st, enable_unfreezes);
             let mut finished = Vec::new();
             for (slot, r) in &mut slots.running {
                 let before = r.anim.player.name.clone();
-                // spec: S-0109 claims 5 to 16 (each running slot animation plays; claim 16: it ends)
-                if !r.anim.player.update(now, &mut env, &q) {
+                // spec: S-0109 claim 23 (held while frozen by S-0108 claim 13 or while its building is being erased; the two causes are independent)
+                let held = r.frozen || erased;
+                // spec: S-0109 claims 5 to 16 (each running slot animation plays; claim 16: it ends) and claim 23 (a held one does not advance)
+                if !r.anim.player.update_held(now, &mut env, &q, held) {
                     finished.push(*slot);
                 } else if r.anim.player.name != before
                     && let Some(e) = env.lookup(&r.anim.player.name).0
@@ -1471,6 +1489,14 @@ impl Live {
     /// has met it (tests and lanes).
     pub fn import_index(&self, kind: SimKind, index: u32) -> Option<usize> {
         self.types.get(&(kind, index)).copied().flatten()
+    }
+
+    /// How many of a building's running slot animations are frozen by
+    /// S-0108 claim 13 (tests and lanes).
+    pub fn frozen_slots(&self, id: ObjectId) -> usize {
+        self.slot_anims
+            .get(&id)
+            .map_or(0, |s| s.running.values().filter(|r| r.frozen).count())
     }
 
     /// The names of a building's running slot animations, in slot order
@@ -2422,19 +2448,6 @@ impl Live {
         Some(look.shrouded(shrouded))
     }
 
-    /// Whether `o` is a tech building that has never changed owner: its
-    /// type needs an engineer and it is not manned (S-0515 claim 2;
-    /// S-0405 claim 8, manned-when-required row).
-    fn unmanned_tech(&self, o: &Object) -> bool {
-        self.rules
-            .econ
-            .power
-            .buildings
-            .get(o.type_index as usize)
-            .is_some_and(|t| t.needs_engineer)
-            && !o.econ.building.manned
-    }
-
     /// The look of a building in the shown tick: its protection look, and
     /// its charge flash count and air-strike mark (S-0519 F7).
     fn building_look(&self, o: &Object) -> super::protection::BuildingLook {
@@ -2664,24 +2677,21 @@ impl Live {
         // body frame follows its damage (S-0108 claim 2), and one with a
         // running slot animation, so that the animation plays (S-0108
         // claim 11, S-0109 claims 1 and 5) instead of standing at its
-        // first image frame. Whether the slots of a building that needs an
-        // engineer run before it is manned (S-0405 claims 8 and 9, S-0515
-        // claim 2) is open (Q-1772): such a building keeps its cell-pass
-        // drawing until its owner or health changes; drawn live before that
-        // for its look (above), its slots stand still (`still_map` below).
+        // first image frame. That includes a building that needs an
+        // engineer and is not manned: its *freeze-unpowered* slots are held
+        // at the image frame they were created with (S-0108 claim 26) by
+        // the slot player, and its other slots play.
         let changed_map: BTreeSet<u32> = self
             .building_ids
             .iter()
             .filter(|(code, id)| {
                 self.world.obj(**id).is_some_and(|o| {
-                    let unmanned_tech = self.unmanned_tech(o);
                     o.on_map
                         && (self.map_start.get(code) != Some(&(o.owner, o.health))
-                            || (!unmanned_tech
-                                && self
-                                    .slot_anims
-                                    .get(id)
-                                    .is_some_and(|s| !s.running.is_empty())))
+                            || self
+                                .slot_anims
+                                .get(id)
+                                .is_some_and(|s| !s.running.is_empty()))
                 })
             })
             .map(|(code, _)| *code)
@@ -2790,22 +2800,6 @@ impl Live {
             })
             .map(|(_, id)| *id)
             .collect();
-        // The map's unmanned tech buildings drawn live only for their look
-        // (protected, flashing, marked or being erased; a gate or an
-        // occupiable type): their owner and health are as at the start, so
-        // under Q-1772's interim their slots stand at their first image
-        // frame, as the cell pass draws them (S-0108 claim 11 starts them;
-        // whether they run before the first ownership change is open).
-        let still_map: BTreeSet<ObjectId> = self
-            .building_ids
-            .iter()
-            .filter(|(code, id)| {
-                !changed_map.contains(code)
-                    && !kept_map.contains(id)
-                    && self.world.obj(**id).is_some_and(|o| self.unmanned_tech(o))
-            })
-            .map(|(_, id)| *id)
-            .collect();
         let own: Vec<(ObjectId, LiveBuilding)> = self
             .world
             .objects
@@ -2838,7 +2832,7 @@ impl Live {
                         object: sim_code(o.id),
                         unloading: self.unloading_of(o),
                         // spec: S-0108 claim 4 (a gate's door, S-0215 claim 35: its special image only while the current behaviour is open; otherwise the stationary rows)
-                        slots: (!still_map.contains(&o.id)).then(|| self.slot_draws(o.id, idx)),
+                        slots: self.slot_draws(o.id, idx),
                         gate_door: (self
                             .rules
                             .buildings

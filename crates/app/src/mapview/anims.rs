@@ -11,9 +11,10 @@
 //! other than infantry-making ones that is a seam (docs/development.md).
 //!
 //! Damage, start and middle events (claims 13, 14 and 17) are the
-//! simulation's and are not played here; held animations (claim 23) and
-//! translucency levels above 0 (claim 20) belong to building slot
-//! animations, which this player does not run.
+//! simulation's and are not played here. Held animations (claim 23) are
+//! building slot animations, which `Live::update_slots` holds through
+//! `Player::update_held`; translucency levels above 0 (claim 20) belong to
+//! building slot animations too.
 
 pub use glasnost_sim::anim_clock::{AnimQuirks, Env, Fields, Playback, Player};
 
@@ -184,6 +185,36 @@ mod tests {
             }
         }
         out
+    }
+
+    // spec: S-0109 claim 23 (a held animation does not advance; its first-update exclusion and its loop delay still run, and its clock keeps running, so it advances at its first eligible update after its release)
+    #[test]
+    fn a_held_animation_keeps_its_clock() {
+        let q = AnimQuirks::default();
+        let mut env = TestEnv::new();
+        let mut a = Player::new(b"A", ty("", 10, (0, 0)), 0, None, &mut env, &q);
+        for t in 0..5 {
+            assert!(a.update_held(t, &mut env, &q, true));
+            assert_eq!(a.frame(), 0, "held (tick {t})");
+        }
+        assert!(a.update_held(5, &mut env, &q, false));
+        assert_eq!(
+            a.frame(),
+            1,
+            "it advances at the first update after its release"
+        );
+        let c = glasnost_sim::anim_clock::Creation {
+            loop_delay: 3,
+            ..Default::default()
+        };
+        let mut b = Player::create(b"B", ty("", 10, (0, 0)), 0, None, c, &mut env, &q);
+        for t in 0..4 {
+            assert!(b.update_held(t, &mut env, &q, true));
+        }
+        assert_eq!(b.loop_delay(), 0, "the loop delay counted down while held");
+        assert_eq!(b.frame(), 0);
+        assert!(b.update_held(4, &mut env, &q, false));
+        assert_eq!(b.frame(), 1);
     }
 
     // spec: S-0108 claim 25 (the stage is kept, not the image frame: the new animation shows its own start field plus the kept stage) and S-0109 claim 1 (image frame a + k)
