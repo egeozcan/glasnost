@@ -1,9 +1,9 @@
 ---
 id: Q-1717
 title: The built-in invisibility-animation type name that selects the C4Warhead for animation damage
-status: open
+status: answered
 related: [S-0109]
-answered-by: []
+answered-by: [S-0109]
 ---
 
 ## Need
