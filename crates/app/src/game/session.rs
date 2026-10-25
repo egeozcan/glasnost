@@ -86,9 +86,14 @@ pub struct Session {
     /// claims 8 and 17): it starts at the index in force and is sent as a
     /// speed order when the menu closes, if it differs.
     menu_speed: u8,
-    /// The person resigned through the options menu, which then stays
-    /// refused until the local house is defeated (S-0201 claim 15).
+    /// The person resigned through the options menu: in a network game
+    /// the menu then stays refused until the local house is defeated
+    /// (S-0201 claim 15); in a skirmish it no longer offers the surrender.
     resigned: bool,
+    /// A network game's "surrender and leave" was chosen: the client
+    /// leaves once the lockstep has carried out the local surrender order
+    /// (S-0201 claim 15).
+    pub leave_after_surrender: bool,
     /// The options menu is open (S-0201 claim 8: in a single-player game no
     /// cycle runs; claim 15: in a network game ticks go on).
     pub paused: bool,
@@ -401,6 +406,7 @@ impl Session {
             speed,
             menu_speed: speed,
             resigned: false,
+            leave_after_surrender: false,
             paused: false,
             focused: true,
             network: false,
@@ -1057,16 +1063,30 @@ impl Session {
                 self.close_options();
                 SessionEvent::None
             }
-            // spec: S-0201 claim 17 (no speed control once the local house is defeated)
+            // spec: S-0201 claim 17 (no speed control once the local house is defeated, in a network game)
             PauseHit::Speed(_) if !self.speed_offered() => SessionEvent::None,
             PauseHit::Speed(d) => {
                 // spec: S-0201 claims 8 and 17 (the options menu's speed control; the change is sent when the menu closes)
                 self.menu_speed = hud::step_speed(self.menu_speed, d);
                 SessionEvent::None
             }
+            hit @ (PauseHit::Surrender | PauseHit::SurrenderLeave)
+                if !self.leave_choices().contains(&hit) =>
+            {
+                SessionEvent::None
+            }
             PauseHit::Surrender => {
-                // spec: S-0201 claim 15 (after resigning through the menu it does not open again until the house is defeated)
+                // spec: S-0201 claim 15 (in a network game, after resigning through the menu it does not open again until the house is defeated; the choice that keeps the player watching)
                 self.resigned = true;
+                self.close_options();
+                self.play.surrender();
+                SessionEvent::None
+            }
+            PauseHit::SurrenderLeave => {
+                // spec: S-0201 claim 15 (the choice that sends the surrender order and then leaves the game)
+                // design: the client leaves once the lockstep has carried its own surrender order out, so that every peer applies the surrender at once rather than at the drop's grace period
+                self.resigned = true;
+                self.leave_after_surrender = true;
                 self.close_options();
                 self.play.surrender();
                 SessionEvent::None
@@ -1357,16 +1377,47 @@ impl Session {
         if victory::ended(w) {
             return false;
         }
-        // spec: S-0201 claim 15 (after resigning through the menu it does not open again until the player's house is defeated, S-0414 claims 5 and 11; a defeated player watching a network game can open it)
-        !self.resigned || victory::defeated(w, self.play.local)
+        // spec: S-0201 claim 15 (in a network game, after resigning through the menu it does not open again until the player's house is defeated, S-0414 claims 5 and 11; a defeated player watching a network game can open it)
+        // design: in a skirmish the menu opens again after our surrender (S-0201 claim 15 states the refusal for a network game only, the skirmish menu's abort being no resignation, S-0703 claim 13), so that the person watching on can still leave or change the speed
+        !self.network || !self.resigned || victory::defeated(w, self.play.local)
     }
 
     /// Whether the options menu offers the speed control (S-0201 claim 17):
-    /// as long as the local house is not defeated, in a network game, and by
-    /// our engine's rule in a skirmish watched on after the defeat.
+    /// in a network game as long as the local house is not defeated; in a
+    /// skirmish always, by our engine's rule also while the person watches
+    /// on after the defeat.
     pub fn speed_offered(&self) -> bool {
-        // spec: S-0201 claim 17 (the control is offered as long as the player's own house has not been defeated; in a skirmish watched on after the defeat our engine shows none either, claim 8)
-        !victory::defeated(&self.play.game.world, self.play.local)
+        // spec: S-0201 claim 17 (in a network game the control is offered as long as the player's own house has not been defeated; in a skirmish watched on after the human player's defeat our engine shows it, and a change takes effect as in claim 8, by the project lead's ruling of 2026-10-24)
+        !self.network || !victory::defeated(&self.play.game.world, self.play.local)
+    }
+
+    /// The options menu's leave choices, in order (S-0201 claims 1 and 15).
+    pub fn leave_choices(&self) -> Vec<PauseHit> {
+        let w = &self.play.game.world;
+        let local = self.play.local;
+        let undefeated = !victory::defeated(w, local);
+        if self.network {
+            // spec: S-0201 claim 15 (while at least two houses of human participants are undefeated, the player's own among them, and the player is not an observer: two choices that send the surrender order, one then leaving the game, one keeping the player watching; otherwise a leave only, sending no surrender order; our engine has no observers, S-0009 claim 28)
+            let person = |h: usize| {
+                w.houses
+                    .get(h)
+                    .is_some_and(|x| x.econ.setup.person_played && !x.econ.setup.observer)
+            };
+            let standing = (0..w.houses.len())
+                .filter(|&h| person(h) && !victory::defeated(w, HouseId(h as u8)))
+                .count();
+            if person(usize::from(local.0)) && undefeated && standing >= 2 {
+                return vec![PauseHit::Surrender, PauseHit::SurrenderLeave];
+            }
+            return vec![PauseHit::Leave];
+        }
+        // spec: S-0201 claim 1 and S-0703 claim 13 (a skirmish's options menu offers one way to leave, which ends the game at once and sends no order)
+        // design: our engine's skirmish menu also offers S-0414 claim 11's surrender (the order is legal at any time in our engine, and a person who surrendered keeps watching; S-0703 claim 13 allows it "where our engine's interface offers one"), while the local house is undefeated and has not surrendered through the menu
+        if undefeated && !self.resigned {
+            vec![PauseHit::Surrender, PauseHit::Leave]
+        } else {
+            vec![PauseHit::Leave]
+        }
     }
 
     /// The index the menu's control starts from and is compared with: the
@@ -1750,7 +1801,8 @@ impl Session {
         self.targets = targets;
         if self.paused {
             let speed = self.speed_offered().then_some(self.menu_speed);
-            let (p, t) = hud::pause_view(self.ui.ui, speed, self.network, hover);
+            let leaves = self.leave_choices();
+            let (p, t) = hud::pause_view(self.ui.ui, speed, self.network, &leaves, hover);
             ui.extend(p);
             self.pause_targets = t;
             self.pause_focus.mark(&mut ui, &self.pause_targets);

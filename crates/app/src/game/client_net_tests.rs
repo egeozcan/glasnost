@@ -905,6 +905,47 @@ fn a_client_that_went_reconnects_and_plays_on_in_lockstep() {
             }
         }
     }
+
+    // Ann surrenders and leaves through the options menu: three human
+    // houses stand, so the menu offers the two surrenders; her client
+    // leaves once her surrender order has been carried out, and the others
+    // hold her house marked to die from that tick, not from a drop's grace.
+    // spec: S-0201 claim 15 (while at least two human houses, the player's own among them, are undefeated: two choices that send the surrender order, one then leaving the game) and S-0414 claim 11 (the surrender marks the house to die)
+    let ann = usize::from(a.session.as_ref().unwrap().play.local.0);
+    assert!(a.session.as_mut().unwrap().open_options());
+    let _ = a.frame();
+    let r = a
+        .session
+        .as_ref()
+        .unwrap()
+        .pause_targets()
+        .rect_of(&PauseHit::SurrenderLeave);
+    click(&mut a, r.expect("the surrender that leaves"));
+    let doomed = |x: &Client| {
+        x.session
+            .as_ref()
+            .is_some_and(|s| s.play.game.world.houses[ann].econ.result.doomed)
+    };
+    let tick = |x: &Client| x.session.as_ref().map(|s| s.play.game.world.tick);
+    let (mut last, mut seen) = (0, [None, None]);
+    pump(
+        &clock,
+        &mut [&mut a, &mut b, &mut c],
+        "the surrender and the leave",
+        |c| {
+            last = tick(c[0]).unwrap_or(last);
+            for (k, x) in [&c[1], &c[2]].into_iter().enumerate() {
+                if seen[k].is_none() && doomed(x) {
+                    seen[k] = tick(x);
+                }
+            }
+            c[0].shell.screen == Screen::Menu && seen.iter().all(Option::is_some)
+        },
+    );
+    assert!(a.session.is_none(), "Ann left the game");
+    for t in seen.into_iter().flatten() {
+        assert!(t <= last + 60, "doomed at {t}, Ann left at {last}");
+    }
     relay.stop();
 }
 

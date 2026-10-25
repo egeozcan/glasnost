@@ -924,44 +924,129 @@ fn a_network_speed_change_goes_through_the_lockstep_orders() {
     assert_eq!(session(&c).speed, want);
 }
 
-/// The menu does not open once the game has ended, and after a surrender
-/// through the menu not again until the house is defeated; a defeated
-/// house's menu offers no speed control.
-/// spec: S-0201 claim 15 (refused from the end of the game on, S-0414 claim 6; after resigning through the menu refused until the house is defeated) and claim 17 (no speed control once the local house is defeated)
+/// A skirmish's menu does not open once the game has ended. After our
+/// engine's surrender it opens again, offering only the leave; after the
+/// defeat it shows the speed control, whose change is sent when the menu
+/// closes and carried out by the next tick.
+/// spec: S-0201 claim 15 (refused from the end of the game on, S-0414 claim 6; the refusal after resigning is a network game's) and claim 17 (in a skirmish watched on after the human player's defeat the control is shown, and a change takes effect as in claim 8, by the project lead's ruling of 2026-10-24)
 #[test]
-fn the_menu_is_refused_after_the_end_and_after_a_surrender() {
+fn the_menu_is_refused_after_the_end_and_offers_the_speed_after_the_defeat() {
     let mut c = client((1024, 768), 100);
     start_by_keyboard(&mut c);
+    assert_eq!(
+        session(&c).leave_choices(),
+        vec![PauseHit::Surrender, PauseHit::Leave]
+    );
     key(&mut c, Key::Escape);
     press_pause(&mut c, PauseHit::Surrender);
     assert!(!session(&c).paused);
-    assert!(!session_mut(&mut c).open_options(), "resigned");
-    key(&mut c, Key::Escape);
-    assert!(!session(&c).paused);
+    // design: our engine's skirmish menu opens again after the surrender, with the leave only
+    assert!(session_mut(&mut c).open_options(), "a skirmish reopens");
+    assert_eq!(session(&c).leave_choices(), vec![PauseHit::Leave]);
+    let _ = c.frame();
+    assert!(
+        session(&c)
+            .pause_targets()
+            .rect_of(&PauseHit::Surrender)
+            .is_none()
+    );
+    press_pause(&mut c, PauseHit::Resume);
+    session_mut(&mut c).step();
     let local = usize::from(session(&c).play.local.0);
     session_mut(&mut c).play.game.world.houses[local]
         .econ
         .result
         .defeated = true;
-    assert!(
-        session_mut(&mut c).open_options(),
-        "defeated: it opens again"
-    );
-    let _ = c.frame();
-    let t = session(&c).pause_targets();
-    assert!(t.rect_of(&PauseHit::Speed(1)).is_none());
-    assert!(t.rect_of(&PauseHit::Speed(-1)).is_none());
+    assert!(session_mut(&mut c).open_options(), "defeated: it opens");
+    let speed = session(&c).speed;
+    let step = if speed == 0 { -1 } else { 1 };
+    press_pause(&mut c, PauseHit::Speed(step));
+    let want = session(&c).menu_speed();
+    assert_ne!(want, speed);
     press_pause(&mut c, PauseHit::Resume);
-    assert!(
-        pending(&c)
-            .iter()
-            .all(|o| !matches!(o, Order::GameSpeed { .. }))
-    );
+    assert_eq!(session(&c).speed, want);
+    assert_eq!(pending(&c), vec![Order::GameSpeed { speed: want }]);
+    session_mut(&mut c).step();
+    assert_eq!(session(&c).play.world().game_speed, want);
     let tick = session(&c).play.world().tick;
     session_mut(&mut c).play.game.world.econ.end.ended = Some(tick);
     assert!(!session_mut(&mut c).open_options(), "the game has ended");
     key(&mut c, Key::Escape);
     assert!(!session(&c).paused);
+}
+
+/// A network game's leave choices: two that surrender while at least two
+/// human houses, our own among them, are undefeated, otherwise the leave
+/// alone; after the surrender that keeps the player watching the menu is
+/// refused until the house is defeated, and a defeated house's menu shows
+/// no speed control.
+/// spec: S-0201 claim 15 (what leaving offers in a network game; after resigning through the menu it does not open again until the house is defeated; a defeated player watching can open it) and claim 17 (no speed control once the player's own house is defeated, in a network game)
+#[test]
+fn a_network_menu_offers_the_surrenders_while_two_humans_stand() {
+    let mut c = client((1024, 768), 100);
+    start_by_keyboard(&mut c);
+    let local = usize::from(session(&c).play.local.0);
+    let other = usize::from(local == 0);
+    {
+        let s = session_mut(&mut c);
+        s.network = true;
+        s.play.outbox = Some(Vec::new());
+    }
+    assert_eq!(
+        session(&c).leave_choices(),
+        vec![PauseHit::Leave],
+        "one human house"
+    );
+    session_mut(&mut c).play.game.world.houses[other]
+        .econ
+        .setup
+        .person_played = true;
+    assert_eq!(
+        session(&c).leave_choices(),
+        vec![PauseHit::Surrender, PauseHit::SurrenderLeave]
+    );
+    session_mut(&mut c).play.game.world.houses[other]
+        .econ
+        .result
+        .defeated = true;
+    assert_eq!(
+        session(&c).leave_choices(),
+        vec![PauseHit::Leave],
+        "the other human house defeated"
+    );
+    session_mut(&mut c).play.game.world.houses[other]
+        .econ
+        .result
+        .defeated = false;
+    key(&mut c, Key::Escape);
+    let _ = c.frame();
+    let t = session(&c).pause_targets();
+    assert!(t.rect_of(&PauseHit::Leave).is_none());
+    assert!(t.rect_of(&PauseHit::SurrenderLeave).is_some());
+    press_pause(&mut c, PauseHit::Surrender);
+    assert!(!session(&c).paused);
+    assert!(!session(&c).leave_after_surrender);
+    assert_eq!(
+        session(&c).play.outbox.clone().unwrap(),
+        vec![Order::Surrender]
+    );
+    assert!(!session_mut(&mut c).open_options(), "resigned");
+    session_mut(&mut c).play.game.world.houses[local]
+        .econ
+        .result
+        .defeated = true;
+    assert!(session_mut(&mut c).open_options(), "defeated: it opens");
+    assert_eq!(
+        session(&c).leave_choices(),
+        vec![PauseHit::Leave],
+        "the opener's house defeated"
+    );
+    let _ = c.frame();
+    let t = session(&c).pause_targets();
+    assert!(t.rect_of(&PauseHit::Speed(1)).is_none());
+    assert!(t.rect_of(&PauseHit::Speed(-1)).is_none());
+    assert!(t.rect_of(&PauseHit::Surrender).is_none());
+    assert!(t.rect_of(&PauseHit::Leave).is_some());
 }
 
 /// A skirmish's active clock counts time without the input focus, in
