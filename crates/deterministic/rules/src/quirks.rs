@@ -1540,7 +1540,7 @@ pub struct Quirks {
     // spec: S-0314 claim 22 and Edge cases
     #[serde(default = "on")]
     pub depot_loss_strands_hover: bool,
-    /// A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual. Not consulted yet (S-0314 r77 is taken in at the next intake).
+    /// A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual.
     // spec: S-0314 claim 21, Edge cases; S-0503 claim 11
     #[serde(default = "on")]
     pub docked_hover_water_loss: bool,
