@@ -1457,6 +1457,22 @@ impl Live {
         out.into_iter().map(|(_, l)| l).collect()
     }
 
+    /// Whether a building is drawn live, as of the last redraw: always for
+    /// one the game placed, and for one of the map's when it has left the
+    /// cell pass (tests and lanes).
+    pub fn drawn_live(&self, id: ObjectId) -> bool {
+        self.building_ids
+            .iter()
+            .find(|(_, b)| **b == id)
+            .is_none_or(|(code, _)| self.gone.contains(code))
+    }
+
+    /// The import registration index of a simulation type, once a redraw
+    /// has met it (tests and lanes).
+    pub fn import_index(&self, kind: SimKind, index: u32) -> Option<usize> {
+        self.types.get(&(kind, index)).copied().flatten()
+    }
+
     /// The names of a building's running slot animations, in slot order
     /// (tests and lanes).
     pub fn slot_names(&self, id: ObjectId) -> Vec<String> {
