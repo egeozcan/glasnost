@@ -8537,7 +8537,7 @@
           "default": true
         },
         "anim_resource_spread_neighbours_only": {
-          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the full pair selects the cell. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order. Not consulted yet (S-0319 is taken in at the next intake).",
           "type": "boolean",
           "default": true
         },
