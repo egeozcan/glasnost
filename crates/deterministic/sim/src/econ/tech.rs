@@ -154,7 +154,8 @@ pub struct TypeTech {
     pub upgrade: bool,
     /// The sidebar tab, 0 to 3 for the first to fourth (S-0004 claim 11).
     pub tab: u8,
-    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3).
+    /// The counts-as-aircraft flag (S-0004 claim 11 rule 3; tracking from a
+    /// placement in the air, S-0502 claim 29 and S-0501 claim 47).
     pub considered_aircraft: bool,
     /// The naval flag (S-0004 claim 11 rule 3).
     pub naval: bool,
@@ -274,7 +275,8 @@ impl Rules {
         };
         let units = |list: &[String],
                      map: &std::collections::BTreeMap<String, glasnost_rules::sim::UnitType>,
-                     tab: u8|
+                     tab: u8,
+                     air_default: bool|
          -> Vec<TypeTech> {
             list.iter()
                 .map(|n| {
@@ -291,8 +293,8 @@ impl Rules {
                         tab,
                         // spec: S-0004 Import mapping (naval = Naval; absent: no)
                         naval: u.combat.naval.unwrap_or(false),
-                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft; absent: no)
-                        considered_aircraft: u.econ.considered_aircraft.unwrap_or(false),
+                        // spec: S-0004 Import mapping (counts as aircraft = ConsideredAircraft) and S-0501 Import mapping (absent: yes for an aircraft type, no for other types; S-0004 open question 2 leaves the aircraft default to S-0501)
+                        considered_aircraft: u.econ.considered_aircraft.unwrap_or(air_default),
                         ..Default::default()
                     };
                     econ_fields(&u.econ, &mut t);
@@ -301,11 +303,11 @@ impl Rules {
                 .collect()
         };
         // spec: S-0004 claim 11 (infantry: the third tab; vehicles and aircraft: the fourth)
-        let infantry_t = units(&infantry, &s.infantry, 2);
+        let infantry_t = units(&infantry, &s.infantry, 2, false);
         // spec: S-0004 claim 11 (vehicles: the fourth tab)
-        let vehicles_t = units(&vehicles, &s.vehicles, 3);
+        let vehicles_t = units(&vehicles, &s.vehicles, 3, false);
         // spec: S-0004 claim 11 (aircraft: the fourth tab)
-        let aircraft_t = units(&aircraft, &s.aircraft, 3);
+        let aircraft_t = units(&aircraft, &s.aircraft, 3, true);
         let buildings_t = buildings
             .iter()
             .map(|n| {

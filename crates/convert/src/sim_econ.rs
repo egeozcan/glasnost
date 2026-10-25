@@ -81,7 +81,12 @@ const UNIT_ECON: &[Row] = &[
     ("slaves_number", "SlavesNumber", Int, "S-0402"),
     ("slave_regen_rate", "SlaveRegenRate", Int, "S-0402"),
     ("slave_reload_rate", "SlaveReloadRate", Int, "S-0402"),
-    ("considered_aircraft", "ConsideredAircraft", Bool, "S-0004"),
+    (
+        "considered_aircraft",
+        "ConsideredAircraft",
+        Bool,
+        "S-0004, S-0501",
+    ),
 ];
 
 /// Fields of infantry types only.

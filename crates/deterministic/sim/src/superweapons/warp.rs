@@ -490,7 +490,7 @@ fn lift_off(w: &mut World, id: ObjectId) {
     if o.kind == Kind::Aircraft {
         // spec: S-0209 claim 1 (an aircraft leaving clears its object-present mark)
         crate::air::clear_mark(w, id);
-        // spec: S-0303 Terms (an aircraft off the map is not in ordinary flight); Q-1845 (interim: leaving the map ends the tracking)
+        // spec: S-0501 claim 47 (b) (leaving the map in any way ends the tracking)
         crate::air::leaving_map(w, id);
     }
     if o.kind == Kind::Vehicle {

@@ -2885,7 +2885,7 @@
           "default": null
         },
         "considered_aircraft": {
-          "description": "Units: `ConsideredAircraft`, the counts-as-aircraft flag of the\nsidebar order (S-0004 claim 11 rule 3); absent: no.",
+          "description": "Units: `ConsideredAircraft`, the counts-as-aircraft flag of the\nsidebar order (S-0004 claim 11 rule 3) and of tracking from a\nplacement in the air (S-0502 claim 29, S-0501 claim 47); absent: no,\nyes for an aircraft type (S-0501 Import mapping).",
           "type": [
             "boolean",
             "null"
@@ -8472,7 +8472,7 @@
           "default": true
         },
         "aircraft_corner_sector_untracked": {
-          "description": "An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list. Not consulted yet (S-0501 r45 claim 47 is taken in at the next intake).",
+          "description": "An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list.",
           "type": "boolean",
           "default": true
         },
@@ -8537,7 +8537,7 @@
           "default": true
         },
         "anim_resource_spread_neighbours_only": {
-          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the full pair selects the cell. Not consulted yet (S-0319 is taken in at the next intake).",
+          "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order. Not consulted yet (S-0319 is taken in at the next intake).",
           "type": "boolean",
           "default": true
         },

@@ -229,9 +229,9 @@ fn anti_air_only_unit_engages_an_aircraft_flying_past() {
     }
 }
 
-// spec: S-0303 Terms (an aircraft in ordinary flight is tracked) and S-0209 claim 13 (a landed aircraft is listed in a cell); the boundaries are this engine's interim rule of Q-1845: tracked exactly while S-0501's in-flight test holds
+// spec: S-0501 claim 47 (a) and (b) (tracked from the update that starts the take-off until touchdown, the landing descent included; a landed aircraft is listed in its cell, S-0209 claim 13, and never tracked); claim 47 (c) (the sector is brought up to date at the start of a movement update, so it is the sector of a cell the aircraft was in at most one update earlier)
 #[test]
-fn aircraft_is_tracked_only_in_flight() {
+fn aircraft_is_tracked_from_take_off_to_touchdown() {
     let mut w = game(&rules());
     let k = put(&mut w, Kind::Aircraft, "KITE", 1, -6, 0);
     assert!(air::on_ground(&w, k), "placed on the ground");
@@ -239,29 +239,60 @@ fn aircraft_is_tracked_only_in_flight() {
     move_to(&mut w, 1, k, 6, 0);
     let mut flew = false;
     let mut landed_after = false;
+    let mut before = w.obj(k).unwrap().pos.cell();
     for _ in 0..1500 {
         glasnost_sim::tick::step(&mut w);
-        let in_flight = !air::on_ground(&w, k);
+        let settled = w.obj(k).unwrap().air.as_ref().unwrap().ground;
         assert_eq!(
             flying::tracked(&w, k),
-            in_flight,
-            "tracked exactly in flight at tick {}",
+            !settled,
+            "tracked exactly from the take-off to touchdown at tick {}",
             w.tick
         );
-        if in_flight {
+        let o = w.obj(k).unwrap();
+        if !settled {
             flew = true;
-            let o = w.obj(k).unwrap();
-            assert_eq!(
-                w.flying.sector_of.get(&k),
-                Some(&flying::sector(&w, o.pos.cell())),
-                "its sector follows its cell"
+            let s = w.flying.sector_of[&k];
+            assert!(
+                s == flying::sector(&w, o.pos.cell()) || s == flying::sector(&w, before),
+                "its sector follows its cell one update late"
             );
         } else if flew {
             landed_after = true;
             break;
         }
+        before = o.pos.cell();
     }
     assert!(flew && landed_after, "takes off and lands again");
+}
+
+// spec: S-0501 claim 47 (e) and S-0309 claim 9 (the airborne scan looks only at tracked objects not in the ground render layer: an anti-air-only building does not acquire an aircraft landed in its range; after a move order it acquires it no earlier than the tick it leaves the ground render layer; scenario AC30 part d)
+#[test]
+fn anti_air_building_ignores_a_landed_aircraft_until_it_leaves_the_ground() {
+    let mut w = game(&rules());
+    let s = put(&mut w, Kind::Building, "SAMS", 0, 0, 0);
+    let k = put(&mut w, Kind::Aircraft, "KITE", 1, -4, 0);
+    for _ in 0..200 {
+        glasnost_sim::tick::step(&mut w);
+        assert_eq!(w.obj(s).unwrap().target, None, "landed: not acquired");
+    }
+    move_to(&mut w, 1, k, -4, 6);
+    let mut left_ground = None;
+    let mut first_target = None;
+    for _ in 0..400 {
+        glasnost_sim::tick::step(&mut w);
+        if left_ground.is_none() && !glasnost_sim::temporal::ground_layer(&w, k) {
+            left_ground = Some(w.tick);
+        }
+        if w.obj(s).unwrap().target == Some(Target::Object(k)) {
+            first_target = Some(w.tick);
+            break;
+        }
+    }
+    let (Some(l), Some(f)) = (left_ground, first_target) else {
+        panic!("leaves the ground {left_ground:?} and is acquired {first_target:?}");
+    };
+    assert!(f >= l, "acquired at {f}, left the ground layer at {l}");
 }
 
 /// A detonation of the combat ruleset's warhead HE (spread 0.75 cells, R
@@ -287,7 +318,7 @@ fn blast(w: &mut World, at: glasnost_sim::world::Pos) {
     );
 }
 
-// spec: S-0303 claims 6 and 10 (a detonation above the terrain reaches the tracked flying objects; an aircraft in the air counts at half distance, so a burst 300 leptons from it, beyond R = 192 but within 2R, hits it, and one 400 leptons from it misses); the tracking is Q-1845's interim rule
+// spec: S-0303 claims 6 and 10 (a detonation above the terrain reaches the tracked flying objects; an aircraft in the air counts at half distance, so a burst 300 leptons from it, beyond R = 192 but within 2R, hits it, and one 400 leptons from it misses); the aircraft is tracked in flight, S-0501 claim 47
 #[test]
 fn area_damage_reaches_an_aircraft_in_flight_at_half_distance() {
     let mut w = game(&rules());

@@ -721,6 +721,41 @@ fn s0407_claim_17_kinds_by_factory_acquisition() {
     }
 }
 
+// spec: S-0004 claim 11 rule 3 and open question 2, S-0501 Import mapping (ConsideredAircraft absent: yes for an aircraft type, so an aircraft type that leaves the key out ranks as air, after a ground vehicle tied with it on every other key; scenario AC30 part j); the control sets the key to no, and the tie then puts the later offer first (S-0407 claim 17)
+#[test]
+fn absent_counts_as_aircraft_ranks_an_aircraft_as_air() {
+    for flag in [None, Some(false)] {
+        let mut r = ruleset();
+        r.registries
+            .get_mut("vehicles")
+            .unwrap()
+            .push("VGND".into());
+        let vgnd = r.sim.vehicles["TANK"].clone();
+        r.sim.vehicles.insert("VGND".into(), vgnd);
+        r.sim
+            .aircraft
+            .get_mut("PLANE")
+            .unwrap()
+            .econ
+            .considered_aircraft = flag;
+        let mut w = game(&r);
+        building(&mut w, "WARFACT", 0, 0, 0);
+        building(&mut w, "AIRPAD", 0, 6, 0);
+        ready(&mut w);
+        let vgnd = t(&w, Kind::Vehicle, "VGND");
+        let plane = t(&w, Kind::Aircraft, "PLANE");
+        let pair: Vec<TypeRef> = sidebar::icons(&w, H)
+            .into_iter()
+            .filter(|x| *x == vgnd || *x == plane)
+            .collect();
+        if flag.is_none() {
+            assert_eq!(pair, vec![vgnd, plane], "air after ground");
+        } else {
+            assert_eq!(pair, vec![plane, vgnd], "a full tie: the later offer first");
+        }
+    }
+}
+
 fn two_tab_rules() -> Ruleset {
     let mut r = preq_rules();
     r.sim.infantry.get_mut("GRUNT").unwrap().econ.prerequisite = Some(vec!["PREQ".into()]);

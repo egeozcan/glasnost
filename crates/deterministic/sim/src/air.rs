@@ -355,14 +355,17 @@ fn listing_layer(w: &World, id: ObjectId) -> Option<Layer> {
 /// Brings the aircraft's cell listing in line with its listing height and
 /// mark (S-0209 claim 13): taking off removes the listing when the listing
 /// height becomes positive, and landing adds it again. A listing already
-/// right is left alone, so the listing order does not change.
+/// right is left alone, so the listing order does not change. Tracking as
+/// a flying object is separate (S-0501 claim 47): it changes only at the
+/// events of [`start_tracking`], [`end_tracking`] and [`sector_update`].
 pub fn sync_listing(w: &mut World, id: ObjectId) {
     if !is_aircraft(w, id) {
         return;
     }
     let Some(o) = w.obj(id) else { return };
     if !o.on_map {
-        crate::combat::flying::unregister(w, id);
+        // spec: S-0501 claim 47 (b) (it stops being tracked when it leaves the map in any way)
+        end_tracking(w, id);
         return;
     }
     let cell = o.pos.cell();
@@ -377,32 +380,66 @@ pub fn sync_listing(w: &mut World, id: ObjectId) {
             w.cells.leave(cell, l, id);
         }
     }
-    sync_tracking(w, id);
 }
 
-/// Keeps an aircraft's registration as a tracked flying object (S-0303
-/// Terms: an aircraft-kind object in ordinary flight) in line with this
-/// spec's in-flight test, and its sector with its cell. The boundaries are
-/// the interim rule of Q-1845, which S-0501 does not give: registered while
-/// in flight (the test of [`on_ground`] fails, exactly when no cell lists
-/// it, S-0209 claim 13), not on the ground or off the map, and its sector
-/// updated at every movement update in flight.
-fn sync_tracking(w: &mut World, id: ObjectId) {
-    // spec: S-0303 Terms (an aircraft in ordinary flight is a tracked flying object); S-0501 Terms (in flight: not on the ground); Q-1845 (interim: these are the boundaries)
-    if w.obj(id).is_some_and(|o| o.on_map) && !on_ground(w, id) {
-        // spec: S-0303 claim 11 (a newly tracked object follows every object already registered)
-        crate::combat::flying::register(w, id);
+/// Whether the aircraft's type has the counts-as-aircraft flag (S-0501
+/// Import mapping: absent, yes for an aircraft type).
+fn counts_as_aircraft(w: &World, id: ObjectId) -> bool {
+    w.obj(id).is_some_and(|o| {
+        w.rules()
+            .econ
+            .tech
+            .of(crate::econ::tech::type_of(o))
+            .is_some_and(|t| t.considered_aircraft)
+    })
+}
+
+/// The aircraft starts being a tracked flying object (S-0501 claim 47
+/// (a)), at the end of its current sector's list. One already tracked is
+/// not added a second time.
+fn start_tracking(w: &mut World, id: ObjectId) {
+    // spec: S-0501 claim 47 (a) (an aircraft already tracked is not added a second time) and S-0303 claim 11 (a newly tracked object follows every object already registered, in its sector and globally)
+    crate::combat::flying::register(w, id);
+}
+
+/// The aircraft stops being a tracked flying object (S-0501 claim 47 (b)).
+fn end_tracking(w: &mut World, id: ObjectId) {
+    crate::combat::flying::unregister(w, id);
+}
+
+/// The sector update at the start of a movement update, before its forward
+/// step (S-0501 claim 47 (c)), from the speed fraction carried from the
+/// previous update.
+fn sector_update(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let cell = o.pos.cell();
+    let a = st(w, id);
+    // spec: S-0501 claim 47 (c) (no sector update while the speed fraction carried from the previous update is 0)
+    if a.cur == F64::ZERO {
+        return;
+    }
+    if crate::combat::flying::tracked(w, id) {
+        // spec: S-0501 claim 47 (c) (in another cell than at its last start of tracking or sector update: when its cell lies in another sector than its list's, it joins the end of its current sector's list, S-0303 claim 11; otherwise its place does not change). Its list's sector is the sector of that last cell, so only a change of cell can change the sector.
         crate::combat::flying::moved(w, id);
-    } else {
-        crate::combat::flying::unregister(w, id);
+    } else if !a.ground && !on_ground(w, id) {
+        // spec: S-0501 claim 47 (c) and Edge cases (quirks.aircraft_corner_sector_untracked on: an untracked aircraft in flight whose cell lies in sector (0, 0) of S-0303 F7, cell (0, 0) included, joins no list; off: it joins sector (0, 0)'s list like any other)
+        if w.rules().quirks.aircraft_corner_sector_untracked
+            && crate::combat::flying::sector(w, cell) == (0, 0)
+        {
+            return;
+        }
+        // spec: S-0501 claim 47 (c) (an aircraft in flight that is not tracked becomes tracked at its first movement update with a positive carried fraction, at the end of its current sector's list)
+        start_tracking(w, id);
     }
 }
 
-/// An aircraft goes off the map (inside a transport or building): it stops
-/// being a tracked flying object (S-0303 Terms; Q-1845 interim).
+/// An aircraft goes off the map (inside a carrier, a transport or a
+/// building): it stops being a tracked flying object (S-0501 claim 47
+/// (b)).
 pub fn leaving_map(w: &mut World, id: ObjectId) {
     if is_aircraft(w, id) {
-        crate::combat::flying::unregister(w, id);
+        // spec: S-0501 claim 47 (b) (leaving the map in any way ends tracking, going inside a carrier, a transport or a building included)
+        end_tracking(w, id);
     }
 }
 
@@ -608,6 +645,10 @@ pub fn placed(w: &mut World, id: ObjectId) {
         ob.air = Some(a);
     }
     sync_listing(w, id);
+    // spec: S-0501 claim 47 (a) (placed with its in-the-air answer yes and its type's counts-as-aircraft flag set: tracked from the placement; placed on the ground, it is first tracked when its take-off starts)
+    if !ground && in_the_air(w, id) && counts_as_aircraft(w, id) {
+        start_tracking(w, id);
+    }
 }
 
 /// The type test of a placement (S-0501 Terms and claim 1), called by
@@ -724,6 +765,8 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
     }
     set_mark(w, id);
     sync_listing(w, id);
+    // spec: S-0501 claim 47 (b) (a landed aircraft resting on a pad is never tracked)
+    end_tracking(w, id);
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1078,8 @@ fn full_speed(w: &World, id: ObjectId, t: &Ty, a: &AirState) -> bool {
 
 /// Takes off toward a new destination (claim 8).
 fn take_off(w: &mut World, id: ObjectId, cruise: i32) {
+    // spec: S-0501 claim 47 (a) (tracking starts when the take-off starts, at the height it has at that moment, before it rises; leaving a pad is such a take-off)
+    start_tracking(w, id);
     clear_mark(w, id);
     let dest = w.obj(id).and_then(|o| o.dest);
     if let Some(a) = st_mut(w, id) {
@@ -1329,6 +1374,8 @@ fn touchdown(w: &mut World, id: ObjectId) {
     if let Some(ob) = w.obj_mut(id) {
         ob.pos.z = surface + if marked { DECK_ALLOWANCE } else { 0 };
     }
+    // spec: S-0501 claim 47 (b) (an accepted touchdown ends tracking, on open ground and on a pad alike; the start of landing and a refused touchdown do not)
+    end_tracking(w, id);
     if let Some(a) = st_mut(w, id) {
         a.deck = marked;
         a.ground = true;
@@ -1464,6 +1511,8 @@ pub fn crashing(w: &World, id: ObjectId) -> bool {
 
 /// Impact of a crashing aircraft (claim 9, S-0312 claim 16).
 fn impact(w: &mut World, id: ObjectId) {
+    // spec: S-0501 claim 47 (b) (a crash impact ends tracking, before the impact's own effects)
+    end_tracking(w, id);
     let Some(o) = w.obj(id).cloned() else { return };
     let surface = w.surface_at(o.pos.x, o.pos.y);
     if let Some(ob) = w.obj_mut(id) {
@@ -1559,6 +1608,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     if o.air.is_none() {
         placed(w, id);
     }
+    // spec: S-0501 claim 47 (c) (the sector update comes at the start of each movement update, before its forward step)
+    sector_update(w, id);
     // Claim 9: the crash contribution comes first; impact before any ordinary adjustment.
     let mut a = st(w, id);
     if dead && a.crash.is_none() && !start_crash(w, id, false) {

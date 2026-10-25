@@ -1356,7 +1356,7 @@ pub struct Quirks {
     // spec: S-0501 claim 46, Edge cases; S-0519 claim 7
     #[serde(default = "on")]
     pub crash_drops_planted_bomb: bool,
-    /// An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list. Not consulted yet (S-0501 r45 claim 47 is taken in at the next intake).
+    /// An aircraft in flight that is not tracked and whose cell lies in sector (0, 0) of S-0303's F7, cell (0, 0) included, joins no flying-object list until it moves into another sector, so neither area damage nor the airborne scan finds it there; off: at its first movement update with a positive carried speed fraction it joins the end of sector (0, 0)'s list.
     // spec: S-0501 claim 47 (c), Edge cases
     #[serde(default = "on")]
     pub aircraft_corner_sector_untracked: bool,

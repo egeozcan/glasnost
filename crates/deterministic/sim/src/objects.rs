@@ -467,7 +467,7 @@ pub fn take_inside(w: &mut World, id: ObjectId) {
     crate::gattling::leaving_map(w, id);
     // spec: S-0209 claim 1 (an aircraft going inside clears its object-present mark)
     crate::air::clear_mark(w, id);
-    // spec: S-0303 Terms (an aircraft off the map is not in ordinary flight); Q-1845 (interim: going inside ends the tracking)
+    // spec: S-0501 claim 47 (b) (going inside a carrier, a transport or a building ends the tracking)
     crate::air::leaving_map(w, id);
     let skip = w.rules().quirks.update_order_removal_skip;
     // spec: S-0203 claim 10 (going inside: a removal from the update order, counting during the turn pass)
