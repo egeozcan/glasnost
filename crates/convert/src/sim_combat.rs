@@ -2823,6 +2823,66 @@ impl Builder<'_> {
         ));
     }
 
+    /// The turret table pairs of a vehicle type that reads them (S-0105
+    /// claim 43, Import mapping, *Turret table pairs*): the fixed type name,
+    /// or every vehicle type with `quirks.turret_table_fixed_type_only` off.
+    /// For the fixed type name, the charge-turret flag a pair with no weapon
+    /// number gives (`quirks.turret_pair_no_weapon_sets_charge_flag`),
+    /// written over the held `is_charge_turret`; for every type that reads
+    /// them, the importer warnings for its pairs. The table itself is
+    /// [`crate::Import::turret_tables`].
+    fn turret_pairs(&mut self, combat: &mut Rec, t: &TypeRec) {
+        use crate::turrets::{STEMS, TABLE_LEN, charge_flag, is_fixed_type, pairs_in};
+        let fixed = is_fixed_type(&t.name);
+        if !fixed && self.i.sim_quirks.turret_table_fixed_type_only {
+            // spec: S-0105 claim 43 and Edge cases (quirks.turret_table_fixed_type_only: no other type reads its pairs)
+            return;
+        }
+        // spec: S-0105 Edge cases (the charge-turret rule stays with the fixed type name whatever quirks.turret_table_fixed_type_only holds)
+        if fixed
+            && self.i.sim_quirks.turret_pair_no_weapon_sets_charge_flag
+            && let Some(on) = charge_flag(t)
+        {
+            // spec: S-0105 Edge cases (quirks.turret_pair_no_weapon_sets_charge_flag: the fixed type name has charge-turret behaviour exactly as its pairs with no weapon number give it; S-0308 claim 5 and S-0301 claim 16 follow the flag)
+            combat.0.retain(|(f, _)| f != "is_charge_turret");
+            combat.put("is_charge_turret", jsonc::boolean(on));
+        }
+        // spec: S-0007 claim 17 (our engine treats a turret count above 18 as 18)
+        let n = int_of(key(t, "TurretCount"))
+            .unwrap_or(0)
+            .min(TABLE_LEN as i32);
+        let name = show(&t.name);
+        for layer in t.reads.clone() {
+            for p in pairs_in(t, layer) {
+                let stem = STEMS[p.stem].0;
+                if !p.no_weapon() && !p.sets_entry() {
+                    // spec: S-0105 Import mapping (a weapon number outside 0 … 17 other than −1: our engine ignores the pair and the importer warns, design)
+                    let (l, line) = p.weapon_at.unwrap_or((layer, 0));
+                    self.warn(
+                        l,
+                        line,
+                        format!(
+                            "vehicles {name} {stem}TurretWeapon {} is outside 0 … 17; the pair is ignored (S-0105 Import mapping)",
+                            p.weapon
+                        ),
+                    );
+                } else if p.sets_entry() && !(-1..n).contains(&p.index) {
+                    // spec: S-0105 Import mapping and claim 12 (a turret index outside −1 … N − 1 is kept and draws nothing; the importer warns)
+                    let (l, line) = p.index_at.or(p.weapon_at).unwrap_or((layer, 0));
+                    self.warn(
+                        l,
+                        line,
+                        format!(
+                            "vehicles {name} {stem}TurretIndex {} is outside −1 … {}; kept, it draws no turret (S-0105 claim 12, Import mapping)",
+                            p.index,
+                            n - 1
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
     /// The combat fields of an infantry, vehicle or aircraft type.
     pub(super) fn unit_combat(&mut self, rec: &mut Rec, kind: Kind, index: usize, t: &TypeRec) {
         let mut combat = Rec::default();
@@ -2831,6 +2891,9 @@ impl Builder<'_> {
         Self::numbered_flh_only_with_slots(&mut combat);
         self.smoke_systems(&mut combat, t);
         self.damage_smoke_offset(&mut combat, kind, t);
+        if kind == Kind::Vehicles {
+            self.turret_pairs(&mut combat, t);
+        }
         if !combat.0.is_empty() {
             rec.put("combat", combat.node());
         }

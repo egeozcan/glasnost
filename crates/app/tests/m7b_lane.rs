@@ -103,6 +103,12 @@
 //! claim 34, S-0519 claim 25); then, on a map with four starts and four
 //! houses, a capture by the last house (S-0103 claim 10).
 //!
+//! M8 step A3 intake 19 (S-0105 claim 43): `ifv-turrets` counts the
+//! multi-turret vehicle types by flag and imported turret table, builds the
+//! first gunner one with a filled table empty and with a first passenger of
+//! each mode, and lets the first charge-turret one attack, counting the
+//! selected turret indices it shows (never which mode shows which).
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -160,6 +166,7 @@ const SCENES: &[Scene] = &[
     ("mirage-click", mirage_click),
     ("derrick-look", derrick_look),
     ("derrick-paths", derrick_paths),
+    ("ifv-turrets", ifv_turrets),
 ];
 
 #[test]
@@ -2363,6 +2370,192 @@ fn key(which: Drained) -> &'static str {
 
 // ---------------------------------------------------------------------------
 // The lane
+
+/// The selected turret index `id` shows now, as the live view derives it
+/// (S-0105 claim 43, S3).
+fn shown_index(l: &Lane, id: ObjectId) -> Option<i32> {
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref()?;
+    let w = l.world();
+    let o = w.obj(id)?;
+    let table = live
+        .import_index(o.kind, o.type_index)
+        .and_then(|i| s.loaded.import.turret_tables.get(&i));
+    glasnost_app::mapview::build::selected_turret_index(w, id, (w.tick - 1).max(0), table)
+}
+
+/// M8 step A3 intake 19 (S-0105 r35 claim 43, Q-1760; the lead's play notes
+/// 3 and 14): counts of the multi-turret vehicle types by flag and turret
+/// table after import; the first gunner multi-turret type with a filled
+/// table built empty and then with one first passenger of each mode some
+/// infantry type has (a fresh vehicle per passenger), its shown index
+/// counted (distinct indices, passengers showing none), one screen each;
+/// the first charge-turret multi-turret type attacking an enemy vehicle,
+/// the ticks it shows each turret number. Counts, cells and ticks only:
+/// which mode shows which turret is never printed.
+fn ifv_turrets(lane: &mut Lane) {
+    let (multi, gunners, charge, neither, filled) = {
+        let s = lane.c.session.as_ref().unwrap();
+        let import = &s.loaded.import;
+        let registry = &import.outcome.registries[&glasnost_convert::kinds::Kind::Vehicles];
+        let w = lane.world();
+        let r = w.rules();
+        let mut k = (Vec::new(), Vec::new(), Vec::new(), 0usize, 0usize);
+        for i in 0..r.vehicles.len() {
+            let Some(u) = r.unit(Kind::Vehicle, i as u32) else {
+                continue;
+            };
+            let c = &u.combat;
+            if c.turret_count <= 0 || c.gattling {
+                continue;
+            }
+            k.0.push(i);
+            let name = r.vehicles[i].name.as_bytes();
+            let table = registry
+                .iter()
+                .position(|t| t.name.eq_ignore_ascii_case(name))
+                .and_then(|x| import.turret_tables.get(&x));
+            if table.is_some() {
+                k.4 += 1;
+            }
+            if c.charge_turret {
+                k.2.push(i);
+            } else if c.gunner {
+                k.1.push((i, table.is_some()));
+            } else {
+                k.3 += 1;
+            }
+        }
+        k
+    };
+    println!(
+        "multi-turret vehicle types {}: gunner (not charge-turret) {}, charge-turret {}, neither {}; \
+         with a filled turret table {}; gunner types with a filled table {}",
+        multi.len(),
+        gunners.len(),
+        charge.len(),
+        neither,
+        filled,
+        gunners.iter().filter(|(_, f)| *f).count()
+    );
+    let local = lane.local();
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 8, home.y + 8));
+    if let Some(&(gi, _)) = gunners.iter().find(|(_, f)| *f) {
+        let name = lane.world().rules().vehicles[gi].name.clone();
+        let empty = lane.spawn(Kind::Vehicle, &name, local, at);
+        lane.ticks(2);
+        lane.look_at(at);
+        let none_empty = shown_index(lane, empty).is_none();
+        println!("gunner type, no passenger: shows none {none_empty}");
+        lane.save("ifv-empty");
+        // One infantry type per mode index (the first in the list).
+        let modes: std::collections::BTreeMap<i32, String> = {
+            let r = lane.world().rules();
+            let mut m = std::collections::BTreeMap::new();
+            for i in 0..r.infantry.len() {
+                if let Some(u) = r.unit(Kind::Infantry, i as u32)
+                    && u.strength > 0
+                {
+                    m.entry(u.combat.ifv_mode)
+                        .or_insert_with(|| r.infantry[i].name.clone());
+                }
+            }
+            m
+        };
+        let mut seen = std::collections::BTreeSet::new();
+        let mut none = 0;
+        for (n, pname) in modes.values().enumerate() {
+            let cell = CellXY::new(at.x + 3 * (n as i32 % 6), at.y + 3 + 3 * (n as i32 / 6));
+            let cell = lane.open_land(cell);
+            let v = lane.spawn(Kind::Vehicle, &name, local, cell);
+            let p = lane.spawn(
+                Kind::Infantry,
+                pname,
+                local,
+                CellXY::new(cell.x, cell.y + 1),
+            );
+            glasnost_sim::transport::board(lane.world_mut(), p, v);
+            lane.ticks(2);
+            match shown_index(lane, v) {
+                Some(k) => {
+                    seen.insert(k);
+                }
+                None => none += 1,
+            }
+            lane.look_at(cell);
+            lane.save(&format!("ifv-passenger-{n}"));
+        }
+        println!(
+            "gunner type: {} passenger modes tried; distinct turret indices shown {}; passengers showing none {none}",
+            modes.len(),
+            seen.len()
+        );
+    }
+    let (Some(&ci), Some(enemy)) = (charge.first(), lane.enemy()) else {
+        println!("no charge-turret multi-turret type or no enemy: charge part skipped");
+        return;
+    };
+    // An unarmed enemy vehicle type, so that the charge-turret vehicle is not shot back at.
+    let Some(target) = ({
+        let r = lane.world().rules();
+        (0..r.vehicles.len())
+            .find(|&i| {
+                r.unit(Kind::Vehicle, i as u32)
+                    .is_some_and(|u| u.strength > 0 && u.combat.slots.iter().all(Option::is_none))
+            })
+            .map(|i| r.vehicles[i].name.clone())
+    }) else {
+        println!("no unarmed vehicle type: charge part skipped");
+        return;
+    };
+    let name = lane.world().rules().vehicles[ci].name.clone();
+    let cell = lane.open_land(CellXY::new(at.x - 10, at.y));
+    let c = lane.spawn(Kind::Vehicle, &name, local, cell);
+    let t = lane.spawn(
+        Kind::Vehicle,
+        &target,
+        enemy,
+        CellXY::new(cell.x + 3, cell.y),
+    );
+    lane.ticks(2);
+    lane.look_at(cell);
+    println!(
+        "charge-turret type: index at creation {:?}",
+        shown_index(lane, c)
+    );
+    lane.save("charge-start");
+    let n = lane.order(local, c, ClickOn::Object(t));
+    // The shown index run by run, (index, ticks), and the shots, for 300 ticks: the target may
+    // die early; the countdown is followed to its end.
+    let mut runs: Vec<(Option<i32>, usize)> = Vec::new();
+    let mut shots = 0;
+    let mut last_until = lane.world().obj(c).map(|o| o.combat.rearm_until);
+    for _ in 0..300 {
+        lane.ticks(1);
+        let k = shown_index(lane, c);
+        let until = lane.world().obj(c).map(|o| o.combat.rearm_until);
+        if until != last_until {
+            shots += 1;
+            last_until = until;
+        }
+        match runs.last_mut() {
+            Some((x, n)) if *x == k => *n += 1,
+            _ => {
+                runs.push((k, 1));
+                if runs.len() <= 6 {
+                    lane.save(&format!("charge-step-{}", runs.len()));
+                }
+            }
+        }
+    }
+    println!(
+        "charge-turret type: {n} orders; {shots} shots; shown index runs (index, ticks) {runs:?}; \
+         alive {}, target alive {}",
+        lane.world().obj(c).is_some(),
+        lane.world().obj(t).is_some()
+    );
+}
 
 fn files(dir: &std::path::Path) -> Vec<PickedFile> {
     let ext = MountOptions::default().archive_extensions;

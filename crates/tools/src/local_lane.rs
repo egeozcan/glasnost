@@ -511,7 +511,9 @@ fn a4_counts(
                     "no turret flag, a turret part imported: none drawn"
                 }
                 (false, _) => "no turret flag, no turret part: none drawn",
-                (true, true) => "multi-turret: none drawn until Q-1760",
+                (true, true) => {
+                    "multi-turret: numbered parts by the selected turret index (S-0105 claim 43)"
+                }
                 (true, false) if art.voxels.contains_key("turret") => {
                     "turret flag, single turret part: drawn"
                 }

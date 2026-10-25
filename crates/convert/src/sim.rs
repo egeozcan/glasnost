@@ -1079,6 +1079,21 @@ pub struct SimQuirks {
     /// in threes, parentheses ignored; off, a parenthesis-aware reading of
     /// our own.
     pub colour_list_item_triples: bool,
+    /// `quirks.turret_table_fixed_type_only` (S-0105 claim 43 and Edge
+    /// cases): only the vehicle type with the fixed type name reads its
+    /// turret table pairs, so every other multi-turret type keeps an
+    /// all-*none* table; off, every vehicle type reads its own pairs by the
+    /// same rules (`turrets::table_for`, [`crate::Import::turret_tables`]).
+    /// Presentation only: the index selects no weapon.
+    pub turret_table_fixed_type_only: bool,
+    /// `quirks.turret_pair_no_weapon_sets_charge_flag` (S-0105 Edge cases and
+    /// Import mapping): in each rules layer that has the fixed type name's
+    /// section, the last pair with no weapon number overrides that layer's
+    /// charge-turret key, on exactly when its turret index is neither 0 nor
+    /// a multiple of 256 (`turrets::charge_flag`); off, such a pair changes
+    /// nothing. It decides the imported `is_charge_turret` field, so S-0308
+    /// claim 5 and S-0301 claim 16 follow it.
+    pub turret_pair_no_weapon_sets_charge_flag: bool,
 }
 
 impl Default for SimQuirks {
@@ -1093,13 +1108,16 @@ impl Default for SimQuirks {
             chop_rounding: true,
             // spec: S-0202 claim 17 and Edge cases (quirks.colour_list_item_triples on by default: the original)
             colour_list_item_triples: true,
+            // spec: S-0105 Edge cases (quirks.turret_table_fixed_type_only and quirks.turret_pair_no_weapon_sets_charge_flag on by default: the original)
+            turret_table_fixed_type_only: true,
+            turret_pair_no_weapon_sets_charge_flag: true,
         }
     }
 }
 
 impl SimQuirks {
     /// The switches by name, for the import record.
-    pub fn named(&self) -> [(&'static str, bool); 5] {
+    pub fn named(&self) -> [(&'static str, bool); 7] {
         [
             (
                 "clear_weapons_any_turret_count",
@@ -1112,6 +1130,14 @@ impl SimQuirks {
             ),
             ("chop_rounding", self.chop_rounding),
             ("colour_list_item_triples", self.colour_list_item_triples),
+            (
+                "turret_table_fixed_type_only",
+                self.turret_table_fixed_type_only,
+            ),
+            (
+                "turret_pair_no_weapon_sets_charge_flag",
+                self.turret_pair_no_weapon_sets_charge_flag,
+            ),
         ]
     }
 }

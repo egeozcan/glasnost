@@ -186,7 +186,7 @@ impl Masks {
             MobileKind::VoxelVehicle if berserk => self.berserk,
             // spec: S-0610 claim 7 (infantry sprite body: yes, unless the centre of its cell is shrouded for the viewing player)
             MobileKind::Infantry if berserk && !shrouded => self.berserk,
-            // spec: S-0610 claim 7 (sprite vehicle, including a voxel turret on a sprite body, and aircraft: none)
+            // spec: S-0610 claim 7 (sprite vehicle, including the voxel part on a sprite body, which S-0105 claim 12 limits to the barrel, and aircraft: none)
             _ => 0,
         }
     }
