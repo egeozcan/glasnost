@@ -2824,7 +2824,7 @@ Notes 2 to 5 of the lead's play notes ([m8-claims/a4-play-notes.md](m8-claims/a4
 
 **The deploy key (note 2; S-0213 *The deploy rule*, S-0214 Terms).** `targeting::key_command` hands the deploy key to `deploy_command`. A garrisoned building of the player's first in the selection gets the only order. Otherwise a selection that holds both deployed and undeployed in-place deployers skips its deployed members, and every member that is a unit or building, movable or able to fire, not berserk, and passes `deploy_check` and `deploy_readiness` gets an order. Deployed now covers vehicles (`econ::inplace::form`) and infantry in the deployed, deployed-fire and deployed-idle sequences. The interims Q-1753 (a member still deploying or undeploying counted as neither) and Q-1754 (the timer that follows an infantry deploy not modelled) are retired: S-0213 revision 46 and S-0214 revision 49 answer them, built at M8 step A3 intake 7 (below). Tests: `tests/claims_s0213_deploy_rule.rs`.
 
-**Multi-turret vehicles (note 3; S-0105 claims 12, 16, 26; S-0007 claim 16).** `Mobile::turret_index` carries the selected turret index, which `mapview::build::selected_turret_index` gives. For a type `multi_turret` accepts (a vehicle with the turret flag, a turret count of 1 or more and no rotating-barrel stages, the importer's test), the turret block draws `turret{k}` and `barrel{k}` and puts *k* in the turret key. Without an index it draws no turret, which is what IFVs showed before. No approved spec says what sets the index (Q-1760), so the function returns none for every object and nothing changes on screen. The numbered model takes claim 16's vehicle turret frame with its own frame count (the claim's interim). Test: `live_tests::multi_turret_draws_the_models_of_the_selected_index`, with the index supplied by the test.
+**Multi-turret vehicles (note 3; S-0105 claims 12, 16, 26; S-0007 claim 16).** `Mobile::turret_index` carries the selected turret index, which `mapview::build::selected_turret_index` gives. For a type `multi_turret` accepts (a vehicle with the turret flag, a turret count of 1 or more and no rotating-barrel stages, the importer's test), the turret block draws `turret{k}` and `barrel{k}` and puts *k* in the turret key. Without an index it draws no turret, which is what IFVs showed before. No approved spec said what sets the index (Q-1760), so the function returned none for every object and nothing changed on screen. The numbered model took claim 16's vehicle turret frame with its own frame count (the claim's interim). Both interims are retired since: S-0105 r35 claim 43 answers Q-1760, and claim 16 draws a numbered turret in frame *f_b* (A3 intake 19, below). Test: `live_tests::multi_turret_draws_the_models_of_the_selected_index`, with the index supplied by the test.
 
 **Row B7 (note 4; S-0214 table B).** A building whose first-slot weapon's projectile is not anti-ground, a pulse cannon, or a building being sold gets *nothing* on a click, whatever the target, aircraft included (Q-1761 asks about airborne targets). Retaliation was unchanged until Q-1761 and Q-1763 were answered; S-0306 revision 33 and S-0309 revision 38 answer them (M8 step A3 intake 5, below), and Q-1761's question 3 on airborne targets stays open. Tests: `claims_s0214_combat.rs`, `row_b7_*`.
 
@@ -2847,7 +2847,7 @@ Seams:
 - `transport::in_tube` is always false (no tunnel travel yet), so the deploy check's inside-a-tunnel case and deploy readiness's inside-a-tunnel case never apply; the tunnel-cell test of deploy readiness does.
 - The deploy key no longer sends a deploy order to a unit with no way to deploy (before, every movable or armed unit that was not a building got one): S-0214's deploy readiness now decides.
 - The vehicle in-place rows V2, V3, VC4 and VC5 of S-0214 are not built yet.
-- The multi-turret index waits for Q-1760, so IFVs still draw no turret.
+- The multi-turret index waited for Q-1760, so IFVs still drew no turret. Answered by S-0105 r35 and built at A3 intake 19 (below).
 
 ### Targeting modes, retaliation and death lists (M8 step A3 intake 5)
 
@@ -2951,6 +2951,25 @@ S-0501 r52 claims 24, 40, 47 and 48 (Q-1841). The ledger, [m8-claims/intake17-S-
 - Goldens duel, duel-diagonal, duel-naval, duel-m6c and skirmish regenerated (causes in the ledger). The arena CSVs are byte-identical, and so are the M7a and M7b sweeps.
 - Q-1875 (the released aircraft's object-present mark) is open; interim in `released_docked` and `tick_flight`.
 - New hashed state (`released`, `ground_filed`): save format 77, AI game format 39.
+
+### Turret table and selected turret index (M8 step A3 intake 19)
+
+S-0105 r35 claims 12, 16, 31 and 43, state table S3, the turret table pairs and two switches (Q-1760; play notes 3 and 14). The ledger, [m8-claims/intake19-S-0105.md](m8-claims/intake19-S-0105.md), holds the notes.
+- The importer reads the 17 turret table pairs (`glasnost_convert::turrets`) into `Import::turret_tables`, by vehicle registry index. Each pair's absent index is its stem's default (Repair 1, MachineGun 2, Flak 3, all others 0), and its absent weapon number is −1. Pairs apply in order in every layer that has the section, the table is never cleared, and the renderer reads it.
+- The importer warns about a weapon number outside 0 … 17 other than −1, and ignores that pair. It also warns about an index outside −1 … *N* − 1, which is kept and draws nothing.
+- Two switches, both on by default, live in `glasnost_convert::sim::SimQuirks`, because the importer applies both:
+  - `turret_table_fixed_type_only`: only the fixed type name reads its pairs.
+  - `turret_pair_no_weapon_sets_charge_flag`: for the fixed type name, the last pair with no weapon number in each layer overrides that layer's `IsChargeTurret`. The flag is on unless the index is 0 or a multiple of 256. It decides the imported `is_charge_turret`, so S-0308 claim 5 and S-0301 claim 16 follow it.
+- `mapview::build::selected_turret_index` derives the index from simulation state that already exists:
+  - a gunner type that is not charge-turret gives *T*[weapon number];
+  - a charge-turret type gives S-0301 claim 16's *c* from its rearm countdown, 0 from creation;
+  - any other type gives *none*.
+- The static map view uses `creation_turret_index`. A numbered turret is drawn in frame *f_b*, and an index outside 0 … *N* − 1 draws neither turret nor barrel.
+- The renderer's `ConsideredAircraft` default is now yes for an aircraft type and no otherwise, which closes the intake 16 seam.
+- Seams:
+  - A sprite body's voxel barrel is not drawn (Q-1885, filed).
+  - The derived charge index also follows the countdown in ticks without a turn.
+- No new state: save format 78, AI game format 40.
 
 ### Bouncing animations (M8 step A3 intake 15 part 1)
 
