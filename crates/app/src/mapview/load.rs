@@ -334,11 +334,14 @@ pub async fn load_with(
         && let Ok((_, _, setup, _)) = &started
     {
         // spec: S-0103 claim 10, S-0412 claim 7 (each player house's colour slot as the lobby resolved it)
+        // Keyed by the name's bytes as the drawing passes owners (`h.name.as_bytes()`), not
+        // by the importer's type-name form (`live::name_bytes`), which differs for a name with
+        // characters in U+F780 … U+F7FF and would draw that house in the fallback grey.
         options.slots = setup
             .houses
             .iter()
             .zip(&setup.skirmish.houses)
-            .filter_map(|(h, v)| Some((live::name_bytes(&h.name), v.colour?)))
+            .filter_map(|(h, v)| Some((h.name.as_bytes().to_vec(), v.colour?)))
             .collect();
     }
     if make.is_none() && !options.skirmish && options.slots.is_empty() {

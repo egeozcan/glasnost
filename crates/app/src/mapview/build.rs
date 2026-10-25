@@ -5696,7 +5696,7 @@ impl Painter {
                 None => (false, false),
             };
             let mut ground = Vec::new();
-            b.live_slots = Some(d.slots.clone());
+            b.live_slots = d.slots.clone();
             let mut items = b.building_items(
                 d.idx,
                 art,
@@ -5765,8 +5765,11 @@ pub struct LiveBuilding {
     pub anim: u32,
     /// It holds at least one garrison occupant (S-0108 Terms, claim 2).
     pub occupied: bool,
-    /// Its running slot animations (S-0108 Terms), in slot order.
-    pub slots: Vec<LiveSlot>,
+    /// Its running slot animations (S-0108 Terms), in slot order; `None`:
+    /// the slots its set-up starts, standing at their first image frame,
+    /// as the cell pass draws them (a map tech building that has not
+    /// changed, Q-1772's interim).
+    pub slots: Option<Vec<LiveSlot>>,
     /// Item object code.
     pub object: u32,
     /// Its unloading state, while it unloads a unit (S-0417 Terms; S-0108
