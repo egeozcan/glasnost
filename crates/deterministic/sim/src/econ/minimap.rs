@@ -431,6 +431,21 @@ fn in_friendly_gap(
     cells: &std::collections::BTreeSet<u32>,
     on_flat_grid: bool,
 ) -> bool {
+    // spec: S-0410 claim 6 (in a friendly gap field only when its candidate cells are covered by one: with no covered cell, none is)
+    if cells.is_empty() {
+        return false;
+    }
+    in_friendly_gap_cells(w, c, cells, on_flat_grid)
+}
+
+/// The friendly-gap test of claim 6 for cell `c` against the covered cells
+/// `cells`, asked whatever `cells` holds.
+fn in_friendly_gap_cells(
+    w: &World,
+    c: CellXY,
+    cells: &std::collections::BTreeSet<u32>,
+    on_flat_grid: bool,
+) -> bool {
     if !w.cells.usable(c) {
         return false;
     }
@@ -609,14 +624,14 @@ pub struct Arrivals {
 impl Arrivals {
     /// Brings the arrivals up to date for house `h`.
     pub fn observe(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
+        // spec: S-0410 Terms (arrivals ordered by tick, then by the order in which the objects' turns run, S-0203: each object's first place in the update order, as a scan of it finds)
+        let mut places: BTreeMap<ObjectId, usize> = BTreeMap::new();
+        for (i, &id) in w.update.order.iter().enumerate() {
+            places.entry(id).or_insert(i);
+        }
         let mut now = BTreeMap::new();
         for &id in w.objects.keys() {
-            let place = w
-                .update
-                .order
-                .iter()
-                .position(|&x| x == id)
-                .unwrap_or(usize::MAX);
+            let place = places.get(&id).copied().unwrap_or(usize::MAX);
             for px in listed(w, h, id, g, img) {
                 // spec: S-0410 Terms (an object that stays listed at one pixel keeps its arrival; arrivals ordered by tick, then by turn order)
                 let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
@@ -626,9 +641,40 @@ impl Arrivals {
         self.at = now;
     }
 
+    /// The arrivals listed at each pixel (object and arrival), each pixel's
+    /// in the order of [`Arrivals::at`].
+    fn by_pixel(&self) -> BTreeMap<(i32, i32), Vec<(ObjectId, (i32, usize))>> {
+        let mut out: BTreeMap<(i32, i32), Vec<_>> = BTreeMap::new();
+        for (&(id, px), &arr) in &self.at {
+            out.entry(px).or_default().push((id, arr));
+        }
+        out
+    }
+
+    /// [`Arrivals::observe`] finding each object's place by a scan of the
+    /// update order, as before M8 C4 part 4: the equivalence tests' old form.
+    #[cfg(test)]
+    pub(crate) fn observe_by_scan(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
+        let mut now = BTreeMap::new();
+        for &id in w.objects.keys() {
+            let place = w
+                .update
+                .order
+                .iter()
+                .position(|&x| x == id)
+                .unwrap_or(usize::MAX);
+            for px in listed(w, h, id, g, img) {
+                let arr = self.at.get(&(id, px)).copied().unwrap_or((w.tick, place));
+                now.insert((id, px), arr);
+            }
+        }
+        self.at = now;
+    }
+
     /// The object whose colour a pixel shows (claim 8): the shown house's
     /// own objects first, latest arrival first; then the others, earliest
-    /// arrival first; the first that passes the draw-time tests.
+    /// arrival first; the first that passes the draw-time tests. [`compose`]
+    /// sorts every pixel's arrivals out at once instead, with the same order.
     pub fn winner(
         &self,
         w: &World,
@@ -637,26 +683,43 @@ impl Arrivals {
         g: &Grid,
         img: &Image,
     ) -> Option<ObjectId> {
-        let mut own = Vec::new();
-        let mut other = Vec::new();
-        for (&(id, px), &arr) in &self.at {
-            if px != pixel {
-                continue;
-            }
-            if w.obj(id).is_some_and(|o| o.owner == Some(h)) {
-                own.push((arr, id));
-            } else {
-                other.push((arr, id));
-            }
-        }
-        // spec: S-0410 claim 8 (own objects first, the latest arrival first; then the others, the earliest first)
-        own.sort_by(|a, b| b.cmp(a));
-        other.sort();
-        own.into_iter()
-            .chain(other)
-            .map(|(_, id)| id)
-            .find(|&id| shown(w, h, id, pixel, g, img))
+        let at = self
+            .at
+            .iter()
+            .filter(|&(&(_, px), _)| px == pixel)
+            .map(|(&(id, _), &arr)| (id, arr));
+        winner_among(w, h, pixel, g, img, at)
     }
+}
+
+/// The object whose colour a pixel shows (claim 8) among the arrivals
+/// listed at it, `at` (object and arrival): the shown house's own objects
+/// first, latest arrival first; then the others, earliest arrival first; the
+/// first that passes the draw-time tests.
+fn winner_among(
+    w: &World,
+    h: HouseId,
+    pixel: (i32, i32),
+    g: &Grid,
+    img: &Image,
+    at: impl Iterator<Item = (ObjectId, (i32, usize))>,
+) -> Option<ObjectId> {
+    let mut own = Vec::new();
+    let mut other = Vec::new();
+    for (id, arr) in at {
+        if w.obj(id).is_some_and(|o| o.owner == Some(h)) {
+            own.push((arr, id));
+        } else {
+            other.push((arr, id));
+        }
+    }
+    // spec: S-0410 claim 8 (own objects first, the latest arrival first; then the others, the earliest first)
+    own.sort_by(|a, b| b.cmp(a));
+    other.sort();
+    own.into_iter()
+        .chain(other)
+        .map(|(_, id)| id)
+        .find(|&id| shown(w, h, id, pixel, g, img))
 }
 
 /// Inputs of the radar map that are not game state: house colours, the
@@ -744,17 +807,16 @@ fn compose_by(
 ) -> Vec<RadarColour> {
     let h = view.house;
     let gaps = friendly_gap_cells(w, h);
-    // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner)
-    let listed: std::collections::BTreeSet<(i32, i32)> =
-        arrivals.at.keys().map(|&(_, px)| px).collect();
+    // spec: S-0410 claim 8 (only a pixel some object is listed at can have a winner, among the objects listed there)
+    let listed = arrivals.by_pixel();
     let mut out = Vec::with_capacity(terrain.len());
     for q in 0..img.height {
         for p in 0..img.width {
             let i = (q * img.width + p) as usize;
             let t = terrain.get(i).copied().unwrap_or([0, 0, 0]);
             // spec: S-0410 claim 6 (the colour of the first object shown at the pixel)
-            if listed.contains(&(p, q))
-                && let Some(id) = arrivals.winner(w, h, (p, q), g, img)
+            if let Some(at) = listed.get(&(p, q))
+                && let Some(id) = winner_among(w, h, (p, q), g, img, at.iter().copied())
             {
                 let o = w.obj(id);
                 // spec: S-0410 claim 8 and S-0516 claim 38 (a disguised unit: its owner's colour when the owner allies H, otherwise its disguise house's, the neutral fallback when the disguise has no house)
@@ -908,3 +970,6 @@ impl Zoom {
         false
     }
 }
+
+#[cfg(test)]
+mod tests;
