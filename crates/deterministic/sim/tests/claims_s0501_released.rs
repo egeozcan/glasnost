@@ -1,5 +1,6 @@
 //! An aircraft released above its pad (S-0501 claim 48, revision 52,
-//! answering Q-1841), docking by landing that moves only horizontally
+//! answering Q-1841; its object-present flag by claim 48 (e), revision 55,
+//! answering Q-1875), docking by landing that moves only horizontally
 //! (claim 24) and pad guidance by the docking position's horizontal
 //! location (claim 40), on synthetic data through the real order and tick
 //! path. The scenario shapes follow AC30 part k and AC14.
@@ -22,9 +23,11 @@ use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 const ALPHA: HouseId = HouseId(0);
 
 /// The pads: (name, docking displacement).
-const PADS: [(&str, [i32; 3]); 4] = [
+const PADS: [(&str, [i32; 3]); 6] = [
     ("HIPAD", [0, 0, 100]),
     ("LOWPAD", [0, 0, 15]),
+    ("TENPAD", [0, 0, 10]),
+    ("MIDPAD", [128, 128, 10]),
     ("OFFPAD", [64, 64, 0]),
     ("FLATPAD", [0, 0, 0]),
 ];
@@ -57,14 +60,19 @@ fn flyer(weapon: Option<&str>) -> UnitType {
 
 /// The rules: the economy ruleset with the combat ruleset's weapons and
 /// warheads, and
-/// - the pads of [`PADS`], each an aircraft factory, helipad and reload pad
+/// - the pads of [`PADS`] (TENPAD is AC30 part k (7)'s second pad; MIDPAD
+///   docks at 10 leptons above the middle of a foundation cell, so that a
+///   destination straight ahead can be a cell whose centre it passes over), each an aircraft factory, helipad and reload pad
 ///   with one docking place and the given displacement;
 /// - JET (armed with Agm, 2 rounds, pad-bound), as AC30 part k's type;
 /// - NEAR (JET with a slowdown distance of 2000 leptons, AC30 part k (4));
 /// - SCOUT (unarmed, not pad-bound), the control that lands on open ground;
 /// - SLOW (JET with a speed of 5 leptons per tick, so that a forward step
 ///   at a speed fraction below 0.2 is 0 leptons and only the docking
-///   approach moves it horizontally while it lands, claim 4).
+///   approach moves it horizontally while it lands, claim 4);
+/// - DRIFT (SCOUT with a slowdown distance of 2000 leptons: a target
+///   fraction below 1 near its destination, and a landing at the trigger
+///   since it is not pad-bound).
 fn rules() -> Ruleset {
     let mut r = econ_common::ruleset();
     let c = testkit::combat_ruleset();
@@ -98,11 +106,14 @@ fn rules() -> Ruleset {
     near.slowdown_distance = Some(2000);
     let mut slow = jet.clone();
     slow.speed = Some(5);
+    let mut drift = flyer(None);
+    drift.slowdown_distance = Some(2000);
     for (n, u) in [
         ("JET", jet),
         ("NEAR", near),
         ("SCOUT", flyer(None)),
         ("SLOW", slow),
+        ("DRIFT", drift),
     ] {
         push(&mut r, "aircraft", n);
         r.sim.aircraft.insert(n.into(), u);
@@ -213,18 +224,37 @@ fn built_rally(
     name: &str,
     rally: Option<glasnost_map::CellXY>,
 ) -> (World, ObjectId, ObjectId) {
+    built_watch(r, pad, name, rally, |_, _| {}, |_, _| {})
+}
+
+/// [`built_rally`] with `prep` run once on the world and the pad before the
+/// build order, and `watch` on every tick before the release.
+fn built_watch(
+    r: &Ruleset,
+    pad: &str,
+    name: &str,
+    rally: Option<glasnost_map::CellXY>,
+    prep: impl FnOnce(&mut World, ObjectId),
+    mut watch: impl FnMut(&World, ObjectId),
+) -> (World, ObjectId, ObjectId) {
     let mut w = game(r);
     let k = building(&mut w, pad, 0, 0, 0);
     w.obj_mut(k).unwrap().guard_spot = rally.map(Target::Cell);
+    prep(&mut w, k);
     ready(&mut w);
     set_credits(&mut w, 0, 100_000);
     let what = t(&w, Kind::Aircraft, name);
     assert!(issue(&mut w, 0, Order::Build { what }));
     let ti = what.index;
     let found = run_until(&mut w, 3000, |w| {
-        w.objects
+        let out = w
+            .objects
             .values()
-            .any(|o| o.kind == Kind::Aircraft && o.type_index == ti && o.on_map)
+            .any(|o| o.kind == Kind::Aircraft && o.type_index == ti && o.on_map);
+        if !out {
+            watch(w, k);
+        }
+        out
     });
     assert!(found, "the aircraft is built");
     let a = w
@@ -352,20 +382,32 @@ fn claim_48_quirk_off_settles_at_the_landing_height() {
     assert!(s.ground && !s.released && !air::ground_filed(&w, a));
     assert!(listed(&w, a), "listed in its cell layer");
     assert!(!tracked(&w, a));
+    // spec: S-0501 claim 48 (e) and Edge cases (off: it holds the object-present flag in the ground record of the docking position's cell, as an aircraft docked by landing does, and in no other recorded cell)
+    let dock = p.cell();
+    assert_eq!(st(&w, a).mark, Some(dock), "{}", describe(&w, a));
+    assert_eq!(flags(&w, dock), (true, false));
+    assert_flags_only(&w, &around(&w, k), Some(dock));
     testkit::run(&mut w, 20);
+    assert_eq!(flags(&w, dock), (true, false), "kept at rest");
     assert!(blast_under(&mut w, a), "area damage reaches it");
     move_to(&mut w, a, testkit::mid(SIZE, 10, 0));
     let off = run_until(&mut w, 50, |w| st(w, a).taking_off);
     assert!(off, "an ordinary take-off: {}", describe(&w, a));
     assert!(tracked(&w, a), "tracked from the take-off (claim 47 (a))");
     assert!(!air::ground_filed(&w, a));
+    // spec: S-0501 claim 44 (the take-off clears its flag)
+    step(&mut w);
+    assert_flags_only(&w, &around(&w, k), None);
 }
 
 // spec: S-0501 Terms and claim 8 (the take-off test reads height: an aircraft at height 0 that is neither settled nor landing is on the ground, and a new destination makes it take off)
 #[test]
 fn claim_8_take_off_test_reads_height() {
     let r = rules();
-    let (mut w, _k, a) = built_at(&r, "FLATPAD", "SCOUT");
+    let (mut w, k, a) = built_at(&r, "FLATPAD", "SCOUT");
+    // spec: S-0501 claim 44 (released at its docking height 0, outside claim 48: it rests on its pad holding its flag in its cell's ground record)
+    let c = pos(&w, a).cell();
+    assert_flags_only(&w, &around(&w, k), Some(c));
     testkit::run(&mut w, 10);
     assert_eq!(air::height(&w, a), 0, "{}", describe(&w, a));
     move_to(&mut w, a, testkit::mid(SIZE, 10, 0));
@@ -679,4 +721,283 @@ fn claim_48_map_wide_ground_pass_takes_the_released_aircraft() {
     w.obj_mut(a).unwrap().air.as_mut().unwrap().ground_filed = false;
     let found = search(&mut w, hunter, SearchKind::MapWide, SearchContext::Hunt);
     assert_eq!(found, None, "{}", describe(&w, a));
+}
+
+// ---------------------------------------------------------------------------
+// Claim 48 (e): the object-present flag (revision 55, Q-1875), AC30 part k
+// (6) and (7). The recorder reads, without writing, the flag of the ground
+// and the deck record and both occupant lists.
+
+/// The object-present flags (S-0209 claim 1) of `c`'s ground and deck
+/// records.
+fn flags(w: &World, c: glasnost_map::CellXY) -> (bool, bool) {
+    let f = |l| w.cells.occ(c, l).is_some_and(|o| o.others > 0);
+    (f(Layer::Ground), f(Layer::Deck))
+}
+
+/// The recorded cells: the pad's foundation and every cell next to it (a
+/// square of 7 by 7 cells around the pad's position, which covers its 2 by
+/// 2 foundation and its neighbours whatever the anchor).
+fn around(w: &World, k: ObjectId) -> Vec<glasnost_map::CellXY> {
+    let c = pos(w, k).cell();
+    (-3..=3)
+        .flat_map(|dy| (-3..=3).map(move |dx| glasnost_map::CellXY::new(c.x + dx, c.y + dy)))
+        .collect()
+}
+
+/// Every cell of `cells` has both object-present flags clear, except
+/// `only`, whose ground flag is set and whose deck flag is clear.
+fn assert_flags_only(
+    w: &World,
+    cells: &[glasnost_map::CellXY],
+    only: Option<glasnost_map::CellXY>,
+) {
+    for &c in cells.iter().chain(only.iter()) {
+        let want = (only == Some(c), false);
+        assert_eq!(flags(w, c), want, "t={} cell {c:?}", w.tick);
+    }
+}
+
+/// `a` is in neither occupant list of any cell of `cells`.
+fn assert_unlisted(w: &World, cells: &[glasnost_map::CellXY], a: ObjectId) {
+    for &c in cells {
+        for l in [Layer::Ground, Layer::Deck] {
+            assert!(!w.cells.list(c, l).contains(&a), "t={} {c:?} {l:?}", w.tick);
+        }
+    }
+}
+
+// spec: S-0501 claim 48 (e) and AC30 part k (6) (from the release tick on, while it rests and through the first three movement updates of a far move order, both object-present flags are clear and the aircraft is in neither list in every cell of the pad's foundation and next to it and in each cell it is in: no flag of its ground placement is kept, on the docking position's cell or another)
+#[test]
+fn claim_48_e_no_flag_from_the_release_on() {
+    let r = rules();
+    let (mut w, k, a) = built_watch(
+        &r,
+        "HIPAD",
+        "JET",
+        None,
+        |_, _| {},
+        |w, k| {
+            // The tick before the release, and every one before it.
+            assert_flags_only(w, &around(w, k), None);
+        },
+    );
+    let mut cells = around(&w, k);
+    let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
+    assert!(
+        cells.contains(&p.cell()),
+        "the docking position's cell is recorded"
+    );
+    let check = |w: &World, cells: &mut Vec<glasnost_map::CellXY>| {
+        let c = pos(w, a).cell();
+        if !cells.contains(&c) {
+            cells.push(c);
+        }
+        assert_flags_only(w, cells, None);
+        assert_unlisted(w, cells, a);
+        assert_eq!(st(w, a).mark, None, "{}", describe(w, a));
+    };
+    // The release tick, then at rest.
+    check(&w, &mut cells);
+    for _ in 0..20 {
+        step(&mut w);
+        check(&w, &mut cells);
+    }
+    assert_resting(&w, k, a, 100);
+    // The move order, and its first three movement updates.
+    move_to(&mut w, a, testkit::mid(SIZE, 10, 0));
+    check(&w, &mut cells);
+    let rest = pos(&w, a);
+    let mut updates = 0;
+    for _ in 0..30 {
+        step(&mut w);
+        check(&w, &mut cells);
+        if updates > 0 || pos(&w, a) != rest {
+            updates += 1;
+        }
+        if updates == 3 {
+            break;
+        }
+    }
+    assert_eq!(updates, 3, "{}", describe(&w, a));
+    assert!(air::height(&w, a) > 0, "{}", describe(&w, a));
+}
+
+// spec: S-0501 claim 48 (e) (after a release, the ground record of the cell holding the docking position's horizontal location has no object-present flag, even if another object had contributed one to that record before the release: S-0209 claim 1, the flags are not counts). The other contribution is written straight into the record before the build, standing for another object's; it is still set on every tick before the release
+#[test]
+fn claim_48_e_release_clears_the_docking_cells_ground_flag() {
+    let r = rules();
+    let dock = std::cell::Cell::new(None);
+    let (w, k, a) = built_watch(
+        &r,
+        "HIPAD",
+        "JET",
+        None,
+        |w, k| {
+            let c = glasnost_sim::econ::release::pad_position_at(w, k, 0).cell();
+            w.cells.occ_mut(c, Layer::Ground).unwrap().others = 1;
+            dock.set(Some(c));
+        },
+        |w, _| assert_eq!(flags(w, dock.get().unwrap()), (true, false), "t={}", w.tick),
+    );
+    let (p, _) = glasnost_sim::econ::release::pad_position(&w, k, a);
+    assert_eq!(Some(p.cell()), dock.get());
+    assert_eq!(flags(&w, p.cell()), (false, false), "{}", describe(&w, a));
+    assert_resting(&w, k, a, 100);
+}
+
+/// AC30 part k (7)'s per-update record of the low release: the height,
+/// the cell, and whether it is listed in that cell's ground layer.
+fn low_update(
+    w: &World,
+    a: ObjectId,
+    cells: &mut Vec<glasnost_map::CellXY>,
+) -> (i32, glasnost_map::CellXY, bool) {
+    let c = pos(w, a).cell();
+    if !cells.contains(&c) {
+        cells.push(c);
+    }
+    (
+        air::height(w, a),
+        c,
+        w.cells.list(c, Layer::Ground).contains(&a),
+    )
+}
+
+// spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (a) (the low release at 10 leptons with a far move order: at the end of its first movement update at height 0, listed in its cell's ground layer and holding the ground flag there and in no other recorded cell; at the end of its second, which climbs with a target fraction of 1, a positive height and no flag and no listing in any recorded cell, as after claim 44's take-off)
+#[test]
+fn claim_48_e_low_release_climbs_and_clears() {
+    let r = rules();
+    let (mut w, k, a) = built_at(&r, "TENPAD", "JET");
+    assert_resting(&w, k, a, 10);
+    let mut cells = around(&w, k);
+    assert_flags_only(&w, &cells, None);
+    testkit::run(&mut w, 10);
+    assert_flags_only(&w, &cells, None);
+    let rest = pos(&w, a);
+    move_to(&mut w, a, testkit::mid(SIZE, 10, 0));
+    let moved = run_until(&mut w, 20, |w| pos(w, a) != rest);
+    assert!(moved, "{}", describe(&w, a));
+    let (h, c, listed) = low_update(&w, a, &mut cells);
+    assert_eq!(h, 0, "{}", describe(&w, a));
+    assert!(listed, "in its cell's ground layer: {}", describe(&w, a));
+    assert_flags_only(&w, &cells, Some(c));
+    step(&mut w);
+    let (h, _, _) = low_update(&w, a, &mut cells);
+    assert!(h > 0, "it climbs: {}", describe(&w, a));
+    assert_flags_only(&w, &cells, None);
+    assert_unlisted(&w, &cells, a);
+    assert_eq!(st(&w, a).mark, None);
+}
+
+/// The cell `dist` leptons straight ahead of `a` along its body facing.
+fn ahead(w: &World, a: ObjectId, dist: i32) -> glasnost_map::CellXY {
+    let o = w.obj(a).unwrap();
+    let (x, y) = glasnost_sim::walk::step_point(
+        o.pos.x,
+        o.pos.y,
+        o.body.value(w.tick),
+        dist,
+        true,
+        w.rules().mode,
+    );
+    Pos::new(x, y, 0).cell()
+}
+
+/// One sample per movement update.
+type Update = (i32, glasnost_map::CellXY, bool);
+
+/// A low release of DRIFT at `pad` given a person's move order to `dest`
+/// after 10 ticks at rest. From its first movement update on, while `go`
+/// holds (at most 400 updates), it samples each update with
+/// [`low_update`] and checks the recorder: at height 0 the flag is in the
+/// cell it is in and in no other recorded cell; above it, in none. Returns
+/// the world, the aircraft, the recorded cells and the samples.
+fn low_run(
+    pad: &str,
+    dest: impl Fn(&World, ObjectId) -> glasnost_map::CellXY,
+    mut go: impl FnMut(&World, ObjectId) -> bool,
+) -> (World, ObjectId, Vec<glasnost_map::CellXY>, Vec<Update>) {
+    let r = rules();
+    let (mut w, k, a) = built_at(&r, pad, "DRIFT");
+    assert_resting(&w, k, a, 10);
+    testkit::run(&mut w, 10);
+    let p = pos(&w, a);
+    let to = dest(&w, a);
+    let mut cells = around(&w, k);
+    move_to(&mut w, a, to);
+    let moved = run_until(&mut w, 20, |w| pos(w, a) != p);
+    assert!(moved, "{}", describe(&w, a));
+    let mut samples = Vec::new();
+    while go(&w, a) && samples.len() < 400 {
+        let s = low_update(&w, a, &mut cells);
+        assert_flags_only(&w, &cells, (s.0 == 0).then_some(s.1));
+        samples.push(s);
+        step(&mut w);
+    }
+    (w, a, cells, samples)
+}
+
+// spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (b) (the low release at 10 leptons with a near move order, a target fraction below 1: at height 0 at the end of every movement update until its landing starts, listed in the ground layer of the cell it is in at that tick and holding the ground flag there and in no other recorded cell, so that a cell it has left is clear; then it holds the flag at the end of its touchdown, in the cell that then holds it). The destination lies 640 leptons straight ahead along its body facing, since claim 42's guidance does not steer it at height 0 (Q-1905), and MIDPAD releases it above a cell's middle, so that it passes over the destination cell's centre and claim 6's trigger starts its landing near it; the run crosses at least one cell boundary at height 0
+#[test]
+fn claim_48_e_low_release_at_height_0_carries_its_flag() {
+    let (mut w, a, mut cells, samples) = low_run(
+        "MIDPAD",
+        |w, a| ahead(w, a, 640),
+        |w, a| !st(w, a).landing && !st(w, a).ground,
+    );
+    assert!(
+        samples.len() < 400,
+        "its landing starts: {}",
+        describe(&w, a)
+    );
+    for (u, &(h, _, listed)) in samples.iter().enumerate() {
+        assert_eq!(h, 0, "update {u}: {samples:?}");
+        assert!(listed, "update {u}: in its cell's ground layer");
+    }
+    let mut seen: Vec<_> = samples.iter().map(|s| s.1).collect();
+    seen.dedup();
+    assert!(seen.len() > 1, "it crosses a cell at height 0: {seen:?}");
+    // spec: S-0501 claim 48 (e) (it next holds the flag at the end of its touchdown, in the cell that then holds it)
+    let down = run_until(&mut w, 400, |w| st(w, a).ground);
+    assert!(down, "{}", describe(&w, a));
+    let (h, c, _) = low_update(&w, a, &mut cells);
+    assert_eq!(h, 0);
+    assert_flags_only(&w, &cells, Some(c));
+}
+
+// spec: S-0501 claim 48 (b), (c) and (e) and claim 42 (interim of Q-1905: guidance only above the terrain, so the low release at height 0 with a destination off its heading goes straight on along its body facing; once claim 5 makes its target fraction 1 it climbs in that update by (b)'s third case, and at the end of that update it holds no flag and is in neither list). Until then the flag goes with it from cell to cell at height 0
+#[test]
+fn claim_48_e_low_release_off_its_heading_goes_straight_on() {
+    let (w, a, cells, samples) = low_run(
+        "TENPAD",
+        |w, a| {
+            let p = pos(w, a);
+            let c = p.cell();
+            // A destination 512 to 767 leptons away and not straight ahead.
+            [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .iter()
+                .flat_map(|&(ux, uy)| (1..4).map(move |d| (ux * d, uy * d)))
+                .map(|(dx, dy)| glasnost_map::CellXY::new(c.x + dx, c.y + dy))
+                .find(|&q| {
+                    let m = Pos::centre(q, 0);
+                    let d = (m.x - p.x).abs().max((m.y - p.y).abs());
+                    (512..768).contains(&d) && (1..4).all(|n| q != ahead(w, a, n * 256))
+                })
+                .expect("a destination off its heading")
+        },
+        |w, a| air::height(w, a) == 0,
+    );
+    assert!(samples.len() < 400, "it climbs: {}", describe(&w, a));
+    let mut seen: Vec<_> = samples.iter().map(|s| s.1).collect();
+    seen.dedup();
+    assert!(seen.len() > 1, "it crosses a cell at height 0: {seen:?}");
+    assert!(
+        air::height(&w, a) > 0 && !st(&w, a).landing,
+        "{}",
+        describe(&w, a)
+    );
+    assert_flags_only(&w, &cells, None);
+    assert_unlisted(&w, &cells, a);
+    assert_eq!(st(&w, a).mark, None);
 }

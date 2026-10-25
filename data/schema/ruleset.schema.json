@@ -8623,7 +8623,7 @@
           "default": true
         },
         "aircraft_released_above_pad": {
-          "description": "A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, and it leaves by an ordinary take-off.",
+          "description": "A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, holding the object-present flag in that cell, and it leaves by an ordinary take-off.",
           "type": "boolean",
           "default": true
         },

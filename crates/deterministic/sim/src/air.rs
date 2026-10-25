@@ -762,10 +762,11 @@ fn set_mark(w: &mut World, id: ObjectId) {
 ///
 /// With `quirks.aircraft_released_above_pad` on, the height is `p`'s:
 /// where that is above the terrain, the aircraft rests in the air there,
-/// not settled, in neither cell layer, not tracked and still filed in the
-/// ground render layer (claim 48). At or below the terrain it is settled
-/// there. Off, it is settled at the landing height above the terrain at
-/// `p`'s horizontal location, like an aircraft docked by landing.
+/// not settled, in neither cell layer, not tracked, still filed in the
+/// ground render layer and holding the object-present flag in no cell
+/// (claim 48). At or below the terrain it is settled there. Off, it is
+/// settled at the landing height above the terrain at `p`'s horizontal
+/// location, holding its flag there, like an aircraft docked by landing.
 pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
     if !is_aircraft(w, id) {
         return;
@@ -800,10 +801,15 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
         // spec: S-0501 claim 48 (a) (its ground placement filed it in the ground render layer and the release raises it without a re-file, S-0102 claim 4)
         a.ground_filed = raised;
     }
-    // Interim (Q-1875): the released aircraft keeps the object-present
-    // mark of its ground placement, moved to its docking cell, until its
-    // first movement update toward a destination.
-    set_mark(w, id);
+    if raised {
+        // spec: S-0501 claim 48 (e) (from the release tick on, resting above its pad, it holds the object-present flag in neither record of any cell: the clear_mark above took its ground placement's flag and none is set; the ground record of the cell holding the docking position's horizontal location ends with no object-present flag, even if another object had contributed one before the release, S-0209 claim 1: the flags are not counts)
+        if let Some(rec) = w.cells.occ_mut(p.cell(), Layer::Ground) {
+            rec.others = 0;
+        }
+    } else {
+        // spec: S-0501 claim 44 and claim 48 (e) and Edge cases (released at or below the terrain, or with quirks.aircraft_released_above_pad off: it rests at the landing height in its cell layer, holding its flag in that cell like an aircraft docked by landing)
+        set_mark(w, id);
+    }
     // spec: S-0209 claim 13 (a positive listing height keeps it out of both cell layers: claim 48 (a))
     sync_listing(w, id);
     // spec: S-0501 claim 47 (b) (a landed aircraft resting on a pad is never tracked) and claim 48 (a) (nothing has made the released aircraft a tracked flying object)
@@ -1227,6 +1233,18 @@ fn landing_cell_ok(w: &World, id: ObjectId, c: CellXY, wanted: Target) -> bool {
         return false;
     }
     let t = ty(w, id).unwrap_or_default();
+    // spec: S-0501 F7 (the found object may be the lander itself: claim 48 (c)'s low release is listed in its cell's ground layer at height 0, and claim 48 (e) gives it its flag there, when its landing starts; finding itself accepts the cell)
+    let found = w.cells.list(c, Layer::Ground).iter().copied().find(|&x| {
+        w.obj(x).is_some_and(|ob| {
+            matches!(
+                ob.kind,
+                Kind::Infantry | Kind::Vehicle | Kind::Aircraft | Kind::Building
+            )
+        })
+    });
+    if found == Some(id) {
+        return true;
+    }
     match f7_found(w, id, c) {
         Some(x) => {
             // spec: S-0501 F7 (the lander's own contact is accepted)
@@ -1666,15 +1684,41 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         .filter(|o| is_aircraft(w, id) && o.on_map && !crate::combat::damage::dead(o))
         .and_then(|o| o.air.as_ref())
         .is_some_and(|a| a.landing);
+    // Claim 48 (e) governs an aircraft that a factory release left above its pad, through the update that ends that state.
+    let released = st_opt(w, id).is_some_and(|a| a.released);
     let moved = tick_flight(w, id);
     // spec: S-0209 claim 13 (taking off removes the listing when the listing height becomes positive, and landing adds it again)
     sync_listing(w, id);
+    if released {
+        released_mark(w, id);
+    }
     let landing = landing || st_opt(w, id).is_some_and(|a| a.landing);
     // spec: S-0102 claim 4 (every movement update of a landing re-files, from the update that starts it to the one that ends it, while the aircraft has strength left; a type that cannot land is never re-filed by landing)
     if landing && landable(w, id) && w.obj(id).is_some_and(|o| o.on_map) {
         crate::combat::effects::layer_refile(w, id);
     }
     moved
+}
+
+/// The object-present flag of a released aircraft at the end of a movement
+/// update (S-0501 claim 48 (e)): above height 0 it holds none; at height 0
+/// it holds one in the cell that then holds it (the ground record in the
+/// low release; claim 44 chooses the record), and in no other cell, so a
+/// cell it has left no longer holds its flag.
+fn released_mark(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if !o.on_map || crate::combat::damage::dead(o) {
+        return;
+    }
+    let cell = o.pos.cell();
+    // spec: S-0501 claim 48 (e) (while it is above height 0, resting or leaving, it holds no flag; it next holds one at the end of a movement update that leaves it at height 0, in the cell that then holds it: at the end of its touchdown, or in the low release; a climb in its second update leaves it with no flag, as after claim 44's take-off)
+    let want = (height(w, id) <= 0).then_some(cell);
+    if st(w, id).mark != want {
+        clear_mark(w, id);
+    }
+    if want.is_some() {
+        set_mark(w, id);
+    }
 }
 
 /// Whether the aircraft's type is landable (S-0501 Terms).
@@ -1790,9 +1834,6 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             }
             return false;
         }
-        // Interim (Q-1875): its first movement update toward a destination clears the object-present mark of its ground placement.
-        clear_mark(w, id);
-        a.mark = None;
     }
     // The held height in ordinary flight (claim 6).
     let ordinary_held = |a: &AirState| {
@@ -1956,6 +1997,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
                 // spec: S-0501 claim 43 (a touchdown refused under claim 7 clears the mark as take-off restarts)
                 s.deck = false;
             }
+            // spec: S-0501 claim 48 (e) and claim 44 (above height 0 it holds no object-present flag: a low release that carried its flag into the landing loses it as take-off restarts; any other lander has none)
+            clear_mark(w, id);
             // spec: S-0102 claim 4 (a refused landing cell starts a take-off in that update, which re-files it; the landing update re-files it too, in tick)
         }
         return w.obj(id).is_some_and(|ob| ob.pos != start);
