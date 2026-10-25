@@ -60,6 +60,7 @@ use glasnost_sim::combat::{check, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
 use glasnost_sim::orders::Order;
+use glasnost_sim::probe::{Phase, Probe};
 use glasnost_sim::regions::{self, Reach};
 use glasnost_sim::rules::{Behaviour, FactoryKind, Kind, Locomotor};
 use glasnost_sim::targeting;
@@ -1290,6 +1291,20 @@ impl Script {
 
     /// The orders of one think.
     pub fn think(&mut self, w: &World) -> Vec<Order> {
+        self.think_with(w, &mut ())
+    }
+
+    /// [`Script::think`], telling `p` which part of the plan runs (the
+    /// tools' benchmark, `glasnost_sim::probe`, M8 C4 part 6); `p` reads
+    /// nothing and changes nothing.
+    pub fn think_with<P: Probe>(&mut self, w: &World, p: &mut P) -> Vec<Order> {
+        let on = p.on();
+        let mut mark = |part: &'static str| {
+            if on {
+                p.mark(Phase::Part(part));
+            }
+        };
+        mark("ai:script:watch");
         let mut out = Vec::new();
         let house = self.house;
         let own = self.own(w);
@@ -1300,6 +1315,7 @@ impl Script {
         self.sell_when_broke(w, &mut out);
         let selling = self.watch.selling;
 
+        mark("ai:script:deploy");
         // 1. Deploy the MCV.
         let has_yard = own
             .iter()
@@ -1323,6 +1339,7 @@ impl Script {
         // (S-0404 claim 7, S-0417 claim 14).
         self.rally_points(w, &own, &mut out);
 
+        mark("ai:script:buildings");
         // 2 and 3. Buildings: a done building is placed first; otherwise the
         // next wanted one is ordered.
         let done = w.econ.lines.lines.iter().find_map(|l| {
@@ -1382,6 +1399,7 @@ impl Script {
             }
         }
 
+        mark("ai:script:harvesters");
         // 4. Harvesters.
         let harvesters = self.of_role(w, Role::Harvester);
         let refineries = self.of_role(w, Role::Refinery);
@@ -1433,6 +1451,7 @@ impl Script {
             self.build(w, Role::Harvester, &mut out);
         }
 
+        mark("ai:script:army_types");
         // The army: one type round-robin per kind of factory, once the
         // plan's harvesters are kept (while a harvester can still be had:
         // a harvester type to build now, or a vehicle factory to build
@@ -1509,6 +1528,7 @@ impl Script {
             }
         }
 
+        mark("ai:script:army_units");
         // 5. Army units. An idle aircraft with ammunition left (on its pad,
         // rearmed) attacks the nearest seen enemy; it flies back to its pad
         // by itself (S-0501 claims 21 to 30).
@@ -1578,6 +1598,7 @@ impl Script {
                 waiting.push(id);
             }
         }
+        mark("ai:script:waves");
         let since = *self.waiting_since.get_or_insert(w.tick);
         if waiting.is_empty() {
             self.waiting_since = None;
