@@ -621,6 +621,10 @@ pub struct Arrivals {
     pub at: BTreeMap<(ObjectId, (i32, i32)), (i32, usize)>,
 }
 
+/// Each pixel's listed arrivals (object and arrival), in the order of
+/// [`Arrivals::at`].
+type ByPixel = BTreeMap<(i32, i32), Vec<(ObjectId, (i32, usize))>>;
+
 impl Arrivals {
     /// Brings the arrivals up to date for house `h`.
     pub fn observe(&mut self, w: &World, h: HouseId, g: &Grid, img: &Image) {
@@ -643,8 +647,8 @@ impl Arrivals {
 
     /// The arrivals listed at each pixel (object and arrival), each pixel's
     /// in the order of [`Arrivals::at`].
-    fn by_pixel(&self) -> BTreeMap<(i32, i32), Vec<(ObjectId, (i32, usize))>> {
-        let mut out: BTreeMap<(i32, i32), Vec<_>> = BTreeMap::new();
+    fn by_pixel(&self) -> ByPixel {
+        let mut out = ByPixel::new();
         for (&(id, px), &arr) in &self.at {
             out.entry(px).or_default().push((id, arr));
         }
