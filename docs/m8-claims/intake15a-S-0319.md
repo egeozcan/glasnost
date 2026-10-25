@@ -116,13 +116,13 @@ synthetic map), `bounce::tests` (2), `convert` `sim::tests::bouncing_animation_f
 ## Lane (by-eye check for the lead)
 
 The `debris-left` scene of `crates/app/tests/m7b_lane.rs` (play note 13) on the real install, run
-on main 707b61f (before) and on this step (after); output under `local-lane/m8/a3-15a/`
+on main 707b61f (before) and on this step rebased onto main b236238 (after); output under `local-lane/m8/a3-15a/`
 (`debris-left-before`, `debris-left-after`). It kills 14 enemy objects, 6 of them vehicles, and
 counts what stays.
 
 | ticks after the kills | bouncing animations before | after |
 |---|---|---|
-| +50 | 10 | 3 |
+| +50 | 10 | 4 |
 | +100 | 10 | 0 |
 | +300 | 10 | 0 |
 | +1000 | 10 | 0 |
