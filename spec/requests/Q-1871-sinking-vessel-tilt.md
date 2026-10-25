@@ -1,9 +1,9 @@
 ---
 id: Q-1871
 title: Does a sinking vessel's body tilt (list, pitch or roll) as it goes down, and how?
-status: open
+status: answered
 related: [S-0504, S-0106, S-0105, S-0312]
-answered-by: []
+answered-by: [S-0504]
 ---
 
 ## Need
