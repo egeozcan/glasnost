@@ -1527,6 +1527,7 @@ impl Client {
             SetupHit::Credits(_)
             | SetupHit::Units(_)
             | SetupHit::Toggle(_)
+            | SetupHit::Fixes
             | SetupHit::Speed(_) => {
                 setup.apply(&hit, &install.setup, &maps);
                 ToRelay::Edit(Edit::Game {
@@ -1534,6 +1535,7 @@ impl Client {
                     units: setup.units,
                     flags: setup.flags,
                     speed: setup.speed,
+                    fixes: setup.fixes,
                 })
             }
             SetupHit::Back => return None,

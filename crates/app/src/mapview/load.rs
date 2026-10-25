@@ -9,6 +9,7 @@ use glasnost_convert::game::GameInputs;
 use glasnost_convert::map::to_vfs_theater;
 use glasnost_convert::theater::Catalogue;
 use glasnost_fmt::pal::Palette6;
+use glasnost_rules::layers::Layers;
 use std::sync::Arc;
 
 use glasnost_map::Map;
@@ -222,12 +223,24 @@ pub async fn load(
     play: bool,
     canvas: VoxelCanvas,
 ) -> Loaded {
-    load_with(vfs, bytes, origin, options, play, canvas, None).await
+    load_with(
+        vfs,
+        bytes,
+        origin,
+        options,
+        play,
+        canvas,
+        None,
+        Layers::REFERENCE,
+    )
+    .await
 }
 
 /// [`load`] with the game's setup made by `make` from the map's typed
 /// rules (the game client's skirmish); `options.game` should then be
-/// [`build::GameMode::Skirmish`] so the skirmish files are read.
+/// [`build::GameMode::Skirmish`] so the skirmish files are read. The rules
+/// are resolved with our own patch layers `layers` (M8 step C7).
+#[allow(clippy::too_many_arguments)]
 pub async fn load_with(
     vfs: &mut Vfs,
     bytes: Vec<u8>,
@@ -236,6 +249,7 @@ pub async fn load_with(
     play: bool,
     canvas: VoxelCanvas,
     make: Option<live::MakeSetup<'_>>,
+    layers: Layers,
 ) -> Loaded {
     let map_ini = glasnost_ini::Document::parse(&bytes, Default::default(), &mut Vec::new());
     // spec: S-0703 Import mapping ([Basic] Theme, the map theme; the music player cuts and matches it); S-0009 Import mapping ([Basic] Theme: read and kept as map data, absent: no map theme)
@@ -248,7 +262,7 @@ pub async fn load_with(
         catalogue,
         tiles,
         mut problems,
-    } = glasnost_convert::game::load(vfs, bytes, origin).await;
+    } = glasnost_convert::game::load(vfs, bytes, origin, layers).await;
     let theater: Theater = to_vfs_theater(map.theater);
     let pal = |b: Option<Vec<u8>>| b.and_then(|b| Palette6::parse(&b).ok());
     // spec: S-0103 State and ordering (program start: the snow unit palette and the anim palette)

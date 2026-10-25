@@ -542,6 +542,7 @@ impl Room {
                 units,
                 flags,
                 speed,
+                fixes,
             } => {
                 if !host {
                     return Err(Refusal::NotHost);
@@ -551,6 +552,7 @@ impl Room {
                 self.setup.units = *units;
                 self.setup.flags = *flags;
                 self.setup.speed = *speed;
+                self.setup.fixes = *fixes;
             }
         }
         self.unready_all();

@@ -637,7 +637,13 @@ async fn lane_cases(dir: &Path, most: usize) -> Vec<(usize, Case)> {
             continue;
         };
         let map_id = glasnost_net::start::content_hash(&bytes);
-        let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
+        let inputs = glasnost_convert::game::load(
+            &mut vfs,
+            bytes,
+            "install".into(),
+            glasnost_rules::layers::Layers::REFERENCE,
+        )
+        .await;
         let (Ok(resolved), Some(tiles)) = (inputs.resolved, inputs.tiles) else {
             continue;
         };

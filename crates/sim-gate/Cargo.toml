@@ -13,10 +13,8 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 glasnost-ai.workspace = true
 glasnost-map.workspace = true
+glasnost-rules.workspace = true
 glasnost-sim.workspace = true
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-glasnost-rules.workspace = true

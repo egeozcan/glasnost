@@ -66,6 +66,8 @@ fn start(c: &mut Client, map: usize, seed: u32, ai: bool) -> Result<(), String> 
     let maps: Vec<MapEntry> = install.maps.iter().map(|(_, m)| m.clone()).collect();
     let mut setup = Setup::new(&install.setup);
     setup.map = map;
+    // The reference ruleset, not our own fixes layer (M8 step C7).
+    setup.fixes = false;
     for (i, slot) in setup.slots.iter_mut().enumerate() {
         if i < 4 {
             slot.kind = if ai { SlotKind::Ai } else { SlotKind::Human };

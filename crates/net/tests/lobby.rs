@@ -44,6 +44,7 @@ fn first_setup() -> Setup {
         units: 3,
         flags: [false, true, true, true, true],
         speed: 2,
+        fixes: false,
     }
 }
 
@@ -155,10 +156,17 @@ fn only_the_host_edits_the_room_and_each_person_their_own_row() {
         units: 5,
         flags: [true; 5],
         speed: 6,
+        fixes: !r.setup().fixes,
     };
+    let fixes_before = r.setup().fixes;
     assert_eq!(r.edit(B, &game), Err(Refusal::NotHost));
+    assert_eq!(r.setup().fixes, fixes_before, "a guest sets no layer");
     assert_eq!(r.edit(HOST, &game), Ok(()));
     assert_eq!(r.setup().credits, 3000);
+    // The host sets our own fixes layer (M8 step C7), and every member's
+    // view shows it.
+    assert_eq!(r.setup().fixes, !fixes_before);
+    assert_eq!(r.view(B).setup.fixes, !fixes_before);
     assert_eq!(r.edit(B, &Edit::Map(map("m8", 8))), Err(Refusal::NotHost));
     // A person sets their own row, not another's; the host sets the computer's.
     assert_eq!(r.edit(B, &choices(1, Some(4), None)), Ok(()));
@@ -193,6 +201,7 @@ fn only_the_host_edits_the_room_and_each_person_their_own_row() {
         units,
         flags: [false; 5],
         speed,
+        fixes: true,
     };
     assert_eq!(
         r.edit(HOST, &bad(999, 3, 0)),

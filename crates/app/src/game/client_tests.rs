@@ -101,6 +101,8 @@ fn menu_setup_and_start_hand_out_jobs() {
             assert_eq!(seed, 42);
             assert_eq!(lobby.map, 0);
             assert_eq!(offered.len(), 2);
+            // Our own fixes layer is on in a new setup (M8 step C7).
+            assert_eq!(lobby.layers, glasnost_rules::layers::Layers::PLAY_FIXES);
         }
         _ => panic!("Start hands out a start job"),
     }
@@ -116,6 +118,32 @@ fn menu_setup_and_start_hand_out_jobs() {
     assert_eq!(c.shell.screen, Screen::Setup);
     assert!(c.vfs.is_some());
     assert_eq!(c.status, "no map");
+}
+
+/// The setup's *Pathing and other fixes* box (M8 step C7) turns our own
+/// layer off for the game the start job loads.
+#[test]
+fn the_fixes_box_turns_the_layer_off() {
+    let mut c = Client::new();
+    c.done(Done::Prepared(
+        Vfs::default(),
+        Ok(Box::new(synthetic_install())),
+    ));
+    let _ = c.frame_rgba();
+    let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
+    click(&mut c, r);
+    let _ = c.frame_rgba();
+    let r = c.setup_targets.rect_of(&SetupHit::Fixes).unwrap();
+    click(&mut c, r);
+    let _ = c.frame_rgba();
+    let r = c.setup_targets.rect_of(&SetupHit::Start_).unwrap();
+    click(&mut c, r);
+    match c.job.take() {
+        Some(Job::Start { lobby, .. }) => {
+            assert_eq!(lobby.layers, glasnost_rules::layers::Layers::REFERENCE);
+        }
+        _ => panic!("Start hands out a start job"),
+    }
 }
 
 /// spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer) and claim 23 (Escape opens the options menu; the arrows are view keys, not commands)

@@ -6,6 +6,10 @@
 //! checks that the recorded replay reproduces the game and that a save in
 //! mid-game, loaded and continued, ends in the same state. Never in CI.
 //!
+//! `GLASNOST_PLAY_FIXES=1` plays with our own rules patch layer *Pathing
+//! and other fixes* (M8 step C7, `glasnost_rules::layers`); unset, the lane
+//! plays the reference ruleset, and the report says so only when it is on.
+//!
 //! With [`Players::Ai`] (M5b) the houses are played by our own AI through
 //! `glasnost_ai::game::Game` instead: the replay holds no orders then (no
 //! person plays), and replaying it runs the AI again.
@@ -22,6 +26,7 @@ use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
 use glasnost_ai::skirmish;
 use glasnost_map::Map;
 use glasnost_map::terrain::TileCatalogue;
+use glasnost_rules::layers::Layers;
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::econ::setup::{self, Player, Settings};
 use glasnost_sim::econ::tech;
@@ -276,6 +281,7 @@ async fn run_async(
     let t0 = Instant::now();
     let mut vfs = crate::local_lane::mount(dir).await?;
     let mount_ms = t0.elapsed().as_millis();
+    let layers = Layers::from_flag(std::env::var("GLASNOST_PLAY_FIXES").ok().as_deref());
     let listings = glasnost_convert::find::find_maps(&vfs).await;
     let mut games = Vec::new();
     let mut looked = 0usize;
@@ -291,7 +297,7 @@ async fn run_async(
         };
         looked += 1;
         let t1 = Instant::now();
-        let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
+        let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into(), layers).await;
         let load_ms = t1.elapsed().as_millis();
         let (Ok(resolved), Some(tiles)) = (inputs.resolved, inputs.tiles) else {
             continue;
@@ -347,7 +353,9 @@ async fn run_async(
             games.push(g);
         }
     }
-    Ok(report(mount_ms, looked, &games, max_ticks, seed, players))
+    Ok(report(
+        mount_ms, looked, &games, max_ticks, seed, players, layers,
+    ))
 }
 
 /// The open countries: those that are not passive and not the neutral or
@@ -2648,6 +2656,7 @@ fn report(
     max_ticks: i32,
     seed: u32,
     players: Players,
+    layers: Layers,
 ) -> String {
     let mut s = String::new();
     let (cmd, who) = match players {
@@ -2660,6 +2669,13 @@ fn report(
         "glasnost-headless {cmd}: {} games of {PLAYERS} {who}, at most {max_ticks} ticks, seed {seed}; install mounted in {mount_ms} ms; {looked} maps read",
         games.len()
     );
+    if layers != Layers::REFERENCE {
+        let _ = writeln!(
+            s,
+            "rules layers: {} (GLASNOST_PLAY_FIXES)",
+            layers.describe()
+        );
+    }
     for g in games {
         let _ = writeln!(
             s,

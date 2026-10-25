@@ -179,7 +179,13 @@ fn run_start(c: &mut Client) {
     let gs = ui_setup::game_setup(&lobby, &fixture::rules(), &offered, seed, seed)
         .expect("the room's setup makes a game setup");
     let s = Loaded::bare(map8(), fixture::rules(), fixture::catalogue(), &gs)
-        .and_then(|l| Session::bare(l, MAP_HASH.into(), local));
+        .and_then(|l| Session::bare(l, MAP_HASH.into(), local))
+        .map(|mut s| {
+            // As `Session::start` does with the lobby's layers (M8 step C7);
+            // the synthetic rules here take no layer.
+            s.play.capture.layers = lobby.layers;
+            s
+        });
     c.done(Done::Started(vfs, Box::new(s), SoundBank::new()));
 }
 
@@ -432,6 +438,63 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
         c[0].session.as_ref().unwrap().play.game.world.tick > at + 10
     });
     assert_eq!(a.net_banner(), None);
+    relay.stop();
+}
+
+/// Our own *Pathing and other fixes* (M8 step C7) in a room: on when the
+/// host creates it, the host's box turns it off for every member, a guest
+/// has no box to press, and both games start with the room's choice.
+#[test]
+fn the_host_sets_the_fixes_layer_for_the_room() {
+    let (_rt, relay) = relay(83);
+    let clock = Clock(Instant::now());
+    let mut a = client(&relay, "Ann");
+    let mut b = client(&relay, "Bea");
+    press_menu(&mut a, MenuHit::Multiplayer);
+    press_net(&mut a, NetHit::Host);
+    pump(&clock, &mut [&mut a], "the room", |c| {
+        c[0].room_code().is_some()
+    });
+    assert!(a.room().unwrap().setup.fixes, "on by default");
+    press_room(&mut a, SetupHit::Kind(1, -1));
+    pump(&clock, &mut [&mut a], "an open row", |c| {
+        c[0].room().unwrap().setup.slots[1].kind == SlotKind::Human
+    });
+    press_menu(&mut b, MenuHit::Multiplayer);
+    b.netform.code = a.room_code().unwrap().to_owned();
+    press_net(&mut b, NetHit::Join);
+    pump(&clock, &mut [&mut a, &mut b], "the join", |c| {
+        c.iter()
+            .all(|c| c.room().is_some_and(|v| v.members.len() == 2))
+    });
+    let _ = b.frame();
+    assert!(
+        b.setup_targets.rect_of(&SetupHit::Fixes).is_none(),
+        "a guest does not set the layer"
+    );
+    press_room(&mut a, SetupHit::Fixes);
+    pump(&clock, &mut [&mut a, &mut b], "the layer off", |c| {
+        c.iter().all(|c| c.room().is_some_and(|v| !v.setup.fixes))
+    });
+    press_room(&mut b, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "ready", |c| {
+        c[0].room()
+            .unwrap()
+            .members
+            .iter()
+            .all(|m| m.ready || m.row == 0)
+    });
+    press_room(&mut a, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "the start", |c| {
+        c.iter().all(|c| c.session.is_some())
+    });
+    for c in [&a, &b] {
+        let s = c.session.as_ref().unwrap();
+        assert_eq!(
+            s.play.capture.layers,
+            glasnost_rules::layers::Layers::REFERENCE
+        );
+    }
     relay.stop();
 }
 
