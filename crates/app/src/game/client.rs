@@ -127,8 +127,17 @@ pub async fn run_job(job: Job) -> Done {
                 // takes it too (S-0412 claims 6 and 7)
                 ui_setup::game_setup(&lobby, rules, &offered, seed, seed).map_err(|e| e.to_string())
             };
-            let r =
-                Session::start(&mut vfs, &file, &make, local, &cursor, colour_blind, watch).await;
+            let r = Session::start(
+                &mut vfs,
+                &file,
+                &make,
+                local,
+                &cursor,
+                colour_blind,
+                watch,
+                lobby.layers,
+            )
+            .await;
             let mut voices = SoundBank::new();
             if let Ok(s) = &r {
                 let set = local_voice_set(&s.play.game.world, Some(s.play.local));

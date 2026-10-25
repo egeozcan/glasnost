@@ -2,6 +2,7 @@
 //! the psychic dominator, and its replay reproduces the final state.
 
 use glasnost_ai::{fixture, fixture_m7b as kit, game::Game};
+use glasnost_rules::layers::Layers;
 use glasnost_sim_gate::{M7B_SEED, M7B_TICKS, m7b};
 
 // spec: S-0608 claims 1, 2, 5, 7 to 10 and 14 (drain links formed, credits moved by payouts, drained buildings, links ended), S-0611 claims 2 and 4 (mutator launches and cell-mode conversions) and S-0612 claims 1, 4 and 14 (dominator launches, sweeps and takeovers): the gate's M7b duel uses the drain, the mutator and the dominator, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
@@ -47,11 +48,21 @@ fn m7b_seed_sweep() {
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
     let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
     let seeds: Vec<u32> = (a..=b).collect();
+    // `GLASNOST_PLAY_FIXES=1`: our own fixes layer (M8 step C7); unset, the
+    // scenario's reference rules, as the gate plays them.
+    let layers = Layers::from_flag(std::env::var("GLASNOST_PLAY_FIXES").ok().as_deref());
+    if layers != Layers::REFERENCE {
+        println!("rules layers: {} (GLASNOST_PLAY_FIXES)", layers.describe());
+    }
+    let rules = glasnost_sim_gate::layered(kit::ruleset(), kit::MAP_NAME, layers);
     let mut runs: Vec<(u32, usize, m7b::Exercise, String)> = Vec::new();
     for chunk in seeds.chunks(8) {
         let hs: Vec<_> = chunk
             .iter()
-            .map(|&s| std::thread::spawn(move || (s, m7b::play(s, M7B_TICKS))))
+            .map(|&s| {
+                let rules = rules.clone();
+                std::thread::spawn(move || (s, m7b::play_with(rules, s, M7B_TICKS)))
+            })
             .collect();
         for h in hs {
             let (s, (hashes, g, ex)) = h.join().expect("the run finished");

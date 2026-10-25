@@ -122,7 +122,13 @@ async fn smoke_async(
             continue;
         };
         let t1 = Instant::now();
-        let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
+        let inputs = glasnost_convert::game::load(
+            &mut vfs,
+            bytes,
+            "install".into(),
+            glasnost_rules::layers::Layers::REFERENCE,
+        )
+        .await;
         run.load_inputs_ms = t1.elapsed().as_millis();
         run.problems = inputs.problems.len();
         let resolved = match inputs.resolved {

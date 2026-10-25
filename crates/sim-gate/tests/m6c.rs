@@ -2,6 +2,7 @@
 //! reproduces the final state.
 
 use glasnost_ai::{fixture, fixture_m6c as kit, game::Game};
+use glasnost_rules::layers::Layers;
 use glasnost_sim_gate::{M6C_SEED, M6C_TICKS, m6c};
 
 // spec: S-0508 (garrisons), S-0509 (engineers and capture), S-0510 (spies and infiltration), S-0515 (tech buildings), S-0502 (jumpjets), S-0517 (deployable units), S-0525 (radiation fields), S-0514 (chrono weapons), S-0518 (linked weapons), S-0519 (terror and strikes), S-0520 (crates): the gate's M6c duel uses every one of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
@@ -71,11 +72,21 @@ fn m6c_seed_sweep() {
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
     let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
     let seeds: Vec<u32> = (a..=b).collect();
+    // `GLASNOST_PLAY_FIXES=1`: our own fixes layer (M8 step C7); unset, the
+    // scenario's reference rules, as the gate plays them.
+    let layers = Layers::from_flag(std::env::var("GLASNOST_PLAY_FIXES").ok().as_deref());
+    if layers != Layers::REFERENCE {
+        println!("rules layers: {} (GLASNOST_PLAY_FIXES)", layers.describe());
+    }
+    let rules = glasnost_sim_gate::layered(kit::ruleset(), kit::MAP_NAME, layers);
     let mut runs: Vec<(u32, usize, m6c::Exercise)> = Vec::new();
     for chunk in seeds.chunks(8) {
         let hs: Vec<_> = chunk
             .iter()
-            .map(|&s| std::thread::spawn(move || (s, m6c::play(s, M6C_TICKS))))
+            .map(|&s| {
+                let rules = rules.clone();
+                std::thread::spawn(move || (s, m6c::play_with(rules, s, M6C_TICKS)))
+            })
             .collect();
         for h in hs {
             let (s, (hashes, _, ex)) = h.join().expect("the run finished");

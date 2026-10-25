@@ -68,8 +68,9 @@ use crate::wire::Hash;
 pub const BUNDLE_MAGIC: [u8; 4] = *b"GDSY";
 
 /// The bundle format's version. Bump it whenever the layout changes.
+/// Version 3 (M8 step C7) added [`Bundle::layers`].
 // nocite: our own netcode
-pub const BUNDLE_VERSION: u8 = 2;
+pub const BUNDLE_VERSION: u8 = 3;
 
 /// The bundle's file name extension.
 // nocite: our own netcode
@@ -261,6 +262,10 @@ pub struct Bundle {
     pub build: String,
     /// The session's start values.
     pub start: StartInfo,
+    /// Our own rules patch layers the writer's game was played with, in
+    /// words (`glasnost_rules::layers::Layers::describe`, M8 step C7); they
+    /// are in the start's rules hash too. Empty when the writer did not say.
+    pub layers: String,
     /// The writer's slot.
     pub writer: u8,
     /// The mismatch it reports (none for a report made on demand).
@@ -386,6 +391,7 @@ fn snapshot(ran: u32, hash: Hash, g: &Game) -> Snapshot {
 pub struct Evidence {
     build: String,
     start: StartInfo,
+    layers: String,
     me: u8,
     every: u32,
     max_snapshots: usize,
@@ -421,6 +427,7 @@ impl Evidence {
         Self {
             build: build.to_owned(),
             start: start.clone(),
+            layers: String::new(),
             me,
             every,
             max_snapshots,
@@ -432,6 +439,12 @@ impl Evidence {
             tick_hashes: false,
             done: false,
         }
+    }
+
+    /// Names the game's rules patch layers in its reports ([`Bundle::layers`]).
+    pub fn with_layers(mut self, layers: String) -> Self {
+        self.layers = layers;
+        self
     }
 
     /// Takes every tick's state hash while the game runs, not only the
@@ -611,6 +624,7 @@ impl Evidence {
         Bundle {
             build: self.build.clone(),
             start: self.start.clone(),
+            layers: self.layers.clone(),
             writer: self.me,
             mismatch: m,
             perturb: self.applied,

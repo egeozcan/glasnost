@@ -490,6 +490,9 @@ impl Bench {
         }
         let mut setup = Setup::new(&install.setup);
         setup.map = self.opts.map;
+        // The benchmark measures the reference ruleset, never our own
+        // fixes layer (M8 step C7).
+        setup.fixes = false;
         for (i, slot) in setup.slots.iter_mut().enumerate() {
             slot.kind = if i < players {
                 SlotKind::Ai

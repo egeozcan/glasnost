@@ -10,6 +10,8 @@
 //! - [`validate`]: semantic checks and ID interning.
 //! - [`hash`]: the canonical binary form and `sim_rules_hash`.
 //! - [`explain`]: `rules explain`.
+//! - [`layers`]: our own patch layers that ship with the engine (the
+//!   play fixes, M8 step C7).
 //!
 //! [`resolve_ruleset`] runs the whole pipeline. This is a simulation crate:
 //! the determinism lints apply, and it never depends on the importer (`ini`,
@@ -20,6 +22,7 @@ pub mod explain;
 pub mod hash;
 pub mod hostile;
 pub mod jsonc;
+pub mod layers;
 pub mod quirks;
 pub mod resolve;
 pub mod schema;

@@ -9,6 +9,7 @@
 //! for a room, so the model serializes; there a [`SlotKind::Human`] row is a
 //! person's row, taken by one member of the room or open.
 
+use glasnost_rules::layers::{Layers, PLAY_FIXES_NAME};
 use glasnost_sim::econ::setup::{self, HouseValues, LobbyChoice, Player, Settings};
 use glasnost_sim::rules::SimRules;
 use glasnost_sim::world::GameSetup;
@@ -164,7 +165,17 @@ pub struct Setup {
     pub flags: [bool; 5],
     /// The speed control's position 0 (slowest) … 6 (fastest).
     pub speed: u8,
+    /// Our own rules patch layer *Pathing and other fixes* (M8 step C7,
+    /// `glasnost_rules::layers`): not a setting of the original's lobby.
+    /// In a network room the host sets it, like the game-wide values.
+    pub fixes: bool,
 }
+
+/// Whether a new setup starts with *Pathing and other fixes* on: the main
+/// session's decision of 2026-10-25 (docs/m8-plan.md). The measurement
+/// tools build their setups with it off.
+// nocite: our own client setting (the main session's decision, docs/m8-plan.md)
+pub const FIXES_BY_DEFAULT: bool = true;
 
 /// Why the setup cannot start yet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,6 +225,9 @@ pub struct Lobby {
     pub game_speed: u8,
     /// The map index.
     pub map: usize,
+    /// Our own rules patch layers the game's rules are resolved with (M8
+    /// step C7).
+    pub layers: Layers,
 }
 
 /// The name of the house of the person (the client renames it as it
@@ -271,6 +285,7 @@ impl Setup {
             flags: rules.flags,
             // spec: S-0201 claim 7 (position p sets index 6 − p)
             speed: 6 - rules.game_speed.min(6),
+            fixes: FIXES_BY_DEFAULT,
         }
     }
 
@@ -454,6 +469,9 @@ impl Setup {
             bases: rules.bases,
             game_speed: self.game_speed(),
             map: self.map,
+            layers: Layers {
+                play_fixes: self.fixes,
+            },
         })
     }
 
@@ -515,6 +533,7 @@ impl Setup {
                 self.units = step(self.units, d, lo, hi, 1);
             }
             SetupHit::Toggle(f) => self.flags[f as usize] ^= true,
+            SetupHit::Fixes => self.fixes ^= true,
             SetupHit::Speed(d) => self.speed = (self.speed as i32 + d).clamp(0, 6) as u8,
             _ => {}
         }
@@ -709,9 +728,14 @@ impl Setup {
             &SetupHit::Speed,
         );
         y += 24;
-        for (k, (f, name)) in FLAGS.iter().enumerate() {
+        // The original's yes/no settings, then our own fixes layer in the
+        // grid's last place.
+        let boxes = FLAGS
+            .iter()
+            .map(|(f, name)| (self.flags[*f as usize], *name, SetupHit::Toggle(*f)))
+            .chain([(self.fixes, PLAY_FIXES_NAME, SetupHit::Fixes)]);
+        for (k, (on, name, hit)) in boxes.enumerate() {
             let r = Rect::new(x0 + (k as i32 % 3) * 200, y + (k as i32 / 3) * 20, 190, 16);
-            let on = self.flags[*f as usize];
             let box_r = Rect::new(r.x, r.y + 2, 12, 12);
             d.fill(box_r, colour::RAISED);
             d.frame(box_r, if hot(r) { colour::ACCENT } else { colour::EDGE });
@@ -719,9 +743,13 @@ impl Setup {
                 d.fill(box_r.inset(3), colour::ACCENT);
             }
             let ink = if game_wide { colour::TEXT } else { colour::DIM };
-            d.text_left(Rect::new(r.x + 14, r.y, r.w - 14, 16), name, ink);
+            d.text_left(
+                Rect::new(r.x + 14, r.y, r.w - 14, 16),
+                &crate::font::fit(name, r.w - 14),
+                ink,
+            );
             if game_wide {
-                t.push(r, SetupHit::Toggle(*f));
+                t.push(r, hit);
             }
         }
         let problem = self.problem(rules, maps);
@@ -807,6 +835,8 @@ pub enum SetupHit {
     Units(i32),
     /// A yes/no setting.
     Toggle(Flag),
+    /// Our own *Pathing and other fixes* (M8 step C7).
+    Fixes,
     /// The speed control.
     Speed(i32),
     /// Back to the main menu.
@@ -895,6 +925,20 @@ mod tests {
         assert_eq!(s.speed, 2);
         assert_eq!(s.players().count(), 2);
         assert_eq!(s.problem(&rules(), &maps()), None);
+    }
+
+    /// Our own fixes layer (M8 step C7): on in a new setup, toggled by its
+    /// box, and carried into the lobby values as the game's layers.
+    #[test]
+    fn the_fixes_start_on_toggle_and_reach_the_lobby() {
+        let r = rules();
+        let mut s = Setup::new(&r);
+        assert!(s.fixes, "on by default (docs/m8-plan.md)");
+        assert_eq!(s.lobby(&r, &maps()).unwrap().layers, Layers::PLAY_FIXES);
+        s.apply(&SetupHit::Fixes, &r, &maps());
+        assert!(!s.fixes);
+        assert_eq!(s.lobby(&r, &maps()).unwrap().layers, Layers::REFERENCE);
+        assert_eq!(s.flags, r.flags, "the original's settings are untouched");
     }
 
     #[test]
@@ -1157,6 +1201,7 @@ mod tests {
             SetupHit::Units(-1),
             SetupHit::Speed(1),
             SetupHit::Toggle(Flag::Crates),
+            SetupHit::Fixes,
             SetupHit::Back,
             SetupHit::Start_,
         ] {
@@ -1224,6 +1269,7 @@ mod tests {
             SetupHit::Credits(1),
             SetupHit::Speed(1),
             SetupHit::Toggle(Flag::Crates),
+            SetupHit::Fixes,
         ] {
             assert!(t.rect_of(&not).is_none(), "{not:?} offered to a guest");
         }
@@ -1240,6 +1286,7 @@ mod tests {
             SetupHit::Country(2, 1),
             SetupHit::Credits(1),
             SetupHit::Toggle(Flag::Crates),
+            SetupHit::Fixes,
             SetupHit::Start_,
         ] {
             assert!(t.rect_of(&want).is_some(), "{want:?} missing for the host");

@@ -435,6 +435,103 @@ fn two_clients_meet_chat_and_play_in_lockstep() {
     relay.stop();
 }
 
+/// Our own *Pathing and other fixes* (M8 step C7) in a room: on when the
+/// host creates it, the host's box turns it off for every member, a guest
+/// has no box to press, and every member's start carries the room's choice
+/// into the lobby values its game loads with.
+#[test]
+fn the_host_sets_the_fixes_layer_for_the_room() {
+    let (_rt, relay) = relay(83);
+    let clock = Clock(Instant::now());
+    let mut a = client(&relay, "Ann");
+    let mut b = client(&relay, "Bea");
+    press_menu(&mut a, MenuHit::Multiplayer);
+    press_net(&mut a, NetHit::Host);
+    pump(&clock, &mut [&mut a], "the room", |c| {
+        c[0].room_code().is_some()
+    });
+    assert!(a.room().unwrap().setup.fixes, "on by default");
+    press_room(&mut a, SetupHit::Kind(1, -1));
+    pump(&clock, &mut [&mut a], "an open row", |c| {
+        c[0].room().unwrap().setup.slots[1].kind == SlotKind::Human
+    });
+    press_menu(&mut b, MenuHit::Multiplayer);
+    b.netform.code = a.room_code().unwrap().to_owned();
+    press_net(&mut b, NetHit::Join);
+    pump(&clock, &mut [&mut a, &mut b], "the join", |c| {
+        c.iter()
+            .all(|c| c.room().is_some_and(|v| v.members.len() == 2))
+    });
+    let _ = b.frame();
+    assert!(
+        b.setup_targets.rect_of(&SetupHit::Fixes).is_none(),
+        "a guest does not set the layer"
+    );
+    press_room(&mut a, SetupHit::Fixes);
+    pump(&clock, &mut [&mut a, &mut b], "the layer off", |c| {
+        c.iter().all(|c| c.room().is_some_and(|v| !v.setup.fixes))
+    });
+    press_room(&mut b, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "ready", |c| {
+        c[0].room()
+            .unwrap()
+            .members
+            .iter()
+            .all(|m| m.ready || m.row == 0)
+    });
+    press_room(&mut a, SetupHit::Start_);
+    pump(&clock, &mut [&mut a, &mut b], "the start", |c| {
+        c.iter().all(|c| c.session.is_some())
+    });
+    for c in [&a, &b] {
+        let begin = c.net.as_ref().unwrap().begin.as_ref().expect("the start");
+        let install = c.install.as_ref().unwrap();
+        let maps: Vec<MapEntry> = install.maps.iter().map(|(_, m)| m.clone()).collect();
+        let lobby = begin
+            .local_setup(0)
+            .lobby(&install.setup, &maps)
+            .expect("the room's setup starts");
+        assert_eq!(lobby.layers, glasnost_rules::layers::Layers::REFERENCE);
+    }
+    relay.stop();
+}
+
+/// Two peers whose played rules differ only in our own fixes layer (M8 step
+/// C7) are refused at the start, on the rules hash.
+#[test]
+fn a_peer_with_other_layers_is_refused_on_the_rules_hash() {
+    use glasnost_rules::layers::Layers;
+    use glasnost_rules::resolve::Source;
+    let base = Source {
+        layer: "base",
+        file: "base.jsonc",
+        text: r#"{"schema": 1}"#,
+    };
+    let hash = |layers: Layers| {
+        let mut sources = vec![base];
+        sources.extend(layers.sources());
+        glasnost_rules::resolve_ruleset(None, &sources)
+            .unwrap()
+            .sim_rules_hash
+    };
+    let setup = fixture::setup(1);
+    let info = |layers| {
+        glasnost_net::start::StartInfo::new(
+            "build",
+            &hash(layers),
+            MAP_HASH,
+            &setup,
+            Default::default(),
+        )
+    };
+    let (plain, fixed) = (info(Layers::REFERENCE), info(Layers::PLAY_FIXES));
+    assert_eq!(plain.mismatch(&info(Layers::REFERENCE)), None);
+    assert_eq!(
+        plain.mismatch(&fixed),
+        Some(glasnost_net::start::Field::RulesHash)
+    );
+}
+
 /// A client of another build is refused when it joins, and the refusal
 /// names the build; it stays on the multiplayer screen.
 #[test]

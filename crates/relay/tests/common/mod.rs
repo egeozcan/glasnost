@@ -196,6 +196,7 @@ pub fn setup(rows: &[SlotKind]) -> Setup {
         units: 3,
         flags: [false, true, true, true, true],
         speed: 2,
+        fixes: false,
     }
 }
 

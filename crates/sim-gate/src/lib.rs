@@ -50,6 +50,9 @@ pub mod m7b;
 pub mod plain;
 
 use glasnost_ai::{fixture, skirmish};
+use glasnost_rules::layers::Layers;
+use glasnost_rules::schema::Ruleset;
+use glasnost_sim::rules::SimRules;
 use glasnost_sim::{save, testkit};
 
 /// Seed of the gate's replay.
@@ -268,6 +271,21 @@ fn duel(duel: plain::Plain, ticks: i32) -> Vec<String> {
         );
     }
     out
+}
+
+/// A scenario's rules with our own patch layers `layers` (M8 step C7) on
+/// its ruleset's quirk switches, for the seed sweeps' `GLASNOST_PLAY_FIXES`.
+/// With no layer they are the scenario's own rules (`kit::rules()`), hash
+/// name `name`; with one the name says so. The gate and the goldens never
+/// take a layer.
+pub fn layered(mut ruleset: Ruleset, name: &str, layers: Layers) -> std::sync::Arc<SimRules> {
+    if layers == Layers::REFERENCE {
+        return std::sync::Arc::new(SimRules::new(&ruleset, name));
+    }
+    ruleset.globals.quirks = layers
+        .apply_quirks(ruleset.globals.quirks)
+        .expect("our own layer applies");
+    std::sync::Arc::new(SimRules::new(&ruleset, &format!("{name}+play-fixes")))
 }
 
 /// The state hash after each of the first `ticks` ticks of a replay (the

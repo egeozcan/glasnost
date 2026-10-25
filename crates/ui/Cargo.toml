@@ -8,12 +8,12 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+glasnost-rules.workspace = true
 glasnost-sim.workspace = true
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 glasnost-ai.workspace = true
-glasnost-rules.workspace = true
 
 [lints]
 workspace = true

@@ -180,7 +180,13 @@ async fn run_async(dir: &Path, side: i32, index: usize, seed: u32) -> std::io::R
         .read(&listing.file)
         .await
         .map_err(|e| std::io::Error::other(format!("{e:?}")))?;
-    let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
+    let inputs = glasnost_convert::game::load(
+        &mut vfs,
+        bytes,
+        "install".into(),
+        glasnost_rules::layers::Layers::REFERENCE,
+    )
+    .await;
     let (Ok(resolved), Some(tiles)) = (inputs.resolved, inputs.tiles) else {
         return Ok("side audit: the map's inputs did not resolve\n".into());
     };

@@ -10,6 +10,7 @@
 //! and borrows the canonical world by swapping it in for each call that
 //! reads it ([`Session::with_live`]).
 
+use glasnost_rules::layers::Layers;
 use std::collections::BTreeMap;
 
 use glasnost_ai::game::Game;
@@ -237,7 +238,9 @@ impl Session {
     /// `colour_blind` draws the player houses in our colour-blind colours
     /// (presentation only, M8 step C3). With `watch`, `local` may be an AI
     /// house, watched rather than played (the performance benchmark, M8
-    /// step C4).
+    /// step C4). The rules are resolved with our own patch layers `layers`
+    /// (M8 step C7), which the game's pathing reports record.
+    #[allow(clippy::too_many_arguments)]
     pub async fn start(
         vfs: &mut Vfs,
         file: &FileRef,
@@ -246,6 +249,7 @@ impl Session {
         cursor: &CursorPaletteKeep,
         colour_blind: bool,
         watch: bool,
+        layers: Layers,
     ) -> Result<Self, String> {
         let bytes = vfs
             .read(file)
@@ -266,6 +270,7 @@ impl Session {
             true,
             glasnost_render::voxel::VoxelCanvas::new(),
             Some(make),
+            layers,
         )
         .await;
         // spec: S-0111 claim 19a (one cursor palette for the cursor images, the wrench and the bomb icon: the session's kept copy with quirks.art_cache_never_invalidated on, this game's read with it off)
@@ -277,14 +282,16 @@ impl Session {
         let (icons, alt_icons) = read_icons(vfs, &loaded).await;
         let cursor_art = read_cursor(vfs, palette.as_deref()).await;
         let status_font = status_font::read(vfs).await;
-        Self::assemble(
+        let mut s = Self::assemble(
             loaded,
             map_id,
             (icons, alt_icons, cursor_art),
             status_font,
             local,
             watch,
-        )
+        )?;
+        s.play.capture.layers = layers;
+        Ok(s)
     }
 
     /// A game on `loaded`, a map loaded without art (the synthetic
@@ -505,8 +512,11 @@ impl Session {
     /// them (a game put in place, or ticks the performance benchmark ran
     /// directly, M8 step C4).
     pub fn catch_up(&mut self) {
-        // The pathing report's ring starts again from the game as it is.
+        // The pathing report's ring starts again from the game as it is,
+        // with the game's layers (M8 step C7).
+        let layers = self.play.capture.layers;
         self.play.capture = super::capture::Ring::new(&self.play.game);
+        self.play.capture.layers = layers;
         self.with_live(|live, inputs, scene| {
             live.after_tick();
             live.redraw(inputs, scene);

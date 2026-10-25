@@ -403,6 +403,13 @@ pub fn analyse(b: &Bundle, inputs: &Inputs, o: &Options) -> Result<Analysis, Ref
             b.build
         )));
     }
+    if inputs.layers != b.layers {
+        return Err(Refused(format!(
+            "the report's game was played with {}, the rules found have {}",
+            b.layers.describe(),
+            inputs.layers.describe()
+        )));
+    }
     if inputs.rules.hash != b.rules_hash {
         return Err(Refused(format!(
             "the rules given hash to {}, the report's to {}",
@@ -525,6 +532,7 @@ pub fn analyse(b: &Bundle, inputs: &Inputs, o: &Options) -> Result<Analysis, Ref
         b.look.speed,
         b.look.local
     );
+    let _ = writeln!(text, "Rules: {}", b.layers.describe());
     let _ = writeln!(
         text,
         "Window: the snapshot at tick {} to the capture at tick {}: {} ticks, {} orders of persons",

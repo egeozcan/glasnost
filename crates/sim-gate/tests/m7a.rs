@@ -2,6 +2,7 @@
 //! economy, and its replay reproduces the final state.
 
 use glasnost_ai::{fixture, fixture_m7a as kit, game::Game};
+use glasnost_rules::layers::Layers;
 use glasnost_sim_gate::{M7A_SEED, M7A_TICKS, m7a};
 
 // spec: S-0610 (berserk hits, the psychic sensor, the psychic reveal), S-0402 claim 14 (slave miners), S-0609 claim 2 (gattling stages), S-0601 claim 6 (takeovers), S-0613 claims 2 to 4 and 13 (gas clouds and their hits), S-0605 claims 1 and 7 (infantry absorbed), S-0606 claims 3, 7 and 12 (bunker entries, bunkered vehicles, exits), S-0607 claims 5 and 13 (lifter builds, lift orders, seized and dropped vehicles): the gate's M7a duel uses each of them, in the AI's orders and in the simulation's events, and the game it plays is reproduced by its replay (setup and persons' orders; the AI runs again).
@@ -74,11 +75,21 @@ fn m7a_seed_sweep() {
     let (a, b) = range.split_once('-').expect("GLASNOST_SWEEP=<from>-<to>");
     let (a, b): (u32, u32) = (a.parse().expect("from"), b.parse().expect("to"));
     let seeds: Vec<u32> = (a..=b).collect();
+    // `GLASNOST_PLAY_FIXES=1`: our own fixes layer (M8 step C7); unset, the
+    // scenario's reference rules, as the gate plays them.
+    let layers = Layers::from_flag(std::env::var("GLASNOST_PLAY_FIXES").ok().as_deref());
+    if layers != Layers::REFERENCE {
+        println!("rules layers: {} (GLASNOST_PLAY_FIXES)", layers.describe());
+    }
+    let rules = glasnost_sim_gate::layered(kit::ruleset(), kit::MAP_NAME, layers);
     let mut runs: Vec<(u32, usize, m7a::Exercise, String)> = Vec::new();
     for chunk in seeds.chunks(8) {
         let hs: Vec<_> = chunk
             .iter()
-            .map(|&s| std::thread::spawn(move || (s, m7a::play(s, M7A_TICKS))))
+            .map(|&s| {
+                let rules = rules.clone();
+                std::thread::spawn(move || (s, m7a::play_with(rules, s, M7A_TICKS)))
+            })
             .collect();
         for h in hs {
             let (s, (hashes, g, ex)) = h.join().expect("the run finished");

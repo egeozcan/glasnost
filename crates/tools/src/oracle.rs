@@ -528,7 +528,13 @@ pub fn stock_ground(dir: &Path, map_file: &str, sha256: &str) -> Result<Ground, 
             .read(&listing.file)
             .await
             .map_err(|e| format!("{map_file}: {e:?}"))?;
-        let inputs = glasnost_convert::game::load(&mut vfs, map_bytes, map_file.to_owned()).await;
+        let inputs = glasnost_convert::game::load(
+            &mut vfs,
+            map_bytes,
+            map_file.to_owned(),
+            glasnost_rules::layers::Layers::REFERENCE,
+        )
+        .await;
         let resolved = inputs
             .resolved
             .map_err(|e| format!("the rules did not resolve: {e}"))?;

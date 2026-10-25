@@ -33,6 +33,15 @@ gives, it files a request and stops that part.
   CLAUDE.md and PROVENANCE.md still bind (approved specs and records only, citations, requests for
   what no spec gives). Where a spec leaves a case open, an interim chosen for play and stated as our
   design in the step's ledger goes ahead without waiting on the lead.
+- **Pathing and other fixes (step C7), the main session's decision:** our own rules patch layer
+  that sets chosen quirk switches to the off position their spec states, where the original's
+  position reads as a bug in play and the change is not one of balance. It is an option of the
+  skirmish setup and the network room, which the host sets, and it is **on by default** in the
+  client's new-game setup. The switches' defaults in `quirks.rs` stay the original's (D6, D8),
+  and the measurement runs (the oracle arena, the seed sweeps, the gates, the tick bench and the
+  fidelity suite) stay on the reference ruleset unless `GLASNOST_PLAY_FIXES=1` is given (the
+  sweeps and the skirmish lane read it). The layer is part of the rules hash, so replays, saves
+  and network starts carry it.
 
 ## Lead rulings of 2026-10-24 (awaiting spec revisions)
 
@@ -112,6 +121,7 @@ These are our own engine and client, except where a step names a request.
 | C4 | **Performance.** A benchmark that plays a late full-game replay with frame timing, natively and in the browser. Profile and fix the renderer and the client until the target is met. | 60 fps at 1080p on a typical Intel laptop iGPU in Firefox WebGL2 (see Decisions). |
 | C5 | **Electric bolts and voxel animations.** The electric-bolt shot, its sparks (`emitters::electric_bolt_sparks`), voxel animations in play and their particle systems (`emitters::voxel_animation_system`). | Part 1 (electric bolts, S-0316, answering Q-1701): built, ledger [docs/m8-claims/c5-S-0316.md](m8-claims/c5-S-0316.md). Part 2 (voxel debris pieces, S-0317, answering Q-1702): built, ledger [docs/m8-claims/c5-S-0317.md](m8-claims/c5-S-0317.md). |
 | C6 | **Optional WebGPU extras.** Only behind the runtime check (D9), after C4. | Lowest priority; may move past M8. |
+| C7 | **Pathing and other fixes.** Our own rules patch layer (`data/layers/play-fixes.jsonc`) of quirk switches set off where the spec states the off position, the on position reads as a bug in play, and it is no balance change; first entries `corridor_retry_no_fallback` and `corridor_split_probe` (S-0212 claims 13 and 13a, answering pathing reports 1 and 2, Q-1771 and Q-1870). A visible option in the skirmish setup and the network room (the host chooses), on by default; in the rules hash; saves, replays and every report keep it. Measurement stays on the reference ruleset unless a flag is given. | A synthetic test plays, saves, loads and replays a game with the layer; the lead's two pathing reports replayed with the layer show the harvester leaving the dock; the sweeps and the quick lane with the layer on have no stall or panic; every default run is byte-identical to main. Built, ledger [docs/m8-claims/c7-play-fixes.md](m8-claims/c7-play-fixes.md). |
 
 ## Housekeeping (any time)
 

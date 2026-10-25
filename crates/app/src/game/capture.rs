@@ -20,6 +20,7 @@ use std::collections::VecDeque;
 
 use glasnost_ai::game::Game;
 use glasnost_map::CellXY;
+use glasnost_rules::layers::Layers;
 use glasnost_sim::orders::Order;
 use glasnost_sim::world::HouseId;
 use serde::{Deserialize, Serialize};
@@ -52,9 +53,14 @@ pub const MAGIC: &[u8; 4] = b"GPTH";
 
 /// The format version of a pathing report. Bump it whenever the layout of
 /// [`Bundle`] changes; the snapshot inside carries the game's own format
-/// versions.
+/// versions. Version 2 (M8 step C7) added [`Bundle::layers`]; a version 1
+/// report reads with no layer, which is what every version 1 game had.
 // nocite: our own file format
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
+
+/// The oldest format version still read.
+// nocite: our own file format
+pub const OLDEST_VERSION: u32 = 1;
 
 /// The folder, under the working directory, of the native client's
 /// reports.
@@ -143,6 +149,10 @@ pub struct Bundle {
     pub map_hash: String,
     /// The setup's hash (`glasnost_net::start::setup_hash`).
     pub setup_hash: String,
+    /// Our own rules patch layers the game was played with (M8 step C7):
+    /// whether *Pathing and other fixes* was on. They are in `rules_hash`
+    /// too; this says it in words.
+    pub layers: Layers,
     /// Whether it is a network game.
     pub network: bool,
     /// Ticks run at the snapshot.
@@ -202,9 +212,9 @@ impl Bundle {
             return Err("this is not a pathing report: it does not start with GPTH".into());
         }
         let version = u32::from_le_bytes([head[4], head[5], head[6], head[7]]);
-        if version != VERSION {
+        if !(OLDEST_VERSION..=VERSION).contains(&version) {
             return Err(format!(
-                "this pathing report has format version {version}; this build reads version {VERSION}"
+                "this pathing report has format version {version}; this build reads versions {OLDEST_VERSION} to {VERSION}"
             ));
         }
         let (digest, body) = rest
@@ -215,9 +225,15 @@ impl Bundle {
                 "the pathing report is damaged: its checksum does not match its contents".into(),
             );
         }
-        let (b, tail) = postcard::take_from_bytes::<Bundle>(body).map_err(|e| {
+        let damaged = |e: postcard::Error| {
             format!("the pathing report is damaged: its contents do not read ({e})")
-        })?;
+        };
+        let (b, tail) = if version == OLDEST_VERSION {
+            let (v1, tail) = postcard::take_from_bytes::<BundleV1>(body).map_err(damaged)?;
+            (v1.into(), tail)
+        } else {
+            postcard::take_from_bytes::<Bundle>(body).map_err(damaged)?
+        };
         if !tail.is_empty() {
             return Err("the pathing report is damaged: it has bytes past its end".into());
         }
@@ -233,6 +249,48 @@ impl Bundle {
     }
 }
 
+/// A version 1 report's body: a [`Bundle`] without its layers.
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct BundleV1 {
+    build: String,
+    rules_hash: String,
+    map_hash: String,
+    setup_hash: String,
+    network: bool,
+    snapshot_ticks_run: i32,
+    snapshot_tick: i32,
+    snapshot: Vec<u8>,
+    orders: Vec<(i32, HouseId, Order)>,
+    capture_ticks_run: i32,
+    capture_tick: i32,
+    capture_hash: String,
+    marks: Vec<i32>,
+    look: Look,
+}
+
+impl From<BundleV1> for Bundle {
+    fn from(b: BundleV1) -> Self {
+        Self {
+            build: b.build,
+            rules_hash: b.rules_hash,
+            map_hash: b.map_hash,
+            setup_hash: b.setup_hash,
+            layers: Layers::REFERENCE,
+            network: b.network,
+            snapshot_ticks_run: b.snapshot_ticks_run,
+            snapshot_tick: b.snapshot_tick,
+            snapshot: b.snapshot,
+            orders: b.orders,
+            capture_ticks_run: b.capture_ticks_run,
+            capture_tick: b.capture_tick,
+            capture_hash: b.capture_hash,
+            marks: b.marks,
+            look: b.look,
+        }
+    }
+}
+
 /// The ring.
 #[derive(Clone, Debug, Default)]
 pub struct Ring {
@@ -244,6 +302,9 @@ pub struct Ring {
     /// The game-speed index the game is paced at (the session sets it
     /// before each tick; a network game's is the room's).
     pub speed: u8,
+    /// Our own rules patch layers of the game (the session sets them when
+    /// the game starts and keeps them when the ring starts again).
+    pub layers: Layers,
 }
 
 impl Ring {
@@ -337,6 +398,7 @@ impl Ring {
             rules_hash: g.world.rules().hash.clone(),
             map_hash: replay.map.clone(),
             setup_hash: glasnost_net::start::setup_hash(&replay.setup),
+            layers: self.layers,
             network,
             snapshot_ticks_run: s.ticks_run,
             snapshot_tick: s.tick,
@@ -407,5 +469,74 @@ pub fn platform_save() -> Option<super::report::SaveReport> {
     #[cfg(target_arch = "wasm32")]
     {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bundle(layers: Layers) -> Bundle {
+        Bundle {
+            build: "test".into(),
+            rules_hash: "rules".into(),
+            map_hash: "map".into(),
+            setup_hash: "setup".into(),
+            layers,
+            network: false,
+            snapshot_ticks_run: 1,
+            snapshot_tick: 1,
+            snapshot: vec![1, 2, 3],
+            orders: Vec::new(),
+            capture_ticks_run: 2,
+            capture_tick: 2,
+            capture_hash: "state".into(),
+            marks: vec![2],
+            look: Look::default(),
+        }
+    }
+
+    /// A report keeps the game's layers (M8 step C7, version 2).
+    #[test]
+    fn a_report_keeps_its_layers() {
+        for layers in [Layers::REFERENCE, Layers::PLAY_FIXES] {
+            let b = bundle(layers);
+            assert_eq!(Bundle::from_bytes(&b.to_bytes()), Ok(b));
+        }
+    }
+
+    /// A version 1 report (before the layers) still reads, with no layer:
+    /// no version 1 game had one.
+    #[test]
+    fn a_version_1_report_reads_with_no_layer() {
+        let b = bundle(Layers::REFERENCE);
+        let v1 = BundleV1 {
+            build: b.build.clone(),
+            rules_hash: b.rules_hash.clone(),
+            map_hash: b.map_hash.clone(),
+            setup_hash: b.setup_hash.clone(),
+            network: b.network,
+            snapshot_ticks_run: b.snapshot_ticks_run,
+            snapshot_tick: b.snapshot_tick,
+            snapshot: b.snapshot.clone(),
+            orders: b.orders.clone(),
+            capture_ticks_run: b.capture_ticks_run,
+            capture_tick: b.capture_tick,
+            capture_hash: b.capture_hash.clone(),
+            marks: b.marks.clone(),
+            look: b.look.clone(),
+        };
+        let body = postcard::to_allocvec(&v1).unwrap();
+        let mut bytes = MAGIC.to_vec();
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&Sha256::digest(&body));
+        bytes.extend_from_slice(&body);
+        assert_eq!(Bundle::from_bytes(&bytes), Ok(b));
+        bytes[4] = 3;
+        assert!(
+            Bundle::from_bytes(&bytes)
+                .unwrap_err()
+                .contains("version 3")
+        );
     }
 }

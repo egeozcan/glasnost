@@ -35,6 +35,7 @@ use glasnost_net::desync::{Bundle, Snapshot, TickRecord, run_record};
 use glasnost_net::sim::{hash_from_hex, hex};
 use glasnost_net::start::content_hash;
 use glasnost_net::wire::Hash;
+use glasnost_rules::layers::Layers;
 use glasnost_sim::rules::{Kind, SimRules};
 use glasnost_sim::world::World;
 
@@ -56,6 +57,9 @@ pub struct Inputs {
     pub rules: Arc<SimRules>,
     /// The map's theater catalogue.
     pub catalogue: Arc<TileCatalogue>,
+    /// Our own rules patch layers the rules carry (M8 step C7): the ones
+    /// whose rules hash is the report's.
+    pub layers: Layers,
 }
 
 impl Inputs {
@@ -66,11 +70,15 @@ impl Inputs {
         (rules.hash == rules_hash).then(|| Self {
             rules,
             catalogue: glasnost_ai::fixture::catalogue(),
+            layers: Layers::REFERENCE,
         })
     }
 
     /// The install's, for the map whose content hash the report names
-    /// (local only: the install's data never leaves the machine).
+    /// (local only: the install's data never leaves the machine). The rules
+    /// are the reference ruleset's or, when those hash otherwise, the ones
+    /// with our play-fixes layer (M8 step C7): the hash names which the game
+    /// ran under, so no report needs to say it for the rules to be found.
     pub fn install(dir: &Path, map_hash: &str, rules_hash: &str) -> Result<Self, String> {
         pollster::block_on(async {
             let mut vfs = crate::local_lane::mount(dir)
@@ -83,24 +91,35 @@ impl Inputs {
                 if content_hash(&bytes) != map_hash {
                     continue;
                 }
-                let inputs = glasnost_convert::game::load(&mut vfs, bytes, "install".into()).await;
-                let resolved = inputs
-                    .resolved
-                    .map_err(|e| format!("the map's rules could not be resolved: {e}"))?;
-                let tiles = inputs
-                    .tiles
-                    .ok_or("the map's theater has no tile catalogue in the install")?;
-                let rules = SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash);
-                if rules.hash != rules_hash {
-                    return Err(format!(
-                        "the install's rules for that map hash to {}, the report's to {rules_hash}",
-                        rules.hash
-                    ));
+                let mut hashes = Vec::new();
+                for layers in [Layers::REFERENCE, Layers::PLAY_FIXES] {
+                    let inputs = glasnost_convert::game::load(
+                        &mut vfs,
+                        bytes.clone(),
+                        "install".into(),
+                        layers,
+                    )
+                    .await;
+                    let resolved = inputs
+                        .resolved
+                        .map_err(|e| format!("the map's rules could not be resolved: {e}"))?;
+                    let tiles = inputs
+                        .tiles
+                        .ok_or("the map's theater has no tile catalogue in the install")?;
+                    let rules = SimRules::new(&resolved.ruleset, &resolved.sim_rules_hash);
+                    if rules.hash == rules_hash {
+                        return Ok(Self {
+                            rules: Arc::new(rules),
+                            catalogue: Arc::new(tiles),
+                            layers,
+                        });
+                    }
+                    hashes.push(format!("{} ({})", rules.hash, layers.describe()));
                 }
-                return Ok(Self {
-                    rules: Arc::new(rules),
-                    catalogue: Arc::new(tiles),
-                });
+                return Err(format!(
+                    "the install's rules for that map hash to {}, the report's to {rules_hash}",
+                    hashes.join(" or ")
+                ));
             }
             Err(format!(
                 "no map of the install has the report's map hash {map_hash}"
@@ -411,6 +430,9 @@ fn describe(out: &mut String, side: char, b: &Bundle) {
         b.end().saturating_sub(1),
         b.base.ran
     );
+    if !b.layers.is_empty() {
+        let _ = writeln!(out, "   its rules, by its own account: {}", b.layers);
+    }
     match b.mismatch {
         Some(m) => {
             let _ = writeln!(
@@ -449,6 +471,11 @@ pub fn compare(a: &Bundle, b: &Bundle, inputs: &Inputs) -> Result<Report, String
     let mut out = String::new();
     describe(&mut out, 'A', a);
     describe(&mut out, 'B', b);
+    let _ = writeln!(
+        out,
+        "Rules: {} (by the rules hash)",
+        inputs.layers.describe()
+    );
     if let Some(f) = a.start.mismatch(&b.start) {
         let _ = writeln!(
             out,

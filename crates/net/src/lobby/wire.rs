@@ -103,6 +103,8 @@ pub enum Edit {
         flags: [bool; 5],
         /// The speed control's position 0 … 6.
         speed: u8,
+        /// Our own *Pathing and other fixes* layer (M8 step C7).
+        fixes: bool,
     },
 }
 
