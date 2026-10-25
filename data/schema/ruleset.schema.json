@@ -8486,6 +8486,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_released_above_pad": {
+          "description": "A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, and it leaves by an ordinary take-off. Not consulted yet (S-0501 r52 is taken in at the next intake).",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_smoke_scenario_draw": {
           "description": "An aircraft's damage-smoke chance draws from the scenario stream, including updates that show no smoke; off: no damage-smoke draw and no smoke animation.",
           "type": "boolean",

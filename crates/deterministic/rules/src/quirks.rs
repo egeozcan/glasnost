@@ -1360,6 +1360,10 @@ pub struct Quirks {
     // spec: S-0501 claim 47 (c), Edge cases
     #[serde(default = "on")]
     pub aircraft_corner_sector_untracked: bool,
+    /// A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, and it leaves by an ordinary take-off. Not consulted yet (S-0501 r52 is taken in at the next intake).
+    // spec: S-0501 claim 48, Edge cases
+    #[serde(default = "on")]
+    pub aircraft_released_above_pad: bool,
     /// A passenger adds its size rounded down to the transport's load; off: the size is kept unrounded.
     // spec: S-0507 claim 1, F1, Edge cases
     #[serde(default = "on")]
@@ -2326,6 +2330,7 @@ impl Default for Quirks {
             aircraft_zero_step_attack_stall: true,
             crash_drops_planted_bomb: true,
             aircraft_corner_sector_untracked: true,
+            aircraft_released_above_pad: true,
             transport_load_truncated: true,
             unload_facing_gap_no_wrap: true,
             unload_second_round_skips_rear: true,
@@ -3328,6 +3333,10 @@ impl Quirks {
                 "aircraft_corner_sector_untracked",
                 self.aircraft_corner_sector_untracked,
             ),
+            (
+                "aircraft_released_above_pad",
+                self.aircraft_released_above_pad,
+            ),
             ("transport_load_truncated", self.transport_load_truncated),
             ("unload_facing_gap_no_wrap", self.unload_facing_gap_no_wrap),
             (
@@ -3853,6 +3862,10 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "red_normalisation_divisor",
         "renderer (render::light), S-0104",
+    ),
+    (
+        "layer_change_on_events_only",
+        "renderer (mapview::quirks), S-0102 claim 4; S-0501 claim 48 (a) names it for an aircraft released above its pad (S-0501 r52)",
     ),
     (
         "enable_unfreezes_unpowered",
