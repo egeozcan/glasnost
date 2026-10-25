@@ -7,6 +7,8 @@ mod common;
 use common::{Scene, cell, code_tile};
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
+use glasnost_num::geom::eight_direction;
+use glasnost_num::{F32, F64, Rounding};
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::{
     BuildingType, Decimal, LandRow, LandType, LocomotionClass, Locomotor, MovementZone, UnitType,
@@ -16,7 +18,7 @@ use glasnost_sim::combat::check::{self, Answer};
 use glasnost_sim::combat::damage::{self, Hit, HitResult};
 use glasnost_sim::combat::effects::Effect;
 use glasnost_sim::econ::TypeRef;
-use glasnost_sim::naval;
+use glasnost_sim::naval::{self, Lean};
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::{Behaviour, Kind};
 use glasnost_sim::targeting::{self, ClickOn, Modifiers};
@@ -732,7 +734,7 @@ fn claim_5_sinking_without_a_hit() {
     assert_eq!(n, 71);
 }
 
-// spec: S-0504 claims 4 and 5 (a sinking vessel's state survives a save and load: the state hash is kept and both copies remove it on the same tick)
+// spec: S-0504 claims 4, 5 and 15 (a sinking vessel's state, its lean included, survives a save and load: the state hash is kept and both copies remove it on the same tick)
 #[test]
 fn sinking_save_load_round_trip() {
     let mut w = world(rules());
@@ -746,6 +748,9 @@ fn sinking_save_load_round_trip() {
     let mut l = save::load(&bytes, w.rules_arc(), w.catalogue_arc()).expect("load");
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
     assert!(naval::sinking(&l, skiff));
+    // spec: S-0504 claim 15 (the pitch and the kept direction are saved with the vessel)
+    assert_eq!(l.obj(skiff).unwrap().naval, w.obj(skiff).unwrap().naval);
+    assert_ne!(naval::pitch(&l, skiff), glasnost_num::F32::ZERO);
     let a = common::run_until(&mut w, 200, |w| w.obj(skiff).is_none());
     let b = common::run_until(&mut l, 200, |w| w.obj(skiff).is_none());
     assert_eq!(a, b);
@@ -1687,4 +1692,240 @@ fn claim_13_zero_health_sinking_vessel_not_self_healed() {
             assert_eq!(o.health, 0, "not revived at tick {}", w.tick);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// The lean of a sinking vessel (claims 15 and 16, F4; Q-1871).
+
+/// A single-precision value from its exact decimal (S-0504 F4's values).
+fn single(text: &str) -> F32 {
+    glasnost_num::decimal::nearest_double(text).to_f32(Rounding::TowardZero)
+}
+
+/// `p` negated (exact).
+fn neg(p: F32) -> F32 {
+    p.to_f64().negated().to_f32(Rounding::TowardZero)
+}
+
+/// The full lean *L* (S-0504 F4).
+fn full_lean() -> F32 {
+    single("0.785398185253143310546875")
+}
+
+/// The pitch held in a vessel's naval state.
+fn pitch_of(w: &World, id: ObjectId) -> F32 {
+    w.obj(id).unwrap().naval.as_ref().unwrap().pitch
+}
+
+// spec: S-0504 F4 and claim 15 (Course of the lean: from level the 78th step gives |p| = 0.779999315738677978515625 under round-toward-zero and 0.779999554157257080078125 with quirks.chop_rounding off; the 79th stops at L and later steps keep it; stern down is the mirror)
+#[test]
+fn f4_the_lean_reaches_the_full_lean_at_the_79th_step() {
+    for (mode, at_78) in [
+        (Rounding::TowardZero, "0.779999315738677978515625"),
+        (Rounding::Nearest, "0.779999554157257080078125"),
+    ] {
+        for lean in [Lean::BowDown, Lean::SternDown] {
+            let sign = |p: F32| if lean == Lean::BowDown { p } else { neg(p) };
+            let mut p = F32::ZERO;
+            for n in 1..=78 {
+                p = naval::pitch_step(p, lean, mode);
+                assert_ne!(p, sign(full_lean()), "{mode:?} {lean:?} step {n}");
+            }
+            assert_eq!(p, sign(single(at_78)), "{mode:?} {lean:?}: the 78th step");
+            p = naval::pitch_step(p, lean, mode);
+            assert_eq!(
+                p,
+                sign(full_lean()),
+                "{mode:?} {lean:?}: the 79th step stops at L"
+            );
+            for _ in 0..5 {
+                p = naval::pitch_step(p, lean, mode);
+                assert_eq!(
+                    p,
+                    sign(full_lean()),
+                    "{mode:?} {lean:?}: the full lean holds"
+                );
+            }
+        }
+    }
+}
+
+// spec: S-0504 claim 15 (Starting value: steps start from the pitch the body had, and a pitch in the opposite sense passes through level first)
+#[test]
+fn claim_15_a_pitch_in_the_opposite_sense_passes_through_level() {
+    let mut p = single("-0.05");
+    let mut steps = 0;
+    while p.to_f64().lt(F64::ZERO) {
+        p = naval::pitch_step(p, Lean::BowDown, Rounding::TowardZero);
+        steps += 1;
+        assert!(steps < 10);
+    }
+    assert!(
+        (5..=6).contains(&steps),
+        "about five steps of 0.01 from −0.05: {steps}"
+    );
+    // A pitch already at the opposite full lean is not held there (the original's oddity is not copied).
+    let q = naval::pitch_step(neg(full_lean()), Lean::BowDown, Rounding::TowardZero);
+    assert!(q.to_f64().gt(neg(full_lean()).to_f64()));
+}
+
+// spec: S-0504 claim 15 and Constants (Direction: bow down at 8-directions 1 to 5, stern down at 0, 6 and 7, the 8-direction of S-0204 F4 rounding to the nearest step)
+#[test]
+fn claim_15_the_end_that_goes_down_by_eight_direction() {
+    for g in 0..8u16 {
+        let want = if (1..=5).contains(&g) {
+            Lean::BowDown
+        } else {
+            Lean::SternDown
+        };
+        assert_eq!(naval::lean_of(g * 8192), want, "8-direction {g}");
+    }
+    // The boundaries of S-0204 F4: half a step either side.
+    assert_eq!(naval::lean_of(4095), Lean::SternDown, "still north");
+    assert_eq!(naval::lean_of(4096), Lean::BowDown, "north-east");
+    assert_eq!(naval::lean_of(45055), Lean::BowDown, "still south-west");
+    assert_eq!(naval::lean_of(45056), Lean::SternDown, "west");
+    assert_eq!(naval::lean_of(61439), Lean::SternDown, "north-west");
+    assert_eq!(naval::lean_of(61440), Lean::SternDown, "north again");
+}
+
+/// Sinks a SKIFF at body facing `facing` from height 0 with a killing hit;
+/// its pitch after each descent while it stays in play, and whether every
+/// own update took exactly claim 4's two ranged wake draws (on a tick number
+/// divisible by 4, none otherwise), run update by update on a copy. No
+/// wake animation is defined, so a wake's own creation takes no draws
+/// (the two wake draws are still taken, claim 4).
+fn sink_and_record(facing: u16) -> (Vec<F32>, bool) {
+    let mut r = rules();
+    r.sim.general.wake = None;
+    let mut w = world(r);
+    let skiff = testkit::spawn(&mut w, Kind::Vehicle, "SKIFF", 0, cell(0, 0), facing);
+    open(&mut w);
+    assert_eq!(kill(&mut w, skiff), HitResult::NowDead);
+    assert_eq!(pitch_of(&w, skiff), F32::ZERO, "level at the hit");
+    let mut a = w.clone();
+    let mut wake_draws_only = true;
+    for t in 0..80 {
+        a.tick = 8 + t;
+        let mut expected = a.rng.clone();
+        if a.tick % 4 == 0 {
+            let half = a.rules().quirks.ranged_draw_half_span;
+            expected.ranged(-170, 170, half);
+            expected.ranged(-170, 170, half);
+        }
+        assert!(!naval::sinking_turn(&mut a, skiff));
+        wake_draws_only &= a.rng == expected;
+    }
+    let mut pitches = Vec::new();
+    loop {
+        tick::step(&mut w);
+        if w.obj(skiff).is_none() {
+            break;
+        }
+        pitches.push(pitch_of(&w, skiff));
+        assert!(pitches.len() < 200);
+    }
+    assert_eq!(
+        pitch_of(&a, skiff),
+        pitches[79],
+        "the same lean update by update"
+    );
+    (pitches, wake_draws_only)
+}
+
+// spec: S-0504 claim 15 (Timing: one step per descent in the same own update; from height 0 the lean is complete at the 79th descent, held at the 80th, and the vessel leaves play at the 81st; no random draw beyond claim 4's wake draws; the direction from the body facing at the first step); claim 4 and F1
+#[test]
+fn claim_15_the_lean_grows_with_each_descent_and_takes_no_draw() {
+    for (facing, lean) in [(0u16, Lean::SternDown), (16384, Lean::BowDown)] {
+        let (pitches, wake_draws_only) = sink_and_record(facing);
+        assert_eq!(pitches.len(), 80, "the 81st descent removes it");
+        let mut p = F32::ZERO;
+        for (n, got) in pitches.iter().enumerate() {
+            p = naval::pitch_step(p, lean, Rounding::TowardZero);
+            assert_eq!(*got, p, "facing {facing}: after descent {}", n + 1);
+        }
+        let full = if lean == Lean::BowDown {
+            full_lean()
+        } else {
+            neg(full_lean())
+        };
+        assert_ne!(
+            pitches[77], full,
+            "the 78th descent is short of the full lean"
+        );
+        assert_eq!(pitches[78], full, "complete at the 79th descent");
+        assert_eq!(pitches[79], full, "held at the 80th");
+        assert!(wake_draws_only, "facing {facing}: only the wake draws");
+    }
+}
+
+// spec: S-0504 claim 15 (Turning: a body turn that continues during descent, claim 10, keeps the direction set at the first step even when it carries the facing into the other group; N16 part a in our engine)
+#[test]
+fn claim_15_a_continuing_turn_keeps_the_lean() {
+    let mut w = world(rules());
+    let skiff = testkit::spawn(&mut w, Kind::Vehicle, "SKIFF", 0, cell(0, 0), 40960);
+    open(&mut w);
+    // A slow turn from south-west (5) towards north (0) through west.
+    let t = w.tick;
+    assert!(w.obj_mut(skiff).unwrap().body.turn_to(0, t, 1));
+    kill(&mut w, skiff);
+    let dir = |w: &World| eight_direction(w.obj(skiff).unwrap().body.value(w.tick));
+    assert_eq!(dir(&w), 5);
+    let mut last = F32::ZERO;
+    let mut crossed = false;
+    for _ in 0..60 {
+        tick::step(&mut w);
+        crossed |= dir(&w) == 6 || dir(&w) == 7;
+        let n = w.obj(skiff).unwrap().naval.clone().unwrap();
+        assert_eq!(n.lean, Some(Lean::BowDown));
+        assert!(
+            n.pitch.to_f64().gt(last.to_f64()),
+            "the bow keeps going down at tick {}",
+            w.tick
+        );
+        last = n.pitch;
+    }
+    assert!(
+        crossed,
+        "the turn carried the facing into the stern-down group"
+    );
+}
+
+// spec: S-0504 claims 13 and 15 (a vessel set sinking again continues with its lean and pitch kept); claim 15 (Causes and types: a start without a hit, as a cull's, leans in the same way)
+#[test]
+fn claim_15_a_second_start_keeps_the_lean() {
+    let mut w = world(rules());
+    let skiff = testkit::spawn(&mut w, Kind::Vehicle, "SKIFF", 0, cell(0, 0), 16384);
+    open(&mut w);
+    naval::start_sinking(&mut w, skiff);
+    for _ in 0..10 {
+        tick::step(&mut w);
+    }
+    let p = pitch_of(&w, skiff);
+    let mut want = F32::ZERO;
+    for _ in 0..10 {
+        want = naval::pitch_step(want, Lean::BowDown, Rounding::TowardZero);
+    }
+    assert_eq!(p, want, "bow down, ten steps, as after a hit");
+    w.obj_mut(skiff).unwrap().body = glasnost_sim::turning::Turning::at(0);
+    naval::start_sinking(&mut w, skiff);
+    assert_eq!(pitch_of(&w, skiff), p);
+    tick::step(&mut w);
+    assert_eq!(
+        pitch_of(&w, skiff),
+        naval::pitch_step(p, Lean::BowDown, Rounding::TowardZero),
+        "still bow down"
+    );
+}
+
+// spec: S-0504 claims 15 and 16 (only a sinking vehicle's pitch is drawn: one afloat reads level)
+#[test]
+fn claim_15_a_vessel_afloat_is_level() {
+    let mut w = world(rules());
+    let skiff = testkit::spawn(&mut w, Kind::Vehicle, "SKIFF", 0, cell(0, 0), 16384);
+    open(&mut w);
+    assert_eq!(naval::pitch(&w, skiff), F32::ZERO);
+    kill(&mut w, skiff);
+    tick::step(&mut w);
+    assert_ne!(naval::pitch(&w, skiff), F32::ZERO);
 }
