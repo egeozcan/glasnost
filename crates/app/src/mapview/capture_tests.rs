@@ -402,6 +402,29 @@ fn a_damaged_map_building_shows_its_damage() {
     assert_ne!(s.body.0, s.body.1, "the damaged frame");
 }
 
+/// spec: S-0103 claim 10 (the neutral house shows the light-grey definition) and claim 8 (a
+/// building is drawn with its owner's palette); S-0108 claim 2 (its damage changes its body
+/// frame); S-0515 claim 2 (it is manned only from its first ownership change); Q-1772 interim (an
+/// unmanned map tech building keeps its cell-pass drawing until its owner or health changes, and
+/// drawn live its slots play): the lead's note 18 of M8 step A4, round 4. A neutral tech building
+/// that is damaged but never captured animates, in the neutral house's colour, not a player's
+#[test]
+fn a_damaged_unmanned_tech_building_animates_in_the_neutral_colour() {
+    let s = scenario(true, true, Act::Damage);
+    assert!(s.before.0 > 0 && s.before.1 == 0, "{:?}", s.before);
+    assert!(s.after.0 == 0 && s.after.1 > 0, "{:?}", s.after);
+    assert!(
+        slot_frames(&s).len() > 1,
+        "the slot animation plays: {:?}",
+        s.slots
+    );
+    // A neutral building that needs no engineer is drawn live from the start: the neutral row.
+    let neutral = scenario(true, false, Act::Nothing).rows;
+    assert_eq!(neutral.len(), 1, "{neutral:?}");
+    assert_eq!(s.rows, neutral, "the neutral house's palette");
+    assert_ne!(s.rows, s.reference, "not a player house's palette");
+}
+
 /// Alpha's own HUTX with the slot animation, sellable (its type has a
 /// build-up sprite, S-0408 claim 4), sold after the first ticks: for each
 /// tick from the order on, the sale's stage and the building's

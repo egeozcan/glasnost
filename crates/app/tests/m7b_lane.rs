@@ -75,6 +75,23 @@
 //! (bouncing, corpse, endless, other), voxel debris pieces and particle
 //! systems (S-0107 claim 17; S-0109; S-0317; S-0616).
 //!
+//! M8 step A4, round 4 (the lead's notes 16 to 18): `carrier-death` puts
+//! each spawner type that launches aircraft on open water of the first map
+//! that has some, orders it to attack an enemy vehicle, kills it once a slot
+//! attacks or returns and counts, per slot aircraft, the ticks to health 0
+//! and to leaving play (S-0506 claims 12 and 13; S-0501 claims 9 and 36;
+//! S-0312 claim 16). `mirage-click` lets an enemy disguise-when-still
+//! vehicle take its disguise and counts the cursor every armed own vehicle
+//! and infantry type shows over it, plain and with force-fire, with the
+//! clicked thing chosen as the client chooses it: disguised, with its fake
+//! blink running, and without the disguise as the control (S-0214 claim 6,
+//! Terms; S-0516 claims 35, 36 and 39). `derrick-look` finds the map's
+//! buildings that need an engineer and have slot animations, and reports
+//! one fresh, damaged, captured by the local house and captured by the
+//! enemy: owner, manned state, drawn live, running slots and whether its
+//! colour is the non-player grey (S-0103 claims 8 and 10; S-0515 claim 2;
+//! Q-1772).
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -128,6 +145,9 @@ const SCENES: &[Scene] = &[
     ("bolt-building", |l| bolts(l, Kind::Building)),
     ("aa-auto", aa_auto),
     ("debris-left", debris_left),
+    ("carrier-death", carrier_death),
+    ("mirage-click", mirage_click),
+    ("derrick-look", derrick_look),
 ];
 
 #[test]
@@ -2583,4 +2603,517 @@ impl Lane {
                 (dx * dx + dy * dy, k.y, k.x)
             })
     }
+}
+
+// ---------------------------------------------------------------------------
+// M8 step A4 round 4 (the lead's play notes 16 to 18)
+
+/// A slot state's short name.
+fn slot_word(s: glasnost_sim::spawn::SlotState) -> &'static str {
+    use glasnost_sim::spawn::SlotState as S;
+    match s {
+        S::Empty => "empty",
+        S::Docked => "docked",
+        S::Preparing => "preparing",
+        S::OnRail => "on the rail",
+        S::Attacking => "attacking",
+        S::Returning => "returning",
+        S::Reloading => "reloading",
+    }
+}
+
+/// Note 16 (S-0506 claims 8, 12 and 13; S-0312 claim 16; S-0501 claim
+/// 36): each spawner type whose spawned type is not a rocket type (a
+/// carrier of aircraft), of the local house, clicked onto an enemy vehicle;
+/// once a slot aircraft attacks or returns, the carrier is killed by a hit,
+/// and every aircraft of the spawned type that was in play is followed:
+/// its health, the tick it falls and the tick it leaves play. Counts and
+/// ticks only.
+fn carrier_death(lane: &mut Lane) {
+    let spawners: Vec<((Kind, u32), glasnost_sim::spawn::SpawnRules)> = lane
+        .world()
+        .rules()
+        .missiles
+        .spawners
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .collect();
+    println!("carrier-death: spawner types {}", spawners.len());
+    let Some(target_name) = plain_vehicle(lane.world()) else {
+        println!("carrier-death: no plain vehicle type");
+        return;
+    };
+    for (n, &((kind, ti), sr)) in spawners.iter().enumerate() {
+        let (rocket, flagged, ship) = {
+            let r = lane.world().rules();
+            (
+                r.missiles.set_of(sr.spawned).is_some(),
+                r.unit(Kind::Aircraft, sr.spawned)
+                    .is_some_and(|u| u.vehicle.missile_spawn),
+                r.unit(kind, ti)
+                    .is_some_and(|u| u.locomotor == glasnost_sim::rules::Locomotor::Ship),
+            )
+        };
+        println!(
+            "carrier-death {n}: kind {kind:?}, ship {ship}, spawn count {}, spawned type a rocket type {rocket}, spawned type with the missile-spawn flag {flagged}",
+            sr.count
+        );
+        if rocket || kind == Kind::Building {
+            continue;
+        }
+        // The first map (of `GLASNOST_LANE_MAPS`, default 8) with open
+        // water near the local start, for a ship.
+        let mut found = None;
+        for map in 0..env_num("GLASNOST_LANE_MAPS", 8) {
+            let l = Lane::start_on(map).expect("the install is set");
+            let home = l.home();
+            let at = if ship {
+                l.area(home, (1, 1), 2, |x| x == land::WATER)
+            } else {
+                Some(l.open_land(CellXY::new(home.x + 10, home.y + 10)))
+            };
+            if let Some(at) = at {
+                println!("carrier-death {n}: map {map}");
+                found = Some((l, at));
+                break;
+            }
+        }
+        let Some((mut l, at)) = found else {
+            println!("carrier-death {n}: no open water on the maps tried");
+            continue;
+        };
+        let Some(enemy) = l.enemy() else { return };
+        let local = l.local();
+        let name = type_name_of(l.world(), kind, ti as usize);
+        let car = l.spawn(kind, &name, local, at);
+        let near = l.open_land(CellXY::new(at.x + 6, at.y));
+        let victim = l.spawn(Kind::Vehicle, &target_name, enemy, near);
+        // The victim lasts: the scene is about the carrier's death.
+        if let Some(o) = l.world_mut().obj_mut(victim) {
+            o.health = i32::MAX / 4;
+        }
+        l.look_at(at);
+        l.ticks(2);
+        let orders = l.order(local, car, ClickOn::Object(victim));
+        let slots = |w: &World| {
+            w.obj(car)
+                .and_then(|o| o.spawn.as_ref())
+                .map(|c| c.slots.clone())
+                .unwrap_or_default()
+        };
+        let flying = |w: &World| {
+            w.obj(car).and_then(|o| o.spawn.as_ref()).is_some_and(|c| {
+                c.slots.iter().any(|s| {
+                    matches!(
+                        s.state,
+                        glasnost_sim::spawn::SlotState::Attacking
+                            | glasnost_sim::spawn::SlotState::Returning
+                    )
+                })
+            })
+        };
+        let waited = until(&mut l, 1500, flying);
+        let at_death: Vec<String> = slots(l.world())
+            .iter()
+            .map(|s| slot_word(s.state).to_string())
+            .collect();
+        // Every aircraft of the spawned type in play (slot objects or detached).
+        let planes: Vec<ObjectId> = l
+            .world()
+            .objects
+            .values()
+            .filter(|o| o.on_map && o.kind == Kind::Aircraft && o.type_index == sr.spawned)
+            .map(|o| o.id)
+            .collect();
+        let in_slot = planes
+            .iter()
+            .filter(|&&p| slots(l.world()).iter().any(|s| s.object == Some(p)))
+            .count();
+        println!(
+            "carrier-death {n}: order {orders}; ticks until a slot attacks or returns {waited:?}; slots at the death {at_death:?}; aircraft of the type in play {}, in a slot {in_slot}",
+            planes.len()
+        );
+        l.save(&format!("carrier-death-{n}-before"));
+        let h = warhead_of_kind(l.world(), 0).unwrap_or(0);
+        kill_with(&mut l, car, h);
+        let t0 = l.world().tick;
+        let mut fell: Vec<Option<i32>> = vec![None; planes.len()];
+        let mut gone: Vec<Option<i32>> = vec![None; planes.len()];
+        for _ in 0..1500 {
+            l.ticks(1);
+            let w = l.world();
+            for (i, &p) in planes.iter().enumerate() {
+                match w.obj(p) {
+                    Some(o) if o.on_map => {
+                        if o.health <= 0 {
+                            fell[i].get_or_insert(w.tick - t0);
+                        }
+                    }
+                    _ => {
+                        gone[i].get_or_insert(w.tick - t0);
+                    }
+                }
+            }
+            if gone.iter().all(Option::is_some) {
+                break;
+            }
+            if w.tick - t0 == 30 {
+                l.save(&format!("carrier-death-{n}-after"));
+            }
+        }
+        let w = l.world();
+        let left: Vec<String> = planes
+            .iter()
+            .filter_map(|&p| w.obj(p))
+            .map(|o| {
+                format!(
+                    "health {} height {} behaviour {:?} kamikaze {}",
+                    o.health,
+                    glasnost_sim::air::height(w, o.id),
+                    o.beh.current,
+                    glasnost_sim::spawn::kamikaze(w, o.id)
+                )
+            })
+            .collect();
+        println!(
+            "carrier-death {n}: carrier in play {}; per aircraft, ticks after the hit to health 0 {fell:?}, to leaving play {gone:?}; still in play {left:?}",
+            w.obj(car).is_some_and(|o| o.on_map)
+        );
+    }
+}
+
+/// The weapon names whose `TerrainFire` key reads as yes in the import
+/// (S-0214 Import mapping; our engine does not import the key yet).
+fn terrain_fire_weapons(lane: &Lane) -> std::collections::BTreeSet<String> {
+    let s = lane.c.session.as_ref().unwrap();
+    s.loaded
+        .import
+        .outcome
+        .registries
+        .get(&glasnost_convert::kinds::Kind::Weapons)
+        .map(|v| {
+            v.iter()
+                .filter(|t| {
+                    t.keys
+                        .get(b"TerrainFire".as_slice())
+                        .and_then(|k| k.value.as_deref())
+                        .and_then(glasnost_ini::value::boolean)
+                        .unwrap_or(false)
+                })
+                .map(|t| String::from_utf8_lossy(&t.name).to_lowercase())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Note 17 (S-0214 Terms *clicked object*, *can be selected*, claim 6 and
+/// table G; S-0516 claims 33, 35 to 37 and 39): each vehicle type that
+/// disguises when still, of an enemy house, standing still until it takes a
+/// disguise; every armed vehicle and infantry type of the local house, five
+/// cells away, is asked what a plain click and a force-fire click on it
+/// give, through the client's own choice of the clicked thing; then the
+/// same while its fake blink runs. Counts only.
+fn mirage_click(lane: &mut Lane) {
+    let types: Vec<usize> = {
+        let r = lane.world().rules();
+        (0..r.vehicles.len())
+            .filter(|&i| {
+                r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                    u.strength > 0
+                        && u.combat.can_disguise
+                        && u.combat.disguise_when_still
+                        && !u.raw.perma_disguise.unwrap_or(false)
+                })
+            })
+            .collect()
+    };
+    let terrain_fire = terrain_fire_weapons(lane);
+    println!(
+        "mirage-click: disguise-when-still vehicle types {}; general attack cursor on disguised units {}; weapons whose terrain-fire key reads yes {}",
+        types.len(),
+        lane.world().rules().cloak.attack_cursor_on_disguise,
+        terrain_fire.len()
+    );
+    let Some(enemy) = lane.enemy() else { return };
+    let local = lane.local();
+    for (n, &ti) in types.iter().enumerate() {
+        let name = lane.world().rules().vehicles[ti].name.clone();
+        let home = lane.home();
+        let at = lane.open_land(CellXY::new(home.x + 12, home.y + 12));
+        let m = lane.spawn(Kind::Vehicle, &name, enemy, at);
+        let took = until(lane, 600, |w| {
+            w.obj(m).is_some_and(|o| o.cloak.disguise.is_some())
+        });
+        let what = lane.world().obj(m).and_then(|o| o.cloak.disguise).map(|d| {
+            let kind = match d.what {
+                Some(glasnost_sim::cloak::disguise::DisguiseAs::Terrain(_)) => "terrain object",
+                Some(glasnost_sim::cloak::disguise::DisguiseAs::Overlay(_)) => "overlay",
+                Some(_) => "unit",
+                None => "no type",
+            };
+            format!("{kind}, house {:?}", d.house)
+        });
+        let w = lane.world();
+        println!(
+            "mirage-click {n}: ticks to its disguise {took:?}: {what:?}; appears disguised to the local house {}; selectable by it {}",
+            glasnost_sim::cloak::appears_disguised(w, m, Some(local)),
+            glasnost_sim::targeting::selectable_by(w, m, Some(local))
+        );
+        lane.look_at(at);
+        lane.save(&format!("mirage-click-{n}-disguised"));
+        mirage_actors(lane, n, "disguised", m, &terrain_fire);
+        // The fake blink (S-0516 claim 39): it runs while the enemy sees
+        // the real unit; set as a shot would set it.
+        let blink_end = lane.world().tick + 60;
+        if let Some(o) = lane.world_mut().obj_mut(m) {
+            o.cloak.blink_until = blink_end;
+        }
+        let w = lane.world();
+        println!(
+            "mirage-click {n}: blinking {}, still disguised {}",
+            glasnost_sim::cloak::disguise::blinking(w, m),
+            w.obj(m).is_some_and(|o| o.cloak.disguise.is_some())
+        );
+        mirage_actors(lane, n, "blinking", m, &terrain_fire);
+        // The control: the same unit without its disguise, at once (no
+        // tick runs, so it does not take it again).
+        if let Some(o) = lane.world_mut().obj_mut(m) {
+            o.cloak.blink_until = 0;
+            o.cloak.disguise = None;
+        }
+        mirage_actors(lane, n, "undisguised (control)", m, &terrain_fire);
+        glasnost_sim::objects::remove(lane.world_mut(), m);
+    }
+}
+
+/// Every armed vehicle and infantry type of the local house, five cells
+/// from `m`, clicked onto it plain and with force-fire, the clicked thing
+/// chosen as the client chooses it; the actions by count.
+fn mirage_actors(
+    lane: &mut Lane,
+    n: usize,
+    what: &str,
+    m: ObjectId,
+    terrain_fire: &std::collections::BTreeSet<String>,
+) {
+    let local = lane.local();
+    let at = lane
+        .world()
+        .obj(m)
+        .map_or(CellXY::new(0, 0), |o| o.pos.cell());
+    let mut plain = std::collections::BTreeMap::<String, usize>::new();
+    let mut force = std::collections::BTreeMap::<String, usize>::new();
+    let mut tf = 0;
+    let mut actors = 0;
+    for kind in [Kind::Vehicle, Kind::Infantry] {
+        for i in 0..type_count(lane.world(), kind) {
+            let ok =
+                lane.world().rules().unit(kind, i as u32).is_some_and(|u| {
+                    u.strength > 0 && u.combat.slots[0].is_some() && !u.combat.gunner
+                });
+            if !ok {
+                continue;
+            }
+            let name = type_name_of(lane.world(), kind, i);
+            let a = lane.spawn(kind, &name, local, CellXY::new(at.x - 5, at.y));
+            actors += 1;
+            let on = lane.c.session.as_ref().unwrap().play.target(Some(m), at);
+            let w = lane.world();
+            let (_, wp) = glasnost_sim::combat::weapon::would_use(
+                w,
+                a,
+                Some(glasnost_sim::world::Target::Object(m)),
+            );
+            if wp.is_some_and(|x| {
+                terrain_fire.contains(&w.rules().combat.weapon(x).name.to_lowercase())
+            }) {
+                tf += 1;
+            }
+            let p = targeting::cursor(w, local, &[a], on, Modifiers::default());
+            let f = targeting::cursor(
+                w,
+                local,
+                &[a],
+                on,
+                Modifiers {
+                    force_fire: true,
+                    ..Modifiers::default()
+                },
+            );
+            let key = |x: targeting::Action| {
+                format!(
+                    "{x:?} on {}",
+                    if matches!(on, ClickOn::Object(_)) {
+                        "the unit"
+                    } else {
+                        "its cell"
+                    }
+                )
+            };
+            *plain.entry(key(p)).or_insert(0) += 1;
+            *force.entry(key(f)).or_insert(0) += 1;
+            glasnost_sim::objects::remove(lane.world_mut(), a);
+        }
+    }
+    println!(
+        "mirage-click {n} {what}: actors {actors} (the weapon each would use is a terrain-fire weapon for {tf}); plain click {plain:?}; force-fire click {force:?}"
+    );
+}
+
+/// Note 18 (S-0103 claims 8 and 10; S-0108 claims 2 and 11; S-0405
+/// claims 8 and 9; S-0509 claim 8; S-0515 claim 2; Q-1772): the map's
+/// buildings whose type needs an engineer and has slot animations, on the
+/// first map (of `GLASNOST_LANE_MAPS`, default 8) that has one: the art's
+/// terrain-palette flag; then one of them fresh, damaged, captured by the
+/// local house's engineer through a click and captured by an enemy
+/// engineer: whether it is drawn live, its running slots, and whether its
+/// owner's colour definition is the non-player grey. Counts only.
+fn derrick_look(_: &mut Lane) {
+    let maps = env_num("GLASNOST_LANE_MAPS", 8);
+    for map in 0..maps {
+        let Some(mut l) = Lane::start_on(map) else {
+            return;
+        };
+        l.ticks(3);
+        let _ = l.c.frame_rgba();
+        let found = derricks(&l);
+        println!(
+            "derrick-look map {map}: needs-engineer map buildings with running slot animations {}",
+            found.len()
+        );
+        let Some(&b) = found.first() else { continue };
+        let flags: std::collections::BTreeMap<Option<bool>, usize> =
+            found.iter().fold(Default::default(), |mut m, &id| {
+                *m.entry(terrain_palette(&l, id)).or_insert(0) += 1;
+                m
+            });
+        println!("derrick-look map {map}: terrain-palette art flag over them {flags:?}");
+        let cell = l.world().obj(b).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+        l.look_at(cell);
+        derrick_state(&mut l, map, "fresh", b);
+        l.save(&format!("derrick-{map}-fresh"));
+        // Damaged, never captured.
+        let full = l.world().obj(b).map_or(0, |o| o.health);
+        if let Some(o) = l.world_mut().obj_mut(b) {
+            o.health = full / 2;
+        }
+        l.ticks(20);
+        derrick_state(&mut l, map, "damaged", b);
+        l.save(&format!("derrick-{map}-damaged"));
+        if let Some(o) = l.world_mut().obj_mut(b) {
+            o.health = full;
+        }
+        // Captured by the local house, then by an enemy, each by a click.
+        let local = l.local();
+        let enemy = l.enemy();
+        for (who, house) in [("local", Some(local)), ("enemy", enemy)] {
+            let Some(house) = house else { continue };
+            let Some(eng) = engineer(&l) else {
+                println!("derrick-look: no engineer type");
+                return;
+            };
+            let spot = l.open_land(CellXY::new(cell.x - 4, cell.y + 4));
+            let e = l.spawn(Kind::Infantry, &eng, house, spot);
+            l.ticks(2);
+            let orders = l.order(house, e, ClickOn::Object(b));
+            let took = until(&mut l, 1500, |w| {
+                w.obj(b).is_some_and(|o| o.owner == Some(house))
+            });
+            l.ticks(20);
+            println!(
+                "derrick-look map {map} {who}: capture order {orders}, ticks to the ownership change {took:?}"
+            );
+            derrick_state(&mut l, map, &format!("captured by the {who} house"), b);
+            l.save(&format!("derrick-{map}-{who}"));
+        }
+        return;
+    }
+}
+
+/// The map's buildings whose type needs an engineer and that have running
+/// slot animations (the live view's slot player).
+fn derricks(l: &Lane) -> Vec<ObjectId> {
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref().expect("a live game");
+    let w = l.world();
+    live.building_ids
+        .values()
+        .filter(|&&id| {
+            w.obj(id).is_some_and(|o| {
+                let tech = w
+                    .rules()
+                    .econ
+                    .power
+                    .buildings
+                    .get(o.type_index as usize)
+                    .is_some_and(|t| t.needs_engineer);
+                o.on_map && tech && !live.slot_names(id).is_empty()
+            })
+        })
+        .copied()
+        .collect()
+}
+
+/// The `TerrainPalette` art flag of a building's type (S-0103 claim 8).
+fn terrain_palette(l: &Lane, id: ObjectId) -> Option<bool> {
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref()?;
+    let o = l.world().obj(id)?;
+    let idx = live.import_index(o.kind, o.type_index)?;
+    let import = &s.loaded.import;
+    let image = import
+        .arts
+        .get(&(glasnost_convert::kinds::Kind::Buildings, idx))?
+        .image
+        .clone();
+    let f = import.art_file.as_ref()?;
+    let doc = glasnost_ini::Document::parse(&f.bytes, Default::default(), &mut Vec::new());
+    Some(
+        doc.value(&image, b"TerrainPalette")
+            .and_then(glasnost_ini::value::boolean)
+            .unwrap_or(false),
+    )
+}
+
+/// An engineer infantry type.
+fn engineer(l: &Lane) -> Option<String> {
+    let r = l.world().rules();
+    (0..r.infantry.len())
+        .find(|&i| {
+            r.unit(Kind::Infantry, i as u32)
+                .is_some_and(|u| u.engineer && u.strength > 0)
+        })
+        .map(|i| r.infantry[i].name.clone())
+}
+
+/// One line on the building's look: owner role, manned, drawn live,
+/// running slots, and whether its owner's colour definition is the
+/// non-player grey or ours.
+fn derrick_state(l: &mut Lane, map: usize, what: &str, b: ObjectId) {
+    l.ticks(1);
+    let _ = l.c.frame_rgba();
+    let permille = l.permille(b);
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref().expect("a live game");
+    let w = l.world();
+    let Some(o) = w.obj(b) else {
+        println!("derrick-look map {map} {what}: gone");
+        return;
+    };
+    let house = o.owner.and_then(|h| w.houses.get(usize::from(h.0)));
+    let name = house
+        .map(|h| h.name.as_bytes().to_vec())
+        .unwrap_or_default();
+    let import = &s.loaded.import;
+    let options = &s.loaded.options;
+    let (hsv, ours) = glasnost_app::mapview::build::owner_definition(import, options, &name);
+    let (grey, _) = glasnost_app::mapview::build::owner_definition(import, options, b"Neutral");
+    println!(
+        "derrick-look map {map} {what}: owner role {:?}, manned {}, health per mille {permille}, drawn live {}, running slots {}, owner colour the non-player grey {}, ours {ours}",
+        house.map(|h| h.role),
+        o.econ.building.manned,
+        live.drawn_live(b),
+        live.slot_names(b).len(),
+        hsv == grey,
+    );
 }

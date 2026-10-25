@@ -90,14 +90,7 @@ pub fn shadow(w: &World, id: ObjectId) -> bool {
 /// 36).
 pub fn pickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
     let Some(o) = w.obj(id) else { return false };
-    let sensed = senses(w, v, id);
-    let owner = v.is_some() && o.owner == v;
-    // spec: S-0516 claim 26 (a fully cloaked object V neither owns nor senses, allies included)
-    if o.cloak.state == CloakState::Cloaked && !owner && !sensed {
-        return false;
-    }
-    // spec: S-0516 claim 26 (a building at fade level 15 that V does not sense)
-    if o.kind == Kind::Building && o.cloak.stage >= 15 && !sensed {
+    if !clickable(w, id, v) {
         return false;
     }
     // spec: S-0516 claim 36 (a unit disguised as a terrain object or overlay that appears disguised to V cannot be selected)
@@ -107,6 +100,26 @@ pub fn pickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
             .and_then(|d| d.what)
             .is_some_and(|d| matches!(d, DisguiseAs::Terrain(_) | DisguiseAs::Overlay(_)))
     {
+        return false;
+    }
+    true
+}
+
+/// Whether a click of viewing house *V* can find the object at all (S-0214
+/// Terms, *clicked object* and *can be selected*; S-0516 claim 26): not a
+/// fully cloaked object *V* neither owns nor senses, nor a building at fade
+/// level 15 that *V* does not sense. A unit disguised as scenery is still
+/// found: claim 36 excludes it from selection only ([`pickable`]).
+pub fn clickable(w: &World, id: ObjectId, v: Option<HouseId>) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    let sensed = senses(w, v, id);
+    let owner = v.is_some() && o.owner == v;
+    // spec: S-0516 claim 26 and S-0214 Terms (a fully cloaked object V neither owns nor senses cannot be clicked, allies included)
+    if o.cloak.state == CloakState::Cloaked && !owner && !sensed {
+        return false;
+    }
+    // spec: S-0516 claim 26 (a building at fade level 15 that V does not sense)
+    if o.kind == Kind::Building && o.cloak.stage >= 15 && !sensed {
         return false;
     }
     true

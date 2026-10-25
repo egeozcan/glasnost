@@ -498,12 +498,11 @@ impl Play {
         }
     }
 
-    /// What a click targets: the selectable object under the pointer, else
-    /// the cell.
+    /// What a click targets: the object under the pointer that a click
+    /// finds, else the cell.
     pub fn target(&self, object: Option<ObjectId>, cell: CellXY) -> ClickOn {
-        // spec: S-0516 claims 26 and 36 (a cloaked or scenery-disguised object the player cannot pick is not clicked)
-        match object.filter(|&id| targeting::selectable_by(&self.game.world, id, Some(self.local)))
-        {
+        // spec: S-0214 Terms (clicked object; a fully cloaked object the viewer neither owns nor senses cannot be clicked) and S-0516 claims 26 and 36 (a unit disguised as scenery is still clicked: it cannot be selected, and the kind tables and the disguise rule of S-0214 claim 6 decide the rest)
+        match object.filter(|&id| targeting::clickable_by(&self.game.world, id, Some(self.local))) {
             Some(id) => ClickOn::Object(id),
             None => ClickOn::Cell(cell),
         }

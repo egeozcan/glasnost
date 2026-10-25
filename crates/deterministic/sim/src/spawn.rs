@@ -1168,8 +1168,10 @@ fn start_crash(w: &mut World, x: ObjectId) {
     }
     if crate::air::is_aircraft(w, x) && crate::air::height(w, x) > 0 {
         // spec: S-0501 claim 36 (starting this crash sets health to 0, not a living disabled fall; its unfinished flight and speed fraction are kept and ordinary movement continues)
+        // spec: S-0501 claim 9 (it falls as a dead aircraft, and its impact effects and removal follow S-0312 claim 16 for one shot down): our engine's dead state is killed with no health left (`damage::dead`), with none of a killing hit's other effects, which S-0501 claim 36 does not give the release
         if let Some(ob) = w.obj_mut(x) {
             ob.health = 0;
+            ob.combat.killed = true;
         }
         if crate::air::start_crash(w, x, false) {
             return;
