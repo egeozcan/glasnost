@@ -2488,7 +2488,7 @@ impl<'a> Builder<'a> {
             let items = self.building_items(
                 // spec: S-0105 claim 16 and S-0609 claim 14 (a map-placed building has not spun: counter 0)
                 i,
-                &art,
+                art,
                 p.cell,
                 cell.level,
                 &p.owner,
@@ -3159,7 +3159,7 @@ impl<'a> Builder<'a> {
         // spec: S-0306 claim 28 and S-0101 F1 (the draw point: the screen point of its position, height lift included, no further shift)
         let point = project_lifted(d.pos.0, d.pos.1, d.pos.2);
         if look.voxel {
-            return self.voxel_projectile(d, &art, &look, point);
+            return self.voxel_projectile(d, art, &look, point);
         }
         // spec: S-0306 claim 28 (a sprite projectile without a sprite draws nothing)
         let Some(sprite) = art.sprite.clone() else {
@@ -4263,7 +4263,7 @@ impl<'a> Builder<'a> {
             Group::Vehicles
         };
         if art.voxels.contains_key("body") {
-            self.vehicle_voxels(m, &art, point, u, row, group)
+            self.vehicle_voxels(m, art, point, u, row, group)
         } else if m.kind == Kind::Vehicles
             && let Some(sprite) = art.sprite.clone()
         {
@@ -5699,7 +5699,7 @@ impl Painter {
             b.live_slots = Some(d.slots.clone());
             let mut items = b.building_items(
                 d.idx,
-                &art,
+                art,
                 d.cell,
                 level,
                 &d.owner,
