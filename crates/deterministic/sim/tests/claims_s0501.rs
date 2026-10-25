@@ -286,7 +286,7 @@ fn attack_take_off_run_return_rearm() {
     assert!(hit, "damages the target: {}", describe(&w, a));
     let empty = run_until(&mut w, 3000, |w| w.obj(a).unwrap().combat.ammo == 0);
     assert!(empty, "spends its rounds: {}", describe(&w, a));
-    // spec: S-0501 claim 24 (docked at the docking position by enter's staged processing after touchdown: sleep)
+    // spec: S-0501 claim 24 (enter's docking steps move it horizontally to the docking position before touchdown, at the landing height; after touchdown it reports entered: sleep)
     let back = run_until(&mut w, 3000, |w| {
         air::on_ground(w, a)
             && w.obj(a).unwrap().contact == Some(k)
@@ -1964,7 +1964,7 @@ fn claim_8_no_heading_request_below_half_height() {
     assert!(turned, "{}", describe(&w, a));
 }
 
-// spec: S-0501 claim 24 (after touchdown on its pad enter's staged processing puts it at the docking position and reports entered: sleep, not on the touchdown tick, within the 3-tick arrival and 1-tick docking stages)
+// spec: S-0501 claim 24 (enter's docking steps leave it at the docking position at touchdown, here with no displacement; after touchdown it reports entered: sleep, not on the touchdown tick, within the 3-tick arrival and 1-tick docking stages)
 #[test]
 fn claim_24_docking_follows_touchdown() {
     let mut r = rules();

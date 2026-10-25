@@ -179,10 +179,10 @@ pub struct AirState {
     pub taking_off: bool,
     /// Landing.
     pub landing: bool,
-    /// Settled on the ground: placed there or touched down, until it takes
-    /// off. The render layer itself follows the height (claim 7: the
-    /// ground layer exactly at a height of 0 or below), so a docked aircraft
-    /// at a positive docking height is settled but in the top layer.
+    /// Settled on the ground: placed there, touched down or released onto
+    /// its pad at the landing height, until it takes off. An aircraft that
+    /// a factory release leaves above its pad is not settled (claim 48,
+    /// [`AirState::released`]).
     pub ground: bool,
     /// The cell holding its object-present mark (S-0209 claim 1), while it
     /// is on the ground.
@@ -246,6 +246,17 @@ pub struct AirState {
     pub body_was: Option<crate::turning::Turning>,
     /// The aiming facing before its first request in `request_tick`.
     pub aim_was: Option<crate::turning::Turning>,
+    /// Left above its pad by a factory release (claim 48), with the landing
+    /// height 0 as its held height, until it takes the held height of
+    /// ordinary flight (claim 48 (b)), starts to land, takes off or
+    /// crashes.
+    pub released: bool,
+    /// Still filed in the ground render layer's list by its ground
+    /// placement, with no re-file since (claim 48 (a) and (c), S-0102
+    /// claim 4): set by a factory release that leaves it above the terrain,
+    /// cleared at its next re-file moment. S-0309 claim 7's ground-layer
+    /// pass and the drawing read it.
+    pub ground_filed: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -333,11 +344,23 @@ pub fn listing_height(w: &World, id: ObjectId) -> i32 {
 }
 
 /// This spec's *on the ground* test (S-0501 Terms): *h* at most the
-/// landing height 0, or drawn in the ground layer, which applies exactly at
-/// a height of 0 or below (claim 7).
+/// landing height 0, or the render layer its height gives it (claim 7) is
+/// the ground layer, the same condition. It reads the height, never the
+/// render-layer list the aircraft was last filed in: claim 48's released
+/// aircraft, still filed in the ground render layer at a positive height,
+/// is in flight.
 pub fn on_ground(w: &World, id: ObjectId) -> bool {
-    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or in the ground layer) and claim 7 (the ground layer exactly when the height above the surface, the deck mark included, is at most 0; no hysteresis)
+    // spec: S-0501 Terms (on the ground: h ≤ landing height 0, or the ground layer its height gives it; the test reads height, not the render layer's list, r52) and claim 7 (the ground layer exactly when the height above the surface, the deck mark included, is at most 0; no hysteresis)
     listing_height(w, id) <= 0
+}
+
+/// Whether the aircraft is still filed in the ground render layer's list
+/// by its ground placement at a positive height, with no re-file since
+/// (S-0501 claim 48 (a) and (c)): a factory release left it above its pad.
+pub fn ground_filed(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .and_then(|o| o.air.as_ref())
+        .is_some_and(|a| a.ground_filed)
 }
 
 /// The cell layer the aircraft is listed in (S-0209 claim 13), or none.
@@ -421,8 +444,9 @@ fn sector_update(w: &mut World, id: ObjectId) {
     if crate::combat::flying::tracked(w, id) {
         // spec: S-0501 claim 47 (c) (in another cell than at its last start of tracking or sector update: when its cell lies in another sector than its list's, it joins the end of its current sector's list, S-0303 claim 11; otherwise its place does not change). Its list's sector is the sector of that last cell, so only a change of cell can change the sector.
         crate::combat::flying::moved(w, id);
-    } else if !a.ground && !on_ground(w, id) {
-        // spec: S-0501 claim 47 (c) and Edge cases (quirks.aircraft_corner_sector_untracked on: an untracked aircraft in flight whose cell lies in sector (0, 0) of S-0303 F7, cell (0, 0) included, joins no list; off: it joins sector (0, 0)'s list like any other)
+    } else if !a.ground && (!on_ground(w, id) || a.released) {
+        // spec: S-0501 claim 47 (c) and claim 48 (c) (so does an aircraft that a factory release has left above its pad, whatever its height at that update: the low release at height 0 is not at rest and becomes tracked all the same)
+        // spec: S-0501 claim 47 (c) and Edge cases (quirks.aircraft_corner_sector_untracked on: an untracked aircraft in flight, or one a factory release has left above its pad, whose cell lies in sector (0, 0) of S-0303 F7, cell (0, 0) included, joins no list; off: it joins sector (0, 0)'s list like any other)
         if w.rules().quirks.aircraft_corner_sector_untracked
             && crate::combat::flying::sector(w, cell) == (0, 0)
         {
@@ -732,27 +756,37 @@ fn set_mark(w: &mut World, id: ObjectId) {
     }
 }
 
-/// A newly built aircraft stands docked at its pad (S-0404 claims 13 and
-/// 15, S-0417 claim 11): settled on the ground at the pad position `p`.
+/// A newly built aircraft is released at its pad (S-0404 claims 13 and
+/// 15, S-0417 claim 11, S-0501 claims 1 and 48): moved, in the tick of its
+/// ground placement, to the pad position `p`, its docking position.
+///
+/// With `quirks.aircraft_released_above_pad` on, the height is `p`'s:
+/// where that is above the terrain, the aircraft rests in the air there,
+/// not settled, in neither cell layer, not tracked and still filed in the
+/// ground render layer (claim 48). At or below the terrain it is settled
+/// there. Off, it is settled at the landing height above the terrain at
+/// `p`'s horizontal location, like an aircraft docked by landing.
 pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
     if !is_aircraft(w, id) {
         return;
     }
     clear_mark(w, id);
-    let mut moved = false;
+    let above = w.rules().quirks.aircraft_released_above_pad;
+    // spec: S-0501 claim 1 and S-0404 claim 15 (a factory release moves it to its docking position, height included, in the same tick) and Edge cases (quirks.aircraft_released_above_pad off: at the docking position's horizontal location, at the landing height 0 above the terrain there)
+    let z = if above { p.z } else { w.surface_at(p.x, p.y) };
     if let Some(o) = w.obj_mut(id) {
-        moved = o.pos.cell() != p.cell();
         let from = o.pos.cell();
-        o.pos = p;
-        if moved {
+        o.pos = Pos::new(p.x, p.y, z);
+        if from != p.cell() {
             w.cells.leave(from, Layer::Ground, id);
             w.cells.enter(p.cell(), Layer::Ground, id, false);
         }
     }
-    let _ = moved;
+    // spec: S-0501 claim 48 (its height there, Terms, is positive: it rests above its pad)
+    let raised = above && height(w, id) > 0;
     if let Some(a) = st_mut(w, id) {
-        // spec: S-0501 claim 1 (a later docking-position assignment is separate: S-0404 claim 15's docking position, its height included) and claim 40 (settled on its contact building: no unfinished flight)
-        a.ground = true;
+        // spec: S-0501 claim 40 (settled on its contact building: no unfinished flight) and claim 48 (a) and (b) (released above its pad: not landing, no take-off under way, the landing height 0 held from its ground placement, its speed fractions 0)
+        a.ground = !raised;
         a.held = 0;
         a.landing = false;
         a.taking_off = false;
@@ -762,11 +796,42 @@ pub fn released_docked(w: &mut World, id: ObjectId, p: Pos) {
         a.flying_to = None;
         a.raised = false;
         a.deck = false; // spec: S-0501 claim 43 (a pad grants no mark: the mark is clear on a pad)
+        a.released = raised;
+        // spec: S-0501 claim 48 (a) (its ground placement filed it in the ground render layer and the release raises it without a re-file, S-0102 claim 4)
+        a.ground_filed = raised;
     }
+    // Interim (Q-1875): the released aircraft keeps the object-present
+    // mark of its ground placement, moved to its docking cell, until its
+    // first movement update toward a destination.
     set_mark(w, id);
+    // spec: S-0209 claim 13 (a positive listing height keeps it out of both cell layers: claim 48 (a))
     sync_listing(w, id);
-    // spec: S-0501 claim 47 (b) (a landed aircraft resting on a pad is never tracked)
+    // spec: S-0501 claim 47 (b) (a landed aircraft resting on a pad is never tracked) and claim 48 (a) (nothing has made the released aircraft a tracked flying object)
     end_tracking(w, id);
+}
+
+/// The aircraft took destination `dest` (S-0501 claim 48 (c)): an aircraft
+/// that a factory release has left above its pad ends its pad contact at
+/// the order when the destination is not that pad and the cell holding its
+/// horizontal position belongs to the pad, whatever its height. An
+/// aircraft standing on its pad ends it at its take-off (claim 8).
+pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target>) {
+    if !is_aircraft(w, id) || !st(w, id).released {
+        return;
+    }
+    let Some(d) = dest else { return };
+    let Some(k) = w.obj(id).and_then(|o| o.contact) else {
+        return;
+    };
+    // spec: S-0501 claim 48 (c) and S-0417 claim 11 (its contact ends at the order when it takes a destination other than the pad; the rule reads the cell of its horizontal position, which must belong to the pad it is in contact with, not its height; a docking position outside the foundation leaves the contact held)
+    if d != Target::Object(k)
+        && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
+        && pad_cell(w, k, id)
+        && let Some(o) = w.obj_mut(id)
+    {
+        o.contact = None;
+        o.econ.exit = None;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -901,19 +966,21 @@ fn raise_now(w: &World, id: ObjectId) -> bool {
 
 /// [`flight_point`] with the height replacement given.
 fn point_with(w: &World, id: ObjectId, d: Target, raised: bool) -> Pos {
-    if let Target::Object(k) = d
-        && w.obj(id).is_some_and(|o| o.contact == Some(k))
-        && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
-    {
-        // spec: S-0501 claim 40 (pad guidance replaces a building point with the contacting aircraft's docking position, S-0404 claim 15)
-        return crate::econ::release::pad_position(w, k, id).0;
-    }
     // spec: S-0501 claim 40 (the destination's heading point with the aircraft as requesting actor: a cell's centre at its surface, a mobile object's next movement point or position, a building's centre)
     let mut p = heading_point(w, d);
     // spec: S-0501 claim 6 (a movement point accepted while the aircraft has a target and ammunition: its world height becomes the terrain height there plus the cruise height)
     if raised {
         let cruise = ty(w, id).map_or(0, |t| t.cruise);
         p.z = w.surface_at(p.x, p.y) + cruise;
+    }
+    if let Target::Object(k) = d
+        && w.obj(id).is_some_and(|o| o.contact == Some(k))
+        && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
+    {
+        // spec: S-0501 claim 40 (pad guidance then replaces a building point with the contacting aircraft's docking position, S-0404 claim 15, but only its horizontal location: the docking position's height is not applied, claim 24, r52)
+        let q = crate::econ::release::pad_position(w, k, id).0;
+        p.x = q.x;
+        p.y = q.y;
     }
     p
 }
@@ -1083,11 +1150,12 @@ fn take_off(w: &mut World, id: ObjectId, cruise: i32) {
     clear_mark(w, id);
     let dest = w.obj(id).and_then(|o| o.dest);
     if let Some(a) = st_mut(w, id) {
-        // spec: S-0501 claim 8 (taking off: the held height becomes the cruise height)
+        // spec: S-0501 claim 8 (taking off: the held height becomes the cruise height) and claim 48 (b) (a take-off gives the held height of ordinary flight)
         a.held = cruise;
         a.taking_off = true;
         a.landing = false;
         a.ground = false;
+        a.released = false;
     }
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0501 claim 8 and claim 24 (standing on a pad, it leaves its reservation for any destination other than that pad); S-0417 claim 11 (the tether ends when it leaves the ground)
@@ -1113,6 +1181,7 @@ fn start_landing(w: &mut World, id: ObjectId) {
         a.taking_off = false;
         a.held = 0;
         a.tgt = F64::ZERO;
+        a.released = false;
     }
 }
 
@@ -1388,13 +1457,14 @@ fn touchdown(w: &mut World, id: ObjectId) {
         a.raised = false;
         // spec: S-0501 claim 40 (landing settled: the completion clears the unfinished flight and the destination)
         a.unfinished = false;
+        a.released = false;
     }
     set_mark(w, id);
     let pad = o
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building) && pad_cell(w, k, id));
     set_dest(w, id, None);
-    // spec: S-0501 claim 24 (in enter, the processing after touchdown recognizes arrival and advances to docking, then the docking-position and entered-report stage follows)
+    // spec: S-0501 claim 24 (in enter, the docking stage's processing after touchdown reports that it has entered; outside enter it docks where it touched down, with no move to the docking position)
     let entering = o.beh.current == Some(Behaviour::Enter);
     if let Some(k) = pad
         && !entering
@@ -1411,14 +1481,18 @@ fn pad_cell(w: &World, k: ObjectId, id: ObjectId) -> bool {
     crate::econ::placement::foundation_cells(w, b.type_index, b.pos.cell()).contains(&o.pos.cell())
 }
 
-/// Docking at pad `k` (claim 24): put at the contact place's docking
-/// position, then reports that it has entered.
+/// Docking at pad `k` after touchdown (claim 24): the aircraft rests where
+/// it touched down, at the landing height, in contact with its contact
+/// place, and reports that it has entered. Only a factory release puts an
+/// aircraft at a docking position ([`released_docked`]); the docking stage
+/// of *enter* has moved it toward that position horizontally while it
+/// landed ([`docking_step`]).
 fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
-    let (p, place) = crate::econ::release::pad_position(w, k, id);
+    // spec: S-0501 claim 24 (docking by landing never applies the docking position: it rests where it touched down, short of that position if the horizontal difference was not used up) and S-0404 claim 15 (its contact place)
+    let (_, place) = crate::econ::release::pad_position(w, k, id);
     let facing = landing_facing(w, id);
     let t = w.tick;
     let keeps = w.rules().quirks.set_facing_keeps_target;
-    released_docked(w, id, p);
     if let Some(o) = w.obj_mut(id) {
         o.contact = Some(k);
         o.econ.exit = Some(crate::econ::release::Exit {
@@ -1431,6 +1505,28 @@ fn dock(w: &mut World, id: ObjectId, k: ObjectId) {
         o.turret.set(facing, t, keeps);
     }
     report_entered(w, id, k);
+}
+
+/// One step of *enter*'s docking approach while the aircraft lands (claim
+/// 24): toward its contact place's docking position at pad `k`, along each
+/// map axis by the difference limited to −5 … +5 leptons, its world height
+/// unchanged.
+fn docking_step(w: &mut World, id: ObjectId, k: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    let here = o.pos;
+    let to = if w.obj(k).is_some_and(|b| b.kind == Kind::Building) {
+        crate::econ::release::pad_position(w, k, id).0
+    } else {
+        // spec: S-0501 claim 24 (a contact that is not a building gives its centre instead of a docking position)
+        w.reference_point(k)
+    };
+    // spec: S-0501 claim 24 and Constants (the docking approach step: each map axis by the difference to the docking position limited to −5 … 5 leptons, each axis separately, exact integer arithmetic; the world height unchanged)
+    let step = |d: i32| d.clamp(-5, 5);
+    let dx = step(to.x.wrapping_sub(here.x));
+    let dy = step(to.y.wrapping_sub(here.y));
+    if (dx, dy) != (0, 0) {
+        move_to(w, id, Pos::new(here.x + dx, here.y + dy, here.z));
+    }
 }
 
 /// The aircraft reports that it has entered pad `k` (claim 24): *sleep*
@@ -1520,6 +1616,7 @@ fn impact(w: &mut World, id: ObjectId) {
     }
     if let Some(a) = st_mut(w, id) {
         a.ground = true;
+        a.released = false;
     }
     let at = Pos::new(o.pos.x, o.pos.y, surface);
     if crate::combat::damage::dead(&o) {
@@ -1671,7 +1768,8 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
-        if a.ground || a.landing {
+        // spec: S-0501 claim 8 and Terms (it takes off only when landing or on the ground by its height, whichever render-layer list it is filed in: claim 48 (c)'s released aircraft above the terrain starts no take-off)
+        if a.ground || a.landing || on_ground(w, id) {
             take_off(w, id, t.cruise);
             if t.landable {
                 // spec: S-0102 claim 4 (the first movement update after a take-off starts re-files, after that update's climb: the drawing evaluates after the tick)
@@ -1684,15 +1782,37 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         a.flying_to = None;
         a.raised = false;
     }
+    if alive && a.released {
+        if dest.is_none() && a.cur == F64::ZERO {
+            // spec: S-0501 claim 48 (a) (its movement updates move it only toward a destination: while it has none, neither its height nor its position changes)
+            if let Some(ob) = w.obj_mut(id) {
+                ob.air = Some(a);
+            }
+            return false;
+        }
+        // Interim (Q-1875): its first movement update toward a destination clears the object-present mark of its ground placement.
+        clear_mark(w, id);
+        a.mark = None;
+    }
     // The held height in ordinary flight (claim 6).
-    if alive && !a.landing && !a.ground {
-        a.held = t.cruise;
+    let ordinary_held = |a: &AirState| {
         // spec: S-0501 claim 6 (below 768 leptons from the destination every marked approach uses the destination height minus the terrain height there)
         if a.holding
             && d.is_some_and(|d| d < 768) // spec: S-0501 claim 6 (below 768 leptons of the destination)
             && let Some(z) = dest_above
         {
-            a.held = z;
+            z
+        } else {
+            t.cruise
+        }
+    };
+    if alive && !a.landing && !a.ground {
+        if !a.released {
+            a.held = ordinary_held(&a);
+        } else if !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode)) {
+            // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update)
+            a.held = ordinary_held(&a);
+            a.released = false;
         }
     }
     let h0 = height(w, id);
@@ -1886,6 +2006,21 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             ob.air = Some(a.clone());
         }
         landing_trigger(w, id, &t, fixed);
+    }
+    if alive
+        && let Some(mut a) = st_opt(w, id).cloned()
+        && a.released
+        && !a.landing
+        && !a.taking_off
+        && flight_target(w, id).is_some()
+        && height(w, id) > 0
+    {
+        // spec: S-0501 claim 48 (b) (a movement update that leaves it alive, with a destination, neither landing nor taking off and above the terrain gives it the held height of ordinary flight, claim 6, at the end of the update: it climbs from its next movement update on, whatever its target fraction and its distance; the next update's start recomputes claim 6's approach height)
+        a.held = t.cruise;
+        a.released = false;
+        if let Some(ob) = w.obj_mut(id) {
+            ob.air = Some(a);
+        }
     }
     // spec: S-0501 claim 42 (guidance follows the movement tick)
     if alive {
@@ -3041,10 +3176,10 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
             return 1;
         }
     }
-    // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten)
+    // spec: S-0501 claim 29 (an armed aircraft below cruise height, not full and without contact: a pad search; enter, target forgotten) and claim 48 (d) (guard compares the height with the cruise height for equality only: every other height, above it as well as below it, takes the same rules)
     if armed
         && !ground
-        && h < t.cruise
+        && h != t.cruise
         && !full_ammo(w, id)
         && o.contact.is_none()
         && let Some(k) = seek_pad(w, id)
@@ -3057,7 +3192,8 @@ fn guard(w: &mut World, id: ObjectId) -> i32 {
         queue(w, id, Behaviour::Enter);
         return standard(w, id);
     }
-    if !ground && h >= t.cruise {
+    // spec: S-0501 claims 29 and 48 (d) (the cruise-height outcomes at exactly the cruise height only)
+    if !ground && h == t.cruise {
         if o.dest.is_some() {
             if !t.bound {
                 // spec: S-0501 claim 29 (at cruise height with a destination: move, if it is not pad-bound)
@@ -3149,14 +3285,21 @@ fn enter(w: &mut World, id: ObjectId) -> i32 {
         fall_back(w, id);
         return 1; // spec: S-0501 claim 24 (the fallback path returns 1 tick)
     }
-    let here = on_ground(w, id) && pad_cell(w, k, id);
+    let landing = st(w, id).landing;
+    // spec: S-0501 claim 24 (the processing of enter that finds it landing while in contact advances to the docking stage; one already down on its pad does too, and is not moved)
+    let here = (landing || on_ground(w, id)) && pad_cell(w, k, id);
     if st(w, id).enter_docking && here {
-        // spec: S-0501 claim 24 (the docking-position and entered-report stage returns 1 tick)
-        dock(w, id, k);
-        return 1; // spec: S-0501 claim 24 (the docking-position and entered-report stage returns 1 tick)
+        if landing {
+            // spec: S-0501 claim 24 (from the next processing until touchdown, each processing, 1 tick after the one before, moves it horizontally toward its docking position)
+            docking_step(w, id, k);
+        } else {
+            // spec: S-0501 claim 24 (after touchdown it reports that it has entered; an aircraft already on the ground and not landing when it reaches this stage is not moved)
+            dock(w, id, k);
+        }
+        return 1; // spec: S-0501 claim 24 (the docking and entered-report stage returns 1 tick)
     }
     if here {
-        // spec: S-0501 claim 24 (the processing that recognizes arrival advances to docking and returns 3 ticks)
+        // spec: S-0501 claim 24 (the processing that finds it landing in contact only advances to the docking stage and returns 3 ticks)
         if let Some(a) = st_mut(w, id) {
             a.enter_docking = true;
         }

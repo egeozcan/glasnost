@@ -186,7 +186,10 @@ impl Layers {
     /// reported around the object's step.
     ///
     /// - **Placement** (an object the drawing has not seen on the map): a
-    ///   re-file, in the update order (S-0203 claim 3).
+    ///   re-file, in the update order (S-0203 claim 3). An aircraft that a
+    ///   factory release left above its pad in the tick of its ground
+    ///   placement, not re-filed since (`air::ground_filed`), is filed in
+    ///   the ground layer its placement gave it (S-0501 claim 48 (a)).
     /// - **The simulation's moments** (`moments`, `Effect::LayerMoment`, in
     ///   the order they happened): a jumpjet's movement step and a fall are
     ///   checks, re-filed only when the layers before and after the step
@@ -243,9 +246,13 @@ impl Layers {
             if self.tracks.contains_key(&id) {
                 continue;
             }
-            let Some(layer) = evaluate(w, id) else {
+            let Some(mut layer) = evaluate(w, id) else {
                 continue;
             };
+            if glasnost_sim::air::ground_filed(w, id) {
+                // spec: S-0501 claim 48 (a) and S-0102 claim 4 (an aircraft that a factory release raised above its pad in the tick of its ground placement was filed in the ground render layer by that placement, and the release does not re-file it)
+                layer = Layer::Ground;
+            }
             self.tracks.insert(
                 id,
                 Track {
@@ -593,6 +600,38 @@ mod tests {
         // A check that would re-file is ignored; the sweep sees no change.
         let placed = l.evaluate_mobiles(&w, true, false, &[(jj, Some((h(100), h(300))))]);
         assert!(placed.is_empty());
+    }
+
+    /// spec: S-0501 claim 48 (a) and (c) and S-0102 claim 4 (an aircraft
+    /// that a factory release left above its pad is filed in the ground
+    /// layer by its ground placement and stays there with no re-file while
+    /// its height gives the top layer; a re-file moment moves it; with
+    /// quirks.layer_change_on_events_only off the sweep moves it to the top
+    /// layer at once)
+    #[test]
+    fn claim4_released_aircraft_stays_in_the_ground_layer() {
+        let mut w = world();
+        let a = spawn(&mut w, Kind::Aircraft, "JET", 0);
+        lift(&mut w, a, 100);
+        w.obj_mut(a).unwrap().air = Some(glasnost_sim::air::AirState {
+            released: true,
+            ground_filed: true,
+            ..Default::default()
+        });
+        assert_eq!(evaluate(&w, a), Some(Layer::Top));
+        let mut l = Layers::default();
+        let placed = l.evaluate_mobiles(&w, false, true, &[]);
+        assert_eq!(placed, [(a, Layer::Ground)]);
+        lift(&mut w, a, 500);
+        assert!(l.evaluate_mobiles(&w, true, true, &[]).is_empty());
+        assert_eq!(l.of(a), Some(Layer::Ground), "no re-file while it flies");
+        l.evaluate_mobiles(&w, true, true, &[(a, None)]);
+        assert_eq!(l.of(a), Some(Layer::Top), "a re-file moment moves it");
+        // The switch off: placed in the ground layer, then the sweep.
+        let mut off = Layers::default();
+        lift(&mut w, a, 100);
+        off.evaluate_mobiles(&w, true, false, &[]);
+        assert_eq!(off.of(a), Some(Layer::Top), "the sweep of the same tick");
     }
 
     /// spec: S-0102 claim 4 (rocket movement, set C only: re-filed at its

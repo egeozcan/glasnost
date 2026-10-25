@@ -76,6 +76,8 @@ pub fn assign_destination(
         // spec: S-0607 claims 12 and 23 (a unit gripped with a stand-in that is given no destination: the grip ends at once and the unit is set down)
         crate::lift::given_no_destination(w, id);
     }
+    // spec: S-0501 claim 48 (c) (an aircraft that a factory release has left above its pad ends its pad contact at the order)
+    crate::air::destination_taken(w, id, dest);
     // spec: S-0207 claim 20 (a) (the locomotor takes the destination at once) and S-0107 claim 15
     crate::infantry::destination_assigned(w, id, before);
 }
