@@ -2,11 +2,11 @@
 id: S-0701
 title: Sound selection
 topic: ui
-revision: 27
+revision: 35
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-24
+approved-on: 2026-10-25
 measurements: []
 requests: [Q-0260, Q-0264, Q-0265, Q-0261, Q-0262, Q-0266, Q-0325, Q-0327, Q-0329, Q-0326, Q-0328, Q-0330, Q-0332, Q-0333, Q-0334, Q-0335, Q-0336, Q-0337, Q-0338, Q-0340, Q-0671, Q-1735]
 supersedes: []
@@ -16,13 +16,13 @@ supersedes: []
 
 ## Summary
 
-Sound data, selection and order responses, event sounds, announcements, mixing limits,
-placement and traced random choices in skirmish; network games and campaigns are out of scope.
-Playback is presentation, but claim 33's traced scenario-stream choices must retain their draws.
-Music belongs to S-0703; claim 30's audio passes carry its music updates. Archive mounting
+Sound data, selection and order responses, event sounds, announcements, mixing limits, placement and
+traced random choices in skirmish; network games and campaigns are out of scope. Playback is
+presentation, but claim 33's traced scenario-stream choices must retain their draws. Music belongs
+to S-0703; claim 30's audio passes and music-only passes carry its music updates. Archive mounting
 belongs to S-0005 claim 10. Which files hold the samples is claim 34; the byte formats of those
-files are outside this spec. Claim 21 aligns spin-sound choices and ordinary report suppression
-with S-0609 claim 13.
+files are outside this spec. Claim 21 aligns spin-sound choices and ordinary report suppression with
+S-0609 claim 13.
 
 **Coverage boundary.** This is a partial sound specification, not an exhaustive event catalogue.
 Claim 40 indexes every question of Q-0260, Q-0264 and Q-0265 against the established answers
@@ -47,7 +47,10 @@ original. They do not authorise host-dependent choices in our engine. The glossa
 scheduling. Claim 30 supplies our engine's replacement clock, waits, sample-completion opportunities
 and draw interleaving as design rules, not oracle findings. Claim 14's separately deferred
 complete delayed-mode sequence remains outside coverage; settling its scheduling does not
-supply that missing sequence.
+supply that missing sequence. Music time in the options menu is the one place where this
+spec's sound and music presentation follows real time; the project lead has accepted it, so
+that the music plays on in the menu as in the original (claim 30, S-0703 claim 13). It reaches
+no game state.
 
 ## Terms
 
@@ -140,7 +143,7 @@ normalisation N of its Formulas F3. In addition:
      request into a screen sound. Likewise the last of *unshroud* and *shroud* applies:
      *unshroud* cancels the explored-cell restriction. These words do not change screen
      requests. The playback effect of the remaining recognised words, including *quiet* and *loud*,
-     is outside this revision's coverage,
+     is outside this spec's coverage,
    - *limit*: an integer, the most instances of this entry that play at once; 0 means no limit
      (claim 8),
    - *loop count*: an integer, default 0 (claim 14),
@@ -311,7 +314,7 @@ normalisation N of its Formulas F3. In addition:
       Random-only body selection follows it. Those choices follow claim 13's instance draws.
       Do not move all decay choices to the end as in immediate mode.
       The complete audible attack/decay sequence, repeated-preparation count, terminal wait
-      duration and full draw ordering are outside this revision's coverage. E3 explores these
+      duration and full draw ordering are outside this spec's coverage. E3 explores these
       deferred parts of Q-0329 and Q-0260. No complete draw total, absence of startup choices
       or immediate-mode replacement follows from these partial rules.
     All traced draws use the unsynchronised stream, after claim 13's draws. In particular an
@@ -467,7 +470,7 @@ normalisation N of its Formulas F3. In addition:
       inaudible. Movement resets a grace counter to 3 ticks. After stopping, three updates
       reduce it to zero and the following eligible update asks the sound to finish looping,
       not to stop its current sample immediately. This rule covers ordinary ground movement. Falling, crashing and carried-unit states
-      are outside this revision's movement-sound coverage.
+      are outside this spec's movement-sound coverage.
     - *Turret:* a turreted type's rotation sound plays as an attached sound while the turret turns.
       At the object's tick sound update, a rotation sample indicating no turn asks the instance
       to end looping, with no grace counter and without cutting the current sample. A later
@@ -498,8 +501,7 @@ normalisation N of its Formulas F3. In addition:
       Non-local production and specialised movement states are outside this claim's coverage.
 
 24. **Interface sounds and refusal cues.** Sidebar clicks, tab and button clicks and the other
-    interface sounds are screen sounds of game-wide entries (Import mapping). Revision 2 corrects
-    revision 1, which gave every refused click the game-wide refusal sound. The cues are:
+    interface sounds are screen sounds of game-wide entries (Import mapping). The cues are:
     - *start, queue, resume, hold, cancel* (S-0411 claim 12): the game-wide build click sound.
       Start, resume, hold and cancel also request the matching announcement of claim 28.
       Adding a queued copy to an active line requests no new start announcement.
@@ -733,9 +735,63 @@ normalisation N of its Formulas F3. In addition:
     Our engine retains this shared unsynchronised stream, as required by S-0202 claim 11,
     for both game-side sound choices and per-instance choices; no separate presentation
     generator is substituted. The following schedule is our engine's design rule, a
-    deterministic departure, not a description or proposed measurement of the original.
+    deterministic departure except for music time in the options menu (Music time below), not a
+    description or proposed measurement of the original.
 
-    **Clock and passes.** In a loaded skirmish, logical audio time *C* and last-pass time *L* begin at 0 ms, and no pass occurs at that instant. At the end of each cycle—after that cycle's input, presentation requests and any tick—*C* is greater than its previous value by *P(s)*, where *P(0) = 8 ms* and *P(s) = 16s* ms for speed indices 1 through 6, using the speed in force during that cycle (S-0201 claims 4, 5 and 8). A pass occurs at that cycle end exactly when *C − L > 33 ms*; when it occurs, the new value of *L* is *C*. Otherwise *L* is unchanged. These are exact integer-millisecond operations, without rounding or clock wrap. At constant speed the interval between passes is *P(s) × (⌊33 / P(s)⌋ + 1)* logical milliseconds: 40, 48, 64, 48, 64, 80 and 96 ms at indices 0 through 6 respectively. Speed changes do not restart the cadence. Each pass ends with one music update (S-0703 claim 10), after that pass's sound choices, so the ranged draws of a music pick follow that pass's draws on the same unsynchronised stream. Thus the strict lower bound of claim 12 is retained without making pass choices depend on host execution time. Frozen cycles advance logical audio time and can service audio despite running no tick. During a stand-still, including the options menu or lost focus, neither logical audio time nor logical playback advances, and resumption causes no catch-up. No skirmish audio passes occur in setup menus before loading, after the cycle that runs the end delay's final tick (the game is over, S-0414 claim 8), or after leaving the match. The end delay's ticks run in ordinary cycles of the loaded skirmish, so this schedule gives them audio passes, each with its music update. The options-menu stand-still has no audio pass, so no music update either (S-0703 claim 13). Menu-specific audio is outside scope.
+    **Clock and passes.** In a loaded skirmish, logical audio time *C* and last-pass time *L* begin
+    at 0 ms, and no pass occurs at that instant. At the end of each cycle—after that cycle's input,
+    presentation requests and any tick—*C* is greater than its previous value by *P(s)*, where *P(0)
+    = 8 ms* and *P(s) = 16s* ms for speed indices 1 through 6, using the speed in force during that
+    cycle (S-0201 claims 4, 5 and 8). A pass occurs at that cycle end exactly when *C − L > 33
+    ms*; when it occurs, the new value of *L* is *C*. Otherwise *L* is unchanged. These are exact
+    integer-millisecond operations, without rounding or clock wrap. At constant speed the interval
+    between passes is *P(s) × (⌊33 / P(s)⌋ + 1)* logical milliseconds: 40, 48, 64, 48, 64, 80 and 96
+    ms at indices 0 through 6 respectively. Speed changes do not restart the cadence. Each pass ends
+    with one music update (S-0703 claim 10), after that pass's sound choices, so the ranged draws of
+    a music pick follow that pass's draws on the same unsynchronised stream. Thus the strict lower
+    bound of claim 12 is retained without making pass choices depend on host execution time. Only
+    music time in the options menu follows real time (Music time below). Frozen cycles advance
+    logical audio time and can service audio despite running no tick. During a stand-still,
+    including the options menu or lost focus, neither logical audio time nor sound playback
+    advances, and resumption causes no catch-up. Music time alone advances in the options menu
+    (Music time below). No skirmish audio passes occur in setup menus before loading, after the
+    cycle that runs the end delay's final tick (the game is over, S-0414 claim 8), or after leaving
+    the match. The end delay's ticks run in ordinary cycles of the loaded skirmish, so this schedule
+    gives them audio passes, each with its music update. The options-menu stand-still has no audio
+    pass and no sound progress. Other menu audio is outside scope. The music of the options menu in
+    a loaded skirmish, and of our engine's own settings screen opened from a game, is covered by
+    Music time below.
+
+    **Music time.** Music time *M* and last-music-pass time *K* begin at 0 ms with *C* and *L*.
+    Outside the options menu, *M* increases with *C* at each cycle end by the same *P(s)*, and *K*
+    becomes *M* at each audio pass. While the options menu is open in a loaded skirmish, *C* and *L*
+    stay unchanged and no audio pass occurs, but *M* advances with real time: the host's monotonic
+    clock is read once as the menu opens and then once for each frame the menu draws, and at each
+    later reading *M* increases by the whole milliseconds elapsed since the previous reading, any
+    fraction of a millisecond being carried to the next. A music-only pass occurs at a reading
+    exactly when *M − K > 33 ms*, so there is at most one per reading; it sets *K* to *M* and runs
+    one music update (S-0703 claim 10) and nothing else: no sound choice, wait, completion,
+    announcement service or draw other than that update's. A track counts its logical duration on
+    music time: one started at a pass with music time *M₀* completes at the first pass, audio or
+    music-only, with *M* ≥ *M₀* + *T*, *T* as in Completion and waits below with *p* = 100. On the
+    menu's closing the next cycle resumes the ordinary schedule with no catch-up; the time spent in
+    the menu counts for music only. Our engine's own settings screen opened from a game counts as
+    the options menu here. Lost focus remains a full stand-still, for music as for sound, also while
+    the options menu is open: from the loss of focus music time stops, and no reading is taken and
+    no music-only pass occurs until focus returns; at its return the clock is read afresh and that
+    reading becomes the previous reading, with the carried fraction kept, so the next increment
+    counts only time since focus returned and the unfocused stretch adds nothing to *M*. **What
+    depends on real time.** These, through the time the options menu is open with focus: while it is
+    open, when music-only passes occur, so when a track completes there and when the next one
+    starts, and how many music picks are made there; after it closes, when the track playing at its
+    closing completes, since part of that track's duration was counted in the menu, and so the cycle
+    of the next music pick and of every later track's start and completion; and, since music picks
+    take their ranged draws from the unsynchronised stream, the stream's position after any of these
+    picks, so the later sound choices drawn from that stream (claims 13, 14 and 17 to 23), with
+    the pitches they draw and so those sounds' durations, completions and channel use, and later
+    music picks. No tick, game state, scenario-stream draw or game rule depends on it (claim 29),
+    and no sound choice is made while the menu is open. Time with focus lost, and time with the menu
+    closed, add to none of these. The project lead has accepted this dependence (S-0703 claim 13).
 
     **Completion and waits.** Each selected sample has a logical duration
     *T* = max(1, ⌈100000 × *N* / (*f* × *p*)⌉) ms, where *N* is its decoded number of
@@ -762,22 +818,47 @@ normalisation N of its Formulas F3. In addition:
     Device callbacks, underruns, mute settings and delivery failures never create or remove
     a logical completion, wait, channel or draw opportunity.
 
-    **Draw assignment within a cycle.** Every game-side choice in claims 17 to 23 is assigned to its causing input or game event, in the event order supplied to presentation, and precedes any per-instance choice at that cycle's end pass. Such choices are not postponed until channel allocation, and no pass separates damage, movement or order events belonging to one tick. If a game-side stop or cut has taken effect, the cancelled sample has no later completion draw. Until a pass recognises completion, an object's intervening update continues to regard its response as speaking, even if the logical duration deadline has passed.
+    **Draw assignment within a cycle.** Every game-side choice in claims 17 to 23 is assigned to its
+    causing input or game event, in the event order supplied to presentation, and precedes any
+    per-instance choice at that cycle's end pass. Such choices are not postponed until channel
+    allocation, and no pass separates damage, movement or order events belonging to one tick. If a
+    game-side stop or cut has taken effect, the cancelled sample has no later completion draw. Until
+    a pass recognises completion, an object's intervening update continues to regard its response as
+    speaking, even if the logical duration deadline has passed.
 
-    Sound requests have increasing presentation request numbers in causing-event order, including requests received before the first pass. At a pass, the shared-stream choices attributable to due completions occur in request-number order. Entry placement and limits are resolved before new channel allocation, under claims 6 to 10; exact entry-ranking ties favour older requests unless claim 8's interrupt rule favours the new request. Among instances that survive, allocation, expired-wait preparation and start choices occur in request-number order, with each instance retaining claim 13/14's internal draw order. When channels are free, the lowest-numbered free channel among channels 0 through 15 is used, and claim 9's channel-order ties follow that same order. A sample cut by an entry limit or channel replacement has no later completion event. Consequently, these observable event and draw assignments are fixed without prescribing data structures or the implementation's work schedule. Other presentation consumers retain their event order in the supplied trace.
+    Sound requests have increasing presentation request numbers in causing-event order, including
+    requests received before the first pass. At a pass, the shared-stream choices attributable to
+    due completions occur in request-number order. Entry placement and limits are resolved before
+    new channel allocation, under claims 6 to 10; exact entry-ranking ties favour older requests
+    unless claim 8's interrupt rule favours the new request. Among instances that survive,
+    allocation, expired-wait preparation and start choices occur in request-number order, with each
+    instance retaining claim 13/14's internal draw order. When channels are free, the
+    lowest-numbered free channel among channels 0 through 15 is used, and claim 9's channel-order
+    ties follow that same order. A sample cut by an entry limit or channel replacement has no later
+    completion event. Consequently, these observable event and draw assignments are fixed without
+    prescribing data structures or the implementation's work schedule. Other presentation consumers
+    retain their event order in the supplied trace.
 
-    Identical initial stream state, data, cycle-indexed events, presentation inputs and
-    speed changes must therefore give identical logical pass times and assigned choices
-    regardless of host load or audio callbacks. Physical delivery timestamps may differ.
+    Identical initial stream state, data, cycle-indexed events, presentation inputs, speed
+    changes and options-menu clock readings (Music time) must therefore give identical logical
+    pass times and assigned choices regardless of host load or audio callbacks. Two runs that
+    differ only in how long the options menu stays open with focus can differ in what Music time
+    lists as depending on real time. A run that never opens the options menu
+    with focus takes no clock reading, so the listed inputs without readings decide it. Physical
+    delivery timestamps may differ.
     Scenario-stream state and game rules remain unaffected (claim 29).
     - Backing: `measurable` (E1 for original instance draw order, E2 for original audio-clock
       eligibility, H1 for original separation from game state). The replacement schedule,
       duration calculation, tie rules, shared-stream retention, the music update at each pass's end,
-      the absence of passes after the end delay's final cycle and of music updates in a
-      stand-still are design requirements, not oracle measurements: engine-only H2's music
-      controls test all three, and engine-only S-0703 MU7 also tests the music update's place
-      after the pass's sound choices.
-    - Confidence: high
+      the absence of passes after the end delay's final cycle, music time with the options menu's
+      music-only passes, and the absence of music updates in a lost-focus stand-still are design
+      requirements, not oracle measurements: engine-only H2's music controls test them, and
+      engine-only S-0703 MU7 also tests the music update's place after the pass's sound choices.
+    - Confidence: high for the original's instance draw order and audio-clock eligibility (E1,
+      E2); medium for the original's separation from game state, as claim 29 rates H1's oracle
+      coverage. Medium for the design requirements, music time
+      in the options menu included: they are our engine's rules, checked only on our engine
+      (H2, MU7), with no oracle run behind them.
 
 31. **Response draws come before the local-player check in two places.** The feedback chance of
     claim 20 is drawn for every owner's object; a selection response draw for a passive house's
@@ -818,7 +899,7 @@ normalisation N of its Formulas F3. In addition:
     mounted when present, else the original's (S-0005 owns the mounting). Announcements work the
     other way: each is a separate file named by claim 26's eight-character name plus the extension
     `.wav`, opened through the same file lookup and never taken from the bank. This claim covers unique bank sample names only; duplicate-name resolution is outside
-    this revision's coverage.
+    this spec's coverage.
     The public byte layout of the bank is outside this spec; no new formats spec is required.
     - Backing: `measurable` (scenario A4 for separate files versus bank samples and
       case-insensitive sample lookup; S-0005 M22 part a for archive fallback).
@@ -847,7 +928,7 @@ normalisation N of its Formulas F3. In addition:
       entry and another non-passive house's defeat uses the player-defeated entry. A local
       win uses the victory entry. Observer eligibility remains with S-0414 claim 5.
     - S-0414 claim 5 owns post-defeat muting, including alliance-formed and superweapon
-      launch/detection announcements. This revision does not specify alliance announcement
+      launch/detection announcements. This spec does not specify alliance announcement
       selection or entry bindings.
     - The play-speech trigger action (S-0011 claim 32) requests the entry it names as kind
       *interrupt*, whatever kind the entry has.
@@ -855,7 +936,7 @@ normalisation N of its Formulas F3. In addition:
       building power state are in Import mapping. Superweapon announcement entries vary
       with the superweapon category, not with the local player's faction; Import mapping
       lists the established category bindings. Unlisted activation/launch bindings and
-      exhaustive activation/detection eligibility are outside this revision's coverage.
+      exhaustive activation/detection eligibility are outside this spec's coverage.
       G6 explores those gaps; an unestablished binding is not proven silence.
       Feature eligibility remains with the feature specs. Claim 39 covers entry selection
       on the ownership changes of claim 39 only.
@@ -1013,7 +1094,7 @@ is the request's pan. Pitches combine as trunc(*p*₁ × *p*₂ / 100), in integ
 medium confidence; the result differs by at most a few units of 16384.
 
 The following master-level rule covers settled levels only; the transition ramp is outside
-this revision's coverage. The master level is not necessarily full even in an ordinary skirmish. At an audio pass, let *C*
+this spec's coverage. The master level is not necessarily full even in an ordinary skirmish. At an audio pass, let *C*
 be the sum of ⌊20 × *e* / 16384⌋ over surviving, non-paused sound instances. Its target level is
 16384 when *C* ≤ 100, and ⌊1638400 / *C*⌋ otherwise. These are exact integer operations. After settling, many simultaneous sounds therefore reduce the loudness of all sounds.
 The target is `measurable` in C3, high confidence; no transition-timing requirement is made.
@@ -1095,7 +1176,7 @@ count. The suppression radii and post-zoom tails are:
 
 For a kind marked *yes*, radar events are game-wide, not per house: a matching event suppresses
 another request regardless of why the first event was created, including triggered events
-(S-0011 claim 32). Kinds marked *no* do not apply the distance rejection. The complete set of event creators is outside this revision's coverage. F7 is high confidence
+(S-0011 claim 32). Kinds marked *no* do not apply the distance rejection. The complete set of event creators is outside this spec's coverage. F7 is high confidence
 and `measurable`: G3 tests production, base and harvester creators; G7 tests every table row
 through the radar-event trigger and cross-creator pairs for production, attack, repair and
 abandonment. This does not assert coverage of every possible creator. The *garrison abandoned*
@@ -1195,7 +1276,7 @@ never takes a channel or the draws of claim 13.
 - **`quirks.attack_decay_without_body`** (default: on). An entry with the *attack* or *decay* word
   whose samples leave no body sample is silent when requested, including repeated requests
   without changing its data. Off: the attack and decay samples play. Recovery after changing
-  an already-loaded entry to valid data is outside this revision's coverage.
+  an already-loaded entry to valid data is outside this spec's coverage.
   Backing: `measurable` (A2). Confidence: high.
 - **`quirks.shroud_sound_corner_cell`** (default: on). A *shroud* sound at cell (0, 0) is never heard.
   Off: that cell is judged like any other.
@@ -1215,7 +1296,9 @@ never takes a channel or the draws of claim 13.
 - **Audio scheduling departure.** The original's real-time
   service interval (claim 12) is a strict lower bound, not an exact schedule or latency
   guarantee. Our engine follows the glossary's deterministic-departure rule, with no quirk
-  switch or presentation-only exception. Both game-side and per-instance choices retain
+  switch, and with one presentation exception that the project lead has accepted: music time
+  in the options menu, which follows real time as claim 30 states and reaches no game state
+  (see Changes for other specs, glossary). Both game-side and per-instance choices retain
   S-0202 claim 11's shared unsynchronised stream. Claim 30 fixes the cycle-end clock,
   completion deadlines, waits and draw assignment. Host-dependent output delivery must not
   feed back into choice assignment, the scenario stream or game state.
@@ -1342,7 +1425,7 @@ Detection bindings traced at superweapon-building placement:
 | genetic mutation | `[EVA_GeneticMutatorDetected]` |
 | teleport source | `[EVA_ChronosphereDetected]` |
 
-An unestablished cell is outside this revision's coverage, not a claim that the event is silent.
+An unestablished cell is outside this spec's coverage, not a claim that the event is silent.
 G6 explores those deferred parts of Q-0325; no entry or universal eligibility rule is invented.
 The listed fixed bindings are high confidence, `measurable` in G4's event controls. Feature
 request conditions are not completed by this table. Alliance bindings are deferred.
@@ -2156,7 +2239,7 @@ eligibility was not met is inconclusive, not proof of silence; unestablished act
 remain exploratory under the explicit Q-0325 limits and G6 settling scenario.
 
 S-0414 claim 5 and V20 own observer eligibility and post-defeat muting, with their own
-limits. No alliance-selection test or binding is asserted in this revision.
+limits. No alliance-selection test or binding is asserted in this spec.
 
 **G5. Capture entry alternatives (Q-0325, claim 39).** Use G4's named announcement data,
 with distinct brief samples for the generic capture, tech-building-lost and two invented
@@ -2224,17 +2307,18 @@ game-state difference falsifies claim 29's prediction for these controls. A diff
 order, unrelated bystander action, or loss of a surviving test object before its named event
 voids the pair rather than counting as an audio-caused mismatch.
 
-**H2. Engine-only scheduling determinism.** Conformance proposal, not an original-game
-measurement. Use E1's immediate-mode test entries and D2's order-response fixtures together,
-with explicit initial states for both streams. Replay one identical cycle-indexed sequence
-of game events, game-speed changes, requests, view changes and local input in three runs:
-ordinary host load, added host delays, and delayed audio-device callbacks. A test driver must
-keep those logical inputs identical while varying only host execution and delivery timing.
-Record chosen entries, pitch/shift values, sample order, every stream draw's assigned use
-and both stream states at matching logical service opportunities. Expected: identical
-assignments and states in all three runs; only device delivery timestamps may differ.
-A changed assignment or state caused solely by host timing falsifies claim 30's design
-requirement. Changed logical input voids the comparison. Also check these canonical controls:
+**H2. Engine-only scheduling determinism.** Conformance proposal, not an original-game measurement.
+Use E1's immediate-mode test entries and D2's order-response fixtures together, with explicit
+initial states for both streams. Replay one identical cycle-indexed sequence of game events,
+game-speed changes, requests, view changes and local input, with the options menu's clock readings
+(claim 30's Music time) wherever the menu is open with focus, in three runs: ordinary host load,
+added host delays, and delayed audio-device callbacks. A test driver must keep those logical inputs
+identical while varying only host execution and delivery timing. Record chosen entries, pitch/shift
+values, sample order, every stream draw's assigned use and both stream states at matching logical
+service opportunities. Expected: identical assignments and states in all three runs; only device
+delivery timestamps may differ. A changed assignment or state caused solely by host timing falsifies
+claim 30's design requirement. Changed logical input voids the comparison. Also check these
+canonical controls:
 - From a fresh clock, run 20 cycles at each constant speed 0 to 6. Expect passes every
   5, 3, 2, 1, 1, 1 and 1 cycles respectively, with the logical intervals of claim 30.
   At speed 1 after two cycles (*C* = 32, *L* = 0), change to speed 0: the next cycle
@@ -2250,8 +2334,19 @@ requirement. Changed logical input voids the comparison. Also check these canoni
   which precede surviving allocation/preparation choices in request-number order.
   Repeat with a game-side cut before the pass: the cancelled completion takes no draw.
 - Insert ten frozen cycles: expect clock and audio progress with unchanged tick number.
-  Insert a menu/lost-focus stand-still: expect no logical progress or draws however many
+  Insert a lost-focus stand-still: expect no logical progress or draws however many
   host frames/callbacks occur; closing it resumes at the next cycle with no catch-up.
+  Then open the options menu, lose focus with it open for a supplied stretch longer than the
+  time left in the current track, and regain focus: expect music time unchanged across the
+  unfocused stretch, no reading, no music-only pass and no draw while focus is lost, and the
+  reading at the return taken as the new previous reading, adding nothing to *M*. The track
+  then completes at the first pass, music-only or audio, with *M* ≥ *M₀* + *T*, where *M₀* is
+  its start time and the unfocused stretch adds nothing to *M*. A completion or pick during the
+  unfocused stretch, an increment that includes it, or a completion before *M* reaches
+  *M₀* + *T* falsifies claim 30's focus rule. Insert
+  an options-menu stand-still with no track due to complete in it: expect no sound progress
+  or sound draws, music-only passes as the supplied clock readings give them, and resumption
+  of the ordinary schedule at the next cycle with no catch-up.
   Test two announcements with known decoded durations: their starts obey both completion
   and the strict 500-ms start gap, rounded to the first qualifying pass.
 - Music controls, with S-0703 MU7's music fixture (shuffle on, test tracks of known length) and
@@ -2261,9 +2356,11 @@ requirement. Changed logical input voids the comparison. Also check these canoni
   claim 8): expect passes and music updates in the end delay's cycles as the cadence gives them,
   a pass at the end of the cycle that runs the end delay's final tick only if the cadence puts
   one there, and no pass or music update after that cycle. Open the options menu for many
-  host frames just before a track would complete: expect no music update, pick or draw while it
-  is open, and the completion and pick at the pass its logical duration gives after closing,
-  the menu's time not counted.
+  host frames just before a track would complete, the test driver supplying the menu's clock
+  readings as logical input, identical in all three runs: expect a music-only pass at each
+  reading at which *M − K > 33 ms*, the track's completion and its pick at the first such pass
+  with *M* ≥ *M₀* + *T*, the next track started there while the menu is open, the pick's ranged
+  draws as the only draws while the menu is open, and no sound progress until it closes.
 Any different pass, deadline, ordering or stand-still result falsifies the design rule.
 Use positive-rate, positive-pitch fixtures, plus one invalid-rate and one nonpositive-pitch
 fixture to check warning/discard without additional sample-preparation draws. These are
@@ -2314,11 +2411,25 @@ rules (claim 9), the exact full-volume integer (claim 2/F1) and intermediate gai
 
 Claim 14's regular playback rules assume nonnegative attack/decay counts with at least one
 body sample, nonnegative delay endpoints and nonnegative loop count. Negative or oversized
-partitions, negative limits/ranges and negative delays are outside this revision's coverage.
+partitions, negative limits/ranges and negative delays are outside this spec's coverage.
 The no-body quirk is a particular tested exception, not a general bad-data rule. Claim 37
 covers lethal-damage reactions, not sale, crushing or script removal.
 
 ## Changes for other specs
+
+Glossary, for the project lead's acceptance of music time in the options menu (claim 30; S-0703
+claim 13):
+- *departure*, "Host or real time": add at the end "One exception has been accepted by the project
+  lead: while the options menu is open in a loaded skirmish, the music plays on as in the original,
+  and our engine advances music time with the host's monotonic clock, with lost focus still a full
+  stand-still (S-0701, claim 30). Only presentation depends on it, the unsynchronised stream included: when a track ends in the menu
+  and which tracks are picked there; when the track playing as the menu closes ends afterwards, and
+  so when every later track starts and ends; and, through the music picks' draws, the position of
+  the unsynchronised stream at later sound choices. No tick, game state or scenario-stream draw
+  depends on it."
+- *audio clock*: replace "The glossary's *departure* rule remains in force." with "The
+  glossary's *departure* rule remains in force, apart from the music time of the options menu
+  that S-0701 claim 30 defines (see *departure*)."
 
 Q-0264 companion import clarification:
 - S-0109 Import mapping: include the animation start-sound reference and stop-sound
@@ -2330,7 +2441,7 @@ Q-0671's schedule corrections below are already present in the approved companio
 Retain them at joint hand-off, with no further change requested:
 - glossary, *audio clock*: retain the original-only real-time definition, but replace the
   statement that claim 30 defers the schedule with a pointer to its logical cycle-end clock,
-  completion deadlines and waits. Retain the existing *departure* rule unchanged.
+  completion deadlines and waits.
 - S-0202 claim 11: replace its statement that S-0701 claim 30 defers the schedule with a
   pointer to the now-specified cycle-end passes, deterministic completion/wait opportunities
   and game-side-before-pass draw assignment. Retain the shared unsynchronised stream and
@@ -2349,7 +2460,7 @@ drafts; retain them at joint hand-off, rather than treating them as new outstand
 - S-0202 claim 11's sound-draw backing: replace the inherited "unmeasured complete
   delayed-mode sequence" with deferred coverage under S-0701 claim 14. Its partial
   choice rules remain measurable in E1/E3; no complete sequence is supplied.
-- S-0414 claim 12: S-0701 claim 36 no longer specifies request-versus-mutual-alliance
+- S-0414 claim 12: S-0701 claim 36 does not specify request-versus-mutual-alliance
   announcement selection or its bindings. Keep independently supported presentation and
   muting rules in S-0414 claims 5 and 12–13, but mark that selection/binding detail deferred
   rather than claiming S-0701 supplies it. Victory/defeat bindings remain specified here.
@@ -2358,8 +2469,7 @@ Existing companion agreements to retain:
 - S-0213 claim 16 agrees with S-0701 claim 24 that a completed tick permits a new route-mode
   refusal cue; there is no once-per-game silence rule.
 
-The remaining items are historical joint-hand-off confirmations, not new requests to
-change already agreeing behaviour. Earlier additions:
+Further items for other specs:
 - S-0411: state the infantry-only training versus other-kind building split for start/resume,
   and no repeated start announcement when adding to an active queue (claim 28, F11).
   Q-0339's dispatch is already specified in S-0411 claim 18 and S13; claim 24/F10
@@ -2374,16 +2484,13 @@ change already agreeing behaviour. Earlier additions:
   with F9 and R13. F7 and G3 here now cite them; no further zoom change is requested.
 - S-0202 claim 10's current Q-0327 contract already agrees with claims 21/32 here:
   preserve, save, restore and hash the creation-derived report value, with presentation access
-  for existing objects and no extra draw. Confirm both versions at joint sign-off.
+  for existing objects and no extra draw.
 
 These hand-off checks include corrections already present in other drafts; they are not
 instructions to undo those corrections. S-0214's current claims 12 and 14 and scenarios T1/T2
 already agree with claims 17/18 here. S-0411's current claim 12 agrees with claim 24 and F5:
 busy-building refusal and refused placement use distinct announcements and neither uses
-the game-wide refusal sound. Its current draft has removed the stale correction assertion
-and clarified the corresponding table and scenario wording. The approved S-0411 copy
-reviewed here already agrees with these cues; confirm the hand-off version retains that
-agreement. No cue is added for its unresolved actions.
+the game-wide refusal sound. No cue is added for its unresolved actions.
 The approved S-0406 reviewed here agrees with claim 24: its claims 1 and 10, State and
 ordering, and refusal measurements specify the cannot-deploy-here announcement request
 only for failed placement, without the game-wide refusal sound. No change to the approved
@@ -2404,17 +2511,16 @@ Other existing hand-off checks:
   A repeated strike point does not suppress it. Retain claim 11's shared unsynchronised
   stream for instance draws and feedback choices.
 - S-0411: resolve its refusal-entry question and replace planned sound pointers with claims
-  24/28. Revision 2 corrects the earlier hand-off: the busy-line refusal of claim 12 and the
+  24/28. The busy-line refusal of claim 12 and the
   refused placement of claim 10 play announcements only ("unable to comply", "cannot deploy
   here"), not the refusal sound. S-0701 does not add cues to sidebar actions that S-0411 leaves
   unresolved.
 - S-0213 claim 16 and O8 already correct the earlier once-per-game route cue assertion:
   a completed tick permits another message-and-sound cue. Claim 24 and F8 here now agree.
-  No once-per-game quirk remains. S-0213's hand-off note already confirms
-  that agreement; confirm both current passages at sign-off.
+  No once-per-game quirk remains.
 - S-0406 already agrees in claims 1/10, State and ordering and its
   scenarios: failed placement requests only the cannot-deploy-here announcement, not the
-  game-wide refusal sound. Confirm the agreeing hand-off text at joint sign-off.
+  game-wide refusal sound.
   No placement-audio correction is needed. Keep no-eligible-factory orders silent and
   distinguish announcement requests from queue-dependent playback (claim 27).
 - S-0404: a request refused as it is applied (full queue or build limit) plays the refusal sound
@@ -2422,8 +2528,8 @@ Other existing hand-off checks:
 - S-0414 claim 5 owns post-defeat muting and V20 supplies its end-delay test, with its own
   limits. Claim 36 retains defeat, player-defeated and victory bindings; those do not end
   continued observation. Alliance selection/bindings are deferred as noted above.
-- S-0005 claim 10a and M25: confirm independent bank-file precedence against claim 34
-  and its M25(b) backing. Claim 10 owns expansion audio archive preference. The public
+- S-0005 claim 10a and M25 agree with claim 34 and its M25(b) backing on independent
+  bank-file precedence. Claim 10 owns expansion audio archive preference. The public
   bank formats need no new spec.
 - S-0416: half-volume credit ticks are request level 8192 (claim 35).
 - S-0314 claim 6 and S-0410 claim 11: use the updated G7 backing described above.
@@ -2437,7 +2543,8 @@ Other existing hand-off checks:
 
 Deferred cases need later investigation, not guessed implementation defaults. Q-0327 is applied
 in claims 21/32. The glossary's existing deterministic-departure policy is retained, with no new
-quirk default or real-time presentation exception. Q-0671 authorises the engine schedule
+quirk default and one real-time presentation exception, which the project lead has accepted:
+music time in the options menu (claim 30). Q-0671 authorises the engine schedule
 now specified in claim 30; no scheduling decision remains deferred to the project lead.
 
 Claim 30 retains S-0202 claim 11's existing shared-stream contract. The former separate-generator
