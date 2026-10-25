@@ -4,8 +4,11 @@
 
 use glasnost_fmt::shp::Shp;
 use glasnost_map::CellXY;
+use glasnost_render::projection::TERRAIN_LIFT;
 use glasnost_render::scene::View;
-use glasnost_render::shroud::{self, Cover, CoverSprite, Covered, ShroudQuirks, Sprites};
+use glasnost_render::shroud::{
+    self, CANVAS_HEIGHT, CANVAS_WIDTH, Cover, CoverSprite, Covered, ShroudQuirks, Sprites,
+};
 use glasnost_sim::econ::shroud::explored;
 use glasnost_sim::world::{HouseId, World};
 
@@ -53,30 +56,90 @@ impl CoverSprites {
 
 /// The covers of the legal cells whose canvas meets `view`, in the
 /// observable order (S-0110 State and ordering: increasing *x* + *y*).
+///
+/// Only the cells whose canvas can reach the view are asked: a canvas's
+/// column depends on *x* − *y* alone and its row on *x* + *y* and the cell's
+/// level (S-0110 F2, S-0101 F1), so the candidates are a band of each,
+/// widened by every level a cell can have; each candidate still takes the
+/// full test. Explored states are read once per cell.
 pub fn covers(world: &World, house: HouseId, view: &View, q: &ShroudQuirks) -> Vec<Cover> {
-    let covered = |x: i32, y: i32| !explored(world, house, CellXY::new(x, y));
-    let mut out: Vec<Cover> = world
-        .cells
-        .grid
-        .iter()
-        .filter_map(|(c, cell)| {
+    let grid = &world.cells.grid;
+    let (ox, oy) = view.origin;
+    let (vw, vh) = (view.size.0 as i32, view.size.1 as i32);
+    // How far a level can move a canvas up or down (S-0110 Edge cases: only with
+    // quirks.shroud_on_flat_grid off; S-0101 claim 4).
+    let (lift_lo, lift_hi) = if q.shroud_on_flat_grid {
+        (0, 0)
+    } else {
+        (
+            TERRAIN_LIFT * i32::from(i8::MIN),
+            TERRAIN_LIFT * i32::from(i8::MAX),
+        )
+    };
+    // S-0110 F2 with S-0101 F1: the canvas of (x, y) spans columns 30(x − y) − 30 to
+    // 30(x − y) + 29 and rows 15(x + y) − lift to 15(x + y) − lift + 29; a band one cell
+    // wider on each side than the inequalities need.
+    let (cw, ch) = (CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+    let u_lo = (ox - CANVAS_WIDTH).div_euclid(cw) - 1;
+    let u_hi = (ox + vw + CANVAS_WIDTH).div_euclid(cw) + 1;
+    let v_lo = (oy - CANVAS_HEIGHT + lift_lo).div_euclid(ch) - 1;
+    let v_hi = (oy + vh + lift_hi).div_euclid(ch) + 1;
+    let (x_lo, y_lo) = (
+        (u_lo + v_lo).div_euclid(2) - 1,
+        (v_lo - u_hi).div_euclid(2) - 1,
+    );
+    let (x_hi, y_hi) = (
+        (u_hi + v_hi).div_euclid(2) + 2,
+        (v_hi - u_lo).div_euclid(2) + 2,
+    );
+    let bw = (x_hi - x_lo + 1).max(0) as usize;
+    let bh = (y_hi - y_lo + 1).max(0) as usize;
+    // Each cell's answer once asked: 0 not yet, 1 covered, 2 explored.
+    let memo: Vec<std::cell::Cell<u8>> = vec![std::cell::Cell::new(0); bw * bh];
+    let covered = |x: i32, y: i32| -> bool {
+        let at = (x >= x_lo && y >= y_lo && x <= x_hi && y <= y_hi)
+            .then(|| &memo[(y - y_lo) as usize * bw + (x - x_lo) as usize]);
+        match at.map(std::cell::Cell::get) {
+            Some(1) => true,
+            Some(2) => false,
+            _ => {
+                let v = !explored(world, house, CellXY::new(x, y));
+                if let Some(m) = at {
+                    m.set(if v { 1 } else { 2 });
+                }
+                v
+            }
+        }
+    };
+    let mut out = Vec::new();
+    for v in v_lo..=v_hi {
+        // u and v have the parity of x + y and x − y: equal.
+        let u_first = if (u_lo - v).rem_euclid(2) == 0 {
+            u_lo
+        } else {
+            u_lo + 1
+        };
+        for u in (u_first..=u_hi).step_by(2) {
+            let c = CellXY::new((u + v) / 2, (v - u) / 2);
+            let Some(cell) = grid.get(c) else { continue };
             let level = i32::from(cell.level);
             // spec: S-0110 claim 1 (every legal cell whose canvas meets the battlefield view)
             if !shroud::canvas_in_view((c.x, c.y), level, view.origin, view.size, q) {
-                return None;
+                continue;
             }
             // spec: S-0110 claims 1 and 2 (the explored states of the cell and its map neighbours;
             // a non-legal neighbour reads the shared state through S-0409 claim 14)
-            let piece = shroud::cell_piece(covered(c.x, c.y), Covered::of(c.x, c.y, covered));
-            Some(Cover {
+            let own = covered(c.x, c.y);
+            let piece = shroud::cell_piece(own, Covered::of(c.x, c.y, covered));
+            out.push(Cover {
                 cell: (c.x, c.y),
                 level,
                 shroud: piece,
                 // spec: S-0110 claim 4, Import mapping (fog of war is always off in skirmish: no fog piece)
                 fog: None,
-            })
-        })
-        .collect();
+            });
+        }
+    }
     // spec: S-0110 State and ordering (cells by increasing x + y)
     out.sort_by_key(|c| (c.cell.0 + c.cell.1, c.cell.0));
     out
@@ -121,9 +184,7 @@ pub fn alpha_of(
 #[cfg(test)]
 mod tests {
     use glasnost_fmt::image::IndexedImage;
-    use glasnost_render::shroud::{
-        CANVAS_HEIGHT, CANVAS_WIDTH, CoverFrame, FULL_COVER, canvas_origin,
-    };
+    use glasnost_render::shroud::{CoverFrame, FULL_COVER, canvas_origin};
     use glasnost_sim::testkit;
     use glasnost_sim::world::Pos;
 
@@ -228,6 +289,83 @@ mod tests {
         let c = w.cells.grid.iter().map(|(c, _)| c).next().unwrap();
         let a = light_alpha(&w, h, &canvas_view(c, &q), &CoverSprites::default(), &q);
         assert!(a.iter().all(|&v| v == 127));
+    }
+
+    /// [`covers`] as before M8 C4 part 4: every cell of the grid asked.
+    fn covers_by_scan(world: &World, house: HouseId, view: &View, q: &ShroudQuirks) -> Vec<Cover> {
+        let covered = |x: i32, y: i32| !explored(world, house, CellXY::new(x, y));
+        let mut out: Vec<Cover> = world
+            .cells
+            .grid
+            .iter()
+            .filter_map(|(c, cell)| {
+                let level = i32::from(cell.level);
+                if !shroud::canvas_in_view((c.x, c.y), level, view.origin, view.size, q) {
+                    return None;
+                }
+                let piece = shroud::cell_piece(covered(c.x, c.y), Covered::of(c.x, c.y, covered));
+                Some(Cover {
+                    cell: (c.x, c.y),
+                    level,
+                    shroud: piece,
+                    fog: None,
+                })
+            })
+            .collect();
+        out.sort_by_key(|c| (c.cell.0 + c.cell.1, c.cell.0));
+        out
+    }
+
+    /// spec: S-0110 claims 1 and 2, State and ordering, Edge cases (the covers from the band of
+    /// candidate cells are the full scan's: views inside, across and outside the map's edges, of
+    /// several sizes, over cells of levels −128 to 127, with quirks.shroud_on_flat_grid on and
+    /// off)
+    #[test]
+    fn covers_of_the_view_band_match_the_full_scan() {
+        let mut w = game();
+        let h = HouseId(0);
+        let cells: Vec<CellXY> = w.cells.grid.iter().map(|(c, _)| c).collect();
+        for (i, &c) in cells.iter().enumerate() {
+            let level = match i % 7 {
+                0 => 0,
+                1 => 4,
+                2 => -3,
+                3 => 127,
+                4 => -128,
+                5 => 12,
+                _ => 1,
+            };
+            w.cells.grid.get_mut(c).unwrap().level = level;
+        }
+        let (lo, hi) = cells.iter().fold((i32::MAX, i32::MIN), |(lo, hi), c| {
+            let (x, _) = glasnost_render::projection::cell_top(c.x, c.y);
+            (lo.min(x), hi.max(x))
+        });
+        let mut nonempty = 0;
+        for flat in [true, false] {
+            let q = ShroudQuirks {
+                shroud_on_flat_grid: flat,
+            };
+            for size in [(1, 1), (60, 30), (333, 177), (1920, 1080), (4000, 3000)] {
+                for ox in (lo - 2000..hi + 2000).step_by(397) {
+                    for oy in (-2500..3500).step_by(311) {
+                        let view = View {
+                            origin: (ox, oy),
+                            size,
+                            reference: 0,
+                        };
+                        let fast = covers(&w, h, &view, &q);
+                        assert_eq!(
+                            fast,
+                            covers_by_scan(&w, h, &view, &q),
+                            "flat {flat}, view {ox}, {oy}, {size:?}"
+                        );
+                        nonempty += usize::from(!fast.is_empty());
+                    }
+                }
+            }
+        }
+        assert!(nonempty > 100, "{nonempty} views have covers");
     }
 
     /// spec: S-0110 Import mapping (a missing SHROUD.SHP or FOG.SHP draws no cover; the importer
