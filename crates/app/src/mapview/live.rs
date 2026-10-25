@@ -605,8 +605,14 @@ pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
 /// How an aircraft body is tilted, read-only from the game state (S-0105
 /// claims 41, 42): a rocket missile's current nose pitch (S-0506) and its set's
 /// pitch fractions, or a flying-locomotor aircraft's signed height, current
-/// speed fraction and unfinished aiming-facing turn.
+/// speed fraction and unfinished aiming-facing turn; or, for a vehicle the
+/// simulation marks sinking, the list of our interim of Q-1871.
 pub fn attitude(w: &World, o: &Object) -> Attitude {
+    if o.kind == SimKind::Vehicle && glasnost_sim::naval::sinking(w, o.id) {
+        // design: Q-1871 interim (a vehicle marked sinking, S-0504 Terms, is drawn listed by its depth below the surface, S-0504 claim 4's height, and its id)
+        let height = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
+        return Attitude::Sinking(super::sinking::list(height, o.id.0));
+    }
     if let Some(d) = glasnost_sim::rocket::drawing(w, o.id) {
         return Attitude::Rocket {
             pitch: d.pitch,

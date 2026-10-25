@@ -599,6 +599,40 @@ pub fn vehicle_local_transforms(
     [d, t, b]
 }
 
+/// [`vehicle_parts`] with a further body-frame rotation `attitude` after the
+/// body's heading: *D = Rz(θ_body) · A*, with *T* and *B* built from that
+/// *D* as in claims 8 and 10, so the turret and barrel ride the body, and the
+/// shadow transform the body's. For a pose of the caller's own (the
+/// sinking vessel's list, the interim of Q-1871, in the app's map view);
+/// [`vehicle_parts`] is unchanged.
+pub fn vehicle_parts_posed(
+    body_facing: u16,
+    turret_facing: u16,
+    turret_offset_leptons: i32,
+    elevation_raw: u16,
+    attitude: &Mat34,
+    quirks: &VoxelQuirks,
+) -> VehiclePose {
+    let v = view(quirks);
+    // spec: S-0105 claims 3, 7 (D starts with the body rotation); the attitude after it is the caller's
+    let d = Mat34::IDENTITY
+        .rotate_z(body_angle(body_facing), quirks)
+        .then(attitude);
+    // spec: S-0105 claim 8 (T = D · X(d) · Rz(θ_rel))
+    let t = d
+        .translate([vehicle_turret_shift(turret_offset_leptons), 0.0, 0.0])
+        .rotate_z(turret_relative_angle(turret_facing, body_facing), quirks);
+    let b = barrel_from_turret(&t, elevation_raw, quirks);
+    let body = v.then(&d);
+    VehiclePose {
+        body,
+        turret: v.then(&t),
+        barrel: v.then(&b),
+        shadow: body,
+        turret_first: turret_drawn_first(turret_facing),
+    }
+}
+
 /// *B = T · Ry(φ)*: the barrel pitches about the lateral axis through the
 /// turret's origin (S-0105 claim 10).
 fn barrel_from_turret(t: &Mat34, elevation_raw: u16, quirks: &VoxelQuirks) -> Mat34 {
@@ -3431,6 +3465,36 @@ mod tests {
             ..q()
         };
         assert!(barrel_pitch(15360, &cont) < 0.0);
+    }
+
+    /// spec: S-0105 claims 7, 8, 10 (with the identity attitude the posed
+    /// parts are the plain ones; with another, the turret and barrel ride
+    /// the body: T = D · X(d) · Rz(θ_rel), B = T · Ry(φ) from the posed D)
+    #[test]
+    fn posed_parts_ride_the_body() {
+        for offset in [0, 120, -80] {
+            let plain = vehicle_parts(raw32(5), raw32(9), offset, 12288, &q());
+            let same =
+                vehicle_parts_posed(raw32(5), raw32(9), offset, 12288, &Mat34::IDENTITY, &q());
+            assert_eq!(plain, same);
+            let a = Mat34::IDENTITY.rotate_y(0.3, &q()).rotate_x(-0.1, &q());
+            let posed = vehicle_parts_posed(raw32(5), raw32(9), offset, 12288, &a, &q());
+            let d = Mat34::IDENTITY
+                .rotate_z(body_angle(raw32(5)), &q())
+                .then(&a);
+            let t = d
+                .translate([vehicle_turret_shift(offset), 0.0, 0.0])
+                .rotate_z(turret_relative_angle(raw32(9), raw32(5)), &q());
+            let v = view(&q());
+            assert_eq!(posed.body, v.then(&d));
+            assert_eq!(posed.shadow, posed.body);
+            assert_eq!(posed.turret, v.then(&t));
+            assert_eq!(
+                posed.barrel,
+                v.then(&t.rotate_y(barrel_pitch(12288, &q()), &q()))
+            );
+            assert_ne!(posed.body, plain.body);
+        }
     }
 
     /// spec: S-0105 claim 10 (B = T · Ry(φ): the barrel pitches about the

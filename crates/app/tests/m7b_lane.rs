@@ -109,6 +109,17 @@
 //! each mode, and lets the first charge-turret one attack, counting the
 //! selected turret indices it shows (never which mode shows which).
 //!
+//! M8 step A4, note 20 (Q-1871, our interim list): `sinking-list` counts
+//! the naval vehicle types by voxel or sprite body, underwater flag and
+//! whether a killing hit sinks them, then puts a vessel a killing hit sinks
+//! (a turreted one when there is one) and an underwater one on open water,
+//! facing different ways; it kills the first and sets the second sinking
+//! directly, as a cull would (S-0614 claim 11; an underwater type never
+//! sinks at a killing hit, S-0504 claim 6), and saves frames before the
+//! hit and at the start, onset, middle and end of the descent, printing each
+//! vessel's id, facing, list direction and step. Ids, cells, counts and
+//! ticks only.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -167,6 +178,7 @@ const SCENES: &[Scene] = &[
     ("derrick-look", derrick_look),
     ("derrick-paths", derrick_paths),
     ("ifv-turrets", ifv_turrets),
+    ("sinking-list", sinking_list),
 ];
 
 #[test]
@@ -3709,4 +3721,184 @@ fn live_name(w: &World, h: HouseId) -> Vec<u8> {
         .get(usize::from(h.0))
         .map(|h| h.name.as_bytes().to_vec())
         .unwrap_or_default()
+}
+
+// ---------------------------------------------------------------------------
+// M8 step A4, note 20 (Q-1871: the sinking vessel's list, our interim)
+
+/// A naval vehicle type: index, voxel body, turret flag, underwater, sinks
+/// at a killing hit.
+type NavalType = (u32, bool, bool, bool, bool);
+
+/// Note 20 (design: Q-1871 interim; S-0504 claims 4, 6; S-0312 claim 10;
+/// S-0614 claim 11): the naval vehicle types counted, and two vessels sunk
+/// on open water with frames of their descent. Counts, ids and ticks only.
+fn sinking_list(lane: &mut Lane) {
+    use glasnost_app::mapview::build::Attitude;
+    let types: Vec<NavalType> = {
+        let s = lane.c.session.as_ref().unwrap();
+        let import = &s.loaded.import;
+        let registry = &import.outcome.registries[&glasnost_convert::kinds::Kind::Vehicles];
+        let r = lane.world().rules();
+        let threshold = r.combat.general.sinking_weight;
+        let mode = r.mode;
+        (0..r.vehicles.len())
+            .filter_map(|i| {
+                let u = r.unit(Kind::Vehicle, i as u32)?;
+                if !u.combat.naval {
+                    return None;
+                }
+                let name = r.vehicles[i].name.as_bytes();
+                let voxel = registry
+                    .iter()
+                    .position(|t| t.name.eq_ignore_ascii_case(name))
+                    .and_then(|x| {
+                        import
+                            .arts
+                            .get(&(glasnost_convert::kinds::Kind::Vehicles, x))
+                    })
+                    .is_some_and(|a| a.voxels.contains_key("body"));
+                let heavy = u
+                    .vehicle
+                    .weight
+                    .unwrap_or_else(|| glasnost_num::F64::from_i64(1, mode))
+                    .ge(threshold);
+                let sinks = !u.combat.underwater && !u.combat.organic && heavy;
+                Some((i as u32, voxel, u.turret, u.combat.underwater, sinks))
+            })
+            .collect()
+    };
+    let count = |f: &dyn Fn(&NavalType) -> bool| types.iter().filter(|t| f(t)).count();
+    println!(
+        "sinking-list: naval vehicle types {}: voxel body {}, sprite body {}; underwater {} (voxel {}); sink at a killing hit {} (voxel {}, with a turret {})",
+        types.len(),
+        count(&|t| t.1),
+        count(&|t| !t.1),
+        count(&|t| t.3),
+        count(&|t| t.3 && t.1),
+        count(&|t| t.4),
+        count(&|t| t.4 && t.1),
+        count(&|t| t.4 && t.1 && t.2),
+    );
+    let ship = types
+        .iter()
+        .find(|t| t.4 && t.1 && t.2)
+        .or_else(|| types.iter().find(|t| t.4 && t.1))
+        .map(|t| t.0);
+    let sub = types.iter().find(|t| t.3 && t.1).map(|t| t.0);
+    let (Some(ship), Some(sub)) = (ship, sub) else {
+        println!("sinking-list: no voxel vessel that sinks at a hit, or no voxel underwater one");
+        return;
+    };
+    let mut found = None;
+    for map in 0..env_num("GLASNOST_LANE_MAPS", 8) {
+        let l = Lane::start_on(map).expect("the install is set");
+        let home = l.home();
+        if let Some(at) = l.area(home, (7, 2), 2, |x| x == land::WATER) {
+            println!("sinking-list: map {map}, water at ({}, {})", at.x, at.y);
+            found = Some((l, at));
+            break;
+        }
+    }
+    let Some((mut l, at)) = found else {
+        println!("sinking-list: no open water on the maps tried");
+        return;
+    };
+    let local = l.local();
+    let ship_name = type_name_of(l.world(), Kind::Vehicle, ship as usize);
+    let sub_name = type_name_of(l.world(), Kind::Vehicle, sub as usize);
+    // Different facings: 8192 for the first, 40960 for the second.
+    let a =
+        glasnost_sim::testkit::spawn(l.world_mut(), Kind::Vehicle, &ship_name, local.0, at, 8192);
+    let b = glasnost_sim::testkit::spawn(
+        l.world_mut(),
+        Kind::Vehicle,
+        &sub_name,
+        local.0,
+        CellXY::new(at.x + 5, at.y + 1),
+        40960,
+    );
+    l.look_at(CellXY::new(at.x + 3, at.y + 1));
+    l.ticks(3);
+    let vessels = [("sinks at a hit", a), ("underwater", b)];
+    let report = |l: &Lane, what: &str| {
+        let w = l.world();
+        for (name, id) in vessels {
+            let Some(o) = w.obj(id).filter(|o| o.on_map) else {
+                println!("sinking-list {what}: {name} id {} out of play", id.0);
+                continue;
+            };
+            let height = o.pos.z - w.surface_at(o.pos.x, o.pos.y);
+            let att = glasnost_app::mapview::live::attitude(w, o);
+            let list = match att {
+                Attitude::Sinking(l) => format!(
+                    "step {} of {}, {} down, {} side down",
+                    l.step,
+                    glasnost_app::mapview::sinking::STEPS,
+                    if l.bow_down { "bow" } else { "stern" },
+                    if l.starboard_down {
+                        "starboard"
+                    } else {
+                        "port"
+                    }
+                ),
+                _ => "level (not sinking)".to_string(),
+            };
+            println!(
+                "sinking-list {what} (tick {}): {name} id {} type {} cell ({}, {}) facing {} sinking {} submerged {} height {height}: {list}",
+                w.tick,
+                id.0,
+                o.type_index,
+                o.pos.cell().x,
+                o.pos.cell().y,
+                o.body.value(w.tick),
+                glasnost_sim::naval::sinking(w, id),
+                glasnost_sim::naval::submerged(w, id),
+            );
+        }
+    };
+    report(&l, "before");
+    l.save("sinking-list-0-before");
+    let h = warhead_of_kind(l.world(), 0).unwrap_or(0);
+    kill_with(&mut l, a, h);
+    glasnost_sim::naval::start_sinking(l.world_mut(), b);
+    let t0 = l.world().tick;
+    report(&l, "hit");
+    // Frames at the start (depth 10, still level), the onset (60), the
+    // middle (200) and the end (390) of the first vessel's descent: 5
+    // leptons a tick (S-0504 claim 4).
+    let marks = [
+        (10, "1-start"),
+        (60, "2-onset"),
+        (200, "3-middle"),
+        (390, "4-end"),
+    ];
+    let mut next = 0;
+    for _ in 0..200 {
+        l.ticks(1);
+        let w = l.world();
+        let depth = w
+            .obj(a)
+            .filter(|o| o.on_map)
+            .map(|o| w.surface_at(o.pos.x, o.pos.y) - o.pos.z);
+        let Some(depth) = depth else {
+            println!(
+                "sinking-list: the first vessel left play {} ticks after the hit",
+                w.tick - t0
+            );
+            break;
+        };
+        if next < marks.len() && depth >= marks[next].0 {
+            let what = format!("{} ({} ticks after the hit)", marks[next].1, w.tick - t0);
+            report(&l, &what);
+            l.save(&format!("sinking-list-{}", marks[next].1));
+            next += 1;
+        }
+    }
+    let w = l.world();
+    println!(
+        "sinking-list: after the descent, in play: first {}, second {}",
+        w.obj(a).is_some_and(|o| o.on_map),
+        w.obj(b).is_some_and(|o| o.on_map)
+    );
 }
