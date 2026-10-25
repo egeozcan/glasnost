@@ -1,9 +1,9 @@
 ---
 id: Q-1760
 title: Which turret model a multi-turret vehicle shows
-status: open
+status: answered
 related: [S-0105, S-0007, S-0308, S-0606, S-0209]
-answered-by: []
+answered-by: [S-0105]
 ---
 
 ## Need
