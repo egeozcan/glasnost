@@ -4372,9 +4372,20 @@ impl<'a> Builder<'a> {
             // combined into one image; its shadow, U − 2, never darkens them, so it goes first)
             items.extend(shadow_item(self, u - 2));
             items.extend(body(self, frame));
+            let barrel = self.sprite_body_barrel(m, point, u, row);
+            // spec: S-0105 claim 12 (Sprite body) and claim 11 (at 4-step turret facings 1 and 2
+            // the barrel wins over the sprite turret, at 0 and 3 the turret wins; either wins over
+            // the body)
+            let barrel_last = voxel::turret_drawn_first(m.turret);
+            if !barrel_last {
+                items.extend(barrel);
+            }
             let t = (n_step(m.turret, 32) as i32 + 4) % 32 + 8 * walk_frames;
             if let Ok(t) = usize::try_from(t) {
                 items.extend(body(self, t));
+            }
+            if barrel_last {
+                items.extend(barrel);
             }
         } else {
             // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
@@ -4382,6 +4393,98 @@ impl<'a> Builder<'a> {
             items.extend(shadow_item(self, -lz - 4));
         }
         items
+    }
+
+    /// The single voxel barrel of a sprite-body vehicle with the turret
+    /// flag (S-0105 claim 12, *Sprite body*; S-0007 claim 19), or `None`
+    /// without a barrel part. The voxel turret part is never drawn.
+    ///
+    /// Our design (the decisions of 2026-10-25; Q-1885 open): the barrel
+    /// takes the sprite body's place in the scene, S-0102 claim 13's row
+    /// for a vehicle drawn as a sprite (U − 2, upright, a reader), so that
+    /// no other object's pixels can hide the barrel and not the body, or
+    /// the reverse, also off the ground. It is drawn in the HVA frame of a
+    /// barrel drawn with a voxel turret, the loaded voxel turret's frame
+    /// standing in for the drawn one (`quirks.barrel_frame_zero`).
+    fn sprite_body_barrel(
+        &mut self,
+        m: &Mobile,
+        point: (i32, i32),
+        u: i32,
+        row: Shade,
+    ) -> Option<Item> {
+        let q = VoxelQuirks::default();
+        let (kind, idx) = (m.kind, m.idx);
+        let art = self.type_art((kind, idx))?;
+        let file = art.voxels.get("barrel")?.clone();
+        // spec: S-0105 Import mapping (TurretOffset, Art [image], default 0); S-0313 claim 11
+        let offset = self.sim_turret_offset(kind, idx).unwrap_or_else(|| {
+            self.art_value(kind, idx, b"TurretOffset")
+                .and_then(value::integer)
+                .unwrap_or(0)
+        });
+        let name = self.import.outcome.registries[&kind][idx].name.clone();
+        // spec: S-0105 Import mapping (UseBuffer is read from the art section of the type's own name)
+        let depth_buffered = self
+            .p
+            .art
+            .value(&name, b"UseBuffer")
+            .and_then(value::boolean)
+            .unwrap_or(false);
+        // spec: S-0105 claim 16 (body frame 0: the turret frame u mod F_tur of the loaded turret part)
+        let turret_frames = art
+            .voxels
+            .get("turret")
+            .cloned()
+            .and_then(|f| self.voxel_model(&f))
+            .map(|t| t.frame_count() as u32);
+        let turret_frame = voxel::vehicle_turret_frame(0, m.anim, turret_frames);
+        // spec: S-0105 claim 16 (quirks.barrel_frame_zero; our design for a sprite body, Q-1885)
+        let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
+        // spec: S-0105 claim 43 (Any body: the barrel key holds the selected turret index of a
+        // multi-turret type); claim 26 (barrel key: the turret's key plus the 32-step elevation)
+        let index = if multi_turret(self.import, kind, idx) {
+            m.turret_index.and_then(|k| u8::try_from(k).ok())
+        } else {
+            None
+        };
+        let turret_key = voxel::vehicle_turret_key(
+            voxel::RAMP_FLAT,
+            m.body,
+            m.turret,
+            offset,
+            index,
+            false,
+            turret_frame,
+        );
+        let key = voxel::barrel_key(turret_key, m.elevation);
+        let (body_facing, turret_facing, elevation) = (m.body, m.turret, m.elevation);
+        let part = self.cached_part(kind, idx, key, |b| {
+            let model = b.voxel_model(&file)?;
+            let vpl = b.vpl();
+            // spec: S-0105 claim 12 (Sprite body: at the turret position, turned with the turret
+            // facing and pitched by the barrel elevation, as for a voxel vehicle, claims 8 and 10)
+            let pose = voxel::vehicle_parts(body_facing, turret_facing, offset, elevation, &q);
+            let img = b.p.canvas.draw_part(
+                &model,
+                barrel_frame,
+                &pose.barrel,
+                vpl.as_ref(),
+                depth_buffered,
+                &q,
+            );
+            b.limit_checked(&file, "barrel", key, img)
+        })?;
+        // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, a reader; our
+        // design for its voxel barrel, Q-1885), S-0102 colour selector (a sprite vehicle's row)
+        Some(Self::part_item(
+            part,
+            point,
+            u - 2,
+            Paint::Lit(row),
+            Group::Vehicles,
+            m.object,
+        ))
     }
 
     /// A parsed voxel model and its motion file from the assets, parsed

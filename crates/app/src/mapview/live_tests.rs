@@ -2148,6 +2148,131 @@ fn multi_turret_draws_the_models_of_the_selected_index() {
     assert_eq!(draw(gattling, Some(1), 0), (plain, plain_keys));
 }
 
+/// S-0105 claim 12, *Sprite body* (S-0007 claim 19): a sprite-body vehicle with the turret flag
+/// draws its single voxel barrel, never the voxel turret part nor a numbered model, at every
+/// selected turret index (claim 43, *Any body*); claim 11's overlap rule by the 4-step turret
+/// facing puts it over the sprite turret at facings 1 and 2 and under it at 0 and 3, always over
+/// the body; without the turret flag or without a barrel part no voxel part is drawn. Its place in
+/// the scene is our design (Q-1885 open): S-0102 claim 13's sprite-vehicle row, U − 2, upright, a
+/// reader, with the body's colour row.
+#[test]
+fn a_sprite_body_draws_its_single_voxel_barrel() {
+    use glasnost_fmt::bytes::F32Bits;
+    use glasnost_fmt::hva::synthetic_animation;
+    use glasnost_fmt::vxl::{VxlWriter, synthetic_model};
+    // The lit items of one sprite vehicle: image size, depth and paint, in drawing order.
+    let draw = |extra: &str, parts: &[(&str, f32)], turret: u16, index: Option<i32>| {
+        let rules = format!("{RULES}[CARX]\n{extra}");
+        let (mut import, catalogue, mut assets) = context_with(&rules);
+        let art = import.arts.get_mut(&(Kind::Vehicles, 0)).unwrap();
+        assert!(!art.voxels.contains_key("body"), "a sprite body");
+        for &(part, width) in parts {
+            let file = format!("{part}.vxl");
+            art.voxels.insert(part.into(), file.as_bytes().to_vec());
+            let mut model = synthetic_model();
+            model.limbs[0].max[0] = F32Bits::new(width);
+            assets.insert(file.as_bytes(), VxlWriter { model: &model }.write());
+            let hva = file.replace(".vxl", ".hva");
+            assets.insert(hva.as_bytes(), synthetic_animation().write());
+        }
+        let doc = Document::parse(&scene_map_text(), Quirks::default(), &mut Vec::new());
+        let map = decode(
+            &doc,
+            &DecodeContext {
+                catalogue: Some(&catalogue),
+                ..Default::default()
+            },
+        )
+        .map;
+        let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+        let options = Options::default();
+        let inputs = Inputs {
+            map: &map,
+            import: &import,
+            catalogue: &catalogue,
+            palettes: &palettes,
+            assets: &assets,
+            options: &options,
+            rules: None,
+            cells: None,
+        };
+        let (built, mut painter) = build_parts(&inputs, true);
+        let mut scene = built.scene;
+        let car = Mobile {
+            kind: Kind::Vehicles,
+            idx: 0,
+            owner: b"Neutral".to_vec(),
+            pos: (2 * 256 + 128, 3 * 256 + 128, 0),
+            body: 0,
+            turret,
+            elevation: 0,
+            anim: 3,
+            infantry: None,
+            object: sim_code(ObjectId(9)),
+            harvesting: None,
+            shadow: None,
+            alternative: false,
+            attitude: Attitude::None,
+            disabled: false,
+            above: 0,
+            protection: None,
+            generic_shadow: None,
+            berserk: None,
+            turret_index: index,
+        };
+        let (entries, _) = painter.mobiles(&inputs, &mut scene, &[car]);
+        entries[0]
+            .items
+            .iter()
+            .filter(|i| i.paint != Paint::Shadow)
+            .map(|i| {
+                let img = &scene.images[i.image as usize];
+                ((img.width(), img.height()), i.depth, i.test, i.paint)
+            })
+            .collect::<Vec<_>>()
+    };
+    let turret = "Turret=yes\n";
+    let all = [("turret", 12.0), ("barrel", 20.0), ("barrel1", 30.0)];
+    // 4-step turret facing 0: body, barrel, sprite turret (the turret wins over the barrel).
+    let west = draw(turret, &all, 0, None);
+    assert_eq!(west.len(), 3, "body, barrel and sprite turret");
+    let (body, barrel, top) = (west[0], west[1], west[2]);
+    assert_eq!(body.0, top.0, "two sprite frames");
+    assert_ne!(barrel.0, body.0, "the voxel barrel");
+    assert_eq!(
+        (barrel.1, barrel.2, barrel.3),
+        (body.1, body.2, body.3),
+        "the sprite body's depth row, test and colour row"
+    );
+    let ItemDepth::Profile { profile, .. } = barrel.1 else {
+        panic!("a profile depth");
+    };
+    assert_eq!(profile, Profile::Upright);
+    // 4-step facings 1 and 2: the barrel after the sprite turret; facing 3 as facing 0.
+    let east = draw(turret, &all, 16384, None);
+    assert_eq!(east.len(), 3, "facing 1");
+    assert_eq!(east[2].0, barrel.0, "facing 1: the barrel last");
+    // Facing 2's sprite turret frame (36) lies past the 32-frame test sprite, so the barrel
+    // follows the body alone.
+    let south = draw(turret, &all, 32768, None);
+    assert_eq!(south.last().map(|i| i.0), Some(barrel.0), "facing 2");
+    assert_eq!(draw(turret, &all, 49152, None)[1].0, barrel.0, "facing 3");
+    // The single barrel at every index of a multi-turret type, none included, never barrel k.
+    let multi = "Turret=yes\nTurretCount=2\n";
+    for index in [None, Some(0), Some(1), Some(5)] {
+        let d = draw(multi, &all, 0, index);
+        assert_eq!(d.len(), 3, "index {index:?}");
+        assert_eq!(d[1].0, barrel.0, "index {index:?}: the single barrel");
+    }
+    // Without a barrel part the voxel turret part is not drawn either.
+    let bare = draw(turret, &[("turret", 12.0)], 0, None);
+    assert_eq!(bare.len(), 2, "body and sprite turret");
+    assert!(bare.iter().all(|i| i.0 == body.0));
+    // Without the turret flag no voxel part is drawn.
+    let plain = draw("", &all, 0, None);
+    assert_eq!(plain.len(), 1, "the body alone");
+}
+
 /// S-0105 claims 41 and 42 (Q-0950): a rocket's body is drawn with its current nose pitch, an image is
 /// reused only inside its pitch class and heading, a flying-locomotor aircraft's body and shadow take its
 /// aiming facing and its pitch and bank follow height, speed and an unfinished turn. The shadow is never
