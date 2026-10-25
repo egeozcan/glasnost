@@ -133,25 +133,26 @@ pub fn rebuild(w: &mut World) {
             }
         }
     }
-    // Label regions densely in index order.
+    // Label regions densely in index order: a root's label is the count of
+    // roots met before it (by root, in a table rather than a map: our tooling
+    // for speed, M8 C4 part 6).
     let mut region = vec![u32::MAX; n];
-    let mut labels: std::collections::BTreeMap<u32, u32> = Default::default();
+    let mut labels = vec![u32::MAX; n];
     let mut cats = Vec::new();
     for &c in &cells {
         let Some(i) = w.cells.idx(c) else { continue };
         if w.cells.category[i] == category::OFF_MAP {
             continue;
         }
-        let root = dsu.find(i as u32);
-        let next = labels.len() as u32;
-        let l = *labels.entry(root).or_insert_with(|| {
+        let root = dsu.find(i as u32) as usize;
+        if labels[root] == u32::MAX {
+            labels[root] = cats.len() as u32;
             cats.push(w.cells.category[i]);
-            next
-        });
-        region[i] = l;
+        }
+        region[i] = labels[root];
     }
     // Region adjacency (S-0212 claim 3).
-    let nr = labels.len();
+    let nr = cats.len();
     let mut adj: Vec<(u32, u32)> = Vec::new();
     for &c in &cells {
         let Some(i) = w.cells.idx(c) else { continue };
