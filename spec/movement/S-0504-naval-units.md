@@ -2,13 +2,13 @@
 id: S-0504
 title: Naval units (ship locomotion, wakes, sinking, underwater vessels, docking at yards)
 topic: movement
-revision: 20
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-25
 measurements: []
-requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646]
+requests: [Q-0600, Q-0640, Q-0642, Q-0643, Q-0644, Q-0646, Q-1871]
 supersedes: []
 ---
 
@@ -39,6 +39,21 @@ Shared salvo release (S-0506 claim 8) is distinct from the end of the missile ra
 between-track hold while its launching count is positive; that hold does not apply merely because
 a carrier's controller is launching ordinary aircraft.
 
+**Q-1871: the lean of a sinking vessel.** A sinking vessel does lean as it goes down. The lean is a
+pitch, a fore-and-aft tilt about the hull's own lateral axis, not a sideways list (claim 15). On
+each of its own updates while sinking, its pitch moves 0.01 radians (F4) towards bow-down or
+stern-down and stops at π/4. From level, that takes 79 updates. The direction comes from the
+8-direction of its body facing at its first update while sinking, is kept for the whole descent,
+and takes no random draw. No type key sets the step, the limit or the direction. The rule keys on
+the sinking state alone, whatever started it and whatever the starting height, where the body is
+drawn by a locomotor that draws rocking (claim 16). Sinking adds no rule of its own for the roll:
+a rocking hit still sets it going, as on a vessel that is not sinking. Both are drawn as rocking under S-0106 claim 9, and a sinking vessel draws no shadow
+(claim 16). Three oddities of the original's drawing are not copied: its lean passes π/4, can
+reverse when a turn crosses between heading groups, and keeps its roll frozen (claim 15; decided at
+the delegated sign-off, 2026-10-25). None of the vessel's own rules other than drawing reads the
+pitch. The lean does reach the shots of passengers that fire from an open-topped transport sinking
+without a killing hit (claim 16).
+
 ## Terms
 
 - **Ship locomotor.** The locomotor whose class identifier is the "ship" row of S-0207 table T3.
@@ -58,6 +73,17 @@ a carrier's controller is launching ordinary aircraft.
   through a cull without a killing hit. Claims 4 and 5 here give what happens while it lasts.
 - **Sinking descent.** The lowering of a sinking vessel by a fixed amount each tick until it leaves
   play (claim 4).
+- **Pitch and roll.** The two rocking angles of a vehicle's body (S-0106 Terms, *Rocking*), in
+  radians, held in single precision.
+  - The *pitch* is S-0210's *forward rocking angle*. It is drawn as a rotation about the body's own
+    lateral axis, the model frame's *y* axis (S-0105 Terms), with S-0105's rotation convention for
+    *Ry*, so a positive pitch lowers the bow and raises the stern.
+  - The *roll* is S-0210's *sideways rocking angle*, drawn about the body's own forward (*x*) axis.
+  - Each angle also has a rate per tick, in radians per tick. S-0210's body tilt is the pitch rate,
+    with the same sign: a negative body tilt raises the bow and a positive one lowers it (see
+    Changes for other specs). How the rates are set,
+    and how they move the angles outside sinking, belongs to the specs that set them (S-0210, S-0303
+    claim 20, S-0614). Claim 15 gives the sinking rule.
 - **Docking answer.** As S-0214 (Terms): the answer a building gives a unit that asks whether it
   may enter or dock.
 - **Docking point.** The world position a building supplies for a contacted unit's docking distance
@@ -373,7 +399,11 @@ a carrier's controller is launching ordinary aircraft.
     does not clear every other object's already-held target. Body-facing updates are separate
     from locomotor processing: a turn already in progress can continue towards the saved desired
     facing while the vessel descends. Sinking does not itself assign a new desired body facing.
-    This is distinct from the visual list during descent (S-0106).
+    Claim 15 owns the vessel's lean during descent, a fore-and-aft pitch whose direction is set by
+    the body facing at the first update while sinking, so a turn that continues does not change
+    it. The visual tilt of a vessel during descent, which S-0106 draws, is this lean: claim 15's
+    pitch, drawn as the rocking of S-0106 claim 9 (claim 16). It is a fore-and-aft lean, not a
+    sideways list. Sinking adds no rule of its own for the roll (claim 15).
 
     Sinking is not immunity to damage delivered to the object. An already-fired shot can still
     damage it when the ordinary impact rules deliver damage to that object; applicable area
@@ -486,6 +516,166 @@ a carrier's controller is launching ordinary aircraft.
     - Confidence: high (shared repair checks, power and queuing); medium (order and sale/removal
       consequences); low (same-yard enter order while docked, inherited from S-0314 claim 20)
 
+### The lean of a sinking vessel
+
+15. **Pitch while sinking (Q-1871).** While a vehicle drawn as a voxel model is sinking, each of
+    its own updates takes one pitch step towards a full lean of π/4, bow
+    down or stern down. A step adds 0.01 radians (bow down) or subtracts it (stern down). A step
+    that would pass the full lean stops at it, and once the pitch is at the full lean it stays
+    there. F4 gives the arithmetic.
+    - **Direction.** The lean is bow down when the 8-direction of the vehicle's body facing
+      (S-0204 F4) at its first step is 1, 2, 3, 4 or 5: map north-east, east, south-east, south
+      or south-west. It is stern down when that 8-direction is 0, 6 or 7: map north, west or
+      north-west. On screen, the end of the hull that is lower on the screen goes down; for the
+      two headings that run across the screen, north-east and south-west, it is the bow. The
+      direction is kept for the rest of the descent, and no random draw is taken.
+    - **Which facing.** The direction is taken from the body facing in the tick of the first
+      step, its value for that tick number under S-0206 claim 1, also while a turn continues
+      (claim 10).
+    - **Course of the lean.** From a level hull, after *n* steps the pitch's magnitude is about
+      0.01*n* radians; F4 gives the exact single-precision values. The 79th step brings it to the
+      full lean, π/4 to single precision, and no later step changes it.
+    - **Timing.** The step comes in the same own update as claim 4's descent. After *n* descents
+      the vessel has taken *n* steps, until the full lean stops them. A vessel that starts sinking
+      at height 0 leaves play at its 81st descent. Starting from level, with no effect that sets
+      the pitch directly, its lean is complete at the 79th descent; the 80th update holds the lean,
+      and the 81st removes the vessel. When the lean is still incomplete on the update that removes
+      the vessel, that update's step is never drawn. A vessel whose descent ends in fewer than 79
+      updates, because it started below height 0, leaves play with its lean incomplete. A start
+      above height 0 only lengthens the time it spends at the full lean.
+    - **Starting value.** Steps start from the pitch the vehicle had when sinking began (for
+      example, left over from earlier rocking), not from level. A pitch that starts in the
+      opposite sense passes through level first.
+    - **The pitch belongs to the lean; the roll is left free.** While sinking, the forward
+      rocking rate is not added to the pitch, the pitch does not return to level, and S-0210
+      claim 12's π/10 limit does not apply to it. Sinking adds no rule of its own for the roll
+      and the sideways rocking rate, and does not hold them: a rocking hit during descent sets
+      the sideways rocking rate as S-0303 claim 20 sets it (a strength scaled by the type's
+      weight; S-0614 claim 10 for a squid's strike), as on a vessel that is not sinking, and S-0106
+      claim 9 draws the roll that follows. Such a hit rolls the hull but does
+      not change its lean. How a rolled body comes back to level is not stated by any approved
+      spec, and this spec does not supply it (Open questions); whether a roll left over from
+      before sinking, or set during descent, returns to level while the vessel sinks is
+      `unmeasured` here.
+    - **Turning.** A body turn that continues during descent (claim 10) does not change the
+      direction of the lean, even when it carries the body facing into the other group of
+      8-directions.
+    - **The original's drawing.** Three oddities of the original are not copied and have no switch
+      (decided at the delegated sign-off, 2026-10-25):
+      - The original tests the limit on the pitch's magnitude before each step, so its lean ends
+        up to one step past π/4 (about 0.79 radians from level), and a pitch already at the limit
+        in the opposite sense stays there.
+      - The original reads the direction again on every update, so a turn that crosses into the
+        other group of 8-directions before its lean reaches the limit reverses its lean back
+        through level towards the other end.
+      - The original holds the roll and both rocking rates for the whole descent, so a roll from
+        before sinking stays drawn until the vessel leaves play, and a rocking hit during descent
+        does not move the body.
+    - **Causes and types.** The rule depends on the sinking state alone: it is the same after a
+      killing hit (S-0312 claim 10), a squid's cull (S-0614 claim 11), a magnetic-lift drop into
+      water (S-0607 claim 17), the jumpjet trigger of S-0502 claim 19 and any other cause, for
+      every type. Underwater types do not start sinking at a killing hit (S-0312 claim 10). One that
+      starts sinking another way leans in the same way. A vehicle not drawn as a voxel model
+      takes no pitch steps.
+    - Backing: the full-lean stop, the kept direction and the roll that sinking leaves free are
+      our engine's design and have no original result to measure; N16 checks them in our engine.
+      `measurable` (N16 for direction at all eight 8-directions, the lean's growth by about equal
+      amounts per descent, its stop near the 79th descent and the absence of draws; its parts a and
+      b for the original's reversal and held roll; part c for the original's held angles under a
+      rocking hit during descent; part h for a start from a rocked pitch; part e for the
+      cull cause). The magnetic-lift cause is `unmeasured`: part f records it, but a level body
+      there is not a falsifier (claim 16, Open questions), so that run cannot tell the rule from
+      its absence. The original's held rates are `unmeasured`: a drawn body that
+      does not change cannot tell a held rate from one that is cleared or ignored while sinking,
+      and no stock observable reads the rates. The original's overshoot is recorded only where
+      the object recorder reads the pitch, and is otherwise `unmeasured` like the exact values. The
+      original's hold of a pitch already at the limit in the opposite sense is `unmeasured`: no
+      stock setup rocks a hull to the limit just before it sinks. The exact single-precision values
+      are `unmeasured`: a drawn image cannot resolve them, and they only fix the step on which the
+      full lean is reached. For the same reason the exact step of 0.01 radians and a stop at the
+      79th descent rather than the 78th or the 80th are `unmeasured` from frames: the 78th step
+      gives 0.78 radians against a limit of about 0.7854, and a drawn image cannot tell these
+      apart. They are shown only where the object recorder reads the pitch (N16). The roll's return
+      to level during descent is `unmeasured` (above). A step on the removal update, when the lean is still incomplete, is
+      `unmeasured` because nothing shows it. Starts at other heights are `unmeasured`, as for claim
+      4: N16 part d cannot set them with stock data. The other causes (the jumpjet trigger, and any
+      cause not named here) and underwater types are `unmeasured`: no scenario here sets them up
+      with stock data, and the claim for them rests on the rule keying on the sinking state alone.
+      "No pitch steps" for a vehicle not drawn as a voxel model is `unmeasured`: its pitch is not
+      drawn and nothing else reads it (claim 16), so the difference has no observable consequence.
+    - Confidence: high (the direction groups, no draw, the lean growing by about equal amounts per
+      descent from level and stopping at about 45 degrees within a descent or two of the 79th, the
+      original's held roll); medium (the exact step of 0.01 radians and the stop at the 79th
+      descent itself, which frames cannot resolve and which rest on F4's arithmetic unless the
+      object recorder reads the pitch; the roll that sinking leaves free, a design rule checked
+      only in our engine; the original's held rates, `unmeasured` because part c's drawn body shows
+      the held angles and not the rates themselves; the original's limit test, which a drawn image
+      cannot resolve; the original's reversal while turning, which depends on claim 10's continuing
+      turn; the starting value; the same rule for the magnetic-lift drop and the other causes, and
+      for underwater types; no steps for a vehicle not drawn as a voxel model)
+
+16. **How the lean is drawn, and what reads it (Q-1871).** A sinking vessel's pitch and roll are
+    drawn as the rocking of S-0106 claim 9.
+    - **Drawn transform.** For the driving and ship locomotors, inside its facing rotation and
+      slope tilt, the body is rolled about its own forward axis and pitched about its own lateral
+      axis, roll outermost, and it is also lifted and shifted by whole model units. F5 gives the
+      whole transform, which these two locomotors use for any rocking, not only for sinking. For
+      the hovering and jumpjet locomotors this spec states only that the lean is drawn as S-0106
+      claim 9's rocking: their order of roll and pitch, and any lift or shift, are not established
+      here (Open questions). A turret and barrel are placed on the body transform (S-0105 claim 8),
+      so they lean with the body.
+    - **Image cache.** Whether a leaning body is drawn fresh or from the image cache is S-0105
+      claim 26's rule for the driving and ship locomotors and S-0106 claim 13's for the hovering
+      and jumpjet locomotors. Sinking adds nothing to them.
+    - **Which locomotors show it.** Only bodies whose locomotor draws rocking show the lean: the
+      driving, ship, hovering and jumpjet locomotors (S-0106 claims 5 and 9). For a body drawn by
+      another locomotor, the pitch still changes by claim 15 but is not drawn.
+    - **Shadow.** A sinking vehicle drawn as a voxel model draws no shadow at all, from the first
+      drawn frame after sinking begins until it leaves play. So the lean never reaches a shadow.
+    - **What reads it.** Among the vessel's own rules, drawing is the only reader of the pitch and
+      roll of a sinking vessel.
+      - None of its own distance, occupancy, targeting or damage rules uses them.
+      - A sinking vessel cannot fire (claim 5), so none of its own firing positions of S-0313 is
+        formed from its tilted body.
+      - **Passengers.** A vehicle that starts sinking at a killing hit carries no passengers
+        during its descent: S-0312 claims 10 and 12 settle them at the hit. A transport
+        that starts sinking another way (claim 15, *Causes and types*) keeps its passengers until
+        it leaves play, when they die (S-0507 claim 16). Those of an open-topped transport stay in
+        play and take their own turns (S-0507 claim 14). The sinking test of the firing check is
+        the firer's own, so the transport's sinking does not stop them firing. They fire from the
+        transport's fire point (S-0313 claims 1 and 5), which is built on the transport's body
+        transform, so the lean and the roll of its descent move the starting point of their
+        shots. The fire point and the drawing use the same transform: S-0313 claim 1 reads its
+        translation as a lepton shift, so F5's lift and shifts, which drawing takes in whole model
+        units, move the fire point by the same numbers in leptons.
+      - Our engine may hold the angles as presentation state, provided they advance once per own
+        update by claim 15 and not once per drawn frame.
+    - Backing: `measurable` (N16 for the end that goes down, no shadow and the visible
+      locomotors; its frames also compare F5's lift against a render). "No other
+      reader" among the vessel's own rules is `unmeasured`: no stock observable can show the
+      absence of a reader. F5's roll terms and their signs are `measurable` through N16 part b's
+      runs on the original, which hold a roll at full lean. The half unit added to *W* (F5) changes
+      the lift or the sideways shift by at most one model unit, which is one screen pixel (S-0105
+      Terms), and only while the roll is not zero. The main run of N16, with no roll, cannot show
+      it. Part b's frames show it as a one-pixel shift of the outline, and only where the recorded
+      roll puts a truncation on the other side of a whole unit; elsewhere it is `unmeasured`. That
+      F5's size values come from the first section of the body's main model is `unmeasured`: it
+      can be told from another section only on a body whose model has more than one section, and
+      no N16 run is set up with such a body. The roll-outermost order and the drawn sense are
+      `measurable` for the ship locomotor only (N16 and its part b); for the driving locomotor
+      they rest on the same F5 with no run of their own (part f records a level body only
+      as evidence). The passengers' firing, and the
+      lepton reading of F5's lift and shifts in their launch positions, are `measurable` (N16
+      part g).
+    - Confidence: high (for the ship locomotor, the drawn pitch axis and its sense under S-0105's
+      convention; no shadow); medium (for the ship locomotor, the roll axis, its sense and the
+      roll-outermost order, which rest on N16 part b's comparison with renders, as F5's roll terms
+      do; the same order and sense for the driving locomotor, which no run here checks; the first
+      section as the source of F5's size values; F5's lift and shift, and its roll terms, not yet
+      compared with a render; no reader other than drawing among the vessel's own rules; the
+      passengers' firing during descent and its starting point; the locomotor list where the body is
+      drawn by a locomotor attached for a lift or a teleport)
+
 ## Formulas
 
 **F1. Sinking descent (claim 4).** Integer leptons, for a vessel retained in play as claim 4
@@ -515,6 +705,55 @@ round-toward-zero arithmetic, then truncates the result toward zero to integer l
 Height counts. This is not the table square root of S-0204. Claim 12 applies the naval-yard
 point selection of S-0314 claim 18; the ship's stopping position need not equal that point.
 
+**F4. Pitch step while sinking (claim 15).** The pitch *p* is a single-precision real in radians.
+*L* = 0.785398185253143310546875 is π/4 rounded to single precision. *c* = 0.01 is rounded to double
+precision. *g* is the 8-direction of the body facing at the first step while sinking (S-0204 F4).
+On each own update while sinking:
+
+> *p*′ = min(RZ₂₄(*p* + *c*), *L*) when 1 ≤ *g* ≤ 5,
+> *p*′ = max(RZ₂₄(*p* − *c*), −*L*) when *g* is 0, 6 or 7,
+
+where *p*′ is the pitch after the update. A pitch at the full lean (*L* bow down, −*L* stern down)
+therefore stays there.
+
+The sum or difference is formed in double precision and narrowed to single precision, both under
+S-0205 claim 5's round-toward-zero mode. That equals RZ₂₄ (S-0205 Terms) of the exact sum. From
+*p* = 0 in either direction, the 78th step gives |*p*| = 0.779999315738677978515625 and the 79th
+stops at *L*, the final value. With `quirks.chop_rounding` off (S-0205), RN replaces RZ: the step
+count is still 79, and the 78th magnitude is 0.779999554157257080078125. For any other starting
+pitch, the number of steps follows from the same recurrence. The original instead holds *p* when
+|*p*| ≥ *L*, otherwise takes the step without the min or max, and reads *g* again on every update,
+so from level its 79th step gives |*p*| = 0.789999306201934814453125 (claim 15, *The original's
+drawing*).
+
+**F5. Rocking body transform, driving and ship locomotors (claim 16).** S-0106 claim 9 leaves this
+composition to the vehicle specs. With roll *r* and pitch *p*, the body transform *D* of S-0105
+claim 7 is
+
+> *D* = Z(lift) · *T* · Rz(*θ*_body) · X(*s*ₓ) · Y(*s*ᵧ) · Rx(*r*) · Ry(*p*),
+
+where *T* is the tilt of S-0106 claim 9, Rz(*θ*_body) is the body rotation of S-0105 claim 7, and
+X, Y and Z are translations along the current local frame's axes, as X(*d*) is in S-0105 claim 8.
+So the lift is along the map's vertical, and the shift is along the body's forward and left axes
+after its facing rotation, before it is rolled and pitched. The lift and the two shifts are whole
+model units:
+
+> lift = trunc(|sin *r*| × *W* + |sin *p*| × *H*),
+> *s*ₓ = trunc(*H* − trunc(*H* × cos *p*)), negated when *p* < 0,
+> *s*ᵧ = trunc(*W* − trunc(*W* × cos *r*)), negated when *r* > 0.
+
+*W* and *H* are size values of the body model: *W* = *Ny* × 0.5 + 0.5 and *H* = *Nx* × 0.5, where
+(*Nx*, *Ny*, *Nz*) is the voxel grid size of the first section of the body's main model (S-0105
+Terms). Each is formed in double precision and held in single precision. sin and cos are the table
+values of S-0105 F1 (single precision), and trunc is the conversion to integer of S-0205 claim 7.
+The products, sums and differences are double precision under S-0205 claims 4 and 5. A level body
+(*r* = *p* = 0) gets no lift and no shift.
+
+The outline this gives, for a body model centred on its pivot at one model unit per voxel: the
+body tips about the edge of the end that goes down and, for a roll, of the side that goes down.
+That edge stays where the level body's edge was, to within the whole-unit rounding and the extra
+half unit of *W*, and the rest of the body rises from it.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -524,6 +763,11 @@ point selection of S-0314 claim 18; the ship's stopping position need not equal 
 | Sinking removal height | −400 | leptons (strictly below) | Claim 4 |
 | Sinking wake period | 4 | ticks (tick number divisible by) | Claim 4 |
 | Sinking wake displacement | [−170, 170] | leptons per axis, inclusive | Claim 4, F2 |
+| Sinking pitch step | 0.01 | radians per own update (double precision, sum stored single) | Claim 15, F4 |
+| Sinking pitch limit | π/4 (single precision); a step stops at it | radians | Claim 15, F4 |
+| Rocking size factors | 0.5 per voxel, plus 0.5 on the width | model units | Claim 16, F5: *W* from the y grid size, *H* from the x grid size |
+| Steps to the limit from level | 79 | own updates | Claim 15, F4 |
+| Bow-down 8-directions | 1 to 5 (others: stern down), read at the first step | 8-direction | Claim 15 |
 | Depot starting distance, ship and hovering locomotors | 200 | leptons | Claim 8 |
 | Depot starting distance, other locomotors | 100 | leptons | Claim 8 |
 | Waiting-to-settling delay | 3 | ticks | Claim 8 |
@@ -540,9 +784,12 @@ point selection of S-0314 claim 18; the ship's stopping position need not equal 
 | sinking | firing check reaches its sinking test | *illegal*, subject to claim 5's earlier answers |
 | sinking | ordinary damage or healing reaches it | ordinary health rules apply, with no sinking exemption (claim 10) |
 | sinking with a body turn in progress | own facing update | saved body-facing turn continues independently of locomotor suppression (claim 10) |
+| sinking, voxel model, pitch short of the full lean | own update | one pitch step towards bow down (8-direction 1 to 5) or stern down (0, 6, 7), stopping at π/4; the direction is the one set at the first step; sinking holds no roll (claim 15) |
+| sinking, voxel model, pitch at the full lean | own update | pitch unchanged; sinking holds no roll (claim 15) |
+| sinking, voxel model | drawn frame | body drawn with its pitch and roll where its locomotor draws rocking; no shadow (claim 16) |
 | docked vehicle at a depot | stands still and is closer than the starting distance | settling scheduled 3 ticks later (claim 8) |
 
-The observable consequences within a sinking vessel's update are that its height is 5 leptons lower, and, if it leaves play on that update, it takes no wake-displacement draws on that tick. If it remains in play on a tick divisible by 4, it takes the two wake-displacement draws during its own update. Relative to other objects' draws, these draws follow the update order of S-0203.
+The pitch step of claim 15 takes no draw and comes in the same update as the descent, so the frame drawn after a vessel's *n*-th descent shows *n* pitch steps, until the limit stops them. The observable consequences within a sinking vessel's update are that its height is 5 leptons lower, and, if it leaves play on that update, it takes no wake-displacement draws on that tick. If it remains in play on a tick divisible by 4, it takes the two wake-displacement draws during its own update. Relative to other objects' draws, these draws follow the update order of S-0203.
 
 ## Edge cases and quirks
 
@@ -565,6 +812,19 @@ The following distinctions are not optional original-versus-fixed behaviours:
   fallback, with an importer warning. The original result for that input is unestablished,
   so the fallback is not claimed to be the original default of a quirk switch. It has
   `unmeasured` backing against the original for that reason. No alternate result is specified.
+- **The lean of a sinking vessel (claims 15 and 16).** Claims 15 and 16 add no switch. Three
+  oddities of the original are fixed (decided at the delegated sign-off, 2026-10-25), and claim 15
+  states the fixed drawing:
+  - The lean stops at π/4. The original's lean passes it by up to one step and holds a pitch
+    already at the limit in the opposite sense.
+  - The direction is set at the first step and kept. The original's lean reverses back through
+    level when a continuing turn crosses between the two groups of 8-directions before the lean
+    reaches the limit.
+  - Sinking does not hold the roll: a rocking hit during descent still rolls the hull. The
+    original holds the roll from before sinking, and both rocking rates, for the whole descent.
+
+  The asymmetric split of 8-directions (five bow down, three stern down) is the original's rule,
+  kept, not a defect.
 
 ## Import mapping
 
@@ -587,7 +847,9 @@ The following distinctions are not optional original-versus-fixed behaviours:
 | Rules, `[AI]`, `PathDelay` | claim 9's shared retry-delay field | decimal game minutes, single precision held as a double | S-0212 |
 | Rules, building section, `NumberOfDocks` | contact-place count for claim 14; shared depot capacity and several-place handling | integer | 1; later absent entries preserve the value in force (S-0314) |
 
-Claims 13 and 14 add no imported damage immunity, descent-restart delay or naval interruption
+Claims 15 and 16 read no imported key. The pitch step, the limit, the direction groups and the
+missing shadow are engine constants. Whether a type is drawn as a voxel model follows S-0105's
+import. Claims 13 and 14 add no imported damage immunity, descent-restart delay or naval interruption
 setting. Claim 13 uses the weight and sinking-condition rows above; healing amounts, periods and
 eligibility remain S-0314 claims 9 and 10's import mapping.
 
@@ -820,7 +1082,7 @@ water map, with a stock surface vessel eligible for killing-hit sinking. For (a)
 stock firer on a sufficiently long flight-time shot, and kill the vessel with the first firer
 before that shot arrives. For (b), use a second explosion with area covering the vessel after
 sinking begins. For (c), use an elite stock vessel with a self-healing ability, and separately
-an owner benefiting from a captured stock vehicle-healing source. Confirm each healing eligibility
+an owner benefiting from a captured stock vehicle-healing source. Record each healing eligibility
 and next due tick before sinking. For (d), order a turn and kill the vessel part-way through it.
 *Procedure:* run each through removal with tick-labelled recording. Time a due healing tick to
 fall before the 81st descent. A squid-cull variant can begin descent above 1 health to expose
@@ -933,10 +1195,145 @@ violates any of these shared outcomes. A refused click does not test an executed
 After a post-settling yard loss, try moving the ship in several directions and record whether
 propulsion remains off; this last probe is exploratory for the stranding question below,
 not a prediction that ships share the hovering failure. Record events read-only under the
-measurement setup; this proposes recording capability, not an oracle modification.
+measurement setup.
+
+**N16. The lean of a sinking vessel (claims 15 and 16; Q-1871).** *Setup:* N5's map and its stock
+non-crashable surface vessel with the ship locomotor, drawn as a voxel model, at height 0 and at
+rest. Use eight runs, one per 8-direction, with the body facing set exactly to that step (0, 8192,
+…, 57344 facing units). The killer is a firer whose weapon kills the vessel in one shot and whose
+warhead has no rocking flag. It is placed so that the shot does not turn the vessel. *Procedure:*
+kill the vessel. Capture one paused frame per tick, with the tick number, from the killing hit until
+it leaves play. Run the random-state recorder over the same ticks. If the object recorder can read
+the body's pitch and roll, record them every tick too. The same scenario, run in our engine, checks
+the fixed drawing of claim 15; the runs on the original record its three oddities (parts a, b
+and c, and the recorded pitch).
+
+*Observables:*
+- Which end of the hull goes down.
+- Whether the lean grows by equal amounts per tick.
+- The descent number at which the lean stops growing, counted with N5's height record.
+- The draws taken during the descent.
+- Whether any shadow is drawn.
+- Whether the sideways attitude changes.
+- The drawn body's outline at full lean, at headings 0 and 2, against a render of the same model
+  under F5 and against one without F5's lift and shift.
+
+*Expected,* in both the original and our engine:
+- The bow goes down at 8-directions 1 to 5 and the stern at 0, 6 and 7.
+- The lean grows and stops at about 45 degrees, at or within a descent or two of the 79th
+  descent (two descents before the vessel leaves play). Frames cannot tell a stop at the 78th,
+  79th or 80th descent apart: the 78th step gives 0.78 radians against a limit of about 0.7854.
+  Only a recorded pitch fixes the descent (below).
+- The same result in a second run with another seed at each heading.
+- No draws other than claim 4's wake draws, counted as N5 counts them (animation-owned draws
+  excluded).
+- No shadow from the first frame after the hit.
+- No sideways change.
+- An outline that matches the render under F5.
+
+A recorded pitch follows F4 exactly (up to the precision the recorder shows): in our engine it ends
+at π/4 to single precision; the original's run records its final value, expected to be about 0.79
+radians.
+
+The primary falsifier is the end that goes down at headings north (0) and east (2): a stern-down
+east run or a bow-down north run reverses claim 15's direction groups or claim 16's drawn sense.
+Also falsifying:
+- A sign that differs between seeds (a random direction).
+- Growth that stops more than two descents from the 79th, or none.
+- A draw during the descent beyond the wake draws, counted as in N5.
+- A drawn shadow.
+- A sideways roll that develops.
+- An outline that matches the render without F5's lift and shift rather than the one under F5.
+
+*Further parts:*
+- **a. Continuing turn.** Order the vessel to turn from south-west (5) towards north (0) through
+  west. Kill it while its body facing is still in the south-west 8-direction, so that the turn
+  continues during descent (claim 10). Expected in our engine: the bow goes down and keeps going
+  down after the facing reaches the west 8-direction (6); a lean that shrinks back falsifies the
+  kept direction. The original's run records the reversal, expected as the lean shrinking back
+  through level once the facing reaches the west 8-direction, then the stern going down.
+- **b. Rolled hull.** Just before the killing shot, rock the vessel sideways with a stock weapon
+  whose warhead has the rocking flag, fired from abeam (S-0303 claim 20). Run the same rocking
+  shot once on a vessel that is not killed, as a control. Expected in our engine: the roll is not
+  held, and over the descent it changes as the control's roll does over the same ticks, while
+  the pitch grows. Whether either returns to level is `unmeasured` (claim 15) and is recorded
+  only. A roll that stays as it was at the hit while the control's roll changes falsifies it. The
+  original's run records its held roll, expected to stay as it was at the hit through the whole
+  descent. Its frames at full lean also test F5's roll terms: compare the outline against renders
+  under F5 with the roll terms, without them, and with the sign of *s*ᵧ reversed, at the recorded
+  roll or, without a recorder, at the roll that best fits the rotation of the outline. A better
+  match without the roll terms, or with the reversed sign, falsifies them.
+- **c. Rocking during descent.** During the descent, detonate a rocking warhead beside the
+  vessel, abeam. Expected in our engine: the hull rolls as S-0303 claim 20 sets it going (any
+  return to level is recorded only, as in part b), and the lean goes on growing
+  as in the main run; a change to the lean falsifies the pitch's ownership by claim 15. The
+  original's run records the drawn body. The rocking hit is expected to add no change of its own
+  to the body's angles: no roll develops, and the lean goes on with claim 15's pitch steps as in
+  the main run. This shows the held angles; it cannot show the held rates (claim 15).
+- **d. Start below height 0.** Not settable with stock data, so it is left unmeasured (claim 15,
+  timing).
+- **e. Squid cull.** Repeat once from a squid cull (S-0614 scenario P6's setup) at headings 0 and 2.
+  Expected: the same lean, with the hull level sideways throughout, because the squid's tilt is
+  0 at the strike and the squid leaves at the cull (S-0614 claims 10 and 11).
+- **f. Magnetic-lift drop.** Repeat once from a magnetic-lift drop into water (S-0607 scenario L6's
+  water case) with a stock voxel vehicle that has the driving locomotor. Expected: the same lean and
+  no shadow. A level body is recorded as evidence for the open question on locomotors attached for a
+  lift, not as a falsifier.
+- **g. Passengers of an open-topped transport.** A test rules file named *n16g-rules*, supplied
+  through the file system for this part and removed after it, adds a test vessel type named
+  *N16TRAN*: a copy of a stock voxel ship that a squid can grapple and cull, with the ship
+  locomotor, its voxel model, the open-topped flag and room for one passenger, and no other
+  change. All other data are stock. It carries one stock
+  infantry passenger with a weapon, at heading 2. An enemy target stands on a shore within the
+  passenger's range. Sink the vessel by a squid cull as in part e. Record each of the passenger's
+  shots during the descent and its launch position from the object recorder. Expected: the
+  passenger keeps firing during the descent, and each launch position matches S-0313 claims 1 and 5
+  computed with the transport's body transform under F5 at that tick's pitch, with F5's lift and
+  shifts read as leptons. Falsified if the passenger stops firing when sinking begins, or if the
+  launch positions stay those of a level body.
+- **h. Start from a rocked pitch.** As part b, but fire the rocking weapon from ahead, at heading
+  2, so that the hull is pitched at the killing hit. Expected: the lean starts from that pitch, not
+  from level, and reaches its full lean as F4 gives for that starting pitch. A hull that jumps to
+  level at the hit falsifies the starting value.
+
+Use tick-labelled frame capture at the measurement speed, and record read-only.
+
+## Changes for other specs
+
+- **S-0210, the drawn direction of the body tilt.** The body tilt is added to the pitch of this
+  spec's Terms with its own sign, and a positive pitch lowers the bow under S-0105's rotation
+  convention. So a negative body tilt raises the bow and a positive one lowers it. S-0210 uses the
+  opposite words in these places:
+  - Terms, *Body tilt*: "rocks forward (negative) or back".
+  - Terms, *Tipping forward*, and the uses of "tips forward" in claims 6, 8 and 9 and in its
+    Constants rows.
+  - Claim 6, and its scenario K8 part c: "pitches back, not forward", where the overlay's
+    positive change in fact lowers the bow.
+  - Its scenarios' forward and backward pitch observables.
+
+  Observable: a crusher that tips under S-0210 claims 6, 8 or 9 is drawn with its bow rising, and
+  a crush of an overlay alone lowers it. Whether S-0210 swaps the words or renames the terms is
+  S-0210's choice; the values and signs it gives stay as they are.
+  - Backing: `measurable` (S-0210 scenario K8, parts a and c, read as which end of the body
+    rises; and this spec's N16 for the sense of a positive pitch)
+  - Confidence: medium
+- **S-0106 claim 9, and S-0210 Terms, *Body tilt*: where the rocking composition is.** S-0106
+  claim 9 leaves the composition of pitch, roll and tilt to the vehicle specs. This spec's F5 is
+  that composition for the driving and ship locomotors, for any rocking, not only for sinking.
+  A pointer to F5 in both places lets a reader of the land-vehicle rules find it. F5 stays in
+  this spec.
 
 ## Open questions
 
+- How a rocking body returns to level. Claim 15 adds no rule of its own for a sinking vessel's
+  roll. S-0303 claim 20 and S-0614 claim 10 set rocking going, S-0210 claim 12 limits it while
+  slowed and S-0106 claim 9 draws it, but the rate at which a rocked body comes back to level
+  belongs to a rendering or vehicle spec that has not stated it. S-0303 claim 20 gives only the
+  strength that sets the rocking going. Until a spec states it, the roll's return to level during descent
+  is `unmeasured` here. The gap reaches gameplay through claim 16: the passengers of an
+  open-topped transport fire from a fire point built on the rolled body transform, so their
+  launch positions during descent depend on how the roll evolves. The spec that owns the return
+  to level should state it with that consequence in view.
 - Q-0641 is partly answered here: claims 8 and 12 specify the naval yard's waiting gate,
   docking point and cell-based stopping, with S-0314 claim 18 owning the shared rule. Full approach handshake, contact reservation timing and failure/retry routing are not
   established here. Do not infer them from aircraft pads, land depots or production release.
@@ -954,6 +1351,16 @@ measurement setup; this proposes recording capability, not an oracle modificatio
   has been established. Claim 3 fixes only the ordinary launching-count hold, not precedence
   over unrelated cancellations or delays.
 - Whether a sinking vessel keeps its cell's occupancy until it leaves play in every respect (claim 5).
+- Q-1871, open details, outside claims 15 and 16:
+  - **Composition for other locomotors.** F5 is stated for the driving and ship
+    locomotors only. For the hovering and jumpjet locomotors, the order in which roll and pitch
+    are composed, and whether they add the same lift and shift, are not established here; no
+    scenario sets up such a body with both a pitch and a roll.
+  - **Locomotors attached for a lift or a teleport.** Whether the lean shows when the sinking
+    body is drawn by such a locomotor (a magnetic-lift drop, a teleport arrival on water).
+  - **Clipping.** Whether the original cuts off a sinking vehicle's image below a screen row
+    fixed at its first drawn frame after sinking begins (the "going under" look), and if so,
+    which row.
 - The driving locomotor keeps a few tracks beyond S-0207's tables (for example for a factory exit)
   that the ship locomotor does not have. It is believed that no ship ever selects them, since ships
   leave a yard by S-0417 claim 9; not exhaustively checked.
