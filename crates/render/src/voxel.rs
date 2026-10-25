@@ -599,25 +599,99 @@ pub fn vehicle_local_transforms(
     [d, t, b]
 }
 
-/// [`vehicle_parts`] with a further body-frame rotation `attitude` after the
-/// body's heading: *D = Rz(θ_body) · A*, with *T* and *B* built from that
-/// *D* as in claims 8 and 10, so the turret and barrel ride the body, and the
-/// shadow transform the body's. For a pose of the caller's own (the
-/// sinking vessel's list, the interim of Q-1871, in the app's map view);
-/// [`vehicle_parts`] is unchanged.
-pub fn vehicle_parts_posed(
+/// The rocking of a body with the driving or ship locomotor (S-0106 claim
+/// 9; S-0504 Terms *Pitch and roll*, F5): its pitch *p* and roll *r* in
+/// radians, single precision, and its body model's size values *W* and
+/// *H*, model units. A positive pitch lowers the bow (S-0105's *Ry*).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rocking {
+    /// The pitch *p*, about the body's own lateral (*y*) axis.
+    pub pitch: f32,
+    /// The roll *r*, about the body's own forward (*x*) axis.
+    pub roll: f32,
+    /// *W = Ny × 0.5 + 0.5*.
+    pub width: f32,
+    /// *H = Nx × 0.5*.
+    pub length: f32,
+}
+
+/// The least pitch or roll magnitude, radians, at which a body rocks
+/// (S-0106 Terms, *Rocking*) and so is not settled (S-0105 claim 26).
+pub const ROCKING_THRESHOLD: f32 = 0.005; // spec: S-0106 Terms (rocking: a pitch or roll of 0.005 radians or more) and S-0105 claim 26
+
+impl Rocking {
+    /// The rocking with pitch `pitch` and roll `roll` of a body whose main
+    /// model's first section has grid size `size` *(Nx, Ny, Nz)* (S-0504 F5).
+    pub fn new(pitch: f32, roll: f32, size: [u8; 3]) -> Self {
+        // spec: S-0504 F5 (W = Ny × 0.5 + 0.5 and H = Nx × 0.5, each formed in double precision and held in single precision)
+        let half = 0.5; // spec: S-0504 Constants (rocking size factors: 0.5 per voxel, plus 0.5 on the width)
+        let width = to_f32_rz(add_rz(mul_rz(f64::from(size[1]), half), half));
+        let length = to_f32_rz(mul_rz(f64::from(size[0]), half));
+        Self {
+            pitch,
+            roll,
+            width,
+            length,
+        }
+    }
+
+    /// Whether the body rocks: its pitch or roll is 0.005 radians or more,
+    /// compared in floating point (S-0106 Terms; S-0105 claim 26).
+    pub fn rocks(&self) -> bool {
+        self.pitch.abs() >= ROCKING_THRESHOLD || self.roll.abs() >= ROCKING_THRESHOLD
+    }
+
+    /// The lift and the forward and sideways shifts of F5, whole model
+    /// units: *(lift, sₓ, sᵧ)* (S-0504 F5).
+    pub fn shifts(&self, quirks: &VoxelQuirks) -> (i64, i64, i64) {
+        let (sin_r, cos_r) = table_sin_cos(f64::from(self.roll), quirks);
+        let (sin_p, cos_p) = table_sin_cos(f64::from(self.pitch), quirks);
+        let (w, h) = (f64::from(self.width), f64::from(self.length));
+        // spec: S-0504 F5 (lift = trunc(|sin r| × W + |sin p| × H), double precision under S-0205 claims 4 and 5, table sine of S-0105 F1)
+        let lift = trunc_i64(add_rz(
+            mul_rz(f64::from(sin_r.abs()), w),
+            mul_rz(f64::from(sin_p.abs()), h),
+        ));
+        // spec: S-0504 F5 (sₓ = trunc(H − trunc(H × cos p)), negated when p < 0)
+        let sx = trunc_i64(sub_rz(h, trunc_i64(mul_rz(h, f64::from(cos_p))) as f64));
+        let sx = if self.pitch < 0.0 { -sx } else { sx };
+        // spec: S-0504 F5 (sᵧ = trunc(W − trunc(W × cos r)), negated when r > 0)
+        let sy = trunc_i64(sub_rz(w, trunc_i64(mul_rz(w, f64::from(cos_r))) as f64));
+        let sy = if self.roll > 0.0 { -sy } else { sy };
+        (lift, sx, sy)
+    }
+
+    /// The rocking body transform *D* of S-0504 F5, flat ground (no slope
+    /// tilt *T*: slope tilt is not drawn, S-0106): *Z(lift) · Rz(θ_body) ·
+    /// X(sₓ) · Y(sᵧ) · Rx(r) · Ry(p)*.
+    pub fn body(&self, body_facing: u16, quirks: &VoxelQuirks) -> Mat34 {
+        let (lift, sx, sy) = self.shifts(quirks);
+        // spec: S-0504 F5 (D = Z(lift) · T · Rz(θ_body) · X(sₓ) · Y(sᵧ) · Rx(r) · Ry(p); the lift along the map's vertical, the shifts along the body's forward and left axes after its facing rotation, roll outermost)
+        Mat34::IDENTITY
+            .translate([0.0, 0.0, lift as f32])
+            .rotate_z(body_angle(body_facing), quirks)
+            .translate([sx as f32, sy as f32, 0.0])
+            .rotate_x(f64::from(self.roll), quirks)
+            .rotate_y(f64::from(self.pitch), quirks)
+    }
+}
+
+/// [`vehicle_parts`] for a rocking body of the driving or ship locomotor
+/// (S-0106 claim 9, S-0504 claim 16, F5): *D* is [`Rocking::body`], and *T*
+/// and *B* are built from that *D* as in claims 8 and 10, so the turret and
+/// barrel lean with the body. The shadow transform is the body's (a sinking
+/// vehicle draws no shadow, S-0504 claim 16; the caller leaves it out).
+pub fn vehicle_parts_rocking(
     body_facing: u16,
     turret_facing: u16,
     turret_offset_leptons: i32,
     elevation_raw: u16,
-    attitude: &Mat34,
+    rocking: &Rocking,
     quirks: &VoxelQuirks,
 ) -> VehiclePose {
     let v = view(quirks);
-    // spec: S-0105 claims 3, 7 (D starts with the body rotation); the attitude after it is the caller's
-    let d = Mat34::IDENTITY
-        .rotate_z(body_angle(body_facing), quirks)
-        .then(attitude);
+    // spec: S-0105 claim 7 and S-0504 F5 (the rocking body transform)
+    let d = rocking.body(body_facing, quirks);
     // spec: S-0105 claim 8 (T = D · X(d) · Rz(θ_rel))
     let t = d
         .translate([vehicle_turret_shift(turret_offset_leptons), 0.0, 0.0])
@@ -3467,21 +3541,26 @@ mod tests {
         assert!(barrel_pitch(15360, &cont) < 0.0);
     }
 
-    /// spec: S-0105 claims 7, 8, 10 (with the identity attitude the posed
-    /// parts are the plain ones; with another, the turret and barrel ride
-    /// the body: T = D · X(d) · Rz(θ_rel), B = T · Ry(φ) from the posed D)
+    /// spec: S-0105 claims 7, 8, 10 and S-0504 claim 16 (a level rocking
+    /// body is the plain one; a rocking one leans its turret and barrel
+    /// with it: T = D · X(d) · Rz(θ_rel), B = T · Ry(φ) from F5's D)
     #[test]
-    fn posed_parts_ride_the_body() {
+    fn rocking_parts_ride_the_body() {
         for offset in [0, 120, -80] {
             let plain = vehicle_parts(raw32(5), raw32(9), offset, 12288, &q());
-            let same =
-                vehicle_parts_posed(raw32(5), raw32(9), offset, 12288, &Mat34::IDENTITY, &q());
+            let level = Rocking::new(0.0, 0.0, [20, 12, 9]);
+            assert!(!level.rocks());
+            assert_eq!(
+                level.shifts(&q()),
+                (0, 0, 0),
+                "F5: a level body gets no lift or shift"
+            );
+            let same = vehicle_parts_rocking(raw32(5), raw32(9), offset, 12288, &level, &q());
             assert_eq!(plain, same);
-            let a = Mat34::IDENTITY.rotate_y(0.3, &q()).rotate_x(-0.1, &q());
-            let posed = vehicle_parts_posed(raw32(5), raw32(9), offset, 12288, &a, &q());
-            let d = Mat34::IDENTITY
-                .rotate_z(body_angle(raw32(5)), &q())
-                .then(&a);
+            let a = Rocking::new(0.3, -0.1, [20, 12, 9]);
+            assert!(a.rocks());
+            let posed = vehicle_parts_rocking(raw32(5), raw32(9), offset, 12288, &a, &q());
+            let d = a.body(raw32(5), &q());
             let t = d
                 .translate([vehicle_turret_shift(offset), 0.0, 0.0])
                 .rotate_z(turret_relative_angle(raw32(9), raw32(5)), &q());
@@ -3495,6 +3574,45 @@ mod tests {
             );
             assert_ne!(posed.body, plain.body);
         }
+    }
+
+    /// spec: S-0504 F5 (W = Ny × 0.5 + 0.5, H = Nx × 0.5; the lift and the
+    /// shifts in whole model units, sₓ negated for p < 0 and sᵧ for r > 0;
+    /// at the full lean the end that goes down keeps the level body's edge
+    /// and the other end rises: a positive pitch lowers the bow)
+    #[test]
+    fn f5_lift_and_shifts() {
+        let full = 0.785_398_2_f32; // S-0504 F4's L
+        let r = Rocking::new(full, 0.0, [20, 12, 9]);
+        assert_eq!((r.width, r.length), (6.5, 10.0));
+        // |sin p| × H = 7.07…, so the lift is 7; sₓ = 10 − trunc(7.07…) = 3.
+        assert_eq!(r.shifts(&q()), (7, 3, 0));
+        assert_eq!(
+            Rocking::new(-full, 0.0, [20, 12, 9]).shifts(&q()),
+            (7, -3, 0)
+        );
+        // A roll: lift adds |sin r| × W; sᵧ = trunc(6.5 − trunc(6.5 cos r)), negated for r > 0.
+        let rolled = Rocking::new(0.0, 0.5, [20, 12, 9]);
+        assert_eq!(rolled.shifts(&q()), (3, 0, -1));
+        assert_eq!(Rocking::new(0.0, -0.5, [20, 12, 9]).shifts(&q()), (3, 0, 1));
+        // The outline at the full lean, facing map east (θ_body = 0).
+        let east = 16384;
+        assert_eq!(body_angle(east), 0.0);
+        let d = r.body(east, &q());
+        let bow = d.apply([10.0, 0.0, 0.0]);
+        let stern = d.apply([-10.0, 0.0, 0.0]);
+        assert!(
+            (bow[0] - 10.0).abs() < 1.0 && bow[2].abs() < 1.0,
+            "bow edge kept: {bow:?}"
+        );
+        assert!(stern[2] > 13.0, "the stern rises: {stern:?}");
+        let down = Rocking::new(-full, 0.0, [20, 12, 9]).body(east, &q());
+        let stern = down.apply([-10.0, 0.0, 0.0]);
+        assert!(
+            (stern[0] + 10.0).abs() < 1.0 && stern[2].abs() < 1.0,
+            "stern edge kept: {stern:?}"
+        );
+        assert!(down.apply([10.0, 0.0, 0.0])[2] > 13.0, "the bow rises");
     }
 
     /// spec: S-0105 claim 10 (B = T · Ry(φ): the barrel pitches about the

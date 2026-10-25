@@ -474,9 +474,16 @@ enum Tilt {
     },
     /// A flying-locomotor body (claim 42).
     Flying(voxel::FlightAttitude),
-    /// A sinking vessel listed by our interim of Q-1871, past its first
-    /// step (a level one is [`Tilt::Plain`]).
-    Listed(super::sinking::List),
+    /// A sinking vehicle (S-0504 claims 15 and 16): its pitch and roll,
+    /// and whether its locomotor draws rocking.
+    Sinking {
+        /// The pitch, radians (positive lowers the bow).
+        pitch: f32,
+        /// The roll, radians.
+        roll: f32,
+        /// The locomotor draws rocking (S-0106 claims 5 and 9).
+        drawn: bool,
+    },
 }
 
 fn derived(import: &Import, kind: Kind, idx: usize, key: &[u8]) -> Option<i64> {
@@ -1106,10 +1113,14 @@ pub struct Painter {
     /// Each type's image cache of voxel part and shadow images (S-0105
     /// claims 26, 31), as scene images with their offsets.
     voxels: BTreeMap<(Kind, usize), voxel::ImageCache<Option<PlacedPart>>>,
-    /// The images of sinking vessels drawn listed (the interim of Q-1871),
-    /// a cache of their own per type and list, so that a listed image is
-    /// never taken for a level one, nor a level one for a listed one.
-    listed: BTreeMap<(Kind, usize, super::sinking::List), voxel::ImageCache<Option<PlacedPart>>>,
+    /// The images of rocking bodies (a sinking vehicle's lean, S-0504
+    /// claims 15 and 16), by type and the exact pitch and roll bits. S-0105
+    /// claim 26 and S-0106 claim 13 draw a rocking body, turret and barrel
+    /// fresh; a fresh draw is a function of its key and its angles alone,
+    /// so these keep it under them, apart from the settled images. The
+    /// pixels are those of a fresh draw; the retention only bounds the
+    /// scene's images (as for a rocket's fresh pitches).
+    rocked: BTreeMap<(Kind, usize, u32, u32), voxel::ImageCache<Option<PlacedPart>>>,
     /// Vehicle shadows with the current part image excluded, by unmasked
     /// shadow image and part images (S-0105 claim 39): a memo of the
     /// per-appearance exclusion, bounded by the cached images it combines.
@@ -4663,34 +4674,37 @@ impl<'a> Builder<'a> {
         self.cached_part_in(kind, idx, None, key, draw)
     }
 
-    /// [`Self::cached_part`] in the type's cache for `list`: the level one
-    /// for `None`, else that list's own (the interim of Q-1871).
+    /// [`Self::cached_part`] in the type's cache for `rocked`: the settled
+    /// one for `None`, else that pitch and roll's own (S-0504 claim 16).
     fn cached_part_in(
         &mut self,
         kind: Kind,
         idx: usize,
-        list: Option<super::sinking::List>,
+        rocked: Option<(u32, u32)>,
         key: voxel::ImageKey,
         draw: impl FnOnce(&mut Self) -> Option<voxel::PartImage>,
     ) -> Option<(u32, [i32; 2])> {
-        if let Some(p) = self.image_cache(kind, idx, list).and_then(|c| c.get(&key)) {
+        if let Some(p) = self
+            .image_cache(kind, idx, rocked)
+            .and_then(|c| c.get(&key))
+        {
             return *p;
         }
         let part = draw(self).and_then(|img| self.add_part(&img));
-        self.image_cache_mut(kind, idx, list).insert(key, part);
+        self.image_cache_mut(kind, idx, rocked).insert(key, part);
         part
     }
 
-    /// The image cache of type `(kind, idx)` for `list` (`None`: level).
+    /// The image cache of type `(kind, idx)` for `rocked` (`None`: settled).
     fn image_cache(
         &self,
         kind: Kind,
         idx: usize,
-        list: Option<super::sinking::List>,
+        rocked: Option<(u32, u32)>,
     ) -> Option<&voxel::ImageCache<Option<PlacedPart>>> {
-        match list {
+        match rocked {
             None => self.p.voxels.get(&(kind, idx)),
-            Some(l) => self.p.listed.get(&(kind, idx, l)),
+            Some((p, r)) => self.p.rocked.get(&(kind, idx, p, r)),
         }
     }
 
@@ -4699,22 +4713,25 @@ impl<'a> Builder<'a> {
         &mut self,
         kind: Kind,
         idx: usize,
-        list: Option<super::sinking::List>,
+        rocked: Option<(u32, u32)>,
     ) -> &mut voxel::ImageCache<Option<PlacedPart>> {
-        match list {
+        match rocked {
             None => self.p.voxels.entry((kind, idx)).or_default(),
-            Some(l) => self.p.listed.entry((kind, idx, l)).or_default(),
+            Some((p, r)) => self.p.rocked.entry((kind, idx, p, r)).or_default(),
         }
     }
 
-    /// How a body is posed: its heading alone, a rocket's nose pitch or a
-    /// flying body's pitch and bank (S-0105 claims 41, 42).
+    /// How a body is posed: its heading alone, a rocket's nose pitch, a
+    /// flying body's pitch and bank (S-0105 claims 41, 42), or a sinking
+    /// vehicle's lean (S-0504 claims 15, 16).
     fn tilt(&self, m: &Mobile, q: &VoxelQuirks) -> Tilt {
         match m.attitude {
             Attitude::None => Tilt::Plain,
-            // design: Q-1871 interim (a sinking vessel's list; level at step 0, drawn as any level body)
-            Attitude::Sinking(l) if l.level() => Tilt::Plain,
-            Attitude::Sinking(l) => Tilt::Listed(l),
+            Attitude::Sinking { pitch, roll, drawn } => Tilt::Sinking {
+                pitch: f32::from_bits(pitch),
+                roll: f32::from_bits(roll),
+                drawn,
+            },
             Attitude::Rocket {
                 pitch,
                 initial,
@@ -4811,27 +4828,38 @@ impl<'a> Builder<'a> {
         } else {
             body_raw
         };
+        // spec: S-0504 claim 16 and F5 (a sinking body whose locomotor draws rocking is drawn with its pitch and roll; F5's size values from the first section of the body's main model, also while the alternative body is drawn)
+        let rocking = match tilt {
+            Tilt::Sinking {
+                pitch,
+                roll,
+                drawn: true,
+            } => self
+                .voxel_model(&main_file)
+                .and_then(|b| b.sections.first().map(|s| s.size))
+                .map(|size| voxel::Rocking::new(pitch, roll, size))
+                .filter(voxel::Rocking::rocks),
+            _ => None,
+        };
+        // spec: S-0504 claim 16 (a sinking vehicle drawn as a voxel model draws no shadow, from the first drawn frame after sinking begins)
+        let sinking = matches!(tilt, Tilt::Sinking { .. });
         let pose = move || match tilt {
             Tilt::Plain => voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q),
+            // spec: S-0504 claim 16 and F5 (D for any rocking; T and B are built on it, S-0105 claim 8, so the turret and barrel lean with the body); a body that does not rock is drawn settled
+            // design: F5 for the hovering and jumpjet locomotors too (S-0504 Open questions leave their order and lift open; with the roll level, as ours always is, the order is moot); no clipping below a fixed row (also open)
+            Tilt::Sinking { .. } => match rocking {
+                Some(r) => {
+                    voxel::vehicle_parts_rocking(body_raw, turret_raw, offset, elevation, &r, &q)
+                }
+                None => voxel::vehicle_parts(body_raw, turret_raw, offset, elevation, &q),
+            },
             // spec: S-0105 claim 41 (V · Rz(θ_body) · Ry(−p), the shadow unpitched)
             Tilt::Rocket { pitch, .. } => voxel::rocket_body_pose(body_raw, pitch, &q),
             // spec: S-0105 claim 42 (V · Rz(θ_flight) · Ry(α) · Rx(β), the shadow the heading alone)
             Tilt::Flying(a) => voxel::flying_body_pose(heading, &a, &q),
-            // design: Q-1871 interim (D = Rz(θ_body) · Ry(pitch) · Rx(roll); turret, barrel and shadow from that D)
-            Tilt::Listed(l) => voxel::vehicle_parts_posed(
-                body_raw,
-                turret_raw,
-                offset,
-                elevation,
-                &l.rotation(&q),
-                &q,
-            ),
         };
-        // design: Q-1871 interim (a listed vessel's images are kept in its list's own cache)
-        let list = match tilt {
-            Tilt::Listed(l) => Some(l),
-            _ => None,
-        };
+        // spec: S-0105 claim 26 and S-0106 claim 13 (a rocking body, turret and barrel are drawn fresh: kept apart under their exact angles)
+        let list = rocking.map(|r| (r.pitch.to_bits(), r.roll.to_bits()));
         let object = m.object;
         // spec: S-0105 claim 40 (an aircraft's shadow draw point is the projection of its horizontal
         // position at the terrain surface height there, 60 pixels higher over a qualifying high
@@ -4849,18 +4877,19 @@ impl<'a> Builder<'a> {
         };
         let mut items = Vec::new();
         // spec: S-0105 claims 29 to 31 (the main body's shadow section in frame 0; skipped with the no-shadow option)
-        let shadow = (!rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
-            let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
-            // spec: S-0105 Import mapping (ConsideredAircraft absent: yes for an aircraft type, no for every other type)
-            let aircraft_like = rule_bool(
-                self.import,
-                kind,
-                idx,
-                b"ConsideredAircraft",
-                kind == Kind::Aircraft,
-            );
-            (section, aircraft_like)
-        });
+        let shadow =
+            (!sinking && !rule_bool(self.import, kind, idx, b"NoShadow", false)).then(|| {
+                let section = art_int(self, b"ShadowIndex", 0).max(0) as usize;
+                // spec: S-0105 Import mapping (ConsideredAircraft absent: yes for an aircraft type, no for every other type)
+                let aircraft_like = rule_bool(
+                    self.import,
+                    kind,
+                    idx,
+                    b"ConsideredAircraft",
+                    kind == Kind::Aircraft,
+                );
+                (section, aircraft_like)
+            });
         // spec: S-0105 claim 31 (shadow key: ramp, 32-step body facing; bodies stand on flat ground), claims 41 and 42 (the 32-step flight drawing heading for a flying-locomotor aircraft, no pitch or bank class)
         let shadow_key = voxel::shadow_key(voxel::RAMP_FLAT, heading);
         let shadow_file = main_file.clone();
@@ -4896,7 +4925,7 @@ impl<'a> Builder<'a> {
         // claim 12's alternative body while no spawned aircraft is docked)
         // spec: S-0105 claims 26, 41, 42 (a rocket body's key: heading, frame and pitch class; a flying body's: flight drawing heading, frame, pitch presence and bank state; neither has a ramp state)
         let key = match tilt {
-            Tilt::Plain | Tilt::Listed(_) => {
+            Tilt::Plain | Tilt::Sinking { .. } => {
                 voxel::body_key(voxel::RAMP_FLAT, body_raw, alt_drawn, body_frame)
             }
             Tilt::Rocket { class, .. } => voxel::rocket_body_key(body_raw, body_frame, class),
@@ -5035,7 +5064,7 @@ impl<'a> Builder<'a> {
             let fresh = (!cached).then(|| draw_shadow(self, s));
             let cache = match list {
                 None => self.p.voxels.entry((kind, idx)).or_default(),
-                Some(l) => self.p.listed.entry((kind, idx, l)).or_default(),
+                Some((p, r)) => self.p.rocked.entry((kind, idx, p, r)).or_default(),
             };
             let part = vehicle_shadow(
                 &mut self.built.scene,
@@ -5345,7 +5374,7 @@ pub(crate) fn multi_turret(import: &Import, kind: Kind, idx: usize) -> bool {
 }
 
 /// How an aircraft body is drawn tilted, read from the game state (S-0105
-/// claims 41 and 42), or a sinking vessel's list (our interim of Q-1871).
+/// claims 41 and 42), or a sinking vehicle's lean (S-0504 claims 15, 16).
 /// Single and double precision values travel as bit patterns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Attitude {
@@ -5373,9 +5402,18 @@ pub enum Attitude {
         /// Crashing (S-0312): drawn level here, the crash attitude is not built.
         crashing: bool,
     },
-    /// A vehicle the simulation marks sinking (S-0504 Terms), with the list
-    /// our interim of Q-1871 gives it ([`super::sinking::list`]).
-    Sinking(super::sinking::List),
+    /// A vehicle the simulation marks sinking (S-0504 Terms): it draws no
+    /// shadow (claim 16), and where its locomotor draws rocking its body is
+    /// drawn with its pitch and roll (claims 15, 16; F5).
+    Sinking {
+        /// The pitch (S-0504 claim 15, F4), radians, single-precision bits.
+        pitch: u32,
+        /// The roll, radians, single-precision bits.
+        roll: u32,
+        /// Its locomotor draws rocking: driving, ship, hovering or jumpjet
+        /// (S-0504 claim 16; S-0106 claims 5 and 9).
+        drawn: bool,
+    },
 }
 
 /// The surface anchor of an aircraft's voxel shadow (S-0105 claim 40).
@@ -5469,7 +5507,7 @@ impl Painter {
             shps: BTreeMap::new(),
             anim_types: BTreeMap::new(),
             voxels: BTreeMap::new(),
-            listed: BTreeMap::new(),
+            rocked: BTreeMap::new(),
             cutouts: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
