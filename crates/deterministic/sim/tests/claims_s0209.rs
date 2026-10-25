@@ -1491,3 +1491,86 @@ fn moving_allied_infantry_answers_through_the_record() {
     assert!(occupancy::counts_as_moving(&w, man));
     assert_eq!(veh(&w, m, there()), Outcome::MovingBlocker);
 }
+
+// spec: S-0209 claims 4 and 5 (the outcome reads the mover's primary weapon: walls, wood and, row VR10, the projectile hitting ground); our tooling for speed (M8 C4 part 5): a mover read once keeps what its primary weapon says, and answers every cell, in any order, as a mover read afresh for each cell does
+#[test]
+fn a_mover_read_once_answers_as_a_mover_read_afresh() {
+    let cells = [
+        there(),
+        cell(0, 1),
+        cell(1, 1),
+        cell(2, 0),
+        cell(0, 2),
+        cell(2, 2),
+        cell(3, 3),
+    ];
+    let movers = [
+        (Kind::Infantry, "Mope"),
+        (Kind::Infantry, "Pike"),
+        (Kind::Infantry, "Sapper"),
+        (Kind::Vehicle, "Cart"),
+        (Kind::Vehicle, "Ram"),
+        (Kind::Vehicle, "Chopper"),
+        (Kind::Vehicle, "Dozer"),
+        (Kind::Vehicle, "Plough"),
+        (Kind::Vehicle, "Barrow"),
+        (Kind::Vehicle, "Smasher"),
+        (Kind::Vehicle, "Lobber"),
+    ];
+    let mut answers = std::collections::BTreeSet::new();
+    for (kind, ty) in movers {
+        let (w, m) = asked(kind, ty, |s| {
+            walls(s, false);
+            s.ruleset.sim.weapons.insert(
+                "Lob".into(),
+                WeaponType {
+                    damage: Some(7),
+                    warhead: Some("Woody".into()),
+                    projectile: Some("Arc".into()),
+                    ..Default::default()
+                },
+            );
+            s.ruleset.sim.projectiles.insert(
+                "Arc".into(),
+                glasnost_rules::sim::ProjectileType {
+                    ag: Some(false),
+                    ..Default::default()
+                },
+            );
+            s.vehicle(
+                "Lobber",
+                UnitType {
+                    primary: Some("Lob".into()),
+                    ..vehicle(true, false)
+                },
+            );
+            s.place_terrain("Bramble", cell(0, 1));
+            s.place_unit(1, "Cart", cell(1, 1), 0);
+            s.place_infantry(1, "Mope", cell(2, 0), 2);
+            s.place_infantry(0, "Mope", cell(0, 2), 2);
+            s.place_infantry(1, "Pike", cell(2, 2), 2);
+        });
+        let level = occupancy::reference_level(&w, m);
+        let fresh = |c: CellXY| match kind {
+            Kind::Infantry => inf(&w, m, c),
+            _ => veh(&w, m, c),
+        };
+        let once = |mv: &occupancy::Mover<'_>, c: CellXY| match kind {
+            Kind::Infantry => occupancy::infantry_outcome_of(&w, mv, c, level),
+            _ => occupancy::vehicle_outcome_of(&w, mv, c, level),
+        };
+        for start in 0..cells.len() {
+            let mv = occupancy::Mover::of(&w, m).expect("the mover exists");
+            for k in 0..cells.len() {
+                let c = cells[(start + k) % cells.len()];
+                let a = once(&mv, c);
+                assert_eq!(a, fresh(c), "{ty} asked {c:?} from {start}");
+                answers.insert(format!("{a:?}"));
+            }
+        }
+    }
+    assert!(
+        answers.len() >= 4,
+        "the scene asks varied cells: {answers:?}"
+    );
+}
