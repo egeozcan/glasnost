@@ -1,9 +1,9 @@
 ---
 id: Q-1890
 title: Slot animations of a building the map places switched off, and same-tick disablings
-status: open
+status: answered
 related: [S-0108, S-0405, S-0009]
-answered-by: []
+answered-by: [S-0108]
 ---
 
 ## Need
