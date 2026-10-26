@@ -2200,7 +2200,12 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
         cached: [bool; 2],
     }
     let point = project_lifted(2 * 256 + 128, 3 * 256 + 128, 0);
-    let draw = |extra: &str, parts: &[(&str, f32)], turret: u16, index: Option<i32>, anim: u32| {
+    let draw_as = |extra: &str,
+                   parts: &[(&str, f32)],
+                   turret: u16,
+                   index: Option<i32>,
+                   anim: u32,
+                   attitude: Attitude| {
         let rules = format!("{RULES}[CARX]\n{extra}");
         let (mut import, catalogue, mut assets) = context_with(&rules);
         assets.insert(b"carx.shp", sprite.clone());
@@ -2258,7 +2263,7 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             harvesting: None,
             shadow: None,
             alternative: false,
-            attitude: Attitude::None,
+            attitude,
             disabled: false,
             above: 0,
             protection: None,
@@ -2299,6 +2304,9 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
             parts,
             cached,
         }
+    };
+    let draw = |extra: &str, parts: &[(&str, f32)], turret: u16, index: Option<i32>, anim: u32| {
+        draw_as(extra, parts, turret, index, anim, Attitude::None)
     };
     let size = |d: &Drawn, id: u32| {
         let i = &d.scene.images[id as usize];
@@ -2467,6 +2475,36 @@ fn a_sprite_body_is_drawn_as_one_composed_image() {
     for &(x, y, p) in &opaque(&bare, parts[1]) {
         assert_eq!(shown(&bare, (x, y)), p, "the turret frame over the body");
     }
+    // spec: S-0504 claims 15 and 16 (the lean and the missing shadow of a sinking vehicle are
+    // drawn only for a vehicle drawn as a voxel model): a sinking sprite body, even one marked
+    // with a pitch and a rocking locomotor, draws the same composed image, barrel included, at
+    // the same place and row, and keeps its sprite shadow.
+    let level = draw(turret, &all, 16384, None, 0);
+    let sinking = draw_as(
+        turret,
+        &all,
+        16384,
+        None,
+        0,
+        Attitude::Sinking {
+            pitch: 0.5f32.to_bits(),
+            roll: 0,
+            drawn: true,
+        },
+    );
+    assert_eq!(sinking.lit.len(), 1, "one composed image while sinking");
+    let (a, b) = (level.lit[0], sinking.lit[0]);
+    assert_eq!((b.x, b.y, b.depth), (a.x, a.y, a.depth));
+    assert_eq!(
+        sinking.scene.images[b.image as usize].pixels(),
+        level.scene.images[a.image as usize].pixels(),
+        "no lean on a sprite body or its barrel"
+    );
+    assert_eq!(
+        sinking.shadows.len(),
+        1,
+        "a sinking sprite body keeps its shadow"
+    );
 }
 
 /// S-0105 claim 12 (*One image* and *Depth*): the composed image is the smallest rectangle holding
