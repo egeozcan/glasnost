@@ -82,9 +82,14 @@ Lane scene `sprite-barrel` (`crates/app/tests/m7b_lane.rs`; counts, cells and ti
 outputs in `local-lane/m8/a3-27/`, git-ignored):
 - Turret-flag vehicle types: 18. Sprite-body types with a barrel part: 0. Sprite-body types
   without one: 0. Voxel-body types with a barrel part: 7, of which 0 have a sprite file and 0
-  are IFV class (the IFV class has numbered barrels, not a single barrel part).
-- So the scene follows MS-33 part k's way in the lane's own copy of the import. It clears the
-  first such type's voxel body and borrows the sprite file of a sprite-body vehicle type.
+  are IFV class.
+- The one IFV-class type has a turret count of 4, with 4 voxel turret parts and 0 barrel parts.
+  Neither its single barrel nor its numbered part 0, which is the same file (S-0007 claims 16 and
+  19), resolves. Loaded as a sprite body, it would draw no barrel. **Deviation from the brief:**
+  the lane subject is therefore not the IFV-class vehicle.
+- So the scene follows MS-33 part k's way in the lane's own copy of the import. It loads the first
+  turret-flag type with a barrel part as a sprite body: voxel body and numbered parts cleared, the
+  single turret and barrel kept, and the sprite file of a sprite-body vehicle type borrowed.
 - The vehicle is placed north, west, south and east of a 2 × 2 building. Its turret is turned
   through the four 4-step facings, one screen each (`sprite-barrel-building-0` to `-3`).
 - Then it is driven onto a high bridge's deck on map 0, reaching the deck's middle at tick 116,
