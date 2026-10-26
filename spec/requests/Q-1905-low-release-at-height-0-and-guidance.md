@@ -1,9 +1,9 @@
 ---
 id: Q-1905
 title: Does an aircraft in the low release turn toward its destination while it goes on at height 0?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
