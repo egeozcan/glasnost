@@ -2,13 +2,13 @@
 id: S-0501
 title: Aircraft flight, attack runs and pads
 topic: movement
-revision: 55
+revision: 59
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-10-26
 measurements: []
-requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875]
+requests: [Q-0630, Q-0631, Q-0632, Q-0633, Q-0634, Q-0635, Q-0636, Q-0650, Q-0651, Q-0653, Q-0654, Q-0841, Q-0872, Q-1755, Q-1756, Q-1775, Q-1776, Q-1837, Q-1838, Q-1845, Q-1841, Q-1875, Q-1905]
 supersedes: []
 ---
 
@@ -105,6 +105,18 @@ Ratings: (1) medium, until AC30 part k (1) runs. (2) medium, until AC30
 parts i (2) and k (1) run. (3) medium, by AC30 part k (1) for the landing and by claim 47's
 `unmeasured` take-off overlap for the take-off. The released aircraft medium, until AC30 part k (2)
 to (6) run.
+Q-1905 in full, by claim 48 (c)'s *At height 0*: (1) while a low-released aircraft stays at height 0
+no rule turns its body: it goes straight on along the facing it was released with, until it climbs.
+(2) With a destination 512 to 767 leptons away that is not straight ahead, when its path does not
+take it through claim 5's halving zone, it goes on past the destination until its target fraction
+reaches 1, then climbs and is guided from that update on. It starts to land, or a pad-bound one
+falls back to rest, only if its path takes it into its destination cell, through claim 5's halving
+zone, where claim 6's trigger applies. Claim 5's positive-fraction hovers apply at height 0 as
+anywhere. (3) So the outcome depends on the released facing and on the destination's direction, and
+AC30 part k (7) states both. Rated medium, until part k (7) runs, for the absence of steering, the
+outcome in the destination cell after a release from inside the pad's foundation, and the run past
+the destination until its target fraction reaches 1. Rated low, with the low release's climb, for
+the climb and the guided flight that follow, and for a release from outside the pad's foundation.
 Shared pad-capacity rules are S-0407 claim 16 and claim 30 here; repair-step rules are S-0314
 claims 4 and 5 and claims 26 and 27 here. S-0504 claim 3 and S-0506 claim 10 own the
 launching-count movement hold: it prevents the next step, not completion of an active step,
@@ -1802,7 +1814,7 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       height 0 and its overlap, which are low, as claim 48 rates that release; medium for part
       (c) and for part (d).
 
-48. **Released above its pad (Q-1841).** A factory release puts the aircraft at its docking
+48. **Released above its pad (Q-1841, Q-1905).** A factory release puts the aircraft at its docking
     position, height included (S-0404 claim 15, claim 1). When its height there (Terms) is
     positive, as when its contact place's displacement has a positive height component over
     level ground, these rules follow (`quirks.aircraft_released_above_pad`, Edge cases).
@@ -1870,8 +1882,62 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       (b)). With a target fraction of 1 its held height becomes its cruise height at the start of
       its second movement update by (b), and it climbs by F1 in that update, leaving the ground
       listing once its height is positive. With a lower target fraction its held height stays 0: it
-      goes on at height 0, listed in the ground layer of each cell it is in, until claim 6's
-      landing trigger.
+      goes on at height 0, listed in the ground layer of each cell it is in, as *At height 0*
+      below states.
+
+    *At height 0 (Q-1905).* While it stays at height 0, nothing steers it:
+    - Claim 42's guidance applies only above the terrain.
+    - Claim 8's take-off steering applies only during a take-off, which it does not make.
+    - A landing's steering applies only once a landing has started.
+    - Claim 4's descent nudge applies only above its held height, and moves it without turning it.
+    - No other rule requests a body facing for an aircraft on a *move* with no target.
+
+    Its body therefore keeps the facing it was released with (S-0404 claim 13). Each movement
+    update steps it straight along that facing by claim 4, with claim 5's fractions taken from its
+    distance to the flight point. For a move order to a cell, that point is the cell's centre.
+    Guidance's distance bands and its close-approach trigger (claims 5 and 6) do not apply at
+    height 0: claim 6's close-approach trigger is a request of guidance, which claim 42 confines
+    to an aircraft above the terrain. So a destination 512 to 767 leptons away is treated like
+    any other below the slowdown distance *S*. Which outcome comes first depends on where the
+    destination lies relative to its path:
+    - *Into the halving zone.* A step can end in claim 5's halving zone (Terms) only when its path
+      passes within min(86, *S* / 10) leptons of the flight point. Every point of the zone lies
+      less than 86 leptons from the cell's centre, so inside the destination cell. In that update
+      its target fraction is 0, and claim 6's exact-cell trigger applies, with its planned-route
+      and pad-bound restrictions:
+      - A type that is not pad-bound starts to land there (claim 7).
+      - A pad-bound type whose docking position lies in a cell of the pad's foundation has no pad
+        there that it is in contact with, since its contact ended at the order (*Pad contact*
+        below), so it falls back to rest by T2. At height 0 it is on the ground (Terms), so it takes
+        the row *on the ground, otherwise*: it forgets its target and destination and takes *guard*
+        (*area guard* for an armed aircraft of a computer-controlled house outside a team). With its
+        ammunition full it looks for no pad (claim 29). The fall-back leaves it at height 0 in that
+        cell, listed there.
+      - A pad-bound type whose docking position lies outside the pad's foundation still holds
+        its contact (*Pad contact* below). When its destination cell holds no building it is in
+        contact with, it also falls back to rest by T2. It takes the same ground row, which
+        forgets its target and destination, and then T2's after-the-row entry for an aircraft
+        that holds a contact gives it *enter*. What *enter* does for it then, with no destination,
+        is open (Open question 26).
+      - When the destination cell of such a type is a cell of the pad it still holds contact
+        with, claim 6's pad-bound restriction does not hold, so the fall-back does not follow.
+        What it does there instead is open (Open question 26).
+    - *Past the destination.* Otherwise its distance falls while the point is ahead, or not at all
+      if it starts abeam or behind, and then grows. Passing through the destination cell with a
+      positive target fraction starts no landing. The first update that ends with the distance at
+      least *S* leaves a target fraction of 1. In the next update its held height becomes that of
+      ordinary flight at the start (third case of (b)), and it climbs by F1. That update ends
+      above the terrain, so from then on guidance requests its body facing toward the flight
+      point; it turns by S-0206 claim 1 and goes on as an aircraft in flight (claims 5 and 6).
+    - Claim 5's positive-fraction hovers apply at height 0 as anywhere, and so does claim 4's rule
+      at the edge of the map.
+
+    The outcome thus depends on the released facing and on the destination's direction, which
+    AC30 part k (7) states for each run. This unsteered run is the original's. It needs no switch
+    of its own: it arises only after a release above the terrain, which
+    `quirks.aircraft_released_above_pad` governs, and with that switch off the aircraft leaves by
+    an ordinary take-off, which claim 8 steers toward the destination (decided at the delegated
+    sign-off, 2026-10-25).
 
     With no take-off, nothing re-files it as it leaves (S-0102 claim 4): it stays in the ground
     render layer until a landing or a crash re-files it, so a map-wide search's ground-layer pass
@@ -1961,7 +2027,10 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       once it is tracked and flying off, by its height; part k (6) for part (e)'s flag, clear in
       both records of every recorded cell from the release tick on, at rest and through the first
       three movement updates of a far move order; part k (7) for the low release, its flag
-      included). `unmeasured`, each for its own reason:
+      included, with runs (b) and (c) for *At height 0*: the unchanged body facing, the
+      straight-ahead destination reached at height 0 with the pad-bound type's fall-back to rest,
+      and the right-angle destination passed until the climb). `unmeasured`, each for its own
+      reason:
       - that a range or area search's cells do not offer it, and both passes of a map-wide search:
         part k runs no such search against it, and for the ground-layer pass no observable consumer
         without the region test can be set up in AC30. The first follows from its absence from both
@@ -1995,7 +2064,15 @@ the original only; the neutral and special houses retain it (glossary, *AI house
       release's flag in part (e), with the low release itself (claim 48 (c)), until part k (7)
       runs. The start of tracking in (c) is claim 47 (c)'s and carries its rating. Low for the low
       release's descent and climb, until part k (7) runs, and for a docking position outside the
-      pad's foundation.
+      pad's foundation, with the *enter* it is then given at height 0 and the open case of a
+      destination cell on the pad it holds contact with (`unmeasured`, as above).
+      Medium, until part k (7) (b) and (c) run, for *At height 0*, given that it is at height 0:
+      that no rule steers it there; the outcome in the halving zone for a docking position inside
+      the pad's foundation, which comes before any climb and which run (b) observes in a run
+      whose recorded path ends an update in the zone; and the run past the destination until
+      the first update that leaves a target fraction of 1. These follow from claims 5 and 6 and
+      T2. Low, with the low release's climb, until part k (7) (c) runs, for the climb after that
+      update and the guided flight from then on.
 
 ## Formulas
 
@@ -2407,8 +2484,10 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
   descends (claim 48). Off: the release puts it at the docking position's horizontal location at
   the landing height above the terrain there, so it rests listed in its cell layer like an aircraft
   docked by landing (claim 24), holding the object-present flag in that cell (claim 48 (e)), and
-  leaves by an ordinary take-off (claim 8). This alternative is a design rule, not an
-  oracle measurement.
+  leaves by an ordinary take-off (claim 8). The same switch governs the low release's unsteered
+  run at height 0 (claim 48 (c), *At height 0*): with it off, claim 8's take-off steers the
+  aircraft toward its destination instead. This alternative is a design rule, not an oracle
+  measurement.
 
 ## Import mapping
 
@@ -2453,7 +2532,7 @@ interval, not a row of this table. A visiting slot aircraft in *retreat* drops t
 | `AttackingAircraftSightRange` | rules, `[General]` | reveal radius on firing | integer, cells | 5 |
 | `SpyPlaneCameraFrames` | rules, `[AudioVisual]` | spy-plane approach delay | integer, ticks | 16 |
 | `ConditionRed` | rules, `[AudioVisual]` | smoke threshold | double, ratio | 0.5 |
-| `PoseDir` | rules, `[AudioVisual]` | landing direction without contact | S-0404 Import mapping | S-0404 |
+| `PoseDir` | rules, `[AudioVisual]` | landing direction without contact; the facing of a release onto a pad, set in AC30 part k (7)'s named test rules | S-0404 Import mapping | S-0404 |
 
 The aircraft-type flags are read only for aircraft types. An aircraft type's `FlightLevel` that is
 absent stays unset (−1), which means "use the game-wide value", not a height of −1.
@@ -3430,16 +3509,66 @@ listed in Open questions are not claimed confirmed by these scenarios.
     cell or another, at rest or in those updates, which would mean that a flag set by the release
     is kept, on the docking position's cell or another.
     (7) *Low release:* as (6), with a second test pad, a copy of the first whose docking
-    displacement has a height component of 10 leptons, on level ground. Two runs from a fresh
-    release each: (a) a move order as in (3); (b) a move order as in (4). Record per tick, with
-    (6)'s recorder, the aircraft's height and the cell it is in. Expected: both runs at height 0
-    at the end of the first movement update, listed in the ground layer of its cell with that
-    cell's ground flag set. In (a), at the end of the second update a positive height, and no
-    flag and no listing in any recorded cell. In (b), height 0 at the end of every update until its
-    landing starts, with the listing and the ground flag in the cell it is in at that tick, and in
-    no other recorded cell, so that a cell it has left is clear. Falsified: no flag at the end
-    of the first update, a flag kept after the climb in (a), or in (b) a flag left in a cell it
-    has left or missing from the cell it is in.
+    displacement has a height component of 10 leptons, on level ground. The named test rules also
+    set the game-wide pose direction (S-0404 Import mapping) to 64, so that every release from
+    either pad faces 16384, map east (S-0404 claim 13). Three runs, each from a fresh release, with
+    the aircraft's body facing at the release recorded:
+    - (a) A move order as in (3).
+    - (b) A move order as in (4), to a cell whose centre lies within 20 leptons of the straight
+      line ahead along that facing. At body facing 16384, F3's steps run exactly along an axis,
+      so no step moves it sideways. The 20-lepton allowance covers claim 48 (c)'s descent nudge
+      in the first update, which moves the aircraft 5 leptons toward the cell's centre: the path
+      then passes within 25 leptons of that centre, close enough for the halving zone. The type
+      is pad-bound, and the pad's docking position lies in a cell of its foundation (part k), so
+      in the halving zone it falls back to rest rather than starting to land (claim 48 (c)).
+    - (c) A move order as in (4), to a cell whose centre lies at a right angle to that facing,
+      within one cell.
+
+    Every cell the aircraft crosses before it climbs is level ground at the pad's terrain height,
+    with no bridge; void (b) or (c) if it crosses any other cell before it climbs, since a change
+    of terrain height under it changes its height above the terrain (Terms). Void (b) and (c) if
+    the type's converted speed is below 20 leptons per tick (claim 5), and void (b) if it is above
+    300 leptons per tick. Void (b) and (c) if the released facing is not 16384. Void (c) if the
+    aircraft reaches the map's edge before it climbs.
+
+    Record per tick, with (6)'s recorder, the aircraft's height, horizontal position, body facing,
+    speed fractions, behaviour and destination, and the cell it is in.
+
+    Expected:
+    - In every run: height 0 at the end of the first movement update, listed in the ground layer
+      of its cell, with that cell's ground flag set.
+    - In (a): a positive height at the end of the second update, and no flag and no listing in any
+      recorded cell.
+    - In (b) and (c), at the end of every update while it is at height 0: the released body facing
+      unchanged, and the listing and the ground flag in the cell it is in at that tick and in no
+      other recorded cell, so that a cell it has left is clear.
+    - In (b): it goes straight on at height 0 along its released facing. Whether a step ends in
+      claim 5's halving zone is read from the recorded positions: an update that ends at a
+      distance from the destination cell's centre (S-0204 claim 5) below 86 leptons and below
+      one tenth of the slowdown distance. At facing 16384, with the path within 25 leptons of the
+      cell's centre, such an update comes at every converted speed from 20 to 300 leptons per
+      tick and every slowdown distance above the destination's distance (by F3, F4 and claim 5).
+      In the first such update its target fraction is 0, and, being pad-bound with its docking
+      position in the pad's foundation, it falls back to rest by T2's ground row (claim 48 (c)):
+      its destination is forgotten, its behaviour is *guard*, its house being human-controlled
+      (the header), and it stays at height 0 in that cell.
+    - In (c): it goes straight on along its released facing, past the destination, until the
+      first update that ends with its distance to the destination at least its slowdown distance.
+      In the next update it climbs, with a positive height at the end of that update. From then on
+      its body facing turns toward the destination, and its flag and listing end as in (a).
+
+    Falsified by any of:
+    - No flag at the end of the first update.
+    - A flag kept after a climb.
+    - In (b) or (c), a flag left in a cell it has left, or missing from the cell it is in.
+    - A change of body facing while it is at height 0.
+    - In (b), a climb, a stop outside the destination cell, or no update that ends in the halving
+      zone.
+    - In (b), an update that ends in the halving zone without a target fraction of 0 and the
+      fall-back to rest in that update, a landing instead of the fall-back, or a fall-back or a
+      stop with no such update before it.
+    - In (c), a stop before it climbs, a climb before its distance reaches its slowdown distance,
+      or no climb in the update after that.
 
 ## Changes for other specs
 
@@ -3607,3 +3736,11 @@ listed in Open questions are not claimed confirmed by these scenarios.
     given to an aircraft resting above its pad, and S-0309 claim 7's connected-region test for it
     when a mobile searcher other than an aircraft runs a map-wide search. No scenario here sets
     up these cases.
+26. A pad-bound aircraft released low from a docking position outside its pad's foundation
+    (claim 48 (c), *At height 0*) still holds its pad contact. When its destination cell holds no
+    building it is in contact with, it falls back to rest at height 0 in that cell, and T2 gives
+    it *enter* with no destination. Whether that *enter* takes it back to the pad, keeps it
+    resting there or does something else is not known. Nor is what it does when its path reaches
+    the halving zone in a destination cell of that pad, where claim 6's pad-bound restriction
+    does not hold: whether it starts to land there (claim 7), docks (claim 24) or does something
+    else. No scenario here puts the docking position outside the foundation.
