@@ -24,8 +24,18 @@ this intake does not take it in.
   - `composed_item` caches each distinct parts list once (`Painter::composed`). It gives the
     composed image the voxel-vehicle row *U*, upright, a reader.
 
-**No new simulation state.** Drawing code only: save format 78 and AI game format 40 stay, and
-`crates/deterministic` and `crates/sim-gate` are untouched. No new switch.
+**No new simulation state.** Drawing code only: `crates/deterministic` and `crates/sim-gate` are
+untouched, and the save and AI game formats stay those of the base (79 and 41 since intake 26).
+No new switch.
+
+**Rebased on fa836fb (intake 26, S-0504 r26).** The sprite-body path never reaches
+`voxel::vehicle_parts_rocking`. That function's only caller is `vehicle_voxels`, which draws
+only a voxel body. The sprite path's barrel pose reads the body facing, turret facing,
+displacement and elevation, never the attitude. S-0504 claims 15 and 16 draw a sinking vehicle's
+lean, and drop its shadow, only for a vehicle drawn as a voxel model. So a sinking sprite body
+draws the same composed image, barrel included, and keeps its sprite shadow. It still descends
+with its position. `a_sprite_body_is_drawn_as_one_composed_image` checks this with a pitch of
+0.5 and a rocking locomotor.
 
 **Tests.**
 - `voxel::tests::sprite_body_barrel_pose_shifts_in_eighths` (render).
@@ -63,7 +73,9 @@ as our design.
 
 ## Checks
 
-Before is main 5c34005, the base of this branch; after is this branch. The branch touches only
+Before is main 5c34005, the base of this branch before its rebase onto fa836fb; after is this
+branch on 5c34005. On the rebased head, the app and render tests, clippy, fmt and `cargo xtask
+check` were re-run. The branch touches only
 `crates/render/src/voxel.rs`, `crates/app/src/mapview` and the lane test.
 `git diff main -- crates/deterministic crates/sim-gate` is empty. `glasnost-sim-gate` depends on
 neither `glasnost-app` nor `glasnost-render`. The arena and oracle modules of `glasnost-tools`
