@@ -2585,9 +2585,13 @@ fn ifv_turrets(lane: &mut Lane) {
 /// turret-flag vehicle types by body and barrel part. Without such a type,
 /// MS-33 part k's way is taken in this lane's own copy of the import: the
 /// first IFV-class type (a gunner multi-turret type with a filled turret
-/// table) with a barrel part, else the first turret-flag type with one, has
-/// its voxel body cleared, and where it has no sprite file it borrows the
-/// one of the first vehicle type drawn as a sprite. The scene says so.
+/// table) with a barrel part, else the first turret-flag type with one, is
+/// loaded as a sprite body would be (S-0007 claim 19): its voxel body and
+/// numbered parts are cleared, and its single turret and barrel parts are
+/// the files a sprite body reads, the image name with the turret and barrel
+/// suffixes, which a numbered type holds as its parts 0 (S-0007 claim 16).
+/// Where it has no sprite file it borrows the one of the first vehicle type
+/// drawn as a sprite. The scene says so.
 fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
     use glasnost_convert::kinds::Kind as CKind;
     let s = lane.c.session.as_mut().unwrap();
@@ -2623,14 +2627,18 @@ fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
             && !c.gattling
             && !c.charge_turret
             && import.turret_tables.contains_key(&x);
-        types.push((
-            t.name.clone(),
-            x,
-            body,
-            art.voxels.contains_key("barrel"),
-            art.sprite.is_some(),
-            ifv,
-        ));
+        // The single barrel a sprite body reads, or a numbered type's part 0 (the same file).
+        let barrel = art.voxels.contains_key("barrel") || art.voxels.contains_key("barrel0");
+        if ifv && print {
+            let parts = |p: &str| art.voxels.keys().filter(|k| k.starts_with(p)).count();
+            println!(
+                "IFV-class type: turret count {}, voxel turret parts {}, voxel barrel parts {}",
+                c.turret_count,
+                parts("turret"),
+                parts("barrel")
+            );
+        }
+        types.push((t.name.clone(), x, body, barrel, art.sprite.is_some(), ifv));
     }
     type T = (String, usize, bool, bool, bool, bool);
     let count = |f: &dyn Fn(&T) -> bool| types.iter().filter(|t| f(t)).count();
@@ -2638,14 +2646,16 @@ fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
         println!(
             "turret-flag vehicle types {}: sprite body with a barrel part {}, sprite body without {}, \
              voxel body with a barrel part {} (with a sprite file {}, IFV class {}); \
-             a sprite-body vehicle type to borrow a sprite file from {}",
+             a sprite-body vehicle type to borrow a sprite file from {}; IFV-class types {} (with a barrel part {})",
             types.len(),
             count(&|t| !t.2 && t.3 && t.4),
             count(&|t| !t.2 && !t.3 && t.4),
             count(&|t| t.2 && t.3),
             count(&|t| t.2 && t.3 && t.4),
             count(&|t| t.2 && t.3 && t.5),
-            donor.is_some()
+            donor.is_some(),
+            count(&|t| t.5),
+            count(&|t| t.5 && t.3)
         );
     }
     if let Some(t) = types.iter().find(|t| !t.2 && t.3 && t.4) {
@@ -2657,14 +2667,24 @@ fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
         .or_else(|| types.iter().find(|t| t.2 && t.3))?
         .clone();
     let art = s.loaded.import.arts.get_mut(&(CKind::Vehicles, t.1))?;
-    art.voxels.remove("body");
+    let numbered = !art.voxels.contains_key("barrel");
+    let single: Vec<_> = [("turret", "turret0"), ("barrel", "barrel0")]
+        .into_iter()
+        .filter_map(|(role, part0)| {
+            let file = art.voxels.get(role).or_else(|| art.voxels.get(part0))?;
+            Some((role.to_string(), file.clone()))
+        })
+        .collect();
+    art.voxels.clear();
+    art.voxels.extend(single);
     let borrowed = art.sprite.is_none();
     if borrowed {
         art.sprite = Some(donor?);
     }
     if print {
         println!(
-            "lane copy: the subject (IFV class {}) has its voxel body cleared; sprite file borrowed {borrowed}",
+            "lane copy: the subject (IFV class {}) loaded as a sprite body: voxel body cleared, \
+             single parts from numbered parts 0 {numbered}, sprite file borrowed {borrowed}",
             t.5
         );
     }
@@ -2673,8 +2693,9 @@ fn sprite_barrel_subject(lane: &mut Lane, print: bool) -> Option<String> {
 
 /// M8 step A3 intake 27 (S-0105 r39 claim 12, *One image* and *Depth*; Q-1885
 /// answered): a sprite-body vehicle with the turret flag and a barrel part
-/// ([`sprite_barrel_subject`]) placed round the local start's first
-/// building, behind it and in front of it, its turret turned through the
+/// ([`sprite_barrel_subject`]) placed round a small building of the local
+/// house spawned near its start, behind it and in front of it, its turret
+/// turned through the
 /// four 4-step facings, one screen each; then on the deck of the first high
 /// bridge with banks at deck level of the maps tried (`GLASNOST_LANE_MAPS`,
 /// default 8), driven there by a click, and turned through the same

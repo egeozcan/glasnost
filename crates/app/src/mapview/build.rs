@@ -4515,6 +4515,8 @@ impl<'a> Builder<'a> {
         }?;
         // spec: S-0105 claim 12 (Depth: S-0102 claim 13's voxel-vehicle row, U with no further
         // constant, upright, a reader, at every height; the colour row of the body)
+        // design: S-0105 claim 12 (Split of a tall image) is never made: every row keeps U,
+        // upright; S-0102 owns the split and its second condition is open (Open questions)
         Some(Self::part_item(
             placed,
             point,
