@@ -2,13 +2,13 @@
 id: S-0108
 title: Building sprites
 topic: rendering
-revision: 75
+revision: 81
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-10-26
 measurements: []
-requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772]
+requests: [Q-0540, Q-1550, Q-1610, Q-1620, Q-1772, Q-1890]
 supersedes: []
 ---
 
@@ -25,7 +25,8 @@ infantry absorption, superweapon charge, turret, repair depot), and what slots d
 needs an engineer before and at its ownership changes (claims 26 to 28). When a slot is started
 while it already holds an animation, the new animation keeps the replaced one's stage and takes its
 own passes afresh (claim 25); that the stage, not the image frame, is what carries over when the two
-types' start fields differ is unmeasured and rated medium there. Claims 26 to 28 answer Q-1772.
+types' start fields differ is unmeasured and rated medium there. Claims 26 to 28 answer Q-1772,
+and claim 28's building placed switched off by the map answers Q-1890.
 Skirmish only; network games and campaigns are out of scope.
 
 ## Terms
@@ -483,6 +484,51 @@ Skirmish only; network games and campaigns are out of scope.
     *freeze-unpowered* slots resume. The power-loss column applies only at a change from powered to
     unpowered: a building that has not been powered since it was placed or completed has had no
     such change, so its *light-unpowered* and *effect-unpowered* slots keep playing (claim 27).
+
+    Each disabling and each re-enabling acts at once, at its own place in the tick. A building's
+    own reaction to a change of its in-operation result, in its next update, acts on the same
+    slots: for a type that needs and draws power, the power-loss column freezes its
+    *freeze-unpowered* slots and the power-return column resumes them. When several of these
+    events reach a building in one tick, its *freeze-unpowered* slots are afterwards frozen or
+    playing as the last of them leaves them, the building's reaction counted among them. For a
+    type that does not need and draw power there is no such reaction, and the disablings and
+    re-enablings alone decide. The disablings are a switch-off (the map's placement of a
+    building in the switched-off state, claim 28, among them), a pulse's start, and the map's
+    placement of a building of claim 26 that is not manned. The re-enablings are a switch-on, a
+    pulse's end, and an ownership change of a building whose type needs an engineer (claim 26).
+    An ownership change of any other building is neither. Their places are S-0203's: a trigger
+    action acts where its trigger fires, the polled triggers before any object's turn (S-0203 row
+    1); an engineer's capture and a pulse's start act in the turn pass (row 5), one after another
+    in update order (S-0203 claim 3); a pulse's end acts before the orders of its tick; and a power
+    order, which a player gives only for a building of their own house (S-0214), acts after the
+    turn pass (row 8, S-0203 claim 7). So, in one tick, for a type that does not need and draw
+    power, and for one that needs and draws power, has no reaction still due from an earlier tick
+    and whose in-operation result is the same after the tick as before it:
+    - A switch-off order applied in the tick of an ownership change that gives the building to the
+      order's house, or of a pulse's end, leaves the slots frozen. Whether an order is applied when
+      a change earlier in its tick has given the building away from the order's house is open
+      (Open questions).
+    - A switch-off by a polled trigger's action in the tick of a pulse's end, or of the capture of
+      a building whose type needs an engineer, leaves them playing, although the building is
+      switched off (`quirks.enable_unfreezes_unpowered`).
+    - A pulse that starts in the tick of an ownership change made by a polled trigger's action
+      leaves them frozen. A pulse that starts in the turn pass that also holds a capture leaves
+      them as the later of the two in update order leaves them.
+    - A switch-on order in a tick in which a pulse holds the building is refused (S-0405 claim
+      10) and changes no slot.
+
+    For a type that needs and draws power whose in-operation result changes in the tick, the
+    building's reaction is one more event in that sequence. For example, take such a type that
+    needs an engineer and is in operation before the tick. A switch-off by a polled trigger's
+    action takes it out of operation, and a capture later in the turn pass re-enables it but
+    leaves it switched off (S-0405 claim 10). If the building's turn comes before the capture, its
+    power-loss reaction freezes the slots and the capture then leaves them playing. If its turn
+    comes after the capture, the capture leaves them playing and the reaction then freezes them.
+    In the same way, a pulse's start and a capture in one turn pass on such a type in operation
+    before the tick leave the slots frozen when the building's turn comes after both, since its
+    reaction is then the last event.
+
+    Claim 28 applies these rules to a building that the map places switched off.
     - Backing: `measurable` (B7 for freeze/light/effect flags and super-low-power transitions, B11
       for disable/re-enable while unpowered and, in its pulse run, for a pulse ending on a building
       still switched off, B22 part g for a building never powered, B22 parts (a), (e) and (k) for
@@ -491,14 +537,37 @@ Skirmish only; network games and campaigns are out of scope.
       delayed-fire outage exceptions and occupied-variant exclusion: no scenario exercises those
       cases or establishes a discriminating event path. `unmeasured` for the power-return reaction
       of a building that is in operation when it is placed or completed: no scenario judges it
-      against no reaction.
+      against no reaction. For disablings and re-enablings close together: `measurable` by B22
+      part (n) for a switch-off order applied in the tick before an ownership change that
+      re-enables the building (the change leaves the slots playing although the building stays
+      switched off), and by part (o) for a switch-off order applied 2 or more ticks before or
+      after a pulse's end (the pulse's end re-enables a building switched off under the pulse; a
+      later switch-off freezes the slots again). For several in one tick: `unmeasured` for a
+      switch-off order applied in the tick of an ownership change that gives the building to the
+      order's house, since a cycle takes the player's input before its tick runs (S-0201,
+      *cycle*), while the building is still another house's, and S-0214 offers power mode only
+      over an own selectable building, so no player's order can be given in that tick. Also
+      `unmeasured` for a switch-off order applied in the tick of a pulse's end, since the light
+      that is the only drawn sign of the end may show one tick late (S-0405 scenario W15), so no
+      drawn frame fixes the end's tick, and for the other combinations, since no scenario here
+      can put a capture and a pulse's start in a chosen update order, and no spec states a
+      trigger action that switches a building. `unmeasured`
+      for the building's own reaction as one more event in that sequence, for a type that needs
+      and draws power whose in-operation result changes in the tick: no scenario here can put the
+      building's turn before or after a capture or a pulse's start at will, and parts (n) and (o)
+      use a type that does not need power, so no reaction comes there.
     - Confidence: high for the power-loss and power-return rules as they act at a change from
       powered to unpowered and back; medium for the disable and enable cases, whose triggers belong
       to other specs, for the same-or-next-tick timing, for the pulse ending on a building still
       switched off until B11's pulse run runs, and for the rule that a building not powered since
       it was placed or completed has had no such change, until B22 parts (f) and (g) run; medium
       for the power-return reaction of a building in operation when placed or completed
-      (`unmeasured`, above)
+      (`unmeasured`, above); medium for disablings and re-enablings close together, until B22
+      parts (n) and (o) run, and for several in one tick, the switch-off order in the tick of a
+      pulse's end or of an ownership change among them (`unmeasured`, above), which rest on the
+      same rule and on S-0203's places in the tick; medium for the building's reaction counted
+      among those events (`unmeasured`, above), which rests on the power columns, the disable and
+      enable rules and the reaction's timing in its next update
 
 14. **Special outage.** For a type marked for special power behaviour, whether or not it needs
     power: when power comes back, the *low-power* slot stops and every slot with *special-outage* is
@@ -949,8 +1018,8 @@ Skirmish only; network games and campaigns are out of scope.
       touches running and unfrozen, and they play from then on, unless an independent hold such as
       an erasure holds them (S-0109 claims 21 and 23), although the building is still not manned
       and still disabled. For a type that needs power the restarted *freeze-unpowered* slots start
-      frozen. This is the original's behaviour, kept as our rule with no quirk switch (decided at
-      the delegated sign-off, 2026-10-25).
+      frozen. This is the original's behaviour, kept as our rule with no quirk switch, as
+      decided at the delegated sign-off, 2026-10-25.
     - **A pulse on a building that is not manned.** When the pulse ends, its re-enabling unfreezes
       the *freeze-unpowered* slots as claim 13 states for any re-enabling, so they play from then on,
       unless an independent hold such as an erasure holds them (S-0109 claim 23), although the
@@ -1036,12 +1105,14 @@ Skirmish only; network games and campaigns are out of scope.
     has had no such change. Its *light-unpowered* and *effect-unpowered* slots started at its
     grand opening therefore keep playing, and *super-low-power* has not started. This holds for a
     building of a needs-engineer type that needs power while it is not manned, and after its
-    capture into a house short of power (claim 26). It holds as well for any building that needs and draws power and completes while its house is short of power.
+    capture into a house short of power (claim 26). It holds as well for any building that needs and draws power and completes while its house is short of power,
+    and for one that the map places switched off (claim 28), before and after it is switched on
+    in a house short of power, until it first comes into operation.
     Claim 13's rule for a start still decides whether its *freeze-unpowered* slots start frozen.
     - Backing: `measurable` (B22 part (g) for its *light-unpowered* and *effect-unpowered*
-      slots). `unmeasured` for *super-low-power* not having started: it starts only from a running
+      slots, and part (m) for a building the map places switched off). `unmeasured` for *super-low-power* not having started: it starts only from a running
       *super-3* at a power loss, and B22 has no superweapon type.
-    - Confidence: medium until B22 part (g) runs, as claim 13 rates the rule; medium for
+    - Confidence: medium until B22 parts (g) and (m) run, as claim 13 rates the rule; medium for
       *super-low-power* (`unmeasured`)
 
 28. **The working animations of S-0405 claim 9 (Q-1772).** They are the slot rules of claims 13
@@ -1050,6 +1121,47 @@ Skirmish only; network games and campaigns are out of scope.
     - *switched on*: switching off disables the building in claim 13's sense. Switching on
       re-enables it, so its *freeze-unpowered* slots resume even under low power (claim 13). The
       end of a pulse re-enables it too while it is still switched off (claim 13).
+      - **Placed switched off by the map (Q-1890).** The map's request to start a building
+        switched off takes effect only for a type with a base drain above 0 or the needs-power
+        flag (S-0405 claim 18). Such a building is switched off, and so disabled, at the end of
+        its placement, after its set-up and grand-opening slot starts (claim 11). From its
+        placement on, each of those slots whose counting flag is *freeze-unpowered* shows the
+        image frame it was created with (S-0109 claims 1, 8 and 12) and does not advance, whether
+        or not the type needs power, as for the map-placed building of claim 26. The *idle* and
+        *active-1* to *active-4* slots follow the same rule; only each slot's counting flag
+        decides. A slot whose art turns *freeze-unpowered* off keeps playing, and for a type that
+        needs and draws power claim 27 applies to it. The per-tick frames of claim 26 (*turret*,
+        silo fill) win over the hold here too. A type with neither condition is not switched off
+        by the map; unless claim 26 disables it, its slots play from its placement. A slot started while the
+        building is switched off follows claim 13's rule for a start: it starts frozen only when
+        the type needs power.
+      - **An ownership change while switched off.** It leaves the building switched off (S-0405
+        claim 10). For a type that does not need an engineer it is no re-enabling, so the held
+        slots stay held. For a type that needs an engineer it is one (claim 26), and they resume.
+      - **Switching on such a building.** The switch-on re-enables it at once, whether or not it is
+        then in operation, so its held slots resume from the image frame they held; they do not
+        start again. The switch-on's re-enabling starts, stops and restarts no slot, so each keeps
+        its variant (claim 12). A resumed slot advances at its first eligible update (S-0109 claim
+        23), which for a power order is in the next tick (S-0203 claim 7) when the slot gets its
+        turn there; a counting removal earlier in that tick's turn pass can cost it that turn
+        (S-0109 claim 5, S-0203 claim 10), and it then advances at its next turn. In a house short
+        of power a building of a type that needs and draws power, with fewer than two chargers,
+        stays not in operation, so no change of its powered state follows: its resumed slots go on
+        advancing and do not freeze again in its next update or later, until a change from in
+        operation to not in operation or a disabling
+        (`quirks.enable_unfreezes_unpowered`). When the switch-on brings a type that needs and
+        draws power into operation, claim 13's power-return column applies in its next update, and
+        claim 14's for a type marked for special power behaviour. A type with the needs-power flag
+        and no base drain never stops for low power (S-0405 claim 8), so the house's power does not
+        keep it out of operation at its switch-on. Neither of claim 13's power columns applies to
+        it, since claim 13 limits both to a type that needs and draws power: the switch-on's
+        re-enabling alone resumes its held slots, and they go on advancing. For such a type that is
+        not marked for special power behaviour, no slot starts or stops at a change of its
+        in-operation result at the switch-on, if any. For one that is so marked, claim 14 applies
+        to a change into operation at the switch-on in its next update: its *low-power* slot stops
+        and every slot with *special-outage* is started (normal or damaged variant), running or
+        not. While a pulse holds the building, a switch-on is refused (S-0405 claim 10)
+        and changes no slot.
     - *not under a pulse*: the pulse disables the building and its end re-enables it (claim 13).
     - *powered*: claim 13.
     - *no blackout*: claim 14.
@@ -1078,12 +1190,30 @@ Skirmish only; network games and campaigns are out of scope.
       slots drawn from its first processing to the build-down's start; the slots advancing through
       a held sale are `unmeasured`, since no input is known that ensures a hold (S-0402 claim 11),
       and part (h) reports that only when a hold arises; B14 covers the hiding during the
-      build-down. B11 covers switching off and on. The other rows rest on the claims they name
-      and their backings.
+      build-down. B11 covers switching off and on. B22 part (l) covers a building the map places
+      switched off: the hold from its placement, the slots that keep playing, a type with neither
+      condition playing, the hold through an ownership change of a type that does not need an
+      engineer, and the resume at its switch-on without a restart; part (m) covers its switch-on
+      in a house short of power, after which the slots keep playing. `unmeasured`: the switch-on of
+      a type with the needs-power flag and no base drain in a house short of power (it rests on
+      S-0405 claim 8's power row and claim 13's scope, which leaves out both power columns for
+      it, and no part places such a type switched off); the switch-on
+      refused under a pulse for such a building (it is S-0405 claim 10's rule, which S-0405
+      scenario W7 measures for a building switched off in play, and no scenario here adds a
+      pulse to part (l)); the ownership change of a needs-engineer type placed switched off
+      (claim 26's resume, which B22 parts (b) and (k) measure for a building the map placed
+      switched on); the per-tick frames winning over this hold (claim 26 rates them); claim 14's
+      reaction at the switch-on of a type marked for special power behaviour (B22 has no such
+      type, and claim 14 rates the rule). The other rows rest on the claims they name and their
+      backings.
     - Confidence: medium for a sale changing no slot before its build-down, until B22 part (h)
       runs with a hold of at least 6 ticks: S-0402 claim 11 has the sale break off the unloading
       harvester's contact, and no input is known that ensures a hold. Medium for the reading of
-      S-0405 claim 9 as a whole.
+      S-0405 claim 9 as a whole. For a building the map places switched off: medium for the hold
+      from its placement and for the resume at its switch-on, which rest on claim 13's disable
+      and enable rules, until B22 part (l) runs; medium for its slots going on advancing after a
+      switch-on in a house short of power, until part (m) runs; medium for the `unmeasured`
+      points above, which rest on S-0405 claim 10 and claims 14 and 26.
 
 ## Formulas
 
@@ -1231,9 +1361,11 @@ outside construction; gates using the special gate image use claim 4, not this t
   normal art on all its running slot animations until its next damage or repair event, or the next
   slot start in the damaged condition (claims 11 and 12). Off: start the *turret* slot in the building's actual condition.
 - **`quirks.enable_unfreezes_unpowered`** (default: on). Re-enabling a disabled building unfreezes
-  its *freeze-unpowered* slot animations even when it has no power (claim 13). This includes the end
+  its *freeze-unpowered* slot animations even when it has no power (claim 13). This includes a
+  switch-on in a house short of power, also of a building the map placed switched off (claim 28),
+  the end
   of a pulse on a building that is switched off or that needs an engineer and is not manned, and every ownership change of
-  such a building, whether or not it is then in operation (claim 26). Off: a re-enabling or an
+  such a building, whether or not it is then in operation (claim 26), also while it is switched off. Off: a re-enabling or an
   ownership change unfreezes them only when the building is in operation right after it. Otherwise
   they stay frozen until power comes back, or until a later re-enabling or ownership change after
   which the building is in operation.
@@ -1382,8 +1514,8 @@ adjustment and y-sort (integers), and `Powered`, `PoweredLight`, `PoweredEffect`
 | `ChargedAnimTime` | building | decimal, held in single precision, game minutes | 999 | *t_c* (claim 18). The default is above 990, so claim 18 is off unless the data sets the key |
 | `UnitRepair` | building | boolean | false | repair depot: the repair-cycle rows and the other depot rows of claim 20 |
 | `Naval` | building | boolean | false | a naval type is exempt from claim 20's every-tick depot row only; the repair-cycle rows still apply |
-| `Powered` | building | boolean | false | needs power (claim 13) |
-| `Power` | building | integer | 0 | a negative value means the building draws power (claim 13) |
+| `Powered` | building | boolean | false | needs power (claims 13, 28) |
+| `Power` | building | integer | 0 | a negative value means the building draws power (claim 13); it is the base drain above 0 that lets the map start the building switched off (claim 28) |
 | `PoweredSpecial` | building | boolean | false | special outage (claim 14) |
 | `NoShadow` | building | boolean | false | suppresses the shadow (claim 9) |
 | `InvisibleInGame` | building | boolean | false | claim 1 |
@@ -1394,6 +1526,10 @@ adjustment and y-sort (integers), and `Powered`, `PoweredLight`, `PoweredEffect`
 | `BuildupTime` | `[General]` | decimal, game minutes | 0.05 (the binary64 value nearest 0.05) | *B* (claim 5, F1) |
 | `ConditionYellow` | `[AudioVisual]` | decimal or percentage ratio | 0.5 | yellow ratio (F3) |
 | `ConditionRed` | `[AudioVisual]` | decimal or percentage ratio | 0.5 | red ratio (F3) |
+
+**Map data.** The switched-on field of an entry in the map's building list is read as S-0009
+claim 40 and S-0405 claim 18 give, including its default when absent (switched on). This spec
+uses it only through the switch state it leaves (claim 28).
 
 ## Measurement scenarios
 
@@ -2040,7 +2176,7 @@ expected numbers are computed from the type's own fields at measurement time.
     needs-power flag. Test type P is the same with the needs-power flag and a positive power
     drain. Test type Q is a copy of a stock building that needs and draws power, without the
     needs-engineer flag. Each has named test slot art with deterministic playback, five visibly
-    distinct image frames and a stage delay of 3 ticks (invented test values). The test slot art
+    distinct image frames, a stage delay of 3 ticks and no loop delay (invented test values). The test slot art
     is not reversed, so a slot's first image frame is the frame it was created with (S-0109
     claim 8), and it has no pass limit, so it keeps playing for the whole run and no slot ends on its own. The
     *idle* and *active-1* slots keep *freeze-unpowered* on. The *active-2* slot turns it off and
@@ -2065,6 +2201,26 @@ expected numbers are computed from the type's own fields at measurement time.
     tick, a power plant for the player's house whose output exceeds the house's total drain (a
     structure in the map's building list owned by a human player's house is dropped, S-0009
     claim 27).
+    For parts (l) and (m), test type D is a copy of a stock building with a positive power drain
+    and neither the needs-power nor the needs-engineer flag, test type E is D with the
+    needs-power flag, and test type Z is D with no power drain. Each has T's test slot art. The
+    map's building list places D1, E1 and Z1 for the neutral house, in view, with the map's
+    switched-on field 0 (S-0009 claim 40 owns its encoding). A map trigger action, fired at least
+    60 ticks after the first tick, gives D1 and E1 to the player's house. Before it fires, the
+    player builds a building of type Q and no power plant, so that the player's house is short of power
+    on every tick from then on; if the record shows no shortfall, the player builds more of type
+    Q before the trigger fires. The record includes that house's power output and drain on every
+    tick.
+    For parts (n) and (o), test type W is a copy of a stock building whose light shows (S-0405
+    claim 9), given the needs-engineer flag, a positive power drain, no needs-power flag and T's
+    test slot art. The map's
+    building list places W7 and W8 for the neutral house, in view. A map trigger action, fired
+    at a set time, gives W7 to the bystander house. Every power order of these parts is
+    for a building of the player's own house at the order's tick, as S-0214 offers power mode only
+    over an own selectable building. Parts (n) and (o) need an input that gives a
+    power order in the cycle of a chosen tick (S-0201, *cycle*), such as a scripted input or a
+    replay of the recording run with the same seed and the same earlier inputs, plus the one
+    power order; without one they are reported unreached.
   - Procedure and parts:
     - (a) Record from the first drawn frame of play for at least 30 ticks, before any capture,
       and log the tick on which the trigger action creates T3 and P3.
@@ -2090,16 +2246,43 @@ expected numbers are computed from the type's own fields at measurement time.
       capture, the pulse hit, the change and the pulse's end. If the pulse ends before the
       change, or the slots are at their first or their last image frame when the pulse freezes
       them, the run is repeated, so that the frame after the held one is not the first.
+    - (l) Record D1, E1 and Z1 from the first drawn frame of play. Log the tick of the trigger
+      action that gives D1 and E1 to the player's house, and record at least 30 ticks after it.
+      Then switch D1 on by the power order (S-0405 claim 10), log the tick of the order, and
+      record at least 60 ticks after it.
+    - (m) In the same run, at least 30 ticks after the transfer, switch E1 on by the power order,
+      log the tick of the order, and record at least 60 ticks after it.
+    - (n) Capture W7 with an engineer at least 30 ticks before the trigger action gives it to the
+      bystander house. In a recording run, log the tick *t* of that change of owner. In a further
+      run with the same seed and the same earlier inputs, the player gives the power-off order for
+      W7 in the cycle of tick *t* − 1, while W7 is still the player's. Record at least 30 ticks
+      after *t* + 2.
+    - (o) Capture W8 with an engineer, and once its *idle* and *active-1* slots have advanced, hit
+      it with the pulse. In a recording run, log the tick *e*: the first tick after the hit at
+      whose end W8's light shows again. A drawn frame shows the state at the end of the previous
+      tick (S-0201 claim 6), so in a screen capture *e* is the tick before the first drawn frame
+      that shows the light again. The light may show one tick after the pulse's end (S-0405
+      scenario W15), so the pulse ends in tick *e* − 1 or tick *e*; the part places no order in
+      either. In two further runs with the same seed and the same earlier inputs, the player
+      gives the power-off order for W8 in the cycle of tick *e* − 3 and of tick *e* + 2, one per
+      run, so that each order falls at least 2 ticks before or after the pulse's end. Record at
+      least 30 ticks after *e* + 2.
     - Remove all named test files afterwards.
   - Observable: per tick, for each test building and each of its four test slots (R: its running
     *active* slot; U1: its *turret* slot and turret facing; F: its free units; T3 also its body
     image frame), whether the slot is drawn, its
-    variant and image frame and whether it changed, the owner, and the health condition, from a screen
-    capture that keeps every drawn frame or a read-only recorder's tick-labelled log.
+    variant and image frame and whether it changed, the owner, and the health condition (W7 and W8:
+    also whether the building is switched on and whether its light shows; in the runs of
+    parts (l) to (o), also each object that left play in the tick), from a screen
+    capture that keeps every drawn frame or a read-only recorder's tick-labelled log. A tick
+    named in the expected results is the tick at whose end the state is recorded; a screen
+    capture shows that state in the next drawn frame (S-0201 claim 6).
   - Runs: part (a) records at the start of the run that parts (b) and (c) continue, before part
     (b)'s capture; part (c) follows part (b) in that same run, and part (i) is read from part
     (a)'s record. Part (j) shares that run, which lasts at least 300 ticks after the first tick.
     Parts (d), (e), (g) and (k) take one run each, part (f) two, and part (h) up to five attempts, as its expected result says.
+    Parts (l) and (m) share one run. Part (n) takes a recording run and one order run, and part
+    (o) a recording run and two order runs.
   - Expected:
     - (a) On T1, T2, T4, T5 and P1 the *idle* and *active-1* slots show their first image frame
       on every tick, and *active-2* and *active-3* advance every 3 ticks. On T3 all four slots
@@ -2148,6 +2331,28 @@ expected numbers are computed from the type's own fields at measurement time.
       shows is the frame after that held frame, not its first frame (later passes show the first
       frame again, as any pass does); *active-2* and *active-3* go on without a
       break. The pulse's end changes nothing.
+    - (l) From the first tick, the *idle* and *active-1* slots of D1 and E1 show their first image
+      frame on every tick, and their *active-2* and *active-3* advance every 3 ticks; all four
+      slots of Z1 advance every 3 ticks. D1's and E1's held slots are still held through the
+      change of owner and up to their switch-on. In the tick after D1's switch-on order, and not
+      later, D1's *idle* and *active-1* advance to the frame after the held one, with no restart
+      and no change of variant, and go on advancing. Their clocks are due after the long hold and
+      the art has no loop delay, so their first eligible update (S-0109 claim 23) is their turn
+      in that tick.
+    - (m) In the tick after E1's switch-on order, and not later, as in part (l), E1's *idle* and
+      *active-1* advance to the frame after the held one, with no restart, and go on advancing at
+      their stage delay to the end of the record, while the record shows the player's house short
+      of power; E1's *active-2* and *active-3* advance throughout. A tick of that record without
+      a shortfall voids the part.
+    - (n) With the order in tick *t* − 1, W7's *idle* and *active-1* hold from the order and
+      advance again, although W7 stays switched off, at the first tick from *t* on at which at
+      least 3 ticks have passed since their last advance (S-0109 claim 23), so no later than
+      tick *t* + 2.
+    - (o) With the order in tick *e* − 3, W8's *idle* and *active-1* show no new frame up to
+      the end of tick *e* − 2, and advance again, although W8 stays switched off, no later than
+      tick *e* + 1: the pulse's end re-enables W8, and their clocks are due after the pulse's
+      hold. With the order in tick *e* + 2, they show no new frame after the end of tick *e* + 2,
+      to the end of the record.
   - Falsified if: an unmanned map-placed building's *freeze-unpowered* slot advances or is not
     drawn before any capture, damage or pulse, or its *active-2* or *active-3* holds; T3 holds,
     its slots first appear on a later tick than the one on which the action creates it, or one of
@@ -2162,7 +2367,19 @@ expected numbers are computed from the type's own fields at measurement time.
     holds after the change; Q's *active-2* or *active-3* holds while the house is short of
     power; or R's *active* slot stops being drawn at or after the sale's first processing before
     the build-down starts, or holds its frame through a hold of at least 6 ticks, or a slot of R is
-    drawn after the build-down starts.
+    drawn after the build-down starts; a held slot of D1 or E1 advances before its switch-on, a
+    slot of Z1 holds, or D1's or E1's *active-2* or *active-3* holds; D1's or E1's held slots stay
+    held in the tick after the switch-on order, restart from their first frame or change variant at
+    it; E1's resumed slots hold again while its house stays short of power; in part (n), the
+    order for W7 in tick *t* − 1 leaves its slots held at the end of tick *t* + 2; or, in part
+    (o), the order in
+    tick *e* − 3 leaves them advancing before the end of tick *e* − 2 or held at the end of tick
+    *e* + 1, or the order in tick *e* + 2 leaves them advancing after the end of that tick.
+  - Validity: a counting removal can cost a slot its turn (S-0109 claim 5, S-0203 claim 10). A
+    run of parts (l) to (o) in whose record any object leaves play in a tick that a timing
+    expectation of the part names is void for that expectation and is repeated. Those parts'
+    inputs put no removal near those ticks (their captures and pulse hit come well before), so
+    none is expected.
 
 Construction timing in claim 5 uses S-0406 scenario PL11 a to f, including its setup,
 read-only per-tick observables and falsification criteria: placed buildings show two runs,
@@ -2249,7 +2466,7 @@ specified here.
   outside this spec's coverage.
 - Claim 5 computes the build-up delay with the build-up time held when the sprite is loaded. Within
   one rules layer, whether the game-wide build-up time is read before or after the building types is not
-  traced, so whether a build-up time that only a game-mode file or a map sets reaches a building's
+  known, so whether a build-up time that only a game-mode file or a map sets reaches a building's
   delay in the same rules layer is open. A building with the new-theater flag gets the final value at the
   theater refresh either way.
 - Turret-slot art selection for wall-tower-style upgrades remains outside this spec's coverage.
@@ -2279,9 +2496,15 @@ specified here.
 - No skirmish path filling any building's own storage is known (S-0408 claim 10). Positive,
   zero-capacity and negative-capacity nonempty cases of claims 15 and 16 all remain unmeasured.
 - Whether the door image of claim 23 also gets a shadow frame, as the body does under claim 9, is
-  not traced.
+  not known.
 - F9 takes the held infantry in turn. With a negative infantry size the result can depend on that
   order, which is not stated (claim 17).
+- Whether a power order given for a building of the player's own house is still applied when an
+  ownership change earlier in the tick of its application (a polled trigger's action, a capture)
+  has given the building to another house is not known. Claim 13 states the slots only for a
+  change that gives the building to the order's house; B22 part (n) gives every order for a
+  building that is the player's at its tick. Rated low, `unmeasured`: no own-building order can
+  be timed after such a change in this spec's scenarios without the original's acceptance rule.
 
 ## Questions for the project lead
 
