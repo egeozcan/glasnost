@@ -1125,6 +1125,11 @@ pub struct Painter {
     /// shadow image and part images (S-0105 claim 39): a memo of the
     /// per-appearance exclusion, bounded by the cached images it combines.
     cutouts: BTreeMap<(u32, Vec<u32>), Option<PlacedPart>>,
+    /// The composed images of sprite-body vehicles with the turret flag
+    /// (S-0105 claim 12, *One image*), by their parts (scene image and
+    /// offset from the draw point, in painting order): bounded by the
+    /// cached images they combine.
+    composed: BTreeMap<Vec<(u32, i32, i32)>, Option<PlacedPart>>,
     /// Where fresh voxel draws are made (S-0105 claims 32, 34): each starts
     /// transparent, and the depth-buffered mode is on only during a fresh
     /// depth-option part draw.
@@ -1159,7 +1164,7 @@ pub struct Painter {
 
 /// A voxel part image added to the scene: its index and offset from the
 /// draw point (S-0105 claim 25, F6).
-type PlacedPart = (u32, [i32; 2]);
+pub(super) type PlacedPart = (u32, [i32; 2]);
 
 /// A decoded tile file: its size in cells and its tile cells, row by row.
 #[derive(Clone, Debug)]
@@ -4367,7 +4372,8 @@ impl<'a> Builder<'a> {
             )
         };
         let body = |b: &mut Self, f: usize| {
-            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader)
+            // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, reader);
+            // S-0105 claim 12 (Depth: only without the turret flag)
             b.place_sprite(
                 sprite,
                 f,
@@ -4386,25 +4392,22 @@ impl<'a> Builder<'a> {
         };
         let mut items = Vec::new();
         if turret {
-            // spec: S-0102 claim 22 (a turret vehicle: body and turret frame ((t₃₂ + 4) mod 32) + 8·F_w
-            // combined into one image; its shadow, U − 2, never darkens them, so it goes first)
+            // spec: S-0102 claim 22 (a turret vehicle: its shadow, U − 2, lies under the combined
+            // image and never darkens it, so it goes first); S-0105 claim 12 (One image: the
+            // vehicle's own shadow is drawn before the composed image and keeps its own row)
             items.extend(shadow_item(self, u - 2));
-            items.extend(body(self, frame));
-            let barrel = self.sprite_body_barrel(m, point, u, row);
-            // spec: S-0105 claim 12 (Sprite body) and claim 11 (at 4-step turret facings 1 and 2
-            // the barrel wins over the sprite turret, at 0 and 3 the turret wins; either wins over
-            // the body)
-            let barrel_last = voxel::turret_drawn_first(m.turret);
-            if !barrel_last {
-                items.extend(barrel);
-            }
+            // A sprite frame as a part placed relative to the draw point (S-0102 F6).
+            let sprite_part = |b: &mut Self, f: usize| {
+                b.sprite_frame(sprite, f)
+                    .map(|(id, (fx, fy), (cw, ch))| (id, [-cw / 2 + fx, -ch / 2 + fy]))
+            };
+            let body_part = sprite_part(self, frame);
+            let barrel = self.sprite_body_barrel(m);
+            // spec: S-0102 claim 22 (turret frame ((t₃₂ + 4) mod 32) + 8·F_w)
             let t = (n_step(m.turret, 32) as i32 + 4) % 32 + 8 * walk_frames;
-            if let Ok(t) = usize::try_from(t) {
-                items.extend(body(self, t));
-            }
-            if barrel_last {
-                items.extend(barrel);
-            }
+            let turret_part = usize::try_from(t).ok().and_then(|t| sprite_part(self, t));
+            let parts = sprite_turret_parts(body_part, barrel, turret_part, m.turret);
+            items.extend(self.composed_item(&parts, point, u, row, m.object));
         } else {
             // spec: S-0102 claims 21 and 28 (the own shadow right after the body: −L(z) − 4, flat)
             items.extend(body(self, frame));
@@ -4414,23 +4417,14 @@ impl<'a> Builder<'a> {
     }
 
     /// The single voxel barrel of a sprite-body vehicle with the turret
-    /// flag (S-0105 claim 12, *Sprite body*; S-0007 claim 19), or `None`
-    /// without a barrel part. The voxel turret part is never drawn.
-    ///
-    /// Our design (the decisions of 2026-10-25; Q-1885 open): the barrel
-    /// takes the sprite body's place in the scene, S-0102 claim 13's row
-    /// for a vehicle drawn as a sprite (U − 2, upright, a reader), so that
-    /// no other object's pixels can hide the barrel and not the body, or
-    /// the reverse, also off the ground. It is drawn in the HVA frame of a
-    /// barrel drawn with a voxel turret, the loaded voxel turret's frame
-    /// standing in for the drawn one (`quirks.barrel_frame_zero`).
-    fn sprite_body_barrel(
-        &mut self,
-        m: &Mobile,
-        point: (i32, i32),
-        u: i32,
-        row: Shade,
-    ) -> Option<Item> {
+    /// flag (S-0105 claim 12, *Sprite body*; S-0007 claim 19), as a part
+    /// placed relative to the draw point, or `None` without a barrel part.
+    /// The voxel turret part is never drawn. It is placed by claim 12's
+    /// *Barrel pose* and drawn in HVA frame 0 whatever the counters and in
+    /// both states of `quirks.barrel_frame_zero` (claim 12, *Frame*); it
+    /// joins the vehicle's composed image ([`Self::composed_item`]) and
+    /// casts no shadow of its own (claim 12, *No barrel shadow*).
+    fn sprite_body_barrel(&mut self, m: &Mobile) -> Option<PlacedPart> {
         let q = VoxelQuirks::default();
         let (kind, idx) = (m.kind, m.idx);
         let art = self.type_art((kind, idx))?;
@@ -4449,16 +4443,9 @@ impl<'a> Builder<'a> {
             .value(&name, b"UseBuffer")
             .and_then(value::boolean)
             .unwrap_or(false);
-        // spec: S-0105 claim 16 (body frame 0: the turret frame u mod F_tur of the loaded turret part)
-        let turret_frames = art
-            .voxels
-            .get("turret")
-            .cloned()
-            .and_then(|f| self.voxel_model(&f))
-            .map(|t| t.frame_count() as u32);
-        let turret_frame = voxel::vehicle_turret_frame(0, m.anim, turret_frames);
-        // spec: S-0105 claim 16 (quirks.barrel_frame_zero; our design for a sprite body, Q-1885)
-        let barrel_frame = voxel::barrel_frame_with_turret(turret_frame, &q);
+        // spec: S-0105 claim 12 (Frame, Q-1885 question 4: always HVA frame 0, in both states of
+        // quirks.barrel_frame_zero, since no voxel turret is drawn whose frame it could take)
+        let barrel_frame = 0;
         // spec: S-0105 claim 43 (Any body: the barrel key holds the selected turret index of a
         // multi-turret type); claim 26 (barrel key: the turret's key plus the 32-step elevation)
         let index = if multi_turret(self.import, kind, idx) {
@@ -4466,6 +4453,8 @@ impl<'a> Builder<'a> {
         } else {
             None
         };
+        // spec: S-0105 claim 26 (turret key: flat ground, the alternative-model state off, and the
+        // frame drawn, which claim 12's Frame fixes at 0)
         let turret_key = voxel::vehicle_turret_key(
             voxel::RAMP_FLAT,
             m.body,
@@ -4473,35 +4462,68 @@ impl<'a> Builder<'a> {
             offset,
             index,
             false,
-            turret_frame,
+            barrel_frame,
         );
         let key = voxel::barrel_key(turret_key, m.elevation);
         let (body_facing, turret_facing, elevation) = (m.body, m.turret, m.elevation);
-        let part = self.cached_part(kind, idx, key, |b| {
+        self.cached_part(kind, idx, key, |b| {
             let model = b.voxel_model(&file)?;
             let vpl = b.vpl();
-            // spec: S-0105 claim 12 (Sprite body: at the turret position, turned with the turret
-            // facing and pitched by the barrel elevation, as for a voxel vehicle, claims 8 and 10)
-            let pose = voxel::vehicle_parts(body_facing, turret_facing, offset, elevation, &q);
+            // spec: S-0105 claim 12 (Barrel pose: claim 8's transform with d = trunc(δ / 8), claim
+            // 4's relative turn, claim 6's elevation about claim 10's axis; the invisible slot-0
+            // projectile's distorted elevation is an original glitch fixed without a switch)
+            let pose =
+                voxel::sprite_body_barrel_pose(body_facing, turret_facing, offset, elevation, &q);
             let img = b.p.canvas.draw_part(
                 &model,
                 barrel_frame,
-                &pose.barrel,
+                &pose,
                 vpl.as_ref(),
                 depth_buffered,
                 &q,
             );
             b.limit_checked(&file, "barrel", key, img)
-        })?;
-        // spec: S-0102 claim 13 (a vehicle drawn as a sprite, h = 0: U − 2, upright, a reader; our
-        // design for its voxel barrel, Q-1885), S-0102 colour selector (a sprite vehicle's row)
+        })
+    }
+
+    /// The composed image of a sprite-body vehicle with the turret flag
+    /// (S-0105 claim 12, *One image* and *Depth*), as one item at the draw
+    /// point `point`: `parts` (scene images placed relative to the draw
+    /// point) painted in order into the smallest rectangle holding them
+    /// all, later opaque pixels winning, with no depth test between them.
+    /// The composed image takes S-0102 claim 13's row for a vehicle drawn
+    /// as a voxel model, *U*, upright, a reader, at every height, its
+    /// anchor row the composed rectangle's last row (S-0102 F2). Each
+    /// distinct list of parts is composed once and kept, as the parts are.
+    fn composed_item(
+        &mut self,
+        parts: &[PlacedPart],
+        point: (i32, i32),
+        u: i32,
+        row: Shade,
+        object: u32,
+    ) -> Option<Item> {
+        let key: Vec<(u32, i32, i32)> = parts.iter().map(|&(i, [x, y])| (i, x, y)).collect();
+        let placed = match self.p.composed.get(&key) {
+            Some(p) => *p,
+            None => {
+                let p = compose_parts(&self.built.scene, parts)
+                    .and_then(|img| add_part_image(&mut self.built.scene, &img));
+                self.p.composed.insert(key, p);
+                p
+            }
+        }?;
+        // spec: S-0105 claim 12 (Depth: S-0102 claim 13's voxel-vehicle row, U with no further
+        // constant, upright, a reader, at every height; the colour row of the body)
+        // design: S-0105 claim 12 (Split of a tall image) is never made: every row keeps U,
+        // upright; S-0102 owns the split and its second condition is open (Open questions)
         Some(Self::part_item(
-            part,
+            placed,
             point,
-            u - 2,
+            u,
             Paint::Lit(row),
             Group::Vehicles,
-            m.object,
+            object,
         ))
     }
 
@@ -5091,6 +5113,69 @@ impl<'a> Builder<'a> {
     }
 }
 
+/// The parts of a sprite-body vehicle with the turret flag in the order
+/// they are painted into its composed image (S-0105 claim 12, *One
+/// image*): the body frame first; then at 4-step turret facings 0 and 3
+/// (the turret's own facing) the barrel and the turret frame, at 1 and 2
+/// the turret frame and the barrel. A missing part is left out.
+pub(super) fn sprite_turret_parts(
+    body: Option<PlacedPart>,
+    barrel: Option<PlacedPart>,
+    turret: Option<PlacedPart>,
+    turret_facing: u16,
+) -> Vec<PlacedPart> {
+    // spec: S-0105 claim 12 (One image: claim 11's order by the 4-step turret facing alone)
+    let rest = if voxel::turret_drawn_first(turret_facing) {
+        [turret, barrel]
+    } else {
+        [barrel, turret]
+    };
+    std::iter::once(body).chain(rest).flatten().collect()
+}
+
+/// Paints `parts` (scene images placed relative to a draw point) in order
+/// into one image (S-0105 claim 12, *One image* and *Depth*): the smallest
+/// rectangle holding every part's rectangle, exactly, with no row or column
+/// added past the lowest or rightmost part (the original's one-row
+/// extension is not reproduced); transparent pixels (index 0) paint
+/// nothing and a later opaque pixel wins. `None` without a part.
+pub(super) fn compose_parts(scene: &Scene, parts: &[PlacedPart]) -> Option<voxel::PartImage> {
+    let rect = |&(id, [x, y]): &PlacedPart| {
+        let img = &scene.images[id as usize];
+        (x, y, x + img.width() as i32, y + img.height() as i32)
+    };
+    // spec: S-0105 claim 12 (Depth: the smallest rectangle holding the rectangles of all its parts;
+    // the exact rectangle, fixed without a switch)
+    let (l, t, r, b) = parts
+        .iter()
+        .map(rect)
+        .reduce(|a, c| (a.0.min(c.0), a.1.min(c.1), a.2.max(c.2), a.3.max(c.3)))?;
+    let (w, h) = ((r - l) as u32, (b - t) as u32);
+    let mut pixels = vec![0u8; w as usize * h as usize];
+    for &(id, [x, y]) in parts {
+        let img = &scene.images[id as usize];
+        for iy in 0..img.height() {
+            for ix in 0..img.width() {
+                // spec: S-0105 claim 12 (One image: transparent pixels paint nothing; later pixels win)
+                match img.get(ix, iy) {
+                    Some(0) | None => {}
+                    Some(p) => {
+                        let (cx, cy) = ((x - l) as u32 + ix, (y - t) as u32 + iy);
+                        pixels[(cy * w + cx) as usize] = p;
+                    }
+                }
+            }
+        }
+    }
+    Some(voxel::PartImage {
+        width: w,
+        height: h,
+        pixels,
+        offset: [i64::from(l), i64::from(t)],
+        copy_size: [i64::from(w), i64::from(h)],
+    })
+}
+
 /// Adds a voxel part or shadow image to `scene`: its index and offset from
 /// the draw point (S-0105 claim 25, F6). An empty image adds nothing.
 fn add_part_image(scene: &mut Scene, img: &voxel::PartImage) -> Option<PlacedPart> {
@@ -5466,6 +5551,17 @@ impl Painter {
             .is_some_and(|c| c.get(key).is_some())
     }
 
+    /// The parts (scene image and offset from the draw point, in painting
+    /// order) the composed image `image` was made of (S-0105 claim 12, *One
+    /// image*), for tests.
+    #[cfg(test)]
+    pub(crate) fn composed_parts(&self, image: u32) -> Option<Vec<PlacedPart>> {
+        self.composed
+            .iter()
+            .find(|(_, p)| p.is_some_and(|(i, _)| i == image))
+            .map(|(k, _)| k.iter().map(|&(i, x, y)| (i, [x, y])).collect())
+    }
+
     /// The unscaled ground light of a cell (S-0104 claim 13), the neutral
     /// brightness off the lit area.
     pub fn ground_light(&self, cell: CellXY) -> i32 {
@@ -5509,6 +5605,7 @@ impl Painter {
             voxels: BTreeMap::new(),
             rocked: BTreeMap::new(),
             cutouts: BTreeMap::new(),
+            composed: BTreeMap::new(),
             canvas,
             models: BTreeMap::new(),
             vpl: None,

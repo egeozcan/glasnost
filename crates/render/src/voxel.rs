@@ -132,8 +132,11 @@ pub struct VoxelQuirks {
     /// shows only 32-step values. Off: continuous pitch from the raw
     /// elevation.
     pub barrel_elevation_quantised: bool,
-    /// `quirks.barrel_frame_zero` (claim 16): barrels drawn with a turret
-    /// use HVA frame 0. Off: the turret's frame.
+    /// `quirks.barrel_frame_zero` (claim 16): barrels drawn with a voxel
+    /// turret use HVA frame 0. Off: the voxel turret's frame. A building
+    /// barrel drawn without a turret is not affected (claim 37), and the
+    /// barrel of a sprite-body vehicle stays in frame 0 in both states
+    /// (claim 12, *Sprite body*).
     pub barrel_frame_zero: bool,
     /// `quirks.vpl_unloaded_rows_blank` (claim 38): rows the lighting table
     /// file does not supply read as zero and a missing or truncated file
@@ -707,6 +710,37 @@ pub fn vehicle_parts_rocking(
     }
 }
 
+/// The barrel shift of a sprite-body vehicle, *d = trunc(δ / 8)* model
+/// units along the body's forward axis (S-0105 claim 12, *Barrel pose*:
+/// claim 9's unit, with no switch).
+pub fn sprite_body_barrel_shift(offset_leptons: i32) -> f32 {
+    // spec: S-0105 claim 12 (Barrel pose: d = trunc(δ / 8), integer division truncated toward zero)
+    (offset_leptons / 8) as f32
+}
+
+/// The draw transform *V · B* of the single voxel barrel of a vehicle drawn
+/// as a sprite (S-0105 claim 12, *Barrel pose*): claim 8's transform with
+/// [`sprite_body_barrel_shift`] for its displacement, *T = D · X(d) ·
+/// Rz(θ_rel)* (claims 3, 4, 7), then *B = T · Ry(φ)*, pitched by claim 6's
+/// 32-step elevation about claim 10's axis through the shifted point (the
+/// lead-confirmed pivot departure, extended to this barrel).
+pub fn sprite_body_barrel_pose(
+    body_facing: u16,
+    turret_facing: u16,
+    turret_offset_leptons: i32,
+    elevation_raw: u16,
+    quirks: &VoxelQuirks,
+) -> Mat34 {
+    // spec: S-0105 claims 3, 7 (flat ground: D is the body rotation)
+    let d = Mat34::IDENTITY.rotate_z(body_angle(body_facing), quirks);
+    // spec: S-0105 claim 12 (Barrel pose: claim 8's shift first, then claim 4's relative turn about the shifted point)
+    let t = d
+        .translate([sprite_body_barrel_shift(turret_offset_leptons), 0.0, 0.0])
+        .rotate_z(turret_relative_angle(turret_facing, body_facing), quirks);
+    // spec: S-0105 claim 12 (Barrel pose: claim 6's elevation about claim 10's axis)
+    view(quirks).then(&barrel_from_turret(&t, elevation_raw, quirks))
+}
+
 /// *B = T · Ry(φ)*: the barrel pitches about the lateral axis through the
 /// turret's origin (S-0105 claim 10).
 fn barrel_from_turret(t: &Mat34, elevation_raw: u16, quirks: &VoxelQuirks) -> Mat34 {
@@ -1052,8 +1086,9 @@ pub fn building_turret_frame(anim_counter: u32, turret_frames: u32) -> u32 {
     anim_counter.checked_rem(turret_frames).unwrap_or(0)
 }
 
-/// The HVA frame of a barrel drawn with a turret: 0 (S-0105 claim 16), or
-/// the turret's frame with `quirks.barrel_frame_zero` off.
+/// The HVA frame of a barrel drawn with a voxel turret: 0 (S-0105 claim
+/// 16), or the turret's frame with `quirks.barrel_frame_zero` off. Not for
+/// the barrel of a sprite-body vehicle, always frame 0 (claim 12).
 pub fn barrel_frame_with_turret(turret_frame: u32, quirks: &VoxelQuirks) -> u32 {
     if quirks.barrel_frame_zero {
         // spec: S-0105 claim 16 (quirks.barrel_frame_zero)
@@ -3634,6 +3669,44 @@ mod tests {
         assert_eq!(b, t.rotate_y(barrel_pitch(12288, &q()), &q()));
         assert_eq!(b.translation(), t.translation());
         assert_ne!(t.translation(), [0.0; 3]);
+    }
+
+    /// spec: S-0105 claim 12 (Barrel pose: a sprite-body vehicle's barrel
+    /// sits trunc(δ / 8) model units ahead of the body's origin, 0, 25, −12
+    /// and −1 for MS-33 part k's pose runs, never δ × ρ nor rounded down;
+    /// turned by the relative turret angle and pitched about claim 10's
+    /// axis through the shifted point)
+    #[test]
+    fn sprite_body_barrel_pose_shifts_in_eighths() {
+        for (offset, d) in [(0, 0.0), (200, 25.0), (-100, -12.0), (-12, -1.0)] {
+            assert_eq!(sprite_body_barrel_shift(offset), d, "δ = {offset}");
+        }
+        assert_ne!(sprite_body_barrel_shift(200), vehicle_turret_shift(200));
+        for offset in [0, 200, -100, -12] {
+            for (body, turret, elevation) in [(5, 9, 12288), (0, 0, ELEVATION_LEVEL), (8, 3, 14336)]
+            {
+                let pose =
+                    sprite_body_barrel_pose(raw32(body), raw32(turret), offset, elevation, &q());
+                let d = Mat34::IDENTITY.rotate_z(body_angle(raw32(body)), &q());
+                let t = d
+                    .translate([sprite_body_barrel_shift(offset), 0.0, 0.0])
+                    .rotate_z(turret_relative_angle(raw32(turret), raw32(body)), &q());
+                let b = t.rotate_y(barrel_pitch(elevation, &q()), &q());
+                assert_eq!(pose, view(&q()).then(&b));
+                // The pivot is the shifted point, on the body's forward axis.
+                assert_eq!(b.translation(), t.translation());
+                let ahead = d.apply([sprite_body_barrel_shift(offset), 0.0, 0.0]);
+                let o = t.translation();
+                assert!((o[0] - ahead[0]).abs() < 1e-4 && (o[1] - ahead[1]).abs() < 1e-4);
+            }
+        }
+        // Equal facings, level: the barrel turns with the body as a voxel vehicle's barrel does,
+        // only the shift differs.
+        let plain = vehicle_parts(raw32(4), raw32(4), 0, ELEVATION_LEVEL, &q());
+        assert_eq!(
+            sprite_body_barrel_pose(raw32(4), raw32(4), 0, ELEVATION_LEVEL, &q()),
+            plain.barrel
+        );
     }
 
     /// spec: S-0105 claims 5, 9 (building turret: absolute facing, shift
