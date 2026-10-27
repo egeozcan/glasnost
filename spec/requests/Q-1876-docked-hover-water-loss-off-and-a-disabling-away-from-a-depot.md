@@ -1,9 +1,9 @@
 ---
 id: Q-1876
 title: With quirks.docked_hover_water_loss off, is a hovering vehicle disabled away from any depot spared the water test?
-status: open
+status: answered
 related: [S-0314, S-0503, S-0405]
-answered-by: []
+answered-by: [S-0314]
 ---
 
 ## Need
