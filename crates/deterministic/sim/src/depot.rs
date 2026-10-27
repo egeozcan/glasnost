@@ -1069,6 +1069,10 @@ pub fn vehicle_turn(w: &mut World, id: ObjectId) {
         if let Some(ob) = w.obj_mut(id) {
             ob.depot.link = None;
         }
+        if !w.rules().quirks.depot_loss_strands_hover {
+            // spec: S-0314 Edge cases and Terms (quirks.depot_loss_strands_hover off: losing contact with a depot ends being settled, and the vehicle is switched on again); design: a contact broken off outside this module (a deploy order's clear, S-0213 claim 10; an owner change's leave, S-0509 claim 14) is seen here, at the vehicle's next turn
+            unsettle(w, id);
+        }
     }
     let Some(k) = w.obj(id).and_then(|o| o.depot.queued) else {
         return;
