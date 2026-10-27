@@ -56,11 +56,14 @@ pub struct ViewQuirks {
     /// layer differs from the list it is in; claim 4's re-files happen in
     /// both states.
     pub layer_change_on_events_only: bool,
-    /// `quirks.enable_unfreezes_unpowered` (S-0108 claims 13 and 26):
-    /// re-enabling a disabled building (a switch-on, the end of a pulse, an
-    /// ownership change) unfreezes its *freeze-unpowered* slot animations
-    /// even when it is not in operation. Off: only when it is in operation
-    /// right after the re-enabling.
+    /// `quirks.enable_unfreezes_unpowered` (S-0108 claims 13, 26 and 28):
+    /// re-enabling a disabled building (a switch-on, also in a house short
+    /// of power and of a building the map placed switched off; the end of a
+    /// pulse; an ownership change of a building whose type needs an
+    /// engineer, also while it is switched off) unfreezes its
+    /// *freeze-unpowered* slot animations even when it is not in operation.
+    /// An ownership change of any other building re-enables nothing. Off:
+    /// only when it is in operation right after the re-enabling.
     pub enable_unfreezes_unpowered: bool,
 }
 

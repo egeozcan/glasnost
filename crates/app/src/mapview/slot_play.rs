@@ -15,11 +15,14 @@
 //! The power rules of claim 13 are played for these slots: a
 //! *freeze-unpowered* slot is frozen (held, S-0109 claim 23) by a loss of
 //! operation of a type that needs and draws power, by a disabling (a
-//! switch-off, a pulse, and the map's placement of a building that needs an
-//! engineer and is not manned, claim 26), and when it starts frozen; it
-//! resumes at a power return or a re-enabling (an ownership change among
-//! them, claim 26). The *light-unpowered* and *effect-unpowered* columns
-//! stop and start slots. Not covered here: claim 14's special outage and
+//! switch-off, among them the map's placement of a building switched off,
+//! claim 28; a pulse's start; and the map's placement of a building that
+//! needs an engineer and is not manned, claim 26), and when it starts
+//! frozen; it resumes at a power return or a re-enabling (a switch-on, a
+//! pulse's end, and an ownership change of a building whose type needs an
+//! engineer, claim 26; an ownership change of any other building is
+//! neither). The *light-unpowered* and *effect-unpowered* columns stop and
+//! start slots. Not covered here: claim 14's special outage and
 //! the *low-power* slot, silo fill (claim 16), the superweapon slots and
 //! *super-low-power* (claims 11, 13 and 18), the turret slot (claims 11 and
 //! 19), the upgrade slots and the recycling building's row of claim 20.
@@ -148,6 +151,9 @@ pub struct TypeKind {
     /// The type needs and draws power (Terms): claim 13's power-loss and
     /// power-return columns apply.
     pub draws_power: bool,
+    /// The type needs an engineer (claim 26): only then is an ownership
+    /// change a re-enabling (claim 13).
+    pub needs_engineer: bool,
 }
 
 /// A building's state as the slot rules read it, each tick.
@@ -164,8 +170,8 @@ pub struct State {
     pub occupied: bool,
     /// The held infantry's total size *T* (claim 17, F9).
     pub held_size: i32,
-    /// The owner, as a house index (claim 26: every ownership change
-    /// re-enables the building).
+    /// The owner, as a house index (claim 26: every ownership change of a
+    /// building whose type needs an engineer re-enables it).
     pub owner: Option<u8>,
     /// The in-operation result of S-0405 claim 8: the powered state of
     /// claim 13 (Terms, claim 28).
@@ -225,9 +231,10 @@ pub struct Slots<A> {
     condition_damaged: bool,
     /// The grand opening has been run (claim 11).
     opened: bool,
-    /// Disabled in claim 13's sense: by a switch-off, a pulse or, for a
-    /// building that needs an engineer, the map's placement while it is not
-    /// manned (claims 26 and 28); cleared by a re-enabling.
+    /// Disabled in claim 13's sense: by a switch-off (the map's placement
+    /// switched off among them), a pulse or, for a building that needs an
+    /// engineer, the map's placement while it is not manned (claims 26 and
+    /// 28); cleared by a re-enabling.
     disabled: bool,
     /// What the last update saw (claims 13, 26 and 28); `None` before the
     /// first.
@@ -329,21 +336,24 @@ impl<A> Slots<A> {
     }
 
     /// The disablings and re-enablings since the last update (claims 13,
-    /// 26 and 28), in our design's order while Q-1890 (question 3) is
-    /// open: the ownership change, the switch, the pulse.
-    fn enablings(&mut self, defs: &Defs, st: &State, last: Seen) {
-        // spec: S-0108 claim 26 (as part of every ownership change the building is re-enabled, whether or not it is in operation after the change; also at every later change of a building already manned)
-        if last.owner != st.owner {
+    /// 26 and 28), each acting at once, in their places in the tick
+    /// (claim 13, S-0203): the ownership change and the pulse's start or
+    /// end, then the switch. The building's own reaction to a change of its
+    /// in-operation result follows them ([`Slots::power`]).
+    fn enablings(&mut self, kind: &TypeKind, defs: &Defs, st: &State, last: Seen) {
+        // spec: S-0108 claim 26 (as part of every ownership change of a building whose type needs an engineer it is re-enabled, whether or not it is in operation after the change) and claim 13 (an ownership change of any other building is neither a disabling nor a re-enabling) and claim 28 (an ownership change while switched off: for a type that does not need an engineer the held slots stay held)
+        if last.owner != st.owner && kind.needs_engineer {
             self.enable(st);
         }
-        // spec: S-0108 claim 28 (switched-on row: switching off disables the building; switching on re-enables it)
-        match (last.switched_off, st.switched_off) {
+        // design: the ownership change before the pulse's start. S-0108 claim 13 puts a polled trigger's ownership change before the turn pass and a capture and a pulse's start in the turn pass in update order, which the drawing does not see; ours is the trigger's order (pulses do not reach the simulation yet: `econ::power::under_pulse`)
+        // spec: S-0108 claims 13 and 28 (a pulse's start disables the building and its end re-enables it, whatever its power switch)
+        match (last.pulsed, st.pulsed) {
             (false, true) => self.disable(defs),
             (true, false) => self.enable(st),
             _ => {}
         }
-        // spec: S-0108 claims 13 and 28 (a pulse disables the building and its end re-enables it, whatever its power switch)
-        match (last.pulsed, st.pulsed) {
+        // spec: S-0108 claim 13 (a power order acts after the turn pass, S-0203 row 8 and claim 7, so after an ownership change and a pulse's start or end of its tick) and claim 28 (switched-on row: switching off disables the building; switching on re-enables it, whether or not it is then in operation)
+        match (last.switched_off, st.switched_off) {
             (false, true) => self.disable(defs),
             (true, false) => self.enable(st),
             _ => {}
@@ -587,7 +597,7 @@ impl<A> Slots<A> {
     pub fn update(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
         let last = self.seen.replace(Seen::of(st));
         if let Some(last) = last {
-            self.enablings(defs, st, last);
+            self.enablings(kind, defs, st, last);
         }
         if st.completed && !self.opened {
             self.opened = true;
@@ -596,12 +606,12 @@ impl<A> Slots<A> {
                 // spec: S-0108 claim 26 (placed by the map's building list while not manned, whatever the owner: disabled in claim 13's sense from its placement on, so every freeze-unpowered slot its set-up starts holds the image frame it was created with, whether or not the type needs power)
                 self.disable(defs);
             }
-            // spec: S-0108 claim 13 (a newly placed or completed building that is not in operation has no power-loss reaction; one in operation has its power-return reaction in its first update)
+            if st.setup && st.switched_off {
+                // spec: S-0108 claim 28 (placed switched off by the map, which S-0405 claim 18 allows only for a type with a base drain above 0 or the needs-power flag: switched off, and so disabled, at the end of its placement, after its set-up and grand-opening slot starts, so every freeze-unpowered slot holds the image frame it was created with, whether or not the type needs power)
+                self.disable(defs);
+            }
+            // spec: S-0108 claim 13 (a newly placed or completed building that is not in operation has no power-loss reaction; one in operation has its power-return reaction in its first update) and claim 27 (one the map places switched off has had no change from powered to unpowered until it first comes into operation)
             self.powered = Some(false);
-        }
-        if last.is_none() && (st.switched_off || st.pulsed) {
-            // Interim of Q-1890: a building first seen switched off or under a pulse (the map's switched-on field 0, S-0009 claim 40) is disabled from then on.
-            self.disable(defs);
         }
         if !st.completed {
             return;
@@ -1122,6 +1132,7 @@ mod tests {
         for needs_power in [false, true] {
             let kind = TypeKind {
                 needs_power,
+                needs_engineer: true,
                 ..TypeKind::default()
             };
             let placed = State {
@@ -1166,6 +1177,7 @@ mod tests {
         let d = defs();
         let kind = TypeKind {
             needs_power: true,
+            needs_engineer: true,
             ..TypeKind::default()
         };
         let placed = State {
@@ -1240,20 +1252,342 @@ mod tests {
         assert!(frozen(&s).is_empty() && !s.disabled());
     }
 
-    /// Q-1890's interim: a building first seen switched off is disabled from then on (S-0108
-    /// claim 28 names no rule for a building placed switched off).
-    #[test]
-    fn a_building_first_seen_switched_off_is_disabled() {
-        let d = defs();
-        let placed = State {
+    /// The state of a building of the map placed switched off for the
+    /// neutral house (house 9), not in operation.
+    fn placed_off() -> State {
+        State {
             setup: true,
             switched_off: true,
+            owner: Some(9),
             ..done()
+        }
+    }
+
+    /// spec: S-0108 claim 28 (placed switched off by the map: disabled at the end of its placement,
+    /// after its set-up and grand-opening starts, so every freeze-unpowered slot holds the frame it
+    /// was created with, whether or not the type needs power, and a slot whose art turns
+    /// freeze-unpowered off keeps playing; an ownership change of a type that does not need an
+    /// engineer is no re-enabling, so the held slots stay held; the switch-on re-enables it at once,
+    /// whether or not it is then in operation, and the held slots resume from the frame they held,
+    /// with no start, stop or restart, keeping their variant; in a house short of power a type that
+    /// needs and draws power stays not in operation, so its resumed slots go on advancing; a type
+    /// with the needs-power flag and no base drain gets neither power column) and claim 27 (its
+    /// light-unpowered slot keeps playing before and after the switch-on): S-0108 B22 parts (l) and
+    /// (m), on test types D, E and a needs-power type with no drain
+    #[test]
+    fn a_building_placed_switched_off_holds_until_its_switch_on() {
+        let mut d = defs();
+        d.insert(Slot::Active2, flagged("A2", true, false));
+        // D: a drain and no needs-power flag; E: both (needs and draws power); N: the needs-power
+        // flag and no drain.
+        let kinds = [
+            ("D", TypeKind::default()),
+            (
+                "E",
+                TypeKind {
+                    needs_power: true,
+                    draws_power: true,
+                    ..TypeKind::default()
+                },
+            ),
+            (
+                "N",
+                TypeKind {
+                    needs_power: true,
+                    ..TypeKind::default()
+                },
+            ),
+        ];
+        for (name, kind) in kinds {
+            let mut s = Slots::default();
+            turn(&mut s, &kind, &d, &placed_off(), true);
+            assert!(s.disabled(), "{name}");
+            assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"], "{name}");
+            assert!(s.runs(Slot::Active2) && !s.frozen(Slot::Active2), "{name}");
+            turn(&mut s, &kind, &d, &placed_off(), true);
+            assert_eq!(frozen(&s), ["I", "A1", "A3", "A4"], "{name}: still held");
+            s.running.get_mut(&Slot::Idle).unwrap().anim.stage = 2;
+            // Given to the player's house (a trigger action): no re-enabling.
+            let given = State {
+                owner: Some(0),
+                ..placed_off()
+            };
+            turn(&mut s, &kind, &d, &given, true);
+            assert!(
+                s.disabled(),
+                "{name}: the ownership change is no re-enabling"
+            );
+            assert_eq!(
+                frozen(&s),
+                ["I", "A1", "A3", "A4"],
+                "{name}: held through it"
+            );
+            // Switched on. The house is short of power: E stays not in operation; D and N are in
+            // operation (N never stops for low power, S-0405 claim 8).
+            let on = State {
+                switched_off: false,
+                in_operation: name != "E",
+                ..given
+            };
+            let mut rec = Recorder(Vec::new());
+            s.prepare(&kind, &on, true);
+            s.update(&kind, &d, &on, &mut rec);
+            assert!(!s.disabled() && frozen(&s).is_empty(), "{name}: resumed");
+            assert!(
+                rec.0.is_empty(),
+                "{name}: no slot started again: {:?}",
+                rec.0
+            );
+            assert_eq!(
+                s.running[&Slot::Idle].anim.stage,
+                2,
+                "{name}: from the held frame"
+            );
+            assert_eq!(
+                names(&s),
+                ["I", "A1", "A2", "A3", "A4"],
+                "{name}: same variants"
+            );
+            for _ in 0..3 {
+                turn(&mut s, &kind, &d, &on, true);
+            }
+            assert!(frozen(&s).is_empty(), "{name}: they go on advancing");
+            assert!(
+                s.runs(Slot::Active2),
+                "{name}: claim 27, no power-loss reaction"
+            );
+        }
+    }
+
+    /// spec: S-0108 claim 28 (a building of a type that needs an engineer placed switched off and
+    /// not manned: its ownership change is a re-enabling, claim 26, so its held slots resume
+    /// although it stays switched off, `quirks.enable_unfreezes_unpowered`)
+    #[test]
+    fn a_needs_engineer_building_placed_switched_off_resumes_at_its_capture() {
+        let d = defs();
+        let kind = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        let placed = State {
+            unmanned: true,
+            ..placed_off()
         };
         let mut s = Slots::default();
-        turn(&mut s, &TypeKind::default(), &d, &placed, true);
-        assert!(s.disabled());
+        turn(&mut s, &kind, &d, &placed, true);
         assert_eq!(frozen(&s).len(), 5);
+        let captured = State {
+            owner: Some(0),
+            unmanned: false,
+            ..placed
+        };
+        turn(&mut s, &kind, &d, &captured, true);
+        assert!(frozen(&s).is_empty() && !s.disabled());
+    }
+
+    /// spec: S-0108 claim 13 (the re-enablings are a switch-on, a pulse's end and an ownership
+    /// change of a building whose type needs an engineer; an ownership change of any other building
+    /// is neither: a building switched off in play stays held through it, and one frozen by a loss
+    /// of operation stays frozen until power comes back)
+    #[test]
+    fn an_ownership_change_of_another_type_is_no_re_enabling() {
+        let d = defs();
+        let kind = TypeKind::default();
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &on(), true);
+        let off = State {
+            switched_off: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut s, &kind, &d, &off, true);
+        let captured = State {
+            owner: Some(1),
+            ..off
+        };
+        turn(&mut s, &kind, &d, &captured, true);
+        assert!(s.disabled() && frozen(&s).len() == 5);
+        // A type that needs and draws power, frozen by a loss of operation, then captured into a
+        // house still short of power.
+        let draws = TypeKind {
+            needs_power: true,
+            draws_power: true,
+            ..TypeKind::default()
+        };
+        let mut p = Slots::default();
+        turn(&mut p, &draws, &d, &on(), true);
+        turn(&mut p, &draws, &d, &done(), true);
+        assert_eq!(frozen(&p).len(), 5);
+        let taken = State {
+            owner: Some(1),
+            ..done()
+        };
+        turn(&mut p, &draws, &d, &taken, true);
+        assert_eq!(frozen(&p).len(), 5, "still frozen");
+        // The same with the needs-engineer flag: the change re-enables it.
+        let tech = TypeKind {
+            needs_engineer: true,
+            ..draws
+        };
+        let mut t = Slots::default();
+        turn(&mut t, &tech, &d, &on(), true);
+        turn(&mut t, &tech, &d, &done(), true);
+        turn(&mut t, &tech, &d, &taken, true);
+        assert!(
+            frozen(&t).is_empty(),
+            "resumed by the needs-engineer change"
+        );
+    }
+
+    /// spec: S-0108 claim 13 (several disablings and re-enablings in one tick: the slots end as the
+    /// last of them leaves them, in their places in the tick; a switch-off order applied in the tick
+    /// of an ownership change that gives the building to the order's house, or of a pulse's end,
+    /// leaves them frozen; a pulse that starts in the tick of an ownership change made by a polled
+    /// trigger's action leaves them frozen; a switch-on order refused under a pulse changes no slot;
+    /// for a type that needs and draws power, its reaction to a change of its in-operation result is
+    /// one more event, here the last)
+    #[test]
+    fn several_in_one_tick() {
+        let d = defs();
+        for needs_engineer in [false, true] {
+            let kind = TypeKind {
+                needs_engineer,
+                ..TypeKind::default()
+            };
+            // An ownership change to house 0 and house 0's switch-off order in one tick.
+            let mut s = Slots::default();
+            let theirs = State {
+                owner: Some(1),
+                ..on()
+            };
+            turn(&mut s, &kind, &d, &theirs, true);
+            let both = State {
+                owner: Some(0),
+                switched_off: true,
+                in_operation: false,
+                ..on()
+            };
+            turn(&mut s, &kind, &d, &both, true);
+            assert_eq!(frozen(&s).len(), 5, "change then order: {needs_engineer}");
+        }
+        let kind = TypeKind::default();
+        // A pulse's end and a switch-off order in one tick.
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &on(), true);
+        let pulsed = State {
+            pulsed: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut s, &kind, &d, &pulsed, true);
+        let ended_off = State {
+            switched_off: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut s, &kind, &d, &ended_off, true);
+        assert_eq!(frozen(&s).len(), 5, "pulse end then order");
+        // A switch-on order under a pulse is refused (S-0405 claim 10): the switch stays off.
+        let both = State {
+            pulsed: true,
+            ..ended_off
+        };
+        turn(&mut s, &kind, &d, &both, true);
+        turn(&mut s, &kind, &d, &both, true);
+        assert_eq!(frozen(&s).len(), 5, "no change under the pulse");
+        // A pulse that starts in the tick of an ownership change (a polled trigger's action) of a
+        // needs-engineer building.
+        let tech = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        let mut t = Slots::default();
+        turn(&mut t, &tech, &d, &on(), true);
+        let hit = State {
+            owner: Some(1),
+            pulsed: true,
+            in_operation: false,
+            ..on()
+        };
+        turn(&mut t, &tech, &d, &hit, true);
+        assert_eq!(frozen(&t).len(), 5, "change then pulse");
+        // The same for a type that needs and draws power in operation before the tick: its
+        // reaction to the loss of operation is the last event.
+        let draws = TypeKind {
+            needs_power: true,
+            draws_power: true,
+            ..tech
+        };
+        let mut r = Slots::default();
+        turn(&mut r, &draws, &d, &on(), true);
+        turn(&mut r, &draws, &d, &hit, true);
+        assert_eq!(frozen(&r).len(), 5, "the reaction last");
+    }
+
+    /// spec: S-0108 claim 13 (disablings and re-enablings close together: a switch-off order in the
+    /// tick before an ownership change of a needs-engineer building leaves its slots playing after
+    /// the change although it stays switched off; a switch-off under a pulse leaves them held to the
+    /// pulse's end, which re-enables it although it stays switched off, and a switch-off after the
+    /// pulse's end freezes them again): S-0108 B22 parts (n) and (o), on test type W
+    #[test]
+    fn a_switch_off_close_to_an_ownership_change_or_a_pulse_end() {
+        let d = defs();
+        let w = TypeKind {
+            needs_engineer: true,
+            ..TypeKind::default()
+        };
+        let mine = State {
+            owner: Some(0),
+            ..on()
+        };
+        let off = State {
+            switched_off: true,
+            in_operation: false,
+            ..mine
+        };
+        // (n): the order in tick t - 1, the change of owner in tick t.
+        let mut s = Slots::default();
+        turn(&mut s, &w, &d, &mine, true);
+        turn(&mut s, &w, &d, &off, true);
+        assert_eq!(frozen(&s).len(), 5, "held from the order");
+        let given = State {
+            owner: Some(1),
+            ..off
+        };
+        turn(&mut s, &w, &d, &given, true);
+        assert!(
+            frozen(&s).is_empty(),
+            "playing after the change, still switched off"
+        );
+        // (o): the order under the pulse, then its end.
+        let pulsed = State {
+            pulsed: true,
+            in_operation: false,
+            ..mine
+        };
+        let mut p = Slots::default();
+        turn(&mut p, &w, &d, &mine, true);
+        turn(&mut p, &w, &d, &pulsed, true);
+        let both = State {
+            switched_off: true,
+            ..pulsed
+        };
+        turn(&mut p, &w, &d, &both, true);
+        assert_eq!(frozen(&p).len(), 5, "held to the pulse's end");
+        turn(&mut p, &w, &d, &off, true);
+        assert!(frozen(&p).is_empty(), "the pulse's end re-enables it");
+        // (o): the order after the pulse's end.
+        let mut q = Slots::default();
+        turn(&mut q, &w, &d, &mine, true);
+        turn(&mut q, &w, &d, &pulsed, true);
+        turn(&mut q, &w, &d, &mine, true);
+        turn(&mut q, &w, &d, &mine, true);
+        assert!(frozen(&q).is_empty());
+        turn(&mut q, &w, &d, &off, true);
+        for _ in 0..3 {
+            turn(&mut q, &w, &d, &off, true);
+        }
+        assert_eq!(frozen(&q).len(), 5, "held from the later order on");
     }
 
     /// spec: S-0108 claim 13 (a type that needs and draws power: at a loss of operation a running
