@@ -1454,6 +1454,63 @@ fn claim_42_close_approach_hovers_short_and_fires() {
     assert!(x.near_aims > 0, "{x:?}");
 }
 
+// spec: S-0501 claim 5 (the approach target replacement: 0 below 128 leptons, 0.5 below 512, 0.75 below 768, with no height condition) and claim 6 (holding-height approach: a target with ammunition left sets the mark, and below 768 leptons the held height is the destination's height minus the terrain height there; a point accepted without a target keeps the cell's surface height, so that held height is 0); Q-1941 interim (claim 48 (c)'s height-0 exemption from the bands is the low release's only, so an ordinary aircraft at height 0 keeps the replacement)
+#[test]
+fn q1941_ordinary_flight_at_height_0_keeps_the_approach_replacement() {
+    let mut r = rules();
+    r.sim.general.economy.curley_shuffle = Some(true);
+    // Slow, so that it reaches height 0 while still in the 0.5 band.
+    let j = r.sim.aircraft.get_mut("JET").unwrap();
+    j.speed = Some(5);
+    j.slowdown_distance = Some(1000);
+    let (mut w, a, v) = attacker(&r, "JET");
+    // A move order: its point is accepted with no target, so not raised.
+    click(&mut w, a, ClickOn::Cell(testkit::mid(SIZE, 8, -4)));
+    assert!(run_until(&mut w, 300, |w| {
+        let s = st(w, a);
+        !s.taking_off && s.held > 0 && air::height(w, a) == s.held
+    }));
+    assert!(!st(&w, a).raised, "the move order's point is not raised");
+    let mut bands = [0; 3];
+    for _ in 0..1500 {
+        // A target with ammunition left, kept on every tick, gives the
+        // holding-height mark (claim 6).
+        w.obj_mut(a).unwrap().target = Some(Target::Object(v));
+        step(&mut w);
+        let s = st(&w, a);
+        let o = w.obj(a).unwrap();
+        let Some(d) = o.dest else { continue };
+        if s.released
+            || s.landing
+            || s.taking_off
+            || s.ground
+            || s.run_lock
+            || air::height(&w, a) > 0
+        {
+            continue;
+        }
+        assert!(s.holding, "it approaches with the holding-height mark");
+        let dd = guide_dist(&w, o.pos, air::flight_point(&w, a, d));
+        let ar = &w.rules().air;
+        // spec: S-0501 claim 5 (the bands 128, 512 and 768 leptons)
+        let (band, want) = if dd < 128 {
+            (0, glasnost_num::F64::ZERO)
+        } else if dd < 512 {
+            (1, ar.half)
+        } else if dd < 768 {
+            (2, ar.three_quarters)
+        } else {
+            continue;
+        };
+        assert_eq!(s.tgt, want, "the replacement at height 0, {dd} leptons");
+        bands[band] += 1;
+    }
+    assert!(
+        bands.iter().sum::<i32>() > 0,
+        "it flies at height 0 inside 768 leptons: {bands:?}"
+    );
+}
+
 // spec: S-0501 claims 4, 5 and 42, F3, F4 and T1 (AC24 variants b2, b5 and b6, converted speed 12 and S = 1000, Q-0653: fraction 0 at a post-step distance below min(86, S / 10) and above 16 leptons, then firing with the destination kept, and the shot from the hover)
 #[test]
 fn claim_42_slow_close_approach_hovers_short_and_fires() {
