@@ -354,6 +354,15 @@ pub fn on_ground(w: &World, id: ObjectId) -> bool {
     listing_height(w, id) <= 0
 }
 
+/// Claim 48 (c)'s low release while it stays at height 0 (*At height 0*):
+/// released above its pad and not yet climbing. Guidance's distance bands,
+/// its close-approach trigger and claim 8's landing in flight do not apply
+/// to it; claims 5, 6 and 8 apply as written to every other aircraft.
+fn low_release_at_height_0(w: &World, id: ObjectId, a: &AirState) -> bool {
+    // spec: S-0501 claim 48 (c) (At height 0: while the low-released aircraft stays at height 0); Q-1941 interim (the exemptions are the low release's only: claims 5 and 6 carry no height condition for any other aircraft, such as an attacker whose holding approach holds height 0)
+    a.released && height(w, id) <= 0
+}
+
 /// Whether the aircraft is still filed in the ground render layer's list
 /// by its ground placement at a positive height, with no re-file since
 /// (S-0501 claim 48 (a) and (c)): a factory release left it above its pad.
@@ -2024,13 +2033,13 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
         }
         // spec: S-0501 claim 5 (the approach target replacement, without the fixed-full-speed case or the fly-by flag; the next ordinary calculation recomputes τ, so it governs only an adjustment in a later tick that skips that calculation)
-        // spec: S-0501 claim 48 (c) (At height 0: guidance's distance bands do not apply at height 0, claim 42 confining guidance to an aircraft above the terrain, so a low release 512 to 767 leptons from its destination keeps claim 5's ordinary target and climbs once that is 1)
+        // spec: S-0501 claim 48 (c) (At height 0: guidance's distance bands do not apply to the low release at height 0, claim 42 confining guidance to an aircraft above the terrain, so a low release 512 to 767 leptons from its destination keeps claim 5's ordinary target and climbs once that is 1); Q-1941 interim (any other aircraft keeps the replacement at any height)
         if let Some(p) = dp
             && !a.landing
             && !a.taking_off
             && !fixed
             && !t.fly_by
-            && height(w, id) > 0
+            && !low_release_at_height_0(w, id, &a)
         {
             let dd = planar(w, w.obj(id).map_or(here, |x| x.pos), p);
             let replacement = if dd < 128 {
@@ -2145,16 +2154,18 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         return;
     }
     let trigger = match o.dest {
-        // spec: S-0501 claim 8 (no destination in flight: it lands where it is; at height 0 it is on the ground by Terms, as claim 48 (c)'s low release after its fall-back to rest, which stays at height 0 in its cell)
-        None => !on_ground(w, id),
+        // spec: S-0501 claim 8 (no destination in flight: it lands where it is; claim 48 (c)'s low release at height 0 is on the ground by Terms, as after its fall-back to rest, which stays at height 0 in its cell); Q-1941 interim (claim 8 as before for any other aircraft)
+        None => !low_release_at_height_0(w, id, &a),
         Some(dd) => {
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
             // spec: S-0501 claim 6 (standing in its destination cell with a target fraction of 0)
             let exact = o.pos.cell() == p.cell() && a.tgt.eq_num(F64::ZERO);
-            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claim 48 (c) (At height 0: the close-approach trigger is a request of guidance, which claim 42 confines to an aircraft above the terrain)
-            let close =
-                dist < 128 && !fixed && a.cur.lt(w.rules().air.twentieth) && height(w, id) > 0;
+            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claim 48 (c) (At height 0: the close-approach trigger is a request of guidance, which claim 42 confines to an aircraft above the terrain, so not for the low release at height 0); Q-1941 interim (any other aircraft keeps it at any height)
+            let close = dist < 128
+                && !fixed
+                && a.cur.lt(w.rules().air.twentieth)
+                && !low_release_at_height_0(w, id, &a);
             exact || close
         }
     };
