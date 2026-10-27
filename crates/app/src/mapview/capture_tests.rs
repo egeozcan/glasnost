@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use glasnost_convert::kinds::Kind;
-use glasnost_map::objects::{Placed, Structure};
+use glasnost_map::objects::{EntryFields, Placed, Structure};
 use glasnost_render::compose::Paint;
 use glasnost_render::palette::{PaletteQuirks, PaletteState};
 use glasnost_render::scene::{Item, Scene};
@@ -29,6 +29,7 @@ use super::tests::{ART, RULES, art_of, context_full, shp};
 
 const SIZE: i32 = 24;
 const ALPHA: HouseId = HouseId(0);
+const BETA: HouseId = HouseId(1);
 const NEUTRAL: HouseId = HouseId(2);
 
 /// The building's image frames are 4 × 4 (tests.rs), the slot
@@ -197,6 +198,9 @@ enum Act {
     /// It is switched off (S-0108 claim 28 disables it), then an engineer
     /// of Alpha's captures it.
     SwitchOffThenCapture,
+    /// An engineer of Alpha's captures it, it is switched off, then an
+    /// engineer of Beta's captures it.
+    CaptureSwitchOffThenRecapture,
     /// Nothing.
     Nothing,
 }
@@ -214,8 +218,9 @@ struct Seen {
     /// The building's slot-animation pixels before the act, in the cell
     /// pass or live.
     still: Vec<u8>,
-    /// For [`Act::SwitchOffThenCapture`], the slot-animation pixels redraw
-    /// by redraw over six ticks while it is switched off.
+    /// For [`Act::SwitchOffThenCapture`] and
+    /// [`Act::CaptureSwitchOffThenRecapture`], the slot-animation pixels
+    /// redraw by redraw over six ticks while it is switched off.
     held: Vec<Vec<u8>>,
     /// The building's body rows after the act.
     rows: BTreeSet<u32>,
@@ -241,8 +246,14 @@ fn scenario(slot: bool, tech: bool, act: Act) -> Seen {
 /// An engineer of Alpha's, ordered by a click on the building, captures
 /// it (S-0509 claims 1, 7 and 8).
 fn capture(live: &mut Live, engineer: ObjectId, b: ObjectId) {
+    capture_for(live, ALPHA, engineer, b);
+}
+
+/// An engineer of `house`'s, ordered by a click on the building, captures
+/// it (S-0509 claims 1, 7 and 8).
+fn capture_for(live: &mut Live, house: HouseId, engineer: ObjectId, b: ObjectId) {
     let r = live.click(
-        ALPHA,
+        house,
         &mut vec![engineer],
         ClickOn::Object(b),
         Modifiers::default(),
@@ -251,7 +262,7 @@ fn capture(live: &mut Live, engineer: ObjectId, b: ObjectId) {
     let mut captured = false;
     for _ in 0..800 {
         live.step();
-        if live.world.obj(b).is_some_and(|o| o.owner == Some(ALPHA)) {
+        if live.world.obj(b).is_some_and(|o| o.owner == Some(house)) {
             captured = true;
             break;
         }
@@ -369,6 +380,31 @@ fn scenario_with(keys: &str, tech: bool, act: Act, quirks: ViewQuirks) -> Seen {
                 held.push(pixels(&scene, sim_code(b), SLOT_FRAME));
             }
             capture(&mut live, engineer, b);
+            assert!(
+                live.world.obj(b).unwrap().econ.building.switched_off,
+                "the switch is kept at the ownership change (S-0405 claim 10)"
+            );
+        }
+        Act::CaptureSwitchOffThenRecapture => {
+            capture(&mut live, engineer, b);
+            // A few ticks, so that the slot is held at a frame other than its first and its last.
+            live.step();
+            live.step();
+            live.world.obj_mut(b).unwrap().econ.building.switched_off = true;
+            for _ in 0..6 {
+                live.step();
+                live.redraw(&inputs, &mut scene);
+                held.push(pixels(&scene, sim_code(b), SLOT_FRAME));
+            }
+            let other = testkit::spawn(
+                &mut live.world,
+                SimKind::Infantry,
+                "MANX",
+                1,
+                testkit::mid(SIZE, 6, 0),
+                0,
+            );
+            capture_for(&mut live, BETA, other, b);
             assert!(
                 live.world.obj(b).unwrap().econ.building.switched_off,
                 "the switch is kept at the ownership change (S-0405 claim 10)"
@@ -580,13 +616,26 @@ fn a_light_unpowered_slot_of_an_unmanned_tech_building_plays() {
     );
 }
 
+/// The frame a slot held over [`Seen::held`], after its first redraw.
+fn held_frame(s: &Seen) -> u8 {
+    let held: BTreeSet<u8> = s.held[1..].iter().flatten().copied().collect();
+    assert_eq!(held.len(), 1, "held while switched off: {:?}", s.held);
+    let frame = *held.first().unwrap();
+    assert_ne!(
+        frame, 1,
+        "held at a frame other than its first: {:?}",
+        s.held
+    );
+    frame
+}
+
 /// spec: S-0108 claim 28 (switching off disables the building: its freeze-unpowered slot holds its
-/// image frame) and claim 26 (at an ownership change the building is re-enabled and every frozen
-/// freeze-unpowered slot resumes from the image frame it held, not from the frame it was created
-/// with, advancing at its first eligible update, S-0109 claim 23, whether or not the building is in
-/// operation after the change, here still switched off: `quirks.enable_unfreezes_unpowered`); S-0108
-/// Edge cases (that switch off: the slot stays frozen, as the building is not in operation after the
-/// change)
+/// image frame) and claim 26 (at every ownership change of a building whose type needs an engineer
+/// it is re-enabled and every frozen freeze-unpowered slot resumes from the image frame it held,
+/// not from the frame it was created with, advancing at its first eligible update, S-0109 claim 23,
+/// whether or not the building is in operation after the change, here still switched off:
+/// `quirks.enable_unfreezes_unpowered`); S-0108 Edge cases (that switch off: the slot stays frozen,
+/// as the building is not in operation after the change). S-0108 B22 part (k)
 #[test]
 fn a_capture_resumes_a_held_slot_from_its_held_frame() {
     for unfreezes in [true, false] {
@@ -594,15 +643,8 @@ fn a_capture_resumes_a_held_slot_from_its_held_frame() {
             enable_unfreezes_unpowered: unfreezes,
             ..ViewQuirks::default()
         };
-        let s = scenario_with(SLOT, false, Act::SwitchOffThenCapture, quirks);
-        let held: BTreeSet<u8> = s.held[1..].iter().flatten().copied().collect();
-        assert_eq!(held.len(), 1, "held while switched off: {:?}", s.held);
-        let frame = *held.first().unwrap();
-        assert_ne!(
-            frame, 1,
-            "held at a frame other than its first: {:?}",
-            s.held
-        );
+        let s = scenario_with(SLOT, true, Act::CaptureSwitchOffThenRecapture, quirks);
+        let frame = held_frame(&s);
         if unfreezes {
             // Resumed: the first redraw after the change shows the frame after the held one (not
             // the first frame, as a start again would).
@@ -617,6 +659,205 @@ fn a_capture_resumes_a_held_slot_from_its_held_frame() {
             );
         }
     }
+}
+
+/// spec: S-0108 claim 13 (an ownership change of a building whose type does not need an engineer is
+/// neither a disabling nor a re-enabling) and claim 28 (an ownership change while switched off
+/// leaves the building switched off, S-0405 claim 10, and for such a type the held slots stay
+/// held), in both positions of `quirks.enable_unfreezes_unpowered`
+#[test]
+fn a_capture_of_a_switched_off_building_that_needs_no_engineer_keeps_its_slot_held() {
+    for unfreezes in [true, false] {
+        let quirks = ViewQuirks {
+            enable_unfreezes_unpowered: unfreezes,
+            ..ViewQuirks::default()
+        };
+        let s = scenario_with(SLOT, false, Act::SwitchOffThenCapture, quirks);
+        let frame = held_frame(&s);
+        assert_eq!(
+            slot_frames(&s),
+            BTreeSet::from([frame]),
+            "still held after the capture: {:?}",
+            s.slots
+        );
+    }
+}
+
+/// A neutral HUTX placed by the map with its switched-on field 0 (S-0009
+/// claim 40), with a power drain when `drain` (else none), and an engineer
+/// of Alpha's. Over the first ticks, the capture, and Alpha's switch-on
+/// order: the slot-animation pixels redraw by redraw, and whether the
+/// building is switched off at each.
+struct PlacedOff {
+    /// Switched off after the set-up.
+    off_at_start: bool,
+    /// Redraw by redraw from the first ticks to the capture.
+    before: Vec<Vec<u8>>,
+    /// Redraw by redraw over six ticks after the capture.
+    captured: Vec<Vec<u8>>,
+    /// Switched off after the capture.
+    off_after_capture: bool,
+    /// The redraw after the tick of the switch-on order.
+    order_tick: Vec<u8>,
+    /// Redraw by redraw over six ticks after that.
+    after: Vec<Vec<u8>>,
+}
+
+/// See [`PlacedOff`].
+fn placed_off(drain: bool) -> PlacedOff {
+    let (import, catalogue, assets) = import(true);
+    let mut map = testkit::empty_map(SIZE);
+    let at = testkit::mid(SIZE, 2, 0);
+    map.objects.structures.push(Structure {
+        placed: Placed {
+            key: b"0".to_vec(),
+            owner: b"Neutral".to_vec(),
+            type_name: b"HUTX".to_vec(),
+            health: 256,
+            cell: at,
+            facing: 0,
+            raw: Vec::new(),
+        },
+    });
+    map.objects.structure_fields.push(EntryFields {
+        // spec: S-0009 claim 40 (the map's switched-on field, here 0)
+        switched_on: Some(false),
+        ..EntryFields::default()
+    });
+    let mut r = ruleset(false);
+    if drain {
+        // A drain of 10 (an invented test value): S-0405 claim 18 lets the map switch it off.
+        r.sim.buildings.get_mut("HUTX").unwrap().econ.power = Some(-10);
+    }
+    let rules = Arc::new(SimRules::new(&r, "synthetic-test"));
+    let setup = setup();
+    let mut world = glasnost_sim::load::new_game(rules.clone(), &map, testkit::catalogue(), &setup)
+        .expect("the synthetic game loads");
+    let b = world
+        .objects
+        .values()
+        .find(|o| o.kind == SimKind::Building && o.pos.cell() == at)
+        .map(|o| o.id)
+        .expect("the map's building");
+    let engineer = testkit::spawn(
+        &mut world,
+        SimKind::Infantry,
+        "MANX",
+        0,
+        testkit::mid(SIZE, -4, 0),
+        0,
+    );
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options {
+        slots: vec![(b"Alpha".to_vec(), 1), (b"Beta".to_vec(), 2)],
+        ..Options::default()
+    };
+    let cells = world.cells.grid.clone();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: Some(&rules),
+        cells: Some(&cells),
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules.clone(), setup, Vec::new()),
+    );
+    let mut scene = built.scene;
+    let off = |live: &Live| live.world.obj(b).unwrap().econ.building.switched_off;
+    let off_at_start = off(&live);
+    let mut before = Vec::new();
+    for _ in 0..6 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        before.push(pixels(&scene, sim_code(b), SLOT_FRAME));
+    }
+    capture(&mut live, engineer, b);
+    let mut captured = Vec::new();
+    for _ in 0..6 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        captured.push(pixels(&scene, sim_code(b), SLOT_FRAME));
+    }
+    let off_after_capture = off(&live);
+    let report = live.issue_orders(ALPHA, vec![Order::PowerOn { actor: b }]);
+    assert_eq!(report.refused, 0, "the power-on order is accepted");
+    live.step();
+    live.redraw(&inputs, &mut scene);
+    let order_tick = pixels(&scene, sim_code(b), SLOT_FRAME);
+    assert!(!off(&live), "switched on");
+    let mut after = Vec::new();
+    for _ in 0..6 {
+        live.step();
+        live.redraw(&inputs, &mut scene);
+        after.push(pixels(&scene, sim_code(b), SLOT_FRAME));
+    }
+    PlacedOff {
+        off_at_start,
+        before,
+        captured,
+        off_after_capture,
+        order_tick,
+        after,
+    }
+}
+
+/// The distinct pixels of one slot image per redraw.
+fn frames_of(redraws: &[Vec<u8>]) -> BTreeSet<u8> {
+    redraws
+        .iter()
+        .map(|px| {
+            assert_eq!(px.len(), 1, "one slot image per redraw: {px:?}");
+            px[0]
+        })
+        .collect()
+}
+
+/// spec: S-0108 claim 28 (a building the map places switched off, S-0405 claim 18 allowing it for a
+/// type with a base drain above 0: disabled at the end of its placement, so its freeze-unpowered
+/// slot shows the image frame it was created with and does not advance, although the type does not
+/// need power; an ownership change of a type that does not need an engineer leaves it switched off
+/// and is no re-enabling, so the slot stays held; the switch-on re-enables it at once and the slot
+/// resumes from the frame it held, advancing at its first eligible update, in the tick after the
+/// power order and not later, S-0109 claim 23, S-0203 claim 7): S-0108 B22 part (l), test type D
+#[test]
+fn a_map_building_placed_switched_off_holds_its_slot_until_switched_on() {
+    let s = placed_off(true);
+    assert!(s.off_at_start, "switched off by the map");
+    assert_eq!(frames_of(&s.before), BTreeSet::from([1]), "{:?}", s.before);
+    assert!(s.off_after_capture, "still switched off after the capture");
+    assert_eq!(
+        frames_of(&s.captured),
+        BTreeSet::from([1]),
+        "held through the ownership change: {:?}",
+        s.captured
+    );
+    assert_eq!(s.order_tick, [1], "still held in the order's tick");
+    assert_eq!(
+        s.after[0],
+        [2],
+        "the frame after the held one in the next tick, no restart: {:?}",
+        s.after
+    );
+    assert!(frames_of(&s.after).len() > 1, "it plays: {:?}", s.after);
+}
+
+/// spec: S-0108 claim 28 (a type with neither a base drain above 0 nor the needs-power flag is not
+/// switched off by the map, S-0405 claim 18; unless claim 26 disables it, its slots play from its
+/// placement): S-0108 B22 part (l), test type Z
+#[test]
+fn a_map_building_that_draws_no_power_is_not_switched_off_by_the_map() {
+    let s = placed_off(false);
+    assert!(!s.off_at_start, "the map's field 0 does not switch it off");
+    assert!(frames_of(&s.before).len() > 1, "it plays: {:?}", s.before);
+    assert!(frames_of(&s.captured).len() > 1, "{:?}", s.captured);
 }
 
 /// Alpha's own HUTX with the slot animation, sellable (its type has a

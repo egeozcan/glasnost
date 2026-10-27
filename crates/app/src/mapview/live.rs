@@ -1346,6 +1346,8 @@ impl Live {
                     needs_power,
                     // spec: S-0108 Terms (needs and draws power: the needs-power flag and a negative power field, a drain above 0)
                     draws_power: needs_power && power.is_some_and(|p| p.drain > 0),
+                    // spec: S-0108 claims 13 and 26 (the needs-engineer flag: only such a type's ownership change re-enables it)
+                    needs_engineer: power.is_some_and(|p| p.needs_engineer),
                 };
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)

@@ -129,6 +129,21 @@
 //! a small building and on a high bridge's deck, its turret turned through
 //! the four 4-step facings, one screen each.
 //!
+//! M8 step A3 intake 29 (S-0108 r81 claims 13 and 28, Q-1890 answered):
+//! `placed-off` counts, map by map, the map's building entries with the
+//! switched-on field 0 (S-0009 claim 40) and the non-player map buildings
+//! whose type the map may switch off (S-0405 claim 18). When no entry has
+//! the field 0, it switches those buildings off before the first tick, as
+//! the field would (the view's first update is their placement). On the
+//! first map with such a building that has a running slot animation
+//! counting *freeze-unpowered* (S-0108 claim 13), it saves the view fresh,
+//! 20 ticks later, after a trigger-style ownership change to the local
+//! house (S-0011 claim 24) and after the local house's power-on order,
+//! with the house first made short of power by a building of its own that
+//! needs and draws power (as S-0108 B22 part (m) sets it up), printing the
+//! running slots with their frames and how many are frozen, tick by tick
+//! around the order. Counts, frames and ticks only.
+//!
 //! Run with `cargo test --release -p glasnost-app --test m7b_lane --
 //! --ignored --nocapture`. `GLASNOST_LANE_SCENE=a,b` plays only the scenes
 //! with those keys; `GLASNOST_UI_MAP=n` picks the n-th offered map.
@@ -189,6 +204,7 @@ const SCENES: &[Scene] = &[
     ("ifv-turrets", ifv_turrets),
     ("sprite-barrel", sprite_barrel),
     ("sinking-list", sinking_list),
+    ("placed-off", placed_off),
 ];
 
 #[test]
@@ -2907,10 +2923,21 @@ impl Lane {
         Lane::start_with(map, 0)
     }
 
+    /// Starts a skirmish on the `map`-th offered map, runs `before` on the
+    /// lane before the first tick, then plays the first ticks.
+    fn start_hooked(map: usize, before: impl FnOnce(&mut Lane)) -> Option<Lane> {
+        Lane::start_full(map, 0, before)
+    }
+
     /// Starts a skirmish on the `map`-th offered map with `extra` more
     /// computer houses in the lobby's third and later rows; `None` when the
     /// map has too few starts for them.
     fn start_with(map: usize, extra: usize) -> Option<Lane> {
+        Lane::start_full(map, extra, |_| {})
+    }
+
+    /// [`Lane::start_with`], running `before` before the first tick.
+    fn start_full(map: usize, extra: usize, before: impl FnOnce(&mut Lane)) -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
         let out = png::lane_out("m7b");
         std::fs::create_dir_all(&out).unwrap();
@@ -2958,6 +2985,7 @@ impl Lane {
         let s = lane.c.session.as_mut().unwrap();
         let local = s.play.local;
         glasnost_sim::econ::shroud::defeat_reveal(&mut s.play.game.world, local);
+        before(&mut lane);
         lane.ticks(5);
         Some(lane)
     }
@@ -4240,4 +4268,234 @@ fn sinking_list(lane: &mut Lane) {
         w.obj(bow).is_some_and(|o| o.on_map),
         w.obj(under).is_some_and(|o| o.on_map)
     );
+}
+
+/// S-0108 claims 13 and 28 (Q-1890 answered by r81): a map building placed
+/// switched off, given to the local house and switched on. See the module
+/// docs. Counts, frames and ticks only.
+fn placed_off(_: &mut Lane) {
+    let maps = env_num("GLASNOST_LANE_MAPS", 8);
+    // First pass: a building with a slot counting freeze-unpowered; else, the first with any
+    // running slot.
+    let mut fallback = None;
+    for map in 0..maps {
+        let Some((l, freeze, any)) = placed_off_start(map, true) else {
+            break;
+        };
+        if let Some(b) = freeze {
+            return placed_off_play(l, map, b);
+        }
+        if fallback.is_none() && any.is_some() {
+            fallback = Some(map);
+        }
+    }
+    let Some(map) = fallback else {
+        println!("placed-off: no map with such a building that has slot animations");
+        return;
+    };
+    println!(
+        "placed-off: no such building with a slot counting freeze-unpowered; map {map}'s first with running slots"
+    );
+    if let Some((l, _, Some(b))) = placed_off_start(map, false) {
+        placed_off_play(l, map, b);
+    }
+}
+
+/// Starts map `map` with its non-player map buildings that the map may
+/// switch off switched off before the first tick (when no entry has the
+/// switched-on field 0; else as the map leaves them), printing the counts
+/// when `print`. Returns the lane, the first such building with a running
+/// slot counting freeze-unpowered, and the first with any running slot;
+/// `None` past the last offered map.
+fn placed_off_start(map: usize, print: bool) -> Option<(Lane, Option<ObjectId>, Option<ObjectId>)> {
+    let mut natural = 0;
+    let mut forced: Vec<ObjectId> = Vec::new();
+    let l = Lane::start_hooked(map, |l| {
+        let s = l.c.session.as_ref().unwrap();
+        natural = s
+            .loaded
+            .map
+            .objects
+            .structure_fields
+            .iter()
+            .filter(|f| !f.switched_on())
+            .count();
+        let live = s.loaded.live.as_ref().expect("a live game");
+        let ids: Vec<ObjectId> = live.building_ids.values().copied().collect();
+        let w = l.world();
+        let mut fit: Vec<(bool, ObjectId)> = ids
+            .into_iter()
+            .filter_map(|id| {
+                let o = w.obj(id)?;
+                let role = o.owner.and_then(|h| w.houses.get(usize::from(h.0)))?.role;
+                let t = w.rules().econ.power.buildings.get(o.type_index as usize)?;
+                (o.on_map
+                    && role != glasnost_sim::world::HouseRole::Player
+                    && glasnost_sim::econ::power::map_off_applies(w, o.type_index))
+                .then_some((t.needs_engineer, id))
+            })
+            .collect();
+        fit.sort();
+        if natural == 0 {
+            for (_, id) in &fit {
+                if let Some(o) = l.world_mut().obj_mut(*id) {
+                    o.econ.building.switched_off = true;
+                }
+            }
+        }
+        forced = fit.into_iter().map(|(_, id)| id).collect();
+    })?;
+    if map >= l.c.install.as_ref().map_or(0, |i| i.maps.len()) {
+        return None;
+    }
+    let doc = art_doc(&l);
+    let mut seen = (0, 0, 0);
+    let (mut freeze_pick, mut any_pick) = (None, None);
+    for &id in &forced {
+        let Some(o) = l.world().obj(id) else { continue };
+        let (off, t) = (o.econ.building.switched_off, o.type_index);
+        let running = {
+            let s = l.c.session.as_ref().unwrap();
+            !s.loaded.live.as_ref().unwrap().slot_names(id).is_empty()
+        };
+        let freeze =
+            slot_counting(&l, &doc, t).contains(&glasnost_app::mapview::slots::Counting::Freeze);
+        seen.0 += usize::from(off);
+        seen.1 += usize::from(off && running);
+        seen.2 += usize::from(off && running && freeze);
+        if off && running {
+            any_pick = any_pick.or(Some(id));
+            if freeze {
+                freeze_pick = freeze_pick.or(Some(id));
+            }
+        }
+    }
+    if print {
+        println!(
+            "placed-off map {map}: entries with the switched-on field 0 {natural}, non-player map buildings the map may switch off {} ({}); switched off {}, with running slots {}, a slot counting freeze-unpowered {}",
+            forced.len(),
+            if natural == 0 {
+                "switched off by the lane"
+            } else {
+                "as the map leaves them"
+            },
+            seen.0,
+            seen.1,
+            seen.2
+        );
+    }
+    Some((l, freeze_pick, any_pick))
+}
+
+/// The scene on building `b` of map `map`: fresh, held, given to the local
+/// house, the house made short of power, switched on.
+fn placed_off_play(mut l: Lane, map: usize, b: ObjectId) {
+    use glasnost_sim::structures::ownership::{Cause, change};
+    let doc = art_doc(&l);
+    if let Some(t) = l.world().obj(b).map(|o| o.type_index) {
+        println!(
+            "placed-off map {map}: its set-up slots' counting power flags {:?} (S-0108 claim 13)",
+            slot_counting(&l, &doc, t)
+        );
+    }
+    let cell = l.world().obj(b).map_or(CellXY::new(0, 0), |o| o.pos.cell());
+    l.look_at(cell);
+    placed_off_state(&mut l, map, "fresh", b);
+    l.save(&format!("placed-off-{map}-fresh"));
+    l.ticks(20);
+    placed_off_state(&mut l, map, "20 ticks later", b);
+    l.save(&format!("placed-off-{map}-held"));
+    let local = l.local();
+    change(l.world_mut(), b, Some(local), Cause::Trigger);
+    l.ticks(20);
+    placed_off_state(&mut l, map, "given to the local house", b);
+    l.save(&format!("placed-off-{map}-given"));
+    // The local house short of power: a building of its own that needs and draws power.
+    let drawer =
+        {
+            let r = l.world().rules();
+            (0..r.buildings.len() as u32).find(|&t| {
+                r.econ.power.buildings.get(t as usize).is_some_and(|p| {
+                    p.needs_power && p.drain > 0 && p.output == 0 && !p.needs_engineer
+                })
+            })
+        };
+    if let Some(t) = drawer {
+        let name = l.world().rules().buildings[t as usize].name.clone();
+        let home = l.home();
+        let spot = l.open_land(CellXY::new(home.x + 6, home.y + 6));
+        l.spawn(Kind::Building, &name, local, spot);
+        glasnost_sim::econ::power::make_due(l.world_mut(), local);
+        l.ticks(5);
+    }
+    placed_off_state(&mut l, map, "the house made short of power", b);
+    let ok = glasnost_sim::orders::issue(
+        l.world_mut(),
+        local,
+        glasnost_sim::orders::Order::PowerOn { actor: b },
+    );
+    println!("placed-off map {map}: power-on order accepted {ok}");
+    for t in 0..4 {
+        placed_off_state(
+            &mut l,
+            map,
+            &format!("switch-on, tick {t} from the order"),
+            b,
+        );
+    }
+    l.ticks(20);
+    placed_off_state(&mut l, map, "switched on, 20 ticks later", b);
+    l.save(&format!("placed-off-{map}-switched-on"));
+}
+
+/// One tick, then one line: owner role, switched off, in operation, the
+/// house's power (output, drain), running slots with their frames, frozen.
+fn placed_off_state(l: &mut Lane, map: usize, what: &str, b: ObjectId) {
+    l.ticks(1);
+    let _ = l.c.frame_rgba();
+    let s = l.c.session.as_ref().unwrap();
+    let live = s.loaded.live.as_ref().expect("a live game");
+    let w = l.world();
+    let Some(o) = w.obj(b) else {
+        println!("placed-off map {map} {what}: gone");
+        return;
+    };
+    let role = o
+        .owner
+        .and_then(|h| w.houses.get(usize::from(h.0)))
+        .map(|h| h.role);
+    let power = o.owner.map(|h| glasnost_sim::econ::power::totals(w, h));
+    println!(
+        "placed-off map {map} {what} (tick {}): owner role {role:?}, needs engineer {}, switched off {}, in operation {}, house power {power:?}, slots {:?}, frozen {}",
+        w.tick,
+        w.rules()
+            .econ
+            .power
+            .buildings
+            .get(o.type_index as usize)
+            .is_some_and(|t| t.needs_engineer),
+        o.econ.building.switched_off,
+        glasnost_sim::econ::power::in_operation(w, b),
+        live.slot_names(b),
+        live.frozen_slots(b),
+    );
+}
+
+/// The counting power flags of a building type's set-up slots that name an
+/// animation (S-0108 claim 13 and Import mapping).
+fn slot_counting(
+    l: &Lane,
+    doc: &glasnost_ini::Document,
+    t: u32,
+) -> Vec<glasnost_app::mapview::slots::Counting> {
+    use glasnost_app::mapview::slots;
+    let Some((image, _)) = type_look(l, doc, t) else {
+        return Vec::new();
+    };
+    slots::SETUP_SLOTS
+        .iter()
+        .map(|base| slots::read_slot(doc, &image, base))
+        .filter(|d| !d.normal.is_empty())
+        .map(|d| d.power.counting())
+        .collect()
 }
