@@ -830,6 +830,7 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
         return;
     };
     // spec: S-0501 claim 48 (c) and S-0417 claim 11 (its contact ends at the order when it takes a destination other than the pad; the rule reads the cell of its horizontal position, which must belong to the pad it is in contact with, not its height; a docking position outside the foundation leaves the contact held)
+    // spec: S-0213 table T3 (b) and S-0417 claim 11; Q-1940 interim (T3 (b) as written: a person's order has already ended the contact of a pad-bound type, which S-0417 claim 11 leaves untethered, so only a destination given without a person's order, or a tethered type, reaches this with its contact held outside the foundation)
     if d != Target::Object(k)
         && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
         && pad_cell(w, k, id)
@@ -1094,7 +1095,7 @@ fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
 /// facing requests of the update.
 fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
     let a = st(w, id);
-    // spec: S-0501 claim 42 (after each movement tick of a living aircraft that has a flight point, is neither landing nor taking off and is above the terrain; a settled aircraft has completed its flight, claim 40)
+    // spec: S-0501 claim 42 (after each movement tick of a living aircraft that has a flight point, is neither landing nor taking off and is above the terrain; a settled aircraft has completed its flight, claim 40) and claim 48 (c) (At height 0: no rule steers the low release, so its body keeps its released facing until it climbs)
     if a.landing || a.taking_off || a.ground || height(w, id) <= 0 {
         return;
     }
@@ -1849,7 +1850,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         if !a.released {
             a.held = ordinary_held(&a);
         } else if !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode)) {
-            // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update)
+            // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update) and (c) (At height 0, Past the destination: the first update that ends with its distance at least S leaves that fraction of 1, and the next update climbs)
             a.held = ordinary_held(&a);
             a.released = false;
         }
@@ -2023,11 +2024,13 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
         }
         // spec: S-0501 claim 5 (the approach target replacement, without the fixed-full-speed case or the fly-by flag; the next ordinary calculation recomputes τ, so it governs only an adjustment in a later tick that skips that calculation)
+        // spec: S-0501 claim 48 (c) (At height 0: guidance's distance bands do not apply at height 0, claim 42 confining guidance to an aircraft above the terrain, so a low release 512 to 767 leptons from its destination keeps claim 5's ordinary target and climbs once that is 1)
         if let Some(p) = dp
             && !a.landing
             && !a.taking_off
             && !fixed
             && !t.fly_by
+            && height(w, id) > 0
         {
             let dd = planar(w, w.obj(id).map_or(here, |x| x.pos), p);
             let replacement = if dd < 128 {
@@ -2142,15 +2145,16 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         return;
     }
     let trigger = match o.dest {
-        // spec: S-0501 claim 8 (no destination in flight: it lands where it is)
-        None => true,
+        // spec: S-0501 claim 8 (no destination in flight: it lands where it is; at height 0 it is on the ground by Terms, as claim 48 (c)'s low release after its fall-back to rest, which stays at height 0 in its cell)
+        None => !on_ground(w, id),
         Some(dd) => {
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
             // spec: S-0501 claim 6 (standing in its destination cell with a target fraction of 0)
             let exact = o.pos.cell() == p.cell() && a.tgt.eq_num(F64::ZERO);
-            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05)
-            let close = dist < 128 && !fixed && a.cur.lt(w.rules().air.twentieth);
+            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claim 48 (c) (At height 0: the close-approach trigger is a request of guidance, which claim 42 confines to an aircraft above the terrain)
+            let close =
+                dist < 128 && !fixed && a.cur.lt(w.rules().air.twentieth) && height(w, id) > 0;
             exact || close
         }
     };
@@ -2170,7 +2174,8 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         set_dest(w, id, Some(next));
         return;
     }
-    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead)
+    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead) and claim 48 (c) (At height 0, Into the halving zone: a low release from a docking position inside the pad's foundation has no contact, so it falls back by T2's ground row and stays at height 0 in that cell)
+    // design: S-0501 Open question 26 (a low release from a docking position outside the foundation still holds its contact: in a destination cell holding no building it is in contact with it falls back, and T2's after-the-row enter is claim 24's, which takes the pad as its destination and takes off toward it; in a destination cell of the pad it is in contact with the restriction does not hold, so it starts to land and its touchdown docks it there, claim 24)
     if t.bound && !o.contact.is_some_and(|k| pad_cell(w, k, id)) {
         if t.docks.is_empty() && armed(w, id) && ammo_left(w, id) {
             // spec: S-0501 claims 6 and 45 (except a pad-bound type with no dock types and ammunition left: it keeps its cell and stays above it)
