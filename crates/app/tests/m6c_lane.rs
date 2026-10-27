@@ -45,6 +45,8 @@ const SCENES: &[Scene] = &[
     ("tech", engineer_takes_tech_building),
     ("jumpjet", jumpjet_flies),
     ("jumpjet-factory", jumpjet_leaves_its_factory),
+    ("low-release-ahead", aircraft_low_release_ahead),
+    ("low-release-abeam", aircraft_low_release_abeam),
     ("deploy", unit_deploys),
     ("radiation", radiation_field),
     ("chrono", chrono_erases),
@@ -702,6 +704,187 @@ fn jumpjet_leaves_its_factory(lane: &mut Lane) {
         "climb shot: {climbing_shot}, contact ended: {}",
         reported.is_some()
     );
+}
+
+/// S-0501 claim 48 (c), *At height 0* (r59, Q-1905): an aircraft released
+/// low from its pad. The lane gives a local copy of the loaded rules a pad
+/// whose docking displacements sit 10 leptons up at a cell's centre (AC30
+/// part k (7)'s second pad) and the aircraft type a slowdown distance of
+/// 2000, so that the release rests above the terrain, then gives a move
+/// order as a person would: `ahead` along the released facing, else at a
+/// right angle to it. Ahead, it should stay at height 0 unturned and come to
+/// rest in the destination cell; at a right angle it should slide on at
+/// height 0 unturned, then climb and turn. Writes a per-update trace
+/// (`low-release-<run>.txt`: tick, cell, height, facing relative to the
+/// release, speed fractions, destination, behaviour, contact) and screens.
+/// Prints no type names or rules values.
+fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
+    use glasnost_sim::econ::release;
+    use std::fmt::Write as _;
+    let run = if ahead { "ahead" } else { "abeam" };
+    let w = lane.world();
+    let r = w.rules();
+    // A pad-bound aircraft type whose first dock type is a pad building, by flags only.
+    let found = (0..r.aircraft.len() as u32).find_map(|i| {
+        let u = r.unit(Kind::Aircraft, i)?;
+        if u.locomotor != glasnost_sim::rules::Locomotor::Fly
+            || !u.raw.econ.airport_bound.unwrap_or(false)
+        {
+            return None;
+        }
+        let first = u.raw.econ.dock.as_ref()?.first()?;
+        let b = *r.names.get(&(Kind::Building, first.clone()))?;
+        r.buildings[b as usize].building.helipad.then_some((i, b))
+    });
+    println!(
+        "pad-bound aircraft with a pad found: {}; quirks.aircraft_released_above_pad: {}",
+        found.is_some(),
+        r.quirks.aircraft_released_above_pad
+    );
+    let Some((ai, bi)) = found else { return };
+    let (bname, size) = (
+        r.buildings[bi as usize].name.clone(),
+        r.buildings[bi as usize].foundation,
+    );
+    // The destination lies off the pad, in whole cells from the docking cell,
+    // and inside the slowdown distance S, so that the target fraction stays
+    // below 1 at the start. The local copy sets S to AC30 part k (7)'s
+    // pad-bound test type's 2000 leptons (the synthetic NEAR of
+    // claims_s0501_released.rs), whatever the loaded type's is.
+    let s_dist = 2000; // spec: S-0501 AC30 part k (7) (a slowdown distance large enough that the target fraction stays below 1)
+    let cells = size.0.max(size.1) / 2 + 2;
+    let local = lane.local();
+    let home = lane.home();
+    let Some(tl) = lane.area(CellXY::new(home.x + 6, home.y + 6), size, 8, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("no room for the pad");
+        return;
+    };
+    let k = lane.spawn(Kind::Building, &bname, local, tl);
+    lane.ticks(2);
+    // The local copy: every docking displacement of the pad type put at the
+    // centre of the cell holding the pad's centre, 10 leptons up, so that a
+    // cell straight ahead has its centre on the line of the run.
+    let w = lane.world();
+    let c = w.reference_point(k);
+    let mid = glasnost_sim::world::Pos::centre(c.cell(), 0);
+    let mut m = (*w.rules_arc()).clone();
+    let econ = &mut m.buildings[bi as usize].raw.econ;
+    let mut offs = econ.docking_offsets.clone().unwrap_or_default();
+    if offs.is_empty() {
+        offs.push([0; 3]);
+    }
+    for d in &mut offs {
+        // spec: S-0501 AC30 part k (7) (the second pad's docking position 10 leptons above level ground, in a foundation cell)
+        *d = [mid.x - c.x, mid.y - c.y, 10];
+    }
+    econ.docking_offsets = Some(offs);
+    m.aircraft[ai as usize].slowdown_distance = s_dist;
+    lane.world_mut().rules = Some(std::sync::Arc::new(m));
+    let a = glasnost_sim::objects::create(lane.world_mut(), Kind::Aircraft, ai, Some(local));
+    let out = release::release(lane.world_mut(), k, a);
+    let w = lane.world();
+    let Some(o) = w.obj(a) else { return };
+    let f0 = o.body.value(w.tick);
+    println!(
+        "{run}: release {out:?}, height {} at cell {:?}",
+        glasnost_sim::air::height(w, a),
+        o.pos.cell()
+    );
+    lane.look_at(o.pos.cell());
+    lane.ticks(1);
+    lane.save(&format!("low-release-{run}-0-released"));
+    // The destination: `cells` cells along the released facing, or a
+    // quarter turn from it.
+    let w = lane.world();
+    let o = w.obj(a).unwrap();
+    let f = if ahead { f0 } else { f0.wrapping_add(16384) };
+    let dist = cells * 256;
+    let (x, y) = glasnost_sim::walk::step_point(o.pos.x, o.pos.y, f, dist, true, w.rules().mode);
+    let to = glasnost_sim::world::Pos::new(x, y, 0).cell();
+    let n = lane.order(local, a, ClickOn::Cell(to));
+    println!("{run}: destination inside S: {}, {n} orders", dist < s_dist);
+    let mut trace = String::new();
+    let mut climbed = None;
+    let mut rest = 0;
+    let mut turned_at_0 = false;
+    let mut mid_shot = false;
+    // The first traced update can still show the release height; a climb
+    // counts only after the run has been at height 0.
+    let mut been_at_0 = false;
+    for _ in 0..400 {
+        lane.ticks(1);
+        let w = lane.world();
+        let Some(o) = w.obj(a) else { break };
+        let s = o.air.clone().unwrap_or_default();
+        let h = glasnost_sim::air::height(w, a);
+        let df = o.body.value(w.tick).wrapping_sub(f0) as i16;
+        let _ = writeln!(
+            trace,
+            "tick {} cell {:?} x {} y {} h {h} held {} facing-delta {df} cur {:?} tgt {:?} dest {} beh {:?} contact {} released {} taking-off {} landing {} holding {}",
+            w.tick,
+            o.pos.cell(),
+            o.pos.x,
+            o.pos.y,
+            s.held,
+            s.cur,
+            s.tgt,
+            o.dest.is_some(),
+            o.beh.current,
+            o.contact.is_some(),
+            s.released,
+            s.taking_off,
+            s.landing,
+            s.holding,
+        );
+        been_at_0 |= h == 0;
+        if h == 0 && climbed.is_none() && df != 0 {
+            turned_at_0 = true;
+        }
+        if climbed.is_none() && been_at_0 && h > 0 {
+            climbed = Some(w.tick);
+        }
+        let (tick, cell, has_dest) = (w.tick, o.pos.cell(), o.dest.is_some());
+        if !mid_shot && h == 0 && has_dest {
+            // The screen of the run at height 0, without skipping a traced update.
+            mid_shot = true;
+            lane.look_at(cell);
+            lane.save(&format!("low-release-{run}-1-at-height-0"));
+        }
+        if !has_dest && h == 0 {
+            rest += 1;
+            if rest == 30 {
+                break;
+            }
+        }
+        if let Some(t) = climbed
+            && tick >= t + 60
+        {
+            break;
+        }
+    }
+    let w = lane.world();
+    let c = w.obj(a).map_or(to, |o| o.pos.cell());
+    println!(
+        "{run}: turned at height 0: {turned_at_0}, climbed: {}, resting with no destination at height 0 for {rest} updates, ends in the destination cell: {}",
+        climbed.is_some(),
+        c == to
+    );
+    lane.look_at(c);
+    lane.ticks(1);
+    lane.save(&format!("low-release-{run}-2-end"));
+    let path = lane.dir.join(format!("low-release-{run}.txt"));
+    std::fs::write(&path, trace).unwrap();
+    println!("wrote {}", path.display());
+}
+
+fn aircraft_low_release_ahead(lane: &mut Lane) {
+    aircraft_low_release(lane, true);
+}
+
+fn aircraft_low_release_abeam(lane: &mut Lane) {
+    aircraft_low_release(lane, false);
 }
 
 /// S-0517: a vehicle that deploys in place is sent the click a person gives
