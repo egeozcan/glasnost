@@ -1,6 +1,7 @@
 //! Claim tests of S-0314 claim 21's *Over water, at a naval yard* and the
-//! Edge case *Hovering vehicle lost at a naval yard* (revision 77,
-//! `quirks.docked_hover_water_loss`), with S-0503 claims 10 and 11, on a
+//! Edge case *Hovering vehicle lost at a naval yard* (revisions 77 and 88,
+//! `quirks.docked_hover_water_loss`; Terms, *Settled at a depot* and *Away
+//! from a depot*, Q-1876), with S-0503 claims 10 and 11, on a
 //! synthetic water map with invented types (every name and number here is
 //! made up; no game data).
 
@@ -113,7 +114,16 @@ fn rules(loss: bool) -> Ruleset {
     r.sim.buildings.insert("NAVYARD".into(), yard);
     r.sim.buildings.insert("PLANT".into(), small(120));
     r.sim.buildings.insert("CENTRE".into(), centre);
-    for n in ["NAVYARD", "PLANT", "CENTRE"] {
+    // BUNKER: a 1 × 1 tank bunker (S-0606), for S-0314 Terms' tank-bunker end.
+    let bunker = BuildingType {
+        strength: Some(500),
+        foundation: Some([1, 1]),
+        bunker: Some(true),
+        number_impassable_rows: Some(0),
+        ..Default::default()
+    };
+    r.sim.buildings.insert("BUNKER".into(), bunker);
+    for n in ["NAVYARD", "PLANT", "CENTRE", "BUNKER"] {
         push(&mut r, "buildings", n);
     }
     r
@@ -268,7 +278,7 @@ fn claim_21_docked_hover_lost_at_a_naval_yard_by_default() {
     );
 }
 
-// spec: S-0314 claim 21 and Edge cases (quirks.docked_hover_water_loss off: a spin end that comes while the vehicle has contact with a depot or is settled makes no water test: no bomb mark, no fall); S-0503 claim 11 (changed by S-0314)
+// spec: S-0314 claim 21 and Edge cases (quirks.docked_hover_water_loss off: a spin end that comes while the vehicle has contact with a depot or is settled at a depot makes no water test: no bomb mark, no fall); S-0503 claim 11 (changed by S-0314)
 #[test]
 fn quirk_docked_hover_water_loss_off_spares_the_docked_hover() {
     let (mut w, k, yard, v) = docked(false);
@@ -280,8 +290,8 @@ fn quirk_docked_hover_water_loss_off_spares_the_docked_hover() {
         "the same draws are taken with the switch off"
     );
     assert!(
-        depot::link(&w, v).is_some() || depot::settled(&w, v),
-        "the spin ended in contact or settled"
+        depot::link(&w, v).is_some() || depot::settled_at_depot(&w, v),
+        "the spin ended in contact or settled at a depot"
     );
     assert!(!hover::bomb_mark(&w, v), "no water test, no bomb mark");
     assert!(!glasnost_sim::fall::falling(&w, v), "it does not fall");
@@ -330,18 +340,33 @@ fn spin_low(w: &mut World, v: ObjectId, during: impl Fn(&mut World, i32)) {
     assert_eq!(spin(w, v), 0, "the spin has ended");
 }
 
-// spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: a spin end while the vehicle is settled, its contact ended, makes no water test); S-0314 Terms (settled can outlast the contact, claim 22)
+// spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: a spin end while the vehicle is settled at a depot, its contact ended, makes no water test); S-0314 Terms (settled at a depot can outlast the contact, claim 22)
 #[test]
 fn quirk_off_settled_without_contact_is_spared() {
     for loss in [true, false] {
         let (mut w, _, v) = on_the_lake(loss);
-        w.obj_mut(v).unwrap().depot.settled = true;
+        w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
         spin_low(&mut w, v, |_, _| {});
         assert!(depot::link(&w, v).is_none());
         assert_eq!(
             hover::bomb_mark(&w, v),
             loss,
-            "settled, no contact: loss {loss}"
+            "settled at a depot, no contact: loss {loss}"
+        );
+    }
+}
+
+// spec: S-0314 Terms (Settled at a depot: a vehicle settled away from a depot is settled but not settled at a depot) and Edge cases (quirks.docked_hover_water_loss off: only contact or being settled at a depot spares it; everywhere else S-0503 claim 11's water test is unchanged)
+#[test]
+fn quirk_off_settled_away_without_contact_is_tested() {
+    for loss in [true, false] {
+        let (mut w, _, v) = on_the_lake(loss);
+        w.obj_mut(v).unwrap().depot.settled = depot::Settled::Away;
+        spin_low(&mut w, v, |_, _| {});
+        assert!(depot::settled(&w, v) && !depot::settled_at_depot(&w, v));
+        assert!(
+            hover::bomb_mark(&w, v),
+            "settled away, no contact: tested in both positions (loss {loss})"
         );
     }
 }
@@ -369,19 +394,19 @@ fn quirk_off_contact_without_settled_is_spared() {
     }
 }
 
-// spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: once its contact has ended and it is not settled, a later spin end is tested as usual by S-0503 claim 11; the test belongs to the spin's end, not to its start)
+// spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: once its contact has ended and it is not settled at a depot, a later spin end is tested as usual by S-0503 claim 11; the test belongs to the spin's end, not to its start)
 #[test]
 fn quirk_off_settled_ended_before_the_spin_end_is_tested() {
     let (mut w, _, v) = on_the_lake(false);
-    w.obj_mut(v).unwrap().depot.settled = true;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
     spin_low(&mut w, v, |w, i| {
         if i == 2 {
-            w.obj_mut(v).unwrap().depot.settled = false;
+            w.obj_mut(v).unwrap().depot.settled = depot::Settled::No;
         }
     });
     assert!(
         hover::bomb_mark(&w, v),
-        "neither in contact nor settled at the spin's end: tested as usual"
+        "neither in contact nor settled at a depot at the spin's end: tested as usual"
     );
 }
 
@@ -412,19 +437,135 @@ fn no_draw_switch_off_makes_no_test_in_either_position() {
     }
 }
 
-// spec: S-0314 Terms (the switch-off of a disabling of S-0405 claim 20 makes the vehicle settled, built for every disabling) and Edge cases (quirks.docked_hover_water_loss off); interim of Q-1876: a powered-unit hover disabled by the loss of its control centre over open water, far from any depot, is settled by the disabling and so, with the switch off, is not tested; with the switch on it is lost as anywhere
+// spec: S-0314 Terms (Away from a depot: a disabling of S-0405 claim 20 makes a vehicle settled wherever it is, and one with no contact in a cell no depot occupies is settled but not settled at a depot) and claim 21 (Over water, at a naval yard: a hovering vehicle disabled over open water away from any depot, for example when its house loses its last control centre, is subject to S-0503 claim 11's water test in both positions of quirks.docked_hover_water_loss; Q-1876 answered); scenario H4 part i run 7 in our engine (two draws at the disabling: S-0503 claim 10's two ranged draws and nothing else on that tick; the bomb mark and the loss at a spin end below 104 leptons)
 #[test]
-fn q1876_interim_disabled_far_from_a_depot() {
+fn run_7_disabled_over_open_water_is_lost_in_both_positions() {
     for loss in [true, false] {
         let (mut w, k, v) = on_the_lake(loss);
         assert!(hover::hover_height(&w, v) > 0, "it hovers");
         power_order(&mut w, k, false);
-        assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+        // The disabling adds to its tick exactly the raw values of the
+        // switch-off's two ranged draws (S-0503 claim 10; a ranged draw may
+        // reject a raw value and take another, S-0202 claim 4). The rest of
+        // the tick is measured on a copy whose vehicle belongs to the other
+        // house, so the centre's loss does not disable it.
+        let mut alone = 0;
+        for _ in 0..30 {
+            if power::unit_disabled(&w, v) {
+                break;
+            }
+            let mut probe = w.clone();
+            let p0 = probe.rng.taken();
+            power::apply_disabled(&mut probe, v, true);
+            alone = probe.rng.taken() - p0;
+            let mut rest = w.clone();
+            rest.obj_mut(v).unwrap().owner = Some(HouseId(1));
+            let r0 = rest.rng.taken();
+            tick::step(&mut rest);
+            let others = rest.rng.taken() - r0;
+            let before = w.rng.taken();
+            tick::step(&mut w);
+            let taken = w.rng.taken() - before;
+            if power::unit_disabled(&w, v) {
+                assert_eq!(
+                    taken,
+                    others + alone,
+                    "the disabling adds the switch-off's draws"
+                );
+            } else {
+                assert_eq!(taken, others, "no draws of its own before it");
+            }
+        }
+        assert!(power::unit_disabled(&w, v));
+        assert!(alone >= 2, "two ranged draws");
+        assert_ne!(
+            spin(&w, v),
+            0,
+            "the disabling above the water started a spin"
+        );
         assert!(depot::settled(&w, v), "the disabling settles it");
+        assert!(!depot::settled_at_depot(&w, v), "but not at a depot");
         assert!(depot::link(&w, v).is_none(), "no depot contact");
+        assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
+        assert!(
+            hover::bomb_mark(&w, v),
+            "marked in both positions: loss {loss}"
+        );
+        assert!(
+            run_until(&mut w, 600, |w| !alive(w, v)),
+            "it falls and is lost: loss {loss}"
+        );
+    }
+}
+
+// spec: S-0314 Terms (Settled at a depot: a disabling while a depot occupied its cell makes it settled at a depot, contact or not) and Edge cases (quirks.docked_hover_water_loss off: no water test while settled at a depot; on, the loss)
+#[test]
+fn disabling_in_a_yard_cell_without_contact_is_settled_at_a_depot() {
+    for loss in [true, false] {
+        let (mut w, k, v) = on_the_lake(loss);
+        // The yard's top-left cell is the vehicle's cell.
+        let _yard = at(&mut w, "NAVYARD", 4, 4);
+        assert!(depot::link(&w, v).is_none());
+        power_order(&mut w, k, false);
+        assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+        assert!(depot::settled_at_depot(&w, v), "a depot occupies its cell");
         assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
         assert_eq!(hover::bomb_mark(&w, v), loss, "loss {loss}");
     }
+}
+
+// spec: S-0314 Terms (Settled at a depot: a disabling while it had contact with a depot makes it settled at a depot, however far away it is) and Edge cases (quirks.docked_hover_water_loss off: spared while in contact)
+#[test]
+fn disabling_in_contact_away_from_the_yard_is_settled_at_a_depot() {
+    for loss in [true, false] {
+        let (mut w, k, v) = on_the_lake(loss);
+        let yard = at(&mut w, "NAVYARD", -6, -6);
+        assert!(depot::request(&mut w, v, yard, false), "contact taken");
+        power_order(&mut w, k, false);
+        assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+        assert!(
+            depot::settled_at_depot(&w, v),
+            "in contact at the disabling"
+        );
+        assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
+        assert_eq!(hover::bomb_mark(&w, v), loss, "loss {loss}");
+    }
+}
+
+// spec: S-0314 Terms (Settled at a depot: the event that last made it settled decides; a disabling anywhere else makes it settled but not settled at a depot, so one settled at a depot earlier, with no contact, becomes settled away) and Edge cases (quirks.docked_hover_water_loss off: then tested)
+#[test]
+fn settled_at_a_depot_then_disabled_away_is_tested() {
+    let (mut w, k, v) = on_the_lake(false);
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
+    power_order(&mut w, k, false);
+    assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+    assert!(depot::settled(&w, v) && !depot::settled_at_depot(&w, v));
+    assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
+    assert!(hover::bomb_mark(&w, v), "settled away at the spin's end");
+}
+
+// spec: S-0314 Terms (Settled away, then at a depot: a depot occupying its cell changes nothing by itself, so a vehicle settled away that stands in a yard's cell with no contact is still not settled at a depot) and claim 21 (Over water, at a naval yard: with quirks.docked_hover_water_loss off, its spin end is tested as in open water)
+#[test]
+fn settled_away_then_in_a_yard_cell_is_still_tested() {
+    let (mut w, k, v) = on_the_lake(false);
+    power_order(&mut w, k, false);
+    assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+    assert_ne!(
+        spin(&w, v),
+        0,
+        "the disabling above the water started a spin"
+    );
+    assert!(!depot::settled_at_depot(&w, v));
+    // The yard comes to stand in the vehicle's cell while the spin runs.
+    let _yard = at(&mut w, "NAVYARD", 4, 4);
+    tick::step(&mut w);
+    assert!(
+        depot::settled(&w, v) && !depot::settled_at_depot(&w, v),
+        "the depot's cell changes nothing by itself"
+    );
+    assert!(run_until(&mut w, 120, |w| spin(w, v) == 0));
+    assert!(depot::link(&w, v).is_none());
+    assert!(hover::bomb_mark(&w, v), "no contact, settled away: tested");
 }
 
 // spec: S-0314 Edge cases (quirks.docked_hover_water_loss off: once the vehicle is no longer settled and has no contact, a later spin end is tested as usual by S-0503 claim 11); S-0405 claim 20 and S-0314 Terms (the enabling ends being settled); S-0503 claim 10 (switched on, an active spin is not cancelled) and claim 11 (the test belongs to the spin's end)
@@ -448,4 +589,62 @@ fn quirk_off_a_spin_outliving_the_disabling_is_tested() {
         hover::bomb_mark(&w, v),
         "neither settled nor in contact at the spin's end: tested and marked"
     );
+}
+
+// spec: S-0314 Terms (Away from a depot: once a vehicle settled away stands in a cell that a tank bunker occupies, a destination that takes effect there while its locomotor counts as switched off ends its being settled, and a hovering one is switched on again at that end although it is still disabled, claim 21; What ends it: one received while it is still above the ground ends nothing, wherever it is)
+#[test]
+fn settled_away_in_a_tank_bunker_cell() {
+    let (mut w, k) = world(true);
+    // Land south of the lake: the bunker, and the SKIMMER standing in its cell.
+    let bunker = at(&mut w, "BUNKER", 0, 9);
+    let v = at(&mut w, "SKIMMER", 0, 9);
+    glasnost_sim::testkit::run(&mut w, 300);
+    assert_eq!(
+        w.obj(v).unwrap().pos.cell(),
+        w.obj(bunker).unwrap().pos.cell()
+    );
+    assert!(hover::hover_height(&w, v) > 0, "it hovers");
+    power_order(&mut w, k, false);
+    assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+    assert!(depot::settled(&w, v) && !depot::settled_at_depot(&w, v));
+    let to = Some(glasnost_sim::world::Target::Cell(cell(3, 9)));
+    if hover::hover_height(&w, v) > 0 {
+        glasnost_sim::econ::assign_destination(&mut w, v, to);
+        glasnost_sim::econ::assign_destination(&mut w, v, None);
+        assert!(
+            depot::settled(&w, v) && hover::switched_off(&w, v),
+            "above the ground: no end"
+        );
+    }
+    assert!(run_until(&mut w, 300, |w| hover::hover_height(w, v) <= 0));
+    assert_eq!(
+        w.obj(v).unwrap().pos.cell(),
+        w.obj(bunker).unwrap().pos.cell()
+    );
+    assert!(depot::settled(&w, v), "down, still settled away");
+    glasnost_sim::econ::assign_destination(&mut w, v, to);
+    assert!(!depot::settled(&w, v), "the bunker's cell: the end");
+    assert!(!hover::switched_off(&w, v), "switched on again");
+    assert!(power::unit_disabled(&w, v), "though still disabled");
+}
+
+// spec: S-0314 Terms (Away from a depot: in cells that neither a depot nor a tank bunker occupies, of the ends only the enabling fires; a destination received there, down, ends nothing)
+#[test]
+fn settled_away_on_open_ground_only_the_enabling_ends_it() {
+    let (mut w, k) = world(true);
+    let v = at(&mut w, "SKIMMER", 0, 9);
+    glasnost_sim::testkit::run(&mut w, 300);
+    power_order(&mut w, k, false);
+    assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+    assert!(run_until(&mut w, 300, |w| hover::hover_height(w, v) <= 0));
+    glasnost_sim::econ::assign_destination(
+        &mut w,
+        v,
+        Some(glasnost_sim::world::Target::Cell(cell(3, 9))),
+    );
+    assert!(depot::settled(&w, v), "no depot or bunker: no end");
+    assert!(hover::switched_off(&w, v));
+    power_order(&mut w, k, true);
+    assert!(run_until(&mut w, 30, |w| !power::unit_disabled(w, v)));
+    assert!(!depot::settled(&w, v), "the enabling ends it");
 }

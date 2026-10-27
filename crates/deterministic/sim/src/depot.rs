@@ -41,6 +41,25 @@ pub struct Link {
     pub tethered: bool,
 }
 
+/// Whether a vehicle is settled, and where (S-0314 Terms, *Settled
+/// vehicle*). The variants are in this order so that the saved byte of a
+/// vehicle that is not settled, or settled at a depot, is the one the
+/// earlier flag had (postcard writes a unit variant as its index).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Settled {
+    /// Not settled.
+    #[default]
+    No,
+    /// Settled at a depot (Terms, *Settled at a depot*): the event that last
+    /// made it settled was its movement arrival (claim 17), a settling
+    /// processing (claim 21), or a disabling while it had contact with a
+    /// depot or while a depot occupied its cell.
+    AtDepot,
+    /// Settled away from a depot (Terms, *Away from a depot*): the event
+    /// that last made it settled was a disabling anywhere else.
+    Away,
+}
+
 /// Depot-cycle state of an object (S-0314 claims 6 and 16 to 24).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DepotState {
@@ -51,9 +70,10 @@ pub struct DepotState {
     pub queued: Option<ObjectId>,
     /// A settled vehicle (S-0314 Terms, claims 21 and 22): made settled by
     /// its movement arrival, a settling processing or a disabling; it can
-    /// outlast the contact.
+    /// outlast the contact. Which of these last made it settled decides
+    /// whether it is settled at a depot (Terms, *Settled at a depot*).
     #[serde(alias = "loco_off")]
-    pub settled: bool,
+    pub settled: Settled,
     /// A depot's serviced vehicle at its last repair processing (S-0314
     /// Edge cases, several contact places: a change restarts the phases).
     pub serviced: Option<ObjectId>,
@@ -364,7 +384,8 @@ fn end_contact(w: &mut World, id: ObjectId) {
 /// vehicle not yet down.
 fn settle(w: &mut World, id: ObjectId) {
     if let Some(o) = w.obj_mut(id) {
-        o.depot.settled = true;
+        // spec: S-0314 Terms (Settled at a depot: the movement arrival, claim 17, and a settling processing, claim 21, make it settled at a depot)
+        o.depot.settled = Settled::AtDepot;
     }
     // spec: S-0314 claim 21 and Changes for other specs (S-0503 claim 10: switched off when it becomes settled and at each later settling processing that finds it within 200 leptons, settled, standing still and not yet down; each switch-off meets claim 10's conditions on its own)
     crate::hover::switched(w, id, true);
@@ -374,23 +395,34 @@ fn settle(w: &mut World, id: ObjectId) {
 /// switched on again, also while it is still disabled (claim 21).
 fn unsettle(w: &mut World, id: ObjectId) {
     let Some(o) = w.obj_mut(id) else { return };
-    if !o.depot.settled {
+    if o.depot.settled == Settled::No {
         return;
     }
-    o.depot.settled = false;
+    o.depot.settled = Settled::No;
     // spec: S-0314 Terms and claim 21 (at every end of being settled a hovering vehicle is switched on again, with no exception for the disabled state)
     crate::hover::switched(w, id, false);
 }
 
 /// The disabling of S-0405 claim 20 made the vehicle settled with its
 /// switch-off (S-0314 Terms, claim 21: whether or not it was settled or
-/// switched on before). The caller has already switched it off.
+/// switched on before), wherever it is (Terms, *Away from a depot*). It is
+/// settled at a depot only when it has contact with a depot or a depot
+/// occupies its cell at the disabling; a disabling anywhere else leaves it
+/// settled away, even if an earlier event had made it settled at a depot.
+/// The caller has already switched it off.
 pub(crate) fn disabled(w: &mut World, id: ObjectId) {
-    if let Some(o) = w.obj_mut(id)
-        && o.kind == Kind::Vehicle
-    {
-        // spec: S-0314 Terms and claim 21 (the switch-off of a disabling of S-0405 claim 20 makes the vehicle settled)
-        o.depot.settled = true;
+    if !w.obj(id).is_some_and(|o| o.kind == Kind::Vehicle) {
+        return;
+    }
+    // spec: S-0314 Terms (Settled at a depot: a disabling while it had contact with a depot or while a depot occupied its cell, claim 21 Disabling while docked; a disabling anywhere else makes it settled but not settled at a depot)
+    let at = if link(w, id).is_some() || occupied_by(w, id, |r| r.building.unit_repair) {
+        Settled::AtDepot
+    } else {
+        Settled::Away
+    };
+    if let Some(o) = w.obj_mut(id) {
+        // spec: S-0314 Terms and claim 21 (the switch-off of a disabling of S-0405 claim 20 makes the vehicle settled, wherever it is)
+        o.depot.settled = at;
     }
 }
 
@@ -401,9 +433,16 @@ pub(crate) fn enabled(w: &mut World, id: ObjectId) {
     unsettle(w, id);
 }
 
-/// Whether vehicle `id` is settled (S-0314 Terms).
+/// Whether vehicle `id` is settled (S-0314 Terms), at a depot or away.
 pub fn settled(w: &World, id: ObjectId) -> bool {
-    w.obj(id).is_some_and(|o| o.depot.settled)
+    w.obj(id).is_some_and(|o| o.depot.settled != Settled::No)
+}
+
+/// Whether vehicle `id` is settled at a depot (S-0314 Terms, *Settled at a
+/// depot*). Only `quirks.docked_hover_water_loss` reads it.
+pub fn settled_at_depot(w: &World, id: ObjectId) -> bool {
+    w.obj(id)
+        .is_some_and(|o| o.depot.settled == Settled::AtDepot)
 }
 
 /// Whether `k` has the obsolete-unloading flag: S-0314 claim 18 and S-0504
@@ -1287,20 +1326,16 @@ pub fn depot_destroyed(w: &mut World, k: ObjectId, v: ObjectId) {
     }
 }
 
-/// A destination assignment of vehicle `id` (S-0314 Terms, claim 22): one
-/// that takes effect (`effective`: S-0207 claim 27) while a repair depot or
-/// a tank bunker occupies the vehicle's cell ends its being settled, a
-/// cleared destination included.
-pub fn destination_given(w: &mut World, id: ObjectId, effective: bool) {
-    // spec: S-0314 Terms (only an assignment that takes effect counts: S-0207 claim 27 rejects one that leaves the destination unchanged, empty to empty included, unless a destination-refresh state is present; a rejected assignment is not a receipt)
-    if !effective || !settled(w, id) {
-        return;
-    }
-    let Some(o) = w.obj(id) else { return };
-    let c = o.pos.cell();
-    let on = w
-        .cells
-        .list(c, crate::world::Layer::Ground)
+/// Whether a building whose type meets `kind` occupies vehicle `id`'s cell
+/// (a building occupies its foundation, glossary *building*).
+fn occupied_by(
+    w: &World,
+    id: ObjectId,
+    kind: impl Fn(&crate::rules::BuildingRules) -> bool,
+) -> bool {
+    let Some(o) = w.obj(id) else { return false };
+    w.cells
+        .list(o.pos.cell(), crate::world::Layer::Ground)
         .iter()
         .any(|&x| {
             w.obj(x).is_some_and(|b| {
@@ -1308,11 +1343,40 @@ pub fn destination_given(w: &mut World, id: ObjectId, effective: bool) {
                     && w.rules()
                         .buildings
                         .get(b.type_index as usize)
-                        .is_some_and(|r| r.building.unit_repair || r.raw.bunker.unwrap_or(false))
+                        .is_some_and(&kind)
             })
-        });
-    if on {
-        // spec: S-0314 Terms and claim 22 (a destination received while a depot or tank bunker occupies its cell, an empty one included, ends being settled; the vehicle is switched on again)
+        })
+}
+
+/// Whether vehicle `id`'s locomotor counts as switched off for an end of
+/// being settled (S-0314 Terms, *What ends it*): always for a vehicle that
+/// does not hover; for a hovering one only once it is down, since above the
+/// ground it is powered in S-0503's sense.
+fn counts_switched_off(w: &World, id: ObjectId) -> bool {
+    // spec: S-0314 Terms (for a vehicle that does not hover, every moment while it is settled; a hovering vehicle counts as switched off only once it is down: while it is still above the ground it is powered in S-0503's sense, S-0503 Terms)
+    // design: S-0314 Terms (a settled hover switched on again with no end of being settled, as by S-0606's bunker release, is powered in S-0503's sense, so it does not count as switched off either)
+    !crate::hover::is_hover(w, id) || !crate::hover::powered(w, id)
+}
+
+/// A destination assignment of vehicle `id` (S-0314 Terms, claim 22): one
+/// that takes effect (`effective`: S-0207 claim 27) while a repair depot or
+/// a tank bunker occupies the vehicle's cell, and while its locomotor
+/// counts as switched off, ends its being settled, a cleared destination
+/// included. This is also the end at a disabling's guard reset.
+pub fn destination_given(w: &mut World, id: ObjectId, effective: bool) {
+    // spec: S-0314 Terms (only an assignment that takes effect counts: S-0207 claim 27 rejects one that leaves the destination unchanged, empty to empty included, unless a destination-refresh state is present; a rejected assignment is not a receipt)
+    if !effective || !settled(w, id) {
+        return;
+    }
+    // spec: S-0314 Terms and claim 22 (only by a vehicle whose locomotor then counts as switched off: a destination a hovering vehicle receives while it is still above the ground does not end its being settled, wherever it is; the same condition for the guard reset of a disabling)
+    if !counts_switched_off(w, id) {
+        return;
+    }
+    // spec: S-0314 Terms and claim 22 (a destination received while a depot or tank bunker occupies its cell, an empty one included, ends being settled)
+    if occupied_by(w, id, |r| {
+        r.building.unit_repair || r.raw.bunker.unwrap_or(false)
+    }) {
+        // spec: S-0314 Terms and claim 21 (the vehicle is switched on again at the end, also a disabled hovering one in a tank bunker's cell, Away from a depot)
         unsettle(w, id);
     }
 }

@@ -748,7 +748,7 @@ fn claim_21_distant_settling() {
     assert!(orders::issue(&mut w, ALPHA, mv(v, 10, 10)));
     assert!(run_until(&mut w, 300, |w| w.obj(v).unwrap().pos.cell().x
         >= testkit::mid(SIZE, 4, 0).x));
-    w.obj_mut(v).unwrap().depot.settled = true;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
     let dd = d_rep(&w);
     assert!(
         run_until(&mut w, dd + 1, |w| !depot::settled(w, v)),
@@ -1881,7 +1881,7 @@ fn claim_21_near_vehicle_not_settled_rechecks_after_one_tick() {
     let (mut w, _d, v) = docked_scene(300);
     let s0 = next_step(&mut w, v, 600).expect("settling step");
     let (mut w, d, v) = docked_scene(300);
-    w.obj_mut(v).unwrap().depot.settled = false;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::No;
     let s1 = next_step(&mut w, v, 600).expect("settling step");
     assert_eq!(s1, s0 + 1, "one recheck 1 tick later");
     assert!(depot::settled(&w, v), "the recheck's processing settled it");
@@ -1961,7 +1961,7 @@ fn terms_only_an_effective_destination_ends_being_settled() {
     let (mut w, d, v) = docked_scene(300);
     let p = w.obj(v).unwrap().pos;
     w.obj_mut(v).unwrap().dest = Some(Target::Object(d));
-    w.obj_mut(v).unwrap().depot.settled = true;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
     glasnost_sim::infantry::destination_assigned(&mut w, v, Some(Target::Object(d)));
     assert!(depot::settled(&w, v), "the same destination: not effective");
     w.obj_mut(v).unwrap().dest = Some(Target::Cell(p.cell()));
@@ -2046,10 +2046,136 @@ fn switching_on_alone_is_not_an_end_of_being_settled() {
     let mut w = game(&r);
     let v = spawn(&mut w, Kind::Vehicle, "SKIMMER", 0, 6, 1);
     open(&mut w);
-    w.obj_mut(v).unwrap().depot.settled = true;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::AtDepot;
     glasnost_sim::hover::switched(&mut w, v, true);
     assert!(glasnost_sim::hover::switched_off(&w, v));
     glasnost_sim::hover::switched(&mut w, v, false);
     assert!(!glasnost_sim::hover::switched_off(&w, v));
     assert!(depot::settled(&w, v), "switching on alone ends nothing");
+}
+
+/// A damaged SKIMMER clicked onto DEPOT and run to its movement arrival:
+/// settled at a depot, switched off and still above the ground (S-0314
+/// claim 17 and Terms; S-0503 claim 10). Returns the world and the vehicle.
+fn skimmer_sinking() -> (World, ObjectId) {
+    let r = skimmer_rules();
+    let mut w = game(&r);
+    let d = depot_at(&mut w, "DEPOT");
+    let v = spawn(&mut w, Kind::Vehicle, "SKIMMER", 0, 6, 1);
+    w.obj_mut(v).unwrap().health = 300;
+    open(&mut w);
+    click_enter(&mut w, v, d);
+    assert!(run_until(&mut w, 900, |w| depot::settled(w, v)));
+    assert!(glasnost_sim::hover::switched_off(&w, v));
+    assert!(
+        glasnost_sim::hover::hover_height(&w, v) > 0,
+        "still above the ground at the arrival"
+    );
+    assert!(
+        depot::settled_at_depot(&w, v),
+        "the arrival makes it settled at a depot"
+    );
+    (w, v)
+}
+
+/// Whether a building occupies vehicle `v`'s cell (here: the depot).
+fn on_the_depot(w: &World, v: ObjectId) -> bool {
+    let c = w.obj(v).unwrap().pos.cell();
+    w.cells
+        .list(c, glasnost_sim::world::Layer::Ground)
+        .iter()
+        .any(|&x| w.obj(x).is_some_and(|o| o.kind == Kind::Building))
+}
+
+// spec: S-0314 Terms (What ends it: a destination received while a depot occupies its cell ends being settled only by a vehicle whose locomotor then counts as switched off; a hovering vehicle still above the ground is powered in S-0503's sense, so a destination it receives then ends nothing, an empty one included; its lift stays off and it goes on sinking; once down, the same destination ends it and switches it on) and claim 22 (Settled vehicles)
+#[test]
+fn terms_a_destination_while_a_hover_is_still_above_the_ground_ends_nothing() {
+    let (mut w, v) = skimmer_sinking();
+    assert!(on_the_depot(&w, v), "the docking point lies in the depot");
+    let to = Some(Target::Cell(testkit::mid(SIZE, 1, 2)));
+    glasnost_sim::econ::assign_destination(&mut w, v, to);
+    assert_eq!(w.obj(v).unwrap().dest, to, "the assignment takes effect");
+    assert!(depot::settled(&w, v), "above the ground: not an end");
+    assert!(
+        glasnost_sim::hover::switched_off(&w, v),
+        "not switched on: its lift stays off"
+    );
+    // A cleared destination (as a disabling's guard reset gives) above the ground: nothing either.
+    glasnost_sim::econ::assign_destination(&mut w, v, None);
+    assert!(depot::settled(&w, v) && glasnost_sim::hover::switched_off(&w, v));
+    assert!(
+        run_until(&mut w, 300, |w| glasnost_sim::hover::hover_height(w, v)
+            <= 0),
+        "it goes on sinking and comes down"
+    );
+    assert!(depot::settled(&w, v));
+    assert!(on_the_depot(&w, v));
+    glasnost_sim::econ::assign_destination(&mut w, v, to);
+    assert!(
+        !depot::settled(&w, v),
+        "down: the destination ends being settled"
+    );
+    assert!(
+        !glasnost_sim::hover::switched_off(&w, v),
+        "switched on again at the end"
+    );
+}
+
+// spec: S-0314 Terms and claim 22 (a person's move order in the sinking window releases the untethered vehicle's contact, claim 20, and ends no being settled while it is above the ground; down, a settled hovering vehicle cannot move while it stays settled; a later order with a new destination while the depot occupies its cell ends being settled and it leaves; the same destination again is rejected by S-0207 claim 27 and ends nothing); Open questions (whether the order moves it in the window: our hover takes the move while powered, S-0503 claim 4)
+#[test]
+fn claim_22_move_order_in_the_sinking_window_then_again_once_down() {
+    let (mut w, v) = skimmer_sinking();
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 9, 9)));
+    tick::step(&mut w);
+    assert_eq!(contact(&w, v), None, "the order releases the contact");
+    assert!(depot::settled(&w, v), "above the ground: still settled");
+    assert!(run_until(&mut w, 300, |w| {
+        glasnost_sim::hover::hover_height(w, v) <= 0
+    }));
+    assert!(depot::settled(&w, v), "down and still settled");
+    let at = w.obj(v).unwrap().pos;
+    glasnost_sim::testkit::run(&mut w, 60);
+    assert_eq!(
+        w.obj(v).unwrap().pos,
+        at,
+        "a settled hover that is down stays put"
+    );
+    assert!(
+        on_the_depot(&w, v),
+        "in this scene it comes down in the depot's cells: {:?}",
+        at.cell()
+    );
+    // The same destination again is no receipt (S-0207 claim 27: an
+    // assignment that leaves the destination unchanged is rejected).
+    assert_eq!(
+        w.obj(v).unwrap().dest,
+        Some(Target::Cell(testkit::mid(SIZE, 9, 9)))
+    );
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 9, 9)));
+    tick::step(&mut w);
+    assert!(depot::settled(&w, v), "the same destination ends nothing");
+    assert!(orders::issue(&mut w, ALPHA, mv(v, 9, 8)));
+    tick::step(&mut w);
+    assert!(
+        !depot::settled(&w, v),
+        "a new destination ends being settled"
+    );
+    assert!(
+        run_until(&mut w, 900, |w| w.obj(v).unwrap().pos.cell()
+            == testkit::mid(SIZE, 9, 8)),
+        "and it leaves"
+    );
+}
+
+// spec: S-0314 Terms (Settled vehicle, Settled at a depot: the state, at a depot or away, survives a save and load)
+#[test]
+fn settled_where_round_trips() {
+    for s in [depot::Settled::AtDepot, depot::Settled::Away] {
+        let (mut w, v) = skimmer_sinking();
+        w.obj_mut(v).unwrap().depot.settled = s;
+        let h = save::state_hash(&w);
+        let l = save::load(&save::save(&w), w.rules_arc(), testkit::catalogue()).unwrap();
+        assert_eq!(l.obj(v).unwrap().depot.settled, s);
+        assert_eq!(save::state_hash(&l), h);
+    }
 }

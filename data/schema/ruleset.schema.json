@@ -9133,7 +9133,7 @@
           "default": true
         },
         "depot_loss_strands_hover": {
-          "description": "A hovering vehicle whose depot is destroyed after it became settled, or sold without the vehicle receiving any destination before the depot's removal, stays settled and switched off and, once down on the ground, never moves again; off: losing contact with a depot ends its being settled, so it is switched on again and rises.",
+          "description": "A hovering vehicle whose depot is destroyed after it became settled, or sold with no destination ending its being settled before the depot's removal (one it receives while still above the ground does not), stays settled and switched off and, once down on the ground, never moves again; off: losing contact with a depot ends its being settled, so it is switched on again and rises.",
           "type": "boolean",
           "default": true
         },
@@ -9188,7 +9188,7 @@
           "default": true
         },
         "docked_hover_water_loss": {
-          "description": "A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled makes no water test, and a later spin end after its contact has ended and it is not settled is tested as usual.",
+          "description": "A hovering vehicle docked at a naval yard on water whose switch-off spin ends less than 104 leptons above the water is lost, as at any other spin end over water; off: a spin end that comes while it has contact with a depot or is settled at a depot (by its arrival, a settling processing, or a disabling in contact or in a depot's cell) makes no water test, and a later spin end after its contact has ended and it is not settled at a depot is tested as usual, as is that of a hovering vehicle disabled away from any depot.",
           "type": "boolean",
           "default": true
         },

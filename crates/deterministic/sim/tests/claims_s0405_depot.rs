@@ -254,7 +254,7 @@ fn claim_20_disabling_settles_and_enabling_ends_it() {
     let (mut w, k, d, v) = scene("DEPOT");
     click_enter(&mut w, v, d);
     serviced(&mut w, v, d);
-    w.obj_mut(v).unwrap().depot.settled = false;
+    w.obj_mut(v).unwrap().depot.settled = depot::Settled::No;
     centre_off(&mut w, k);
     assert!(power::unit_disabled(&w, v));
     assert!(depot::settled(&w, v), "the disabling settles it");
