@@ -437,14 +437,47 @@ fn no_draw_switch_off_makes_no_test_in_either_position() {
     }
 }
 
-// spec: S-0314 Terms (Away from a depot: a disabling of S-0405 claim 20 makes a vehicle settled wherever it is, and one with no contact in a cell no depot occupies is settled but not settled at a depot) and claim 21 (Over water, at a naval yard: a hovering vehicle disabled over open water away from any depot, for example when its house loses its last control centre, is subject to S-0503 claim 11's water test in both positions of quirks.docked_hover_water_loss; Q-1876 answered); scenario H4 part i run 7 in our engine (a spin started by the disabling; the bomb mark and the loss at a spin end below 104 leptons)
+// spec: S-0314 Terms (Away from a depot: a disabling of S-0405 claim 20 makes a vehicle settled wherever it is, and one with no contact in a cell no depot occupies is settled but not settled at a depot) and claim 21 (Over water, at a naval yard: a hovering vehicle disabled over open water away from any depot, for example when its house loses its last control centre, is subject to S-0503 claim 11's water test in both positions of quirks.docked_hover_water_loss; Q-1876 answered); scenario H4 part i run 7 in our engine (two draws at the disabling: S-0503 claim 10's two ranged draws and nothing else on that tick; the bomb mark and the loss at a spin end below 104 leptons)
 #[test]
 fn run_7_disabled_over_open_water_is_lost_in_both_positions() {
     for loss in [true, false] {
         let (mut w, k, v) = on_the_lake(loss);
         assert!(hover::hover_height(&w, v) > 0, "it hovers");
         power_order(&mut w, k, false);
-        assert!(run_until(&mut w, 30, |w| power::unit_disabled(w, v)));
+        // The disabling adds to its tick exactly the raw values of the
+        // switch-off's two ranged draws (S-0503 claim 10; a ranged draw may
+        // reject a raw value and take another, S-0202 claim 4). The rest of
+        // the tick is measured on a copy whose vehicle belongs to the other
+        // house, so the centre's loss does not disable it.
+        let mut alone = 0;
+        for _ in 0..30 {
+            if power::unit_disabled(&w, v) {
+                break;
+            }
+            let mut probe = w.clone();
+            let p0 = probe.rng.taken();
+            power::apply_disabled(&mut probe, v, true);
+            alone = probe.rng.taken() - p0;
+            let mut rest = w.clone();
+            rest.obj_mut(v).unwrap().owner = Some(HouseId(1));
+            let r0 = rest.rng.taken();
+            tick::step(&mut rest);
+            let others = rest.rng.taken() - r0;
+            let before = w.rng.taken();
+            tick::step(&mut w);
+            let taken = w.rng.taken() - before;
+            if power::unit_disabled(&w, v) {
+                assert_eq!(
+                    taken,
+                    others + alone,
+                    "the disabling adds the switch-off's draws"
+                );
+            } else {
+                assert_eq!(taken, others, "no draws of its own before it");
+            }
+        }
+        assert!(power::unit_disabled(&w, v));
+        assert!(alone >= 2, "two ranged draws");
         assert_ne!(
             spin(&w, v),
             0,
