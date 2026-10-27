@@ -20,7 +20,11 @@
 //! parachutes (S-0522; sent through `planes::paradrop` only when no type has the
 //! paradrop kind), and the trigger events and actions of every
 //! offered map counted by how this engine covers them (S-0011, S-0524;
-//! counts and codes only). A new scene is one more function and one more
+//! counts and codes only), and a hover disabled at a naval yard and one
+//! disabled over open water away from any depot, each in both positions
+//! of `quirks.docked_hover_water_loss` (S-0314 r88 claim 21, H4 part i;
+//! the powered-unit flag and a control centre given in a local rules
+//! copy). A new scene is one more function and one more
 //! row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -76,6 +80,8 @@ const SCENES: &[Scene] = &[
     ("paratroopers-dropping", paratroopers_dropping),
     ("transport-unloading", transport_unloading),
     ("trigger-coverage", trigger_coverage),
+    ("hover-yard", hover_at_yard),
+    ("hover-away", hover_disabled_away),
 ];
 
 #[test]
@@ -379,6 +385,273 @@ fn vehicle_repaired_at_depot(lane: &mut Lane) {
     let v = lane.spawn(Kind::Vehicle, &un, local, from);
     println!("depot at {at:?} foundation {fw}x{fh}, vehicle at {from:?}");
     repair_scene(lane, k, v, at, "vehicle-repaired-at-depot");
+}
+
+/// One trace line of a hovering vehicle (S-0314 r88 Terms, *Settled at a
+/// depot*; S-0503 claims 10 and 11): its cell, hover height, spin count,
+/// bomb mark, whether it is settled and settled at a depot, its depot
+/// contact, and whether it is disabled and switched off.
+fn hover_line(w: &World, id: ObjectId) -> String {
+    let Some(o) = w.obj(id).filter(|o| o.on_map && o.health > 0) else {
+        return "gone".into();
+    };
+    format!(
+        "cell {:?}, height {}, spin {}, bomb mark {}, settled {}, at a depot {}, contact {}, disabled {}, switched off {}",
+        o.pos.cell(),
+        glasnost_sim::hover::hover_height(w, id),
+        o.hover.as_ref().map_or(0, |h| h.spin),
+        glasnost_sim::hover::bomb_mark(w, id),
+        glasnost_sim::depot::settled(w, id),
+        glasnost_sim::depot::settled_at_depot(w, id),
+        glasnost_sim::depot::link(w, id).is_some(),
+        glasnost_sim::econ::power::unit_disabled(w, id),
+        glasnost_sim::hover::switched_off(w, id),
+    )
+}
+
+/// Runs up to `n` ticks, printing the hover's trace line whenever it
+/// changes; stops early when it is gone or `done` holds. Returns whether it
+/// is still alive.
+fn hover_trace(lane: &mut Lane, id: ObjectId, n: usize, done: impl Fn(&World) -> bool) -> bool {
+    let mut last = String::new();
+    for _ in 0..n {
+        let line = hover_line(lane.world(), id);
+        if line != last {
+            println!("  tick {}: {line}", lane.world().tick);
+            last = line;
+        }
+        if last == "gone" || done(lane.world()) {
+            break;
+        }
+        lane.ticks(1);
+    }
+    last != "gone"
+}
+
+/// The local rules copy and objects of the hover scenes (S-0314 r88, H4
+/// part i): a hovering vehicle type (found by its locomotor) given the
+/// powered-unit flag, a building type with a base drain made its control
+/// centre (S-0405 claim 13), `quirks.docked_hover_water_loss` set to
+/// `loss`; the power plants placed and the centre spawned on land near home.
+/// Returns the hover type's name and the centre.
+fn hover_setup(lane: &mut Lane, loss: bool) -> Option<(String, ObjectId)> {
+    let w = lane.world();
+    let hover = find_type(w, Kind::Vehicle, |_, u| u.locomotor == Locomotor::Hover);
+    let p = &w.rules().econ.power;
+    let b = &w.rules().buildings;
+    let centre = (0..b.len())
+        .filter(|&i| {
+            let t = &p.buildings[i];
+            t.drain > 0
+                && !t.upgrade
+                && !t.firestorm
+                && t.powers_unit.is_none()
+                && !b[i].naval
+                && b[i].factory.is_none()
+                && b[i].foundation.0 <= 2
+                && b[i].foundation.1 <= 2
+        })
+        .min_by_key(|&i| (b[i].foundation.0 * b[i].foundation.1, i));
+    println!(
+        "hover type found: {}, centre candidate found: {}",
+        hover.is_some(),
+        centre.is_some()
+    );
+    let (Some(name), Some(ci)) = (hover, centre) else {
+        return None;
+    };
+    let ti = w.rules().index_of(Kind::Vehicle, &name)?;
+    let (cname, size) = (b[ci].name.clone(), b[ci].foundation);
+    let mut m = (*w.rules_arc()).clone();
+    m.econ.power.powered_unit[ti as usize] = true;
+    m.econ.power.buildings[ci].powers_unit = Some(ti);
+    m.quirks.docked_hover_water_loss = loss;
+    lane.world_mut().rules = Some(std::sync::Arc::new(m));
+    let local = lane.local();
+    lane.world_mut().houses[usize::from(local.0)].credits += 10_000;
+    let home = lane.home();
+    let at = lane.area(CellXY::new(home.x - 6, home.y + 6), size, 1, standing)?;
+    let k = lane.spawn(Kind::Building, &cname, local, at);
+    lane.power_up();
+    lane.ticks(30);
+    println!(
+        "quirks.docked_hover_water_loss {loss}: centre at {at:?}, in operation {}",
+        glasnost_sim::econ::power::in_operation(lane.world(), k)
+    );
+    Some((name, k))
+}
+
+fn power_order(lane: &mut Lane, centre: ObjectId, on: bool) -> bool {
+    let local = lane.local();
+    let o = if on {
+        Order::PowerOn { actor: centre }
+    } else {
+        Order::PowerOff { actor: centre }
+    };
+    let ok = glasnost_sim::orders::issue(lane.world_mut(), local, o);
+    println!(
+        "tick {}: centre power {} order taken: {ok}",
+        lane.world().tick,
+        if on { "on" } else { "off" }
+    );
+    ok
+}
+
+/// S-0314 r88 claim 21 (*Over water, at a naval yard*) and H4 part i: a
+/// damaged hover clicked onto an own repairing naval yard on water docks
+/// and is repaired; then its control centre is switched off (a disabling at
+/// the depot), on (it rises) and off again (a disabling above the water,
+/// its spin judged at its end); in both positions of
+/// `quirks.docked_hover_water_loss`.
+fn hover_at_yard(lane: &mut Lane) {
+    for loss in [true, false] {
+        let mut fresh;
+        let lane: &mut Lane = if loss {
+            &mut *lane
+        } else {
+            fresh = Lane::start().expect("the install is set");
+            &mut fresh
+        };
+        hover_at_yard_run(lane, loss);
+    }
+}
+
+fn hover_at_yard_run(lane: &mut Lane, loss: bool) {
+    let Some((hn, centre)) = hover_setup(lane, loss) else {
+        return;
+    };
+    let w = lane.world();
+    let yard = w
+        .rules()
+        .buildings
+        .iter()
+        .find(|b| b.naval && b.factory.is_some() && b.building.unit_repair)
+        .map(|b| (b.name.clone(), b.foundation));
+    let Some((yn, (fw, fh))) = yard else {
+        println!("no repairing naval yard type");
+        return;
+    };
+    let home = lane.home();
+    let water = |l| l == land::WATER;
+    let Some(at) = lane
+        .area(home, (fw, fh), 1, water)
+        .or_else(|| lane.area(home, (fw, fh), 0, water))
+    else {
+        println!("no open water for the yard: unreached");
+        return;
+    };
+    let local = lane.local();
+    let k = lane.spawn(Kind::Building, &yn, local, at);
+    let Some(sea) = lane.area(CellXY::new(at.x - 5, at.y + 1), (1, 1), 1, water) else {
+        println!("no open water for the hover: unreached");
+        return;
+    };
+    let v = lane.spawn(Kind::Vehicle, &hn, local, sea);
+    println!("yard at {at:?} foundation {fw}x{fh}, hover at {sea:?}");
+    hover_trace(lane, v, 30, |_| false);
+    let full = lane.strength(v);
+    lane.world_mut().obj_mut(v).unwrap().health = full / 4;
+    let n = lane.order(local, v, ClickOn::Object(k));
+    println!("click onto the yard: {n} orders issued");
+    let down = |w: &World| {
+        glasnost_sim::depot::link(w, v).is_some()
+            && glasnost_sim::depot::settled_at_depot(w, v)
+            && glasnost_sim::hover::hover_height(w, v) <= 0
+    };
+    let docked = hover_trace(lane, v, 3000, down);
+    let ok = docked && down(lane.world());
+    println!("in contact, settled at the yard and down: {ok}");
+    lane.look_at(at);
+    lane.ticks(1);
+    lane.save(&format!("hover-yard-{loss}-1-docked"));
+    if !ok {
+        println!("the hover did not dock: unreached");
+        return;
+    }
+    hover_trace(lane, v, 10, |_| false);
+    power_order(lane, centre, false);
+    hover_trace(lane, v, 60, |_| false);
+    lane.save(&format!("hover-yard-{loss}-2-disabled-docked"));
+    power_order(lane, centre, true);
+    hover_trace(lane, v, 60, |_| false);
+    lane.save(&format!("hover-yard-{loss}-3-enabled"));
+    power_order(lane, centre, false);
+    let alive = hover_trace(lane, v, 900, |_| false);
+    lane.save(&format!("hover-yard-{loss}-4-after"));
+    println!("quirks.docked_hover_water_loss {loss}: alive after the second disabling: {alive}");
+}
+
+/// S-0314 r88 claim 21 and H4 part i run 7: a hover over open water at
+/// least 10 cells from any depot, disabled by its control centre's
+/// switch-off, is tested at its spin's end in both positions of
+/// `quirks.docked_hover_water_loss` (Q-1876 answered).
+fn hover_disabled_away(lane: &mut Lane) {
+    for loss in [true, false] {
+        let mut fresh;
+        let lane: &mut Lane = if loss {
+            &mut *lane
+        } else {
+            fresh = Lane::start().expect("the install is set");
+            &mut fresh
+        };
+        hover_disabled_away_run(lane, loss);
+    }
+}
+
+fn hover_disabled_away_run(lane: &mut Lane, loss: bool) {
+    let Some((hn, centre)) = hover_setup(lane, loss) else {
+        return;
+    };
+    let w = lane.world();
+    let depots: Vec<CellXY> = w
+        .objects
+        .values()
+        .filter(|o| {
+            o.on_map
+                && o.kind == Kind::Building
+                && w.rules().buildings[o.type_index as usize]
+                    .building
+                    .unit_repair
+        })
+        .map(|o| o.pos.cell())
+        .collect();
+    let far = |c: CellXY| {
+        depots
+            .iter()
+            .all(|d| (d.x - c.x).abs().max((d.y - c.y).abs()) >= 10)
+    };
+    let home = lane.home();
+    let water = |l| l == land::WATER;
+    let mut spot = None;
+    'find: for r in [0, 8, 16, 24, 32] {
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (-1, 0), (0, -1)] {
+            if let Some(c) = lane.area(
+                CellXY::new(home.x + dx * r, home.y + dy * r),
+                (1, 1),
+                2,
+                water,
+            ) && far(c)
+            {
+                spot = Some(c);
+                break 'find;
+            }
+        }
+    }
+    let Some(sea) = spot else {
+        println!("no open water 10 cells from every depot: unreached");
+        return;
+    };
+    let local = lane.local();
+    let v = lane.spawn(Kind::Vehicle, &hn, local, sea);
+    println!("hover at {sea:?}, {} depots on the map", depots.len());
+    hover_trace(lane, v, 60, |_| false);
+    lane.look_at(sea);
+    lane.ticks(1);
+    lane.save(&format!("hover-away-{loss}-1-hovering"));
+    power_order(lane, centre, false);
+    let alive = hover_trace(lane, v, 900, |_| false);
+    lane.save(&format!("hover-away-{loss}-2-after"));
+    println!("quirks.docked_hover_water_loss {loss}: alive after the disabling: {alive}");
 }
 
 /// The shared repair scene: `unit` is damaged to a quarter, clicked onto
