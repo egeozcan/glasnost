@@ -2,13 +2,13 @@
 id: S-0314
 title: Healing and repair in combat (healers, self-healing, house-wide healing, repair depot, hospital, building repair)
 topic: combat
-revision: 77
+revision: 88
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-10-27
 measurements: []
-requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610]
+requests: [Q-1156, Q-0341, Q-0641, Q-0680, Q-0681, Q-0682, Q-0683, Q-0674, Q-0790, Q-0794, Q-1158, Q-1162, Q-1610, Q-1876]
 supersedes: []
 ---
 
@@ -37,6 +37,9 @@ vehicle's wait to come down, can delay the step. The step comes at the first pro
 meets the completed-settling condition of S-0504 claim 8 (Changes for other specs).
 A hovering vehicle lost over water at a naval yard has the quirk switch
 `quirks.docked_hover_water_loss` (claim 21, Edge cases), whose default is the original's loss.
+With the switch off, only a vehicle in contact with a depot or settled at a depot (Terms) is
+spared the water test; a hovering vehicle disabled away from any depot is tested as usual
+(Q-1876).
 
 ## Terms
 
@@ -47,9 +50,10 @@ Shared terms used here are defined in the glossary: *house*, *infantry*, *vehicl
 *human-controlled*, *available credits*, *credit balance*.
 S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In addition:
 
-- **Settled vehicle.** A state that a vehicle takes on at a depot: on arriving at its docking
-  point, or at a settling processing. It can last after the vehicle's contact with the depot
-  ends (claim 22).
+- **Settled vehicle.** A state that a vehicle takes on in three ways: on its movement arrival
+  at a depot's docking point, at a depot's settling processing, or at the switch-off of a
+  disabling of S-0405 claim 20, wherever it is (*Away from a depot*). Taken on at a depot, it can
+  last after the vehicle's contact with the depot ends (claim 22).
   - *What makes it settled:* its movement arrival in the docking-point cell (claim 17), whatever
     its state before; and a settling processing that finds it standing still within 200 leptons
     of its docking point, unless the *production* slot hold of claim 6 applies at that
@@ -59,7 +63,12 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     `quirks.depot_loss_strands_hover` off, losing contact with a depot also ends it (Edge cases).
     At every end, a hovering vehicle is switched on again (claim 21).
     - *A destination received* while a depot or tank bunker occupies its cell, an empty one
-      included (a cleared destination) (claim 22). Only an assignment that takes effect counts:
+      included (a cleared destination), by a vehicle whose locomotor then counts as switched
+      off (claim 22). For a vehicle that does not hover, that is every moment while it is
+      settled. A hovering vehicle counts as switched off only once it is down: while it is still
+      above the ground it is powered in S-0503's sense (S-0503 Terms), so a destination it
+      receives then does not end its being settled, wherever it is. Only an assignment that takes
+      effect counts:
       S-0207 claim 27 rejects an assignment that leaves the destination unchanged, empty to empty
       included, unless a destination-refresh state is present (it is present only during a
       vehicle's placement and its teleporting dock approach, S-0207 claim 27), and a rejected
@@ -70,7 +79,8 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     - *A waiting processing that does not accept it* (claim 21).
     - *An enabling* of S-0405 claim 20.
     - *The guard reset of a disabling* of S-0405 claim 20, when its cleared destination takes
-      effect (the vehicle still has a destination) while a depot occupies the cell. The same
+      effect (the vehicle still has a destination) while a depot occupies the cell, on the same
+      condition of a locomotor that counts as switched off as above. The same
       disabling's switch-off makes it settled again on the same tick (claim 21).
     - *Not an end:* the removal of the vehicle's order-level destination by the depot's own
       settling processing (claim 21) is not a receipt of a destination. It neither ends its being
@@ -81,15 +91,95 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
     a processing that finds the vehicle already settled and, if it hovers, down on the ground
     (claims 6 and 21). So after an end of being settled, the first settling processing that
     again finds the vehicle standing still within 200 leptons takes no step. A hovering vehicle
-    is switched off in S-0503 claim 10's sense when it becomes settled and again at each later settling
-    processing that finds it within 200 leptons, settled, standing still and not yet down, so it
-    comes down on the ground (claim 21). A settled hovering
-    vehicle that is down on the ground cannot move while it stays settled (claim 22). Being settled is seen only through
-    these effects.
+    is switched off in S-0503 claim 10's sense when it becomes settled and again at each later
+    settling processing that finds it within 200 leptons, settled, standing still and not yet
+    down, so it
+    comes down on the ground (claim 21). A settled hovering vehicle that is down on the ground
+    cannot move while it stays settled (claim 22). Being settled is seen only through these
+    effects, through the ends listed above, and, with `quirks.docked_hover_water_loss` off,
+    through the water test that spares a vehicle settled at a depot (*Settled at a depot*). For a
+    vehicle settled away from a depot that has no contact with a depot and stays in cells that
+    neither a depot nor a tank bunker occupies, neither these effects nor that sparing arises,
+    and of the ends only the enabling does (*Away from a depot*).
+  - *Away from a depot:* a disabling of S-0405 claim 20 makes a vehicle settled wherever it is,
+    with or without contact with a depot. The disabling switches every such vehicle's locomotor
+    off, which makes it switched off in S-0503 claim 10's sense; a hovering one counts as switched
+    off only once it is down (*What ends it*). Take a vehicle that became settled in a cell that
+    holds neither a depot nor a tank bunker, and that since then has had no contact with a depot
+    and has stood in no cell that a depot or tank bunker occupies. It shows no effect of being
+    settled beyond those of the disabling itself (S-0405 claim 20, S-0503 claims 8 and 10).
+    While it stays so, no end of being settled other than the enabling can fire for it: it has
+    no contact with a depot, so no settling or waiting processing reads it, and no depot or tank
+    bunker occupies its cell, so neither a destination it receives nor a later disabling's guard
+    reset ends it. The enabling that ends the disabling also ends its being settled. Once it
+    stands in a cell that a depot occupies, or gains contact, *Settled away, then at a depot*
+    applies. Once it stands in a cell that a tank bunker occupies, a destination that takes
+    effect there while its locomotor counts as switched off ends its being settled (*What ends
+    it*), and a hovering one is switched on again at that end although it is still disabled
+    (claim 21); no settling or waiting processing reads it there.
+  - *Settled away, then at a depot:* such a vehicle may still reach a depot while it is disabled.
+    A hovering one may move while it is still above the ground if a late order or an accepted
+    scatter request gives it a destination (S-0405 claim 20, which rates that movement low; Open
+    questions), and a late enter order can gain it contact with a depot (claim 17). Reaching a
+    cell that a depot occupies changes nothing by itself. Whether it is still above the ground
+    when it gets there is not established: S-0503 gives a vehicle that is not powered no thrust
+    but slows it by braking rather than stopping it at once, so it may still be moving when it
+    touches down. Both cases follow *What ends it*:
+    - If it is still above the ground, a destination it receives there does not end its being
+      settled (above).
+    - If it is down, a destination that takes effect while the depot occupies its cell ends its
+      being settled. That includes a late order, a scatter request's destination and the
+      cleared one of a later disabling's guard reset (S-0405 claim 20). A guard reset's
+      disabling makes it settled again on the same tick, and settled at a depot (*Disabling
+      while docked*, claim 21).
+    - A contact gained by an entry request is contact in claim 17's sense, and its movement
+      arrival in the docking-point cell makes it settled again (claim 17).
+    - With `quirks.docked_hover_water_loss` off, which of these it reaches decides whether its
+      spin end is tested (*Settled at a depot*, below), whichever height it arrives at.
+  - *Settled at a depot:* a vehicle is settled at a depot while it is settled and the event that
+    last made it settled was its movement arrival (claim 17), a settling processing (claim 21), or
+    a disabling while it had contact with a depot or while a depot occupied its cell (claim 21,
+    *Disabling while docked*). A disabling anywhere else makes it settled but not settled at a
+    depot. A vehicle settled away from a depot that then stands in a cell a depot occupies,
+    with no contact and made settled by no later event of this list, is still not settled at a
+    depot (*Settled away, then at a depot*). Only `quirks.docked_hover_water_loss` reads the
+    difference (claim 21, Edge cases); with the switch at its default nothing does. So with the
+    switch off, such a vehicle is spared the water test while it has contact (claim 17) or once
+    its arrival at the docking point or a later disabling in the depot's cell has made it settled
+    at a depot, and is tested otherwise, as in open water. This was decided at the delegated
+    sign-off, 2026-10-25: the switch spares a vehicle that has contact with a depot or that an
+    arrival or a disabling at the depot made settled, and tests one that reached a depot's cell
+    already disabled, with no contact.
+  - *Backing:* for a vehicle with no contact with a depot, in cells that neither a depot nor a
+    tank bunker occupies, the away-from-a-depot rule is `unmeasured`: every effect it could have
+    there is the disabling's own (S-0405 claim 20), so no run tells being settled there from not
+    being settled. Confidence medium. Its tank-bunker end is `unmeasured`: no scenario here puts
+    a disabled, settled vehicle in a tank bunker's cell and gives it a destination there, and
+    the case's effect on the vehicle belongs to S-0405 claim 20 (Changes for other specs).
+    Confidence medium. That a destination received while a hovering vehicle is still above the
+    ground ends nothing is `unmeasured`, rated medium. In settling, an end would switch the
+    vehicle on (claim 21) only until the depot's next settling processing, which comes every
+    tick while the vehicle is within 200 leptons and not down, switches a vehicle that stands
+    still there off again. Its height over those ticks mixes S-0503 F6's bob term with S-0503
+    claim 8's damped lift and retained vertical velocity, so no end-of-tick recording tells a
+    vehicle that had lift for a few ticks from one that had none. A longer end needs the order
+    to set the vehicle moving before it is down, and whether an order can do that is open (Open
+    questions). In working, or after the depot's removal, nothing switches it off again (claims
+    21 and 22), so an end would leave it raised; but that needs a destination in the few ticks
+    between a disabling and its touching down, and no known input ensures one (S-0405 claim
+    20), so no scenario here sets those cases up. How a vehicle settled away from a depot
+    then reaches one is `unmeasured`: it needs a late order or a scatter request in the few
+    ticks between the disabling and the vehicle touching down near a depot, and no known input
+    ensures either (S-0405 claim 20). Confidence low, as S-0405 claim 20 rates that movement.
+    Whether it arrives still above the ground or already down is `unmeasured` for the same
+    reason, confidence low. *Settled at a depot* is our engine's term for the switch-off
+    position: `unmeasured` (design), confidence medium; the rule holds whichever way the
+    vehicle arrives.
   - *What is observed:* the ends are stated so that the processings at which the settling step
-    comes are fixed. An engine that keeps no such state but takes the
-    settling step at the same processings, and switches a hovering vehicle off and on at the
-    same moments, conforms.
+    comes are fixed. With `quirks.docked_hover_water_loss` at its default, an engine that keeps
+    no such state but takes the settling step at the same processings, and switches a hovering
+    vehicle off and on at the same moments, conforms. With the switch off, the water test also
+    reads whether the vehicle is settled at a depot (*Settled at a depot*).
   The depot's *settling* phase
   (claim 6) and the *settled vehicle* are this spec's senses; neither is S-0503 claim 10's
   settling of a hovering vehicle down to height 0, which this spec calls coming down on the
@@ -201,7 +291,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
    "medic" or "mechanic" type flag: a healer that repairs vehicles but not infantry is a healer
    whose warhead's versus values are 0 for infantry armour classes, and the reverse.
    *Dropping the target.* When a healer's target stops being a legal healing target, for example
-   because it has reached full health, is no longer of the right kind, or is gone, the firing
+   because it has reached full health, has stopped being of the right kind, or is gone, the firing
    check gives its *illegal* answer. S-0310 (claim 11) owns which targets give *illegal* for a
    healer vehicle and for a healer infantry unit, and what the answer does to a vehicle's target.
    What the unit then does is the attack behaviour of S-0215. This spec adds no rule to that.
@@ -869,7 +959,7 @@ S-0205's notation applies: trunc, ⌈ ⌉, RZ₅₃, *single* and *double*. In a
 
     Reaching the destination cell is distinct from first contact. The completed-entry exchange
     can turn a tethered vehicle toward 16384 facing units (map east) and report arrival once it
-    is no longer moving and still has *enter* as its behaviour. Separately, reaching the supplied
+    has stopped moving and still has *enter* as its behaviour. Separately, reaching the supplied
     docking-point cell during movement sets the depot's ready mark and queues *repair* at
     the depot and *sleep* at the vehicle, neither with an immediate start. S-0215 claim 29
     already states this ready-mark effect; starts still follow S-0215 claim 11, rather than
@@ -1084,7 +1174,7 @@ only the vehicle in that place.
       can dock; one whose movement zone is plain amphibious, for example) whose spin ends while it
       is less than 104 leptons above the water is given the bomb mark, falls and is lost (S-0503
       claim 11), and the yard then meets the loss of a vehicle in contact (claim 6's rows with no
-      contact). The spin ends at the latest on the first tick on which the vehicle is no longer
+      contact). The spin ends at the latest on the first tick on which the vehicle has stopped being
       powered (S-0503 claim 10), so one that takes the draws while still above the water is given
       the bomb mark when its spin ends, on the tick it comes down at the latest, and is lost when
       its fall ends (S-0503 claim 11, which leaves the fall's end to S-0312), unless the spin ends
@@ -1101,14 +1191,26 @@ only the vehicle in that place.
       part i run 1); run 6 (ii) records it at the yard. At a land depot the spin ends over land and
       the vehicle survives it. This loss is the original's behaviour and the default of quirk
       `quirks.docked_hover_water_loss` (Edge cases). With the switch off, a spin end that comes
-      while the vehicle has contact with a depot (Terms) or is settled makes no water test: the
-      vehicle is not given the bomb mark and does not fall. Once its contact has ended and it is
-      not settled, a later spin end is tested as usual by S-0503 claim 11.
+      while the vehicle has contact with a depot (Terms) or is settled at a depot (Terms) makes no
+      water test: the vehicle is not given the bomb mark and does not fall. Once its contact has
+      ended and it is not settled at a depot, a later spin end is tested as usual by S-0503 claim
+      11. So a hovering vehicle disabled over open water away from any depot, for example when its
+      house loses its last control centre, is subject to S-0503 claim 11's water test, with that
+      claim's exception for a spin that ends at least 104 leptons above the water, in the original
+      (H4 part i run 7), and in our engine in both positions of the switch. With the switch off,
+      the same holds for a vehicle settled away from a depot that then reaches a cell a depot
+      occupies while it is disabled, with no contact, as long as no later event has made it
+      settled at a depot (Terms, *Settled away, then at a depot*).
       - Backing: `measurable` (H4 part i run 6: a disabling at a naval yard while the vehicle
         is above the water, a no-draw control in working, and a land-depot control). That
         buildings leave their cells' land type unchanged is shown there only for the yard in
         that run. The behaviour with `quirks.docked_hover_water_loss` off is our engine's rule:
-        `unmeasured` (design, as the original has no such setting), confidence medium.
+        `unmeasured` (design, as the original has no such setting), confidence medium. Its
+        limit to a vehicle in contact or settled at a depot was decided at the delegated
+        sign-off, 2026-10-25: the switch removes a loss that a vehicle suffers because it is
+        being serviced, and the loss of a hovering vehicle switched off over open water is an
+        ordinary rule of S-0503 claim 11 that the switch leaves alone. The original's loss away
+        from a depot is `measurable` (H4 part i run 7), confidence medium.
       - Confidence: medium until run 6 runs, which uses a named test type that no stock type
         matches and may be reported unreached.
     - *Enabling while settled.* An enabling of S-0405 claim 20 switches a settled vehicle on
@@ -1134,10 +1236,12 @@ only the vehicle in that place.
       with no extra processing; a hovering vehicle that was still raised loses its lift and comes
       down. The cases differ only in the draws a hovering vehicle takes at the disabling:
       S-0503 claim 10's two draws, from the scenario random stream, when the disabling's cleared
-      destination switches it on (it takes effect, Terms) or when it is above the ground or was
-      still switched on from an earlier end of being settled, and none otherwise:
+      destination switches it on (it takes effect while it is down and switched off, Terms) or
+      when it is above the ground or was still switched on from an earlier end of being settled,
+      and none otherwise:
       - *Before the settling step,* at a docking point in a depot cell, the vehicle still has its
-        destination, so the cleared destination takes effect and switches it on: a hovering
+        destination, so the cleared destination takes effect: it switches on a hovering vehicle
+        that is down, and one still above the ground is powered already, so either way a hovering
         vehicle takes the two draws.
       - *After the settling step,* in settling or working, its order-level destination is
         already empty (claim 21). Unless a destination-refresh state is present (only during
@@ -1161,7 +1265,9 @@ only the vehicle in that place.
       takes no draws: S-0503 claim 10's draws are the hovering locomotor's.
       - Backing: `measurable` (H4 part i run 4 before the settling step at a docking point in
         a depot cell; run 5 after the settling step and at a docking point outside the
-        foundation). That no destination-refresh state is present for a vehicle in contact is
+        foundation). That the hovering vehicle's lift stays off after the disabling is S-0405
+        claim 20's and S-0503 claim 10's rule, and these runs record its height without judging
+        it (run 4). That no destination-refresh state is present for a vehicle in contact is
         `unmeasured`: S-0207 claim 27 gives refresh only at placement and in its dock approach,
         and no scenario here sets one up.
       - Confidence: medium until runs 4 and 5 run; medium for the absence of refresh.
@@ -1226,7 +1332,7 @@ only the vehicle in that place.
       arrival did not accept the vehicle, and no input is known that ensures one (below, for
       why H18 b's waiting repeat does not), so part b
       remains an attempt. After an order received on the depot, a vehicle standing still within 200
-      leptons that is no longer settled (its step then comes at the next processing, as above) is
+      leptons that has stopped being settled (its step then comes at the next processing, as above) is
       `unmeasured`: no order is known that leaves the vehicle standing still within 200 leptons
       of its docking point, since the nearest other cell centre is 256 leptons away, and H18 b's
       settling repeat checks only the moving recheck. The removal
@@ -1283,22 +1389,26 @@ only the vehicle in that place.
       (`quirks.depot_loss_leaves_sleep`).
     - *Settled vehicles.* Becoming settled (Terms) and the settling step that follows are as
       claim 21 states. Normally a vehicle stops being settled when it receives a destination
-      while a depot or tank bunker occupies its cell; the depot's own removal of its destination
+      while a depot or tank bunker occupies its cell and its locomotor counts as switched off
+      (Terms); the depot's own removal of its destination
       at a settling processing is not such a receipt (Terms, claim 21). A settled hovering vehicle that is down on
       the ground cannot move while it stays settled. While it is still above the ground after becoming settled it counts
-      as powered in S-0503's sense (S-0503 Terms). An order that gives it a destination in that window while a depot
-      still occupies its cell ends its being settled, as above. Whether an order given in that
-      window after its depot has left the map can move it is not settled (Open
-      questions). If its depot is destroyed or otherwise removed without a sale after the
+      as powered in S-0503's sense (S-0503 Terms), so a destination it receives in that window
+      does not end its being settled, whether or not a depot still occupies its cell (Terms): its
+      lift stays off and it goes on sinking. Once it is down, a destination received while a
+      depot or tank bunker occupies its cell ends its being settled, as above. Whether an order
+      given in that window can move it is not settled (Open questions). If its depot is destroyed or otherwise removed without a sale after the
       vehicle became settled, a later destination does not end its being settled while no depot
       or tank bunker occupies its cell (Terms). A sale is different: the depot still occupies its cells from the start
       of the sale to its removal, since a building occupies its foundation (glossary,
       *building*) and a sold building stays in play until the processing that finds its
       build-down complete removes it (S-0408 claims 6 and 17), so the run-away notice's clearing of a
       destination that is the depot, the destination of a scatter request that notice brings,
-      and a destination that an order gives it before the removal each end the vehicle's being settled as above. A
-      vehicle settled in a cell of a sold depot's foundation is still settled after the removal only if it received no
-      destination between the start of the sale and the removal; one settled at a docking point
+      and a destination that an order gives it before the removal each end the vehicle's being
+      settled as above, once a hovering vehicle is down (Terms). A
+      vehicle settled in a cell of a sold depot's foundation is still settled after the removal only if no destination
+      it received between the start of the sale and the removal ended its being settled (one
+      received while a hovering vehicle is still above the ground does not, Terms); one settled at a docking point
       outside the foundation follows the ends of Terms.
       Once it is down, a hovering vehicle stays immobile under every later order
       (`quirks.depot_loss_strands_hover`). No such effect was found for other land locomotors
@@ -1342,7 +1452,7 @@ only the vehicle in that place.
       without an animation wait. In working it enters settling and rechecks after 1 tick.
       In settling, from that already scheduled processing on, it stays in its repair behaviour,
       checking every tick, until its *special-3*
-      slot animation is no longer running, and only then returns to *guard*. The slot's duration
+      slot animation has stopped running, and only then returns to *guard*. The slot's duration
       from the art data is deterministic simulation state: neither visibility nor drawing-frame
       cadence changes this wait. S-0108 claim 20 owns the slot changes: *special-3* and
       *active-1* start on loss of contact in waiting or working, and in settling when
@@ -1373,7 +1483,9 @@ only the vehicle in that place.
       a destination received between the start of a sale and the depot's removal ends being
       settled is `measurable` (H18 e's sale repeat, through its move order), rated medium until it
       runs. For the run-away notice's scatter request it is `unmeasured`, medium: H18 e starts
-      after the settling step, where S-0207 claim 16 can refuse the scatter.
+      after the settling step, where S-0207 claim 16 can refuse the scatter. That a destination
+      received while a hovering vehicle is still above the ground does not end its being settled
+      is `unmeasured`, rated medium, for the reason that Terms gives.
     - Backing for the other ends and the restart: `measurable` (H18 b for the 1-tick recheck
       within 200 leptons of a vehicle that has received a destination and is moving. It backs the end of being settled on receiving a destination
       only that far: a rule that rechecks after 1 tick whenever the vehicle moves, settled or not,
@@ -1407,6 +1519,8 @@ only the vehicle in that place.
       - medium, resting on H18 b and e, which are not yet run: that a destination received on
         the depot ends being settled, and that a vehicle settled at a lost depot gets claim 6's
         timing at another.
+      - medium, `unmeasured` (Terms): no end of being settled at a destination received while a
+        hovering vehicle is still above the ground.
       - medium: the settling row for a loss in the 3 ticks after an acceptance.
       - low: the scatter request, and no stranding for other land locomotors.
 
@@ -1789,10 +1903,13 @@ alternatives are design rules, not claims of oracle measurements.
   2026-10-25. A hovering vehicle docked at a naval yard standing on water, whose switch-off there
   starts a spin (S-0503 claim 10) that ends while it is less than 104 leptons above the water, is
   lost (claim 21, *Over water, at a naval yard*; S-0503 claim 11). With the switch off, a spin end
-  that comes while the vehicle has contact with a depot (Terms) or is settled makes no water test:
-  the vehicle is not given the bomb mark and does not fall. Once its contact has ended and it is
-  not settled, a later spin end is tested as usual by S-0503 claim 11. Everywhere else S-0503 claim
-  11's water test is unchanged. The behaviour with the switch off is our engine's rule:
+  that comes while the vehicle has contact with a depot (Terms) or is settled at a depot (Terms)
+  makes no water test: the vehicle is not given the bomb mark and does not fall. Once its contact
+  has ended and it is not settled at a depot, a later spin end is tested as usual by S-0503 claim
+  11. Everywhere else S-0503 claim 11's water test is unchanged: a hovering vehicle disabled away
+  from any depot is settled (Terms) but not settled at a depot, and its spin end over water is
+  tested in both positions of the switch. Limiting the switch to service at a depot was decided at
+  the delegated sign-off, 2026-10-25. The behaviour with the switch off is our engine's rule:
   `unmeasured` (design), confidence medium.
 - **Several contact places** (departure). The original services only place 0 (claims 20 to
   23). With an imported docking-place count above 1, a queued second vehicle can take place 1.
@@ -2135,7 +2252,9 @@ too.
   the owner's power cut while the recorder shows settling, the vehicle settled and down on the
   ground, before the settling step; power stays cut. *Expected:* at the disabling tick, two
   draws, R(20, 30) then R(0, 99), with the vehicle's current behaviour *guard* after it (or
-  *wait* if it was in *wait*); the vehicle does not rise; the next settling processing that
+  *wait* if it was in *wait*). Its height is recorded but not judged: with its lift on, S-0503
+  claim 8's truncated height update can hold a vehicle short of its hover height field, so no
+  fixed height tells lift on from lift off. The next settling processing that
   finds it standing still takes its step, with no processing in between that takes none; the
   contact is kept and later steps follow part a's spacing. Repeat run 4 with a land vehicle of
   a type that S-0405 claim 13 disables: no draw at the disabling, and the step at the next
@@ -2153,14 +2272,14 @@ too.
   working step answers *cannot pay* and the depot returns to settling with the vehicle in
   contact (claim 6); the power is cut while the recorder shows that settling phase, and the
   owner is given ample credits 2 *D* ticks after the cut, so that the later steps can be
-  judged. *Expected:* no draw at the disabling tick, the vehicle does not
-  rise, its current behaviour is *guard* after it (or *wait*), and its later steps keep part a's
-  spacing. Repeat on H19 part f's named pad-test map, whose depot's docking point lies in an
+  judged. *Expected:* no draw at the disabling tick, its height recorded but not judged (as in
+  run 4), its current behaviour is *guard* after it (or *wait*), and its later steps keep part
+  a's spacing. Repeat on H19 part f's named pad-test map, whose depot's docking point lies in an
   accessible cell outside its foundation, with run 4's hovering vehicle docked there by an
   ordinary entry and the power cut before the settling step while the vehicle is settled and
   down there (S-0405 claim 20 passes over only a vehicle tethered to a depot standing in its
-  own cell): no draw and no rise. Run 5 is an attempt: a repeat whose recorder does not
-  show the vehicle down and settled at the disabling is inconclusive.
+  own cell): no draw. Run 5 is an attempt: a repeat
+  whose recorder does not show the vehicle down and settled at the disabling is inconclusive.
   *Run 6 (a naval yard, claim 21's water case):* a tiny test map with water cells, an own
   naval yard of a type with the repair flag and without the pad flag or either unloading flag
   standing on them (so the ordinary entry establishes no tether, S-0405 claim 13), an own land depot and the
@@ -2185,18 +2304,30 @@ too.
   processing that finds it standing still and down. Run 6 uses a test type that no stock type
   matches and may be reported unreached; a repeat whose recorder does not show the phase and
   height that its case names at the cut is inconclusive.
+  Run 7 (Q-1876): the same test type with the powered-unit flag, ordered over an open water cell
+  at least 10 cells from any depot or naval yard, its house given one control centre that is then
+  destroyed while the recorder shows the vehicle standing still above the water and never docked.
+  *Expected:* two draws at the disabling, and on the tick its spin ends less than 104 leptons above
+  the water the bomb mark and the loss, as S-0503 claim 11 gives. A spin that ends at least 104
+  leptons up leaves that repeat inconclusive: repeat the run with a fresh vehicle, destroying the
+  control centre at a different tick of the vehicle's hover, until one repeat's spin ends less
+  than 104 leptons up, and stop after 10 repeats, reporting run 7 unreached if none does. The
+  same run repeated in our engine, once with
+  `quirks.docked_hover_water_loss` in each position, checks claim 21's switch-off rule there.
   *Falsified if:* in run 1, draws come only at the first switch-off while the vehicle is above
   the ground in a behaviour other than *sleep* and *enter* at later processings, or come at a
   processing where its behaviour is *sleep* or *enter*; in run 2, it comes down during working
   or a step is deferred while it stands still; in run 3, it keeps its lift after the next
   settling processing, or a step comes while it is above the ground; in the land repeat, the
   step comes at the first settling processing after the enabling; in run 4, the hovering
-  vehicle takes no draw at the disabling or rises, or any repeat's step comes 1 tick after a
-  settling processing that took none while the vehicle stood still (and was down), or the
-  contact is released; in run 5, a draw at the disabling or a rise; in run 6 (i), the vehicle
+  vehicle takes no draw at the disabling, or any
+  repeat's step comes 1 tick after a settling processing that took none while the vehicle stood
+  still (and was down), or the contact is released; in run 5, a draw at the disabling; in run 6
+  (i), the vehicle
   survives the end of its spin less than 104 leptons above the yard's water cell, or takes no
   draws (a spin that ends at least 104 leptons up leaves (i) inconclusive for the loss); in (ii), a loss
-  with no draw logged since the vehicle came down; in (iii), the vehicle is lost.
+  with no draw logged since the vehicle came down; in (iii), the vehicle is lost; in run 7, the
+  vehicle survives the end of its spin less than 104 leptons above the water.
 
 **H5: building repair (claim 8).** Building repair rate 0.016 (the absent-key default, so *P*<sub>b</sub> =
 14), a building type with cost 1000 and strength 1000, repair step 10, repair percentage 25 % (step
@@ -2689,7 +2820,7 @@ damaged to half strength unless a part says otherwise.
   to *guard* at its next processing without waiting for *special-3*; working enters settling
   with a 1-tick retry; after its first no-contact processing, no-contact settling checks every
   tick and returns to *guard* only once
-  *special-3* is no longer running. Repeat the settling hold with the depot off-screen and at
+  *special-3* has stopped running. Repeat the settling hold with the depot off-screen and at
   different drawing-frame cadences: the simulation ticks of the animation end and guard return
   do not change (S-0108 claim 20, B18 g). Then order another vehicle to enter.
   *Falsified if:* a contact survives, the approaching vehicle keeps its depot order, the docked
@@ -2779,7 +2910,7 @@ damaged to half strength unless a part says otherwise.
   Expect no tether when the
   conditions of claim 17's one-place case hold, but normal paid repair. A pause that allows
   an enter processing with no moving destination in the centre cell is a separate control,
-  expected to tether, not evidence that the uninterrupted case tethers. Confirm that the
+  expected to tether, not evidence that the uninterrupted case tethers. Check that the
   separate locomotor destination has actually cleared: a pause in physical motion alone
   does not create this control. In both pad and
   no-pad runs record the depot ready mark immediately around movement arrival, and its
@@ -2841,7 +2972,7 @@ damaged to half strength unless a part says otherwise.
   leptons from the supplied docking point. Record distance, movement, processing tick,
   health, credits, tether/contact and the second vehicle's ability to acquire the place.
 - **Expected:** no step or credit debit, retained settling and contact, and the next settling processing *D* ticks later (that
-  the vehicle is no longer settled afterwards is claim 21's rule
+  the vehicle has stopped being settled afterwards is claim 21's rule
   and is not observed here). Contrast a still-moving check below 200: next
   processing 1 tick later. Stationary distant settling can take the repair step.
 - **Falsification:** distant moving settling takes a step, frees contact, advances to working,
@@ -3016,12 +3147,12 @@ The measurement scenario requires a read-only record of the ordered events; end-
 - Whether a settled vehicle with a driving or other non-hovering land locomotor can still
   move (claim 22, low confidence). H18 e records it.
 - Whether an order can move a settled hovering vehicle while it is still sinking, between its
-  becoming settled and its touching down, when its depot has left the map (sold or
-  destroyed) inside that window (claim 22). S-0503 counts it as powered then, so a destination
-  could start a path search (S-0503 claim 5). A hovering vehicle settled by its arrival sinks from
+  becoming settled and its touching down (claim 22), whether or not its depot is still on the map.
+  S-0503 counts it as powered then, so a destination could start a path search (S-0503 claim 5).
+  The order does not end its being settled, whether or not a depot occupies its cell (Terms,
+  claim 22), and its lift stays off. A hovering vehicle settled by its arrival sinks from
   that arrival on, since it is switched off when it becomes settled (Terms), so the window opens at
-  the arrival in that case. An order in that window while a depot still occupies its cell ends its
-  being settled (Terms, claim 22) and is not part of this question.
+  the arrival in that case.
 - Whether a scatter request after the sale's run-away notice moves a vehicle that is already
   standing on or beside the depot (claim 22; S-0215 claim 19 owns acceptance).
 - The former allied-depot blocking question concerns route-point action selection, owned by
@@ -3067,17 +3198,24 @@ The measurement scenario requires a read-only record of the ordered events; end-
 - S-0503 claim 11, after "A switch-off that starts no spin, while no spin is active, makes no such
   test, and the vehicle rests on the water.", gains: "With S-0314's quirk
   `quirks.docked_hover_water_loss` off, a spin end that comes while the vehicle has contact with a
-  repair depot or naval yard or is settled makes no water test: the vehicle is not given the bomb
-  mark and does not fall. Once its contact has ended and it is not settled, a later spin end is
-  tested as usual by this claim (S-0314 claim 21 and Edge cases). The default is the original's
-  loss." S-0314 scenario H4 part i run 6 tests the default loss at a naval yard.
+  repair depot or naval yard or is settled at one (S-0314 Terms) makes no water test: the vehicle
+  is not given the bomb mark and does not fall. Once its contact has ended and it is not settled at
+  a depot, a later spin end is tested as usual by this claim (S-0314 claim 21 and Edge cases). The
+  default is the original's loss." S-0314 scenario H4 part i run 6 tests the default loss at a
+  naval yard.
 
 - S-0405 claim 20, *Movement and turning*: "a scatter request is refused because its
   locomotor is off" becomes "a scatter request is refused because its locomotor is off, unless a
-  repair depot has switched it on again at an end of being settled (S-0314 claim 21)". A
-  disabled vehicle in contact with a depot is switched on when it stops being settled, like any
-  other vehicle (S-0314 claim 21), and the claim's "It starts no new movement of its own" takes the
-  same exception for that scatter; claim 20's other rules for it are unchanged. Otherwise S-0405
+  repair depot, or a destination in a tank bunker's cell, has switched it on again at an end of
+  being settled (S-0314 Terms and claim 21)". A disabled vehicle in contact with a depot is
+  switched on when it stops being settled, like any other vehicle (S-0314 claim 21), and so is a
+  disabled hovering vehicle that is down in a cell that a tank bunker occupies when a destination
+  takes effect there (S-0314 Terms, *What ends it* and *Away from a depot*). Its second state,
+  "after it has been switched on again at an end of its being settled at a repair depot",
+  becomes "… at a repair depot or in a tank bunker's cell", with the same switch-on that leaves
+  it disabled and does not reset its guard state. The claim's "It starts no new movement of its
+  own" takes the same exception for that scatter in both cases; claim 20's other rules for it
+  are unchanged. Otherwise S-0405
   claim 20 (enabling and disabling) states its own effects on the vehicle without using this
   spec's *settled* term. What the enabling and the disabling do to a vehicle's being settled is
   stated once, in this spec's Terms and claim 21, which own the term. S-0606 needs no change:
