@@ -106,13 +106,15 @@ and a plain harvester sent to harvest, and four driving types sent about 20 cell
 ticks the chrono miner made 4 jumps, all 4 onto the refinery's docking cell in *enter*, none
 elsewhere; it drove 67 cells and had teleporting current for 0 tick ends (it is teleporting only
 inside a docking jump's tick). Three of the four driving types reached their cells; the fourth
-did not move (its goal cell, chosen by offset, was not investigated).
+did not move: its goal cell, chosen by offset, lies in no reach region of its movement zone
+(S-0212 claim 4; the lane prints each driver's start and goal regions), while the other three
+goals share their start's region.
 
 **Gate and margins** (main 70eef44 before, this branch after; the sweeps and the arena ran on
 the build before the scatter-request hook, which acts only on vehicles with the teleport-capable
 flag: since claim 28 itself moved none of these games, none of them has such a vehicle).
 - Sweeps M6c, M7a and M7b, seeds 1 to 16, reference and with the play-fixes layer: every min,
-  median and max is the same as before. The gate games pass.
+  median and max is the same as before, and so is every per-seed line. The gate games pass.
 - Oracle arena (local lane): the three game files are byte for byte the same. M-0001 30 of 96
   pairings failing, 150 of 171 unanimous outcomes reproduced; M-0002 12 of 24, 42 of 47; M-0003 2
   of 35, 60 of 64.
@@ -126,9 +128,12 @@ flag: since claim 28 itself moved none of these games, none of them has such a v
   against Yuri 52 535 / 34 976 (27 688 / 47 051); map 2 against Soviet 64 376 / 68 299
   (30 770 / 48 233), against Yuri 83 201 / 35 449 (49 712 / 42 163); map 0 against Soviet
   43 437 / 53 862 (26 258 / 63 247), against Yuri 50 278 / 23 341 (40 232 / 40 533). It falls in
-  4 of 6 games, and in the other two the game ran much longer. The Allied house won 4 of 6 games on main and 2 of 6 here. Watched on map 0 against Yuri
+  4 of 6 games, and in the other two the game ran much longer. The Allied house won 4 of 6
+  games on main and 2 of 6 here. Watched on map 0 against Yuri
   (ticks 16 000 to 24 000): a chrono miner loads at a field about 16 cells from its refinery,
   jumps onto the docking cell in *enter*, unloads, and drives back in about 350 ticks; a cycle
-  takes about 1 300 ticks. On main the same miners jumped both ways and reached fields farther
-  off; here the near field runs low and the miners spend more time seeking (harvester ticks in
-  *harvest* or *guard* while seeking: 1 593 on main, 30 745 here).
+  takes about 1 300 ticks. On main the same miners jumped both ways. In that game the Allied
+  house's two chrono miners made 34 jumps, all 34 onto the docking cell in *enter*. Its refinery
+  was destroyed at about tick 24 500 and the AI did not build another (no refinery spending,
+  credits near 0), so both miners stood in *guard* until about tick 39 800; that, not claim 28,
+  is where this game's idle harvester ticks come from.
