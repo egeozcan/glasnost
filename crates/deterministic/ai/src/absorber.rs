@@ -35,6 +35,7 @@
 //! not game behaviour.
 
 use glasnost_map::CellXY;
+use glasnost_sim::econ::slaves;
 use glasnost_sim::econ::{production, tech};
 use glasnost_sim::orders::Order;
 use glasnost_sim::rules::{Behaviour, Kind};
@@ -143,7 +144,14 @@ fn free_infantry(w: &World, id: ObjectId) -> bool {
     // Already on its way: waiting in line or in contact (a new order would
     // end the wait and put it at the back again).
     let going = absorb::waiting_for(w, id).is_some() || o.contact.is_some();
-    !special && !going && scripted::idle(w, id) && targeting::selectable(w, id)
+    // design: a slave resting by its master is that master's worker, not
+    // spare infantry (the opponent is ours); inside a reactor it would never
+    // mine again. The grinder leaves slaves alone too.
+    !special
+        && !going
+        && !slaves::is_slave(w, id)
+        && scripted::idle(w, id)
+        && targeting::selectable(w, id)
 }
 
 impl Special {
