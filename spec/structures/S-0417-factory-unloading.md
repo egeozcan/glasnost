@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 64
+revision: 68
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-10-29
 measurements: []
-requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110, Q-1757, Q-1850]
+requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110, Q-1757, Q-1850, Q-1980]
 supersedes: []
 ---
 
@@ -50,6 +50,16 @@ its release, or S-0404 claim 13 gives the release another failure. That walk is 
 within the 54 ticks between releases at a stock infantry speed, but this spec has no figure for
 a stock walking speed, and only U10 f would show it. This is rated medium until U10 parts b and
 f are run, and only on that condition.
+Q-1980 is answered in claim 17 (*No path*). A walking unit whose fresh search fails at the
+reachability gate loses that destination in the same movement update, and its movement in
+progress ends, so the next request is accepted with its draw (question 1). A walking unit that
+holds a destination while its retry delay runs has movement in progress, so each request during
+the wait is refused with no draw and the destination is kept (question 2). For a walking unit
+other than a fraidycat whose current behaviour has the scatter property (claim 17, *During the
+walk-off*), later requests are refused while an accepted destination waits or is walked to, so a
+draw comes once per failed fresh search, not once per turn (question 3). Questions 1 and 2 are
+rated medium (`unmeasured`: U10 g needs input in the unit's release window), the repeated
+cycle of question 3 low.
 Still open: whether a released jumpjet infantry unit is in *guard* or *area guard*
 over K's foundation and so receives that request (Open question 3), whether a busy second
 finished item differs between factories with one contact place and those with several (Open
@@ -782,15 +792,44 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     S-0208 claim 24's limits on a move order. A teleporting unit jumps there (below), which
     needs no path (S-0208 claim 19). Whether a further request is sent depends on the conditions
     above. A refused request, or an accepted one that gets no destination, leaves the unit
-    resting on the building cell. A walking unit whose path computation fails at the reachability
-    gate (S-0208 claim 24, S-0212 claim 6) also stays on the building cell, but it keeps that
-    destination (S-0212 claim 23, the row for the gate's failure); a failed search follows S-0212
-    claim 23's other rows instead. A later request replaces that destination only if the unit
-    accepts it. Whether its locomotor reports movement in progress while it holds a destination
-    with no path, so that S-0208 claim 11's third case refuses each later request as during the
-    walk-off (below), is not established. If the conditions
+    resting on the building cell. If the conditions
     above still hold in its next turn, the request is sent again; each accepted request takes its
     draw.
+
+    **No path (Q-1980).** A walking unit whose destination gets no path also stays on the
+    building cell. What a later request finds depends on why it has no path:
+    - *Waiting for the retry delay.* A walking unit that holds a destination it has not yet
+      searched for, because its retry delay (S-0212 claim 21) still runs, has movement in
+      progress. Its locomotor normally has movement in progress from the moment the destination
+      reaches it, before any path is found, and keeps it while it waits. So S-0208 claim 11's
+      third case refuses each request that comes during the wait, as during the walk-off
+      (below, with the fraidycat exception given there): it takes no draw, and the unit keeps its
+      destination. The fresh search is made when the delay is over.
+    - *Failed at the reachability gate.* When a walking unit's fresh search fails at the
+      reachability gate (S-0208 claim 24, S-0212 claim 6), its destination is cleared in the same
+      movement update and its movement in progress ends, as with the driving and ship locomotors
+      (S-0212 claim 23, the row for the gate's failure). Its
+      behaviour is unchanged, so it still rests in *guard* or *area guard*. The first request
+      after that update is accepted unless claim 11's first case refuses it, with its draw. No
+      request finds the unit holding the destination that failed.
+    - *Failed search.* A fresh search that passes the gate but finds no path also ends the
+      walking unit's movement in progress in that update, whether or not the unit keeps its
+      destination (S-0212 claim 23, the sentence after its table on rows 2 and 3), so the first
+      request after it is accepted in the same way.
+
+    The delay *R* of S-0212 claim 21 starts at each failed fresh search, and for a walking unit a
+    new destination does not cut it short (S-0212 claim 21). The rest of this paragraph is for a
+    walking unit other than a fraidycat whose current behaviour has the scatter property: every
+    unit has scatter permission for this request, so S-0208 claim 11's third case refuses each
+    such unit's request that is not effectively forced, and the fraidycat exception of *During
+    the walk-off* accepts each request instead. The destination of a request accepted after a
+    failed search
+    waits for what remains of *R*: the requests during that wait are refused with no draw, and
+    its fresh search is made when the wait is over. If that search fails as well, the next
+    request is accepted with a draw, and the cycle repeats. Such a unit on a building cell whose
+    every scatter destination fails therefore takes one draw per failed fresh search, not one
+    per turn. When *R* is 0 there is no wait, and it takes one in each turn in which a request
+    comes. A destination whose search succeeds is walked to as above.
 
     **During the walk-off.** An accepted request whose destination comes from S-0212 claim 25's
     search leaves the unit's current behaviour as it was. So a walking unit that has accepted one
@@ -911,9 +950,15 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       with the
       fraidycat flag. The fall-back's queued *move*, and a teleporting unit's jump after a
       fall-back destination, are `unmeasured` for the reason given for the repeat above: no stock
-      setup is known in which the search around a factory's foundation gives no cell. Whether a
-      walking unit whose path failed at the reachability gate reports movement in progress is
-      `unmeasured`: no part of U10 gives a resting unit a destination behind that gate. That the
+      setup is known in which the search around a factory's foundation gives no cell. *No path*
+      is `unmeasured`: U10 g would test the gate's failure, the cleared destination, the accepted
+      request after it and the refused requests while the next destination waits for the retry
+      delay, but it needs an order that takes effect after the unit's release and before its
+      first turn. The cycle repeated over several
+      failed searches is `unmeasured`: U10 g gives one
+      destination behind the gate, and no stock setup is known in which every scatter destination
+      around a factory fails the gate. A failed search that passes the gate is `unmeasured` here:
+      no part of U10 makes one for a resting unit. That the
       request follows the start of
       the resting behaviour in the same turn is our engine's rule (design), and the original's
       order within the turn is `unmeasured` (Open question 11).
@@ -933,9 +978,13 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       - *During the walk-off*, a walking unit keeping its first destination and a teleporting
         unit's jump in its request's turn: medium, until U10 b and e are run. The fraidycat
         exception,
-        the fall-back's queued *move*, the jump after a fall-back destination, and the later
-        requests of a walking unit whose path failed at the reachability gate: low
+        the fall-back's queued *move* and the jump after a fall-back destination: low
         (`unmeasured`).
+      - *No path*: medium for the cleared destination after the gate's failure, the accepted
+        request after it and the refusals while a destination waits for the retry delay
+        (`unmeasured`, as above). Low for the end of movement in progress after a failed search that
+        passes the gate, as S-0212 claim 23 rates that sentence, and for the repeated cycle
+        (both `unmeasured`).
       - *area guard*, other buildings, the enslaved unit's exception, the request in the same
         turn as a later behaviour change, the repeat in every turn, the exempt buildings and the
         bridge-cell destination (all `unmeasured` here), and the jumpjet case: low.
@@ -1393,6 +1442,36 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   release does not test the no-busy expectation (claim 14) and is reported so; a cell that the
   visibility test of S-0212 claim 25 makes non-preferred is taken into the prediction, not
   scored as a falsifier.
+  Part g (Q-1980): as part b, on a test map with a small island in another reach region within
+  a few cells of the factory and no bridge to it (S-0212 scenario P3's island). Run 1 uses stock
+  data. Run 2 sets the path-retry delay field to 0.1 game minutes, giving *R* = 90 ticks (S-0212
+  P25 a), an exception to the no-data-change instruction above limited to this part. With the
+  random-state recorder, record per tick from release, for 300 ticks: current and queued
+  behaviour, destination, movement in progress, the remaining retry delay, position, cell,
+  whether the cell holds K, and the draws. Give the unit by scripted input a move to an island
+  cell, as an order that takes effect after its release and before its first turn, so that it
+  is still on the release cell when it first searches. Give it through a team script if
+  targeting would replace the island cell (as P3 does). The release and the order share one
+  input window (S-0215 claim 12): the harness queues the order, or the team script's start, in
+  the window in which the place order takes effect and after it, naming the unit the release
+  has just created. The part runs only with a harness that can place that input in that
+  window, which is not established. An order given in a later window, after the unit's first
+  turn, does not test the part, and such a run is reported so (below). Expect:
+  - no step towards the island,
+  - the destination cleared and movement in progress ended in the tick of the fresh search that
+    fails at the gate, with the retry delay *R* running from that tick (S-0212 claim 21),
+  - in the first later turn in which *guard* is current and the unit is on a cell that holds K,
+    an accepted request with its draw and a new destination,
+  - while that destination waits for the rest of the delay, movement in progress, the same
+    destination and no draw taken by a request in each turn, then the walk off the foundation
+    once the delay is over.
+
+  Falsifiers: the island destination still held in a later tick; no draw at the first request after
+  the gate's failure although *guard* is current and the unit is on a cell that holds K; a
+  request's draw or a destination change during the wait; no movement in progress during the wait.
+  A run in which the unit has left the cells of K when the gate fails, or whose first request comes
+  before the island order takes effect, does not test the part and is reported so. Which tick the
+  first request falls on, relative to the failure, is not scored (Open question 11).
 - **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
   production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
   order. Record the factory's guard processings, the scatter requests and the vehicle's
