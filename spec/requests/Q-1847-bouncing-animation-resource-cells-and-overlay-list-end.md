@@ -1,9 +1,9 @@
 ---
 id: Q-1847
 title: A bouncing animation's new resource cells, the resource lists and the end of the overlay list
-status: open
+status: answered
 related: [S-0319, S-0401, S-0202, Q-1762]
-answered-by: []
+answered-by: [S-0319]
 ---
 
 ## Need
