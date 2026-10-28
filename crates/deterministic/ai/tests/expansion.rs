@@ -151,10 +151,13 @@ fn a_rich_house_with_a_far_field_builds_a_yard_vehicle() {
     let (orders, builds, _) = think(&mut w, &map);
     assert!(builds_mcv(&w, &orders), "{orders:?}");
     assert_eq!(builds, 1);
-    // Without the far field scouted, none.
-    let mut w = g.world.clone();
+    // Without the far field, none. (On the far-field map the harvesters
+    // explore it themselves once the refinery beside the home field has
+    // mined that field down, M8 step B8.)
+    let plain = fixture::map();
+    let mut w = built_up(&plain).world;
     w.houses[0].credits = 100_000;
-    let (orders, builds, _) = think(&mut w, &map);
+    let (orders, builds, _) = think(&mut w, &plain);
     assert!(!builds_mcv(&w, &orders), "{orders:?}");
     assert_eq!(builds, 0);
 }

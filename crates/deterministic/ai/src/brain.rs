@@ -357,7 +357,11 @@ impl Brain {
             mark(p, "ai:plant_first");
             if !self.script.selling() {
                 let plant = self.script.plant_type(w);
-                let n = crate::power::plant_first(w, self.house(), plant, &mut out);
+                // design: a lost refinery is not put behind a power plant
+                // (M8 step B8: in the quick lane the plant that replaced it
+                // was cancelled for it at the next think, over and over).
+                let lost = self.script.refinery_lost(w);
+                let n = crate::power::plant_first(w, self.house(), plant, lost, &mut out);
                 self.special.count_plants_first(n);
             }
         }
@@ -496,6 +500,7 @@ impl Brain {
         // barracks for the soldiers the base needs, and none is started
         // while the building is short.
         let has_yard = self.has_yard(w);
+        let lost = self.script.refinery_lost(w);
         let army = |t: TypeRef| army_item(w, t, has_yard);
         let short = !paying && !self.script.selling() && self.superweapon_short(w);
         let saving = short && self.safe(w);
@@ -504,7 +509,13 @@ impl Brain {
             if i.done() || economy(i.t) {
                 continue;
             }
-            if paying {
+            if paying && lost.is_some_and(|t| production::line_kind(w, t) == Some(l.kind)) {
+                // design: the item on the line a lost refinery needs is
+                // cancelled, not held: a held item keeps its line (S-0404
+                // claim 5), and the refinery could not start (M8 step B8).
+                // spec: S-0404 claim 6 (the cancel-all order; at an unchanged price the refund is everything paid)
+                out.push(Order::CancelAll { what: i.t });
+            } else if paying {
                 let power = scripted::role_of(w, i.t) == Some(Role::Power);
                 if i.hold == Hold::None && !(power && low_power) {
                     out.push(Order::Hold { what: i.t });
@@ -660,11 +671,17 @@ impl Brain {
     /// Whether the house pays for its economy first ([`Self::economy_first`]):
     /// it is short of its economy target or of a refinery, and an item of
     /// the harvester or refinery role runs on a line with less money in hand
-    /// than its balance owed.
+    /// than its balance owed; or its harvesters wait for a lost refinery
+    /// (`Script::refinery_lost`) that is not on its lines yet, selling out
+    /// or not (M8 step B8).
     fn paying(&self, w: &World) -> bool {
         use glasnost_sim::econ::production::Hold;
         let h = self.house();
-        let short = !self.script.selling()
+        let lost = self.script.refinery_lost(w);
+        if lost.is_some_and(|t| !self.script.in_line(w, t)) {
+            return true;
+        }
+        let short = (!self.script.selling() || lost.is_some())
             && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
         let credits = w.houses[usize::from(h.0)].credits;
         short
@@ -1303,7 +1320,8 @@ impl Brain {
 
     /// Places a finished building of the house: an anti-air defence near
     /// the drainer in the air it answers (`antiair::place_goal`, M8 step
-    /// B6), any other in the spiral around the yard.
+    /// B6), a refinery beside the field (`Script::place_refinery`, M8 step
+    /// B8), any other in the spiral around the yard.
     fn place_done(&self, w: &World, out: &mut Vec<Order>) {
         let house = self.house();
         let done = w.econ.lines.lines.iter().find_map(|l| {
@@ -1314,6 +1332,7 @@ impl Brain {
         let cell = done.and_then(|t| {
             crate::antiair::place_goal(&self.script, w, t)
                 .and_then(|goal| self.script.place_near(w, t, goal))
+                .or_else(|| self.script.place_refinery(w, t))
                 .or_else(|| self.script.place_cell(w, t))
         });
         if let Some(t) = done
@@ -2363,9 +2382,9 @@ impl Brain {
     /// `scripted::FIELD_REACH` of each and the distance to the nearest;
     /// each harvester's cell, behaviour, phase, load and distances to the
     /// nearest refinery and the nearest explored resource cell; the role
-    /// the plan builds next, the refinery types it can build and place, a
-    /// refinery item on its lines, and the economy-first and selling
-    /// states.
+    /// the plan builds next, the refinery types it can build and place, the
+    /// items on its lines (line kind, role, progress, hold), and the
+    /// economy-first and selling states.
     pub fn economy_probe(&self, w: &World) -> String {
         use glasnost_sim::econ::{resource, shroud};
         use std::fmt::Write as _;
@@ -2448,34 +2467,33 @@ impl Brain {
             .iter()
             .filter(|&&t| s.place_cell(w, t).is_some())
             .count();
-        let lined: Vec<String> = w
-            .econ
-            .lines
-            .lines
-            .iter()
-            .filter(|l| l.house == h)
-            .flat_map(|l| {
-                let item = l.item.iter().filter(|i| is_economy(w, i.t)).map(|i| {
-                    format!(
-                        "{:?} {}/54 owed {} hold {:?}{}",
-                        scripted::role_of(w, i.t),
-                        i.progress,
-                        i.owed,
-                        i.hold,
-                        if i.done() { " done" } else { "" }
-                    )
-                });
-                let queued = l
-                    .queue
-                    .iter()
-                    .filter(|&&t| is_economy(w, t))
-                    .map(|&t| format!("{:?} queued", scripted::role_of(w, t)));
-                item.chain(queued).collect::<Vec<_>>()
-            })
-            .collect();
+        let lined: Vec<String> =
+            w.econ
+                .lines
+                .lines
+                .iter()
+                .filter(|l| l.house == h)
+                .flat_map(|l| {
+                    let item = l.item.iter().map(|i| {
+                        format!(
+                            "{:?}: {:?} {}/54 owed {} hold {:?}{}",
+                            l.kind,
+                            scripted::role_of(w, i.t),
+                            i.progress,
+                            i.owed,
+                            i.hold,
+                            if i.done() { " done" } else { "" }
+                        )
+                    });
+                    let queued = l.queue.iter().map(move |&t| {
+                        format!("{:?}: {:?} queued", l.kind, scripted::role_of(w, t))
+                    });
+                    item.chain(queued).collect::<Vec<_>>()
+                })
+                .collect();
         let _ = write!(
             out,
-            "; plan wants {:?}; refinery types {} placeable {}; economy items {lined:?}",
+            "; plan wants {:?}; refinery types {} placeable {}; line items {lined:?}",
             s.wanted_role(w),
             types.len(),
             placeable,

@@ -1042,12 +1042,20 @@ impl Script {
         }
         self.watch.selling = true;
         let army = !self.of_role(w, Role::Army).is_empty();
+        // design: while its harvesters wait for a lost refinery the house
+        // keeps the construction yard that builds one, and sells the rest
+        // first to pay for it (M8 step B8: in the quick lane a house sold
+        // its yard first, the costliest building, and its two miners stood
+        // for the rest of the game).
+        let rebuilding = self.refinery_lost(w).is_some();
         let keep = |id: ObjectId| {
             let Some(o) = w.obj(id) else { return true };
-            FACTORIES.iter().any(|&k| {
-                self.allowed(w, tech::type_of(o), Role::Factory(k))
-                    && self.of_role(w, Role::Factory(k)).first() == Some(&id)
-            }) && army
+            (rebuilding && is_yard(w, o))
+                || (army
+                    && FACTORIES.iter().any(|&k| {
+                        self.allowed(w, tech::type_of(o), Role::Factory(k))
+                            && self.of_role(w, Role::Factory(k)).first() == Some(&id)
+                    }))
         };
         let sale = self
             .own(w)
@@ -1262,6 +1270,11 @@ impl Script {
     /// Power is read off the plants without a blackout (`power::short`): a
     /// blackout is not answered with power plants.
     pub(crate) fn wanted_role(&self, w: &World) -> Option<Role> {
+        // design: a lost refinery its harvesters wait for comes before
+        // power (M8 step B8): with no refinery the house has no income.
+        if self.refinery_lost(w).is_some() {
+            return Some(Role::Refinery);
+        }
         let low_power =
             crate::power::short(w, self.house) || self.of_role(w, Role::Power).is_empty();
         low_power
@@ -1275,6 +1288,29 @@ impl Script {
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
             .find(|&r| !self.candidates(w, r).is_empty())
+    }
+
+    /// The refinery type the house rebuilds before anything else, when it
+    /// keeps harvesters (not slave miners, which are their slaves' own
+    /// refinery, S-0402 claim 14) and has lost every refinery: the cheapest
+    /// refinery type it can build and place now. A harvester whose owner
+    /// owns no refinery queues *guard* and stands (S-0402 claim 13), so the
+    /// house earns nothing until one stands again; a person rebuilds it
+    /// first, clearing the building line and holding the rest of the
+    /// sidebar for it (`Brain::economy_first`), and keeps the construction
+    /// yard while selling out (M8 step B8: in the quick lane a lost
+    /// refinery waited behind a power plant on the building line at
+    /// credits near 0, and the yard was sold).
+    pub(crate) fn refinery_lost(&self, w: &World) -> Option<TypeRef> {
+        if self.has_refinery(w)
+            || self.slave_miners(w)
+            || self.of_role(w, Role::Harvester).is_empty()
+        {
+            return None;
+        }
+        self.candidates(w, Role::Refinery)
+            .into_iter()
+            .find(|&t| self.placeable(w, t))
     }
 
     /// The power plant the plan builds next: the cheapest power plant type
@@ -1403,13 +1439,19 @@ impl Script {
                     .flatten()
                     .and_then(|g| self.place_toward(w, t, g))
             };
-            if let Some(cell) = aa.or_else(toward).or_else(|| self.place_cell(w, t)) {
+            if let Some(cell) = aa
+                .or_else(|| self.place_refinery(w, t))
+                .or_else(toward)
+                .or_else(|| self.place_cell(w, t))
+            {
                 out.push(Order::Place {
                     what: t,
                     cell: Some(cell),
                 });
             }
-        } else if !selling {
+        } else if !selling || self.refinery_lost(w).is_some() {
+            // design: a house selling out still rebuilds a lost refinery
+            // its harvesters wait for (`Script::refinery_lost`, M8 step B8).
             let wanted = self.wanted_role(w);
             let walk = || {
                 // The cheapest power plant with a cell toward the water.
@@ -1420,7 +1462,8 @@ impl Script {
             };
             if let Some(role) = wanted {
                 self.build(w, role, &mut out);
-            } else if self.harvesters_kept(w)
+            } else if !selling
+                && self.harvesters_kept(w)
                 && let Some(t) = walk().or_else(|| self.climb(w))
             {
                 self.order_build(w, t, &mut out);
@@ -1982,6 +2025,75 @@ impl Script {
             .filter(|&c| dist2(c, goal) < reach)
             .filter(|&c| self.fits(w, t, c))
             .min_by_key(|&c| (dist2(c, goal), c.y, c.x))
+    }
+
+    /// The explored resource cell a refinery goes beside: the one nearest
+    /// home (first in cell order on equal distance) with at least
+    /// [`CELLS_PER_HARVESTER`] explored resource cells within
+    /// [`FIELD_REACH`] cells, a field that keeps a harvester at work; with
+    /// none, the explored resource cell nearest home.
+    fn ore_goal(&self, w: &World) -> Option<CellXY> {
+        let home = self.home(w)?;
+        let mut ore: Vec<CellXY> = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, self.house, c)
+            })
+            .collect();
+        ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let rich = |c: CellXY| {
+            ore.iter().filter(|&&o| dist2(o, c) <= reach).count() >= CELLS_PER_HARVESTER
+        };
+        ore.iter()
+            .copied()
+            .find(|&c| rich(c))
+            .or_else(|| ore.first().copied())
+    }
+
+    /// Where a person puts a refinery (M8 step B8): in the wider spiral
+    /// around the construction yard, the legal cell whose foundation is
+    /// nearest the field of [`Script::ore_goal`], with no resource under
+    /// it, the gap narrowing as in [`Script::place_cell`]. A harvester
+    /// leaves its refinery for the field after every load, so a refinery
+    /// beside the field shortens every trip; the spiral's first legal cell
+    /// lies wherever the spiral starts (M8 step B8: in the quick lane the
+    /// Allied miners loaded 10 to 16 cells from their refinery and spent a
+    /// third of each cycle on the way out). None for a house whose
+    /// refineries are slave miners (S-0402 claim 14), or for another role.
+    pub(crate) fn place_refinery(&self, w: &World, t: TypeRef) -> Option<CellXY> {
+        if role_of(w, t) != Some(Role::Refinery) || self.slave_miners(w) {
+            return None;
+        }
+        let goal = self.ore_goal(w)?;
+        let search = {
+            let cells: Vec<CellXY> = self.spiral(w, WIDE_RINGS).collect();
+            placement::PlaceSearch::new(w, self.house, t, &cells)
+        };
+        let p = search.place_type();
+        let (fw, fh) = p.size;
+        let centre = |c: CellXY| CellXY::new(c.x + fw / 2, c.y + fh / 2);
+        let mut cells: Vec<CellXY> = self.spiral(w, WIDE_RINGS).collect();
+        cells.sort_by_key(|&c| (dist2(centre(c), goal), c.y, c.x));
+        let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
+        let known = self.known_objects(w, None);
+        (0..=GAP).rev().find_map(|gap| {
+            cells.iter().zip(legal.iter_mut()).find_map(|(&c, l)| {
+                let ok = *l.get_or_insert_with(|| {
+                    search.cell_test(w, c)
+                        && search.place_legal(w, c)
+                        && placement::foundation_cells_of(p, c)
+                            .iter()
+                            .all(|&f| resource::resource_at(w, f).is_none())
+                });
+                (ok && free_among(&known, &placement::foundation_cells_of(p, c), gap)).then_some(c)
+            })
+        })
     }
 
     /// Whether the foundation's cells hold no object and keep a gap of
