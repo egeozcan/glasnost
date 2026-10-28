@@ -287,7 +287,7 @@ fn claim_16a_a_rebuild_counts_friends() {
         let own = put(&mut w, Kind::Building, "HUT3", 2, -8, -8);
         let ally = put(&mut w, Kind::Vehicle, "BUGGY", 1, 8, -8);
         put(&mut w, Kind::Vehicle, "BUGGY", 0, 0, 8);
-        assert_eq!(total(&w, G) > 0, true);
+        assert!(total(&w, G) > 0);
         assert_eq!(
             window(&w, G, block_of(at(-8, -8))),
             empty(),

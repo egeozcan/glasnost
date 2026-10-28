@@ -381,6 +381,7 @@ fn coarse_threat(w: &World, lv: &SectorLevel, l: usize, q: u32, s: u32, h: House
             // spec: S-0212 F5 (a: q's quarters towards d; b: s's quarters towards the opposite direction; t = ⌊(a + b) / 2⌋)
             let a = side(lv.block[q as usize], dx, dy);
             let b = side(lv.block[s as usize], -dx, -dy);
+            // spec: S-0212 F5 (t = ⌊(a + b) / 2⌋)
             (a + b).div_euclid(2)
         }
     }
