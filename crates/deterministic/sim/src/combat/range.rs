@@ -543,7 +543,7 @@ pub fn approach_search(w: &mut World, id: ObjectId, r_prime: i32) -> Option<Appr
         // spec: S-0307 claim 19 (the candidate end on the deck when its cell carries a high bridge)
         let c_deck = w.high_bridge(cell);
         let e = |p: CellXY, pd: bool, q: CellXY, qd: bool| {
-            crate::path::coarse_estimate_layers(w, u.zone, p, pd, q, qd)
+            crate::path::coarse_estimate_layers(w, u.zone, p, pd, q, qd, None)
         };
         // spec: S-0307 claim 16 and Constants (E(c, t) <= C(c, t) + 8 or E(a, c) <= C(a, c) + 8 cells; a failed estimate never satisfies)
         e(cell, c_deck, t_cell, t_deck).is_some_and(|x| x <= cheb(cell, t_cell) + 8) // spec: S-0307 claim 16 (8 cells)

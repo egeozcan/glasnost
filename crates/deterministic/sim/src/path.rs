@@ -1914,7 +1914,13 @@ fn anchor(w: &World, x: CellXY, s: u32) -> Option<CellXY> {
 /// The estimate test of S-0212 claim 24 for adopting `found` in place of
 /// the destination `dest`: the coarse estimate E is at most their
 /// Chebyshev distance plus 6 cells.
-fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: CellXY) -> bool {
+fn estimate_ok(
+    w: &World,
+    id: ObjectId,
+    u: &crate::rules::UnitRules,
+    found: CellXY,
+    dest: CellXY,
+) -> bool {
     // spec: S-0212 claim 24 (E for the unit's own zone; zone normal for a subterranean unit whose destination passes the further test)
     let zone = if u.zone == MovementZone::Subterranean && burrow_ok(w, dest) {
         MovementZone::Normal
@@ -1923,7 +1929,17 @@ fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: Cell
     };
     let direct = (found.x - dest.x).abs().max((found.y - dest.y).abs());
     // spec: S-0212 claim 24 (adopted when E ≤ Chebyshev distance + 6; not when the coarse search fails)
-    coarse_estimate(w, zone, found, dest).is_some_and(|e| e <= direct + 6) // spec: S-0212 Constants (substitution detour allowance 6 cells)
+    coarse_estimate_layers(
+        w,
+        zone,
+        found,
+        true,
+        dest,
+        true,
+        // spec: S-0212 claim 24 (Q-1975: the coarse search adds the threat term as a path computation's does: the unit's own coefficient and its owner's records, the zone alone changing for a subterranean unit)
+        corridor::threat_of(w, id),
+    )
+    .is_some_and(|e| e <= direct + 6) // spec: S-0212 Constants (substitution detour allowance 6 cells)
 }
 
 /// The coarse estimate E of S-0212 claim 24 and F8 from `found` to `dest`
@@ -1931,12 +1947,13 @@ fn estimate_ok(w: &World, u: &crate::rules::UnitRules, found: CellXY, dest: Cell
 /// The regions must be up to date ([`regions::ensure`]).
 pub fn coarse_estimate(w: &World, zone: MovementZone, found: CellXY, dest: CellXY) -> Option<i32> {
     // spec: S-0212 claim 13b (the found cell counts as on a bridge deck when it is a bridge cell)
-    coarse_estimate_layers(w, zone, found, true, dest, true)
+    coarse_estimate_layers(w, zone, found, true, dest, true, None)
 }
 
 /// [`coarse_estimate`] with each end read on its deck (`found_deck`,
 /// `dest_deck`) or on the ground: a bridge cell read on the ground is its
-/// own coarse end cell (S-0212 claim 13b); the legs of F8 follow the bridge
+/// own coarse end cell (S-0212 claim 13b); `threat` is the threat term of the
+/// coarse search (claim 24, `None` for none); the legs of F8 follow the bridge
 /// cells as before.
 pub fn coarse_estimate_layers(
     w: &World,
@@ -1945,19 +1962,22 @@ pub fn coarse_estimate_layers(
     found_deck: bool,
     dest: CellXY,
     dest_deck: bool,
+    threat: Option<corridor::Threat>,
 ) -> Option<i32> {
     // spec: S-0212 claim 13b (a bridge cell read as on its deck has its coarse end cell at a bridge end; any other cell is its own)
     let found_end = coarse_end(w, found, found_deck);
     let dest_end = coarse_end(w, dest, dest_deck);
-    // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted). With no threat term: whether this search reads the unit's threat is asked in Q-1975
-    let chains = corridor::coarse(
+    // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted; the threat term of `threat` as in a path computation, F5)
+    let chains = corridor::coarse_why(
         w,
         &w.regions.sectors,
         zone,
         found_end,
         dest_end,
         &Default::default(),
-    )?;
+        threat,
+    )
+    .ok()?;
     let chain = &chains[0];
     let n = chain.len() as i32;
     let cheb = |a: CellXY, b: CellXY| (a.x - b.x).abs().max((a.y - b.y).abs());
@@ -2225,7 +2245,7 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
                     r.mode,
                 ) as i64;
                 // spec: S-0212 claim 24 (adopted when nearer than D_u and the coarse estimate E allows it)
-                if d < du && estimate_ok(w, &u, c, goal) {
+                if d < du && estimate_ok(w, id, &u, c, goal) {
                     goal = c;
                 }
             }

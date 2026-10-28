@@ -603,3 +603,38 @@ fn claim_13_a_unit_with_a_threat_coefficient_goes_round_threat() {
     let bent = shy_path("1", true);
     assert!(off_row(&bent) >= 4, "k 1 bends round the blocks: {bent:?}");
 }
+
+/// The coarse estimate E of claim 24 from at(-12, 0) to at(12, 0) for a
+/// fresh SHY of Alpha with coefficient `k`, with Beta's BUGGY beside the
+/// row at at(0, 3); the unit's own threat term as the substitution passes it.
+fn shy_estimate(k: &str) -> Option<i32> {
+    let mut r = threat_ruleset();
+    r.registries.get_mut("vehicles").unwrap().push("SHY".into());
+    let mut shy = r.sim.vehicles["BUGGY"].clone();
+    shy.combat.threat_posed = None;
+    shy.threat_avoidance_coefficient = Some(d(k));
+    r.sim.vehicles.insert("SHY".into(), shy);
+    let mut w = game_on(&r, Triggers::default());
+    put(&mut w, Kind::Vehicle, "BUGGY", 1, 0, 3);
+    let v = put(&mut w, Kind::Vehicle, "SHY", 0, -12, 0);
+    glasnost_sim::regions::ensure(&mut w);
+    let threat = corridor::threat_of(&w, v);
+    glasnost_sim::path::coarse_estimate_layers(
+        &w,
+        glasnost_rules::sim::MovementZone::Normal,
+        at(-12, 0),
+        true,
+        at(12, 0),
+        true,
+        threat,
+    )
+}
+
+// spec: S-0212 claim 24 (Q-1975: the estimate's coarse search adds the threat term with the unit's own coefficient, so a unit with a coefficient above 0.00001 gets a longer level-0 corridor, a larger E, where a unit with coefficient 0 gets the plain one), scenario P30 part j's shape
+#[test]
+fn claim_24_the_estimate_reads_the_units_threat() {
+    let calm = shy_estimate("0").expect("a corridor");
+    assert_eq!(shy_estimate("0.000001"), Some(calm), "k at the limit: none");
+    let shy = shy_estimate("1").expect("a corridor");
+    assert!(shy > calm, "threat bends the corridor: {shy} vs {calm}");
+}
