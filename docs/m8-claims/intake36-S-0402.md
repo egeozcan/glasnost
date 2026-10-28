@@ -103,3 +103,5 @@ git-ignored `local-lane/m8/a3-36/`).
   29 394, Soviet 30 240 / 49 844; map 2 Allied 93 673 / 87 238, Soviet 19 117 / 29 565; map 0
   Allied 75 951 / 29 038 (play fixes 47 054 / 55 962), Soviet 38 955 / 53 987. Yuri's bio
   reactors held 3 to 15 passengers at once in these games (the absorber finding above).
+- Goldens (after the rebase onto intakes 35 and 37): all pass unchanged, and so do the M6c, M7a and M7b
+  gate games.
