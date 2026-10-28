@@ -2871,9 +2871,11 @@ pub struct TerrainObjectType {
     #[serde(default)]
     pub animation_probability: Option<Decimal>,
     /// The number of image frames *N* of the type's sprite (S-0401 claim
-    /// 15, S-0112 Terms *frame count*), from its art; absent: not known,
-    /// and an animated ore mine never makes resource (a provisional rule:
-    /// the importer does not read terrain sprites yet).
+    /// 15, S-0112 Terms *frame count*), which the importer reads from the
+    /// sprite of S-0007 claim 13 for the map's theater; absent (no sprite,
+    /// a file that does not parse, or an import without a theater): an
+    /// animated ore mine never makes resource, as for a sprite of fewer
+    /// than 2 image frames (S-0401 claim 15).
     #[serde(default)]
     pub image_frames: Option<i32>,
     /// `Strength` (S-0302 claim 20), with the game-wide tree strength

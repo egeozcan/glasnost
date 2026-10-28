@@ -7,6 +7,7 @@ mod harvest_common;
 
 use glasnost_map::CellXY;
 use glasnost_sim::econ::harvest::{self, Counter, DockState, HarvestState, Phase};
+use glasnost_sim::econ::sell::Stage;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::Behaviour;
 use glasnost_sim::testkit;
@@ -782,6 +783,266 @@ fn claim_11_refinery_sold_while_entering() {
         o.beh
     );
     assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+fn sale_stage(w: &World, b: ObjectId) -> Option<Stage> {
+    w.obj(b).and_then(|o| o.econ.sale.as_ref()).map(|s| s.stage)
+}
+
+/// Sells `refn` and runs to the tick of the sale's first processing.
+fn sell_to_first_processing(w: &mut World, refn: ObjectId) -> i32 {
+    assert!(orders::issue(w, HouseId(0), Order::Sell { actor: refn }));
+    until(w, 10, |w| sale_stage(w, refn) == Some(Stage::Begun)).expect("first processing")
+}
+
+// spec: S-0402 claim 11 (H12 part a2: harvest queued and started first, then the scatter request while it has no destination; the contact holds through the sale's first processing and ends at its second, 1 tick later, tethered or not) and Changes for other specs (S-0408 claim 6: the tethered harvester holds back the build-down, not the end of its contact)
+#[test]
+fn claim_11_sale_breaks_contact_at_its_second_processing() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let (refn, h) = docked(&mut w, vec![4, 3], 16384);
+    w.obj_mut(h)
+        .unwrap()
+        .econ
+        .harvest
+        .as_mut()
+        .unwrap()
+        .tethered = true;
+    until(&mut w, 100, |w| harvest::load(w, h) == vec![0, 3]).expect("first payment");
+    let first = sell_to_first_processing(&mut w, refn);
+    let o = w.obj(h).unwrap();
+    assert_eq!(o.beh.current, Some(Behaviour::Harvest));
+    assert!(!harvest::state_of(&w, h).unloading);
+    assert_eq!(
+        o.contact,
+        Some(refn),
+        "contact kept at the first processing"
+    );
+    assert!(
+        matches!(o.dest, Some(Target::Cell(_))),
+        "the scatter destination comes while the contact holds: {:?}",
+        o.dest
+    );
+    assert_eq!(harvest::load(&w, h), vec![0, 3]);
+    testkit::run(&mut w, 1);
+    assert_eq!(w.tick, first + 1);
+    assert_eq!(w.obj(h).unwrap().contact, None, "broken at the second");
+    assert!(harvest::docked(&w, refn).is_empty());
+    assert_eq!(
+        sale_stage(&w, refn),
+        Some(Stage::Begun),
+        "a tethered harvester holds back the build-down"
+    );
+    let down = until(&mut w, 10, |w| {
+        matches!(sale_stage(w, refn), Some(Stage::BuildDown(_)))
+    })
+    .expect("build-down");
+    assert!(down > first + 1);
+}
+
+// spec: S-0402 claim 11 and Changes for other specs (a contact without a tether does not hold up the release: with no unit docked, the build-down begins at the sale's second processing, S-0408 claim 6)
+#[test]
+fn claim_11_untethered_contact_does_not_hold_the_sale() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let (refn, h) = docked(&mut w, vec![4, 3], 16384);
+    until(&mut w, 100, |w| harvest::load(w, h) == vec![0, 3]).expect("first payment");
+    assert!(!harvest::state_of(&w, h).tethered);
+    sell_to_first_processing(&mut w, refn);
+    assert_eq!(w.obj(h).unwrap().contact, Some(refn));
+    testkit::run(&mut w, 1);
+    assert_eq!(w.obj(h).unwrap().contact, None);
+    assert!(matches!(sale_stage(&w, refn), Some(Stage::BuildDown(_))));
+}
+
+// spec: S-0402 claim 11 (an unloading harvester whose harvest could not start: the scatter request is refused, since unload is still current (S-0207 claim 16), and it gets no scatter destination)
+#[test]
+fn claim_11_sale_scatter_refused_when_harvest_cannot_start() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let (refn, h) = docked(&mut w, vec![4, 3], 16384);
+    until(&mut w, 100, |w| harvest::load(w, h) == vec![0, 3]).expect("first payment");
+    // The sale's first processing, with a body turn still running.
+    let t = w.tick;
+    w.obj_mut(h).unwrap().body.turn_to(0, t, 1);
+    harvest::refinery_sold(&mut w, refn);
+    let o = w.obj(h).unwrap();
+    assert!(o.body.turning(w.tick));
+    assert_eq!(o.contact, Some(refn));
+    assert_eq!(o.beh.current, Some(Behaviour::Unload));
+    assert_eq!(o.beh.queued, Some(Behaviour::Harvest));
+    assert!(!harvest::state_of(&w, h).unloading);
+    assert_eq!(o.dest, None, "no scatter destination");
+    assert_eq!(harvest::load(&w, h), vec![0, 3]);
+}
+
+// spec: S-0402 claim 11 (H12 part a3: a harvester in enter on the docking cell, still turning: guard queued, a destination naming the refinery removed, the scatter request refused by the turning body; it is in guard soon after and never docks)
+#[test]
+fn claim_11_sale_while_entering_on_the_docking_cell_still_turning() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, dock_cell(), 0);
+    // In enter on the docking cell, tethered, its body turning towards the
+    // dock facing (claim 10 row 3), with a destination naming the refinery.
+    let t = w.tick;
+    let o = w.obj_mut(h).unwrap();
+    o.contact = Some(refn);
+    o.dest = Some(Target::Object(refn));
+    o.econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        tethered: true,
+        ..Default::default()
+    });
+    o.beh.force(Behaviour::Enter, t, true);
+    o.body.turn_to(16384, t, 1);
+    w.obj_mut(refn).unwrap().econ.dock = Some(DockState { holders: vec![h] });
+    sell_to_first_processing(&mut w, refn);
+    let o = w.obj(h).unwrap();
+    assert!(o.body.turning(w.tick));
+    assert_eq!(o.beh.queued, Some(Behaviour::Guard));
+    assert_eq!(
+        o.dest, None,
+        "the refinery destination removed, no scatter cell"
+    );
+    for _ in 0..150 {
+        testkit::run(&mut w, 1);
+        assert_ne!(current(&w, h), Some(Behaviour::Unload), "never docks");
+    }
+    assert_eq!(current(&w, h), Some(Behaviour::Guard));
+    assert_eq!(w.obj(h).unwrap().contact, None);
+    assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+// spec: S-0402 claim 11 (H12 part a4: a harvester in enter, in contact and driving to the docking cell: guard queued, the docking-cell destination kept, no scatter request; it never docks)
+#[test]
+fn claim_11_sale_while_driving_to_the_docking_cell_keeps_it() {
+    let r = sellable_ruleset();
+    let mut w = game(&r);
+    unblock(&mut w);
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "HARV", 0, at(4, 4), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        ..Default::default()
+    });
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    until(&mut w, 30, |w| {
+        let o = w.obj(h).unwrap();
+        o.contact == Some(refn) && o.dest == Some(Target::Cell(dock_cell()))
+    })
+    .expect("in contact, driving to the docking cell");
+    assert_ne!(w.obj(h).unwrap().pos.cell(), dock_cell());
+    sell_to_first_processing(&mut w, refn);
+    let o = w.obj(h).unwrap();
+    assert_eq!(o.beh.queued.or(o.beh.current), Some(Behaviour::Guard));
+    assert_eq!(o.dest, Some(Target::Cell(dock_cell())), "kept, no request");
+    for _ in 0..150 {
+        testkit::run(&mut w, 1);
+        assert_ne!(current(&w, h), Some(Behaviour::Unload), "never docks");
+    }
+    assert_eq!(w.obj(h).unwrap().contact, None);
+    assert_eq!(harvest::load(&w, h), vec![5, 0]);
+}
+
+/// A harvester resting on the docking cell of a refinery, and a second one
+/// at `from`, loaded and ordered to enter the refinery (S-0402 claim 10a).
+fn occupied_dock(w: &mut World, from: CellXY) -> (ObjectId, ObjectId, ObjectId) {
+    unblock(w);
+    let refn = place_building(w, "REFN", 0, refinery_cell());
+    let a = place_vehicle(w, "HARV", 0, dock_cell(), 0);
+    let b = place_vehicle(w, "HARV", 0, from, 0);
+    w.obj_mut(b).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![5, 0],
+        ..Default::default()
+    });
+    assert!(orders::issue(
+        w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: b,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    (refn, a, b)
+}
+
+// spec: S-0402 claim 10a (Q-1870: within the close-enough distance no substitute is adopted; the look at the first cell sends the resting occupant a forced, move-anywhere scatter request, the contacting harvester never gives up the move, keeps its contact and reservation and docks once the cell is clear; the occupant stays in guard)
+#[test]
+fn claim_10a_occupant_scattered_and_the_contacting_harvester_docks() {
+    let r = ruleset();
+    let mut w = game(&r);
+    let (refn, a, b) = occupied_dock(&mut w, at(0, 0));
+    until(&mut w, 600, |w| current(w, b) == Some(Behaviour::Unload))
+        .expect("the contacting harvester docks");
+    assert_ne!(
+        w.obj(a).unwrap().pos.cell(),
+        dock_cell(),
+        "the occupant left"
+    );
+    assert_eq!(w.obj(b).unwrap().pos.cell(), dock_cell());
+    assert_eq!(w.obj(b).unwrap().contact, Some(refn));
+    assert_eq!(current(&w, a), Some(Behaviour::Guard));
+}
+
+/// `occupied_dock` on a base raised to cell level `level` everywhere.
+fn raised_occupied_dock(flat: bool, level: i8) -> (World, ObjectId, ObjectId, ObjectId) {
+    let mut r = ruleset();
+    r.globals.quirks.substitution_distance_flat_destination = flat;
+    let mut w = game_with_map(&r, &[], 7, |m| {
+        for dy in -20..=20 {
+            for dx in -20..=20 {
+                if let Some(c) = m.cells.get_mut(at(dx, dy)) {
+                    c.level = level;
+                }
+            }
+        }
+    });
+    let (refn, a, b) = occupied_dock(&mut w, at(0, 0));
+    (w, refn, a, b)
+}
+
+// spec: S-0402 claim 10a (quirks.substitution_distance_flat_destination: on a base raised so high that the harvester's world height alone exceeds the close-enough distance, every offer is substituted, it never gets a path onto the docking cell, never sends the request and keeps its contact and reservation; with the switch off the true distance decides, so it scatters the occupant and docks)
+#[test]
+fn claim_10a_raised_base_substitutes_every_offer() {
+    let (mut w, refn, a, b) = raised_occupied_dock(true, 8);
+    let r = w.rules_arc();
+    assert!(
+        w.obj(b).unwrap().pos.z > r.general.close_enough,
+        "raised high enough"
+    );
+    for _ in 0..600 {
+        testkit::run(&mut w, 1);
+        assert_ne!(current(&w, b), Some(Behaviour::Unload), "never docks");
+    }
+    assert_eq!(
+        w.obj(a).unwrap().pos.cell(),
+        dock_cell(),
+        "the occupant stays"
+    );
+    assert_eq!(w.obj(b).unwrap().contact, Some(refn), "contact kept");
+    assert!(harvest::docked(&w, refn).contains(&b), "reservation kept");
+    let (mut w, _, a, b) = raised_occupied_dock(false, 8);
+    until(&mut w, 600, |w| current(w, b) == Some(Behaviour::Unload))
+        .expect("switch off: the true distance decides and it docks");
+    assert_ne!(w.obj(a).unwrap().pos.cell(), dock_cell());
 }
 
 // spec: S-0402 claim 11 (finishing with a destination and a queued behaviour other than harvest: leaves the unloading state, starts it, keeps contact)
