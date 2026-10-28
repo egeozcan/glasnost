@@ -776,6 +776,73 @@ fn animation_start_sound() {
     assert_eq!(heard(&mut a, 0), ["Poof"]);
 }
 
+/// Screen points one sixteenth of the leptons: positions far apart are
+/// placed apart.
+fn linear(x: i32, y: i32, _: i32) -> (i32, i32) {
+    (x / 16, y / 16)
+}
+
+// spec: S-0319 claim 5 (a bouncing animation's start sound, while it plays, follows its position in play; presentation only); design: once the animation has left play the sound plays on where it was
+#[test]
+fn bouncing_animation_start_sound_follows_it() {
+    use glasnost_rules::sim::AnimationType;
+    let mut r = ruleset();
+    r.registries
+        .entry("animations".into())
+        .or_default()
+        .push("DROP".into());
+    r.sim.animations.insert(
+        "DROP".into(),
+        AnimationType {
+            bouncer: Some(true),
+            frame_count: Some(200),
+            rate: Some(900),
+            ..Default::default()
+        },
+    );
+    let mut w = testkit::game_with(&r, SIZE, 5);
+    let at = Pos::centre(testkit::mid(SIZE, 0, 0), 2000);
+    let id = glasnost_sim::anims::spawn(&mut w, "DROP", Some(at), Default::default())
+        .id
+        .expect("in play");
+    let mut a = audio(&w, &["Whoosh"]);
+    let mut cat = SoundCatalog::new();
+    let mut e = SoundEntry::new("Whoosh", &["Whoosh"]);
+    e.control.looped = true;
+    cat.insert(e);
+    a.set_catalog(cat);
+    a.set_view(View {
+        origin: (0, 0),
+        size: (800, 600),
+        project: linear,
+    });
+    let mut n = SoundNames::default();
+    n.set_anim_report("DROP", "Whoosh");
+    a.set_names(n);
+    let mut u = Rng::new(1);
+    let start = Effect::Anim {
+        name: "DROP".into(),
+        pos: at,
+        delay: None,
+        reverse: false,
+        z_adjust: None,
+        id: Some(id),
+    };
+    a.tick(&w, &[start], &mut u);
+    assert_eq!(heard(&mut a, 0), ["Whoosh"]);
+    let far = Pos::new(100_000, at.y, at.z);
+    w.anims.anims.get_mut(&id).expect("in play").pos = Some(far);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(a.mixer().alive(), 1);
+    assert_eq!(a.mixer().busy_channels(), 0, "moved off the screen with it");
+    w.anims.anims.get_mut(&id).expect("in play").pos = Some(at);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 100), ["Whoosh"], "back with it");
+    w.anims.anims.remove(&id);
+    a.tick(&w, &[], &mut u);
+    assert_eq!(heard(&mut a, 200), ["Whoosh"], "it plays on where it was");
+}
+
 // spec: S-0701 claim 23 (movement: one entry by F5 as an attached sound; grace 3; then finish looping)
 #[test]
 fn movement_sound_episode() {

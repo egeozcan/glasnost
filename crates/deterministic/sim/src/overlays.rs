@@ -160,6 +160,40 @@ pub(crate) fn place_overlay(w: &mut World, c: CellXY, o: u8) {
             cell.overlay_data = 0;
         }
     }
+    placed_effects(w, c, o);
+}
+
+/// An overlay placement made in play (S-0202 claim 10, with its conditions
+/// and effects; S-0319 claim 10): the vein overlay only when the vein
+/// placement test passes, a low-bridge end marker only when its end row is
+/// written, every other type always. Returns whether the cell holds an
+/// overlay afterwards; a refused placement changes nothing and takes no
+/// draw.
+pub(crate) fn place_in_play(w: &mut World, c: CellXY, o: u8) -> bool {
+    if o == VEIN {
+        // spec: S-0202 claim 10 (the vein placement test: otherwise it changes nothing and takes no draw)
+        if !vein_test(w, c) {
+            return false;
+        }
+        // spec: S-0202 claim 10 (the placement: the vein overlay and its raw value, then the edge neighbours)
+        vein_placement(w, c);
+        // design: the ordinary placement's remaining effects follow, in place_overlay's order (S-0202 claim 10 orders the vein pattern's raw values only among themselves)
+        placed_effects(w, c, o);
+    } else if let Some(m) = marker(o) {
+        // spec: S-0202 claim 10 (an end row any of whose cells holds an overlay: nothing is written, nothing follows, no draw)
+        if across(m.line, c).iter().any(|&x| holds_overlay(w, x)) {
+            return false;
+        }
+        place_overlay(w, c, o);
+    } else {
+        place_overlay(w, c, o);
+    }
+    w.cells.cell(c).is_some_and(|x| x.overlay != NO_OVERLAY)
+}
+
+/// The effects of an overlay of type `o` just put in `c` (S-0009 claim 12,
+/// S-0202 claim 10), after the overlay is in its cell.
+fn placed_effects(w: &mut World, c: CellXY, o: u8) {
     // spec: S-0211 claim 15 (a placed high-bridge overlay marks its high-bridge cells)
     w.cells.mark_high_bridge(c, o);
     if walls::is_wall(w, o) {

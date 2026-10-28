@@ -166,6 +166,14 @@ pub fn spawn(w: &mut World, name: &str, at: Option<Pos>, s: Spawn) -> Spawned {
         F64::ZERO
     };
     let id = w.new_id();
+    // spec: S-0319 claim 11 and Edge cases (a bouncing animation whose placement point is exactly (0, 0, 0) is not placed: its creation draws are taken, but it never takes a turn, never moves, lands or ends by itself and is never drawn; design rule, no switch)
+    // design: as for a debris piece at that point (`pieces::create`), its start event is still made at its creation when it has no loop delay (a deferred one never comes: it takes no turn) and its number is still its own; no record of it is kept, as nothing reads it again.
+    if flight.is_some() && at == Some(Pos::new(0, 0, 0)) {
+        return Spawned {
+            id: Some(id),
+            delay: drawn,
+        };
+    }
     w.anims.anims.insert(
         id,
         Anim {

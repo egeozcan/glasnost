@@ -76,7 +76,11 @@
 //! systems (S-0107 claim 17; S-0109; S-0317; S-0616). `debris-pieces`
 //! destroys six enemy vehicles and follows their debris pieces tick by
 //! tick, with screens of them flying, bouncing and drawn with their shadows
-//! (S-0317 claims 10, 17 to 22 and 27).
+//! (S-0317 claims 10, 17 to 22 and 27). `bouncing-anims` destroys six
+//! enemy vehicles and follows the bouncing animations they leave tick by
+//! tick (in play, heights, how many have left play), with screens of them
+//! falling, with the view on the first one in flight (S-0319 claims 4 to
+//! 8).
 //!
 //! M8 step A4, round 4 (the lead's notes 16 to 18): `carrier-death` puts
 //! each spawner type that launches aircraft on open water of the first map
@@ -201,6 +205,7 @@ const SCENES: &[Scene] = &[
     ("aa-auto", aa_auto),
     ("debris-left", debris_left),
     ("debris-pieces", debris_pieces),
+    ("bouncing-anims", bouncing_anims),
     ("carrier-death", carrier_death),
     ("mirage-click", mirage_click),
     ("derrick-look", derrick_look),
@@ -2265,6 +2270,92 @@ fn debris_pieces(lane: &mut Lane) {
         "debris-pieces: most in play {most}, pieces {}, reversals (contacts) {contacts}",
         flips.len()
     );
+}
+
+/// S-0319 claims 4 to 8: enemy armed vehicles destroyed, then the
+/// bouncing animations (sprite debris) they leave watched tick by tick:
+/// how many are in play, their heights, how many have left play, with
+/// screens of them in flight and after their landings.
+fn bouncing_anims(lane: &mut Lane) {
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 10, home.y + 10));
+    lane.look_at(at);
+    let vehicles: Vec<String> = {
+        let r = lane.world().rules();
+        (0..r.vehicles.len())
+            .filter(|&i| {
+                r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                    u.strength > 0
+                        && u.combat.slots[0].is_some()
+                        && u.locomotor != glasnost_sim::rules::Locomotor::Ship
+                })
+            })
+            .take(6)
+            .map(|i| r.vehicles[i].name.clone())
+            .collect()
+    };
+    let h = warhead_of_kind(lane.world(), 0).unwrap_or(0);
+    let ids: Vec<ObjectId> = vehicles
+        .iter()
+        .enumerate()
+        .map(|(j, v)| {
+            let x = at.x + 2 * (j as i32 % 3);
+            let y = at.y + 2 * (j as i32 / 3);
+            lane.spawn(Kind::Vehicle, v, enemy, CellXY::new(x, y))
+        })
+        .collect();
+    lane.ticks(2);
+    for id in ids {
+        kill_with(lane, id, h);
+    }
+    let mut seen: std::collections::BTreeSet<ObjectId> = Default::default();
+    let mut most = 0;
+    let mut centred = false;
+    let mut last_landing = None;
+    for t in 1..=400 {
+        lane.ticks(1);
+        let w = lane.world();
+        let flying: Vec<(ObjectId, glasnost_sim::world::Pos)> = w
+            .anims
+            .anims
+            .iter()
+            .filter(|(_, a)| a.flight.is_some())
+            .filter_map(|(id, a)| Some((*id, a.pos?)))
+            .collect();
+        let before = seen.len();
+        seen.extend(flying.iter().map(|f| f.0));
+        let live = flying.len();
+        let ended = seen.len() - live;
+        most = most.max(live);
+        let zs: Vec<i32> = flying.iter().map(|f| f.1.z).collect();
+        println!(
+            "bouncing-anims +{t}: in play {live}, height min {:?} max {:?}, seen {}, left play {ended}",
+            zs.iter().min(),
+            zs.iter().max(),
+            seen.len(),
+        );
+        if seen.len() > before && !centred {
+            centred = true;
+            let c = flying[0].1;
+            let c = CellXY::new(c.x / 256, c.y / 256);
+            println!("bouncing-anims: first in flight at +{t}, view centred on cell {c:?}");
+            lane.look_at(c);
+        }
+        if ended > 0 && last_landing.is_none() {
+            last_landing = Some(t);
+            println!("bouncing-anims: first left play at +{t}");
+        }
+        if [1, 3, 6, 10, 15, 20, 30, 45].contains(&t) {
+            lane.save(&format!("bouncing-anims-{t:03}"));
+        }
+        if t > 5 && live == 0 {
+            println!("bouncing-anims: none in play from +{t}");
+            break;
+        }
+    }
+    lane.save("bouncing-anims-end");
+    println!("bouncing-anims: most in play {most}, seen {}", seen.len());
 }
 
 /// The first weapon with the electric-bolt flag that makes a bolt (no

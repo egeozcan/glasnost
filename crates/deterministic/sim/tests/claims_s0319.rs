@@ -1,6 +1,7 @@
 //! Claim tests for bouncing animations (S-0319) on synthetic data: invented
 //! animation types, warheads, overlays and a resource, every name and
-//! number our own. The ledger is `docs/m8-claims/intake15a-S-0319.md`.
+//! number our own. The ledgers are `docs/m8-claims/intake15a-S-0319.md` and
+//! `docs/m8-claims/intake33-S-0319.md`.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -874,10 +875,10 @@ fn claim_10_large_radius_neighbours() {
     }
 }
 
-/// spec: S-0319 claim 10 and F5 (the overlay draw counts places after the spawn overlay type), with Q-1847's interim for a place past the overlay list: nothing placed, both draws taken, and the cell takes no further offer in the landing, so a large radius still ends after one offer per direction
+/// spec: S-0319 claim 10 and F5 (the overlay draw counts places after the spawn overlay type; a place past the end of the overlay list is a departure: no overlay, both draws taken, and the cell stays germinable, so each further pair that offers it takes both draws again; with radius 1 each of the directions 7, 0 and 1 has three pairs)
 #[test]
 fn claim_10_place_past_the_overlay_list() {
-    let mut r = resource_rules(1_000_000_000);
+    let mut r = resource_rules(1);
     let t = r.sim.animations.get_mut("GROW").unwrap();
     t.tiberium_spawn_type = Some("ov7".into());
     let mut w = world(&r);
@@ -893,21 +894,34 @@ fn claim_10_place_past_the_overlay_list() {
     set(&mut w, id, [at.x, at.y, 5], ["0", "0", "-10"]);
     let mut probe = w.rng.clone();
     let half = w.rules().quirks.ranged_draw_half_span;
-    // i runs from −10⁹, which is 0 mod 8: directions 0 to 7 in turn, one offer each.
     let mut want = vec![];
-    for (dx, dy) in glasnost_sim::regions::STEPS {
-        let k = probe.ranged(0, 3, half);
-        let stage = probe.ranged(0, 2, half);
+    let mut repeated = false;
+    for dir in [7, 0, 1] {
+        let (dx, dy) = glasnost_sim::regions::STEPS[dir];
         let cell = CellXY::new(c.x + dx, c.y + dy);
-        want.push((cell, (k == 0).then_some((last as u8, stage as u8))));
+        let mut placed = None;
+        // trunc(√(i² + j²)) ≤ 1 for j of −1, 0 and 1 whatever i: three pairs.
+        for pair in 0..3 {
+            let k = probe.ranged(0, 3, half);
+            let stage = probe.ranged(0, 2, half);
+            if k == 0 {
+                placed = Some((last as u8, stage as u8));
+                break;
+            }
+            repeated |= pair > 0;
+        }
+        want.push((cell, placed));
     }
     assert!(
-        want.iter().any(|(_, p)| p.is_none()),
-        "the seed draws a place past the list"
+        repeated,
+        "the seed offers a cell again after a place past the list"
     );
     anims::turn(&mut w, id);
     assert!(gone(&w, id));
-    assert_eq!(w.rng, probe, "one offer's two draws per direction");
+    assert_eq!(
+        w.rng, probe,
+        "each pair's two draws until the cell receives an overlay"
+    );
     for (cell, placed) in want {
         match placed {
             Some(p) => assert_eq!(overlay_at(&w, cell), p, "{cell:?}"),
@@ -1004,4 +1018,515 @@ fn flight_round_trip() {
     testkit::run(&mut w, 20);
     testkit::run(&mut back, 20);
     assert_eq!(save::state_hash(&back), save::state_hash(&w));
+}
+
+/// Puts an animation's flight state in play from decimal strings (the
+/// flight position may be fractional); the position in play is the flight
+/// position truncated.
+fn set_exact(w: &mut World, id: ObjectId, p: [&str; 3], v: [&str; 3]) {
+    let m = mode(w);
+    let a = w.anims.anims.get_mut(&id).unwrap();
+    let f = Flight {
+        p: p.map(|x| s(x).to_f32(m)),
+        v: v.map(|x| s(x).to_f32(m)),
+    };
+    let [x, y, z] = f.p.map(|c| c.to_f64().to_i32_common());
+    a.flight = Some(f);
+    a.pos = Some(Pos::new(x, y, z));
+}
+
+fn single(x: F64, m: Rounding) -> F32 {
+    x.to_f32(m)
+}
+
+/// Numeric equality per component (+0 equals −0: the spec's matrix sums
+/// fix no sign for a zero).
+fn same(a: [F32; 3], b: [F32; 3]) -> bool {
+    (0..3).all(|i| a[i].to_f64().eq_num(b[i].to_f64()))
+}
+
+/// m · v grouped as S-0613 F3: (a_y + a_z) + a_x for x, (a_y + a_x) + a_z
+/// for y and z, each component stored as a single (the helper of
+/// `claims_s0317.rs`).
+fn mat(m3: &[[F32; 3]; 3], v: [F32; 3], m: Rounding) -> [F32; 3] {
+    let row = |r: &[F32; 3]| {
+        let a: Vec<F64> = (0..3)
+            .map(|j| r[j].to_f64().mul(v[j].to_f64(), m))
+            .collect();
+        (a[0], a[1], a[2])
+    };
+    let (x0, x1, x2) = row(&m3[0]);
+    let (y0, y1, y2) = row(&m3[1]);
+    let (z0, z1, z2) = row(&m3[2]);
+    [
+        single(x1.add(x2, m).add(x0, m), m),
+        single(y1.add(y0, m).add(y2, m), m),
+        single(z1.add(z0, m).add(z2, m), m),
+    ]
+}
+
+/// F6 as the spec writes it: w = Mᵀ · D · v, w′ = Z · (ε w), v″ = D · M · w′.
+fn f6(m3: &[[F32; 3]; 3], v: [F32; 3], eps: F32, m: Rounding) -> [F32; 3] {
+    let flip_y = |a: [F32; 3]| [a[0], a[1].to_f64().negated().to_f32(m), a[2]];
+    let mut t = *m3;
+    for (i, r) in t.iter_mut().enumerate() {
+        for (j, e) in r.iter_mut().enumerate() {
+            *e = m3[j][i];
+        }
+    }
+    let w = mat(&t, flip_y(v), m);
+    let w = w.map(|c| single(c.to_f64().mul(eps.to_f64(), m), m));
+    let w = [w[0], w[1], w[2].to_f64().negated().to_f32(m)];
+    flip_y(mat(m3, w, m))
+}
+
+/// [`rules`] with SOFT: a falling type of elasticity 30% (0.3 read from a
+/// percentage, a double that single precision does not hold).
+fn soft_rules() -> Ruleset {
+    let mut r = rules();
+    add(
+        &mut r,
+        "SOFT",
+        AnimationType {
+            bouncer: Some(true),
+            elasticity: dec("30%"),
+            ..long()
+        },
+    );
+    r
+}
+
+fn e03(m: Rounding) -> F64 {
+    Decimal("30%".into()).value(m)
+}
+
+/// spec: S-0319 claim 11 and Edge cases (a bouncing animation whose placement point is (0, 0, 0) is not placed: its creation draws are taken, it takes no turn; design rule) and State and ordering (placed, except at (0, 0, 0))
+#[test]
+fn claim_11_not_placed_at_the_origin() {
+    let r = rules();
+    let mut w = world(&r);
+    let mut other = world(&r);
+    let id = anims::spawn(&mut w, "ROCK", Some(Pos::new(0, 0, 0)), Spawn::default())
+        .id
+        .expect("a number");
+    make(&mut other, "ROCK", Pos::new(1, 0, 0));
+    assert_eq!(w.rng, other.rng, "the same creation draws");
+    assert!(gone(&w, id), "not in play");
+    testkit::run(&mut w, 3);
+    assert!(gone(&w, id), "it never takes a turn");
+    // A plain animation at the origin is placed as before.
+    let plain = make(&mut w, "PEBBLE", Pos::new(0, 0, 0));
+    assert!(!gone(&w, plain));
+}
+
+/// spec: S-0319 claim 11 (no placement test: an animation is placed at its placement point on the map or off it; a meteor animation's start position off the legal map is kept)
+#[test]
+fn claim_11_meteor_start_off_the_map() {
+    let r = rules();
+    let mut w = world(&r);
+    let c = Pos::new(-5000, -5000, 0);
+    let id = make(&mut w, "STAR", c);
+    let a = get(&w, id);
+    let p = a.pos.unwrap();
+    assert_ne!(p, c, "the start position, not the creation point");
+    assert!(w.cells.cell(p.cell()).is_none(), "off the legal map");
+    anims::turn(&mut w, id);
+    assert!(!gone(&w, id), "it keeps its turns off the map");
+}
+
+/// spec: S-0319 claim 6 (the building cell: the first building listed in the ground layer counts unless an inactive laser-fence section or a vehicle-like building; with none listed, one of the three wall overlays; no other overlay) and S-0317 claim 19 (every section counts as inactive in our engine)
+#[test]
+fn claim_6_kinds_of_building_cell() {
+    use glasnost_rules::sim::BuildingType;
+    let mut r = rules();
+    let mut building = |name: &str, f: &dyn Fn(&mut BuildingType)| {
+        let mut t = BuildingType {
+            strength: Some(1000),
+            foundation: Some([1, 1]),
+            ..Default::default()
+        };
+        f(&mut t);
+        register(&mut r, "buildings", name);
+        r.sim.buildings.insert(name.into(), t);
+    };
+    building("FENCE", &|b| b.laser_fence = Some(true));
+    building("HUT", &|_| {});
+    building("MOBILE", &|b| b.undeploys_into = Some("BUGGY".into()));
+    // Whether a move to 118.6 above the ground of the cell is a landing.
+    let contact = |set_up: &dyn Fn(&mut World, CellXY)| {
+        let mut w = world(&r);
+        let c = mid(0, 0);
+        set_up(&mut w, c);
+        let at = centre(c, 0);
+        let id = make(&mut w, "DROP", at);
+        set(&mut w, id, [at.x, at.y, 120], ["0", "0", "0"]);
+        glasnost_sim::bounce::step_for_test(&w, id).2.is_some()
+    };
+    let spawn = |w: &mut World, c: CellXY, name: &str| {
+        testkit::spawn(w, Kind::Building, name, 1, c, 0);
+    };
+    assert!(!contact(&|_, _| {}), "an empty cell");
+    assert!(contact(&|w, c| spawn(w, c, "HUT")), "a building");
+    assert!(
+        !contact(&|w, c| spawn(w, c, "FENCE")),
+        "a laser-fence section"
+    );
+    assert!(
+        !contact(&|w, c| spawn(w, c, "MOBILE")),
+        "a vehicle-like building"
+    );
+    for wall in [2u8, 26, 243] {
+        assert!(
+            contact(&|w, c| w.cells.grid.get_mut(c).unwrap().overlay = wall),
+            "wall overlay {wall}"
+        );
+    }
+    assert!(
+        !contact(&|w, c| w.cells.grid.get_mut(c).unwrap().overlay = 3),
+        "another overlay"
+    );
+    assert!(
+        !contact(&|w, c| {
+            w.cells.grid.get_mut(c).unwrap().overlay = 2;
+            spawn(w, c, "FENCE");
+        }),
+        "a laser fence listed first hides the wall overlay"
+    );
+}
+
+/// spec: S-0319 claim 6 and Constants (the cliff test: u_z below −0.0002, compared in double precision, undoes a contact that puts the animation higher than z₀; any other u_z, 0 included, one that lifts it more than 1 lepton above z₀ + u_z; z₀ is the flight position's height, not the position in play's)
+#[test]
+fn claim_6_cliff_line_and_flight_height() {
+    let r = rules();
+    // (flight height, position height, u, undone)
+    let cases = [
+        // u exactly 0: a lift to 208, more than 1 above 206, is undone; exactly 1 above 207 stands.
+        ("206", None, "0", true),
+        ("207", None, "0", false),
+        // −0.0001 is not below the line: 208 ≤ 207.5 − 0.0001 + 1, so the move stands.
+        ("207.5", None, "-0.0001", false),
+        // −0.001 is below it: 208 > 207.5, undone.
+        ("207.5", None, "-0.001", true),
+        // A rising animation whose position in play stands far below its flight position: the
+        // flight height decides, 208 ≤ 205 + 3 + 1, and it climbs.
+        ("205", Some(150), "3", false),
+    ];
+    for (z0, posz, u, undone) in cases {
+        let mut w = world(&r);
+        let low = mid(0, 0);
+        let high = mid(1, 0);
+        w.cells.grid.get_mut(high).unwrap().level = 2;
+        let at = centre(low, 0);
+        let id = make(&mut w, "DROP", at);
+        let x = format!("{}", at.x + 125);
+        let y = format!("{}", at.y);
+        set_exact(&mut w, id, [&x, &y, z0], ["10", "0", u]);
+        if let Some(z) = posz {
+            w.anims.anims.get_mut(&id).unwrap().pos.as_mut().unwrap().z = z;
+        }
+        let before = flight(&w, id);
+        let (f, p, landed) = glasnost_sim::bounce::step_for_test(&w, id);
+        assert!(landed.is_some(), "a contact either way");
+        assert_eq!(f.p == before.p, undone, "z₀ {z0}, u {u}");
+        assert_eq!(p.cell() == low, undone, "z₀ {z0}, u {u}");
+    }
+}
+
+/// spec: S-0319 claim 7 and F6 (a contact reflects the velocity in the plane of S-0106 C4's transform for the new cell's slope shape and scales it by ε, e narrowed once to single precision, each step stored in single precision; shapes 0 and 17 to 20 give the flat rule) and Edge cases (quirks.bouncing_anim_rebound_faults: a deck contact over sloped ground rebounds off the slope; off, by the flat rule)
+#[test]
+fn claim_7_f6_rebound_on_a_slope() {
+    let r = soft_rules();
+    let ramps = glasnost_sim::gas::ramps();
+    for shape in [0u8, 1, 6, 14, 18] {
+        let mut w = world(&r);
+        let m = mode(&w);
+        let c = mid(0, 0);
+        w.cells.grid.get_mut(c).unwrap().slope = shape;
+        let at = centre(c, 0);
+        let f = w.surface_at(at.x, at.y);
+        let id = make(&mut w, "SOFT", at);
+        let z = format!("{}", f + 5);
+        let (x, y) = (format!("{}", at.x), format!("{}", at.y));
+        set_exact(&mut w, id, [&x, &y, &z], ["2", "-3", "-10"]);
+        let (fl, _, landed) = glasnost_sim::bounce::step_for_test(&w, id);
+        assert!(landed.is_some(), "shape {shape}: a ground contact");
+        let v = [
+            s("2").to_f32(m),
+            s("-3").to_f32(m),
+            single(s("-10").to_f32(m).to_f64().sub(g(), m), m),
+        ];
+        let eps = e03(m).to_f32(m);
+        let want = f6(&ramps[usize::from(shape)], v, eps, m);
+        assert!(same(fl.v, want), "shape {shape}: {:?} {want:?}", fl.v);
+        // The flat rule: (εvₓ, εv_y, −εv_z), each product stored.
+        let flat = [
+            single(v[0].to_f64().mul(eps.to_f64(), m), m),
+            single(v[1].to_f64().mul(eps.to_f64(), m), m),
+            single(v[2].to_f64().mul(eps.to_f64(), m), m)
+                .to_f64()
+                .negated()
+                .to_f32(m),
+        ];
+        if shape == 0 || shape == 18 {
+            assert_eq!(fl.v, flat, "shape {shape}: the flat rule");
+        } else {
+            assert_ne!(fl.v, flat, "shape {shape}: a tilted plane");
+        }
+    }
+    // A deck contact over a sloped cell.
+    for faults in [true, false] {
+        let mut w = world(&r);
+        let m = mode(&w);
+        set_quirks(&mut w, |q| q.bouncing_anim_rebound_faults = faults);
+        let c = mid(0, 0);
+        w.cells.grid.get_mut(c).unwrap().slope = 1;
+        let i = w.cells.idx(c).unwrap();
+        w.cells.deck[i] = true;
+        let at = centre(c, 0);
+        let deck = w.surface_at(at.x, at.y) + 416;
+        let id = make(&mut w, "SOFT", at);
+        let z = format!("{}", deck + 4);
+        let (x, y) = (format!("{}", at.x), format!("{}", at.y));
+        set_exact(&mut w, id, [&x, &y, &z], ["0", "0", "-10"]);
+        let (fl, _, landed) = glasnost_sim::bounce::step_for_test(&w, id);
+        assert!(landed.is_some());
+        assert_eq!(fl.p[2], d(i64::from(deck), m).to_f32(m), "on the deck");
+        let v = [
+            F32(0),
+            F32(0),
+            single(s("-10").to_f32(m).to_f64().sub(g(), m), m),
+        ];
+        let shape = if faults { 1 } else { 0 };
+        let want = f6(&ramps[shape], v, e03(m).to_f32(m), m);
+        assert!(
+            same(fl.v, want),
+            "deck rebound, faults {faults}: {:?} {want:?}",
+            fl.v
+        );
+    }
+}
+
+/// A SOFT animation in a fresh world whose old cell `mid(0, 0)` is at level
+/// 0 and whose new cell (dx, dy) from it and the cells `highs` (offsets
+/// from the old cell) are at level 2, crossing into the new cell from near
+/// the matching corner, descending: the velocity the undone move leaves and
+/// the velocity at the start of the turn.
+fn cliff_case(dx: i32, dy: i32, highs: &[(i32, i32)], faults: bool) -> ([F32; 3], [F32; 3]) {
+    let r = soft_rules();
+    let mut w = world(&r);
+    set_quirks(&mut w, |q| q.bouncing_anim_rebound_faults = faults);
+    let low = mid(0, 0);
+    for &(ox, oy) in std::iter::once(&(dx, dy)).chain(highs) {
+        w.cells.grid.get_mut(mid(ox, oy)).unwrap().level = 2;
+    }
+    let base = Pos::centre(low, 0);
+    let edge = |k: i32, c: i32| match k {
+        1 => c - 128 + 250,
+        -1 => c - 128 + 5,
+        _ => c,
+    };
+    let (x, y) = (edge(dx, base.x), edge(dy, base.y));
+    let ux = match dx {
+        0 => "3",
+        1 => "12",
+        _ => "-12",
+    };
+    let uy = match dy {
+        0 => "7",
+        1 => "10",
+        _ => "-10",
+    };
+    let id = make(&mut w, "SOFT", base);
+    let (xs, ys) = (format!("{x}"), format!("{y}"));
+    set_exact(&mut w, id, [&xs, &ys, "150"], [ux, uy, "-5"]);
+    let before = flight(&w, id);
+    let (f, _, landed) = glasnost_sim::bounce::step_for_test(&w, id);
+    assert!(landed.is_some(), "({dx}, {dy}) {highs:?}: a landing");
+    assert_eq!(f.p, before.p, "({dx}, {dy}) {highs:?}: undone");
+    (f.v, before.v)
+}
+
+/// spec: S-0319 claim 7 and F7 (the cliff turn of the velocity u at the start of the turn, every face exchanging or reversing the horizontal components; each component multiplied by e as imported, in double precision, not narrowed first, and stored) and Edge cases (quirks.bouncing_anim_rebound_faults: the north-west turn (c, uₓ, u_y) when of (x − 1, y) and (x, y − 1) only (x, y − 1) is high; off, across the second axis)
+#[test]
+fn claim_7_f7_cliff_turns() {
+    let m = mode(&world(&rules()));
+    let e = e03(m);
+    assert_ne!(
+        e,
+        e.to_f32(m).to_f64(),
+        "30% is not held in single precision"
+    );
+    let scale = |a: [F32; 3]| a.map(|c| c.to_f64().mul(e, m).to_f32(m));
+    let n = |c: F32| c.to_f64().negated().to_f32(m);
+    for faults in [true, false] {
+        // Straight steps: d = 0 across y, d = 2 across x.
+        let (v, u) = cliff_case(0, -1, &[], faults);
+        assert_eq!(v, scale([u[0], n(u[1]), u[2]]), "d 0");
+        let (v, u) = cliff_case(1, 0, &[], faults);
+        assert_eq!(v, scale([n(u[0]), u[1], u[2]]), "d 2");
+        // d = 7 with only (x − 1, y) high: across x.
+        let (v, u) = cliff_case(-1, -1, &[(-1, 0)], faults);
+        assert_eq!(v, scale([n(u[0]), u[1], u[2]]), "d 7, (x − 1, y)");
+        // d = 7 with only (x, y − 1) high: the north-west turn, or across y.
+        let (v, u) = cliff_case(-1, -1, &[(0, -1)], faults);
+        let want = if faults {
+            scale([s("2.3771235942840576").to_f32(m), u[0], u[1]])
+        } else {
+            scale([u[0], n(u[1]), u[2]])
+        };
+        assert_eq!(v, want, "d 7, (x, y − 1), faults {faults}");
+    }
+}
+
+/// spec: S-0319 claim 7 (after an undone descending move between flat cells, the height counts from the lower ground: with 0 ≤ e ≤ 1 and a face turn the landing is an impact landing) and F7 (after the north-west turn the vertical speed is the scaled old second-axis speed)
+#[test]
+fn claim_7_measure_after_a_cliff_turn() {
+    for faults in [true, false] {
+        let r = soft_rules();
+        let mut w = world(&r);
+        set_quirks(&mut w, |q| q.bouncing_anim_rebound_faults = faults);
+        for (ox, oy) in [(-1, -1), (0, -1)] {
+            w.cells.grid.get_mut(mid(ox, oy)).unwrap().level = 2;
+        }
+        let base = Pos::centre(mid(0, 0), 0);
+        let id = make(&mut w, "SOFT", base);
+        let (x, y) = (format!("{}", base.x - 123), format!("{}", base.y - 123));
+        set_exact(&mut w, id, [&x, &y, "150"], ["-12", "-10", "-5"]);
+        let (_, p, landed) = glasnost_sim::bounce::step_for_test(&w, id);
+        assert_eq!(p.z, 150, "the restored height");
+        assert_eq!(landed, Some(true), "an impact landing, faults {faults}");
+    }
+}
+
+/// spec: S-0319 claim 7 and Edge cases (quirks.bouncing_anim_impact_hits_walk: the hits follow the cell's listing as it changes, so a hit that takes its own object out of the ground layer ends the hits and no object listed after it is hit; off: every object listed when the hits begin receives its hit)
+#[test]
+fn claim_7_impact_hits_walk_switch() {
+    for walk in [true, false] {
+        let r = rules();
+        let mut w = world(&r);
+        set_quirks(&mut w, |q| q.bouncing_anim_impact_hits_walk = walk);
+        let c = mid(0, 0);
+        let tower = testkit::spawn(&mut w, Kind::Building, "TOWER", 1, c, 0);
+        let buggy = testkit::spawn(&mut w, Kind::Vehicle, "BUGGY", 1, c, 0);
+        let list = w.cells.list(c, glasnost_sim::world::Layer::Ground).to_vec();
+        let pos = |id| list.iter().position(|&x| x == id).unwrap();
+        assert!(pos(buggy) < pos(tower), "the vehicle is listed first");
+        w.obj_mut(buggy).unwrap().health = 1;
+        let h0 = health(&w, tower);
+        let mut rules = (*w.rules_arc()).clone();
+        rules
+            .animations
+            .iter_mut()
+            .find(|a| a.name == "ROCK")
+            .unwrap()
+            .bounce
+            .expire = None;
+        w.rules = Some(std::sync::Arc::new(rules));
+        let at = centre(c, 0);
+        let id = make(&mut w, "ROCK", at);
+        set(&mut w, id, [at.x, at.y, 5], ["0", "0", "-10"]);
+        anims::turn(&mut w, id);
+        assert!(gone(&w, id));
+        assert!(w.obj(buggy).is_none(), "the vehicle is destroyed");
+        assert_eq!(
+            health(&w, tower) < h0,
+            !walk,
+            "the building after it, walk {walk}"
+        );
+    }
+}
+
+/// spec: S-0319 claim 10 and F5 (a germinable neighbour that holds a terrain object receives no overlay; both draws are still taken, and it stays germinable, so each further pair that offers it takes both draws again)
+#[test]
+fn claim_10_terrain_object_neighbour() {
+    use glasnost_rules::sim::TerrainObjectType;
+    let mut r = resource_rules(1);
+    register(&mut r, "terrain_objects", "TREE");
+    r.sim.terrain_objects.insert(
+        "TREE".into(),
+        TerrainObjectType {
+            strength: Some(100),
+            ..Default::default()
+        },
+    );
+    let mut w = world(&r);
+    let c = mid(0, 0);
+    let (dx, dy) = glasnost_sim::regions::STEPS[0];
+    let treed = CellXY::new(c.x + dx, c.y + dy);
+    let ty = w.rules().index_of(Kind::Terrain, "TREE").unwrap();
+    let tree = glasnost_sim::objects::create(&mut w, Kind::Terrain, ty, None);
+    glasnost_sim::objects::place(&mut w, tree, Pos::centre(treed, 0), 0);
+    assert!(glasnost_sim::econ::resource::germinable(&w, treed));
+    let at = centre(c, 0);
+    let id = make(&mut w, "GROW", at);
+    set(&mut w, id, [at.x, at.y, 5], ["0", "0", "-10"]);
+    let mut probe = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // Direction 7 once, direction 0 (the tree's) three times, direction 1 once.
+    for n in [1, 3, 1] {
+        for _ in 0..n {
+            probe.ranged(0, 3, half);
+            probe.ranged(0, 2, half);
+        }
+    }
+    anims::turn(&mut w, id);
+    assert_eq!(
+        w.rng, probe,
+        "the tree's cell takes both draws at each of its pairs"
+    );
+    assert_eq!(overlay_at(&w, treed).0, glasnost_map::NO_OVERLAY);
+}
+
+/// spec: S-0319 claim 10 and Edge cases (quirks.anim_resource_no_growth_entry: a new resource cell joins no growth list and takes no growth-list draw; off: it is offered to its tiberium's growth list with S-0401 claim 7's raw draw, after the placement and before the stage draw)
+#[test]
+fn claim_10_growth_entry_switch() {
+    use glasnost_rules::sim_econ::TiberiumType;
+    for none in [true, false] {
+        let mut r = resource_rules(0);
+        register(&mut r, "tiberiums", "ORE");
+        r.sim.tiberiums.insert(
+            "ORE".into(),
+            TiberiumType {
+                value: Some(10),
+                image_run: Some([0, 4, 4]),
+                ..Default::default()
+            },
+        );
+        let mut w = world(&r);
+        set_quirks(&mut w, |q| q.anim_resource_no_growth_entry = none);
+        let c = mid(0, 0);
+        let at = centre(c, 0);
+        let id = make(&mut w, "GROW", at);
+        set(&mut w, id, [at.x, at.y, 5], ["0", "0", "-10"]);
+        let mut probe = w.rng.clone();
+        let half = w.rules().quirks.ranged_draw_half_span;
+        let entries = |w: &World| {
+            w.econ
+                .resources
+                .tiberiums
+                .first()
+                .map_or(0, |t| t.growth.count)
+        };
+        let e0 = entries(&w);
+        // Radius 0: the one pair (0, 0) offers the neighbour in step direction 0.
+        probe.ranged(0, 3, half);
+        if !none {
+            probe.raw();
+        }
+        let stage = probe.ranged(0, 2, half);
+        anims::turn(&mut w, id);
+        assert_eq!(w.rng, probe, "switch {none}");
+        let (dx, dy) = glasnost_sim::regions::STEPS[0];
+        let cell = CellXY::new(c.x + dx, c.y + dy);
+        assert_eq!(
+            overlay_at(&w, cell).1,
+            stage as u8,
+            "the stage draw's stage"
+        );
+        assert_eq!(
+            entries(&w) - e0,
+            i64::from(!none),
+            "growth entries, switch {none}"
+        );
+    }
 }

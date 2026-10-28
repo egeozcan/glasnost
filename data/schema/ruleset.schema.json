@@ -8677,6 +8677,11 @@
           "type": "boolean",
           "default": true
         },
+        "anim_resource_no_growth_entry": {
+          "description": "A bouncing animation's new resource cell joins neither of S-0401's lists; off: it is offered to its tiberium's growth list.",
+          "type": "boolean",
+          "default": true
+        },
         "anim_resource_spread_neighbours_only": {
           "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order.",
           "type": "boolean",
@@ -8759,6 +8764,16 @@
         },
         "bouncing_anim_expiry_needs_animation": {
           "description": "A bouncing animation's end deals claim 8's area damage and light flash only when its type names an expiry animation; off: also when its damage amount is not 0.",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_impact_hits_walk": {
+          "description": "The impact hits go through the cell's listing as it changes; off: through the objects listed when the hits begin.",
+          "type": "boolean",
+          "default": true
+        },
+        "bouncing_anim_rebound_faults": {
+          "description": "A deck contact rebounds off the ground cell's slope under the deck, and the north-west cliff turn gives (c e, e u_x, e u_y); off: a deck contact rebounds by the flat rule and the north-west case turns across the second axis.",
           "type": "boolean",
           "default": true
         },

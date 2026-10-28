@@ -393,14 +393,14 @@ pub(crate) fn water(w: &World, c: CellXY) -> bool {
 
 /// The slope shape of a cell (S-0106); the off-map cell's 0 (S-0317 claim
 /// 20).
-fn slope(w: &World, c: CellXY) -> usize {
+pub(crate) fn slope(w: &World, c: CellXY) -> usize {
     // spec: S-0317 claims 17 and 20 (the slope shape of the cell read; the off-map cell is flat, shape 0)
     w.cells.cell(c).map_or(0, |x| usize::from(x.slope))
 }
 
 /// Whether the cell of a new position counts as holding a building for
 /// claim 10's building contact (S-0317 claim 19).
-fn building_cell(w: &World, c: CellXY) -> bool {
+pub(crate) fn building_cell(w: &World, c: CellXY) -> bool {
     let rules = w.rules();
     // spec: S-0317 claim 19 (the first building listed in the cell's ground layer, S-0209 claim 13's listing order, decides)
     let first = w
@@ -631,7 +631,7 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
 /// F8: the rebound of the velocity `v` that the move leaves, off a cell of
 /// slope shape `shape`, scaled by *ε*.
 // nocite: vector and matrix dimensions (three axes)
-fn rebound(
+pub(crate) fn rebound(
     ramps: &[[[F32; 3]; 3]],
     shape: usize,
     v: [F32; 3],
@@ -669,7 +669,7 @@ enum Face {
 /// F9: the cliff turn of the velocity `u` of the start of the turn, for a
 /// move from the cell `oc` to `nc`, scaled by *e* as imported.
 // nocite: vector and matrix dimensions (three axes)
-fn cliff_turn(
+pub(crate) fn cliff_turn(
     w: &World,
     u: [F32; 3],
     oc: CellXY,
@@ -787,13 +787,18 @@ fn land_impact(w: &mut World, t: &PieceType, old: Pos, cell: CellXY, at: Pos, on
         } else {
             Layer::Ground
         };
-    ground_hits(w, cell, layer, at, t.radius, t.damage, t.warhead);
+    // S-0319 claim 7's listing walk is stated for sprite animations only (S-0317 Open questions leave a piece's open): pieces keep the listing as it stands when the hits begin.
+    ground_hits(w, cell, layer, at, t.radius, t.damage, t.warhead, false);
 }
 
 /// The hits of a ground impact (S-0317 claim 7 and F4), which a bouncing
 /// animation's impact landing shares (S-0319 claim 7): each object listed
 /// in `layer` of `cell` within `radius` of `at` by |Δx| + |Δy| receives a
-/// hit of `damage` with `warhead`, at the lifted distance.
+/// hit of `damage` with `warhead`, at the lifted distance. With `walk` the
+/// hits go through the listing as it changes (S-0319 claim 7,
+/// `quirks.bouncing_anim_impact_hits_walk`); without it through the listing
+/// as it stands when the hits begin.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ground_hits(
     w: &mut World,
     cell: CellXY,
@@ -802,34 +807,64 @@ pub(crate) fn ground_hits(
     radius: i32,
     damage: i32,
     warhead: Option<WarheadId>,
+    walk: bool,
+) {
+    if !walk {
+        // spec: S-0317 claim 7 and S-0209 claim 13 (the objects listed in the cell's layer, in listing order; the list as it stands when the hits begin) and S-0319 Edge cases (quirks.bouncing_anim_impact_hits_walk off: each object listed when the hits begin, unless an earlier hit took it out of play; an object entering receives none)
+        let list: Vec<ObjectId> = w.cells.list(cell, layer).to_vec();
+        for target in list {
+            ground_hit(w, target, at, radius, damage, warhead);
+        }
+        return;
+    }
+    // spec: S-0319 claim 7 (the hits go through the cell's listing in its order as it changes, S-0209 claim 13)
+    let mut next = w.cells.list(cell, layer).first().copied();
+    while let Some(target) = next {
+        ground_hit(w, target, at, radius, damage, warhead);
+        let live = w.cells.list(cell, layer);
+        // spec: S-0319 claim 7 (a hit that takes its own object out of the cell's layer ends the hits; the design rule for infantry removed at once and a building that leaves at once: any object no longer listed after its hit ends them)
+        let Some(i) = live.iter().position(|&x| x == target) else {
+            break;
+        };
+        // spec: S-0319 claim 7 (the next object is the one now listed after the object just hit: one taken out before it is reached is not hit, one that entered is hit only when listed after it)
+        next = live.get(i + 1).copied();
+    }
+}
+
+/// One hit of a ground impact on `target` (S-0317 claim 7 and F4; S-0319
+/// claim 7), its radius test and distance taken from its position now.
+fn ground_hit(
+    w: &mut World,
+    target: ObjectId,
+    at: Pos,
+    radius: i32,
+    damage: i32,
+    warhead: Option<WarheadId>,
 ) {
     let mode = w.rules().mode;
-    // spec: S-0317 claim 7 and S-0209 claim 13 (the objects listed in the cell's layer, in listing order; the list as it stands when the hits begin)
-    let list: Vec<ObjectId> = w.cells.list(cell, layer).to_vec();
-    for target in list {
-        let Some(o) = w.obj(target) else { continue };
-        // spec: S-0317 F4 (the objects whose horizontal sum |Δx| + |Δy| before the lift is at most the damage radius)
-        let sum = (o.pos.x.wrapping_sub(at.x))
-            .wrapping_abs()
-            .wrapping_add(o.pos.y.wrapping_sub(at.y).wrapping_abs());
-        if sum > radius {
-            continue;
-        }
-        // spec: S-0317 F4 (D = L(|xₒ − x| + |yₒ − y|), S-0409 F2's lift applied to the horizontal sum, as S-0613 F7)
-        let distance = crate::econ::shroud::height_lift(sum, mode);
-        let hit = crate::combat::damage::Hit {
-            amount: damage,
-            warhead,
-            distance,
-            // spec: S-0317 claims 1 and 7 and S-0312 claim 4 (no attacker, no attacking house whatever the piece's own house, defences not ignored, no no-escape marker; S-0302 claim 1's table row)
-            attacker: None,
-            house: None,
-            ignore_defences: false,
-            no_escape: false,
-        };
-        // spec: S-0317 claim 7 (ordinary damage, S-0302; whatever the amount; no skip for an object with no health left, the spec's stated reading)
-        crate::combat::damage::apply(w, target, hit);
+    // spec: S-0319 Edge cases (an object an earlier hit took out of play receives no hit)
+    let Some(o) = w.obj(target) else { return };
+    // spec: S-0317 F4 (the objects whose horizontal sum |Δx| + |Δy| before the lift is at most the damage radius) and S-0319 claim 7 (taken at the object's own hit, from its position then, with the walk switch on or off)
+    let sum = (o.pos.x.wrapping_sub(at.x))
+        .wrapping_abs()
+        .wrapping_add(o.pos.y.wrapping_sub(at.y).wrapping_abs());
+    if sum > radius {
+        return;
     }
+    // spec: S-0317 F4 (D = L(|xₒ − x| + |yₒ − y|), S-0409 F2's lift applied to the horizontal sum, as S-0613 F7)
+    let distance = crate::econ::shroud::height_lift(sum, mode);
+    let hit = crate::combat::damage::Hit {
+        amount: damage,
+        warhead,
+        distance,
+        // spec: S-0317 claims 1 and 7 and S-0312 claim 4 (no attacker, no attacking house whatever the piece's own house, defences not ignored, no no-escape marker; S-0302 claim 1's table row)
+        attacker: None,
+        house: None,
+        ignore_defences: false,
+        no_escape: false,
+    };
+    // spec: S-0317 claim 7 and S-0319 claim 7 (ordinary damage, S-0302; whatever the amount; no skip for an object with no health left)
+    crate::combat::damage::apply(w, target, hit);
 }
 
 /// Claim 11: the end of a piece, then its removal.

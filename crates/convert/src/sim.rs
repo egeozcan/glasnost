@@ -2403,6 +2403,39 @@ impl Builder<'_> {
                     "animations {who}: its {what}, which stops the original with a division by zero; our engine takes the remainder as 0, so every animation of the type has the same speed on that axis (S-0319 claim 14, a departure)"
                 ));
             }
+            // spec: S-0319 claim 7 and Constants (the bound H = max(|M|, ||W_xy| − 1 − M|), and |M + |W_xy| − 1| for −2147483648 under quirks.random_magnitude_overflow; the importer warns when H is 256 or more)
+            let edge = glasnost_num::F64::from_i64(i64::from(wxy.unsigned_abs()) - 1, m);
+            let limit = glasnost_num::F64::from_i64(256, m);
+            let big = |x: glasnost_num::F64| x.abs().ge(limit);
+            let plain = big(big_m) || big(edge.sub(big_m, m));
+            // The overflow switch is a simulation switch the importer does not see, so its term is named apart.
+            let overflow = big(big_m.add(edge, m));
+            let note = match (plain, overflow) {
+                (true, _) => Some(""),
+                (false, true) => Some(
+                    " under quirks.random_magnitude_overflow (the default), for the raw value −2147483648",
+                ),
+                (false, false) => None,
+            };
+            if let Some(note) = note {
+                self.warn(line, 0, format!(
+                    "animations {who}: its first horizontal speed can reach a magnitude of 256 or more{note}, which can move it more than one cell in a turn; the original's cliff face is then undefined, our engine turns it as for the step the signs give (S-0319 claim 7, a departure)"
+                ));
+            }
+        }
+        if flag(b"IsTiberium")
+            && let Some(name) = sec
+                .value(b"TiberiumSpawnType")
+                .map(|v| value::text(v, usize::MAX))
+                .filter(|n| !n.is_empty() && !value::is_no_type(n))
+            && let Some(reg) = self.i.outcome.registries.get(&Kind::Overlays)
+            && let Some(i) = reg.iter().position(|t| value::type_name_eq(&t.name, name))
+            && reg.len() - 1 - i < 3
+        {
+            // spec: S-0319 claim 10 and Import mapping (a spawn overlay type with fewer than three entries after it in the overlay list: a drawn place can lie past the list, a departure, and the importer warns)
+            self.warn(line, 0, format!(
+                "animations {who}: TiberiumSpawnType has fewer than three overlay types after it, so a resource offer can draw a place past the overlay list; the original's result is undefined, our engine places no overlay there (S-0319 claim 10, a departure)"
+            ));
         }
         let names_trailer = sec
             .value(b"TrailerAnim")
