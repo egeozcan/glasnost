@@ -1,9 +1,9 @@
 ---
 id: Q-1942
 title: When claim 40 replaces the low release's move destination at the move's first processing, after it has reached height 0, does claim 8 make it take off?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
