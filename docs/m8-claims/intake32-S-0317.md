@@ -93,7 +93,7 @@ intake. S-0319 r26 (spec commit 3b1bf3b, also on main) was not taken in: it is t
 | Claim or item | Status | Notes |
 |---|---|---|
 | 1 (hits without a house; a detonation's pieces; the palette as the house's drawn effect) | tested | Unchanged rules: `claim_1_hits_carry_no_attacker_and_no_house`. The palette: `a_piece_draws_its_section_in_its_colours`. |
-| 2 (a wrapped meteor counter: placed at F2's start, anywhere) | tested | `claim_4_meteor_piece_creation`, `claim_6_lifetime_in_turns`; the start's conversion is S-0205 claim 7's (`to_i32_common`), placement by claim 21 (`claim_21_no_placement_at_the_origin`), off-map flight by claim 20 (`claim_20_off_the_legal_map`). Interim Q-1836 retired. |
+| 2 (a wrapped meteor counter: placed at F2's start, anywhere) | tested | `claim_2_wrapped_meteor_start` (counters −2147483648 + *j* for *j* = 0 and 10: the piece is in play at F2's start converted by S-0205 claim 7, and flies on or ends in its first turn as claim 6's count-down says); off-map flight by claim 20 (`claim_20_off_the_legal_map`). Interim Q-1836 retired. |
 | 3, 4, 11, 12 (backing and confidence text) | tested | No rule change; claim 12's off-map neighbours take claim 20's cell (`claim_20_off_the_legal_map`). |
 | 7 (no skip for an object with no health left) | by construction | Already the code's reading (C5 part 2's decision); now the spec's rule. No scenario here holds such an object in the cell. |
 | 10 (cliff line −0.0002, *z*₀ the flight position's height, *e* narrowed for a rebound) | tested | `claim_10_cliff_line_and_flight_height` (a *u* of 0 is undone when lifted more than 1 above *z*₀ + *u*; just below −0.0002 the descending condition; a falling piece's first turn measures from the flight position, 10 higher); `claim_10_cliff_undone`, `claim_10_high_bridge_deck`, `claim_10_deep_move_and_building_cell` still pass. |
@@ -117,7 +117,16 @@ intake. S-0319 r26 (spec commit 3b1bf3b, also on main) was not taken in: it is t
 | Measurement scenarios V1 to V15, Changes for other specs | not ours | Oracle scenarios and other specs' text. |
 | Open questions (r57) | design | The zero spin axis draws without spin (`piece_rotation` gives none); claim 12's fall-backs, the multi-cell cliff move, the section outside the model and the system's place in the update order are our design, as stated. |
 
-**Goldens, arena, sweeps.** No golden moved: the gate games make no debris pieces. Sweeps and
-arena before and after: see the report (`local-lane/m8/a3-32/before` and `after`).
+**Goldens, arena, sweeps.** No golden moved (`cargo xtask gate` ok, native and wasm32): the gate
+games make no debris pieces. M6c, M7a and M7b seed sweeps 1 to 16, reference and with
+`GLASNOST_PLAY_FIXES=1`: all exit 0, output identical before and after apart from timings. Arena:
+M-0001 31 of 96 pairings failing, M-0002 13 of 24, M-0003 2 of 35, before and after; the arena
+output folders are identical. Runs in `local-lane/m8/a3-32/before` and `after` (git-ignored).
+
+**Local lane.** New scene `debris-pieces` in `crates/app/tests/m7b_lane.rs`: six enemy armed
+vehicles destroyed, their pieces followed tick by tick. On the install's first map: 3 pieces, up to
+about 1000 leptons high, first contact at +43 ticks (the view then centres on that piece), 12
+contacts in all, the net turn count falling after each reversal, all pieces ended by +151.
+Screens `debris-pieces-002` to `-051` and `-end` in `local-lane/m8/a3-32/lane/`.
 
 **Requests.** None; Q-1965 to Q-1969 unused.
