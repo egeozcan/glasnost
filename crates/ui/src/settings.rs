@@ -92,8 +92,11 @@ pub fn view(
     let pw = 620;
     let cw = 290;
     let left_h = 24 * ROWS.len() as i32;
-    let right_h = 18 + 22 * page.bindings.len() as i32 + 18 + 14 * page.fixed.len() as i32;
-    let content = left_h.max(right_h);
+    // design: the fixed keys sit in two columns under both columns, so the
+    // panel stays within a 640x480 logical screen with 9 bindings.
+    let keys_h = 18 + 22 * page.bindings.len() as i32;
+    let fixed_lines = (page.fixed.len() as i32 + 1) / 2;
+    let content = left_h.max(keys_h) + 18 + 14 * fixed_lines;
     let ph = 26 + content + 98;
     let r = Rect::new((w - pw) / 2, ((h - ph) / 2).max(4), pw, ph);
     widget::panel(&mut d, r, Some("SETTINGS"));
@@ -125,15 +128,21 @@ pub fn view(
         t.push(br, SettingsHit::Rebind(i));
         y += 22;
     }
-    d.text_left(Rect::new(x1, y + 2, cw, 14), "Fixed keys", colour::ACCENT);
-    y += 18;
-    for (action, key) in &page.fixed {
+    let y = r.y + 26 + left_h.max(keys_h);
+    d.text_left(Rect::new(x0, y + 2, cw, 14), "Fixed keys", colour::ACCENT);
+    let y = y + 18;
+    for (i, (action, key)) in page.fixed.iter().enumerate() {
+        let (col, line) = (i as i32 / fixed_lines, i as i32 % fixed_lines);
         d.text_left(
-            Rect::new(x1 + 4, y, cw - 4, 12),
+            Rect::new(
+                if col == 0 { x0 } else { x1 } + 4,
+                y + 14 * line,
+                cw - 4,
+                12,
+            ),
             &format!("{action}: {key}"),
             colour::DIM,
         );
-        y += 14;
     }
     let y = r.y + 26 + content + 12;
     let reset = Rect::new(x0, y, 160, 20);
@@ -186,6 +195,18 @@ mod tests {
             let r = t.rect_of(&hit).unwrap();
             assert_eq!(t.hit(r.centre()), Some(hit));
             assert!(r.y >= 0 && r.bottom() <= 480, "{hit:?} {r:?}");
+        }
+        for size in [(640, 480), (800, 600)] {
+            let mut p = page();
+            p.bindings = (0..9).map(|i| (format!("A{i}"), "K".into())).collect();
+            p.fixed = (0..14).map(|i| (format!("F{i}"), "K".into())).collect();
+            let (_, t) = view(size, &p, None);
+            for (r, _) in &t.list {
+                assert!(
+                    r.x >= 0 && r.y >= 0 && r.right() <= size.0 && r.bottom() <= size.1,
+                    "{size:?} {r:?}"
+                );
+            }
         }
         // Every value row is one keyboard stop, then the keys, Reset and Back.
         assert_eq!(t.stops.len(), ROWS.len() + 5 + 2);
