@@ -475,6 +475,119 @@ fn claim_6_berserk_unit_attacks_its_own_infantry_not_the_drone() {
 }
 
 // ---------------------------------------------------------------------------
+// M-0011 (CAOS against BFRT watched per unit): the parts of the record's
+// chain that the approved specs give. How a berserk crusher comes to hold a
+// berserk-friendly drone as its target is Q-2005.
+
+/// The rules with MITE: a crushable, berserk-friendly, psionics-immune
+/// vehicle with no weapon (an invented stand-in for the record's drones).
+fn mite_rules() -> Ruleset {
+    let mut r = rules();
+    vehicle(&mut r, "MITE", |t| {
+        t.crushable = Some(true);
+        t.combat.immune_to_psionics = Some(true);
+        t.combat.berserk_friendly = Some(true);
+    });
+    r
+}
+
+// spec: S-0302 claim 10 and S-0610 claim 4 (a further berserk hit sets the remaining time to its own T, longer or shorter; target and behaviour stay)
+// measure: M-0011 (Gas on the fortresses: each further hit sets the remaining time to its own amount, one shortening it and two lengthening it)
+#[test]
+fn m0011_a_further_berserk_hit_sets_the_time_anew_longer_or_shorter() {
+    let mut w = testkit::game_with(&rules(), SIZE, 1);
+    let tank = put(&mut w, Kind::Vehicle, "TANK", BETA, 0, 0);
+    let h = mad(&w, 100, Some(ALPHA));
+    damage::apply(&mut w, tank, h);
+    let first = left(&w, tank).expect("berserk");
+    testkit::run(&mut w, 3);
+    assert_eq!(left(&w, tank), Some(first - 3), "one countdown step a tick");
+    // Longer: the new T replaces the remaining time, it is not added.
+    let h = mad(&w, 100, Some(ALPHA));
+    damage::apply(&mut w, tank, h);
+    assert_eq!(left(&w, tank), Some(first));
+    // Shorter.
+    let h = mad(&w, 20, Some(ALPHA));
+    damage::apply(&mut w, tank, h);
+    assert!(left(&w, tank).is_some_and(|t| t < first - 3));
+    let short = left(&w, tank).unwrap();
+    // Longer again.
+    let h = mad(&w, 60, Some(ALPHA));
+    damage::apply(&mut w, tank, h);
+    assert!(left(&w, tank).is_some_and(|t| t > short));
+    // A berserk hit takes no health.
+    assert_eq!(health(&w, tank), 1000);
+}
+
+// spec: S-0610 claims 6 and 8 and S-0309 table C row "firing check" (a berserk unit's search never takes a berserk-friendly object, here the only enemy beside it)
+// measure: M-0011 (What the berserk fortresses do: their fire goes at each other)
+#[test]
+fn m0011_a_berserk_crusher_never_searches_out_a_berserk_friendly_enemy() {
+    let mut w = testkit::game_with(&mite_rules(), SIZE, 1);
+    w.houses[usize::from(ALPHA)].human = false;
+    let crusher = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
+    let mite = put(&mut w, Kind::Vehicle, "MITE", BETA, 2, 0);
+    psychic::enter(&mut w, crusher, 10_000);
+    w.obj_mut(crusher).unwrap().beh.current = Some(Behaviour::Hunt);
+    for _ in 0..200 {
+        testkit::run(&mut w, 1);
+        assert_ne!(
+            w.obj(crusher).unwrap().target,
+            Some(Target::Object(mite)),
+            "never the berserk-friendly enemy"
+        );
+    }
+    assert!(w.obj(mite).is_some(), "not crushed");
+}
+
+// spec: S-0210 claim 11 (the attack-target variant of a computer-controlled owner: a crushable target less than the crush range away and no move destination; nothing in it asks the firing check or the berserk state)
+// spec: S-0210 claims 3 and 4 (crushed at the cell centre: removed on the same tick, no damage, the crush sound)
+// spec: S-0610 claims 6 and 8 (the berserk crusher never fires at the berserk-friendly target it holds)
+// measure: M-0011 (How the drones leave play: no damage event, while a grounded fortress that had the drone as its target stood on its position)
+#[test]
+fn m0011_a_berserk_crusher_holding_a_berserk_friendly_target_drives_over_it() {
+    use glasnost_sim::combat::effects::{Effect, Sound};
+    let mut w = testkit::game_with(&mite_rules(), SIZE, 1);
+    // A test-only computer-controlled player house, as the arena's.
+    w.houses[usize::from(ALPHA)].human = false;
+    let crusher = put(&mut w, Kind::Vehicle, "CRUSHER", ALPHA, 0, 0);
+    let mite = put(&mut w, Kind::Vehicle, "MITE", BETA, 1, 0);
+    psychic::enter(&mut w, crusher, 10_000);
+    let o = w.obj_mut(crusher).unwrap();
+    o.beh.current = Some(Behaviour::Hunt);
+    o.beh.queued = None;
+    o.target = Some(Target::Object(mite));
+    let mut shots = 0;
+    let mut crushed = false;
+    for _ in 0..200 {
+        let before = health(&w, mite);
+        testkit::run(&mut w, 1);
+        let gone = w.obj(mite).is_none();
+        for e in std::mem::take(&mut w.effects) {
+            match e {
+                // A shot in the very tick of the crush, after the mite left
+                // play, is not counted: what the firing check answers for a
+                // target removed earlier in the same turn is open (Q-2006).
+                Effect::Shot { firer, .. } if firer == crusher && !gone => shots += 1,
+                Effect::Sound {
+                    sound: Sound::Crush,
+                    ..
+                } => crushed = true,
+                _ => {}
+            }
+        }
+        if gone {
+            assert_eq!(before, 1000, "no damage before it leaves play");
+            break;
+        }
+    }
+    assert!(w.obj(mite).is_none(), "crushed");
+    assert!(crushed, "the crush sound");
+    assert_eq!(shots, 0, "never fired at");
+    assert!(psychic::berserk(&w, crusher), "still berserk");
+}
+
+// ---------------------------------------------------------------------------
 // Claim 8: area berserk weapons.
 
 // spec: S-0610 claim 8 and scenario P5 (every berserk hit of an area pulse takes T at distance 0: equal tanks at different distances get the same initial T; the psionics-immune, berserk-friendly drone cannot go berserk from it)
