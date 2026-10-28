@@ -628,8 +628,10 @@ pub fn process_selling(w: &mut World, id: ObjectId) -> i32 {
             set_stage(w, id, sale.packs, Stage::Begun);
         }
         Stage::Begun => {
+            // spec: S-0402 claim 11 and Changes for other specs (the second processing breaks off every refinery contact; a harvester tethered then still holds back the releases and the build-down)
+            let held = crate::econ::harvest::sale_breaks_contact(w, id);
             // spec: S-0408 claim 6 (a later processing while any unit remains docked: the sale waits)
-            if any_docked(w, id) {
+            if held || any_docked(w, id) {
                 return SELLING_DELAY;
             }
             let quirk = w.rules().quirks.packup_release_by_guard_spot;

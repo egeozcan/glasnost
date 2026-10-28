@@ -1640,35 +1640,58 @@ fn finish(w: &mut World, id: ObjectId) -> i32 {
 
 /// A refinery's sale reaches its first processing (S-0402 claim 11, S-0408
 /// claim 6): every harvester docked with it is told to leave. One in the
-/// unloading state leaves it, scatters, queues *harvest* and starts it,
-/// keeping the unpaid part of its load; one still in *enter* queues *guard*
-/// and scatters. The sale then breaks off the contact.
+/// unloading state leaves it, queues *harvest* and starts it, keeping the
+/// unpaid part of its load, then scatters; one still in *enter* queues
+/// *guard*, loses a destination naming the refinery and scatters. The
+/// contact holds until the sale's next processing
+/// ([`sale_breaks_contact`]).
 pub fn refinery_sold(w: &mut World, refinery: ObjectId) {
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let t = w.tick;
     for h in docked(w, refinery) {
         if in_unloading_state(w, h) {
-            // spec: S-0402 claim 11 (refinery sold: a harvester in the unloading state leaves it at once, receives a forced vehicle scatter request without a threat point and not move-anywhere, queues harvest and starts it if ready, which it now is)
+            // spec: S-0402 claim 11 (refinery sold: a harvester in the unloading state leaves it at once, queues harvest and starts it if it is ready to change, keeping its unpaid load)
             leave_unloading(w, h);
-            sale_scatter(w, h);
             let ready = crate::process::ready(w, h);
             if let Some(ob) = w.obj_mut(h) {
                 ob.beh
                     .queue_and_start(Some(Behaviour::Harvest), ready, t, stale);
             }
+            // spec: S-0402 claim 11 (in the same processing a forced vehicle scatter request without a threat point, only while it has no destination; refused, by S-0207 claim 16, when harvest could not start and unload is still current)
+            sale_scatter(w, h);
         } else if w
             .obj(h)
             .is_some_and(|o| o.beh.seen() == Some(Behaviour::Enter))
         {
-            // spec: S-0402 claim 11 (refinery sold: a harvester still in enter queues guard instead and receives the same vehicle scatter request, subject to the usual refusals)
+            // spec: S-0402 claim 11 (refinery sold: a harvester still in enter, in contact with the refinery, queues guard instead)
             if let Some(ob) = w.obj_mut(h) {
                 ob.beh.queue(Some(Behaviour::Guard));
+                // spec: S-0402 claim 11 (a destination naming the refinery building itself is removed first; a cell destination, such as the docking cell, is kept)
+                if ob.dest == Some(Target::Object(refinery)) {
+                    ob.dest = None;
+                }
             }
+            // spec: S-0402 claim 11 (then, only with no destination, the same vehicle scatter request, which a turning body still refuses: S-0207 claim 16)
             sale_scatter(w, h);
         }
-        // spec: S-0402 claim 11 (the sale then breaks off the contact)
+        // spec: S-0402 claim 11 (the contact holds until the sale's next processing: sale_breaks_contact)
+    }
+}
+
+/// The sale's second processing breaks off every contact with the
+/// refinery (S-0402 claim 11 and its change for S-0408 claim 6), whether or
+/// not the harvester is still tethered. Returns whether a tethered
+/// harvester was docked when it came, which holds back the releases and
+/// the build-down, not the end of its contact.
+pub fn sale_breaks_contact(w: &mut World, refinery: ObjectId) -> bool {
+    let holders = docked(w, refinery);
+    // spec: S-0402 Changes for other specs (S-0408 claim 6: a tethered unit holds up only the releases and the build-down; a contact without a tether does not)
+    let held = holders.iter().any(|&h| tethered(w, h));
+    for h in holders {
+        // spec: S-0402 claim 11 (the sale breaks off the contact at its next processing, 1 tick after the first)
         break_contact(w, h);
     }
+    held
 }
 
 /// The scatter a refinery's sale sends a docked harvester (S-0402 claim
