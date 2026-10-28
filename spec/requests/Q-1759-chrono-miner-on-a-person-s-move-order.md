@@ -1,9 +1,9 @@
 ---
 id: Q-1759
 title: Whether a chrono miner teleports or drives when a person orders it to move
-status: open
+status: answered
 related: [S-0207, S-0402, S-0214, S-0417]
-answered-by: []
+answered-by: [S-0207]
 ---
 
 ## Need
