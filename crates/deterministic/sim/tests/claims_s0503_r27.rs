@@ -572,6 +572,36 @@ fn quirk_hover_landing_request_stands() {
     assert!(!hover::landing_requested(&w, id), "the request is met");
 }
 
+// spec: S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands: on, a landing-first in-place hover whose first deploy step finds it above the ground never deploys; off, once no longer moving the request counts as met and the next step deploys it); M8 step C7 part 3: the play-fixes layer sets the switch off, read from the layer file
+#[test]
+fn play_fixes_layer_deploys_a_hover_with_a_standing_landing_request() {
+    for layered in [false, true] {
+        let mut w = world();
+        if layered {
+            quirk(&mut w, |q| {
+                *q = glasnost_rules::layers::Layers::PLAY_FIXES
+                    .apply_quirks(*q)
+                    .unwrap();
+            });
+        }
+        let id = at(&mut w, "HOVC", 0, 0);
+        settle(&mut w);
+        deploy(&mut w, id);
+        common::run_until(&mut w, 40, |w| hover::landing_requested(w, id));
+        assert!(hover::landing_requested(&w, id), "the landing request");
+        for _ in 0..40 {
+            to_ground(&mut w, id);
+            tick::step(&mut w);
+        }
+        let form = inplace::form(&w, id);
+        if layered {
+            assert_eq!(form, Form::Deployed, "the layer deploys it");
+        } else {
+            assert_eq!(form, Form::Mobile, "never deploys on the reference");
+        }
+    }
+}
+
 /// A balloon-hover in-place hover (HOVE) moving east to a far cell, with an
 /// object ahead as the retention's target (S-0502 claim 28's direction row),
 /// given the deploy order midway; its height is set to its surface before

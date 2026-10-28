@@ -40,8 +40,7 @@
 //! unit does not take that click either (it stands idle on the same cell:
 //! the order memory), the next think clicks another side of the grinder,
 //! the nearest one not yet failed from there, rather than the same cell
-//! again (M8 B4: with `quirks.corridor_split_probe` off, M7a seed 4's
-//! vehicles stood all game beside a grinder). The brain's base defence
+//! again (M8 B4: M7a seed 4's vehicles stood all game beside a grinder). The brain's base defence
 //! leaves a unit on its way in alone.
 //!
 //! It never sends an own harvester, slave miner or slave, engineer or spy

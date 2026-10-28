@@ -688,6 +688,29 @@ fn claim_11_quirk_unload_without_contact_stalls() {
     }
 }
 
+// spec: S-0402 claim 11 row 1 and Edge cases (Unload without contact stalls: on, the harvester stays in unload for good; off, it falls back as if unload were not current and starts at once); M8 step C7 part 3: the play-fixes layer sets the switch off, read from the layer file, so a harvester whose contact is lost while it unloads goes on working
+#[test]
+fn play_fixes_layer_frees_a_harvester_unloading_without_contact() {
+    for layered in [false, true] {
+        let mut r = ruleset();
+        if layered {
+            r.globals.quirks = glasnost_rules::layers::Layers::PLAY_FIXES
+                .apply_quirks(r.globals.quirks)
+                .unwrap();
+        }
+        let mut w = game(&r);
+        let (_, h) = docked(&mut w, vec![4, 0], 16384);
+        until(&mut w, 100, |w| harvest::state_of(w, h).unloading).expect("unloading");
+        w.obj_mut(h).unwrap().contact = None;
+        testkit::run(&mut w, 30);
+        assert_eq!(
+            current(&w, h) == Some(Behaviour::Unload),
+            !layered,
+            "stalled in unload only without the layer"
+        );
+    }
+}
+
 // spec: S-0402 claim 11 (an order while unloading breaks off contact and frees the slot in the same tick; the order starts at the next processing of unload; the unpaid load is kept)
 #[test]
 fn claim_11_order_while_unloading() {

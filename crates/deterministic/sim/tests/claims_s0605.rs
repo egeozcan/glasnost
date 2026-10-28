@@ -417,6 +417,39 @@ fn claim_3_4_waiting_in_line() {
     assert_eq!(absorb::passengers(&w, b), vec![c, a], "front first");
 }
 
+// spec: S-0605 claim 17 and Edge cases (Contact outlives enter: an entrant that leaves enter with its contact keeps the link place and the one waiting is refused for good; off, the contact ends and the waiting one goes in); M8 step C7 part 3: the play-fixes layer sets the switch off, read from the layer file
+#[test]
+fn play_fixes_layer_lets_the_waiting_entrant_in() {
+    for layered in [false, true] {
+        let r = quirked(|q| {
+            if layered {
+                *q = glasnost_rules::layers::Layers::PLAY_FIXES
+                    .apply_quirks(*q)
+                    .unwrap();
+            }
+        });
+        let mut w = game_on(&r);
+        let b = bio(&mut w, "BIO");
+        let a = walker(&mut w, 8, 0);
+        let c = walker(&mut w, 4, 2);
+        send(&mut w, a, b);
+        send(&mut w, c, b);
+        assert_eq!(absorb::waiting_for(&w, c), Some(b));
+        {
+            let o = w.obj_mut(a).unwrap();
+            o.beh.current = Some(Behaviour::Guard);
+            o.beh.queued = None;
+            o.dest = None;
+            o.path.steps.clear();
+        }
+        let in_c = until(&mut w, 800, |w| inside(w, c, b));
+        assert_eq!(
+            in_c, layered,
+            "the waiting entrant goes in only with the layer"
+        );
+    }
+}
+
 // spec: S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept on: an entrant that leaves enter with its contact keeps its link place, and the one waiting in line is refused for good; off: the contact ends and the waiting one gets it and goes in)
 #[test]
 fn claim_17_stale_contact_both_positions() {

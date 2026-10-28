@@ -2548,6 +2548,38 @@ fn corridor_free_part_ignores_height_off_goes_round_a_ledge() {
     }
 }
 
+// spec: S-0212 Edge cases (quirks.corridor_free_part_ignores_height off: a ledge stops the free part as a strip does and the retries lead a new coarse search round it) and claim 13 (the limit of 5 cell searches); M8 step C7 part 3: the play-fixes layer sets the switch off, read from the layer file, so a ledge across the route is gone round and not given up at the 5th search
+#[test]
+fn play_fixes_layer_goes_round_a_ledge() {
+    for half in [1, 3] {
+        for shift in 0..8 {
+            for layered in [false, true] {
+                let mut s = scene();
+                for y in -half..=half {
+                    s.set_cell(cell(0, y + shift), 0, 1);
+                }
+                if layered {
+                    let q = s.ruleset.globals.quirks;
+                    s.ruleset.globals.quirks = glasnost_rules::layers::Layers::PLAY_FIXES
+                        .apply_quirks(q)
+                        .unwrap();
+                }
+                s.place_unit(0, CAR, cell(-12, shift), 64);
+                let mut w = s.build();
+                regions::ensure(&mut w);
+                let id = vehicles(&w)[0];
+                let r = compute_to(&mut w, id, cell(12, shift), Mode::Fresh);
+                let case = format!("ledge {} shift {shift} layered {layered}", 2 * half + 1);
+                if layered {
+                    assert_eq!(r, Search::Found, "{case}");
+                } else {
+                    assert_eq!(r, Search::SearchFailed, "{case}");
+                }
+            }
+        }
+    }
+}
+
 /// The tracked test vehicle of the strip tests.
 const TANK: &str = "TESTTANK";
 
