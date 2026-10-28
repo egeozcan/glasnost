@@ -158,7 +158,7 @@ pub struct Session {
     pub clock_ms: i64,
     /// Each house's display colour by house index (the radar colours,
     /// S-0410 claim 8), for the psychic sensor's intent-line end squares.
-    house_colours: Vec<[u8; 3]>,
+    pub(crate) house_colours: Vec<[u8; 3]>,
     /// The last drawn sidebar's targets, in the interface's logical pixels.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
@@ -645,6 +645,45 @@ impl Session {
         // origin is given in them too (equal to the screen's at 100 %).
         let r = self.layout().radar;
         (r.x, r.y)
+    }
+
+    /// The superweapon countdown rows every player sees (S-0512 claim 18),
+    /// in grant order, with each house's colour.
+    pub fn countdown_rows(&self) -> Vec<hud::CountdownRow> {
+        let w = &self.play.game.world;
+        let types = &w.rules().superweapons.types;
+        // spec: S-0512 claim 18 (every granted record with the countdown flag of a house that is not passive, seen by every player whatever the house and the alliances, in grant order)
+        glasnost_sim::superweapons::charge::countdown_rows(w)
+            .into_iter()
+            .map(|r| hud::CountdownRow {
+                // Seam (countdown display name): claim 18 shows the type's
+                // display name, a string-table label (S-0512 Import mapping);
+                // the client reads no string table yet, so the row shows the
+                // type's name, as the sidebar's icons do.
+                name: types
+                    .get(r.sw as usize)
+                    .map_or_else(String::new, |t| t.name.clone()),
+                // spec: S-0512 claim 18 (the name in its house's colour)
+                colour: self
+                    .house_colours
+                    .get(usize::from(r.house.0))
+                    .copied()
+                    .unwrap_or([255, 255, 255]),
+                seconds: r.seconds,
+            })
+            .collect()
+    }
+
+    /// The battlefield view's outline on the radar map (S-0410 claim 11),
+    /// in radar map pixels; none without a radar map.
+    pub fn radar_view_box(&self) -> Option<hud::ViewBox> {
+        let r = self.radar.as_ref()?;
+        let v = self.view();
+        let (x, y, w, h) = r.image_rect();
+        Some(hud::ViewBox {
+            image: Rect::new(x, y, w, h),
+            edges: r.view_outline(v.origin, (v.size.0 as i32, v.size.1 as i32)),
+        })
     }
 
     /// The sidebar's layout in the interface's logical pixels.
@@ -1782,6 +1821,11 @@ impl Session {
             ui.fill(Rect::new(lm.x, lm.bottom() - 16, lm.w, 16), [0, 0, 0, 200]);
             ui.text(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
         }
+        ui.extend(hud::countdown_view(
+            &self.countdown_rows(),
+            lm,
+            self.clock_ms,
+        ));
         // A shared handle: a copy of the rules each frame cost more than the
         // rest of the draw list (M8 step C4).
         let rules = self.play.game.world.rules_arc();
@@ -1803,7 +1847,8 @@ impl Session {
             let img = icons.get(&t)?;
             Some((id, 0, img.width() as i32, img.height() as i32))
         };
-        let model = self.play.hud_model(&name, &art);
+        let mut model = self.play.hud_model(&name, &art);
+        model.view_box = self.radar_view_box();
         let pointer = self.pointer;
         let hover = pointer.map(|p| self.ui.to_ui(p));
         let (hud_list, targets) = hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover);

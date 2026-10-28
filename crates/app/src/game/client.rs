@@ -1429,3 +1429,7 @@ mod access_tests;
 #[cfg(test)]
 #[path = "client_music_tests.rs"]
 mod music_tests;
+
+#[cfg(test)]
+#[path = "client_play_notes_tests.rs"]
+mod play_notes_tests;
