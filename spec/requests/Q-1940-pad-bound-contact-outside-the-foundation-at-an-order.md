@@ -1,9 +1,9 @@
 ---
 id: Q-1940
 title: Does a person's move order end the pad contact of a pad-bound aircraft released at a docking position outside its pad's foundation?
-status: open
+status: answered
 related: [S-0501, S-0213, S-0417]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
