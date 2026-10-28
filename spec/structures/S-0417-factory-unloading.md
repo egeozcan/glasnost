@@ -2,13 +2,13 @@
 id: S-0417
 title: Factory unloading (doors, exit movement and rally destinations)
 topic: structures
-revision: 21
+revision: 64
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110]
+requests: [Q-0221, Q-0222, Q-0223, Q-0697, Q-1070, Q-1110, Q-1757, Q-1850]
 supersedes: []
 ---
 
@@ -24,25 +24,52 @@ failed results, and refunds; S-0404 claim 15 owns aircraft pad positions. Skirmi
 and network games are out of scope. This answers Q-0221, Q-0222 and Q-0223 and most of Q-0120.
 Q-0697's teleporting-infantry clear report is specified in claim 10. Q-1070's jumpjet
 ascent clear report is claim 15: normal factory-released flight does not hold the factory
-until landing or destination arrival. Still open: possible later
-unsolicited movement without a rally point (Open question 3) and the draws of putting a
-released unit on the map (Open question 8). Claim 14 owns the
+until landing or destination arrival. Q-1757 is answered in part by claim 17: an infantry unit
+resting in *guard* or *area guard* on a cell that holds a building that counts there is sent a
+scatter request in each of its turns while those conditions hold, so a walking
+or teleporting infantry unit released with no rally point onto a cell that holds the factory is
+sent off it from its first turn in which it rests there, when its request gets a destination
+(S-0208 claim 13, with that claim's fall-back to the neighbours).
+Claim 17 answers Q-1757 questions 1 and 2, rated medium until U10 part b is run, and question 3
+in part: whether a later release is busy with stock types is Open question 10. Question 5's
+cloning and teleporting parts are answered at medium until U10 parts b2 and e are run, and its
+jumpjet part is Open question 3.
+Q-1757 question 4 is answered in claim 10: a rally point set after the release does not move
+the resting unit. That answer is backed by U10 b, which has not been run (Open question 13).
+An infantry unit released with no rally point does not rest on the foundation holding the
+contact place; claim 17 normally sends it the scatter request in its first turn, and it walks
+off (its exceptions: a refused request, an accepted one that gets no destination or, for a
+walking unit, no path, a missed turn, S-0203 claim 10), so a later release from that factory is
+busy only during that walk.
+Q-1850 questions 1 to 3 are answered in claim 17 (*Unit after unit*): each unit normally receives,
+in the tick after its release (claim 17's exceptions as above), a destination on a cell of its
+own off the foundation. When claim 17's conditions hold for every earlier unit, and each
+earlier walk off the foundation finishes before the next unit's request, every queued unit
+comes out at its release unless an earlier unit's first arrival comes 54 ticks or more after
+its release, or S-0404 claim 13 gives the release another failure. That walk is expected to end
+within the 54 ticks between releases at a stock infantry speed, but this spec has no figure for
+a stock walking speed, and only U10 f would show it. This is rated medium until U10 parts b and
+f are run, and only on that condition.
+Still open: whether a released jumpjet infantry unit is in *guard* or *area guard*
+over K's foundation and so receives that request (Open question 3), whether a busy second
+finished item differs between factories with one contact place and those with several (Open
+question 10),
+and the draws of putting a released unit on the map (Open question 8). Claim 14 owns the
 contact-place count, infantry candidate acceptance and edge-entry nearby destination, including
 the search's no-draw rule; their untested cases remain qualified there.
 
-**Paired hand-off confirmations.** S-0404 claim 13 retains the fulfilled release
-hand-off: release queues *unload*, and contact-place count, infantry candidate acceptance and
-edge-entry nearby destination refer to claim 14 here. Nearby-search draws are resolved as none.
-Initial-placement draws remain open. S-0212 claim 25 table T5 includes the aircraft factory
-edge-entry-without-rally row with claim 14's parameters, and claim 25 uses the release tick to
-select its destination. S-0215 claim 11 records that factory release and unloading
-neither set nor clear the ready mark, with start consequences owned by claim 2 here. Its claim 13
-and S-0207 claim 21 jointly own restoration and retained teleporting state after
-claim 5's temporary drive. The decided apron off-state rules remain in Edge cases. Confirm
-these companion passages at sign-off. Q-1110 question 3 is answered by claim 16. For this hand-off, S-0207 claims 25
-and 27 must cite its factory-exit lifecycle, and S-0402 claim 17 must qualify
-teleporting travel by the active locomotion, including the first factory-built
-chrono miner's driving leg. Q-1110 questions 1 and 2 belong to S-0207 claim 27.
+**Paired hand-offs.** S-0404 claim 13 retains the fulfilled release hand-off: release queues
+*unload*, and contact-place count, infantry candidate acceptance and edge-entry nearby destination
+refer to claim 14 here. Nearby-search draws are resolved as none. Initial-placement draws remain
+open. S-0212 claim 25 table T5 includes the aircraft factory edge-entry-without-rally row with
+claim 14's parameters, and claim 25 uses the release tick to select its destination. S-0215 claim
+11 records that factory release and unloading neither set nor clear the ready mark, with start
+consequences owned by claim 2 here. Its claim 13 and S-0207 claim 21 jointly own restoration and
+retained teleporting state after claim 5's temporary drive. The decided apron off-state rules
+remain in Edge cases. Q-1110 question 3 is answered by claim 16. For this hand-off, S-0207 claims
+25 and 27 must cite its factory-exit lifecycle, and S-0402 claim 17 must qualify teleporting travel
+by the active locomotion, including the first factory-built chrono miner's driving leg (S-0402
+claim 17 carries this). Q-1110 questions 1 and 2 belong to S-0207 claim 27.
 
 ## Terms
 
@@ -384,48 +411,72 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
 
     Landing-point reservation alone does not report clear. If the unit never jumps and has no
     other cell-arrival update or independent contact-breaking event, it retains both contact
-    and tether as a resting walker does. There is no factory-release contact timeout. Clearing
+    and tether as a resting walker does. Without a rally point, claim 17 normally sends it a request
+    in its first turn in which its resting behaviour is current, and it then jumps (claim 17,
+    rated medium there).
+    So this retention needs a request that is refused, that gets no destination (after S-0208
+    claim 13's fall-back to the neighbours), or that gives a destination to which it never
+    jumps. A jump needs no path (S-0208 claim 19), so the reachability gate that stops a walking
+    unit (S-0208 claim 24) gives a teleporting unit no retention. U10 e tests the ordinary
+    no-rally jump; retention without an arrival report is otherwise `unmeasured`.
+    There is no factory-release contact timeout. Clearing
     a destination without jumping, resting in *guard*, and falling back to rest do not themselves
     supply the missing arrival report. With every contact place held, a later release is busy
     under claim 14 and S-0404 claim 13, not successfully released with a permanently stale link.
-    - Backing: `measurable` (U10 d for jump-time release and ordering, U10 e for the no-jump
-      control and a later commanded jump)
+    - Backing: `measurable` (U10 d for jump-time release and ordering, U10 e for the jump
+      that claim 17 causes without a rally point). The retention of a teleporting unit that
+      never jumps is `unmeasured`: claim 17 moves a resting unit on the foundation, and no
+      stock setup is known that keeps it from jumping without an order
     - Confidence: high (arrival/report connection, contact and tether loss, absence of vehicle
-      suppression); medium (combined factory-release and no-jump consequences)
+      suppression); medium (combined factory-release consequences); low (the no-jump
+      retention, `unmeasured`)
 
     **Release of jumpjet infantry.** Claim 15 owns its ascent clear report, which ends both factory
     contact and tether during the climb, without waiting for a walking arrival or touchdown.
 
     With no rally point (or a rally point in the unit's own cell), neither placement nor the release
-    gives a destination or queues *move*. The unit rests in *guard*, and no rule of resting
-    infantry found so far moves it off a building cell: the building-cell scatter of a walking
-    unit applies only when a *move* ends, and the periodic scatter of a resting unit concerns a unit
-    hidden behind higher ground, not a building. What moves the unit off the foundation, if
-    anything, is therefore not established (Open question 3). The no-arrival contact rule is
-    settled: while it remains resting without a cell-arrival update or an independent
-    contact-breaking event, it keeps contact and tether and holds one of K's contact places
-    (claim 14). For a jumpjet, claim 15's ascent report is such an independent event:
-    no-rally release must not be read as retention after it has flown away.
-    This also applies to teleporting infantry that never jumps (U10 e). With a
-    single contact place the next infantry release is busy (S-0404 claim 13), which makes
-    retention observable (U10 b). This is not a promise that unrelated events can never move
-    the unit or break contact.
+    gives a destination or queues *move*. A walking or teleporting unit rests in *guard* (or
+    *area guard*) where the release puts it. When that cell holds K (claim 17's cell test), claim
+    17 sends it off that cell when its request gets a destination (for jumpjet infantry, Open
+    question 3); a cell of K's foundation rectangle that K's foundation word leaves out (S-0406
+    claim 2) does not hold K. In its first turn in which its resting behaviour is current on a
+    cell that holds K it is sent a
+    forced, move-anywhere scatter request with no threat point (claim 17) and, when it accepts and a
+    destination is found, moves to that destination (a teleporting unit jumps, claim 17). Its first standing-position arrival after tether establishment
+    is its clear report, as above, which ends contact and tether and frees K's contact place.
+    The no-arrival contact rule still holds: while it remains resting without a cell-arrival
+    update or an independent contact-breaking event (for example while each request is refused,
+    gets no destination after S-0208 claim 13's fall-back to the neighbours, or, for a walking
+    unit, gives a destination for which no path is found, S-0208 claim 24 and S-0212 claim 6's
+    reachability gate), it keeps contact and tether and holds one of K's contact places
+    (claim 14). There is no factory-release contact timeout. For a jumpjet, claim 15's ascent
+    report is such an independent event: no-rally release must not be read as retention after
+    it has flown away. With a single contact place, a later infantry release is busy (S-0404
+    claim 13) only while that place is held, which after claim 17 is normally the unit's short
+    walk to its first arrival; so later units of the factory come out (claim 17, *Unit after
+    unit*).
+
+    Setting K's rally point after the release does not move a unit already released: its guard
+    spot, if it has one, was saved at its release, and no rule gives a resting unit its factory's later rally
+    point. This negative is proposed for measurement (U10 b) and has not been run.
 
     The original's computer-controlled release also queues *area guard* and can choose a
     base-cell guard spot. Our player houses use the human rule; neutral and special houses retain
     the original owner rule.
     - Backing: `measurable` (U10 a and S-0208 W15 for ordinary release, first-arrival
       clear-report timing and the two-leg walk; U10 b for the
-      absence of an immediate no-rally destination and no-arrival contact retention,
-      U10 c for jumpjet release; U10 d/e for teleporting release). Cloning contact hand-over,
+      absence of an immediate no-rally destination, the walk off the foundation, its contact end
+      and a rally point set afterwards; U10 c for jumpjet release; U10 d/e for teleporting
+      release). No-arrival contact retention is `unmeasured`: claim 17 moves a resting unit off
+      the foundation, and no stock setup is known that keeps it there. Cloning contact hand-over,
       a rally in the appear cell and zero-draw contact
       exchanges are `unmeasured` here: these parts do not exercise those releases or isolate
       their contact draws. Non-player-house production is `unmeasured`: no stock factory-release
-      setup for it is established. Later spontaneous movement in the no-rally case remains an
-      open question, not a prediction of a permanent wait.
+      setup for it is established.
     - Confidence: high (release destinations, contact hand-over and first-arrival report test),
-      medium (the two-leg walk and intermediate/foundation arrival consequences),
-      low (later movement in the no-rally case)
+      medium (the two-leg walk and intermediate/foundation arrival consequences, the no-rally
+      walk off the foundation as composed with claim 17, and a rally point set afterwards,
+      until U10 b is run), low (no-arrival contact retention, `unmeasured` here)
 
 11. **Aircraft factory.** It does not enter these factory unloading stages. Edge-entry orders and
     where the aircraft appears belong to S-0404 claim 13. When the aircraft appears docked at K,
@@ -470,13 +521,19 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     (claim 10), offering contact and the tether request to a docked aircraft take no draw. The
     edge-entering aircraft's nearby destination of claim 14 takes no draw (S-0212 claim 25).
     Whether putting a released unit on the map takes draws of its own is not established (Open
-    question 8).
+    question 8). A unit released with no rally point takes the draw of the scatter request of claim
+    17 in the turn in which it accepts it (S-0208 claim 13), normally its first turn, in the next
+    tick (claim 17 gives the exceptions). That draw belongs to that turn of the unit, not to its
+    release.
     - Backing: `measurable` (U3, U11 for delay/scatter assignment and U3's isolated ground
-      exit events). Placement guard-spot changes, aircraft contact/tether exchanges and the
+      exit events; U10 b for the first-turn scatter draw of a unit released with no rally
+      point). Placement guard-spot changes, aircraft contact/tether exchanges and the
       edge-entry destination's no-draw exclusions are `unmeasured` here: the release scenarios
       do not separate their effects from untraced placement draws. Failed replacement's effects
       are `unmeasured`: no stock setup causing that failure is established.
-    - Confidence: high (explicit delay and scatter assignments); medium (downstream effects)
+    - Confidence: high (explicit delay and scatter assignments), except the scatter draw of a
+      unit released with no rally point, medium as claim 17 and S-0208 claim 13 rate it; medium
+      (downstream effects)
 
 13. **Idle vehicle factory clears its apron.** This applies to a building whose type has the vehicle
     factory flag, naval or not, that is unarmed and lacks the stupid-guard-mode flag (S-0215
@@ -515,7 +572,12 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     - **Contact places of a factory.** A factory building has *n* = max(*d*, 1) contact places,
       where *d* is its type's imported docking-place count (S-0404 Import mapping, including its
       absent default). A place is free while no unit is in contact through it. An infantry
-      factory's release is busy when none of its *n* places is free.
+      factory's release is busy when none of its *n* places is free. Without a rally point, claim
+      17 normally ends the earlier unit's contact at its first arrival off the walk it starts in
+      its first turn, so a later release is busy only if it comes before that arrival. One line
+      finishes its items at least 54 ticks apart (S-0404 claim 7, S-0403 F7), so that needs a
+      first arrival at least 54 ticks after the release. This consequence of claim 17 has
+      claim 17's rating (medium), not this claim's.
     - **Entry test of an infantry exit candidate.** A candidate cell that is a legal map cell
       passes when the unit's own cell-entry test for that cell (S-0209 and S-0211, made with
       no particular facing or level) gives the free result. Any other result rejects the
@@ -531,13 +593,15 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
       When the search finds a cell, the aircraft's *move* is forced with that cell as
       destination. When it finds none, *move* is forced with no destination. With a rally point,
       *move* is forced with the rally point as destination. The search takes no draw.
-    - Backing: `measurable` (U13 a for a single held contact place, U13 b for the entry test,
+    - Backing: `measurable` (U13 a for a single held contact place, with its slow test type,
+      U13 b for the entry test,
       U13 c for a successful aircraft nearby destination). Counts other than one, the
       no-result search, deck-mode search and forced-move distinction are `unmeasured` here:
       no scenario part establishes those setups or distinguishes a forced move from an ordinary
       move. Their owning general rules remain as cited.
     - Confidence: high (contact-place count, forced *move* and destinations); medium (the entry
-      test's exact results, inherited from the cell-entry rules)
+      test's exact results, inherited from the cell-entry rules, and the busy release before the
+      first arrival, which rests on claim 17)
 
 15. **Ascent of a jumpjet releases the factory (Q-1070).** A released infantry unit or vehicle
     currently using jumpjet locomotion, whose type is marked as jumpjet or balloon-hover,
@@ -569,16 +633,17 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     or later according to actor update order and its processing delay. It need not wait
     for any part of the jumpjet's journey after this report. An infantry factory has no
     unloading stage: the contacted place becomes free in the report tick itself, so a later
-    release is no longer busy on account of that unit's old contact (claim 14).
+    release is not busy on account of that unit's old contact (claim 14).
 
     **Rally and no rally.** The report condition itself does not test for a rally point.
     A ground vehicle receives claim 5's fixed exit destination whether or not K has a
     rally point, so its ordinary successful exit starts ascent in both cases. Infantry
     with a rally point outside its own cell starts towards that rally under claim 10.
     Infantry without such a point receives no release destination; if it later starts
-    ascending, the same report applies. What initiates unsolicited movement of an otherwise
-    resting no-rally infantry unit remains Open question 3, not a prediction that a unit
-    already flying retains its factory forever. A newly commanded legal move can supply
+    ascending, the same report applies. Whether claim 17's request reaches a resting no-rally
+    jumpjet infantry unit, and so starts its movement, remains Open question 3. It is not a
+    prediction that a unit already flying retains its factory forever.
+    A newly commanded legal move can supply
     the ascent; a refused tethered stop is neither required nor a remedy.
 
     **Destination after the ascent report.** This report does not use claim 8's ordinary
@@ -598,8 +663,8 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     - Backing: `measurable` (U14 for ordinary stock vehicle and infantry release, ascent
       tick, both links, destination effects and subsequent production). Balloon-hover
       infantry, non-balloon jumpjet vehicles, missing type flags, the original aftermath
-      of a one-step ascent that skips the window and a resting no-rally infantry unit's
-      unsolicited take-off are
+      of a one-step ascent that skips the window and a resting no-rally jumpjet infantry
+      unit's take-off are
       `unmeasured` here: no stock factory-release fixture exercising those cases is
       established. The report rule is established conditional on ascent, not on a measured
       automatic no-rally take-off. U14 records that remaining limitation explicitly.
@@ -622,8 +687,8 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     | A factory-built chrono miner starts seeking and finds ore in a different cell | The ore destination replaces the exit point. The miner drives its first leg to that ore with its temporary driving locomotion, retaining the suspended teleporting locomotion |
     | A later driving track completes at its order-level goal with the height condition of S-0207 claim 25 met | The replacement locomotor destination point clears by that claim, before the cell-arrival report. This is a later goal's completion, not retroactive clearing at the apron |
     | The ordinary cell-goal cleanup, an effective destination removal that stops locomotion, or another accepted stop applies | The driving destination point clears under S-0207 claims 25 and 26 |
-    | A subsequent fall-back to rest finds all claim 5 restoration predicates satisfied | The suspended locomotion is restored under S-0215 claim 13. Restoration is not implied merely by arriving at the first ore cell or starting loading |
-    | A qualified refinery docking-cell assignment occurs | S-0207 claim 27 owns restoration within that assignment or its fallback stop and refreshed reassignment; this is a separate route to restoration, not a required prior fall-back to rest |
+    | A subsequent fall-back to rest finds all claim 5 restoration predicates satisfied | The suspended locomotion is restored under S-0215 claim 13. Restoration is not implied merely by arriving at the first ore cell or starting loading. For a chrono miner, its next destination that is not a qualified docking assignment installs temporary driving again (S-0207 claim 28) |
+    | A qualified docking assignment occurs (S-0207 claim 28 lists those of ordinary play) | S-0207 claim 27 owns restoration within that assignment or its fallback stop and refreshed reassignment; this is a separate route to restoration, not a required prior fall-back to rest |
 
     The seeking exception that drops an initial destination for teleporting movement
     (S-0402 claim 17) tests the active locomotion. It does not drop that destination
@@ -631,6 +696,16 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     The run-away reply's *harvest* start therefore does not restore the miner before
     its first field leg. A refinery's free unit is a different release path
     (S-0402 claim 18), not evidence that a vehicle-factory exit skips this driving leg.
+
+    A later restoration does not end a factory-built chrono miner's driving trips. Every
+    destination it later takes that is not a qualified docking assignment installs temporary
+    driving again, outside S-0207 claim 28's three exclusions (warp-pending immobilization,
+    being gripped, seizure), so after a restoration it teleports only on a qualified
+    refinery docking assignment: the refinery's docking-cell offer, the repeated dock test
+    of that cell in *enter*, or, at a sale of that refinery while the contact still holds,
+    the sale's scatter request and, for a miner that was unloading there and is not full, the
+    cells its first seeking processing sets (S-0207 claim 28, *A sale of the refinery*). Its
+    other trips to ore, to a queueing cell and to a player's destinations are driven.
 
     **No follow-up goal.** There is no unconditional guarantee that every conceivable
     exit is followed by restoration. If no later instruction replaces or stops the
@@ -645,13 +720,229 @@ Armed and unarmed use S-0215 claim 32's building weapon test.
     non-harvesting teleporting vehicle is established here, so the non-harvester rows
     are conditional rules, not a claimed stock release fixture.
     - Backing: `measurable` (U15 for the first field leg, replacement, clearing and
-      subsequent restoration). Isolated retention with every subsequent stop and
+      subsequent restoration). The chrono-miner consequences, and the expectations of U6 and
+      U15, are composed with S-0207 claim 28. Isolated retention with every subsequent stop and
       destination replacement excluded is `unmeasured` until U15's no-field control
       establishes that interval; no finite observation proves perpetual retention.
       No stock non-harvester teleporting release fixture is established for that branch.
     - Confidence: high (point lifetime, active-locomotion test, harvest queue not a
       restoration event); medium (composed first-field-leg and subsequent restoration
       consequences).
+
+17. **Resting infantry on a building cell is sent off it (Q-1757).** An infantry unit is sent a
+    scatter request in each of its turns (S-0203 claim 2) in which all of these hold:
+    - it is in play on the map,
+    - its current behaviour is *guard* or *area guard*,
+    - the cell that holds its position holds a building that counts here.
+
+    The request has no threat point, is forced and is move-anywhere, unlike claim 8's request and
+    S-0215 claim 28's, which are not move-anywhere. It is part of the unit's own turn, not of its
+    behaviour's processing. It comes in every turn of
+    the unit in which these conditions hold, whatever the behaviour's processing delay,
+    including the turn in which a queued resting behaviour becomes current (S-0215 claim 11).
+    So the first request comes in the unit's first turn in which the resting behaviour is
+    current on such a cell, on that turn's own tick and not one tick later, and while the conditions hold a request comes in
+    every turn of the unit, each taking its draw when it is accepted. In our engine the request
+    comes after the rest of the unit's turn: after its queued resting behaviour has become
+    current, after any processing of its behaviour in that turn (with that processing's draw)
+    and after its movement in that turn. So it tests the behaviour current at the end of the
+    turn, also in the turn of a late start (S-0215 claim 11), and its draw follows the
+    processing's draw (design); the original's order within the turn is `unmeasured` (Open
+    question 11).
+    Our engine does not send the request in a turn of the unit in which the unit is being erased
+    (S-0514 claim 17), which includes a superweapon warp's leaving stage, since a unit in that
+    stage counts as being erased (glossary *leaving stage*), nor in a tick in which the unit
+    travels through a tunnel. This is a design rule, decided at the delegated sign-off,
+    2026-10-25: the request comes after the rest of the unit's turn, and in those ticks the unit
+    does none of its ordinary work (S-0513 claim 48, S-0514 claim 17 and S-0215 claim 2 leave
+    such a unit out of its behaviour processing, movement and firing), so a turn that ends
+    early makes no request. Whether the original sends the request in those ticks depends on
+    where it falls within the turn, which is not established (Open question 11). At a warp's earlier
+    update boundaries (S-0513 claim 51) our engine does not send the request (design); whether the
+    original sends it there is open (Open question 12). The cell is the one under the unit's
+    position on the ground plane, whatever the unit's height. A building does not count when it
+    fits one of the following occupant rows of S-0209 claim 4 (part 4c), whose value is *none*:
+    this test borrows those rows to decide whether a standing building counts.
+    They are:
+    - a building of a type that is invisible in play (row WP7),
+    - a laser-fence section in either of row WP8's two states. Which states those are in the
+      original is not established (S-0209; Open question 14). Our engine takes them to be the
+      states in which the fence is down and shows no beam (design),
+    - a firestorm wall whose owner's firestorm is off (row WP10),
+    - an open gate (row WP11).
+
+    An enslaved unit is not sent the request when the building is its master and the cell is
+    the master's unloading cell (row WP2).
+
+    The unit judges the request by S-0208 claim 11 and, when it accepts, finds its destination
+    by S-0208 claim 13 and its single draw. A unit with no movement in progress accepts it unless
+    claim 11's first case refuses it (a sequence that cannot be interrupted), since the request
+    is forced, and since it is also move-anywhere the second case does not refuse it either. A
+    walking unit that accepts and gets a destination walks there as under a move order, within
+    S-0208 claim 24's limits on a move order. A teleporting unit jumps there (below), which
+    needs no path (S-0208 claim 19). Whether a further request is sent depends on the conditions
+    above. A refused request, or an accepted one that gets no destination, leaves the unit
+    resting on the building cell. A walking unit whose path computation fails at the reachability
+    gate (S-0208 claim 24, S-0212 claim 6) also stays on the building cell, but it keeps that
+    destination (S-0212 claim 23, the row for the gate's failure); a failed search follows S-0212
+    claim 23's other rows instead. A later request replaces that destination only if the unit
+    accepts it. Whether its locomotor reports movement in progress while it holds a destination
+    with no path, so that S-0208 claim 11's third case refuses each later request as during the
+    walk-off (below), is not established. If the conditions
+    above still hold in its next turn, the request is sent again; each accepted request takes its
+    draw.
+
+    **During the walk-off.** An accepted request whose destination comes from S-0212 claim 25's
+    search leaves the unit's current behaviour as it was. So a walking unit that has accepted one
+    is still in *guard* or *area guard* while it walks off, and the request is sent in each of
+    its turns until its position leaves the cell that holds K. Its locomotor then has movement
+    in progress (S-0208 Terms), so the request is not effectively forced, and S-0208 claim 11's
+    third case refuses it: it takes no draw, and the unit keeps its destination. The exception is
+    a unit of a type with the fraidycat flag whose current behaviour has the scatter property:
+    the move-anywhere option gives it scatter permission, so it accepts each such request, with
+    its draw and a new destination from the search around its walking target's cell (S-0208
+    claim 13). When the destination comes instead from S-0208 claim 13's fall-back to the
+    neighbours, *move* is queued with it (S-0215 claim 11 decides when it becomes current), and
+    until it does the requests are refused in the same way. For a teleporting unit, an accepted
+    request whose destination comes from the search gives its locomotor one movement update at
+    once, in which it jumps, with no wait, to the landing point that the destination fixed
+    (S-0208 claim 19, S-0207 claim 20 d), so the jump falls in the request's own turn. A
+    destination from the fall-back to the neighbours gives no such update, and the jump comes at
+    the unit's next movement, which in our engine precedes the request in its next turn (above).
+    When no landing point is fixed, the destination is removed and the unit does not jump (S-0208
+    claim 19), and it rests on the building cell as after a request that gets no destination.
+
+    The rule is not specific to factories, but a factory release is where it is seen:
+    - **Released with no rally point.** The release happens when the place order takes effect,
+      after the turn pass (S-0404 claim 7; S-0203 claim 7). The unit therefore takes its first
+      turn in the next tick unless it misses that turn (S-0203 claim 10). Its queued resting
+      behaviour becomes current at the first update at which it is ready to change (S-0215
+      claim 11). When the cell claim 10 has it resting on holds K, and K counts here, the
+      first request comes in its first turn in which that behaviour is current.
+    - **Where it goes.** It goes to the destination of S-0208 claim 13. Which cells qualify is
+      S-0212 claim 25's. A qualifying cell has an empty occupancy record, so a destination that
+      the search finds is not a cell that holds K, unless it is a bridge cell: there the deck's
+      record is read, so a bridge cell over part of K with an empty deck could qualify. No stock
+      placement is known that puts a factory's foundation under a bridge, so that case is
+      `unmeasured`.
+    - **When K is free again.** Its first standing-position arrival after tether
+      establishment is claim 10's clear report, which ends contact and tether.
+    - **A unit that stays on the foundation.** It keeps both links while each request is
+      refused, gets no destination after S-0208 claim 13's fall-back to the neighbours, or, for a
+      walking unit, gives a destination for which no path is found (S-0208 claim 24, S-0212 claim
+      6's reachability gate) (claim 10).
+    - **Unit after unit (Q-1850).** The unit has no walking target when the request comes, so its
+      scatter centre cell is its own cell (S-0208 Terms), a cell that holds K. The search of S-0212
+      claim 25 around that cell never gives a cell that holds K, other than a bridge cell (*Where it
+      goes*), nor one whose occupancy record shows any unit, even one infantry unit in one standing
+      position. On
+      otherwise open ground it stops at the end of the first ring that has such an empty cell
+      passing S-0212 claim 25's visibility test, normally the
+      cells next to the foundation around the release cell, and takes the preferred cell at
+      position *N* mod *n*, where *N* is the tick number of the request and *n* the number of
+      preferred cells (S-0212 claim 25). The request's draw gives only a direction, which plays
+      no part in that choice (S-0208 claim 13). So which cell the unit takes depends on the tick
+      on which its first turn falls and on which cells already hold units, not on a draw. A later unit of
+      the same factory finds the cells of earlier units taken, since each earlier unit rests
+      where its walk ended and is not sent claim 17's request there, and so takes another
+      cell. A unit of a type without the fraidycat flag accepts one request, with one draw, for
+      its walk-off (*During the walk-off*). So no two of them that rest in *guard* end on one cell,
+      provided each earlier unit's walk has ended by the next unit's request: a release comes at
+      least 54 ticks after the previous one (claim 14), and a walk to a cell next to the
+      foundation at a stock infantry speed is expected to end within that time. That expectation
+      is untested: this spec has no figure for a stock walking speed, and only U10 f, which has
+      not run, would show it. A unit that rests in *area guard* takes its own cell as its guard
+      spot (S-0215 claim 26), which can be a cell of K, and may return there, so for *area guard*
+      the result is `unmeasured`.
+      Where it is released is S-0404 claim 13's exit
+      cell rule, unchanged. Each later unit is released when its own place order takes effect
+      (S-0404 claim 7) and is not busy, because the earlier unit's contact ended at its first
+      arrival (*When K is free again*), so it appears with no wait beyond its build time.
+      Only a release that comes before the earlier unit's first arrival is busy, and its item
+      is then cancelled with a refund, with no retry (S-0404 claims 7 and 13); with one line
+      finishing items at least 54 ticks apart, that needs a first arrival at least 54 ticks
+      after the release (claim 14). Thus five units queued at one factory with no rally point
+      and nothing else near it, each resting in *guard*, each making its first arrival less
+      than 54 ticks after its release and ending its walk before the next request, all come
+      out, each in the order boundary in which its own place order takes effect, each
+      receives the scatter request in its next turn, and they end on five different cells
+      next to or near the foundation, none of which holds K (bridge cells aside, *Where it
+      goes*).
+
+    The same conditions apply to a cloning building's copy. A teleporting infantry unit whose accepted request
+    produces a destination jumps to it, and its first jump's arrival is its clear report (claim 10). The cell test ignores the unit's
+    height, so a jumpjet infantry unit released with no rally point over K's foundation
+    receives the request whenever its current behaviour there is *guard* or *area guard*.
+    Which behaviour it has there is not established (Open question 3).
+    - Backing: `measurable` (U10 b for the first-turn request, its draw, the walk and the
+      contact end, U10 f for *Unit after unit*: five releases in a row, their ticks, their
+      cells and no busy release, including the stock walk ending within 54 ticks, which no
+      other part tests, U10 b part b2 for a cloning copy, U10 e for a teleporting type, and S-0208
+      W7 for the acceptance rules). U10 b measures the request in the turn in which the queued
+      resting behaviour first becomes current, by the tick of the first request. A request in
+      the same turn as a later behaviour change is `unmeasured`: no part of U10 makes the
+      resting behaviour current at a late start. The
+      exempt buildings are `unmeasured` here: no setup in
+      this spec leaves an infantry unit resting on such a cell, and the rows themselves carry
+      S-0209's backing. The repeat while every request gets no destination is `unmeasured`: no
+      stock setup is known in which neither the search around a factory's foundation nor S-0208
+      claim 13's fall-back to the eight neighbours of the scatter centre cell gives one. *Area
+      guard*, buildings other than factories and cloning buildings, and the enslaved unit's
+      exception are `unmeasured`: U10 places only *guard* infantry on a factory's or cloning
+      building's foundation. No request while being erased (a warp's leaving stage
+      included) or while the unit travels through a tunnel is `unmeasured`: no part of U10 puts
+      a resting unit on a factory cell in either state. For our engine it is a design rule
+      (above); for the original it rests on the request's place within the turn, which Open
+      question 11 leaves open. That the
+      request is forced is `measurable` (U10 b): its unit is of a type without the fraidycat
+      flag and rests with no movement in progress, so by S-0208 claim 11's third case it would
+      refuse a request that is not forced and stay on the foundation. That it is move-anywhere
+      is `unmeasured`. The option changes the outcome in two places of S-0208 claim 11 only: for
+      a unit whose sequence is a deploy kind (its second case and the *undeploy* request), and,
+      as scatter permission in its third case, for a unit whose locomotor is moving, so that the
+      request is not effectively forced. In the third case the option matters only for a
+      fraidycat whose behaviour has the scatter property (S-0208 claim 11), and no part of U10
+      uses such a type. For the deploy kinds, no setup here rests a unit with a deploy-kind
+      sequence on a factory cell. The bridge-cell
+      destination over K is `unmeasured`, as said above. *During the walk-off* is `measurable`
+      (U10 b for a walking unit of a type without the fraidycat flag keeping its first
+      destination while it is on a cell that holds K, U10 e for a teleporting unit's jump in the
+      tick of its request). The fraidycat exception is `unmeasured`: no part of U10 uses a type
+      with the
+      fraidycat flag. The fall-back's queued *move*, and a teleporting unit's jump after a
+      fall-back destination, are `unmeasured` for the reason given for the repeat above: no stock
+      setup is known in which the search around a factory's foundation gives no cell. Whether a
+      walking unit whose path failed at the reachability gate reports movement in progress is
+      `unmeasured`: no part of U10 gives a resting unit a destination behind that gate. That the
+      request follows the start of
+      the resting behaviour in the same turn is our engine's rule (design), and the original's
+      order within the turn is `unmeasured` (Open question 11).
+    - Confidence:
+      - the conditions and the absence of a threat point, for *guard* infantry on a cell that
+        holds a factory or cloning building: medium, until U10 b is run.
+      - the first request in the tick after the release, composed with S-0203 claim 7: medium,
+        until U10 b is run.
+      - the forced option: medium, until U10 b is run.
+      - the move-anywhere option: medium (`unmeasured`, as above).
+      - the three exclusions (being erased, a warp's leaving stage, a tunnel): medium as our
+        engine's design rule; low for the original (`unmeasured`, and the request's place
+        within the original's turn is open, Open question 11).
+      - *Unit after unit*, composed with S-0208 claim 13, S-0212 claim 25 and S-0404 claims 7
+        and 13: medium, until U10 parts b and f are run, and only for the walk length stated
+        there.
+      - *During the walk-off*, a walking unit keeping its first destination and a teleporting
+        unit's jump in its request's turn: medium, until U10 b and e are run. The fraidycat
+        exception,
+        the fall-back's queued *move*, the jump after a fall-back destination, and the later
+        requests of a walking unit whose path failed at the reachability gate: low
+        (`unmeasured`).
+      - *area guard*, other buildings, the enslaved unit's exception, the request in the same
+        turn as a later behaviour change, the repeat in every turn, the exempt buildings and the
+        bridge-cell destination (all `unmeasured` here), and the jumpjet case: low.
+      - the request's place in the turn, after the behaviour's start, its processing and the
+        movement, and our engine's laser-fence states: medium as our engine's design rules, which
+        only our engine's fixtures check; the original's order and states are `unmeasured`
+        (Open questions 11 and 14), low.
 
 ## Formulas
 
@@ -815,7 +1106,7 @@ relative actor update orders; confidence medium.
 | No data key | runtime exit movement and order destinations | claim 16's replacement, clearing and restoration events | no factory-exit restoration timeout |
 | `JumpJet`, `Teleporter` | rules, infantry type | boolean exceptions to initial exit destination | S-0208 and S-0402 |
 | `Locomotor` | rules, infantry type | locomotor identifier, parsed as S-0207 claim 14; actual teleporting locomotion supplies claim 10's jump update, distinct from the boolean destination exception | S-0207 claim 14 |
-| No data key | runtime factory contact and tether | claim 10's teleport arrival report, claim 15's jumpjet ascent report and resting retention, not an imported delay | no release-contact timeout |
+| No data key | runtime factory contact and tether | claim 10's teleport arrival report, claim 15's jumpjet ascent report, and claim 10's retention for a resting unit whose every request is refused or gets no destination (`unmeasured`), not an imported delay | no release-contact timeout |
 | `JumpJet`, `BalloonHover` | rules, infantry or vehicle type | booleans; either enables claim 15's ascent-notification response; the latter selects the half-height threshold only for vehicles | no for each (S-0502) |
 | `JumpjetHeight` | rules, infantry or vehicle type | integer leptons; imported cruise height starts the ascent target (S-0502 claims 1 and 5); claim 15 reads the current target, not a separate factory height | S-0102 and S-0502 |
 | `GDIBarracks`, `NODBarracks`, `YuriBarracks` | rules, building type | booleans; barracks door kinds that qualify a contacted building for claim 15, as does `WeaponsFactory` | no for each (S-0404) |
@@ -952,17 +1243,23 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   distant clear-cell move order. Expect assignments completed entirely in driving
   locomotion to leave the suspended teleporting landing point and reservation unchanged.
   Occupancy follows S-0209's
-  driving rules. Restoration alone neither resets teleporting state nor moves a mark. A newly
-  taken destination after restoration fixes a landing point and jumps under S-0207 claim 20.
+  driving rules. Restoration alone neither resets teleporting state nor moves a mark. The
+  stock teleporting vehicle is a chrono miner, whose type has the teleport-capable flag: its
+  newly taken destination after restoration installs temporary driving again and is driven
+  (S-0207 claim 28). The restoration still shows: the active movement kind changes from
+  driving to teleporting at the fall-back and back to driving on the order's tick. Only for a
+  vehicle type with the teleporting locomotor and without that flag, if one is used, does a
+  newly taken destination after restoration fix a landing point and jump under S-0207 claim 20.
   A qualified docking assignment that restores within the assignment also applies its
   point to the restored locomotion under S-0207 claim 27, not to driving first.
   A changed suspended landing point or teleport reservation due to an assignment
   completed entirely in driving locomotion, a
-  state reset or occupancy action due solely to restoration, or driving rather than teleporting
-  for that post-restoration order falsifies the corresponding rule (S-0207 D23). Record any
+  state reset or occupancy action due solely to restoration, no restoration at the eligible
+  fall-back, or a jump by the stock vehicle to that post-restoration order's cell falsifies the
+  corresponding rule (S-0207 D23). Record any
   factory-supplied destination before temporary driving starts: do not presume an empty
-  suspended state. No stock setup for a pre-existing pending jump or phasing-in state at
-  installation is established, so U6 does not score those conditional retention rules.
+  suspended state. No stock setup for a pending jump or phasing-in state at installation is
+  established, so U6 does not score S-0207 claim 21's conditional rules for them.
 - **U7, speed.** Produce stock accelerating and non-accelerating drive types and record speed
   fractions, per-tick positions and arrival time. Calculate each prediction using its own imported
   speed, bonuses, S-0207 progress formula and T1. Expect 0.5 retained for accelerating types,
@@ -1009,12 +1306,44 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   standing-position arrival (including on the foundation), premature completion of the exit
   walk caused solely by the report, or a vehicle-factory run-away reply given by the infantry
   factory. Contact exchange draws are not scored from the release's total
-  draw count, because placement's own draws remain open. Part b: no rally point.
-  Record destination, position, contact and tether over 300 ticks, then order a second infantry
-  unit and record its release result. Expect no destination and no *move* from the release
-  itself. A destination or queued *move* produced by the release falsifies that immediate
-  prediction. Report every later movement and its first tick, without scoring it, and whether the
-  second release is busy. Part c: rally point set, stock jumpjet infantry type if one is
+  draw count, because placement's own draws remain open. Part b (Q-1757): no rally point, a
+  stock infantry factory on open flat ground with no other units within 3 cells. With the
+  random-state recorder, record per tick from release the current and queued behaviour,
+  destination, position, cell, contact, tether and the draws, for 300 ticks. Then order a second
+  infantry unit and record its release result. Then set a rally point and record the first
+  unit for a further 100 ticks. Also record whether the cell the unit is released onto holds K.
+  Use an infantry type without the fraidycat flag, and record its type.
+  The expectation is that every stock infantry factory type releases onto a cell of its own
+  foundation, since S-0404 claim 13 moves the exit cell one cell toward the foundation
+  rectangle. The record guards against a foundation cell that the
+  building does not occupy: a run in which the cell does not hold K is reported so and does
+  not test claim 17's request. Expect:
+  - no destination and no *move* from the release itself,
+  - in the tick after the release, the unit's first turn, in which its queued resting
+    behaviour becomes current (S-0215 claim 11), a scatter request with no threat point that
+    the unit accepts (claim 17; since the type has no fraidycat flag, only a forced request is
+    accepted, so this tells forced from not forced, but not move-anywhere), its
+    single draw, and a destination by S-0208
+    claim 13 that is not a cell that holds K (bridge cells aside, claim 17, *Where it goes*; the
+    test ground has no bridge),
+  - that destination kept, unchanged, while the unit's position is on a cell that holds K,
+    since the requests of its later turns there are refused while it walks (claim 17, *During
+    the walk-off*),
+  - contact and tether ending on its first standing-position arrival,
+  - the second release not busy,
+  - the first unit not moved by the later rally point.
+
+  Falsifiers: the unit still on the foundation after 300 ticks with no order (as a request
+  that is not forced would leave it),
+  no scatter request in the tick after the release although the unit takes its turn then
+  (a first request one tick later falsifies the request in the turn in which the behaviour
+  becomes current, claim 17), a destination given by the release itself, contact kept
+  past its first arrival, a destination change while the unit is still on a cell that holds K,
+  a busy second release, or the resting unit moved by the later rally point. Run it with each stock
+  infantry factory type available to the test house. Part b2: the same with a cloning building of
+  the same house, recording the copy as the original unit. Expect the copy to rest on the cloning
+  building's foundation and to be sent the same
+  request in its first turn. Part c: rally point set, stock jumpjet infantry type if one is
   available from an infantry factory. Expect the rally point as first destination and an empty
   guard spot. Falsifier: an exit-cell leg. Also record contact, tether, flight state,
   target height and S-0502 claim 7's bridge-adjusted height on each ascent tick.
@@ -1033,17 +1362,37 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   the old contact must not make release busy. Falsifiers: either link surviving the ordinary
   jump arrival, loss on reservation alone, a run-away detour, or contact still present when
   the tag action executes. A run with an entry interaction removing the unit is not scored.
-  Part e: repeat with no rally and no new order for 300 ticks, recording every position,
-  arrival update and contact change. Expect no release-supplied destination or jump. During
-  any interval with no arrival or independent contact break, expect contact and tether retained.
-  Attempt a second release while all contact places are held: expect busy under S-0404
-  claim 13, including its refund rule, not an automatic release retry. Then order the first
-  unit to a distant clear cell and produce a fresh second unit after its jump: expect contact
-  loss on that jump and no busy result attributable to the old link. Falsifiers: automatic
-  timeout during an otherwise unchanged resting interval, no clear report on the commanded
-  jump, or a successful release with all contact places still held. Record any spontaneous
-  movement and its cause separately for Open question 3; do not assume a 300-tick observation
-  proves absence of all possible later events.
+  Part e: repeat part d with no rally point and no new order, for 300 ticks, recording with the
+  random-state recorder as well every position, arrival update, contact change and draw. Expect
+  no release-supplied destination. In its first turn, expect claim 17's request, and then a jump
+  to that request's destination in the tick of the request's draw (claim 17, *During the
+  walk-off*), with contact
+  and tether ended in that jump's arrival update. Produce a second unit after the jump: expect
+  it released, not busy. Falsifiers: no request in the first turn although the unit takes that turn with its resting
+  behaviour current, no jump while the request
+  has a destination, a jump on a later tick than the request's draw, contact kept after the
+  jump, or a busy second release after it.
+  Part f (Q-1850): as part b, but queue five units of that infantry type in a row at the one
+  factory, with no rally point and nothing else within 3 cells of the factory. With the
+  random-state recorder and the read-only recorder, record for each unit its release tick and
+  result, the tick its item became done and the tick its place order took effect, the sidebar
+  state of each item, and per tick for 300 ticks after its release its current and queued
+  behaviour, destination, position, cell, contact and tether, and the occupancy of the cells
+  within 2 cells of the foundation at each request tick. Expect: each unit released (not busy)
+  in the order boundary in which its place order takes effect, its item neither cancelled nor
+  refunded; each sent claim 17's request in the tick after its release, and its destination
+  the preferred cell at position *N* mod *n* of S-0212 claim 25's search around its own cell,
+  predicted from the recorded request tick and the recorded occupancy; each contact ended at
+  that unit's first standing-position arrival, before the next release; at the end, the five
+  units on five different cells, none of which holds K (bridge cells aside; the test ground
+  has no bridge). Falsifiers: a busy release, a
+  cancelled or refunded item, or a release later than its place order; a unit still on the
+  foundation after 300 ticks; two of the units ending on one cell, in a run in which each
+  earlier unit's walk ended before the next unit's request (a run in which one did not is
+  reported so and does not test it); a destination other than the predicted cell. A run in which a unit's first arrival comes at least 54 ticks after its
+  release does not test the no-busy expectation (claim 14) and is reported so; a cell that the
+  visibility test of S-0212 claim 25 makes non-preferred is taken into the prediction, not
+  scored as a falsifier.
 - **U11, idle apron clearing.** Part a: an idle stock ground vehicle factory in *guard*, no
   production. Place an idle vehicle of the factory's own house on E by map pre-placement or a move
   order. Record the factory's guard processings, the scatter requests and the vehicle's
@@ -1071,11 +1420,20 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   after leaving the ground. If a stock type cannot be produced docked for a branch, record
   that branch as untested, not confirmed.
 
-- **U13, release details.** Part a: an infantry factory with no rally point. Hold the first
-  released unit inside the foundation (U10 b), without issuing it any new order, and order a
-  second unit. Score only a run where the first unit actually remains in contact. Record contact
-  places in use and the second release result. For a stock factory with one contact place,
-  expect busy; a released second unit while that place is held falsifies it. This does not test
+- **U13, release details.** Part a: an infantry factory with no rally point. Release a second
+  unit while the first one still holds its contact: with claim 17 that is only before the first
+  unit's first arrival. One line finishes its items at least 54 ticks apart (S-0404 claim 7,
+  S-0403 F7), so the first arrival must come at least 54 ticks after the first release. A
+  test rules file named *u13a-rules*, supplied through the file system for this part and removed
+  after it, adds a test infantry type named *U13SLOW*, buildable at that factory, with a speed
+  field low enough that *a* − *r* ≥ 54 ticks, where *r* is the first unit's release tick and *a*
+  its first-arrival tick, and with *a* later than the tick of the second release at the line's
+  shortest build time; the run records the first unit's release and first-arrival ticks and the
+  second item's finishing tick. Score only a run where the first unit actually remains in contact
+  when the second release happens; if no run reaches that, the busy result stays unmeasured
+  for stock data. Record contact
+  places in use and the second release result. For a stock factory building with one contact place
+  releasing the test type while the first unit holds the contact, expect busy (claim 14); a released second unit while that place is held falsifies it. This does not test
   the count formula for multi-place factories. Part b: place persistent refusing units on the door cell
   and on the first exit-list cells in separate runs. Record the chosen exit cell. Expect a cell
   holding a unit that would only make a mover wait to be rejected like any other non-free
@@ -1107,9 +1465,10 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   movement point and commitment retained, rather than an effective-clear reroute.
   Falsifiers: either link surviving that eligible
   update, a foundation/distance gate, a different threshold, or a destination or movement
-  consequence inconsistent with the corresponding row. For infantry without a rally,
-  observe for 300 ticks without orders and record any unsolicited movement without
-  assuming that it must occur. If still grounded, give a legal move to a distant clear
+  consequence inconsistent with the corresponding row. For jumpjet infantry without a rally,
+  observe for 300 ticks without orders and record any movement, its first tick and whether
+  it follows a scatter request of claim 17, without assuming that it must occur.
+  If still grounded, give a legal move to a distant clear
   cell; expect the same ascent report once it climbs. A grounded interval does not score
   ascent timing or settle Open question 3. After each report, produce another unit with
   the exit clear: expect no busy result attributable to the old infantry contact, and
@@ -1148,11 +1507,15 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
   against S-0207 claim 27, not a factory-exit timer. In a separate run, after the first
   ore arrival give an accepted ordinary move to a distant clear cell. Let it complete
   and fall back to rest with no lock or seizure. Expect the point cleared and the
-  suspended locomotion restored at the eligible fallback; the next accepted distant
-  move then uses teleporting locomotion. Falsifiers: exit completion or harvest queue
+  suspended locomotion restored at the eligible fallback, shown by the active movement
+  kind changing from driving to teleporting. The next accepted distant move installs
+  temporary driving again and is driven (S-0207 claim 28): the active movement kind is
+  driving from that move's tick. At its next refinery approach the miner jumps to the
+  docking cell. Falsifiers: exit completion or harvest queue
   alone unconditionally clearing/restoring, a first-field teleport without an
-  intervening restoration event, retention despite a qualifying stop, or failure to
-  restore at an eligible fallback. A different outcome caused by a refused order or
+  intervening restoration event, retention despite a qualifying stop, failure to
+  restore at an eligible fallback, or a jump to that later move's cell. A different outcome
+  caused by a refused order or
   missing restoration predicate does not score those exclusions.
 
   **No-field control.** Repeat on a map with no resource field and no rally. Observe
@@ -1174,12 +1537,15 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
    destination-triggered pad-contact release from physical lift-off; neither tether timing is
    inherited from the glossary.
 2. The aircraft's cell near K without a rally point: resolved by claim 14.
-3. Partly resolved (Q-0120, Q-0697): no-arrival contact retention, including a teleporting
-   unit that never jumps, is claim 10; release and placement give no destination without a
-   rally point or with a rally in the unit's own cell. Still open: whether some later
-   unsolicited event moves such a unit off the foundation, and its first tick and cause.
-   No such resting-infantry rule has been established. U10 b/e and U13 a record it. This
-   uncertainty does not defer the jump-time clear report or create a contact timeout.
+3. Specified, and proposed for measurement (U10 b and e, not yet run), for walking and
+   teleporting infantry (Q-0120, Q-0697, Q-1757). Release and
+   placement give no destination without a rally point or with a rally in the unit's own cell.
+   Claim 17 then sends the resting unit the scatter request in its first turn in which it rests
+   on a cell that holds K, and it leaves when that request gets a destination; claim 10's
+   no-arrival retention applies only while it stays there. U10 b and e are proposed to test it.
+   Still open: claim 17 tests the cell whatever the unit's height, so the open point is whether
+   a jumpjet infantry type released with no rally point is in *guard* or *area guard* over K's
+   foundation, and so receives claim 17's request, or takes off by some other event.
 4. Failed temporary driving replacement and refused exit-track instructions: subsequent damage,
    movement and contact loss remain untraced. They must not be implemented as guaranteed
    permanent waits on the evidence here.
@@ -1198,6 +1564,105 @@ Use stock data, no engine add-on and no mods (the named test files of a scenario
    original aftermath of a one-step climb that skips the strict window and missing
    type flags; no stock release fixture is established for either. Claim 15 supplies
    the decided reaching-update safety fallback for the skipped window, not an inferred
-   original release event. The separate cause of any unsolicited no-rally infantry
+   original release event. The separate cause of any unsolicited no-rally jumpjet
    take-off remains Open question 3.
+10. Q-1757 question 3, a second finished item. Without a rally point, claim 17 normally ends the
+    earlier unit's contact at its first arrival, so a later release is busy only if it comes
+    before that arrival (claim 14). What becomes of the finished item when the release is busy
+    is S-0404's: nothing of a release is retried, and a busy item is cancelled at once (S-0404
+    claims 7 and 13, including refunds). U13 a reaches that with a slow test type whose first
+    arrival comes at least 54 ticks after its release, the shortest gap between two items of
+    one line. With stock types the busy case is not established. Whether the answer differs between factories with one contact
+    place and those with several is not established: claim 14's counts other than one are
+    `unmeasured`.
 
+11. Q-1757 question 1, the unmeasured parts of claim 17. Claim 17 states them, with their
+    backing: the request in the same turn as a later behaviour change, the repeat in every turn
+    while each request gets no destination, *area guard*, buildings other than factories and cloning
+    buildings, the enslaved unit's exception, and the turns of erasure or a warp's leaving
+    stage. No setup in this spec reaches them, and they stay open until one does. The turn in
+    which the request comes is claimed in claim 17, including a turn in which a queued
+    behaviour becomes current: U10 b tests it for the first turn after a release (medium there),
+    and for a later behaviour change it is `unmeasured` and low. A request only from the next
+    turn would show as a request one tick later. U10 b observes only the tick of the first
+    request and its draw. Where the request falls within the turn, relative to the behaviour
+    processing, its draws and the locomotor's progress, is not established for the original,
+    since no U10 part makes a processing draw and the request's draw fall in one turn. Claim 17
+    gives our engine's order (design).
+12. Claim 17 and a superweapon warp, in the original. At the update boundaries of a warp before
+    its arrival hold (S-0513 claim 51), our engine does not send claim 17's request (design).
+    Whether the original sends it at those boundaries, other than in the leaving stage (claim
+    17), is not established.
+13. Q-1757 question 4, a rally point set after the release. Claim 10 answers it: the resting
+    unit is not moved. That answer is backed `measurable` by U10 b, which has not been run.
+14. Claim 17's laser-fence exception. S-0209 does not name the two states of a laser-fence
+    section that give no value (row WP8), and which states they are in the original is not
+    established. Our engine's rule (design) takes them to be the states in which the section's
+    fence is down and shows no beam, so a resting infantry unit on a laser-fence section with its
+    fence up is sent the request, and one on a section whose fence is down is not.
+15. Q-1757 questions 2 and 5, the unrun parts. Question 2, when the contact ends, is answered by
+    claim 17 (the first standing-position arrival after the request's walk or jump), answered
+    at medium until U10 part b is run. Question 5's cloning and teleporting parts are answered
+    at medium until U10 parts b2 and e are run; its jumpjet part is Open question 3. Question 3
+    is answered in part by claim 17: whether a later release is busy with stock types is Open
+    question 10.
+    Q-1850 questions 1 to 3 are answered by claim 17 (*Unit after unit*), rated medium until
+    U10 parts b and f are run, and only on the condition that each earlier unit's walk off the
+    foundation ends before the next unit's request: this spec has no figure for a stock walking
+    speed, and only U10 f would show that the walk ends within the 54 ticks between releases.
+
+## Changes for other specs
+
+- **S-0208 claim 11.** Its closing list of forced requests with no threat point (the idle
+  scatters and the scatter off a building of S-0215 claim 28) should add claim 17's request.
+  Claim 17's request is move-anywhere as well, unlike S-0215 claim 28's, so the two are not the
+  same request. Claim 8's request goes to a vehicle (S-0207 claim 16), not to infantry, so it does
+  not belong in this list. Claim 17's
+  acceptance ("accepts it unless claim 11's first case refuses it") rests on S-0208 claim 11's
+  cases for a forced request to a resting unit, so the amendment should keep those cases as they
+  are for it.
+- **S-0208 claims 12 and 13, the behaviour after an accepted scatter.** Both say only that the
+  unit moves to its destination "as under a move order". Claim 17's *During the walk-off* relies
+  on the difference between their paths: a destination from claim 13's nearby-cell search leaves
+  the unit's current behaviour as it was, while a destination from claim 12 (a threat point) or
+  from claim 13's fall-back to the neighbours queues *move* with it. For a teleporting unit, the
+  search destination also gives its locomotor one movement update at once, in which it jumps,
+  and the other two give no such update. S-0208 should state this in claims 12 and 13. The
+  immediate update is asked for the teleporting unit only: for a walking unit this spec relies
+  on no such update, and S-0208 claim 15's rule that the walking target is chosen only at the
+  next walking step stays as it is.
+- **S-0208 claim 23, backing.** It cites this spec's U10 d/e for teleporting release, the
+  entered-by ordering and no-jump retention. U10 e has a teleporting unit released with no rally
+  point accept claim 17's request and jump off the foundation, so it shows the jump, not
+  retention without a jump. The backing should cite U10 d and e for the teleporting release and
+  the ordering only. Retention without a jump needs a teleporting unit whose claim 17 request
+  gets no destination (after S-0208 claim 13's fall-back to the neighbours), which no stock
+  setup is known to give, so that part is `unmeasured`. S-0207
+  claim 22's backing cites U10 d/e for the same retention; S-0207 already makes that part
+  `unmeasured`.
+- **S-0404 claim 13, infantry row.** For a unit released with no rally point, it should point to
+  claim 17 here for how the unit leaves the foundation and frees the contact place. Both of
+  that claim's sentences that leave the walk-out open change with it: "any later walk-out
+  remains S-0417 Open question 3" and "Only subsequent no-rally walk-out remains open there
+  (Open question 3)". Claim 17 settles the walk-out for walking and teleporting infantry, and
+  Open question 3 here is about jumpjet infantry only, so each sentence should point to claim
+  17 and keep Open question 3 for the jumpjet case.
+- **S-0404 scenario P12, part (f).** Its setup, "two infantry items that finish in consecutive
+  ticks on one infantry factory", cannot be made with one line, which finishes its items at least
+  54 ticks apart (S-0404 claim 7, S-0403 F7). Part (f) should take two infantry items finished on
+  that line, and score only a run in which the first released unit is still in contact with the
+  factory when the second is released. With no rally point that needs a first arrival 54 ticks or
+  more after the first release (claim 14 here, *Contact places of a factory*). A run in which the
+  first unit has left by then is inconclusive, not a falsification. Its expectation and its low
+  confidence stay as they are.
+- **S-0215 claims 24 and 26 (*guard*, *area guard*).** A pointer to claim 17. The rule runs in
+  the infantry unit's turn whatever its behaviour's processing delay, so it is not a step of
+  those processings. Claim 17's backing goes with the pointer: `measurable` (U10 b) for the
+  first turn after a no-rally release, and `unmeasured` for the request in the same turn as a
+  later behaviour change. The committed S-0215 claim 24 says "The actor stays where it is".
+  That sentence needs claim 17 carved out: an infantry unit resting in *guard* on a cell that
+  holds a counting building is sent claim 17's scatter request and can move.
+- **S-0215 claim 11 (the late start).** It says of a *guard* made current at the late start that
+  "nothing of it (search, hold, processing) happens before the unit's next update". Claim 17's
+  request is not part of the *guard*, so it needs the same carve-out: in the turn of a late start
+  the request can still come, after that start (claim 17).
