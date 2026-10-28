@@ -998,6 +998,74 @@ fn a_moving_slave_miner_stands_for_the_refinery() {
     );
 }
 
+// spec: S-0402 claim 14 (Q-1990, DECIDED 2026-10-28: an AI house takes the human-controlled
+// alternatives, so its slave miner resting far from a field never wakes by itself; our AI gets the
+// original computer player's behaviour with an ordinary order, a harvest order on a field cell)
+// and claim 22 (that order finds a site near the cell, travels there and deploys). The field is one
+// the house has explored; the miner neither sees it nor has it in its short scan.
+#[test]
+fn a_resting_slave_miner_far_from_a_field_is_sent_to_harvest() {
+    let rules = slave_rules();
+    let map = fixture::map();
+    let mut w =
+        glasnost_sim::load::new_game(rules, &map, fixture::catalogue(), &fixture::setup(5))
+            .expect("loads");
+    for id in of(&w, 0, "MCV") {
+        objects::remove(&mut w, id);
+    }
+    let at = |dx: i32, dy: i32| fixture::at(dx, dy);
+    testkit::spawn(&mut w, Kind::Building, "YARD", 0, at(-23, 3), 0);
+    let m = testkit::spawn(&mut w, Kind::Vehicle, "SMV", 0, at(-8, -10), 0);
+    testkit::run(&mut w, glasnost_ai::scripted::THINK_PERIOD);
+    assert!(slaves::at_rest(&w, m), "the miner rests where it stands");
+    let field = |c: glasnost_map::CellXY| glasnost_sim::econ::resource::resource_at(&w, c).is_some();
+    assert!(
+        w.cells
+            .grid
+            .iter()
+            .any(|(c, _)| field(c) && shroud::explored(&w, HouseId(0), c)),
+        "the house has explored its start field"
+    );
+    let orders = Brain::new(&w, &map, HouseId(0)).think(&w);
+    let dest = orders.iter().find_map(|o| match o {
+        Order::Behaviour {
+            actor,
+            behaviour: glasnost_sim::rules::Behaviour::Harvest,
+            dest: Some(Target::Cell(c)),
+            ..
+        } if *actor == m => Some(*c),
+        _ => None,
+    });
+    let dest = dest.unwrap_or_else(|| panic!("a harvest order on a field cell: {orders:?}"));
+    assert!(field(dest), "{dest:?} holds resource");
+    assert!(shroud::explored(&w, HouseId(0), dest));
+    // The order takes the miner to a site by the field, where it deploys.
+    assert!(glasnost_sim::orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: m,
+            behaviour: glasnost_sim::rules::Behaviour::Harvest,
+            attack_move: false,
+            target: None,
+            dest: Some(Target::Cell(dest)),
+        }
+    ));
+    for _ in 0..3000 {
+        if !of(&w, 0, "SMB").is_empty() {
+            break;
+        }
+        testkit::run(&mut w, 1);
+    }
+    let smb = of(&w, 0, "SMB");
+    assert_eq!(smb.len(), 1, "deployed by tick {}", w.tick);
+    let c = w.obj(smb[0]).unwrap().pos.cell();
+    assert!(
+        (c.x - dest.x).abs() + (c.y - dest.y).abs() < 12,
+        "deployed by the field: {c:?}, field cell {dest:?}"
+    );
+}
+
 /// `n` free land cells around `c`, nearest first.
 fn free_cells(w: &World, c: glasnost_map::CellXY, n: usize) -> Vec<glasnost_map::CellXY> {
     let mut v: Vec<glasnost_map::CellXY> = (-6..=6)

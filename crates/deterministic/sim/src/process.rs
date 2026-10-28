@@ -1209,7 +1209,7 @@ fn process_guard(w: &mut World, id: ObjectId) -> i32 {
             crate::seams::wake_slaves(w, id);
             return standard_delay(w, id);
         }
-        // spec: S-0215 claim 24 vehicle table row 2 (a guard rule of S-0402 that queues harvest again: 1 tick, no draw; excludes the rest)
+        // spec: S-0215 claim 24 vehicle table row 2 (a guard rule of S-0402 that queues harvest again: 1 tick, no draw; excludes the rest) and S-0402 claim 14 (claim 13's rows only after a processing that did not wake, and only for a type with the harvester flag: `guard_rule` tests it)
         if crate::seams::harvester_guard_rule(w, id) {
             return 1;
         }

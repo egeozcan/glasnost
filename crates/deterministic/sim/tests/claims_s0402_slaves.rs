@@ -2196,3 +2196,297 @@ fn claim_14_refinery_smoke_per_delivery() {
     glasnost_sim::emitters::refinery_smoke(&mut w, v);
     assert_eq!(w.gas.systems.len(), n);
 }
+
+// Q-1990 (S-0402 r80 claim 14): a slave miner with no destination, off
+// tiberium land and more than the short scan from every field, by owner.
+
+/// The kick delay of the far-from-a-field tests (invented; H7 part (g)'s).
+const FAR_KICK: i32 = 300;
+
+/// [`rules`] with the kick delay `k` and two more slave-miner vehicles:
+/// SMVD (SMV with the dock type REFN, still without the harvester flag)
+/// and SMVH (SMVD with the harvester flag).
+fn far_rules(k: i32) -> Ruleset {
+    let mut r = rules();
+    r.sim.general.economy.slave_miner_kick_frame_delay = Some(k);
+    let mut d = r.sim.vehicles["SMV"].clone();
+    d.econ.dock = Some(vec!["REFN".into()]);
+    let mut h = d.clone();
+    h.harvester = Some(true);
+    for (n, u) in [("SMVD", d), ("SMVH", h)] {
+        r.registries.get_mut("vehicles").unwrap().push(n.into());
+        r.sim.vehicles.insert(n.into(), u);
+    }
+    r
+}
+
+/// A game with `ore` and four houses: 0 a person, 1 an AI house
+/// (human-controlled, glossary *AI house*), 2 the neutral house, 3 a
+/// test-only computer-controlled player house (glossary).
+fn owners_game(r: &Ruleset, ore: &[(CellXY, u8, u8)]) -> World {
+    let mut map = testkit::empty_map(SIZE);
+    for &(c, o, d) in ore {
+        let cell = map.cells.get_mut(c).unwrap();
+        cell.overlay = o;
+        cell.overlay_data = d;
+    }
+    let mut s = testkit::setup(7);
+    s.houses[1].ai = true;
+    for (name, country, role) in [
+        ("Civ", "Civland", HouseRole::Neutral),
+        ("Comp", "Betaland", HouseRole::Player),
+    ] {
+        s.houses.push(HouseSetup {
+            name: name.into(),
+            country: country.into(),
+            human: false,
+            start: None,
+            role,
+            ai: false,
+        });
+    }
+    let rules = Arc::new(SimRules::new(r, "synthetic-test"));
+    glasnost_sim::load::new_game(rules, &map, testkit::catalogue(), &s).unwrap()
+}
+
+/// Where the four houses' miners stand: off tiberium land, more than the
+/// short scan (5 cells, the absent-key default) from every cell of the
+/// field at (10, 0) and well within the long scan (80 cells).
+const FAR: [(i32, i32); 4] = [(-8, -8), (-8, 0), (-8, 8), (0, -9)];
+
+/// What a far miner did over a run, in the ticks of the steps that did
+/// it: the tick its group first left rest, the tick it first moved, the
+/// first tick *harvest* was queued or current or its *guard* had restarted
+/// before the wake, its behaviours (current, queued) right after the wake,
+/// the ticks of its *guard* processings, and the cell of the slave-master
+/// building of its owner that stood when the vehicle left the map (its
+/// deployed form).
+#[derive(Debug, Default)]
+struct FarLog {
+    woke: Option<i32>,
+    moved: Option<i32>,
+    harvest_before_wake: Option<i32>,
+    restarted_before_wake: Option<i32>,
+    after_wake: Option<(Option<Behaviour>, Option<Behaviour>)>,
+    guard_processings: Vec<i32>,
+    deployed: Option<CellXY>,
+}
+
+/// Runs `w` for `n` ticks and logs each of `miners` (with the start tick
+/// `s_m` of its *guard*).
+fn far_run(w: &mut World, miners: &[(ObjectId, i32)], n: i32) -> Vec<FarLog> {
+    let mut logs: Vec<FarLog> = miners.iter().map(|_| FarLog::default()).collect();
+    let cells: Vec<_> = miners
+        .iter()
+        .map(|&(m, _)| w.obj(m).unwrap().pos)
+        .collect();
+    let owners: Vec<_> = miners.iter().map(|&(m, _)| w.obj(m).unwrap().owner).collect();
+    for _ in 0..n {
+        let guard: Vec<bool> = miners
+            .iter()
+            .map(|&(m, _)| {
+                w.obj(m)
+                    .is_some_and(|o| o.beh.current == Some(Behaviour::Guard))
+            })
+            .collect();
+        // The step processes this tick and then advances the tick number.
+        let t = w.tick;
+        testkit::run(w, 1);
+        for (i, &(m, s_m)) in miners.iter().enumerate() {
+            let l = &mut logs[i];
+            let Some(o) = w.obj(m) else {
+                l.moved.get_or_insert(t);
+                if l.deployed.is_none() {
+                    l.deployed = w
+                        .objects
+                        .values()
+                        .find(|b| {
+                            b.kind == Kind::Building
+                                && b.owner == owners[i]
+                                && b.econ.group.is_some()
+                        })
+                        .map(|b| b.pos.cell());
+                }
+                continue;
+            };
+            if guard[i] && o.beh.last.is_some_and(|(at, _)| at == t) {
+                l.guard_processings.push(t);
+            }
+            if l.woke.is_none() {
+                if !slaves::at_rest(w, m) {
+                    l.woke = Some(t);
+                    l.after_wake = Some((o.beh.current, o.beh.queued));
+                } else {
+                    let b = &o.beh;
+                    if b.queued == Some(Behaviour::Harvest)
+                        || b.current == Some(Behaviour::Harvest)
+                    {
+                        l.harvest_before_wake.get_or_insert(t);
+                    }
+                    if b.start_tick != s_m || b.current != Some(Behaviour::Guard) {
+                        l.restarted_before_wake.get_or_insert(t);
+                    }
+                }
+            }
+            if o.pos != cells[i] {
+                l.moved.get_or_insert(t);
+            }
+        }
+    }
+    logs
+}
+
+/// Places `name` for each house 0 to 3 at its [`FAR`] cell; with
+/// `refinery`, each house also owns a REFN away from the miners and the
+/// field. Returns the miners and their guard start ticks.
+fn far_miners(w: &mut World, name: &str, refinery: bool) -> Vec<(ObjectId, i32)> {
+    unblock(w);
+    if refinery {
+        for h in 0..4u8 {
+            place_building(w, "REFN", h, at(-16 + 5 * i32::from(h), 14));
+        }
+    }
+    FAR.iter()
+        .zip(0u8..)
+        .map(|(&(x, y), h)| {
+            let m = place_vehicle(w, name, h, at(x, y), 0);
+            (m, w.obj(m).unwrap().beh.start_tick)
+        })
+        .collect()
+}
+
+// spec: S-0402 claim 14 (Q-1990: the owner alternative is a computer-controlled owner's, in our engine the neutral and special houses and a test-only computer-controlled player house; a person's house and an AI house take the human-controlled alternatives, glossary *AI house*, so such a miner far from a field never wakes and does not move without an order)
+// spec: S-0402 claim 14 (a computer-controlled owner needs only the kick test on s_m and a group at rest: it wakes at the first processing of guard with t > k + s_m, still in the guard that started at s_m) and claim 22 (waking starts field seeking with the long scan, then travelling to a site and deploying)
+// spec: S-0402 claim 14 (claim 13's guard rows apply only to a type with the harvester or the weeder flag: SMVD has neither, so even with a dock-type refinery and no no-field record nothing queues harvest before the wake) and Import mapping (Harvester, a field separate from the enslaves field)
+#[test]
+fn claim_14_far_from_a_field_wakes_only_for_a_computer_controlled_owner() {
+    for name in ["SMV", "SMVD"] {
+        let r = far_rules(FAR_KICK);
+        let mut w = owners_game(&r, &field(10, 0, 5));
+        let miners = far_miners(&mut w, name, name == "SMVD");
+        assert!(w.houses[0].human && w.houses[1].human, "a person and an AI house");
+        assert!(!w.houses[2].human && !w.houses[3].human);
+        for &(m, _) in &miners {
+            let c = w.obj(m).unwrap().pos.cell();
+            assert_ne!(
+                w.cells.cell(c).unwrap().land,
+                glasnost_map::terrain::land::TIBERIUM
+            );
+        }
+        let logs = far_run(&mut w, &miners, 3000);
+        for (h, l) in logs.iter().enumerate() {
+            let (m, s_m) = miners[h];
+            if h < 2 {
+                assert_eq!(l.woke, None, "{name}, house {h}: {l:?}");
+                assert_eq!(l.moved, None, "{name}, house {h} stays put");
+                assert!(l.guard_processings.len() > 3, "{name}, house {h}: {l:?}");
+                assert_eq!(w.obj(m).unwrap().beh.start_tick, s_m);
+                continue;
+            }
+            let woke = l
+                .woke
+                .unwrap_or_else(|| panic!("{name}, house {h} wakes: {l:?}"));
+            let first = l
+                .guard_processings
+                .iter()
+                .copied()
+                .find(|&t| t > FAR_KICK + s_m)
+                .expect("a qualifying processing");
+            assert_eq!(
+                woke, first,
+                "{name}, house {h}: the first processing with t > k + s_m"
+            );
+            assert_eq!(l.harvest_before_wake, None, "{name}, house {h}: no claim 13 row");
+            assert_eq!(l.restarted_before_wake, None, "{name}, house {h}: s_m kept");
+            let moved = l
+                .moved
+                .unwrap_or_else(|| panic!("{name}, house {h} moves: {l:?}"));
+            assert!(moved >= woke);
+        }
+        // The computer-controlled owners' miners drove to sites by the
+        // field and deployed there (their slaves later mine the small field
+        // out and the masters pack up again, claim 25).
+        let centre = at(11, 1);
+        for l in &logs[2..] {
+            let c = l
+                .deployed
+                .unwrap_or_else(|| panic!("{name}: deployed: {l:?}"));
+            assert!(
+                (c.x - centre.x).abs() + (c.y - centre.y).abs() < 12,
+                "{name}: a site by the field, not {c:?}"
+            );
+        }
+    }
+}
+
+// spec: S-0402 claim 14 (while the miner stays in the same guard, every later processing of guard that finds the group at rest wakes it again) and claim 22 (no field in the long scan puts the group at rest with the current tick as last-rest; no guard is queued)
+#[test]
+fn claim_14_computer_controlled_owner_wakes_again_in_the_same_guard() {
+    let r = far_rules(FAR_KICK);
+    let mut w = owners_game(&r, &[]);
+    let miners = far_miners(&mut w, "SMV", false);
+    let (m, s_m) = miners[3];
+    let mut wakes = Vec::new();
+    let mut was = true;
+    for _ in 0..2000 {
+        testkit::run(&mut w, 1);
+        let now = slaves::at_rest(&w, m);
+        if was && !now {
+            wakes.push(w.tick);
+        }
+        was = now;
+        let o = w.obj(m).unwrap();
+        assert_eq!(o.beh.current, Some(Behaviour::Guard), "tick {}", w.tick);
+        assert_eq!(o.beh.start_tick, s_m, "tick {}: the same guard", w.tick);
+        assert_ne!(o.beh.queued, Some(Behaviour::Harvest));
+    }
+    assert!(wakes.len() >= 3, "woken again and again: {wakes:?}");
+    assert!(wakes[0] > FAR_KICK + s_m);
+    // Each seek found nothing: back at rest with the seek's tick.
+    assert!(group(&w, m).last_rest > wakes[0]);
+    // The person's miner in the same game never woke.
+    assert!(slaves::at_rest(&w, miners[0].0));
+    assert_eq!(group(&w, miners[0].0).last_rest, 0);
+}
+
+// spec: S-0402 claim 14 (the wake-up rule is tested first and a wake ends the processing; claim 13's rows are tested only after a processing that did not wake, for a type with the harvester flag: for a computer-controlled owner with a dock-type refinery and an unset no-field record such a processing queues harvest, claim 13 row 2) and Import mapping (Harvester)
+#[test]
+fn claim_14_harvester_flagged_slave_miner_takes_claim_13_rows_after_no_wake() {
+    // The kick delay not yet passed: the first guard processing does not
+    // wake, so claim 13 row 2 queues harvest for the computer-controlled
+    // owners, never for the person's house or the AI house.
+    let r = far_rules(FAR_KICK);
+    let mut w = owners_game(&r, &field(10, 0, 5));
+    let miners = far_miners(&mut w, "SMVH", true);
+    let logs = far_run(&mut w, &miners, 120);
+    for (h, l) in logs.iter().enumerate() {
+        if h < 2 {
+            assert_eq!(l.harvest_before_wake, None, "house {h}: {l:?}");
+        } else {
+            let q = l
+                .harvest_before_wake
+                .unwrap_or_else(|| panic!("house {h}: {l:?}"));
+            assert!(q < FAR_KICK + miners[h].1, "house {h}: before the kick delay");
+            assert_eq!(l.woke, None, "house {h}");
+        }
+    }
+    // A kick delay of 0: the processing at the guard's start tick cannot
+    // wake (k + s_m < t fails), so row 2 queues harvest; harvest with no
+    // destination queues guard again (claim 22), and the first processing
+    // of that guard after its start tick wakes the group and ends there:
+    // nothing is queued by it.
+    let r = far_rules(0);
+    let mut w = owners_game(&r, &field(10, 0, 5));
+    let miners = far_miners(&mut w, "SMVH", true);
+    let logs = far_run(&mut w, &miners, 120);
+    for l in &logs[2..] {
+        let woke = l.woke.expect("woken");
+        assert!(l.harvest_before_wake.is_some_and(|q| q < woke), "{l:?}");
+        assert_eq!(l.guard_processings.last(), Some(&woke), "{l:?}");
+        assert_eq!(l.after_wake, Some((Some(Behaviour::Guard), None)), "{l:?}");
+    }
+    for l in &logs[..2] {
+        assert_eq!(l.woke, None, "{l:?}");
+        assert_eq!(l.harvest_before_wake, None, "{l:?}");
+    }
+}
