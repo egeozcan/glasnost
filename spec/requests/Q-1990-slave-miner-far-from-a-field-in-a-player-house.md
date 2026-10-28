@@ -1,9 +1,9 @@
 ---
 id: Q-1990
 title: Does a slave miner of a computer-played player house wake its slaves far from a field?
-status: open
+status: answered
 related: [S-0402, S-0215]
-answered-by: []
+answered-by: [S-0402]
 ---
 
 ## Need
