@@ -135,8 +135,12 @@ pub const M6C_TICKS: i32 = 12_000;
 /// bunker vehicle the waves leave at home): no counter is 0 in seeds 1
 /// to 16, none of which has every counter at least 3 (the sensor orders'
 /// 2, or few takeover orders); of seeds 17 to 104, seed 92 is the only
-/// one that does.
-pub const M7A_SEED: u32 = 92;
+/// one that does. Moved from 92 to 17 at M8 step A4 round 5 (note 24): the
+/// absorber keeps slaves, so seed 92 absorbs no infantry; of seeds 1 to 40,
+/// seeds 17 and 26 have every counter at least 3 (seed 17 is the lowest),
+/// seed 17 has 18 absorber entry orders and 4 infantry absorbed, all real
+/// spare infantry (no slave among them).
+pub const M7A_SEED: u32 = 17;
 
 /// Ticks of the full run of the M7a duel.
 pub const M7A_TICKS: i32 = 12_000;

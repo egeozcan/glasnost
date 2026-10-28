@@ -202,6 +202,29 @@ fn engineers_are_kept() {
     );
 }
 
+// design (PLAN §4.7, the opponent is ours): a slave with a master is its master's worker, not spare infantry; it is never sent into the absorber while others are.
+#[test]
+fn slaves_are_kept() {
+    let g = game(10);
+    let (mut w, b, u) = scene(&g, "BIOR", "WALKER", KEEP + 2);
+    let master = u[0];
+    for &x in &u[KEEP..] {
+        w.obj_mut(x).unwrap().econ.slave = Some(glasnost_sim::econ::slaves::SlaveState {
+            master: Some(master),
+            phase: Default::default(),
+            load: Vec::new(),
+            remembered: None,
+            recalled: false,
+        });
+    }
+    let mut br = brain(&w);
+    let orders = br.think(&w);
+    assert!(
+        u[KEEP..].iter().all(|&x| entered(&orders, x) != Some(b)),
+        "{orders:?}"
+    );
+}
+
 // S-0605 claims 7 and 10 and S-0601 claim 9, PLAN §4.7: a controlled enemy infantry unit is sent in whatever the house keeps.
 #[test]
 fn a_controlled_enemy_is_sent_in() {
