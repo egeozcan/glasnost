@@ -11,7 +11,7 @@ use glasnost_rules::layers::Layers;
 // nocite: our own test length
 const TICKS: i32 = 600;
 
-// spec: S-0212 claims 13 and 13a and Edge cases (both corridor switches off, as the play-fixes layer sets them): a game with the layer is a game of its own rules, saved, loaded and replayed under them
+// spec: S-0212 claims 13 and 13a and Edge cases (both corridor switches off) and S-0314 Edge cases (quirks.depot_loss_strands_hover off), as the play-fixes layer sets them: a game with the layer is a game of its own rules, saved, loaded and replayed under them
 #[test]
 fn a_game_with_the_layer_saves_loads_and_replays_under_its_own_rules() {
     let name = "synthetic-skirmish";
@@ -24,6 +24,7 @@ fn a_game_with_the_layer_saves_loads_and_replays_under_its_own_rules() {
     );
     assert_ne!(plain.hash, fixed.hash);
     assert!(!fixed.quirks.corridor_retry_no_fallback && !fixed.quirks.corridor_split_probe);
+    assert!(!fixed.quirks.depot_loss_strands_hover);
     let catalogue = fixture::catalogue();
     let mut g = Game::new(
         fixed.clone(),

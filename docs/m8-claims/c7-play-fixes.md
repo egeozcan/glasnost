@@ -50,3 +50,87 @@ Format versions: wire 9 (the relay must be redeployed), pathing report 2, desync
 - In a network room a guest's box shows the host's choice, greyed; the host's untick reaches the guest.
 - A pathing report saved with P gives "Rules: Pathing and other fixes: on" in the tool's `report.txt`.
 - In a skirmish with the layer on, a harvester whose refinery stands between its docking cell and the field leaves the dock for the field.
+
+## Part 2: a stranded hover (S-0314)
+
+Brief: `.claude/worktrees/M8-C7-PART2-BRIEF.md`. The play seam of intake 30
+([intake30-S-0314.md](intake30-S-0314.md), *Seams*) and S-0314's Edge case *Hovering vehicle
+stranded*: with `quirks.depot_loss_strands_hover` on (the original), a hover that is down and
+settled outside every depot's cells never moves again unless it is disabled and enabled.
+
+**Admitted: `depot_loss_strands_hover` off.**
+1. The spec states the off position (Edge cases; Terms, *What ends it*: "losing contact with a
+   depot also ends it", and a hover is switched on again at every end). `depot::end_contact`
+   implements it.
+2. On, the hover never moves again, and nothing on screen says why.
+3. It is no balance change: no stat, cost or timing of a working unit changes.
+
+**What the switch's off position frees** (tests in `claims_s0314_stranded.rs`, both positions,
+the rules read from the layer file through `Layers::apply_quirks`):
+
+| Case | Reference (on) | Layer (off) | Test |
+|---|---|---|---|
+| Depot destroyed after the hover is down and repaired (a 5 × 5 synthetic depot with its places 512 leptons from its centre, so S-0312 claim 17 releases the contact instead of destroying it) | settled, stays put under every later order | not settled once the contact ends; it moves | `a_hover_whose_depot_is_destroyed_moves_only_with_the_play_fixes` |
+| An untethered hover ordered off a 1 × 1 depot while it still sinks | claim 20 releases the contact; it stays settled, comes down outside the depot's cells and never moves again | the same release ends being settled; it rises and goes where it was sent | `a_hover_ordered_off_its_depot_while_sinking_moves_only_with_the_play_fixes` |
+| The same with a tether (set by the test: our synthetic depot's arrival sets none) | the contact is kept (claim 20) and it is repaired where it stands; after the service ends it stays settled and never moves | the same until the service ends; the contact's end ends being settled and it leaves | `a_docked_hover_ordered_off_while_sinking_is_freed_at_its_service_end_by_the_play_fixes` |
+| A deploy order that breaks the contact of a sinking hover (S-0213 claim 10) | settled | not settled from the vehicle's next turn | `a_deploy_order_breaking_a_sinking_hovers_contact_frees_it_only_with_the_play_fixes` |
+
+So the switch frees the drifted case too, and the brief's step 2 (another switch, or a request)
+is not needed. Every way to become settled at a depot without a disabling has contact (the
+arrival and the settling processing, `depot::settle`), and every such contact ends: by an order
+for an approaching vehicle, at the service's end (or for lack of money) for a docked one, or by
+the depot's loss. A hover still stuck after its contact has ended was disabled. It is settled
+until its enabling, as the spec has it. The layer does not change that.
+
+**Code.** The switch's off position was reached only through `depot::end_contact`. A contact
+broken off elsewhere, such as a deploy order's clear (S-0213 claim 10) or an owner change's
+leave (S-0509 claim 14), dropped the depot link at the vehicle's next turn (`depot::vehicle_turn`)
+without ending being settled. With the switch off, that drop now ends it too. `// design:`: it
+ends one tick late at most, at the vehicle's next turn, not at the clear itself. The spec gives
+no tick. With the switch on (the default) nothing changes. No new state: save format 80 and AI
+game format 42 are unchanged.
+
+**Naval yards and ships.** S-0504 (Open questions) leaves open whether a *ship* is stranded
+after its yard's loss and does not extend the switch to ships. Our engine strands no ship in
+either position: only the hover locomotor reads being settled (`hover::tick`). A hover at a naval
+yard is a hovering vehicle under S-0314, so the switch covers it. No request.
+
+**Formats.** The layer travels as a flag (`Lobby::layers`, the pathing report's `layers`, the
+desync bundle's words), and its content travels only through `sim_rules_hash`. A new entry
+changes no wire, save, report or bundle layout, so wire 9, pathing report 2 and desync bundle 3
+stay. A save, replay or report written with part 1's two-entry layer now matches neither the
+reference nor the new layered hash. It is refused on the rules hash, as a file from any build
+with other rules is. A room of mixed builds is refused at the start
+(`a_peer_with_other_layers_is_refused_on_the_rules_hash`).
+
+**Results** (local lane; outputs in the git-ignored `local-lane/m8/c7-2/`, `before/` built from
+main b5b62ba and `after/` from this branch):
+- *Default runs, byte-identical to main.* The oracle arena (`arena --record all --threads 8`)
+  writes the same `ours-M-0001.csv` to `ours-M-0003.csv` and oracle reports (M-0001 31 of 96
+  pairings failing, 151 of 172 stock outcomes reproduced; M-0002 13 of 24, 43 of 47; M-0003 2 of
+  35, 61 of 64). The M6c, M7a and M7b sweeps 1 to 16 print the same output line for line.
+  `git diff main -- crates/sim-gate/golden` is empty, and `cargo xtask gate` passes.
+- *With the layer on* (`GLASNOST_PLAY_FIXES=1`), the sweeps also print the same output as main's:
+  M6c smallest minimum 4, M7a 1, M7b smallest drain minimum 3, and no seed ends early. Their duels
+  strand no hover, so the new entry changes nothing there. B6's quick lane (48 games) gives the
+  same length and winner in every game as part 1's layer run: median 34 955 ticks, Yuri wins 29,
+  and every game is over with a winner and no panic.
+- *The app lane* (`GLASNOST_LANE_SCENE=hover-stranded`: a real naval yard, 4 × 4, with the hover
+  damaged to a quarter). The hover survives its yard's destruction in both positions, because its
+  place is far enough from the yard's centre (S-0312 claim 17). Unticked, it stays settled and does
+  not move on either of two later orders. Ticked, it is no longer settled once the yard is gone,
+  and it goes where each order sends it. In the drift part the hover is ordered, on its arrival
+  while it still sinks, to open water beside the yard. Unticked, it comes down one cell outside the
+  yard's cells, still settled, and does not move on the next order. Ticked, the order ends being
+  settled, and the hover reaches the water it was sent to and later obeys the next order. (The
+  lane's "moved after the first order" counts only the 300 ticks after the run's wait, so it is
+  false in both drift runs.)
+
+**By eye** (for the lead), in a skirmish with *Pathing and other fixes* ticked:
+- Send a damaged hover to a naval yard, and once it is down on the yard, have the yard destroyed.
+  The hover should rise and obey orders. Unticked, it should stay down where the yard stood and
+  ignore orders.
+- Send a damaged hover to a naval yard, and as it arrives, still sinking, order it to the water
+  beside the yard. It should go there. Unticked, it should come down just outside the yard and
+  ignore orders from then on.
+Selling the yard was not tried.

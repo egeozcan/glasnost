@@ -24,7 +24,10 @@
 //! disabled over open water away from any depot, each in both positions
 //! of `quirks.docked_hover_water_loss` (S-0314 r88 claim 21, H4 part i;
 //! the powered-unit flag and a control centre given in a local rules
-//! copy). A new scene is one more function and one more
+//! copy), and a hover stranded at a naval yard (S-0314 claim 22, Edge
+//! cases, `quirks.depot_loss_strands_hover`) with *Pathing and other fixes*
+//! ticked and unticked in the setup (M8 step C7 part 2). A new scene is one
+//! more function and one more
 //! row of [`SCENES`].
 //!
 //! Run with `cargo test --release -p glasnost-app --test m6b_lane --
@@ -82,6 +85,7 @@ const SCENES: &[Scene] = &[
     ("trigger-coverage", trigger_coverage),
     ("hover-yard", hover_at_yard),
     ("hover-away", hover_disabled_away),
+    ("hover-stranded", hover_stranded),
 ];
 
 #[test]
@@ -652,6 +656,172 @@ fn hover_disabled_away_run(lane: &mut Lane, loss: bool) {
     let alive = hover_trace(lane, v, 900, |_| false);
     lane.save(&format!("hover-away-{loss}-2-after"));
     println!("quirks.docked_hover_water_loss {loss}: alive after the disabling: {alive}");
+}
+
+/// S-0314 claim 22 and Edge cases (*Hovering vehicle stranded*,
+/// `quirks.depot_loss_strands_hover`), M8 step C7 part 2: a damaged hover
+/// clicked onto an own repairing naval yard on water docks; (a) `lost`: once
+/// it is down and has been repaired a while, the yard is destroyed and the
+/// hover is ordered away; (b) `drift`: on a fresh game, it is ordered away at
+/// its arrival, while it still sinks. Then it is ordered once more. Each
+/// with *Pathing and other fixes* ticked (the layer sets the switch off) and
+/// unticked (the reference ruleset); the rules are the setup's, unchanged.
+fn hover_stranded(lane: &mut Lane) {
+    let map = env_num("GLASNOST_UI_MAP", 0);
+    for fixes in [true, false] {
+        for part in ["lost", "drift"] {
+            let mut fresh;
+            let lane: &mut Lane = if fixes && part == "lost" {
+                &mut *lane
+            } else {
+                fresh = Lane::start_with(map, fixes).expect("the install is set");
+                &mut fresh
+            };
+            hover_stranded_run(lane, fixes, part);
+        }
+    }
+}
+
+/// Runs up to `n` ticks of the hover's trace and tells whether its ground
+/// position changed.
+fn hover_moves(lane: &mut Lane, v: ObjectId, n: usize) -> bool {
+    let at = lane.world().obj(v).map(|o| (o.pos.x, o.pos.y));
+    hover_trace(lane, v, n, |_| false);
+    lane.world().obj(v).map(|o| (o.pos.x, o.pos.y)) != at
+}
+
+fn hover_stranded_run(lane: &mut Lane, fixes: bool, part: &str) {
+    let strands = lane.world().rules().quirks.depot_loss_strands_hover;
+    println!("-- {part}, fixes ticked {fixes}: quirks.depot_loss_strands_hover {strands}");
+    let w = lane.world();
+    let hover = find_type(w, Kind::Vehicle, |_, u| u.locomotor == Locomotor::Hover);
+    let yard = w
+        .rules()
+        .buildings
+        .iter()
+        .find(|b| b.naval && b.factory.is_some() && b.building.unit_repair)
+        .map(|b| (b.name.clone(), b.foundation));
+    let (Some(hn), Some((yn, (fw, fh)))) = (hover, yard) else {
+        println!("no hover type or repairing naval yard type");
+        return;
+    };
+    let home = lane.home();
+    let water = |l| l == land::WATER;
+    let Some(at) = lane
+        .area(home, (fw, fh), 1, water)
+        .or_else(|| lane.area(home, (fw, fh), 0, water))
+    else {
+        println!("no open water for the yard: unreached");
+        return;
+    };
+    let local = lane.local();
+    let k = lane.spawn(Kind::Building, &yn, local, at);
+    let Some(sea) = lane.area(CellXY::new(at.x - 5, at.y + 1), (1, 1), 1, water) else {
+        println!("no open water for the hover: unreached");
+        return;
+    };
+    let v = lane.spawn(Kind::Vehicle, &hn, local, sea);
+    println!("yard at {at:?} foundation {fw}x{fh}, hover at {sea:?}");
+    hover_trace(lane, v, 30, |_| false);
+    let full = lane.strength(v);
+    lane.world_mut().obj_mut(v).unwrap().health = full / 4;
+    let n = lane.order(local, v, ClickOn::Object(k));
+    println!("click onto the yard: {n} orders issued");
+    let in_yard = |w: &World| {
+        w.obj(v).is_some_and(|o| {
+            let c = o.pos.cell();
+            (at.x..at.x + fw).contains(&c.x) && (at.y..at.y + fh).contains(&c.y)
+        })
+    };
+    // Open water clear of the yard's foundation (`area` takes no occupied
+    // cell and, with a margin of 1, none next to the yard either).
+    let Some(away) = lane.area(CellXY::new(at.x + fw + 2, at.y + fh / 2), (1, 1), 1, water) else {
+        println!("no open water beside the yard: unreached");
+        return;
+    };
+    if part == "drift" {
+        let arrived = |w: &World| glasnost_sim::depot::settled(w, v);
+        let ok = hover_trace(lane, v, 3000, arrived) && arrived(lane.world());
+        println!("arrived and settled (still sinking): {ok}");
+        if !ok {
+            return;
+        }
+        let n = lane.order(local, v, ClickOn::Cell(away));
+        println!(
+            "tick {}: ordered to {away:?} while sinking: {n} orders",
+            lane.world().tick
+        );
+        let down = |w: &World| glasnost_sim::hover::hover_height(w, v) <= 0;
+        hover_trace(lane, v, 600, down);
+        let w = lane.world();
+        println!(
+            "down: {}, in the yard's cells: {}, settled: {}",
+            down(w),
+            in_yard(w),
+            glasnost_sim::depot::settled(w, v)
+        );
+    } else {
+        let down = |w: &World| {
+            glasnost_sim::depot::link(w, v).is_some()
+                && glasnost_sim::depot::settled_at_depot(w, v)
+                && glasnost_sim::hover::hover_height(w, v) <= 0
+        };
+        let ok = hover_trace(lane, v, 3000, down) && down(lane.world());
+        println!("in contact, settled at the yard and down: {ok}");
+        if !ok {
+            return;
+        }
+        hover_trace(lane, v, 120, |_| false);
+        lane.look_at(at);
+        lane.ticks(1);
+        lane.save(&format!("hover-stranded-{fixes}-lost-1-docked"));
+        let hit = glasnost_sim::combat::damage::Hit {
+            amount: 1_000_000,
+            warhead: None,
+            distance: 0,
+            attacker: None,
+            house: None,
+            ignore_defences: true,
+            no_escape: true,
+        };
+        glasnost_sim::combat::damage::apply(lane.world_mut(), k, hit);
+        lane.ticks(1);
+        let w = lane.world();
+        println!(
+            "tick {}: yard destroyed: {}, hover alive: {}, settled: {}",
+            w.tick,
+            w.obj(k).is_none_or(|b| !b.on_map || b.health <= 0),
+            hover_line(w, v) != "gone",
+            glasnost_sim::depot::settled(w, v)
+        );
+        if hover_line(w, v) == "gone" {
+            println!("the hover died with the yard (S-0312 claim 17): unreached");
+            return;
+        }
+        hover_trace(lane, v, 60, |_| false);
+        let n = lane.order(local, v, ClickOn::Cell(away));
+        println!(
+            "tick {}: ordered to {away:?}: {n} orders",
+            lane.world().tick
+        );
+    }
+    let moved = hover_moves(lane, v, 300);
+    let again = CellXY::new(sea.x + 2, sea.y - 2);
+    let n = lane.order(local, v, ClickOn::Cell(again));
+    println!(
+        "tick {}: ordered to {again:?}: {n} orders",
+        lane.world().tick
+    );
+    let moved_again = hover_moves(lane, v, 300);
+    lane.look_at(at);
+    lane.ticks(1);
+    lane.save(&format!("hover-stranded-{fixes}-{part}-2-after"));
+    let w = lane.world();
+    println!(
+        "{part}, fixes ticked {fixes}: moved after the first order: {moved}, after the second: {moved_again}, settled at the end: {}, at {:?}",
+        glasnost_sim::depot::settled(w, v),
+        w.obj(v).map(|o| o.pos.cell())
+    );
 }
 
 /// The shared repair scene: `unit` is damaged to a quarter, clicked onto
@@ -1689,6 +1859,13 @@ impl Lane {
 
     /// Starts a skirmish on the `map`-th offered map.
     fn start_on(map: usize) -> Option<Lane> {
+        Lane::start_with(map, true)
+    }
+
+    /// Starts a skirmish on the `map`-th offered map with *Pathing and other
+    /// fixes* ticked (`fixes`, the setup's default) or unticked by a click on
+    /// its box, as a person would.
+    fn start_with(map: usize, fixes: bool) -> Option<Lane> {
         let dir = std::env::var_os("GLASNOST_GAME_DIR")?;
         let out = png::lane_out("m6b");
         std::fs::create_dir_all(&out).unwrap();
@@ -1704,6 +1881,11 @@ impl Lane {
         for _ in 0..map {
             let _ = c.frame();
             let r = c.setup_targets.rect_of(&SetupHit::Map(1)).unwrap();
+            click(&mut c, r);
+        }
+        if !fixes {
+            let _ = c.frame();
+            let r = c.setup_targets.rect_of(&SetupHit::Fixes).unwrap();
             click(&mut c, r);
         }
         let _ = c.frame();

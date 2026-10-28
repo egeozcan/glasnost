@@ -33,6 +33,17 @@
       // corridor ends the computation (claim 13's cap).
       // Answers: the same reports and requests (Q-1771, Q-1870).
       "corridor_split_probe": false,
+      // S-0314 Edge cases (Hovering vehicle stranded) and Terms, What ends it
+      // (quirks.depot_loss_strands_hover off): losing contact with a depot ends being settled,
+      // so a hovering vehicle is switched on again and rises. On (the original), a hover whose
+      // depot is destroyed or sold after it became settled never moves again once down
+      // (claim 22), and so does one ordered away while it still sinks at a depot that comes
+      // down outside the depot's cells: its order released the contact, and no later order
+      // ends being settled there. Off, that order's release (claim 20), or the end of service
+      // for a docked hover, ends it.
+      // Answers: the play seam of docs/m8-claims/intake30-S-0314.md (a hover that never moves
+      // again) and the spec's own Edge case.
+      "depot_loss_strands_hover": false,
     },
   },
 }

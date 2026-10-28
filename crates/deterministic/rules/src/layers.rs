@@ -163,9 +163,13 @@ mod tests {
 
     /// The switches the play-fixes layer turns off (M8 step C7). Changing the
     /// layer's list means changing this one, its docs section and its tests.
-    const ADMITTED: [&str; 2] = ["corridor_retry_no_fallback", "corridor_split_probe"];
+    const ADMITTED: [&str; 3] = [
+        "corridor_retry_no_fallback",
+        "corridor_split_probe",
+        "depot_loss_strands_hover",
+    ];
 
-    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off) and claim 13a and Edge cases (quirks.corridor_split_probe off): the layer sets exactly these two switches, and only switches
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off) and claim 13a and Edge cases (quirks.corridor_split_probe off); S-0314 Edge cases (quirks.depot_loss_strands_hover off): the layer sets exactly these three switches, and only switches
     #[test]
     fn play_fixes_sets_only_the_admitted_switches_off() {
         let paths = paths(&play_fixes()).unwrap();
@@ -186,6 +190,7 @@ mod tests {
         changed.sort_unstable();
         assert_eq!(changed, ADMITTED);
         assert!(!q.corridor_retry_no_fallback && !q.corridor_split_probe);
+        assert!(!q.depot_loss_strands_hover);
         // Every switch the layer changes is on by default (the original),
         // so the layer only ever turns the original's behaviour off.
         for n in ADMITTED {
