@@ -1997,7 +1997,16 @@ mod tests {
         assert!(s.runs(Slot::Super3) && !s.runs(Slot::SuperLowPower));
         // A freeze-unpowered super-1 is only frozen at a loss: no super-low-power.
         let mut t = Slots::default();
-        turn(&mut t, &kind, &d, &State { in_operation: true, ..charging(Some(900)) }, true);
+        turn(
+            &mut t,
+            &kind,
+            &d,
+            &State {
+                in_operation: true,
+                ..charging(Some(900))
+            },
+            true,
+        );
         turn(&mut t, &kind, &d, &charging(Some(900)), true);
         assert!(t.frozen(Slot::Super1) && !t.runs(Slot::SuperLowPower));
         // The restart order of claim 12.

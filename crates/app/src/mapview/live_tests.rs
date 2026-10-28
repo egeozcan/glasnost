@@ -5168,12 +5168,7 @@ fn wrench_run(
         testkit::mid(24, 4, 4),
         0,
     );
-    live.world
-        .obj_mut(tower)
-        .unwrap()
-        .econ
-        .building
-        .repairing = repairing;
+    live.world.obj_mut(tower).unwrap().econ.building.repairing = repairing;
     if let (Some(v), true) = (viewer, explore) {
         let pos = live.world.obj(tower).unwrap().pos;
         glasnost_sim::econ::shroud::area_reveal(&mut live.world, v, pos, 3);
@@ -5227,7 +5222,11 @@ fn wrench_run(
 fn repair_wrench_claim19() {
     // Under repair, no local player: the wrench, centred at the status anchor.
     let (status, pixels, frame, (ax, ay), notes) = wrench_run(&wrench_assets(), true, None, false);
-    assert_eq!(status.len(), 1, "the wrench alone: not selected, no insignia");
+    assert_eq!(
+        status.len(),
+        1,
+        "the wrench alone: not selected, no insignia"
+    );
     let w = status[0];
     // Frame f is a block of value f + 1.
     assert_eq!(pixels[0], frame as u8 + 1);

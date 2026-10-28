@@ -3664,10 +3664,13 @@ impl Live {
                 let p = self.world.reference_point(o.id);
                 let anchor = project_lifted(p.x, p.y, p.z);
                 // design: the wrench follows the bomb icon and precedes the insignia and health bar among the object's extras, so the bar and its marks cover it as they cover the bomb icon (S-0111 gives no order for the wrench)
-                match self
-                    .cache
-                    .wrench_item(scene, inputs.assets, anchor, frame, Some(sim_code(o.id)))
-                {
+                match self.cache.wrench_item(
+                    scene,
+                    inputs.assets,
+                    anchor,
+                    frame,
+                    Some(sim_code(o.id)),
+                ) {
                     Some(item) => items.push(item),
                     // spec: S-0111 Import mapping (a missing sprite draws nothing; the importer warns); claim 19a (missing cursor palette: likewise, its own warning)
                     None => {
