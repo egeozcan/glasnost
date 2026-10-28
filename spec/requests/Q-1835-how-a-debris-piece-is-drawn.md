@@ -1,9 +1,9 @@
 ---
 id: Q-1835
 title: How a debris piece with a voxel model is drawn (pose, spin, light, palette, depth, shadow)
-status: open
+status: answered
 related: [S-0317, S-0007, S-0102, S-0105]
-answered-by: []
+answered-by: [S-0317]
 ---
 
 ## Need
