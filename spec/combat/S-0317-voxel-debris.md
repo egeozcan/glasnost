@@ -2,13 +2,13 @@
 id: S-0317
 title: Debris pieces with voxel models (creation, flight, bounces, end of life, removal)
 topic: combat
-revision: 34
+revision: 57
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-23
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-1702]
+requests: [Q-1702, Q-1834, Q-1835, Q-1836]
 supersedes: []
 ---
 
@@ -22,8 +22,16 @@ piece is an object of play: its creation takes draws from the scenario random st
 under a fixed gravity, it can damage objects where it bounces and where it ends, and it is removed
 after a lifetime counted in piece turns. A piece of a type with the *meteor* flag flies a straight line
 instead and can throw further pieces when it ends. A move can meet the ground, a high bridge's deck, a
-building or a cliff face (claim 10). The exact rebound off slopes and cliff faces is only partly settled (Open
-questions).
+building or a cliff face (claim 10). Claims 17 to 19 give the rebound on a sloped cell, the turn
+off a cliff face and the cells that count as a building's. A piece is never removed for leaving
+the map: off the legal map it meets S-0009 claim 44's stand-in cell, which our engine reads as a
+blank cell at height 0 (claims 20 and 21). Claims 22 to
+28 say how a piece is drawn: its pose and spin, the section drawn, its light, palette, depth,
+shadow and visibility. The drawn model turns once in each flying turn, and the sense of its turn
+reverses at every contact (claim 22). Claim 10's flat rebound narrows the elasticity to single
+precision before it scales (F8). The slope rebound, the cliff turn and the building cells answer
+Q-1834, the drawing Q-1835, and a piece off the map Q-1836. The two faults of the cliff turn share
+one switch, as claim 18 states.
 
 ## Terms
 
@@ -60,6 +68,18 @@ fields make any conversion of this spec out of range (S-0205).
 - **Speed field, spin field.** The type's fields of claim 3, as Formulas F1 names them: *M* (the
   horizontal speed limit), *Z*ₘᵢₙ and *Z*ₘₐₓ (the vertical speed limits), *A*ₘᵢₙ and *A*ₘₐₓ (the
   spin limits), *e* (elasticity).
+- **Cell of a position.** The cell coordinates (*c*ₓ, *c*ᵧ) = (trunc(*x*/256), trunc(*y*/256)) of
+  a position (*x*, *y*, *z*) in leptons, as S-0306 Terms has it: a coordinate between −255 and 0
+  falls in cell 0.
+- **Cell read for a position.** The cell that every reading of this spec takes for a position
+  (claim 20): the cell of the position when that is a legal cell (glossary, S-0009 claim 1), and
+  the off-map cell otherwise.
+- **Off the legal map.** A position is off the legal map when its cell read is the off-map cell.
+- **Off-map cell.** The one cell read for every position off the legal map: S-0009 claim 44's
+  stand-in cell (claim 20).
+- **High cell.** In the cliff turn (claim 18, F9), a cell whose height level is at least the level
+  of the cell of the old position plus 2.
+- **Orientation.** The rotation with which a piece's model is drawn (claim 22, F10).
 
 ## Behaviour
 
@@ -75,19 +95,19 @@ An `unmeasured` part is rated medium at most.
    outcome of the game (S-0202 Terms, draw allocation order). It can damage objects (claims 7 and
    11). No limit on the number of pieces is known: a producer that throws *n* pieces makes
    all *n*, however many are in play, at least up to the 4000 pieces that V9
-   is proposed to test. Whatever house its producer gives it (S-0312 claim 4 gives the pieces of a
+   tests. Whatever house its producer gives it (S-0312 claim 4 gives the pieces of a
    destroyed object that object's house; a detonation's pieces are taken to have none, which S-0303
    claim 22 does not state and V5 part f tests), every
    hit a piece deals (claims 7 and 11) is dealt by no attacker and on behalf of no house, its
    further pieces have no house (claim 12) and its attached system no owner house (claim 13). So
-   the ownership of S-0312 claim 4 changes no outcome of a piece. A hit on behalf of a house would
+   the ownership of S-0312 claim 4 changes no outcome in play of a piece (it does choose the
+   palette the piece is drawn with, claim 25). A hit on behalf of a house would
    show: a destruction by
    a hit with an attacking house and no attacker is credited to that house (S-0302 claim 14), and
-   so counts among that house's kills in the score-screen tally of S-0414 claim 21 (after the
-   amendment that Changes for other specs lists). That tally is
+   so counts among that house's kills in the score-screen tally of S-0414 claim 21. That tally is
    the sense of credit that V5 parts f and g observe: part f for the thrower's house, part g for
-   the piece's own house. Both parts tell a hit with a house from one without only if that
-   amendment holds in the original (V5 part f).
+   the piece's own house. Both parts tell a hit with a house from one without only once V5 part
+   f's check of that crediting shows it in the original.
 
    | Part of the claim | Backing | Confidence |
    |---|---|---|
@@ -96,8 +116,8 @@ An `unmeasured` part is rated medium at most.
    | Every one of those pieces is made | `unmeasured`: V9's draws cannot tell it from a limit that takes the draws and makes no piece | medium |
    | No piece made is later removed for the number in play; no limit for larger counts | `unmeasured`: V9 does not record removal, and no finite scenario shows every count | medium |
    | The hits have no attacker | `unmeasured`: V5 part f judges house credit, not an attacker object, and judges no retaliation | medium |
-   | The hits have no house, so neither the thrower's house nor the piece's own house is credited | `measurable` (V5 part f for the thrower's house, V5 part g for the piece's own house; V8's matching parts for the expiry damage, claim 11), once V5 part f's check of the S-0414 claim 21 amendment has run | medium until V5 parts f and g and that check run |
-   | A detonation's pieces have no house | `measurable` together with the hits' lack of a house only (V5 part f: a credit to the thrower would show that the pieces hold the thrower's house and that their hits carry it). Once V5 part g shows that a piece's hits do not carry its own house, the house a detonation's pieces hold changes no outcome | medium until V5 part f runs |
+   | The hits have no house, so neither the thrower's house nor the piece's own house is credited | `measurable` (V5 part f for the thrower's house, V5 part g for the piece's own house; V8's matching parts for the expiry damage, claim 11), once V5 part f's check of S-0414 claim 21's crediting has run | medium until V5 parts f and g and that check run |
+   | A detonation's pieces have no house | `measurable` together with the hits' lack of a house only (V5 part f: a credit to the thrower would show that the pieces hold the thrower's house and that their hits carry it). Once V5 part g shows that a piece's hits do not carry its own house, the house a detonation's pieces hold changes no outcome in play. Also `measurable` on its own through the drawn palette, which shows the house a piece holds (V15 part c, claim 25) | medium until V15 part c runs |
 
 2. **Lifetime at creation.** A piece's lifetime counter starts at its type's duration field. A
    meteor piece then loses *L* of it, 0 to 19 turns (claim 4, F2). For a meteor piece whose
@@ -105,12 +125,19 @@ An `unmeasured` part is rated medium at most.
    *L* > *j* it becomes 2147483648 + *j* − *L*, a value from 2147483629 to 2147483647; when
    *L* = *j* it is exactly −2147483648, which claim 6 wraps at the piece's first turn; when
    *L* < *j* it stays negative and the piece ends in its first turn (claim 6). The duration
-   −2147483648 itself (*j* = 0) therefore always wraps, at creation or at the first turn. Where F2
-   then places a piece with a wrapped counter, and what follows, is open (Open questions).
+   −2147483648 itself (*j* = 0) therefore always wraps, at creation or at the first turn. In all
+   three cases F2's start lies some 2³¹ turns of flight back along the velocity (ahead of the
+   creation point when the counter is negative): each coordinate beyond the integer range is
+   converted by S-0205 claim 7, so the start can lie anywhere, on or off the legal map. The
+   piece is placed there (claim 21) and then flies and ends as any other piece, off the legal map
+   as claim 20 says.
    - Backing: `measurable` (scenario V2 for the duration field; V4 for a meteor piece's loss,
      through its start position, which F2 moves back by the shortened lifetime)
-   - Confidence: high except as stated. The meteor pieces whose counter wraps are `unmeasured`
-     and low: their placement is open.
+   - Backing for the start of a meteor piece with such a counter: `measurable` (V4 part f for
+     *j* = 0, V4 part g for *j* = 10, which gives all three cases of the loss).
+   - Confidence: high for the duration field and a meteor piece's loss; medium for a counter
+     of −2147483648 + *j* and the start it gives until V4 parts f and g run. The results for the
+     other values of *j* follow from the same arithmetic and are medium.
 
 3. **Creation of a falling piece.** In this order, a falling piece's creation takes four raw values
    from the scenario random stream (for its spin rate, its vertical speed, its *y* speed and its
@@ -125,22 +152,25 @@ An `unmeasured` part is rated medium at most.
    claim 10's row for a bouncing type (S-0109 Terms), "a group of three raw values and a
    subsequent group of three ranged draws", covers the bouncing sprite animations of S-0109's
    animation types, not pieces: a piece type is a voxel-animation type, a list of its own, and
-   a piece's creation takes the four raw values above. Changes for other specs limits that row to sprite animations accordingly,
-   and the reading stays medium until V1 runs (Questions for the project lead). The count rests on
-   that amendment and on the lead's question. V1 decides it: four raw values before the first
-   ranged draw confirm it, and three falsify it.
-   - Backing: `measurable` (scenario V1 for the draw count and the order of raw and ranged draws, V3 for
-     the velocity from the logged raw values)
+   a piece's creation takes the four raw values above. Changes for other specs limits that row to
+   sprite animations accordingly, and the reading stays medium until V1 runs. This reading was
+   decided at the delegated sign-off, 2026-10-25. The count rests on that amendment. V1 decides it:
+   four raw values before the first ranged draw confirm it, and three falsify it.
+   - Backing: `measurable` (scenario V1 for the draw count and the order of raw and ranged
+     draws, four raw values before the three ranged draws; V3 for the velocity from the logged
+     raw values, which tells which raw value gives which speed). `unmeasured` for the first raw
+     value's use as the spin rate, as in claim 4: V15 part b's two spin limits are equal, so its
+     rate does not depend on the draw.
    - Backing for the one raw value whose signed reading is −2147483648 (F1, under
      `quirks.random_magnitude_overflow`): `unmeasured`, as the setup cannot select the seed that
      makes that one value in 2³² occur (S-0202 claim 6).
    - Confidence: medium for the draw count until V1 runs, since it departs from S-0202 claim
-     10's bouncing-type row as now written; it does not rise to high before V1 has run. Medium
-     also for the order of the draws this claim names among themselves, the four raw values
-     included, until V1 runs and while the lead's question on the scope of S-0202 claim 10 is open
-     (Questions for the project lead). High
-     that they are taken from the scenario random stream. Medium for the velocity's precision
-     (F1). Medium for the case of that one raw value: it rests on F1's form, not on a run.
+     10's bouncing-type row as that row reads; it does not rise to high before V1 has run. Medium
+     also for the four raw values coming before the three ranged draws, until V1 runs, and for
+     which raw value gives which quantity: the speeds' until V3 runs, the spin rate's because
+     it is `unmeasured`. High that they are taken from the scenario random stream. Medium for
+     the velocity's precision (F1). Medium for the case of that one raw value: it rests on F1's
+     form, not on a run.
 
 4. **Creation of a meteor piece.** A meteor piece's creation takes, in this order: a raw value for
    its *y* speed and one for its *x* speed (F2), a raw value that shortens its lifetime (F2), a raw
@@ -161,12 +191,13 @@ An `unmeasured` part is rated medium at most.
      draws, and V4 part a for the speeds, the sign change and the start position, and for which of the first
      three raw values gives the *y* speed, the *x* speed and the shortened lifetime, which it
      tells apart from the logged raw values)
-   - Backing: `unmeasured` for the fourth raw value's use as the spin rate and for which ranged
-     draw gives which component of the spin axis: no scenario here records a piece's spin, so
-     these are medium
+   - Backing: `measurable` (V15 part b, which logs the draws and compares the drawn turn with F5's
+     axis and rate) for which ranged draw gives which component of the spin axis; medium until V15
+     part b runs. `unmeasured` for the fourth raw value's use as the spin rate: V15 part b's two
+     spin limits are equal, so its rate does not depend on the draw; medium
    - Confidence: medium for the draw count until V1 runs, as in claim 3 (not high before V1 has
      run), and medium for the order of the draws this claim names among themselves until V1 runs
-     and while the lead's question on the scope of S-0202 claim 10 is open, as in claim 3. High for the sign change and the start position
+     as in claim 3. High for the sign change and the start position
      (F2). Medium for the
      ground impact before the end, which follows from F2 and F3.
 
@@ -219,7 +250,7 @@ An `unmeasured` part is rated medium at most.
    one with that lifetime. A ground impact on water (claim 8) or a stop (claim 9) sets the counter to 0,
    so the piece ends in its next turn. Piece turns take place in the update order of S-0203 (claims
    2 and 3). A piece whose placement succeeds enters play during its creation, before any other
-   object's next turn (a failed placement is open, Open questions); until its first turn a falling
+   object's next turn (a placement fails only at one point, claim 21); until its first turn a falling
    piece is at the creation point and a meteor piece at its start position. Claim 11 says which of
    the two points a falling piece's end uses when it ends in its first turn. Where a piece's
    attached particle system (claim 13) stands in the update order is not stated here (Open
@@ -276,11 +307,12 @@ An `unmeasured` part is rated medium at most.
      ground layer. This holds for a deck over ground that is not water; over water, claim 8
      applies at the deck height as under it, and the impact hits nothing. A detonation, by contrast, chooses its layer by height (S-0303 claim 4). This
      is a bug of the original (Edge cases, `quirks.voxel_debris_deck_impact_layer`).
-   - whether these hits skip an object listed in the cell that has no health left, as S-0613
-     claim 13's gas hits do, is open (Open questions). For the one such object known to stay
-     listed in a cell, a building awaiting removal with 0 health (S-0312 claim 21), the answer
-     changes nothing: a hit on it would be stopped with no side effect by S-0302 claim 8's
-     no-health row for a building, so a skip and a hit give the same result.
+   - no object listed in the cell is skipped for having no health left, unlike S-0613 claim 13's
+     gas hits: such an object receives its hit under S-0302's rules for its target kind, as S-0319
+     claim 7 states for a sprite animation's hits. For the one such
+     object known to stay listed in a cell, a building awaiting removal with 0 health (S-0312
+     claim 21), a skip and a hit give the same result: the hit is stopped with no side effect by
+     S-0302 claim 8's no-health row for a building.
    - a type with no warhead (the absent-key default, Import mapping) still deals these hits: each
      is a hit without a warhead, which S-0302 decides (claim 6 reduces it to 0 for a hit that does
      not ignore defences, claim 20 stops it on a terrain object, and its Edge cases give the
@@ -303,6 +335,7 @@ An `unmeasured` part is rated medium at most.
    | The bounce animation, with its creation draws, before the hits and their draws | `measurable` (V5 part h, random-state recorder) | medium until V5 part h runs |
    | The bounce animation's position | `measurable` (V3, which records where each bounce animation is made) | medium until V3 runs |
    | A type with no warhead | `unmeasured`: no scenario here isolates its hit consequences | medium, resting on S-0302 |
+   | No skip for an object with no health left | `unmeasured`: no scenario here holds an object with no health in the impact cell, and for a building awaiting removal a skip and a hit look alike | medium, as S-0319 claim 7 rates the same rule for a sprite animation |
 
 8. **Ground impact on water.** A ground impact whose position before the move is in a cell of the water land
    type, and whose move is not a stop (claim 9), makes no animation and no hit. It sets the lifetime counter to 0 (claim 6). Only the land type of
@@ -355,8 +388,8 @@ An `unmeasured` part is rated medium at most.
     height plus 416 leptons, 4 height levels) are taken at the new position truncated toward zero
     in each axis. The ground height is the terrain surface height of S-0106 claim 2 at that
     position, so on a sloped cell it is the slope's height at the piece's place in the cell, not the
-    cell's centre height (medium: `unmeasured` on a sloped cell, since no run here throws pieces
-    onto a slope; flat cells are covered by V3).
+    cell's centre height (medium: `measurable` on a sloped cell by V7 part e's positions; flat
+    cells are covered by V3).
     - **High-bridge deck.** When the cell of the new position or of the old position is a
       high-bridge cell (a cell that an intact high bridge marks, S-0211 claim 15): a
       move from at or above the deck height to below it puts the height of the flight position at
@@ -364,62 +397,82 @@ An `unmeasured` part is rated medium at most.
       20 leptons below the deck height (under the deck). A low bridge has no deck: a low-bridge
       cell is not a high-bridge cell, so a move there is tested as on any other cell, by the
       ground test below at the cell's ground height, with the land type of its bridge overlay
-      (S-0211 claim 9). The cells of a destroyed high bridge are no longer marked (S-0211 claim
-      15) and are tested in the same way.
+      (S-0211 claim 9). The cells of a destroyed high bridge lose their mark (S-0211 claim 15)
+      and are tested in the same way.
     - **Ground.** Otherwise (no deck is crossed, whether or not the cell is a
       high-bridge cell: Terms, *ground impact*), when the new height is below the ground height, the move reaches the
       ground. The height is set to the ground height when it is less than 100 leptons below it, and
       is otherwise left where it is, below the ground (Edge cases).
     - **Building cell.** Otherwise, when the new height is at least the ground height and less
       than 150 leptons above it, and the cell of the new position holds a building, the move is a
-      contact and the height is set to the ground height. Some buildings do not count, and some
-      overlays count as a building does (Open questions).
+      contact and the height is set to the ground height. Claim 19 says which cells count as holding
+      a building: not every building does, and a wall overlay does.
     - **No contact.** Otherwise the move has no contact: no ground impact and no rebound (the stop
       of claim 9 can still end the piece).
 
     At every contact that the cliff test below does not undo, the velocity rebounds off the surface of the cell of the new position and is
     scaled by the type's elasticity *e*. On a flat cell the vertical speed is reversed and the
-    whole velocity is scaled by *e*: *v*′ = *e*(*v*ₓ, *v*ᵧ, −*v*_z). On a sloped cell the component
-    across the cell's surface is reversed instead (Open questions). The **cliff** test is made
-    for a contact whose new position is in a cell at least 2 height levels above the cell of the
-    old position. Let *u* be the piece's vertical speed at the start of the turn, before gravity,
-    *z*₀ the height of its position before the move (not of its flight position) and *z*₁ the height the contact has just set. The move is undone
-    when:
-    - the piece is descending (*u* < 0) and *z*₁ > *z*₀: the contact would put the piece higher
-      than it was before the move, or
-    - the piece is rising (*u* > 0) and *z*₁ > *z*₀ + *u* + 1: the contact would lift the piece
-      more than 1 lepton above the height its own vertical speed, without gravity, would have
-      carried it to.
+    whole velocity is scaled by *e*: *v*′ = *e*(*v*ₓ, *v*ᵧ, −*v*_z). On a sloped cell the velocity
+    is reflected in a tilted plane instead (claim 17, F8), of which the flat rule is the case of a
+    flat cell; in both, *e* is narrowed to single precision before it scales (F8; `measurable` by V3
+    part e, medium until it runs). The **cliff** test is made
+    for a contact whose new position is in a cell at least 2 height levels above the cell of the old
+    position. Let *u* be the piece's vertical speed at the start of the turn, before gravity, *z*₀
+    the single-precision height of its flight position before the move (F3), and *z*₁ the height the
+    contact has just set. *z*₀ is the height of the flight position, not of the position (claims 3
+    and 11), which is the flight position truncated to whole leptons and, in a falling piece's first
+    turn, the creation point: there the flight position stands 10 leptons higher, at the start
+    position. After the first turn the two heights differ by less than 1 lepton, unless the height's
+    conversion is out of the integer range (S-0205 claim 7). The move is undone when:
+    - *u* is below −0.0002 leptons per tick (the piece is descending) and *z*₁ > *z*₀: the contact
+      would put the piece higher than it was before the move, or
+    - *u* is any other value, 0 included, and *z*₁ > *z*₀ + *u* + 1: the contact would lift the
+      piece more than 1 lepton above the height its own vertical speed, without gravity, would
+      have carried it to.
 
-    Our engine applies the two conditions as written, so a piece whose *u* is exactly 0 meets
-    neither. Where the original's line between them lies, for a piece whose *u* is zero or within a
-    small fraction of a lepton per tick of zero at the top of its arc, is `unmeasured` (below).
+    The comparison with −0.0002 is made in double precision, with *u* (stored in single
+    precision) widened exactly, and our engine draws the line at the same place. So a piece whose
+    *u* is exactly 0 is undone when its contact lifts it more than 1 lepton above its height
+    before the move. A meteor piece with a lower vertical limit of 0 has *u* exactly 0 at the
+    start of every turn until its first contact, since the gravity taken off and added back
+    cancel exactly for a vertical speed of 0 (F3).
 
     When the move is undone, the flight position and the velocity become those at the start of
-    the turn, the velocity is then turned off the cliff face and scaled by *e* (Open questions),
+    the turn, the velocity is then turned off the cliff face and scaled by *e* as imported, not
+    narrowed to single precision as at a rebound (claim 18, F9),
     and the ground impact's position (claim 7) is the position before the move. So a piece that
     the contact would lift onto a higher cell, by more than its own motion carried it, bounces off
     the cliff face instead, while a rising piece that the contact lifts by little enough climbs
     onto the higher cell.
-    - Backing: `measurable` (scenario V3 for flat ground; V7 part a for the cliff test as far as
-      its throws reach, the deep move and the undoing of a rising piece's contact; V7 parts b to d for the high-bridge deck and
-      the low bridge, the building cell and the 100-lepton limit). The set-back of a descending
-      piece less than 100 leptons below the higher ground, and a rising piece that climbs onto it,
-      are `unmeasured`: V7 part a's throws stay far below a ground 2 height levels higher, and no
-      run here throws a piece from higher up. The line between the cliff
-      test's two conditions is `unmeasured`: it matters only for a piece whose vertical speed is
-      within a small fraction of a lepton per tick of zero at the start of a turn, which F1 and F3
-      make only by chance, and no scenario builds one. Our engine's line at *u* = 0 is not claimed to
-      match the original's within that margin.
-      Confidence: medium. The boundary of the ground test
-      (a height exactly at the ground height is no contact outside a building cell) is
-      `unmeasured`: F3's single-precision steps make an exact landing on the ground height rare,
-      and no run here arranges one; medium.
+    - Backing: `measurable` (scenario V3 for flat ground; V7 part a for the cliff test as far as its
+      throws reach, the deep move and the undoing of a rising piece's contact; V7 parts b to d for
+      the high-bridge deck and the low bridge, the building cell and the 100-lepton limit; V7 part f
+      for the set-back of a descending piece less than 100 leptons below the higher ground; V7 part
+      i for a rising piece that climbs onto the higher cell in its first turn). That a piece whose
+      *u* is 0 is undone when its contact lifts it 1.4 leptons or more, the lifts V7 part h makes,
+      is `measurable` (V7 part h); for a lift above 1 lepton and below 1.4 it is `unmeasured`, since
+      no run here makes one. The place of the line at −0.0002 rather than at 0 is `unmeasured`: only
+      a vertical speed from −0.0002 up to 0 would show it, which F1 and F3 make only by chance, and
+      no scenario builds one. Confidence: medium. That *z*₀ is the flight position's height is
+      `measurable` in a falling piece's first turn (V7 part i): there the two heights differ by 10
+      leptons, and part i's first moves meet the cliff in the band where that difference decides the
+      result. Its pieces rise, so the rising condition (the second) is the one that applies: from
+      the flight position's height it lets their moves stand, and from the position's height it
+      would undo them. A test that undid every contact putting a piece higher than before its move,
+      whatever its vertical speed, would undo them from either height, so part i also tells the
+      rising condition from that rule. After the first turn it is `unmeasured`: the two heights
+      differ there by less than 1 lepton unless the height's conversion is out of the integer range
+      (S-0205 claim 7), and no scenario here resolves a lift that close to the line (V7 part h's
+      lifts exceed 1 from either height). Medium. The boundary of the ground test (a height exactly
+      at the ground height is no contact outside a building cell) is `unmeasured`: F3's
+      single-precision steps make an exact landing on the ground height rare, and no run here
+      arranges one; medium.
     - Confidence: medium for the flat rebound, the high-bridge rules, the low bridge, the 100-lepton limit and the
-      150-lepton building band, until V3 and V7 run. Low for the rebound on a sloped cell, the
-      turn off a cliff face, and which buildings and overlays count. Medium for the cliff test's
-      two conditions (until V7 part a runs, and `unmeasured` for the cases above that it does not
-      reach).
+      150-lepton building band, until V3 and V7 run. The rebound on a sloped cell, the turn off a
+      cliff face and the cells that count as holding a building keep the ratings of claims 17 to
+      19. Medium for the cliff test's
+      two conditions (until V7 parts a, h and i run, and `unmeasured` for the cases above that
+      they do not reach), and for the flight position's height as *z*₀ until V7 part i runs.
 
 11. **End of a piece.** When a piece ends (claim 6), the effects depend on two tests made at its
     position: *on water* (its cell has the water land type) and *at deck height* (its height is at least
@@ -494,7 +547,8 @@ An `unmeasured` part is rated medium at most.
 
     A type with the resource flag, at an end that is not on water and not at deck height, adds new
     resource: a falling piece to its own cell, a meteor piece to each of the 8 neighbouring cells
-    in step-direction order 0 to 7. Each such cell that is germinable (S-0401 claim 10) becomes a
+    in step-direction order 0 to 7 (for an end off the legal map, claim 20 says how they are
+    found). Each such cell that is germinable (S-0401 claim 10) becomes a
     new resource cell as S-0401 claim 11 says, with its overlay draw and then its growth-list
     offer, cell by cell in that order. Its stage is 0. S-0401 claim 11's limits apply: no cell
     becomes a resource cell at stage 12 or more, which never bars one here, as the stage is 0; and
@@ -559,12 +613,11 @@ An `unmeasured` part is rated medium at most.
     - Backing: `measurable` (scenario V12)
     - Confidence: medium
 
-15. **Spin.** The spin rate is formed by F5 and turns the drawn model each tick about the spin
-    axis. It has no effect on play. Its raw value and the three axis draws are taken at every creation
+15. **Spin.** The spin rate is formed by F5 and turns the drawn model about the spin axis in each
+    flying turn, in a sense that reverses at each contact (claim 22). It has no effect on play. Its raw value and the three axis draws are taken at every creation
     that completes (claims 3 and 4; claim 16 for a span of 0).
-    - Backing: `measurable` (scenario V1 for the draws). The drawn rotation is `unmeasured`: it is
-      presentation only, and no scenario here reads the model's orientation from captured frames
-      (V3 part b and V12 capture the trailer's point and the start sound, not the spin).
+    - Backing: `measurable` (scenario V1 for the draws). The drawn rotation is claim 22's, with
+      its own backing (V15 part b).
     - Confidence: high for the draws, apart from their count, which is rated as in claim 3
       (medium until V1 runs). Medium for the spin rate's value (F5).
 
@@ -591,6 +644,390 @@ An `unmeasured` part is rated medium at most.
       (scenario V13). The departure's result is a design rule, not an oracle value.
     - Confidence: high for the horizontal span that stops the original; medium for the vertical
       and spin spans until V13's runs for them are made.
+
+17. **Rebound on a sloped cell.** At every contact of claim 10 that the cliff test does not undo,
+    the rebound depends on the slope shape (S-0106) of the cell of the new position. The velocity
+    is reflected in a plane fixed by that shape's original tilt transform (S-0106 table C4), and
+    then scaled by *e* (F8). The plane's normal is the up axis of that transform: in exact
+    arithmetic, *v*″ = *e*(*v* − 2(*v* · *n*)*n*), where *n* is the unit normal of F8. The
+    reflection reverses the velocity's component along *n* and keeps the two components in the
+    plane.
+    - For the flat shape and the saddle shapes, which C4 gives the identity, *n* is vertical, and
+      this is claim 10's flat rule.
+    - For the other shapes *n* leans toward the downhill side, as the gas deflection of S-0613 claim
+      10 does with the same transforms. So with a positive *e* a piece that comes straight down
+      rebounds with a horizontal speed toward the downhill side.
+    - The tilt of *n* from the vertical is that of C4, not the terrain as drawn. It is about 29.31°
+      for the edge and steep shapes and about 21.36° for the corner and valley shapes. S-0106
+      claim 4 corrects this mismatch for drawing only, and the rebound keeps C4's values, as the
+      gas deflection does (S-0106 claim 4, S-0613 claim 10).
+
+    The surface the piece meets need not be the cell's ground. At a contact on a high bridge's
+    deck (claim 10's deck test), the rebound still takes the slope shape of the ground cell under
+    the deck. On a deck above sloped ground a piece therefore rebounds as off the slope, not off
+    the flat deck. This is a bug of the original (Edge cases,
+    `quirks.voxel_debris_deck_rebound_slope`).
+    - Backing: `measurable` (V7 part e for each slope shape; its deck run for the deck over a
+      slope, where a test map can hold one). `unmeasured` for F8's single-precision stores on a
+      sloped cell: another placement of the stores differs from F8 only in the last place, and
+      V7 part e does not log its velocities as exact single-precision values, so no scenario
+      here tells the placements apart. Medium.
+    - Confidence: medium for the reflection in C4's planes on the edge, corner and valley shapes
+      (1 to 12) until V7 part e runs. Medium for C4's angle rather than the drawn one on the
+      steep shapes (13 to 16),
+      which V7 part e cannot tell apart, and medium for the flat rule on the flat and
+      saddle shapes, as claim 10 rates the flat rebound, until V7 part e runs. Medium for the
+      narrowing of *e* until V3 part e runs, and medium for
+      the deck over a slope (low if no test map can hold one).
+
+18. **Turn off a cliff face.** When the cliff test undoes a move (claim 10), the velocity *u* of
+    the start of the turn (before gravity) is turned off a face and scaled by *e* (F9).
+    - The face depends on the step direction *d* (glossary) from the cell of the old position to
+      that of the new.
+    - For a straight step (*d* even) the face lies across the step. The horizontal component
+      along the step reverses, and the other component and the vertical speed are kept.
+    - For a diagonal step two further neighbours of the old cell are examined (F9's table):
+      - When exactly one of them is a high cell (Terms), the face is the straight face that F9
+        names for it, and one horizontal component reverses.
+      - Otherwise the face is diagonal: the two horizontal components exchange places, and for a
+        step to the south-east or north-west both also change sign.
+    - Apart from the north-west fault below, the turn keeps the sign of the vertical speed, and
+      the whole velocity is then scaled by *e* as imported. So with a positive *e* a piece that was
+      falling keeps falling; with *e* = 0 its vertical speed becomes 0, and a negative *e*
+      reverses it. A meteor piece then has *g* added back (claim 5, F3).
+
+    Two faults of the original affect the diagonal steps. One switch covers both
+    (`quirks.voxel_debris_cliff_step_faults`, Edge cases):
+    - **North-east and south-west steps.** These examine the two cells on the far side of the old
+      cell, behind the move, instead of the two cells beside the corner the piece crosses, and
+      they map each of them to the face the other would give. The south-east and north-west steps
+      examine the cells beside the corner.
+    - **North-west steps.** When only the northern of the two cells is high, the original gives a
+      velocity that matches no face (F9): the *x* speed becomes a fixed 2.3771236, the *y*
+      speed takes the old *x* speed, and the vertical speed takes the old *y* speed, all then
+      scaled by *e*.
+
+    With the switch off, north-east and south-west steps examine the cells beside the corner, as
+    the other two diagonal steps do, and the north-west case turns across *y*: the *y* speed
+    reverses and the other components are kept.
+
+    A move whose cell changes by more than one in *x* or in *y* needs a horizontal speed of 256
+    leptons per tick or more, unless a coordinate's conversion is out of the integer range
+    (S-0205 claim 7), which can change the cell by more than one at any speed. For it the
+    original's face is undefined, and this case is a **departure** (no switch): our engine takes
+    the step direction from the signs of the two changes and turns the velocity as for that step
+    (design). The importer warns for a type
+    whose horizontal limit *M* is 256 or more. That warning does not cover every case: a rebound
+    off a slope or the north-west turn can raise the horizontal speed to 256 or more from a
+    smaller *M*.
+    - Backing: `measurable` (V7 part f for each straight step, each diagonal case of F9's table,
+      the mirrored cells and the north-west turn). `unmeasured` for the multi-cell move, which
+      is a departure, and for F9's scaling by *e* as imported, not narrowed first: part f's
+      elasticity of 0.5 is exact in single precision, so it scales alike either way, and no
+      cliff turn in the scenarios here uses an elasticity that single precision does not hold.
+      Medium.
+    - Confidence: medium until V7 part f runs. Its throws reach a cliff face only from below,
+      and the diagonal cases need a move that crosses a corner, which part f must arrange.
+
+19. **Cells that count as holding a building.** For claim 10's building contact, the cell of the
+    new position counts as holding a building in either of these cases:
+    - **A building is listed there.** The first building listed in the cell's ground layer
+      (S-0209 claim 13's listing order) counts, unless it is an inactive section of a laser fence
+      (S-0211 Terms) or a vehicle-like building (S-0214 Terms). When the first building listed is
+      one of those two kinds, the cell does not count, even if a building listed after it would,
+      and even if the cell also holds a wall overlay.
+    - **No building is listed there.** The cell counts when its overlay is one of the three wall
+      overlays of S-0306's constants.
+
+    Every other building counts: one in the construction state (glossary), whether in its
+    build-up just after it is placed or being sold, one awaiting removal (S-0312 claim 21), one
+    of any house or of no owner, a gate whether open or closed, and an active laser-fence
+    section. No
+    other overlay counts. Only the ground layer is examined, whatever the piece's height: an
+    object on a high bridge's deck makes no building contact. S-0613 claim 10 names the same two
+    excluded kinds for a gas particle's obstacles; it does not state the first-listed rule.
+    - Backing: `measurable` (V7 part g for the kinds of building and overlay it sets up).
+      `unmeasured` for a building awaiting removal and one of no owner, which V7 part g does not
+      set up (no map can place a building of no owner: S-0009 claim 27 drops a map object whose
+      owner matches no house, and no scenario here makes one in play); for an active laser-fence section, since no spec gives a route by which a scenario
+      can make one (S-0211), so V7 part g records it only where a run happens to hold one; and
+      for the first building listed: no scenario here builds a cell that lists two buildings,
+      which stock play rarely makes.
+    - Confidence: medium until V7 part g runs; medium for a building awaiting removal, one of no
+      owner and an active laser-fence section (unmeasured, as above); low for the first-listed
+      rule.
+
+20. **Off the legal map.** A piece is never removed for leaving the map, at once or later. It
+    takes its turns wherever it is, on the legal map or off it, and ends only
+    as claim 6 says: after its lifetime, or in the turn after a stop or a ground impact on water.
+    Every reading of this spec that takes the cell of a position (its ground height, height
+    level, slope shape, land type, high-bridge mark, buildings, overlay and ground light) takes
+    the cell read for it (Terms). For a position off the legal map that is the off-map cell, S-0009
+    claim 44's stand-in. Our engine reads it as a blank cell at every position and at every time:
+    flat (slope shape 0), at height level 0 and ground height 0, of the clear land type, with no
+    overlay, no object listed in any layer and no high bridge. This is S-0009 claim 44's
+    departure, with no switch. In the original the stand-in is one shared cell whose state can
+    change: a low bridge whose end row or pieces reach outside the map gives it that overlay at
+    map load, and every later read of any off-map cell, in the same game or in a later game of the
+    same program run, sees that state (S-0009 claim 44). On a map with no such low bridge, in a
+    fresh program run or one with no earlier game whose low bridge reached off its map, the
+    original's stand-in reads as the same blank cell, and the rest of this claim describes that
+    blank cell. Its unscaled ground light level is
+    1000, which claim 25 reads; S-0104 leaves the light of a position off the legal map open, and
+    this value is stated here for a piece only. So off the legal map a piece:
+    - reaches the ground at height 0, rebounds as on a flat cell there (claims 10 and 17), and
+      can stop there (claim 9, with *h* counted from 0),
+    - meets no water in the off-map cell, which is of the clear land type. Its ground contacts
+      follow claims 7 to 9: claim 8's water test still looks at the position before the move, so
+      a move from a legal water cell that ends off the map is a ground impact on water; any other
+      ground impact makes its bounce animation and deals its hits (claim 7), which find no object,
+      and a stopping turn has only the stop's effect (claim 9),
+    - makes no building contact there, since the off-map cell does not count as holding a
+      building (claim 19). The off-map cell has no high-bridge mark, so off the legal map claim
+      10's deck test applies only through the cell of the old position: a move from a high-bridge
+      cell into the off-map cell is tested for the deck as any move from that cell is. Its cliff
+      test compares height levels with level 0 (claim 10), in both directions across the edge of
+      the legal map,
+    - at its end, makes the first row of claim 11 there: its expiry animation, an area damage in
+      which cells off the map take part in nothing (S-0303), the light flash, and for a meteor
+      piece the further pieces of claim 12 at its flight point off the map,
+    - adds new resource as claim 12 says, with each cell tested as usual. A falling piece adds
+      it to its own cell, the off-map cell, which is never germinable: it lies in no usable area
+      (S-0401 claim 10). So a falling piece adds no resource and takes no resource draw. A meteor
+      piece adds it to each of the 8 neighbouring cells of its flight point, found as below, and
+      each neighbour that is a legal, germinable cell becomes a resource cell as on the map. The
+      end off the map gates nothing. Whether a neighbour of a position off the legal map can be
+      germinable depends on whether the map's usable area reaches its outermost legal cells.
+
+    A position outside the usable area but on a legal cell is on the map. Its cell is a real cell
+    with its own height, land type, overlay and contents, and every claim applies to it unchanged.
+
+    A neighbouring cell is found in the same way. A step, one of claim 18's cliff steps or one of
+    claim 12's eight resource cells in step-direction order, is added to the cell coordinates of
+    the old position (for claim 18's cliff steps) or of the end's flight point (for claim 12). When the sum names a legal cell, that
+    cell is the neighbour; otherwise the neighbour is the off-map cell. So across the edge of the
+    legal map a neighbour one step away is a legal cell or the off-map cell as the sum says, in
+    both directions.
+
+    Our engine reads the off-map cell for every position off the legal map, however far away, and
+    for every neighbour that names no legal cell (design rule, decided at the delegated sign-off,
+    2026-10-25). The original departs from it only off the legal map, and near its edge only on
+    maps whose legal cells reach the highest columns: there a position just beyond the lowest or
+    highest legal column can read a legal cell near the opposite edge of the map, one row over.
+    Far off the map, a position about 2³¹ leptons away in *y* can read a legal cell (V4 part f),
+    and a neighbour of a position tens of thousands of cells off the map can be a legal cell. Reading the off-map cell there keeps a piece that has flown far away free of
+    terrain it is nowhere near. There is no switch: see Edge cases.
+    - Backing: `measurable` (V14: no removal, the contact at height 0, the expiry animation at a
+      falling piece's end off the map, no resource from a falling piece's end, a meteor piece's
+      end tested on its legal neighbours, and the ordinary behaviour on legal cells outside the
+      usable area; V15 part c's off-map run for the ground light of 1000, inconclusive if no view
+      can show a position off the legal map, when that light stays `unmeasured`). `unmeasured` for
+      the end's area damage and light flash off the map and for a meteor piece's further pieces
+      made off it: V14 records neither the damage nor a flash, its *Meteor resource run*'s type
+      names no spawn type, and its *Meteor run* does not arrange a piece that ends off the map.
+      `unmeasured` for the original's
+      off-map cell being the same blank cell at every position and every time on a map with no
+      low bridge reaching off it, in a program run with no earlier such map: V14 samples only some, and S-0009 claim 44 leaves changes in
+      play open. Our engine's blank cell is S-0009 claim 44's departure, not a measured fact. The reading of
+      the off-map cell far from the map is a design rule and is not measured. Of the original's
+      far readings it replaces, V4 part f shows the one in *y*, whose raised test map tells the
+      legal cell's ground height from the off-map cell's height 0; the column reading and the far
+      neighbours are `unmeasured`, since no scenario here reaches them.
+    - Confidence: medium until V14 runs, the meteor neighbours' test included. Medium for the
+      end's area damage, light flash and further pieces off the map (`unmeasured`). Medium for the
+      design rule far from the map: a choice, which no measurement of the original confirms.
+      Medium for the original's far reading in *y* until V4 part f runs; low for its column
+      reading and far neighbours (`unmeasured`, as above). Medium that nothing in play changes the
+      original's off-map cell on such a map (S-0009 claim 44 did not look for changes in play).
+      Medium for the off-map ground light of 1000 until V15 part c's off-map run shows it, and
+      medium if it stays `unmeasured`, as no view may show a position off the legal map.
+
+21. **Placement at creation.** A piece is placed (claim 6) at its creation point (a falling piece)
+    or its start position (a meteor piece, F2). The placement makes no test against the map's
+    bounds, so it succeeds on or off the legal map, at every point but one: a piece whose
+    placement point is exactly (0, 0, 0) is not placed, and never takes a turn. Such a piece has
+    still taken all its creation draws (claims 3 and 4), made its attached particle system (claim 13) and played its start sound (claim 14). It
+    never enters the update order: it never takes a turn, so it never moves, never ends, has
+    none of claim 11's effects and is never drawn. Its system keeps it as an owner that never
+    moves and never leaves play. No switch: our engine does the same (Edge cases).
+    - Backing: `measurable` for a start off the legal map (V14's meteor run). `unmeasured` for
+      the failure at (0, 0, 0): no producer here can be made to name exactly that point.
+    - Confidence: medium for placement anywhere until V14 runs; low for the failed placement.
+
+22. **Pose and spin of the drawn model.** A piece's model is drawn with its orientation (F10)
+    alone. Unlike a body, turret or projectile, no view transform of S-0105 claim 1 is applied. Its
+    model frame is mapped straight onto the screen frame of S-0105 F5 and F6: model *x* to the
+    right, model *y* up the screen after F5's flip, and model *z* toward the viewer.
+    - **At creation.** The orientation is the identity, so the model is seen straight along its
+      own *z* axis, from the side its *z* axis points to, at a fixed screen orientation that does not depend on
+      the throw.
+    - **Flying turns.** In each flying turn (claim 6), contact or not, the orientation turns
+      about the spin axis of F5 by the spin rate (F10), a right-handed turn in the model's frame
+      before F5's flip. The turn builds up smoothly, not in facing steps, and the axis stays
+      fixed.
+    - **Contacts.** At every contact of claim 10, also one that the cliff test undoes, the sense
+      of the turn reverses before that flying turn's rotation is applied: the contact turn itself
+      already turns in the reversed sense, and so does every later turn until the next contact
+      reverses the sense again. So after *n* flying turns the model is turned about the axis by
+      the spin rate times (*n*₊ − *n*₋), where *n*₊ counts the turns flown in the first sense
+      and *n*₋ those flown in the reversed sense, each contact turn counted in the sense that
+      its own contact gives.
+    - **End.** The pose changes only in flying turns, so not in the turn in which a piece ends
+      (claim 6).
+
+    No switch: the missing view tilt is presentation only and not plainly a fault, since the
+    model tumbles from its first flying turn (Edge cases).
+    - Backing: `measurable` (V15 part a for the pose at creation, V15 part b for the turn, its
+      smoothness and its reversal at the ground contacts on its flat ground that make a bounce
+      animation, the contact turn included). `unmeasured` for the reversal at the other contacts.
+      A contact that the cliff test undoes makes a bounce animation (V7 part a), but V7 records
+      positions, not frames, and V15 part b has no cliff, so no scenario here captures the turn
+      at such a contact. A stop and a ground impact on water make no bounce animation (claims 8
+      and 9) and end the piece in its next turn, in which the pose does not change (claim 6), so
+      only the contact turn itself shows the sense there, and V15 part b sets up neither. Medium.
+    - Confidence: medium for the pose at creation with no view transform until V15 part a runs.
+      Medium for the turn's sense and its reversal, the contact turn's own sense included, and
+      for F10's rule, until V15 part b runs.
+
+23. **What is drawn of the model.** A piece draws one section of its model (S-0007 claim 30: its
+    own model or a shared part), whose index is the type's section field (Import mapping,
+    default 0).
+    - The section is drawn with claim 22's transform only. No motion-file transform is applied
+      (S-0105 claims 13 and 14 do not apply). For an own model, which has no motion file, that
+      changes nothing. For a shared part, the part's motion file plays no part in the piece's
+      drawing: the section is drawn neither in frame 0 of that file nor with the file played
+      over the piece's life.
+    - A section index outside the model's sections is a **departure** (no switch): the
+      original's result is undefined. Our engine draws nothing for such a piece, and the
+      importer warns (design).
+    - Backing: `measurable` (V15 part d), except that the section is not drawn in frame 0 of a
+      shared part's motion file, which is `unmeasured`: part d's motion file need not move the
+      section in frame 0.
+    - Confidence: medium until V15 part d runs; medium for frame 0 (`unmeasured`).
+
+24. **Light.** Before the section is drawn, each normal index of the model's normal table gets
+    the shade of S-0306 F16's one diffuse term, with *L*′ = *R*ᵀ*L*.
+    - *R* is the rotation of the orientation (claim 22, F10), with no view part, and *L* is the
+      fixed light of S-0105 claim 17. The light is therefore fixed in the frame the model is
+      drawn in, and the model turns under it: a face of the model brightens and darkens as the
+      piece spins.
+    - There is no specular term.
+    - The normal table is the one that the normal mode of the model's first section selects,
+      also when the section drawn is another one. This is S-0105 claim 18's rule, under its
+      `quirks.voxel_light_first_section_mode`.
+    - Normal indices 253 to 255 get shade 16, and indices at or above the table's size but below
+      253 keep the shade an earlier draw gave them (S-0105 claim 20).
+    - Each pixel is then looked up in the voxel lighting table (S-0105 claim 19) and rasterised
+      as S-0105 claims 21 to 23 say, outside the depth-buffered mode of S-0105 claim 24.
+    - All of the above holds for a drawn section of normal mode 1 to 4. A drawn section of normal
+      mode 0 is drawn as S-0105 claim 35 says: unlit, with its column data read under
+      `quirks.voxel_mode0_misread`, and without the shades of this claim. Whether it is lit
+      follows the drawn section's own normal mode, not the first section's. A drawn section of
+      normal mode 1 to 4 whose first section has normal mode 0 is lit through a normal table with
+      no entries: normal indices below 253 keep the shade an earlier draw gave them, and indices
+      253 to 255 get shade 16.
+    - Every drawn frame shows the piece in its current orientation (claim 22) and with the light
+      of that orientation.
+    - Backing: `measurable` (V15 part b, from the shades of the turning test model) for the one
+      diffuse term and for the absence of a specular term. The normal
+      table of the first section, the shades of indices 253 and above and the drawing of a
+      section of normal mode 0 rest on S-0105 claims 18, 20 and 35 and their backing: V15 part b
+      does not test them here, and no scenario here draws a debris model with a section of normal
+      mode 0. `unmeasured` for a drawn section of normal mode 1 to 4 whose first section has
+      normal mode 0: S-0105 does not state this case, and the empty table is inferred from S-0105
+      claim 18 (the table follows the first section's mode), claim 35 (a section of mode 0 has no
+      table) and claim 20 (the shades of indices outside a table); no scenario here draws such a
+      model. `unmeasured` for the current orientation in every drawn frame: an image kept from
+      an earlier frame differs from a fresh one only where its pose or light has since changed,
+      and no scenario here can tell that from a fresh drawing of the same pose.
+    - Confidence: medium until V15 part b runs; medium for the first-section table, the indices
+      of 253 and above and a section of normal mode 0, which follow S-0105; medium for the empty
+      table under a first section of normal mode 0 (`unmeasured` and inferred, as above); medium
+      for the current orientation in every drawn frame (`unmeasured`, as above).
+
+25. **Palette, brightness and translucency.** The drawn image is copied to the screen with the
+    first of these that applies:
+    - a piece that holds a house (S-0312 claim 4): that house's 53-shade house-colour palette
+      (S-0103 claim 5), at the brightness *U* of the cell of the piece's position (S-0104 claim
+      13's unscaled ground level), with no extra light, no height term and no bridge-deck term,
+    - a piece with no house whose type has the resource flag: the start-up mine table (S-0112
+      Terms) at that *U*,
+    - any other piece with no house: the start-up mine table at brightness 1000.
+
+    The copy goes through the light-alpha values (S-0104 claim 15). It is 50 % translucent when
+    the type's translucent flag is set (Import mapping), and opaque otherwise. A translucent
+    piece's pixel blends by S-0102 F8's 50 % row: each output channel is ⌊*s*/2⌋ + ⌊*d*/2⌋, where
+    *s* is the channel of the piece's selected, lit source pixel and *d* the channel already on
+    the screen, each halved and rounded down before the sum, in integers. This is a rule of a
+    piece's own, with no fade by progress. Off the legal map, *U* is the off-map cell's 1000, with
+    its own backing in claim 20. So a destroyed
+    object's pieces show their house's colour and follow the cell's light, while a detonation's
+    pieces, which hold no house (claim 1), show the untinted colours of the start-up mine table
+    and do not follow the light unless their type has the resource flag.
+    - Backing: `measurable` (V15 part c for the palettes and the brightness *U*; V15 part d for
+      the translucency). `unmeasured` for the blend's channel arithmetic: part d's pieces spin
+      and move, so no frame shows the same pixel opaque and translucent over a known background.
+      S-0102 D41 measures the same arithmetic for animations. `unmeasured` for the absence of an
+      extra light, of a height term and of a bridge-deck term: part c lights its pieces with no
+      extra light, over ground at one height and with no high bridge, so it cannot tell them from
+      their alternatives, and no scenario here sets them up.
+    - Confidence: medium until V15 parts c and d run; medium for the blend's channel arithmetic
+      and for the three absent terms (`unmeasured`, as above).
+
+26. **Draw point and depth.** The model is placed around the ground projection of the
+    piece's position, lifted once by the height lift *L*(*z*) of S-0101 claim 3, where *z* is the
+    position's world height, as S-0105 F6 places a part around its draw point. It is drawn in the
+    air layer (S-0102 claim 3).
+    - **Depth test.** It reads depth with the flat profile and the strict test of S-0102 claims
+      10 and 12, with a final bias of −2 − *L*(*z*), where *z* is the world height of its
+      position (S-0102 claim 13's terms).
+    - **No depth write.** It never writes depth.
+    - **Consequence.** The bias cancels the height lift (S-0102 claim 11), so the piece is
+      compared as if it lay at the ground point below it. However high it flies, terrain,
+      overlays and buildings hide it at a pixel where, and only where, the depth they stored there
+      wins the strict test against the flat profile's depth at that pixel (S-0102 claims 10 and 12).
+    - Backing: `measurable` (V15 part e) for the depth test, its second run for the flat
+      profile rather than the upright one. `unmeasured` for the absence of a
+      depth write: no drawing after a piece is placed in the scenarios here to show one.
+    - Confidence: medium until V15 part e runs; medium for the absence of a depth write
+
+27. **Shadow.** Every piece that is drawn also draws a shadow, before its body.
+    - **Shape.** The shadow is the footprint of the drawn section, two pixels for each present
+      column as S-0105 claim 30 says. It is positioned by F11: S-0105 F10 with the orientation's
+      rotation applied to the corners of the section's bottom face after their height is set to
+      0, with no view transform, no shadow transform of a cell's tilt, a scale of 1 and the
+      3-pixel shift of S-0105 claim 31. So the footprint turns as the model spins, and it
+      narrows as the model's bottom face turns toward the vertical.
+    - **Draw point.** The shadow's draw point is the ground projection of (*x*, *y*), lifted once
+      by *L*(*f*) (S-0101 claim 3), where *f* is the ground height at the piece's position (0 off
+      the legal map). In a high-bridge cell, when the piece's height is at least *f* + 416, it is
+      lifted by *L*(*f* + 417) instead, one lepton above the deck.
+    - **Depth.** The shadow reads depth with the flat profile and a final bias of
+      −4 − *L*(*h*ₛ), where *h*ₛ is *f*, or *f* + 416 in the case over a deck.
+    - **No depth write.** It never writes depth.
+    - **Treatment.** It is drawn with the ordinary shadow treatment (S-0102 claim 26, S-0105
+      claim 31), not through the light-alpha values, and in every drawn frame for the piece's
+      current orientation, as its body is (claim 24).
+    - Backing: `measurable` (V15 part f) for the shape over flat ground and the draw point.
+      `unmeasured` for the absence of a shadow transform of a cell's tilt: part f throws only
+      over flat ground and a deck, where a tilt transform changes nothing. `unmeasured` for the
+      treatment: part f records no contrast between the ordinary shadow treatment and the
+      light-alpha values. `unmeasured` for the depth reading and the absence of a depth write:
+      V15 part f compares the footprint's shape and placement, and no scenario here draws
+      anything over the shadow afterwards that would show a depth reading or write (as for claim
+      26's depth write).
+    - Confidence: medium until V15 part f runs; medium for the tilt and the treatment, and for
+      the depth reading and the absence of a depth write
+
+28. **Visibility.** A piece within the view is drawn in every drawn frame, with its shadow,
+    whatever the shroud over it: the shroud does not hide it. Its body takes the light-alpha
+    values that the shroud pieces set (S-0110 claim 5), so under the shroud it darkens as the
+    ground does, to black where the shroud is complete. With fog of war in force, neither the
+    body nor the shadow is drawn while the piece's position is fogged for the player. Fog of war
+    is off in a skirmish (S-0409 claim 19), so there this rule changes nothing.
+    - Backing: `measurable` for the shroud (V15 part g). `unmeasured` for fog of war, as the
+      original's skirmish cannot turn it on (as for S-0102 claim 10's remembered images).
+    - Confidence: medium
 
 ## Formulas
 
@@ -673,7 +1110,8 @@ with *a*₁, *a*₂, *a*₃ the three ranged draws R(−65535, 65535) in the ord
 unit length. Which draw gives which component, and the precision in which the spin rate is kept,
 show only in drawing, but there they are observable. The first decides the axis the model turns
 about, which a capture of the drawn model could compare with V1's logged draws. The second decides
-the angle reached after many turns. No scenario here reads the drawn orientation (claim 15).
+the angle reached after many turns. V15 part b reads the drawn orientation only to the precision
+of captured frames (claim 22).
 When all three draws are 0 the axis has no direction
 and cannot be normalised. Our engine then draws the piece without spin; the axis affects drawing
 only, so this changes nothing in play (the original's drawing in that case, about one creation in
@@ -742,6 +1180,85 @@ This is a bug of the original (Edge cases,
 *h* = trunc *z*, so the trailer is made at the flight point (claim 11) before the move. Units:
 leptons.
 
+
+**F8. Rebound** (claims 10 and 17). Let *v* = (*v*ₓ, *v*ᵧ, *v*_z) be the velocity that the turn's
+move leaves (*v*′ of F3), and *M* the matrix of S-0106 table C4 for the slope shape of the cell
+of the new position (of the ground under the deck at a deck contact, claim 17). *M*'s rows are as
+C4 lists them; shapes 0 and 17 to 20 give the identity. Write *S* = diag(1, −1, 1),
+*Z* = diag(1, 1, −1), and *ε* for *e* stored in single precision. Then
+
+> *w* = *M*ᵀ · *S* · *v*,  *w*′ = *Z* · (*ε* *w*),  *v*″ = *S* · *M* · *w*′
+
+and *v*″ is the velocity after the rebound. Read the formula from right to left.
+- **Stores.** Each completed vector component is stored in single precision: the three
+  components of *M*ᵀ · *S* · *v*, each product *ε* *w*ᵢ, and the three components of
+  *S* · *M* · *w*′. A
+  change of sign is exact.
+- **Sums.** A matrix-vector product groups its row sums as S-0613 F3 does: (*a*ᵧ + *a*_z) + *a*ₓ
+  for *x*, and (*a*ᵧ + *a*ₓ) + *a*_z for *y* and *z*, with no fused operations.
+- **Flat cell.** With *M* the identity, *v*″ = (*ε* *v*ₓ, *ε* *v*ᵧ, −*ε* *v*_z), each product
+  stored: claim 10's flat rule.
+- **Exact arithmetic.** *v*″ = *ε*(*v* − 2(*v* · *n*)*n*) with *n* = *S* *m*₃ = (*m*₁₃, −*m*₂₃,
+  *m*₃₃), where *m*ᵢⱼ is *M*'s entry in row *i* and column *j*. This holds to C4's precision,
+  whose rows are unit vectors only to single precision. The tilt of *n* from the vertical is
+  arccos *m*₃₃.
+- **Stored result.** The rebound velocity equals the composition of the three steps above with
+  each listed component stored in single precision, which can differ from the exact form in its
+  last place.
+
+*ε* is the imported elasticity narrowed once to single precision: for the default it is the
+single-precision 0.8, and for an elasticity of 0.5 it is 0.5 exactly. Units: leptons per tick.
+
+**F9. Cliff turn** (claim 18). Let *u* = (*u*ₓ, *u*ᵧ, *u*_z) be the velocity at the start of the
+turn, before gravity, (*x*, *y*) the cell of the old position, and *d* the step direction of the
+cell of the new position from it (glossary). *High* is as in Terms. The face is:
+
+| *d* | first cell *P* | second cell *Q* | only *P* high | only *Q* high | otherwise |
+|---|---|---|---|---|---|
+| 0, 4 | — | — | — | — | across *y* |
+| 2, 6 | — | — | — | — | across *x* |
+| 1 (north-east) | (*x* − 1, *y*) | (*x*, *y* + 1) | across *y* | across *x* | diagonal |
+| 3 (south-east) | (*x* + 1, *y*) | (*x*, *y* + 1) | across *x* | across *y* | diagonal |
+| 5 (south-west) | (*x* + 1, *y*) | (*x*, *y* − 1) | across *y* | across *x* | diagonal |
+| 7 (north-west) | (*x* − 1, *y*) | (*x*, *y* − 1) | across *x* | north-west turn | diagonal |
+
+with these results before scaling:
+
+| Face | Velocity |
+|---|---|
+| across *x* | (−*u*ₓ, *u*ᵧ, *u*_z) |
+| across *y* | (*u*ₓ, −*u*ᵧ, *u*_z) |
+| diagonal, *d* = 1 or 5 | (*u*ᵧ, *u*ₓ, *u*_z) |
+| diagonal, *d* = 3 or 7 | (−*u*ᵧ, −*u*ₓ, *u*_z) |
+| north-west turn | (*c*, *u*ₓ, *u*ᵧ), *c* = 2.3771235942840576 |
+
+- **Scaling.** Each component of the result is multiplied by *e* as imported, in double
+  precision and not narrowed first (unlike F8), and stored in single precision.
+- **North-west turn.** *c* is the single-precision number 2.3771236.
+- **With `quirks.voxel_debris_cliff_step_faults` off.** The rows of *d* = 1 and 5
+  examine the cells beside the corner and keep their faces, as the rows of *d* = 3 and 7 do:
+  - *d* = 1: (*x* + 1, *y*) only high gives across *x*; (*x*, *y* − 1) only high gives across *y*.
+  - *d* = 5: (*x* − 1, *y*) only high gives across *x*; (*x*, *y* + 1) only high gives across *y*.
+  - The north-west turn is across *y*.
+
+Units: leptons per tick.
+
+**F10. Orientation** (claims 22, 24 and 27). **The rule.** After *n* flying turns the orientation
+is the turn about F5's axis *a* by *ω*(*n*₊ − *n*₋) (claim 22), where *ω* is the spin rate, and the
+drawing transform is that turn's matrix. That is all a run can check, to the precision of captured
+frames (claim 22's backing).
+
+**F11. Shadow footprint** (claim 27). S-0105 F10 applies with these changes:
+- **Corners.** For each of the four corners *K* = (*K*ₓ, *K*ᵧ, *K*_z) of the drawn section's bottom
+  face, take *K̄* = (*K*ₓ, *K*ᵧ, 0), and let *G K* be replaced by *R K̄* (*R* the rotation of claim
+  24, F10), stored in single precision as S-0105 F10 stores *G K*.
+- **Q.** *Q* = ((*R K̄*)ₓ + 2.9999964, −(*R K̄*)ᵧ), with *μ* = 1.
+- **Columns.** The present columns are those of the drawn section (claim 23). The quantities
+  *o*, Δᵢ, Δⱼ and the marking of two pixels per present column are S-0105 F10's.
+- **Copy.** The copy to the screen follows S-0105 F6 around the shadow's draw point (claim 27).
+
+Units: pixels.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -756,6 +1273,19 @@ leptons.
 | trailer cadence | every tick with an even tick number | ticks | claim 6 |
 | trailer height factor *k* | 6.967 (our engine's value, design) | — | claim 6, F7 (medium; F7's bracket; matching the original inside it is not claimed) |
 | degrees to radians | 0.01745277777777778 (3.1415 / 180) | radians per degree | Import mapping |
+| building band | 150 | leptons | claims 10 and 19 |
+| high cell | 2 | height levels above the old cell | claim 18, F9 |
+| cliff speed line | −0.0002 (double precision) | leptons per tick | claim 10: below it the descending condition |
+| north-west turn speed factor *c* | 2.3771235942840576 (single precision) | leptons per tick, before scaling by *e* | F9, `quirks.voxel_debris_cliff_step_faults` |
+| off-map cell (our engine; the original on a map with no low bridge reaching off it, in a program run with no earlier such map) | level 0, ground height 0, slope shape 0, clear, unscaled ground light 1000 | — | claim 20, S-0009 claim 44 |
+| the one point where a piece is not placed | (0, 0, 0) | leptons | claim 21 |
+| default section | 0 | section index | claim 23 |
+| shade of normal indices 253 to 255 | 16 | shade index | claim 24 (S-0306 F16) |
+| brightness of a piece with no house and no resource flag | 1000 | per-mille | claim 25 |
+| body depth bias | −2 − *L*(*z*) | depth units | claim 26 |
+| shadow depth bias | −4 − *L*(*h*ₛ) | depth units | claim 27 |
+| shadow deck lift | 416 (test), 417 (draw point) | leptons above the ground height | claim 27 |
+| shadow *x* shift | 2.9999964 | pixels | F11 |
 
 ## State and ordering
 
@@ -782,15 +1312,17 @@ and the creation draws of each spawned piece in turn, then the resource draws.
   whenever the type names an expiry animation (as with the switch on, an amount of 0 included) or
   the damage amount is not 0.
 - **The impact distance is lifted** (claim 7, F4). The distance passed to S-0302 is the lifted
-  Manhattan sum, smaller than the lepton distance. This is the same rule as S-0613 F7 and has no
-  switch of its own here (Questions for the project lead).
+  Manhattan sum, smaller than the lepton distance. This is the same rule as S-0613 F7. No switch,
+  here or in S-0613 (decided at the delegated sign-off, 2026-10-25).
 - **A deck impact hits the ground layer** (`quirks.voxel_debris_deck_impact_layer`, default on,
   claims 7 and 10). A piece whose ground impact puts it on a high-bridge deck hits the objects
   under the deck in that cell, not those on the deck. With the switch off, a ground impact that
   the deck test puts at the deck height hits the deck layer of the cell of the new position when
   that cell carries a high bridge, as a detonation on the deck does (S-0303 claim 4), and every
   other ground impact hits the ground layer. S-0607 has the same kind of fault for a dropped unit's
-  landing, under a switch of its own: see Questions for the project lead.
+  landing, under a switch of its own (`quirks.lift_deck_impact_reads_ground`). The two switches
+  stay separate, and this switch and `quirks.voxel_debris_deck_over_water` have the meanings given
+  here (decided at the delegated sign-off, 2026-10-25).
 - **A deck impact over water is a water impact** (`quirks.voxel_debris_deck_over_water`, default
   on, claims 8 and 11). A ground impact whose position before the move is in a high-bridge cell
   over water makes no bounce animation and no hit even when the deck test puts it on the deck, and
@@ -800,7 +1332,7 @@ and the creation draws of each spawned piece in turn, then the resource draws.
   `quirks.voxel_debris_deck_impact_layer` chooses), and the lifetime counter is not set to 0 by
   it. An impact under the deck over water stays a water impact either way.
 - **An impact hits one cell only** (claim 7). Objects of neighbouring cells within the radius are
-  not hit. No switch is proposed: the one-cell limit is the original's observable behaviour
+  not hit. There is no switch: the one-cell limit is the original's observable behaviour
   (V5), not a fault.
 - **A deep move stays below the ground** (claim 10). A move that ends 100 leptons or more below the
   ground height is not put back on the ground: the piece rebounds from where it is, below the
@@ -821,6 +1353,41 @@ and the creation draws of each spawned piece in turn, then the resource draws.
 - **The stop sound is ignored** (claim 14). No switch: it changes no play.
 - **Zero spans** are a departure (claim 16).
 - **An empty splash list** is a departure (claim 11).
+- **A deck rebound takes the ground's slope** (`quirks.voxel_debris_deck_rebound_slope`, default
+  on; claim 17). A contact on a high bridge's deck over sloped ground rebounds as off that slope.
+  With the switch off, a contact that the deck test puts at the deck height rebounds by the flat
+  rule (F8 with the identity). It is a switch of its own beside the two deck switches above
+  (decided at the delegated sign-off, 2026-10-25).
+- **Faults of the diagonal cliff steps** (`quirks.voxel_debris_cliff_step_faults`, default on,
+  claim 18, F9). The two faults share this one switch, as decided at the delegated sign-off,
+  2026-10-25. North-east and south-west steps examine the two cells behind the move and swap
+  their faces. With only the northern neighbour high, a north-west step gives (*c*, *u*ₓ, *u*ᵧ)
+  scaled by *e*, which no face stands for. With the switch off, north-east and south-west steps
+  examine the cells beside the corner the piece crosses, as F9's list under the switch says, and
+  the north-west case turns across *y*.
+- **A move of more than one cell** is a departure (claim 18): our engine turns it as for the step
+  direction of the signs of its two cell changes, and the importer warns for a type whose
+  horizontal limit is 256 or more.
+- **The rebound uses the original tilt transforms** (claim 17). The tilt of the rebound plane is
+  C4's, not the drawn terrain's. No switch: it is the same rule as S-0613 claim 10's gas
+  deflection, which has none.
+- **The off-map cell is always blank** in our engine (claim 20): S-0009 claim 44's departure,
+  with no switch. The original's stand-in can take a low bridge's overlay at map load, and every
+  later off-map read sees it, in later games of the same program run too.
+- **A far cell read as a legal cell** is a departure (claim 20). In the original, some positions
+  far off the legal map, and neighbours of positions very far off it, read a legal cell elsewhere
+  on the map. Our engine reads the off-map cell for them (decided at the delegated sign-off,
+  2026-10-25). No switch: such positions are reached only with extreme data, such as a wrapped
+  duration, or beyond the edge of a map of the largest sizes, and a far cell's terrain there is a
+  fault with no use in play.
+- **No placement at the origin** (claim 21). A piece placed at exactly (0, 0, 0) takes its creation draws,
+  makes its system and plays its sound, then never takes a turn. No switch: our engine does the
+  same.
+- **No view tilt on a piece** (claim 22). A piece's model is drawn without S-0105 claim 1's view
+  transform. No switch: this is presentation only, and it is not plainly a fault, since the model
+  tumbles from its first flying turn.
+- **A section outside the model** is a departure (claim 23): our engine draws nothing for such a
+  piece, and the importer warns.
 
 ## Import mapping
 
@@ -838,10 +1405,12 @@ and the creation draws of each spawned piece in turn, then the resource draws.
 | rules, same section, `IsTiberium` | resource flag (claim 12) | boolean | no |
 | rules, same section, `AttachedSystem` | attached particle system (claim 13) | particle-system name | none |
 | rules, same section, `StartSound`, `StopSound` | start sound (claim 14); stop sound read, no effect | sound names | none |
+| rules, same section, `VoxelIndex` | section drawn (claim 23) | integer section index | 0 |
+| rules, same section, `Translucent` | 50 % translucent drawing (claim 25) | boolean | no |
 | rules, the general section, `Wake` | wake animation (claim 11) | as S-0312's Import mapping | as there |
 | rules, the combat-damage section, `SplashList` | splash list (claim 11) | as S-0303's Import mapping | as there |
 
-The type's drawing keys belong to S-0007 and do not change play.
+The type's other drawing keys (the model it names) belong to S-0007 and do not change play.
 
 Backing of the absent-key defaults: `measurable` for the duration (V2 run with the key absent), the
 speed limits and the elasticity (V3 run with those keys absent: F1's ranges and the rebound factor,
@@ -849,11 +1418,15 @@ and for the upper vertical limit only as far as F1's vertical span shows it, sin
 from 4.5 up to but not including 5.5 gives the same span with the lower limit 3.5),
 and the three animations (V3 run with those keys absent: no bounce, expiry or trailer animation
 appears). The damage, radius and warhead defaults are `unmeasured`: with them a ground impact deals no
-hit with a visible result, so no run tells them from other values that also give none. The spin
-defaults are `unmeasured`: they change only the drawn rotation, which no run here records.
-Confidence: high for the `measurable` defaults, except the exact upper vertical limit: medium, as
-V3 shows only the span. Medium for the damage, radius, warhead and spin
-defaults, and for the spin defaults' conversion to radians. The defaults of the meteor flag, the
+hit with a visible result, so no run tells them from other values that also give none. The
+lower spin default is `measurable` through the drawn rotation only (a V15 part b run with those
+keys absent), and the upper one only as far as F5 shows it: any upper limit at least the lower
+one and less than 1 radian above it gives the same rotation, the lower limit's, whatever the
+draw. The section and translucency defaults are `measurable` (V15 part d).
+Confidence: high for the `measurable` defaults, except the exact upper vertical limit (medium,
+as V3 shows only the span) and the section and translucency defaults (medium, as claims 23 and
+25 rate them). Medium for the damage, radius, warhead and spin defaults, and for the spin
+defaults' conversion to radians. The defaults of the meteor flag, the
 resource flag, the attached system and the sounds are `measurable` (V3's
 run with those keys absent: a falling piece, no new resource, no particle
 system and no sound). Medium for them until that run is made. The spawn type and count defaults
@@ -987,6 +1560,14 @@ least 5 pieces have a stopping turn whose move reaches the ground, found from F3
 the logged raw values. *Expected:* none of those turns makes a bounce animation, and each piece
 ends in the turn after it. *Falsified by:* a bounce animation in such a turn. A set of throws with
 no such turn is inconclusive for this part.
+*Part e (the narrowing of the elasticity, claim 10 and F8):* part d's throws, with the read-only recorder
+logging the velocity each tick as its exact single-precision values. Single precision does not
+hold part d's elasticity, 0.1, exactly. For each flat rebound, compute each component after it from the logged
+velocity before it in two ways: scaled by the single-precision 0.1 (F8's *ε*) and stored, and
+scaled by the double-precision 0.1 and stored. The two differ in the last place for some
+components only. *Expected:* every component matches the first. *Falsified by:* a component that
+matches only the second. Throws in which fewer than 10 components tell the two apart are
+inconclusive for this part, and more are thrown.
 
 **V4. Meteor line.** *Setup:* a named test meteor type with a duration of 40, equal vertical speed
 limits of −10 (so that it descends 11.4 leptons per turn), a spawn type and spawn count 2, thrown
@@ -1014,8 +1595,56 @@ F3 the whole-lepton heights for the recorded start position under two readings: 
 whose vertical speed is kept exactly. By the first ground impact, some 880 turns in, the two
 differ by about a third of a lepton, so their whole-lepton heights differ at many turns. *Expected:* F3's reading at every
 turn. *Falsified by:* the other reading at a turn where they differ. A run in which no turn
-differs is inconclusive. A run whose placement fails at that start is reported so (Open
-questions).
+differs is inconclusive. The placement cannot fail at that start (claim 21).
+*Part f (a wrapped counter, claims 2, 20 and 21):* a named test meteor type with a duration of
+−2147483648, a horizontal limit of 15, vertical limits of −10 and an expiry animation, thrown by a
+test warhead at flat clear ground near the middle of a small test map, several times. Every
+legal cell of the test map is flat clear ground at height level 4, so the ground height of any
+legal cell differs from the off-map cell's height 0 (claim 20). *Record:* the logged raw values,
+the lifetime counter, position and height of each piece from its creation (the read-only recorder,
+which follows objects off the map too), the height of each contact, and any expiry animation.
+*Expected:*
+- each throw makes its pieces, with their creation draws (claim 4),
+- each piece's start position is F2's with the shortened lifetime of claim 2 (the counter wrapped
+  or −2147483648), computed from the logged raw values, each coordinate wrapped in its conversion
+  (S-0205 claim 7). With the loss *r* = |*q*₃ rem 20| and whole-number speeds, this puts a
+  horizontal coordinate whose speed is even *r* times that speed from the creation point's,
+  one whose speed is odd about 2³¹ leptons away, and the start height 10*r* leptons below the
+  creation point's,
+- each piece then takes its turns as claim 6 says (one in each tick, except where a removal
+  earlier in the update order costs it one), with its counter counting down from the wrapped
+  value; a piece whose counter after the loss is −2147483648 wraps at its first turn (claim 6)
+  and flies on,
+- each move is tested as claim 10 says against the cell that the original reads for the new
+  position (below). A start at or below the ground height there makes the first move a contact, so such a piece
+  rebounds (claims 10 and 17) and does not fly its straight line; one that starts above the
+  ground flies its line until it meets the ground,
+- a piece whose *x* speed is odd reads the off-map cell (contacts tested against height 0). One
+  whose *x* speed is even and *y* speed odd lies about 2³¹ leptons off the map in *y*: the
+  original reads for it a legal cell, the one in the row after the row its *y* coordinate would
+  give without the 2³¹ leptons (the same row when that coordinate is a whole number of cells), so
+  claim 10's tests use that cell's ground height, the height of level 4, although the piece lies
+  far off the map. The deep-move exception is included: a move that ends 100 leptons or more
+  below that height is a contact left below the ground, not set to it, and every other contact is
+  set to that height. Contacts tested against height 0 would show the off-map cell instead. Our
+  engine reads the off-map cell there (claim 20's design rule), so this case records the
+  original's reading that the rule replaces. One whose speeds are both even stays near the
+  creation point.
+
+*Falsified by:* a throw that makes no piece, a piece that never moves, a start that differs from
+F2's, a piece that ends at once although its counter wrapped to a large positive value, or a
+contact that does not follow claim 10 for the cell the original reads for the position (above):
+a ground contact set to another height than that cell's ground height (for a piece about 2³¹
+leptons off the map in *y*, a contact at height 0 instead of level 4's), or a piece moved by a
+contact that claim 10 leaves where it is, such as one 100 leptons or more below that ground.
+*Part g (a counter near the wrap, claim 2 for* j *≥ 1):* as part f, with a duration of
+−2147483638 (*j* = 10), thrown many times. From each piece's logged third raw value its loss
+*L* = |*q*₃ rem 20| is known (F2). *Expected:* a piece with *L* > 10 has the counter 2147483658 −
+*L* after the loss and flies on; one with *L* = 10 has −2147483648, wraps at its first turn
+(claim 6) and flies on; one with *L* < 10 ends in its first turn with no flight (claim 6). *Falsified by:* a counter after the loss other
+than the one its *L* gives, or a piece that flies on although its *L* is less than 10, or ends at
+once although its *L* is 10 or more. Throws are repeated until each of the three cases has
+occurred; a case that never occurs leaves its result untested.
 **V5. Impact hits.** *Setup:* a fixed-path test type with damage 50, a damage radius of 128,
 a test warhead, vertical speed limits of −40 each, the default elasticity and duration (Import
 mapping) and no expiry animation, so that its end deals no area damage (claim 11), thrown over a cell holding two infantry objects of the same house as the thrower,
@@ -1058,10 +1687,8 @@ nothing during the run (a map with no base for it); short game off keeps it unde
 survivor keeps it in play. *Record:* each house's count of units destroyed on the score screen,
 the kill tally of S-0414 claim 21. A hit with the thrower's house as its attacking house and no
 attacker would raise the thrower's count (S-0302 claim 14), so the part tells an absent house from
-the thrower's, but only if the amendment of S-0414 claim 21 that Changes for other specs proposes
-holds in the original. Under claim 21 as it stands, a destruction without an attacking object
-gives no house a kill, and the thrower's count would not change whether or not the hit carries a
-house. So a separate run first checks the amendment, on the same map with the same two houses:
+the thrower's, as S-0414 claim 21 credits such a hit to its attacking house. A separate run
+first checks that crediting, on the same map with the same two houses:
 an infantry object of the computer house is destroyed by a hit with the thrower's house as attacking house and no attacker, for
 example the gas particle damage of a particle system owned by the thrower's house (S-0302 claim
 1, S-0613 claim 13). *Expected of the check:* the thrower's count rises by one. If it does not,
@@ -1090,7 +1717,7 @@ turn was not a stop. *Expected:* the
 first infantry object dies; the third house's count of units destroyed does not change, and the
 thrower's house's count rises by one only, for the vehicle (S-0302 claim 14). *Falsified by:* a
 rise in the third house's count, or a rise of more than one in the thrower's. As in part f, the
-part tells the two apart only once part f's check of the S-0414 claim 21 amendment has shown a
+part tells the two apart only once part f's check of the S-0414 claim 21 crediting has shown a
 rise.
 *Part h (the order of a ground impact's effects, claim 7):* as the setup, with the random-state
 recorder running, one piece thrown, and the type naming a test bounce animation whose random-rate
@@ -1149,7 +1776,7 @@ the vessel in the throw over water alone. *Engine run:* V6 on our engine with an
 piece and no splash animation, and nothing at all for a meteor piece (claim 11). *Falsified by:*
 any splash animation or failure.
 
-**V7. Cliff, bridge and building** (claim 10). Named falling test types with chosen horizontal
+**V7. Cliff, bridge and building** (claim 10; parts e to g: claims 17 to 19). Named falling test types with chosen horizontal
 speeds (a horizontal limit of 0.5 gives −0.5 per axis, F1), an elasticity of 0.5 and a bounce
 animation that marks each ground impact. *Record:* the per-tick flight position (the read-only
 recorder) and velocity, and each bounce animation.
@@ -1173,7 +1800,8 @@ not undo it, or a rising piece whose result is the other one of the two. With th
 vertical limits (F1) and *g*, a piece thrown from the lower ground rises less than 20 leptons
 above its creation point, so in this part no move ends less than 100 leptons below a ground 2
 height levels higher: the set-back of a descending piece within 100 leptons of that ground, and
-a rising piece that climbs onto it, are recorded if they occur but are not expected to arise.
+a rising piece that climbs onto it, are recorded if they occur but are not expected to arise in
+this part. Part f arranges the first with its two types, and part i the second.
 *Part b (bridge deck):* thrown from above a high bridge's deck so that it falls through the deck
 height. *Expected:* the height becomes the deck height, a ground impact, and a rebound from there.
 A second run starts below the deck (thrown from under the bridge) with a high vertical speed.
@@ -1216,6 +1844,132 @@ ends more than 100 leptons below the ground (about one move in three does, as ea
 about 150 leptons). *Expected:* the height after such a move is left below the ground height,
 while a move that ends less than 100 leptons below it is set to the ground height. *Falsified
 by:* the other result in either case.
+*Part e (slopes, claim 17):* a test map holding one cell of each slope shape 1 to 20 (S-0106),
+each with neighbours at height levels that keep claim 10's cliff test from applying. The pieces are
+of a fixed-path test type with vertical limits of −40 each and an elasticity of 0.5. They are
+thrown, as in part d, by a test warhead's detonation on a test aircraft flying over each sloped
+cell, so that the first contact is on that cell. *Record:* the velocity in the turn before the
+contact and in the contact turn, and the position after the contact.
+*Expected:*
+- The velocity after the contact is F8's for the cell's shape, with C4's matrix, computed from the
+  velocity that the move leaves (F3, from the logged velocity before it). The run holds it to F8
+  only to within the last place, so it does not test where F8 stores (claim 17).
+- On shapes 17 to 20 that is the flat rule.
+- A piece that comes almost straight down leaves with a horizontal speed toward the downhill side.
+
+*Falsified by:* the flat rule on shapes 1 to 16, or a reflection in the drawn terrain's planes
+(S-0106 claim 4's corrected angles) where the two differ. For a piece that comes almost straight
+down at a vertical speed *V*, with *e* = 0.5, the horizontal speed after the rebound is about
+0.5 *V* sin 2*θ* for a tilt *θ*. C4's angles and the corrected ones then give speeds that differ by
+about 7.7 % of *V* on the edge shapes 1 to 4 (29.31° against 22.21°), some 3 leptons per tick at
+*V* = 40, and by about 9.4 % on the corner and valley shapes 5 to 12 (21.36° against 30°), some 4
+leptons per tick. On the steep shapes 13 to 16 (29.31° against 30°) they differ by only about 0.6 %,
+some 0.24 leptons per tick at *V* = 40, which the run does not reliably tell apart: there it tests
+the reflection against the flat rule only, and is inconclusive between C4's and the corrected
+angle.
+*Deck over a slope:* where a test map can hold a high bridge whose deck lies over a sloped cell,
+a throw onto the deck there. *Expected:* F8 with the ground cell's shape. *Falsified by:* the flat
+rule. Where no test map can hold one, this run is not made and claim 17's deck sentence stays
+`unmeasured`.
+
+*Part f (cliff faces, claim 18):* plateaus 2 height levels above the throwing ground, laid out so
+that the old cell of a move undone by the cliff test faces:
+- a straight face in each of the four straight step directions,
+- for each diagonal step, the four layouts of F9's table: only the cell of the step high, also *P*
+  high, also *Q* high, and both high.
+
+Two types are used:
+- the fixed-path test type, whose step is always north-west (−0.5 leptons per tick in each axis,
+  F1). Its creation point lies equally far into its cell in *x* and in *y*, so that both cell
+  coordinates change in the same move, and its creation height and vertical limits are chosen
+  from F1 and F3 so that it reaches the plateau's edge less than 100 leptons below the plateau's
+  ground, falling,
+- a type with a horizontal limit of 1.5, whose speeds are −1.5, −0.5 or 0.5 leptons per tick in
+  each axis (F1), and both vertical limits 0, so that its vertical speed starts at 0. It is
+  thrown many times for the other directions, from creation points within 4 leptons of the face
+  (of both faces, for a step that crosses a corner), at a creation height that puts its start
+  (F1) between 5 and 10 leptons below the plateau's ground. At its slowest speed toward the face
+  it reaches the face within 10 turns, by which *g* (claim 5) has lowered it by less than 80
+  leptons, so it too reaches each face less than 100 leptons below the plateau's ground, falling.
+
+*Record:* as the setup. A throw is judged only where the recorder's positions show a move undone
+by the cliff test (claim 10); its step direction and the layout give the expected face. Every
+throw of the fixed-path type is also judged at its move into the plateau's cell: that move is
+expected to be undone (claim 10's descending condition), and a fixed-path piece left in the
+plateau's cell after it falsifies claim 10.
+*Expected:*
+- the velocity after the turn is F9's, computed from the logged velocity at the start of that
+  turn, with the vertical speed kept in sign and scaled by *e*, except in the north-west turn
+  (claim 18, F9's north-west row), whose speeds the third item gives,
+- in the north-east and south-west layouts, the faces of F9's table, which differ from those of
+  the cells beside the corner,
+- for the fixed-path type with only the northern cell high, an *x* speed of about 2.3771236 × 0.5
+  ≈ 1.19, a *y* speed of about −0.25 and a vertical speed of about −0.25 leptons per tick
+  (*u*ₓ = *u*ᵧ = −0.5).
+
+*Falsified by:* any other face where the two differ: in particular the faces of the cells beside
+the corner for a north-east or south-west step, or a reversed *y* speed in the north-west case.
+
+*Part g (building cells, claim 19):* as part c, onto cells holding, in turn:
+- an ordinary test building, and one under construction,
+- a building of a neutral house,
+- an open gate and a closed gate,
+- an active section of a laser fence, and an inactive one,
+- a vehicle-like building (S-0214 Terms),
+- each of the three wall overlays, with no building,
+- a resource overlay, with no building.
+
+*Expected:* a building contact (part c's height set to the ground from less than 150 leptons above
+it) on every cell except those with the inactive fence section, the vehicle-like building and the
+resource overlay, where the first contact is with the ground. *Falsified by:* the other result on
+any cell. No spec gives a route to an active laser-fence section, so that cell is set up only
+where a run happens to hold one; without it, the active section stays `unmeasured` (claim 19).
+*Part h (vertical speed 0 at a cliff, claim 10):* part a's cliff, with the lower ground lying
+toward lower first-axis values and stretching at least three cells from the face. A named test
+meteor type with vertical limits of 0 each, a horizontal limit of 8, a duration of 40 and an
+elasticity of 0.5, thrown many times by a test warhead at a point on the higher ground next to
+the face. Each move is then (*v*ₓ, *v*ᵧ, −1.4) and *u* is exactly 0 in every turn up to the first
+contact (claim 10), and the start position lies at the creation point's height, the higher
+ground's (F2). *Qualifying throws:* those whose *v*ₓ is positive and whose start position lies
+over the lower ground at least one move short of the face, so that the move entering the higher
+cell is not the first. After *k* ≥ 1 earlier moves that move ends 1.4(*k* + 1) leptons below the
+higher ground, a ground contact set to that ground, which lifts the piece 1.4*k* leptons above its
+height before the move, more than 1. *Expected:* for each qualifying throw, the move is undone:
+a bounce animation at the position before the move, over the lower cell, at that position's
+whole-lepton height (claims 7 and 11; the flight position before the move lies 1.4*k* leptons
+below the higher ground), and next turns that move away from the face. *Falsified by:* for a qualifying
+throw, the piece on the higher cell's ground after that move, which a test that undoes no move
+with *u* = 0 would give. Both of claim 10's conditions undo these moves, so this part does not
+tell which of them *u* = 0 takes.
+*Part i (height before the move, claim 10):* part h's cliff. A named falling test type with a
+horizontal limit of 255, vertical limits of 197.5 and 198.5, an elasticity of 0 and an expiry
+animation, thrown many times by a test warhead detonating on the lower ground at the centre of
+a cell next to the face, with the random-state recorder. By F1 each vertical speed is 197.5 or
+198.5 and each horizontal speed a whole number from −255 to 254. *Qualifying pieces:* those whose
+recorded creation point lies at the lower ground's height and whose logged raw values give, by
+F1, a first move that ends in the higher cell next to the creation point's cell: an *x* speed
+that carries the start position across the face and a *y* speed that keeps it in its row. With
+the creation point at the cell's centre that is an *x* speed above 128 and a *y* speed of
+magnitude below 128, about 1 piece in 8. The first move then ends 1.9 or 0.9 leptons below the
+higher ground, which stands 208 leptons above the lower ground, so the move ends 206.1 or 207.1
+leptons above the lower ground: a ground contact less than 100 leptons below the higher ground,
+set to it. Measured from the flight position before the move, the start
+position 10 leptons above the lower ground, that lifts the piece by 198 leptons, less than
+*u* + 1, so the move is not undone; measured from the position before the move, the creation
+point, it would lift it by 208, more than *u* + 1, and the move would be undone. The piece
+rises (*u* is 197.5 or 198.5), so only claim 10's rising condition applies, and the run tells a
+*z*₀ taken from the flight position's height from one taken from the position's. A test that
+undid every contact putting the piece higher than before its move, whatever its vertical
+speed, would undo it from either height. *Record:* the logged raw values, the per-tick flight
+position, each bounce animation and the expiry animation. *Expected:* for each qualifying piece,
+in its first turn a stop on the higher cell at the higher ground's height, with no bounce
+animation (claim 9: the rebound scaled by 0 leaves it at rest on the ground, so *S* is 0), and
+its end in its next turn, with the expiry animation on the higher cell at that height.
+*Falsified by:* for a qualifying piece, a flight position over the lower cell at the end of its
+first turn, or its expiry animation on the lower cell (claim 10: an undone move leaves the piece
+at its start position, 10 leptons above the lower ground), which a *z*₀ taken from the position
+(claim 3), or a test that undid every contact putting the piece higher whatever its vertical
+speed, would give.
 
 **V8. Expiry damage and the deck.** *Setup:* a fixed-path test type with damage 50 and a test
 warhead that names a particle system (S-0303 claim 20), has an animation list of one test type
@@ -1306,6 +2060,146 @@ whether the program stops when the piece is created. *Expected:* a stop for 0.25
 for the two further types, none for −0.5. *Falsified by:* a stop for −0.5, or none for any of the
 others.
 
+**V14. Off the map** (claims 20 and 21). *Setup:* a small test map whose legal cells are all at
+height level 4, those outside the usable area included, with no low bridge, played in a freshly
+started program (or one whose earlier games had no low bridge reaching off their map), so that
+the original's stand-in cell stays blank (S-0009 claim 44). The ground there is 416 leptons
+high, so a contact on a legal cell can be told from one off the legal map, at height 0.
+- *Falling run:* a named test falling type with a horizontal limit of 15, an elasticity of 1, a
+  duration of 3000 and an expiry and a bounce animation, thrown many times by a test warhead near
+  one edge of the usable area. Some pieces head out across the legal cells outside the usable
+  area and off the legal map.
+- *Resource run:* the same falling type with the resource flag.
+- *Meteor resource run:* a variant test map whose usable area reaches its outermost legal cells
+  along one edge, clear, flat and germinable there, if the map's size fields allow one (if not,
+  this run is not made and the meteor neighbours' test stays medium). A named test meteor type
+  with the resource flag, no spawn type, a duration of 100, a horizontal limit of 15 and vertical
+  limits of −10, thrown so that some pieces end just off the legal map beside that edge.
+- *Meteor run:* a named test meteor type with a duration of 200, a horizontal limit of 15,
+  vertical limits of −10, a spawn type and a spawn count of 2, thrown near the same edge, so
+  that some start positions (F2) lie off the legal map.
+
+*Record:* each piece's position and lifetime counter each tick (the read-only recorder, which
+follows objects off the map too), each animation made with its position, overlay changes, and the
+draws.
+*Expected:*
+- no piece leaves play for being off the map: each ends only as claim 6 says, in a turn whose
+  counter is not positive, its lifetime run out or its counter set to 0 by a stop or a ground
+  impact on water (claims 8 and 9),
+- on legal cells outside the usable area, contacts at their ground height of 416 leptons,
+- off the legal map, ordinary ground impacts at height 0, each with a bounce animation and no
+  water case; a stopping turn there makes no bounce animation (claim 9), and a contact undone by
+  the cliff test is left where claim 10 leaves it,
+- a piece that comes back toward the map from off it meets the map's edge as claim 10's cliff
+  test says, the legal cells being 4 levels above the off-map cell's level 0 (claim 18),
+- at a falling piece's end off the legal map, the expiry animation there and, for the resource
+  run, no new resource and no resource draws,
+- in the meteor resource run, an end just off the legal map makes new resource, with its draws,
+  on each of its neighbours that is a legal, germinable cell, in step-direction order, and on no
+  other cell,
+- in the meteor run, pieces placed at start positions off the legal map that fly in and spawn on
+  the map as claim 12 says.
+
+*Falsified by:* a piece removed in a turn whose counter, after that turn's reduction, is still
+positive; a contact at height 0 on a legal cell outside the usable
+area, which would show that such a cell is read as off the map; an ordinary ground impact off the
+legal map at another height; a water
+case off it; resource or resource draws at a falling piece's end off it; in the meteor resource
+run, no resource on a germinable legal neighbour of an end off the map, or resource on a cell that
+is not a neighbour; or a meteor piece with a start off the legal map that never appears or never
+moves.
+
+**V15. Drawing** (claims 22 to 28). Captured frames of a fixed view: every drawn frame, with its tick. *Setup:*
+a named test model of two sections, each asymmetric under every rotation and distinctly coloured
+(for example an L shape), and named test types that use it. *Record:* the frames, the creation
+draws (random-state recorder) and the piece's position each tick (read-only recorder).
+- *Part a (pose at creation, claim 22):* spin limits of 0.001 degrees per tick each, which give a
+  spin rate too small to see (F5). *Expected:* the model is seen straight along its own *z* axis,
+  its *x* axis to the right and its *y* axis up the screen, the same in every throw.
+  *Falsified by:* the look of S-0105 claim 1's view, which a test vehicle with the same model as
+  its body, facing east, shows beside it.
+- *Part b (turn and light, claims 22 and 24):* spin limits of 10 degrees per tick each, an
+  elasticity of 0.5, and a named test bounce animation, so that each contact that makes one is
+  marked in the frames. *Expected:*
+  - a turn about F5's axis, from the logged draws, of 10 degrees per flying turn, built up
+    smoothly,
+  - the sense reversed from each contact turn on, the contact turn itself included, for the
+    contacts with its flat ground that make a bounce animation, which shows them (a stop or a
+    ground impact on water makes none, and the piece flies no turn after it). The sense of one
+    turn is read from the frames of its tick and of the tick before: the drawn model turns 10
+    degrees on about the axis in the first sense and 10 degrees back in the reversed one, a
+    difference of 20 degrees that the captured frames resolve,
+  - the shades of F10's rotation applied to S-0306 F16.
+
+  *Falsified by:* a turn in facing steps, a turn about another axis, a sense kept through a
+  contact or in the contact turn itself, or shades of a light that turns with the model. A run
+  with no contact that makes a bounce animation is inconclusive for the reversal.
+- *Part c (palette and brightness, claim 25):* a map with a low ambient light (S-0104). Pieces
+  come from the destruction of a test vehicle of a house with a distinctive colour (S-0312
+  claim 4), and from a detonation, with and without the resource flag. *Expected:*
+  - the house colour on the remapped indices of the destroyed vehicle's pieces, and untinted
+    start-up mine-table colours on the detonation's,
+  - the detonation's pieces without the resource flag brighter than the others, which take the
+    cell's level.
+
+  *Off-map run (claim 20's ground light):* where the view can show a position off the legal map,
+  the destroyed vehicle's pieces thrown past the legal map's edge on the same map. *Expected:*
+  those pieces at brightness 1000, brighter than the same house's pieces on a legal cell. The run
+  is inconclusive if no view shows a position off the legal map.
+
+  *Falsified by:* a house colour on a detonation's pieces, which would also show that they hold
+  the thrower's house (claim 1), or a brightness that does not follow this rule.
+- *Part d (section and translucency, claim 23):*
+  - one test type with the section field 1 and the translucent flag,
+  - one that leaves both keys absent,
+  - one that shares the body part of a test vehicle whose motion file moves that section visibly
+    from frame to frame.
+
+  *Expected:* only section 1, at 50 %, for the first; section 0, opaque, for the second; and for
+  the shared part, the section drawn without its motion file's transform and unchanged in shape
+  from frame to frame apart from the spin. *Falsified by:* another section, another translucency,
+  or a shared part that follows its motion file.
+  Part d does not tell frame 0 of the motion file from no transform, since the file need not move
+  the section in frame 0 (claim 23).
+- *Part e (depth, claim 26):* pieces falling and bouncing at several heights over cells directly
+  behind a test building, as seen on screen, so that the building lies in front of the ground
+  point below each piece. The view stays fixed from the game's start, with no view jump, and the
+  building's whole drawn image stays in view. Frames are judged only while the recorded position
+  keeps the piece's ground point in those cells. The two departures of S-0102 F1 and F2 then have
+  no effect on the cut: the original anchors the building's upright profile at its last row, as
+  F2 does, and the expected cut is computed with the original's depth reference for that view,
+  32768 plus the view's top world row at the game's start (S-0102 F1), not with F1's fixed one.
+  *Expected:* in every judged frame, the pixels of the piece's image
+  that fall within the building's drawn image are hidden exactly where S-0102 F2 hides a flat
+  reader with the bias −2 − *L*(*z*) behind that building, computed from the recorded position
+  and the building's depth profile (its companion depth image of S-0102 F5 included where it has
+  one), and every other pixel is drawn. Over a building without a companion depth image this is
+  S-0102's cut of a flat reader over an upright writer: the piece is cut along a row, and its
+  rows nearest the building's base can stay drawn when its ground point lies just behind that
+  base. A frame in which none of the image overlaps the building judges nothing. *Falsified by:*
+  a hidden part that differs from F2's prediction by more than a row; in particular the one a
+  bias of −2 alone would give, without the term that cancels the height lift, which hides the
+  piece further toward the building's base, by about three quarters of its lift in rows.
+  *Second run (the profile):* a named test type whose model is a tall column of voxels, its
+  section field naming it, thrown so that it bounces just behind the building's edge. *Expected:*
+  the hidden part of the column is the one the flat profile gives (S-0102 claim 12 and F2).
+  *Falsified by:* the upright profile's hidden part where the two differ. A frame in which they
+  hide the same pixels is inconclusive.
+- *Part f (shadow, claim 27):* the frames of parts a and b over flat ground, and a throw over a
+  high bridge's deck. *Expected:*
+  - a shadow on the ground under the piece, which keeps its screen place as the piece rises and
+    falls, at F11's footprint,
+  - over the deck, at the deck height,
+  - in part a, the outline of the section's bottom face; in part b, the turning outline that
+    narrows as that face turns toward the vertical.
+
+  *Falsified by:* a shadow that follows the piece's height, no shadow, or the footprint of S-0105
+  claim 30's view.
+- *Part g (shroud, claim 28):* pieces thrown from a revealed cell across the edge of the shroud.
+  *Expected:* the piece stays drawn across the edge and darkens with the shroud's light-alpha
+  values, to black under complete shroud. *Falsified by:* a piece that vanishes at the edge, or
+  that is drawn undarkened under the shroud.
+
 ## Changes for other specs
 
 - **S-0303 claim 22 and S-0312 claim 4 (F1):** the debris pieces they throw are objects of play,
@@ -1332,40 +2226,41 @@ others.
   projectile-only effects of claims 21 and 22. Unlike the disc laser, a piece's end also makes
   the warhead's light flash when the warhead has one (S-0317 claim 11). Claim 19's barrel debris could be named as pieces of
   S-0317, as claim 22's voxel-model debris is.
-- **S-0414 claim 21:** "A destruction without an attacking object gives no house a kill" is
-  broader than S-0302 claim 14 allows: that claim credits a destruction by a hit with an attacking
-  house and no attacking object to that house. Proposed wording: "A destruction with neither an attacking
-  object nor an attacking house gives no house a kill (S-0302 claim 14), but still gives the
-  victim's house a loss when it qualifies." S-0317 V5 parts f and g read the tally in this sense.
+- **S-0009 claim 44:** its rule covers a read whose cell is not a legal cell. In the original some
+  positions far off the legal map, and some neighbours of positions very far off it, compute a
+  cell that is a legal cell elsewhere on the map, and the original reads that legal cell (S-0317
+  claim 20; V4 part f for the reading in *y*). Claim 44 could add that such a read is not a read
+  outside the map in the original, and that our engine reads the stand-in for it (S-0317 claim
+  20's design rule).
+- **S-0302 claim 8, *No-health targets*:** its list of sources that it cannot place under a
+  filter names a debris piece's ground-impact hits with "S-0317 claim 7, which leaves this open
+  for them". S-0317 claim 7 settles it: those hits skip no listed object for having no health
+  left, so the object receives its hit and the no-health rows decide what the hit does, as for a
+  bouncing animation's landing hits (S-0319 claim 7). Claim 8 can name them as a known source of
+  such hits.
+- **S-0312 claim 21, a building awaiting removal:** "it cannot be hit" holds for detonations
+  (S-0303 claim 9). A debris piece's ground-impact hits (S-0317 claim 7) still reach it, since it
+  stays listed in its cells; the hit is stopped with no side effect by S-0302 claim 8's
+  no-health row for a building.
+- **S-0007 claim 30:** its "with that part's motion file" concerns loading a shared part. A debris
+  piece that draws a shared part does not apply the motion file when drawing it (S-0317 claim 23).
 
 ## Open questions
 - How the original draws a piece whose three spin-axis draws are all 0 (F5), about one creation in
   2 × 10¹⁵. Our engine draws it without spin. This is drawing only and changes nothing in play.
 - The hits of one ground impact (claim 7): whether an object that a hit removes from play stops the hits
   on the objects listed after it, and whether an object that enters the cell during the hits is
-  hit. S-0613 claim 13 states for its gas hits that a removed object does not stop the hits on the
-  others; the same reading is likely here but is not established. The listing order of those
+  hit. S-0319 claim 7 states for a sprite animation's hits, which go through the listing the same
+  way, that a removed object ends them; S-0613 claim 13 states for its gas hits that a removed
+  object does not stop the hits on the others. Which holds for a piece is not established, though
+  the walk's likeness to S-0319 claim 7's favours that claim. The listing order of those
   hits is rated low and `unmeasured` for the same reason (claim 7).
-- Whether a ground impact's hits (claim 7) skip an object with no health left, as S-0613 claim
-  13's gas hits do. The original is believed to make no such test of its own (low), so that S-0302
-  claim 8's rows for a target with no health would decide each such hit; no run can show it yet.
-  For the only case known to arise, a building awaiting removal (S-0312 claim 21), a skip and a
-  hit give the same result (claim 7), so either conforms there. Whether a dying infantry unit, a
-  crashing vehicle or aircraft (S-0302 claim 8) or a sinking vehicle (S-0203 claim 6(a)) stays
-  listed in a cell's ground layer is not known; a piece that bounces on a water cell (Edge cases)
-  next to a sinking vehicle at 0 health would be a set-up that tells the two apart, if the
-  vehicle stays listed there. If the absence is confirmed, S-0302 claim 8's sentence that no
-  known source delivers a hit to a target with no health, and S-0312 claim 21's "cannot be hit",
-  would need a note naming this source.
-- The rebound on a sloped cell and the turn off a cliff face (claim 10): the velocity after the
-  rebound, for each slope type of the cell, and after the turn, for each direction a cliff face
-  can face, as a function of the velocity before it. This spec does not state it. The outcome to
-  measure is the per-tick velocity that V7's recorder logs for pieces that rebound on each slope
-  type and off cliff faces of each direction. Which buildings do not count as a building contact, and which
-  overlays count as one, are not established. The ground height that claim 10's contact test and
-  F6 read on a sloped cell is settled as S-0106's surface height at the piece's truncated position
-  (claim 10), but no run checks it there; a slope run that logs each piece's position would. Confidence
-  low for the rebound until scenario V7 and a slope run are made.
+- Whether a dying infantry unit, a crashing vehicle or aircraft (S-0302 claim 8) or a sinking
+  vehicle (S-0203 claim 6(a)) stays listed in a cell's ground layer, where a ground impact's hits
+  (claim 7) would reach it with no health left, is not known. A piece that bounces on a water cell
+  (Edge cases) next to a sinking vehicle at 0 health would be a set-up that shows such a hit, if
+  the vehicle stays listed there. That case would then belong with the notes on S-0302 claim 8
+  and S-0312 claim 21 that Changes for other specs lists.
 - The hits of claim 12's further pieces (medium, `unmeasured`): claim 1's reading, not yet shown
   for a further piece. A V4 run whose spawn type carries damage and whose further pieces end on
   V5 part f's layout, with the meteor thrown as in part g, would test the house.
@@ -1377,35 +2272,17 @@ others.
   pieces, not how many pieces enter or stay in play, nor that all the detonations fall in one
   tick; that no piece made is later removed for the number in play, and
   that no larger count meets a cap, are `unmeasured`.
-- Q-1702 question 4, leaving the map in flight: whether a piece that flies off the map is removed
-  for that. It is believed not to be (low confidence, `unmeasured` until a piece can be followed
-  off the map). What its ground impacts and its end read there as its
-  cell (land type, ground height), and so when it stops or ends, is not established.
-- What happens to a piece whose placement at creation fails, for example a meteor piece whose start
-  position, moved back by up to its lifetime times its speed, lies off the map, as it may for a
-  meteor piece whose counter wraps (claim 2). It may never take a turn and so never end.
 - Whether every producer of pieces makes them in the order of its own list (S-0303 F6, S-0312 F1).
   This spec assumes the producer's order.
 - The motion measure (F6) when the sum of the three squares reaches 2⁵³ or more: how that sum is
   rounded before the table root is taken.
+- Whether a test map can hold a high bridge whose deck lies over a sloped cell (claim 17's deck
+  sentence, V7 part e). If none can, that sentence stays `unmeasured`.
+- The original's behaviour for a move of more than one cell at a cliff (claim 18) and for a section
+  index outside the model (claim 23): both are undefined in the original, and our engine's rules
+  are design.
 - Where a piece's attached particle system (claim 13) stands in the update order, and so whether,
   under `quirks.update_order_removal_skip` of S-0203, a piece's end in a tick costs its system
   its turn in that tick. No record is known that shows it: the system is marked in the tick its
   piece ends (claim 13), and V11 records only its position and the tick its emission stops.
   Our engine places the system directly after its piece (design).
-
-## Questions for the project lead
-
-- The scope of S-0202 claim 10's bouncing-type row (claim 3; Changes for other specs): this spec
-  reads it as covering sprite animations only, so that a piece takes four raw values. The reading
-  needs the lead's confirmation, and V1 settles the count.
-- Whether the lifted impact distance (claim 7, F4; Edge cases) gets a quirk switch. It is the
-  same rule as S-0613 F7, so one switch would cover both specs.
-- The proposed `quirks.voxel_debris_deck_impact_layer` (claim 7, Edge cases): whether the
-  fault gets a switch, and whether it is one switch for pieces only or one shared with other
-  landings that read the ground layer on a deck, such as the dropped unit of S-0607
-  (`quirks.lift_deck_impact_reads_ground`).
-- The proposed `quirks.voxel_debris_deck_over_water` (claim 8, Edge cases): whether a deck
-  impact over water treated as a water impact gets a switch of its own or shares one with
-  `quirks.voxel_debris_deck_impact_layer`, since both concern a ground impact on a high-bridge
-  deck.
