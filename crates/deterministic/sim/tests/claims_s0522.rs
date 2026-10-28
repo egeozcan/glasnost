@@ -1084,3 +1084,78 @@ fn save_load_mid_descent_round_trips() {
     }
     assert_eq!(save::state_hash(&l), save::state_hash(&w));
 }
+
+// --- Claim 17 with the deploy key (M8 A4 round 5, note 32) -------------------
+
+/// These rules with the second side group's payload one DROPDEP: WALKER
+/// made an in-place deployer with no undeploy delay (deploy, deployed and
+/// undeploy sequences of its own).
+fn deployer_rules() -> Ruleset {
+    let mut r = rules_with("DROPDEP", 1);
+    let mut inf = r.sim.infantry["WALKER"].clone();
+    inf.deployer = Some(true);
+    inf.undeploy_delay = Some(-1);
+    for (k, n) in [("deploy", 4), ("deployed", 1), ("undeploy", 6)] {
+        inf.sequences.insert(
+            k.into(),
+            SequenceEntry {
+                start: 0,
+                count: n,
+                multiplier: 0,
+                direction: None,
+            },
+        );
+    }
+    r.sim.infantry.insert("DROPDEP".into(), inf);
+    reg(&mut r, "infantry", "DROPDEP");
+    r
+}
+
+fn deploy_press(w: &World, id: ObjectId) -> Vec<glasnost_sim::orders::Order> {
+    glasnost_sim::targeting::key_command(
+        w,
+        ALPHA,
+        &[id],
+        glasnost_sim::targeting::KeyCommand::Deploy,
+    )
+}
+
+#[test]
+fn claim17_a_deploy_press_while_falling_gives_no_order_and_nothing_follows_at_landing() {
+    // spec: S-0522 claim 17 (a falling paratrooper is not movable; landing issues, replaces and clears no order) with S-0213 the deploy rule (each selected object needs to be movable or able to fire) and S-0214 Terms (movable and able to fire: not falling)
+    let mut w = game(&deployer_rules());
+    let p = launch(&mut w);
+    let (x, y) = west_of(at(1, 1));
+    hold(&mut w, p, x, y, 0, 3);
+    let first = transport::passengers(&w, p)[0];
+    assert!(paradrop::attempt(&mut w, p));
+    assert!(falling(&w, first));
+    // A press in every tick of the fall gives no order, so none is kept for
+    // later.
+    while falling(&w, first) {
+        assert!(deploy_press(&w, first).is_empty(), "no order while falling");
+        step(&mut w);
+    }
+    // Landed: no deploy follows by itself.
+    run(&mut w, 60);
+    assert!(
+        !matches!(seq(&w, first), Some(Seq::Deploy | Seq::Deployed)),
+        "{:?}",
+        seq(&w, first)
+    );
+    // A press after landing deploys it.
+    let orders = deploy_press(&w, first);
+    assert_eq!(
+        orders,
+        vec![glasnost_sim::orders::Order::Deploy { actor: first }]
+    );
+    for o in orders {
+        glasnost_sim::orders::issue(&mut w, ALPHA, o);
+    }
+    until(&mut w, 200, |w| {
+        matches!(
+            seq(w, first),
+            Some(Seq::Deployed | Seq::DeployedIdle | Seq::DeployedFire)
+        )
+    });
+}
