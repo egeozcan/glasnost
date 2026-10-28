@@ -2,13 +2,13 @@
 id: S-0207
 title: Ground vehicle movement (drive locomotor)
 topic: movement
-revision: 41
+revision: 82
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-18
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160]
+requests: [Q-0019, Q-0020, Q-0035, Q-0040, Q-0071, Q-0072, Q-0200, Q-0181, Q-0232, Q-0233, Q-0240, Q-0310, Q-0268, Q-0356, Q-0600, Q-0676, Q-0793, Q-0794, Q-0797, Q-0830, Q-1090, Q-1110, Q-1130, Q-1131, Q-1160, Q-1759]
 supersedes: []
 ---
 
@@ -21,17 +21,21 @@ progress along fixed cell-to-cell tracks (straight, diagonal and two-cell curves
 between track points, and what it does when the cell of its next step may not be entered. It also
 states which locomotor a mobile type has (claim 14) and how every vehicle, whatever its locomotor,
 answers a scatter request (claim 16), while where a vehicle may go (S-0211), which steps it takes
-(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19, 20 and 21) are
+(S-0212), how fast it turns (S-0206) and every other locomotor (apart from claims 16, 19, 20, 21 and 28) are
 left to other specs. Claim 20 states how an object with the teleporting locomotor moves on its
 own: where it lands, what the jump does and how long it then phases in. Claim 21 covers
-its retained state after temporary driving. Claim 22 fixes cell-tag arrival timing for driving vehicles and own-locomotor teleports. Claim 18 also defines the speed estimate supplied by a driving target for a shot's lead, including
+its retained state after temporary driving, and the cancellation of a jump pending when that
+driving is installed. Claim 22 fixes cell-tag arrival timing for driving vehicles and
+own-locomotor teleports. Claim 18 also defines the speed estimate supplied by a driving target for
+a shot's lead, including
 turning and waiting. Claim 19 states when a vehicle with the driving, ship or hovering locomotor
 that approaches a target stops once the target is in range, and what happens to its destination. Claims 24 and 25 distinguish
 stored heading height and the separate locomotor destination point, including factory exits.
 Claim 26 distinguishes cell-goal removal at rest from retained goals naming buildings or units and fixes
 its tick relative to final track completion. Claim 27 covers the qualified teleport/dock
 transition and its separate destination-refresh and movement-point suppression states for vehicles.
-This spec covers skirmish. Network games and campaigns are out of scope.
+Claim 28 says which locomotor a vehicle with the teleport-capable flag uses: it drives except on its
+refinery docking approach and on its jump when that refinery is sold. This spec covers skirmish. Network games and campaigns are out of scope.
 
 ## Terms
 
@@ -87,6 +91,8 @@ The *order-level destination* is the destination that behaviours and factory rep
 
   - claim 27 covers destination refresh and the qualified teleport/dock transition for
     vehicles of any locomotor.
+  - claim 28 and scenario D34 cover vehicles whose type has the teleport-capable flag,
+    whatever their current locomotor.
 
   All other claims cover drive vehicles only. An infantry or aircraft type can also name the
   driving locomotor (claim 14), but how an object of such a type moves is outside this spec (Open
@@ -746,7 +752,7 @@ The *order-level destination* is the destination that behaviours and factory rep
     row a check of the same kind as the T5 check that discarded the path (T5 below). So on a tick of a repeated check
     against stationary friends the vehicle can send the request twice, once here and once by T4,
     when the cell still gives *stationary friendly* at the repeated check. This is the default
-    of the proposed `quirks.drive_duplicate_scatter_request` below. With it off, claim 15
+    of `quirks.drive_duplicate_scatter_request` below. With it off, claim 15
     sends at most one request from this vehicle to the same cell layer in a tick; the
     repeated check still decides giving up, waiting and any other non-request effect.
 
@@ -864,7 +870,11 @@ The *order-level destination* is the destination that behaviours and factory rep
     - (e) it has a destination and the request is not move-anywhere,
     - (f) it is deployed, deploying or undeploying (a vehicle type that deploys in place),
     - (g) its locomotor is switched off (the specs of the effects that switch a locomotor off own
-      when that happens).
+      when that happens); for a hovering vehicle, its locomotor is not powered in S-0503's sense
+      (S-0503 Terms: switched off and down at a hover height of 0), so a switched-off hovering
+      vehicle still above the ground is not refused by this case (S-0405 claim 20, *Movement and
+      turning*, which states the same reading). The hovering reading is `unmeasured` and rated
+      low, with the rest of case g (backing, below).
 
     A request **without a threat point** that is not refused takes no random draw. The vehicle's
     destination becomes the cell that the nearby-cell search of S-0212 (claim 25) gives around its
@@ -933,8 +943,11 @@ The *order-level destination* is the destination that behaviours and factory rep
         (S-0209 claim 12, S-0215 claims 19 and 28, S-0417 claims 4 and 13,
         S-0402 claim 10, claim 15 here), so no setup is known that sends
         a vehicle a request that is not forced.
-      - case g: which effects switch a locomotor off belongs to specs not yet written, so no setup
-        can yet be defined.
+      - case g, including its reading for a hovering vehicle: the effects that switch a
+        locomotor off are stated elsewhere (S-0405 claim 20, S-0503 claims 8 and 10 to 11, S-0314
+        claim 21), but no known input makes a scatter request reach a vehicle while its locomotor
+        is switched off, or reach a switched-off hovering vehicle in the ticks before it touches
+        down, so no setup can yet be defined (as S-0405 claim 20's backing says for that state).
       - case i: no setup is known that times a threat-point request to a vehicle unloading
         passengers while it passes the earlier refusals.
       - deploying and undeploying in case f: D18 part g isolates the fully deployed state,
@@ -1105,6 +1118,10 @@ The *order-level destination* is the destination that behaviours and factory rep
       destination, except while still deployed and carried by another object's locomotion.
       Landing for deploy is not such a transition; destination-driven cancellation of jumpjet
       landing belongs to S-0502 claim 16 (see also S-0517 claim 8).
+      For a vehicle whose type has the teleport-capable flag, claim 28 first decides whether
+      teleporting movement receives the assignment at all: outside claim 28's three
+      exclusions, only a qualified docking assignment does, and claim 28 lists the ones that
+      arise in ordinary play.
       When the object is given a destination (its behaviour or an order sets one, S-0215),
       subject to those restrictions, the locomotor takes it at once, unless a pending suppression (claim 27) stops it. It drops the destination and does
       nothing, when the object is disabled by an electromagnetic pulse, is *held*
@@ -1124,6 +1141,9 @@ The *order-level destination* is the destination that behaviours and factory rep
       *moving blocker* from S-0209 claim 5 row VR5, while the latter meets no blocker
       from this reservation. Other terrain, occupants and exceptions still belong to
       S-0209 and can give a different final outcome.
+      The old mark is cleared before part (b)'s entry test is made, so a vehicle that fixes a
+      landing point again in a cell where it already holds that reservation does not meet its
+      own reservation there (claim 28, *One jump*).
       Clearing an earlier reservation likewise uses its remembered point and height:
       a remembered non-infantry landing point at *H* clears the ground record. Before any
       landing point has been remembered, the vehicle clears at its own position; a point
@@ -1240,7 +1260,13 @@ The *order-level destination* is the destination that behaviours and factory rep
       belong to S-0520 claims 20 and 26 and claim 13 here. S-0520 claim 6 includes this
       own-locomotor pickup; its superweapon-transport exclusion is a separate rule.
       It stops moving and its
-      destination is removed, so its behaviour falls back to rest (S-0215 claim 13). A second
+      destination is removed. A behaviour that ends once its destination is gone, such as
+      *move*, then falls back to rest (S-0215 claim 13), but not within the jump tick: the
+      behaviour is processed before the locomotion (part d), so the fall-back comes at a later
+      tick, at the behaviour's next processing or at the end of phasing in with no target
+      (part f), whichever is first. After a
+      docking jump its *enter* behaviour goes on instead while its refinery accepts it, and
+      falls back to rest if the refinery refuses it or the contact ends (claim 28). A second
       warp animation plays at *L*.
       Its type's departure and arrival sounds override the game-wide ones.
     - (f) **Phasing in.** At the jump the object starts *phasing in* (S-0214 Terms; *materialising*
@@ -1327,7 +1353,7 @@ The *order-level destination* is the destination that behaviours and factory rep
       and 6. This is part of the respective ground-reservation quirks, not an
       additional removal switch.
     - Backing: `measurable` (scenario D22: runs 1 and 2 for parts a, b, d, e and f with the
-      harvester exception, run 2 also for part g, run 3 for the occupied destination, run 4 for
+      harvester exception, run 3 for the occupied destination, run 4 for
       cliffs and islands, run 5 for D against distance and each rules field, run 6 for an order
       dropped while phasing in and for part h, run 7 for the draw at the end of phasing in and for
       part i, run 8 for a shot in flight, run 9 for part j; S-0208 W11 for part c and infantry
@@ -1354,30 +1380,43 @@ The *order-level destination* is the destination that behaviours and factory rep
       and no reachable setup preserving a target through this interval is established.
       F9's distinction between different nonpositive delays is `unmeasured`: run 5 tests
       their shared next-tick completion, not the stored delay, and completion timing cannot
-      distinguish those values. The seize-time no-cell case in part b inherits
+      distinguish those values. Part g's jumps on consecutive movement updates by a
+      harvester-flag object are `unmeasured`: no run gives such an object a new destination on
+      the movement update after a jump, and D22 run 2 makes a single docking jump. The
+      seize-time no-cell case in part b inherits
       S-0607 claim 23's `unmeasured` backing: no setup establishing it is known.
     - Confidence: the seize-time no-cell case in part b inherits S-0607 claim 23's
       low confidence. Part a's vehicle destination restriction inherits S-0517 claim 9's
       confidence (high for refusal, low for the carried exception); jumpjet landing cancellation
-      inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read); medium for part b
+      inherits S-0502 claim 16's confidence. High for parts d, e and f and F9 (the whole move was read),
+      except part e's exception after a docking jump, which takes claim 28's ratings: medium
+      for *enter* going on (D34 part c), medium for the fall-back to rest on a refusal (D34
+      part g) and medium for it on a lost contact until D34 part h runs (claim 28's backing and
+      rating); medium for part b
       (including the entry-test level and the search without a reach restriction), for the
       aircraft reservation and landing rules, including Q-0310's clearing and retained
       ground flag after removal, for part k's vehicle and aircraft removal rules,
       and for Q-0240's vehicle ground reservation,
-      retained-point clearing and two-record post-jump result; for part a's list of disabling states, for part d's same-tick consequence and
-      for part h's consequences; part c inherits S-0208 claims 19–20's confidence, high for
+      retained-point clearing and two-record post-jump result; for part a's list of disabling
+      states, for part d's same-tick consequence, for part e's fall-back to rest in a later tick
+      than the jump (D22 run 1) and for part h's consequences; low for part g's consecutive jumps,
+      which are `unmeasured` and follow from part a's immediate take-up and the absence of phasing
+      in for a harvester-flag object; part c
+      inherits S-0208 claims 19–20's confidence, high for
       position choice and draws and medium for search choices, bridge consequences and placement
       conditions; low for part j's statement that nothing else changes
 
 21. **Teleporting locomotion after temporary driving (Q-0233).** The temporary drive of
     S-0417 claim 5 suspends the object's own teleporting movement; it does not make a new,
     empty teleporting state when S-0215 claim 13 restores that movement. At that restoration
-    boundary a previously fixed landing point and a pending jump are retained, not rebased
-    to the vehicle's current cell. A pending jump proceeds on the next update using teleporting
-    movement, subject to claim 20's disabling and phasing-in states. A retained landing point
-    without a pending move does not by itself cause a jump. A destination changed or removed
-    by the rest of the fall-back can replace or cancel the move as usual; restoration is not
-    a promise that an earlier jump survives those separate effects.
+    boundary a previously fixed landing point is retained, not rebased to the vehicle's current
+    cell. Our engine cancels a jump that is pending when temporary driving is installed over
+    teleporting (S-0417 claim 5, claim 28), as an empty assignment cancels one
+    (claim 20 h): the landing point and its occupancy reservation stay, and no jump is pending at
+    restoration. This has no quirk switch: a jump at restoration to a cell given before the drive
+    would look like a fault in play (decided under the delegation, 2026-10-27). A retained
+    landing point without a pending move does not by itself cause a jump. A destination changed
+    or removed by the rest of the fall-back can replace the landing point as usual.
 
     A phasing-in state and its original expiry tick are also retained. Time spent temporarily
     driving does not restart or extend its delay: on the first teleporting movement update
@@ -1386,8 +1425,11 @@ The *order-level destination* is the destination that behaviours and factory rep
     new destinations affect driving movement and its ordinary occupancy rules (S-0209), not
     the suspended teleporting landing point or its reservation. Thus an ordinary newly
     created vehicle with no pending teleport before its factory exit acquires no teleport
-    reservation from its exit or rally destination while driving. Its first destination
-    taken after restoration fixes a landing point by claim 20 a.
+    reservation from its exit or rally destination while driving. After restoration, a
+    destination fixes a landing point by claim 20 a only when teleporting movement receives
+    it. For a vehicle with the teleport-capable flag, outside claim 28's exclusions, that is
+    only a qualified docking assignment (claim 27), and any other assignment installs driving
+    again (claim 28).
 
     **A previous deck landing (Q-0356).** Merely installing temporary driving clears
     neither the remembered ground reservation nor the actual deck mark. If a vehicle
@@ -1402,14 +1444,17 @@ The *order-level destination* is the destination that behaviours and factory rep
     installed can already have replaced the old ground reservation (claim 20 a).
     This conditional case does not undo that replacement.
     - Backing: `measurable` (D23 for the ordinary factory exit, destination routing and first
-      post-restoration jump). `unmeasured` for a pre-existing pending jump, phasing-in
-      state or two-record deck landing at temporary-drive installation: no established
-      stock setup starts a factory exit in those states. D23 gives a conditional
+      post-restoration jump). `unmeasured` for the cancellation of a jump pending at
+      temporary-drive installation: claim 28's sale branches reach it, but no scenario records
+      the pending jump there, and the original's handling was not settled. `unmeasured` for a
+      phasing-in state or a two-record deck landing at temporary-drive installation: no
+      established stock setup starts a factory exit in those states. D23 gives a conditional
       observation protocol, not permission to manufacture one through state writes.
       These are conditional retention rules, not an assertion that a factory-produced
       vehicle starts in any of those states.
-    - Confidence: high for retention at restoration and no teleport destination handling
-      during driving; medium for the ordinary factory consequence and the conditional
+    - Confidence: high for a landing point's retention at restoration and no teleport
+      destination handling during driving; medium for the cancellation of a pending jump at
+      installation, a design rule; medium for the ordinary factory consequence and the conditional
       previous-deck-landing occupancy result
 
 22. **Cell-tag arrival timing (Q-0268 part 1).** A driving vehicle's cell-arrival
@@ -1446,14 +1491,16 @@ The *order-level destination* is the destination that behaviours and factory rep
     Ordinary infantry walking timing belongs to S-0208, not this claim.
     - Backing: `measurable` (D24 for straight and curved driving, teleport, bridge
       and passive chain-point cases; S-0417 U10 d/e for teleporting infantry's
-      jump-time clear report, ordering before entered-by actions and no-jump retention).
+      jump-time clear report and ordering before entered-by actions). No-jump retention is
+      `unmeasured`: no stock setup is known that keeps a released teleporting unit from
+      jumping.
       Exact ordering against building reports and
       crushing uses D24 with S-0402 H14 and S-0210's crushing fixtures. Record their
       effects and the tag's variable action in the same arrival tick, using D24's ordering
       controls rather than end-of-tick coincidence alone. Ordering before jump-time crate
       collection, destination removal and the landing animation is `unmeasured`: D24
       establishes the arrival tick but isolates none of those comparisons
-    - Confidence: medium
+    - Confidence: medium; low for no-jump retention (`unmeasured`)
 
 ### Wakes while driving
 
@@ -1648,34 +1695,38 @@ The *order-level destination* is the destination that behaviours and factory rep
     placement fallback for a fresh ordinary vehicle with no destination clears its
     destination, including an empty-to-empty assignment. That assignment stops
     locomotion under claim 25 or the corresponding locomotor's clearing rule. It
-    consumes refresh, and does not enable the separate point suppression. A fresh
-    jumpjet without a movement commitment gains no flight from this clear. The
-    type-specific fallback exceptions remain S-0215 claims 13 and 14's rules, not an
-    unconditional extra clear imposed on every retained order at re-placement.
-    The initial fallback and its destination clear precede the vehicle's later
-    placement-only random choice for a visceroid's initial action timing, when that
-    choice applies. There is no extra random request for refresh or for the clear.
-    This relative order does not assert a complete draw count for all placement effects.
+    consumes refresh, and does not enable the separate point suppression. For a vehicle whose type
+    has the teleport-capable flag it also installs driving (claim 28, the placement bullet). A
+    fresh jumpjet without a movement commitment gains no flight from this clear. The type-specific
+    fallback exceptions remain S-0215 claims 13 and 14's rules, not an unconditional extra clear
+    imposed on every retained order at re-placement. The initial fallback and its destination clear
+    precede the vehicle's later placement-only random choice for a visceroid's initial action
+    timing, when that choice applies. There is no extra random request for refresh or for the
+    clear. This relative order does not assert a complete draw count for all placement effects.
 
     **Dock evaluation event.** The dock test belongs to an otherwise eligible vehicle
     destination assignment, after unchanged-destination rejection, not to first contact,
     track arrival or a once-per-entry latch. It uses the destination offered by that
     assignment and the contact already held at that moment. An *enter* order naming
     the building does not itself satisfy the cell-destination requirement. In the
-    ordinary refinery approach, S-0402 claim 10 row 2 offers the docking cell at each
-    due *enter* processing. Such an offer reaches this test when changed, or when
+    ordinary refinery approach, S-0402 claim 10 row 2 offers the docking cell at the due
+    *enter* processings that its row 2 names. Such an offer reaches this test when changed, or when
     refresh permits an unchanged assignment. An unchanged offer without refresh is
     ignored before this test, even if contact or cell occupancy has changed since the
-    earlier offer. No separate periodic dock test is required between assignments.
+    earlier offer. For a vehicle whose type has the teleport-capable flag, claim 28 adds a
+    dock test at every accepted *enter* processing at which it has a destination, changed or
+    not (claim 28, the repeated dock test). No other periodic dock test is made.
 
     All these conditions must hold: the vehicle's type has the teleport-capable flag,
-    it has no warp-pending immobilization, has no magnetic-lift source and is
+    it has no warp-pending immobilization, is not gripped (glossary) and is
     not seized, its current contact is a building permitting dock unloading, the offered
     destination is a cell containing no ground-layer vehicle, and its current locomotor
     is not teleporting. A vehicle of any house on the ground layer disqualifies the cell,
     including the approaching vehicle itself if it is already there. The type flag is
     independent of the currently active locomotor. Failure of any predicate adds no
-    stop, restoration or pending state through this dock rule.
+    stop, restoration or pending state through this dock rule. For a vehicle that passes
+    the first four predicates, claim 28 says what the same assignment then does to its
+    locomotor.
 
     **Which immobilization.** The predicate reads the vehicle's warp-pending
     immobilization, even when its current locomotor is not teleporting. It does not
@@ -1732,7 +1783,9 @@ The *order-level destination* is the destination that behaviours and factory rep
     before the order-level destination is kept leaves suppression pending. Otherwise the nonempty
     order-level destination is kept, and while suppression is pending the active locomotor is
     not offered the point. It is not specific to restoration, to a teleporting predecessor or
-    to driving. The table gives the results for a vehicle whose active locomotor is teleporting.
+    to driving. The table gives the results for a vehicle whose active locomotor is teleporting
+    and still is once claim 28 has acted. For a vehicle with the teleport-capable flag, that
+    means a qualified docking assignment, or one of claim 28's three exclusions.
 
     | Vehicle at the assignment | Suppression pending before it | Result |
     |---|---|---|
@@ -1741,7 +1794,11 @@ The *order-level destination* is the destination that behaviours and factory rep
     | Disabled, held, being erased or phasing in | no | The destination is dropped: the order-level destination becomes empty (claim 20 a). Nothing is consumed |
 
     S-0402's seeking drop adopts a harvester's remembered cell by an ordinary destination
-    assignment, so these rows apply to it: pending suppression keeps the cell without a landing
+    assignment. Claim 28 decides whether a chrono miner's teleporting locomotor receives that
+    assignment: it does only when the adoption is a qualified docking assignment (at a sale,
+    *A sale of the refinery*), and otherwise driving takes it. The rows reach only a harvester
+    whose teleporting locomotor receives that assignment. For such a harvester these rows
+    apply: pending suppression keeps the cell without a landing
     point, and the disabling states drop it (claims 20 a and 27); the drop that follows then fixes
     no landing point for the adopted cell in either case. Any earlier remembered landing point and
     its reservation are kept, as the table above and part (h) say.
@@ -1805,6 +1862,296 @@ The *order-level destination* is the destination that behaviours and factory rep
       reachability beyond placement and the composed post-exit restoration
       consequences inherited from S-0417 claim 16; medium for rows 1 and 3 of the Q-1130 table,
       which restate claim 20 (a) and its backing (D22); low for row 2, which is `unmeasured` (see above)
+
+### Which locomotor a teleport-capable vehicle uses
+
+28. **A teleport-capable vehicle drives, except on its docking approach (Q-1759).** This claim
+    covers vehicles whose type has the teleport-capable flag (Import mapping), whatever their
+    current locomotor. It does not cover infantry or aircraft: no rule installs driving for them
+    at an assignment, so an infantry unit that moves with the teleporting locomotor takes every
+    destination under claim 20, whatever its flag. Nor does it cover a vehicle
+    type that has the teleporting locomotor without the flag.
+
+    **The rule.** The rule acts at each vehicle destination assignment that gets past the
+    unchanged-destination rejection (claim 27), and an empty assignment counts. It applies when
+    the vehicle has no warp-pending immobilization, is not gripped (glossary) and is not
+    seized: the same three exclusions as claim 27's dock test. Under any of them the rule
+    installs nothing and replaces nothing: the destination goes to the current locomotor, as
+    for a vehicle without the flag. The seize's own assignment of the lifter as the unit's
+    destination (S-0607 claim 5) installs nothing under this rule, and the stand-in locomotor
+    of S-0607 claim 23 takes it. Once seized, a vehicle ignores every new
+    destination (S-0607 claim 9), and the one exception there is a rule that gives a gripped
+    unit no destination, which ends its grip. Otherwise the assignment has one of two outcomes:
+
+    | Assignment | Locomotor that receives it |
+    |---|---|
+    | A qualified docking assignment: every remaining condition of claim 27's dock test holds (contact with a building permitting dock unloading, a cell destination, no ground-layer vehicle in that cell) | Claim 27 decides. When the current locomotor is already teleporting, nothing changes and teleporting movement takes the destination under claim 20 |
+    | Any other assignment, empty assignments included | Temporary driving, which then receives the destination, whenever the current locomotor is not driving. The suspended teleporting state is kept under claim 21. When the current locomotor is already driving, nothing changes |
+
+    The qualifying conditions leave out claim 27's last condition, that the current locomotor is
+    not teleporting, on purpose. A vehicle whose current locomotor is already teleporting (the
+    at-rest window after a restoration, below) still makes a qualified docking assignment. Claim
+    27's dock test fails for it on that condition and adds nothing, so the assignment goes to the
+    teleporting locomotor, which jumps under claim 20; no driving is installed.
+
+    Installing temporary driving here leaves the vehicle's current and queued behaviours as they
+    are. In particular S-0215 claim 9's guard reset for an actor whose locomotor is replaced is not
+    applied to it, nor to claim 27's and S-0215 claim 13's replacements (Cross-spec changes). D34
+    part c observes this at the docking jump, where *enter* stays current. The temporary driving
+    installed here is the same kind of temporary drive as S-0417 claim 5's factory exit: it can
+    later be ended by the restorations of S-0215 claim 13 and claim 27. While it is active, the
+    destination of this and of every later assignment belongs to driving movement and its ordinary
+    path and occupancy rules (S-0209, S-0212), until one of those restorations ends it. An
+    assignment that itself restores the teleporting locomotor (claim 27) gives its point to the
+    restored locomotor instead. An assignment that driving receives fixes no landing point and
+    moves no teleport reservation.
+
+    If the current locomotor is some other temporary replacement whose restoration is
+    permitted, that replacement is ended first, and driving is installed over the restored
+    locomotor. If its restoration is not permitted, it is not ended: driving is installed over
+    it, and it becomes driving's suspended predecessor in turn. Magnetic lifting and seizure
+    never reach either case, because the exclusions above leave the rule out for them.
+
+    **The repeated dock test in *enter*.** While its contact accepts it, or while it is tethered, a
+    vehicle whose type has the teleport-capable flag and holds a destination in *enter*
+    (S-0402 claim 10) has that destination treated as a new assignment at each processing of
+    *enter*, even when it is unchanged. So a miner standing in contact jumps to the docking
+    cell once that cell is clear (*An occupied docking cell*, below). A vehicle with no
+    destination makes no such jump. A vehicle with no destination and further points of a
+    waypoint path queued is outside this claim.
+
+    **Consequences in ordinary play.** Several assignments in play are never qualified
+    docking assignments:
+    - **A player's order.** Every behaviour order that S-0213 table T3 part a does not ignore
+      breaks off any contact with a building of the unloading kind before it assigns its destination (S-0213 table T3
+      part b, before parts e and f). This covers a move, attack-move, guard-area or waypoint
+      order, and a harvest order on a resource cell. None of them can therefore be a qualified
+      docking assignment, in any harvest phase or behaviour: the vehicle drives to the order's
+      destination.
+    - **The vehicle's own jump.** When a teleporting jump removes the destination (claim 20 d,
+      e), that removal is an empty assignment, so driving is the active movement kind from the
+      jump tick on. The same holds for claim 20 b's removal without a jump, and for claim 20
+      a's drop of a destination offered while disabled.
+    - **After a docking jump.** The docking jump is made in *enter* (S-0402 claim 10), and
+      removing its destination does not make that behaviour fall back to rest. The vehicle
+      now stands on the docking cell, so the refinery offers it no destination (S-0402 claim
+      10, rows 3 to 5), and the repeated dock test (above) has nothing to test, as the vehicle
+      has no destination. Tethering, turning to the
+      unloading facing and unloading make no destination assignment, and while the refinery
+      accepts it the vehicle does not fall back to rest. So driving stays active through the
+      docking and the unloading, and unloading ends by breaking the contact before the next
+      destination is set (S-0402 claim 11). If instead the refinery refuses it, or the contact
+      has ended, at such a processing before it docks, the vehicle falls back to rest. S-0215 claim 13's
+      restoration then finds the driving just installed eligible, because the vehicle stands
+      still with no destination, and restores teleporting. The vehicle then rests with
+      teleporting active (the second window below) until its next destination assignment,
+      which has no contact and so installs driving again.
+    - **After unloading.** Outside a sale of the refinery (below), a harvester's refinery
+      contact ends before the harvest cycle sets its next destination (S-0402 claim 11). Its
+      trips to resource cells and to a queueing cell are therefore driven.
+    - **A sale of the refinery.** When its refinery is sold, a chrono miner that is unloading
+      there, or is still in *enter* with it, receives a scatter request while the contact still
+      holds (S-0402 claim 11). The request's destination (claim 16) is a cell, so it is a
+      qualified docking assignment unless a ground-layer vehicle is in that cell, and claim 27
+      decides. A chrono miner on the docking cell, after its docking jump, has driving
+      installed over its teleporting locomotor and no movement report, so teleporting is
+      restored, with a landing point fixed at the scatter cell and the jump pending (claim 20
+      a). A chrono miner in *enter* makes that jump at its next movement update (claim 20 d).
+      That jump removes the destination, which installs driving again (the jump bullet above).
+      An unloading chrono miner has *harvest* current from the sale (S-0402 claim 11), and the
+      first processing of that *harvest* comes in its next turn, before its locomotion and while
+      the contact still holds (S-0402 claim 17, case (f)). That processing decides:
+      - if the miner is full, it assigns nothing, and the miner jumps to the scatter cell,
+      - if it is not full, a remembered cell that it adopts is a qualified docking assignment, which
+        teleporting keeps, unless a ground-layer vehicle is in it: then driving takes it, which
+        cancels the scatter jump (claim 21), nothing is dropped, no ring search follows, and the
+        miner drives to its remembered cell. Otherwise the seeking drop's empty assignment installs
+        driving, which cancels the scatter jump (claim 21), so no jump to the scatter cell or the
+        remembered cell is made; and the cell that the ring search sets is a qualified docking
+        assignment while the contact holds, unless a ground-layer vehicle is in it, so teleporting
+        is restored and the miner jumps to that resource cell in the same turn, without reaching the
+        scatter cell. With a vehicle in that cell, driving takes it and the miner drives there. When
+        the search finds no cell, it stays where it is with driving installed. Our engine keeps this
+        jump to a resource cell, with no quirk switch: it follows from the qualification rule, which
+        tests the contact and a free cell destination, not which cell it is, and only this rare case
+        reaches it (decided at the delegated sign-off, 2026-10-25).
+
+      The sale breaks off the contact at its next processing, 1 tick after the first (S-0402
+      claim 11), so no later assignment is qualified through the sold refinery: a queueing cell on
+      the way to another refinery, for example, is driven.
+
+      A chrono miner still approaching gets the request only if it then has no destination: a
+      destination naming the refinery building is removed first, and a cell destination is kept with
+      no request (S-0402 claim 11). One that gets the request while still moving gets claim 27's
+      fallback instead of the jump. A refused request (S-0402 claim 11: a turning body, an existing
+      destination, or *unload* still current) assigns nothing. A chrono miner still in *enter* has
+      *guard* queued by the sale (S-0402 claim 11), whatever came of the sale's scatter request. It
+      falls back to rest at a processing of *enter* if one comes before that *guard* starts: at the
+      first one if it is not tethered, since a refinery being sold refuses it (S-0402 claim 10 row
+      1), or otherwise at the first one after the sale has broken off its tether and contact (S-0408
+      claim 6). That fall-back restores teleporting when it stands still with no destination (the
+      at-rest window below). The queued *guard* starts at the first per-tick start at which the
+      miner is ready to change (S-0215 claim 11), for example after its jump, or once a refused
+      turning body's turn has ended. A processing of *enter* comes only when its processing timer is
+      due (S-0215 claim 2), so which of the two comes first depends on that timer. If the *guard*
+      starts first, the miner makes no fall-back from *enter*: its behaviour becomes *guard*,
+      driving stays installed, and teleporting is not restored this way. One that was unloading has
+      *harvest* current and does not fall back.
+    - **Placement.** The destination clear of claim 27's placement is an assignment that gets
+      past the unchanged-destination rejection, so the rule acts on it. A new vehicle placed
+      with its own teleporting locomotor active, such as a refinery's free miner (S-0402 claim
+      18), therefore has driving installed at its placement, before its first trip. A
+      refinery's free unit has none of the states in which placement skips that clear: when it
+      is placed it has no contact, no destination, and no current or queued behaviour, because
+      the free-unit rule gives it *harvest* only after the placement (S-0402 claim 18). Its
+      placement fall-back is therefore S-0215 claim 15's row 4 for a harvester with nothing
+      current or queued: target and destination are cleared, which installs driving, and
+      *harvest* is queued. The free-unit rule then gives it *harvest* with an immediate start,
+      so the miner starts its harvest cycle at once with driving already active. A
+      vehicle-factory-built vehicle leaves its factory with one temporary driving over its
+      suspended teleporting locomotor. If its placement has already installed driving, the
+      factory exit (S-0417 claim 5) installs nothing more and moves it with that driving.
+      Otherwise the factory exit installs it. Either way the later restorations (S-0215 claim
+      13, claim 27) bring back teleporting, not driving.
+
+    Apart from a superweapon warp (claim 27) and the three exclusions above, teleporting
+    locomotion is therefore active only in these windows:
+    - from a qualified docking assignment to the end of that jump, or to an earlier assignment
+      that installs driving (an unloading miner at a sale, *A sale of the refinery*, above); a
+      further qualified docking assignment before then carries the window on to its own jump,
+    - at rest, after a restoration by S-0215 claim 13 or by the end of a seizure (S-0607 claim
+      20), until the next destination assignment,
+    - from the placement of a vehicle whose own locomotor is teleporting and whose placement
+      makes no destination assignment (one of claim 27's type-specific fallback exceptions
+      applies), until its first destination assignment or a factory exit's temporary driving.
+      A refinery's free miner is not such a vehicle (the placement bullet above). Which ways of
+      creating a vehicle reach this window is `unmeasured` and rated low: none is established,
+      and
+    - after S-0607 claim 4 ends a resource-gathering vehicle's temporary driving (a
+      magnetic-beam hit that seizes nothing), until its next destination assignment: that
+      ending makes no destination assignment. The restored teleporting locomotion has no
+      pending jump, since the destinations given while it drove went to driving and a jump
+      pending when its driving was installed was cancelled then (claim 21), so it makes no jump
+      in this window: its next jump still needs a qualified docking
+      assignment. A second hit inside this window
+      finds no temporary locomotor and seizes the vehicle (S-0607 claim 5). This window is
+      `unmeasured` and rated low: no scenario records the active movement kind after such a hit.
+
+    A chrono miner's only jumps in ordinary play (outside contrived set-ups such as S-0402 H14's
+    named test map) are to a refinery's docking cell, at a
+    processing of its *enter* approach while it is in contact with that refinery: through the
+    refinery's docking-cell offer (S-0402 claim 10 row 2), or through the repeated dock test of
+    that cell (above); and, when that refinery is sold while the contact still holds, to the
+    scatter cell next to it or, for a miner that was unloading and is not full, to the resource
+    cell that its first seeking processing sets (*A sale of the refinery*, above). Whether it
+    has docked before since
+    leaving its factory makes no difference to any other trip.
+
+    **An occupied docking cell.** Suppose a vehicle stands on the docking cell when the offer
+    is made to a vehicle whose suspended predecessor is its teleporting locomotor. (A vehicle
+    with no suspended predecessor whose current locomotor is not teleporting gets claim 27's fallback at every qualified docking
+    assignment instead, and does not jump.) The offer is then not a qualified docking assignment: the teleport-capable
+    vehicle drives towards that cell, except that a path computation that adopts a substitute for
+    it stops the vehicle at the end of its track (S-0402 claim 10a, *A chrono miner*). The
+    repeated dock test checks the cell again at each
+    accepted processing and fails while the cell stays occupied, so it goes on driving. At the
+    first such processing after the cell has cleared, the test is a qualified docking
+    assignment, and claim 27 decides:
+    - when claim 27 permits the restoration (the vehicle has no movement report, claim 25),
+      teleporting is restored and the vehicle jumps to the docking cell,
+    - when the vehicle is still moving, it gets claim 27's fallback: it stops, *enter* is
+      queued again and refresh is pending. At the first later processing of *enter* at which it
+      stands still (it first finishes the track it is on, claim 11),
+      the refinery offers the docking cell again (S-0402 claim 10 row 2), refresh lets that
+      unchanged offer through, teleporting is restored and it jumps.
+
+    It reaches the docking cell by driving only if it gets there before those processings.
+
+    **One jump.** When the refinery's docking-cell offer (S-0402 claim 10 row 2) and the
+    repeated dock test both act in one processing, they are two qualified docking assignments
+    of the same cell, the offer first. The first meets claim 27's dock test:
+    - when claim 27 permits the restoration, the first restores teleporting and fixes the
+      landing point at the docking cell's centre. The second then finds teleporting current, so
+      claim 27's dock test fails on its last condition and adds nothing, and teleporting
+      movement takes the same cell under claim 20 (the first row of this claim's table). That
+      fixes the landing point again: the mark the first left at the docking cell is cleared
+      before the entry test (claim 20 a), so the test finds the cell as the first did, and the
+      point is the same centre. The vehicle makes one jump, to that centre.
+    - when the vehicle has a movement report, the first gets claim 27's fallback: locomotion
+      stops, which removes the locomotor destination point (claim 25), *enter* is queued again,
+      refresh is pending, and the first assignment's own point is suppressed, which consumes the
+      suppression (claim 27, *Separate consumption events*). The second then meets claim 27's
+      predicate in the state that fallback leaves:
+      - if a heading point horizontally different from the vehicle's position is still ahead
+        (a track begun before the stop is still being finished, claim 11), the vehicle still
+        has a movement report, and the second gets the same fallback again. The result is that
+        of a single fallback: no landing point is fixed, and the vehicle jumps at the first later
+        processing of *enter* at which it stands still (*An occupied docking cell*, above),
+      - if none is, the vehicle has no movement report after the first fallback, so the second
+        restores teleporting and, with no suppression pending, fixes the landing point by claim
+        20 (b). The first fixed none, so the docking cell holds no reservation of the vehicle's
+        own from that processing, and the point is the docking cell's centre when the entry test
+        finds the cell clear. The vehicle jumps at its next teleporting movement update,
+        possibly in the same tick (claim 20 d), with *enter* queued by the first fallback.
+
+    The one jump is `measurable` (D34 part c's docking jumps, each to the docking cell, which a
+    landing point from the nearby-cell search would not give) and rated as claim 28 rates the
+    docking jump. Both branches of the case with a movement report are `unmeasured` and rated
+    low: no set-up is known that makes the offer to a vehicle that has a movement report, and
+    a recorder sees only the stop it shares with a single fallback, or a jump it shares with a
+    restoration at the first assignment.
+
+    | Q-1759 question | Answer |
+    |---|---|
+    | 1: a player's move order to an open cell after docking | It drives there along a path |
+    | 2: the same order while seeking or loading, returning full, or in guard | It drives, in every case |
+    | 3: attack-move, guard-area, waypoint path, or a harvest order on a resource cell | It drives, for every kind |
+    | 4: what makes it teleport again | Only a qualified docking assignment: the refinery's docking-cell offer, or the repeated dock test of that cell, at a processing of *enter* while it is in contact with that refinery and no vehicle stands on that cell. It jumps when claim 27 permits the restoration. A miner that is still moving gets claim 27's fallback first: it stops, and jumps at the first later processing of *enter* at which it stands still, or in that same processing when a second assignment of the cell there finds it with no movement report (*One jump*). The other qualified docking assignments in ordinary play come at a sale of that refinery while the contact still holds: its scatter request, which makes a miner on the docking cell jump to the scatter cell next to it, and, for a miner that was unloading and is not full, the cells its first seeking processing sets; *A sale of the refinery* gives where it then goes, a jump to a resource cell among them |
+
+    - Backing: `measurable` (scenario D34) for the two outcomes and their consequences in ordinary
+      play, including the vehicle staying with driving through docking and unloading (part c) and
+      the occupied docking cell (part e), the behaviour kept at an install (part c, at the docking
+      jump) and driving from placement (part f). `measurable` through D34 part h for the sale's
+      jumps (to the scatter cell in runs 2 and 4, to a resource cell in run 1; run 1's absence of a
+      move to the scatter cell rests on claim 21's `unmeasured` design rule, the cancellation of the
+      pending scatter jump, and is rated medium on that basis), for the restoration
+      after the sale's end of contact, and for the queued *guard* starting first, and through D34
+      part i for the at-rest window after a move order. `unmeasured` for an unloading miner's sale
+      with a ground-layer vehicle in its remembered cell or in the ring search's cell, or with no
+      cell found: D34's map has a
+      free field in range, and no other set-up is known. `unmeasured` for a sale's scatter
+      request to a miner still approaching and still moving (claim 27's fallback): no set-up is
+      known that times the sale to that state. A refusal by the refinery while the contact is still
+      present is `measurable` through D34 part g: a refinery switched off (S-0405 claim 10) after
+      the docking jump and before the next processing of *enter* refuses the untethered vehicle on
+      its docking cell (S-0402 claim 10 row 1), which breaks off the contact itself, with the same
+      fall-back and restoration as a lost contact. `unmeasured` for the third window (a placement
+      that makes no destination assignment) and for the window after S-0607 claim 4's restoration,
+      for the reasons given in the window list. `unmeasured` for the three exclusions and the two
+      nested-replacement cases: each needs a teleport-capable vehicle that is warp-pending, gripped,
+      seized or under another temporary replacement at the moment of an assignment, and no
+      ordinary-play fixture is known that reaches that and can then tell the outcomes apart. D34
+      records at the end of each tick, so it shows the movement kind from the tick of an assignment
+      on, not that the installation is made at the assignment rather than later in that tick: that
+      order within the tick is `unmeasured`, because no recorder field shows the movement kind
+      between the assignment and the end of the tick.
+      The repeated dock test itself is `unmeasured`: in part e a substitution leaves refresh
+      pending, which lets the refinery's unchanged offer through when the cell clears, and a route
+      found without a substitute drives *H* on to the cell, so no falsifier of part e fires without
+      it.
+    - Confidence: medium for the rule, including empty assignments, and driving from the jump
+      tick on, shown at the end of the jump tick: no run has yet shown the active movement kind at
+      an assignment, because D34 has not run. Medium for driving staying active through docking and
+      unloading, and for the repeated dock test in *enter* with the occupied-docking-cell sequence
+      that follows from it, for the behaviour kept at an install, and for driving from placement.
+      Medium for the sale's jumps, for the queued *guard* that can start before a fall-back, for the
+      restoration after a lost docking contact and for the at-rest window after a move order, until
+      D34 parts h and i run; low for the sale's request to a miner still moving, and for an
+      unloading miner's sale with a vehicle in its remembered cell or in the ring search's cell, or
+      with no cell found. Medium
+      for the composed consequences: contact broken by every order kind and after unloading. Medium
+      for the refusal case until D34 part g runs. Low for the exclusions, the nested replacement
+      cases, the third window and the window after S-0607 claim 4's restoration (Open questions).
 
 ## Formulas
 
@@ -2305,11 +2652,13 @@ its target in the direction of travel, and end with facing equal to the last ste
 | holding a path found on this tick | repeated check: cloaked blocker or blocked | gives up the move |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, no threat point | destination from the nearby-cell search, behaviours unchanged, no draw (claim 16) |
 | any object of the vehicle type kind, whatever its locomotor | scatter request accepted, threat point | one draw over 0 to 2 (after a draw over 1 to 4 when it has a target and the request is not forced), destination among the eight neighbours, *move* queued (claim 16) |
-| teleporting, idle | destination given, not disabled, not held, not being erased, not phasing in, no suppression pending | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
+| teleport-capable vehicle (claim 28), no warp-pending immobilization, not gripped, not seized | effective destination assignment that is not a qualified docking assignment, empty included | temporary driving installed unless already driving; the destination goes to driving movement, no landing point fixed; a pending jump is cancelled, *L* and its reservation retained (claim 21, claim 28) |
+| teleport-capable vehicle outside claim 28's three exclusions, teleporting, jump made | the jump removes its destination | driving active from the jump tick on (claim 28) |
+| teleporting, idle (for a teleport-capable vehicle outside claim 28's three exclusions, only a qualified docking assignment reaches this row, claim 28) | destination given, not disabled, not held, not being erased, not phasing in, no suppression pending | landing point *L* fixed at once, kind-specific occupancy reservation moved to *L* (claim 20 a–c) |
 | teleporting, any state | effective nonempty destination assignment, suppression pending (claim 27) | no new landing point fixed or jump scheduled by this assignment; any earlier landing point, pending jump and reservation unchanged; destination kept; suppression consumed (claim 27, Q-1130 table, second row) |
 | teleporting, *L* fixed | its next movement update, *L* differs from its position | jump: target-loss and revert subject to claim 20 e's airstrike and restored-target distinctions, projectiles lose it, kind-specific arrival and crate rules apply, destination removed; phasing in for *D* ticks (F9), none for a harvester-flag type (claim 20 e, f) |
 | teleporting, *L* fixed, jump pending | empty destination assigned | pending jump and moving state cancelled; remembered *L* and its occupancy reservation retained (claim 20 h) |
-| teleporting, *L* fixed, no pending jump (cancelled by an empty assignment) | its next movement update | no jump; the jump row above does not apply to it; remembered *L* and its reservation kept until the next accepted destination (claim 20 h; claim 21) |
+| teleporting, *L* fixed, no pending jump (cancelled by an empty assignment or by temporary driving's installation) | its next movement update | no jump; the jump row above does not apply to it; remembered *L* and its reservation kept until the next accepted destination (claim 20 h; claim 21) |
 | teleporting, *L* fixed | its next movement update, *L* equals its position or none was fixed | destination removed, no jump (claim 20 b, d) |
 | phasing in | destination given | dropped (claim 20 a), unless suppression is pending (claim 27): then kept, no landing point |
 | phasing in | first tick with *t* − *t*₀ ≥ *D* (at least *t*₀ + 1) | phasing in ends; only with no target, conditional timer shortening then gated teleport search, whose normal timer draw replaces the shortening when both occur; idle fallback when no target is set (claim 20 f) |
@@ -2382,7 +2731,8 @@ its new destination from that tick.
   flag off (*q* = 0) and gives an importer warning. This is a departure (bad data), with no switch.
 - **A teleporting object ignores terrain between its position and its landing point** (claim 20 b).
   It can reach cells that no path reaches. This is original behaviour, not a bug, and has no switch.
-- **`quirks.teleport_aircraft_ground_reservation`** (claim 20 a, e; proposed).
+- **`quirks.teleport_aircraft_ground_reservation`** (claim 20 a, e; decided at the delegated sign-off,
+  2026-10-25).
   Default original: reserve ground at terrain height, retain that mark through deck
   placement, clear the remembered ground mark on the next accepted destination, and
   clear only actual occupancy on removal, not a separate remembered or pending
@@ -2392,7 +2742,8 @@ its new destination from that tick.
   both the pending reservation and actual occupancy on removal, leaving no orphan
   reservation. Shared with S-0209; D22 runs 14 and 15 test the default.
 
-- **`quirks.teleport_vehicle_ground_reservation`** (claim 20 a, e; proposed).
+- **`quirks.teleport_vehicle_ground_reservation`** (claim 20 a, e; decided at the delegated sign-off,
+  2026-10-25).
   Default (original): a teleporting vehicle reserves the ground record even for a high-bridge
   landing, remembers that terrain-height point for later reservation clearing, and keeps the
   ground reservation through deck placement; placement also marks the deck record.
@@ -2414,7 +2765,8 @@ its new destination from that tick.
   and only the look at the first cell of a new path asks. Off: every give-up test of claim 15 also
   requires the vehicle to be in contact with nothing, as a walker's does (S-0209 claim 8). No
   measurement setup is known that tells the two apart (scenario D17, switch note).
-- **`quirks.drive_duplicate_scatter_request`** (claim 15; proposed).
+- **`quirks.drive_duplicate_scatter_request`** (claim 15; decided at the delegated sign-off,
+  2026-10-25).
   Default (original): a blocked vehicle can send its request twice in one tick, once when it
   looks at the first cell of the path it has just found and once at the repeated check, when
   the cell still gives *stationary friendly* then. Each request reaches the objects eligible
@@ -2459,7 +2811,7 @@ its new destination from that tick.
 |---|---|---|
 | No additional key | Warp-pending immobilization, claim 27 | Runtime external-teleport commitment, initially absent; not a cooldown or an independently imported delay. Warp timing belongs to S-0513 claim 39 |
 | No additional key | Restored predecessor's same-assignment destination, claim 27 | Runtime destination routing; no imported ordering option or absent-key value |
-| vehicle type section, key `Teleporter` | Teleport-capable flag for claim 27's dock test, independent of current locomotor | Boolean; keeps the earlier layer's value; engine default no |
+| vehicle type section, key `Teleporter` | Teleport-capable flag for claim 27's dock test and claim 28's choice of locomotor, independent of current locomotor | Boolean; keeps the earlier layer's value; engine default no |
 | building type section, key `DockUnload` | Dock-unloading permission in claim 27 | Boolean; keeps the earlier layer's value; engine default no. Refinery interaction belongs to S-0402 claim 10 |
 | No additional key | Factory exit heading height, claim 24 | Engine constant 0 leptons; not imported from terrain or rules |
 | No additional key | Driving/ship locomotor destination lifetime, claim 25 | Runtime movement state, initially absent; assignment and clearing are not imported settings |
@@ -2550,7 +2902,7 @@ of the give-up test is imported as S-0209 says.
 
 | Input | Concept | Parse form | Absent-key default |
 |---|---|---|---|
-| Vehicle type `Teleporter` | teleport-capable flag in claim 27, independent of current locomotor | boolean (S-0003) | false |
+| Vehicle type `Teleporter` | teleport-capable flag in claims 27 and 28, independent of current locomotor | boolean (S-0003) | false |
 | No data key | claim 27's assignment-time dock evaluation, driving restoration permission, placement clear and point suppression | runtime behaviour, no numeric parse or tuning field | refresh, point suppression and restoration lock absent on a new driving vehicle |
 | Building type `DockUnload` | permits dock unloading in claim 27 | boolean (S-0003) | false |
 
@@ -3132,7 +3484,8 @@ cell before *X*.
     current or queued behaviour still names the tested behaviour when the request arrives.
     A behaviour that has already changed makes the run inconclusive.
   - (d) An idle vehicle of a stock type whose locomotor is the teleporting one, given the scatter
-    order. *Expected:* it does not move.
+    order while it is at rest after S-0215 claim 13's restoration, with teleporting as its active
+    movement kind (the recorder shows it). *Expected:* it does not move.
   - (e) A vehicle *W* of the human player stands on a cell of a bunker of its house when another
     vehicle of the house enters the bunker, so that the bunker rule of S-0215 claim 17 sends *W* a
     forced request with the bunker's position as threat point. *Expected:* exactly one draw from the
@@ -3327,17 +3680,20 @@ cell before *X*.
 - *Setup:* open flat ground with a cliff ridge and a second island separated by water, as each run
   needs. Units of the human player: the stock chrono miner *H* (a vehicle type with the harvester
   flag and the teleporting locomotor), and a test vehicle type *T* that copies an armed stock
-  vehicle type without its locomotor field (as D16's *A*) and has the harvester flag off. An
-  ordinary driving harvester *G* as a control. Recorder as in D17, recording each tick the
+  vehicle type without its locomotor field (as D16's *A*) and has the harvester flag off. Like
+  that type, *T* has the teleport-capable flag off, so claim 28 does not apply to it; *H* has
+  the flag, so a player's order makes *H* drive (claim 28). An ordinary driving harvester *G*
+  as a control. Recorder as in D17, recording each tick the
   position (leptons and height), the facing, the cell listings and occupancy marks, the
-  destination, whether the unit is phasing in, its targeting timer and the draws from the scenario
-  random stream.
+  destination, the behaviour, whether the unit is phasing in, its targeting timer and the draws
+  from the scenario random stream.
 - *Procedure and expected:*
   - Run 1 (timing and effects). *T* stands still; on tick *t* scripted input orders it to a cell 15
     cells away. *Expected:* no turn and no movement before the jump; the jump on the tick on which the
     recorder first shows the destination; on that tick its position becomes the destination cell's
-    centre at height *H*, its old cell no longer lists it, the new one does, its facing is unchanged,
-    its destination is gone and its behaviour falls back to rest; it is phasing in from that tick
+    centre at height *H*, its old cell does not list it and the new one does, its facing is unchanged,
+    its destination is gone and its behaviour is still *move* at the end of that tick; it falls
+    back to rest at a later tick (claim 20 e); it is phasing in from that tick
     until the tick F9 gives with the rules in force. Record animation appearances and
     sound requests at both positions, with their tick and within-tick order. In a named
     test-map control give *T* distinct departure and arrival sound entries; compare a
@@ -3346,16 +3702,21 @@ cell before *X*.
     *L* before the landing-point animation, and type entries in place of the game-wide
     ones when supplied. Wrong position, order or sound selection falsifies these parts
     of claim 20 e; a silent or unidentifiable entry makes that sound control inconclusive.
-  - Run 2 (harvester exception). As run 1 with *H*. *Expected:* the same jump, and no phasing in at
-    all: a further order on the next tick is obeyed with a jump on that tick.
+  - Run 2 (harvester exception). *H* uses its docking jump, not a player's order. It is full,
+    15 cells from its owner's free refinery and within the chrono-harvester too-far distance
+    (S-0402 claim 9), which a test rules file sets to 50 cells, as S-0402 scenario H8 sets
+    it, so its *enter* approach offers the docking cell. *Expected:* the jump to
+    the docking cell in one movement update. The recorder shows no phasing-in state at any tick
+    from the jump on, and its active locomotion is driving from the jump tick and stays driving
+    through its docking and unloading (claim 28). Its behaviour stays *enter* until it docks.
   - Run 3 (occupied destination). The destination cell holds a stationary friendly vehicle.
     *Expected:* *T* lands on the cell that the nearby-cell search of claim 20 b gives (at position
     (*N* mod *n*) of the collection order, *N* the tick number), not on the occupied cell. Variant:
     every cell within the search's largest radius is occupied or unenterable. *Expected:* *T* does
     not move and its destination is removed.
   - Run 4 (no path needed). The destination is on top of a cliff with no ramp, and in a second run
-    on another island. *Expected:* *T* and *H* jump there in one movement update; *G*, given the same
-    order, does not arrive.
+    on another island. *Expected:* *T* jumps there in one movement update. *H* and *G*, given the
+    same order, drive and do not arrive (claim 28 for *H*).
   - Run 5 (delay against distance). Orders to cells at several distances from 1 to 30 cells, with
     the stock rules and with test rules files that change, one at a time, the distance factor, the
     trigger flag (off), the minimum delay and the range minimum. *Expected:* the phasing-in
@@ -3420,7 +3781,8 @@ cell before *X*.
     Missing either test draw, reversed assignment or delayed creation falsifies the claim.
   - Run 13 (vehicle bridge reservations, Q-0240). At game speed index 2, use a high bridge
     over traversable flat ground, a human house and one bystander computer player kept away,
-    no engine add-ons or unrelated mods. Use the stock chrono miner and separately *T*. Observe the bridge,
+    no engine add-ons or unrelated mods. Use *T*: a player's destination makes the stock chrono
+    miner drive (claim 28), so it is not a subject here. Observe the bridge,
     its approaches and the departure cell; void runs with unrelated bystander interference or
     defeat. Start once below deck height and once on a deck, so the search's deck mode differs.
     Supply a clear bridge-cell destination by scripted input; record both occupancy records,
@@ -3485,8 +3847,9 @@ cell before *X*.
 - *Runs:* 3 each, run 3's main case at three different tick numbers; run 7 until each class has at
   least 3 runs.
 - *Falsified if:* a turn or a wait precedes the jump, the jump comes a tick later than stated, the
-  facing changes, *T* lands on the occupied cell in run 3, *T* or *H* fails to reach the cliff top
-  or island in run 4, *T*'s phasing-in end tick differs from jump tick + max(*D*, 1) with
+  facing changes, *T*'s behaviour is rest at the end of its jump tick in run 1, *T* lands on the
+  occupied cell in run 3, *T* fails to reach the cliff top
+  or island in run 4, *H* jumps in run 4, *T*'s phasing-in end tick differs from jump tick + max(*D*, 1) with
   *D* from F9, *H* phases in, the order of run 6 is
   carried out, the draw count of run 7 differs, the projectile of run 8 hits *T*, or in run 9 *T*
   cannot be damaged or is treated differently by the crusher.
@@ -3494,7 +3857,7 @@ cell before *X*.
   - Run 16 (landing-cell crate pickup). On a tiny flat skirmish map at speed index 2,
     with no engine add-ons or unrelated mods, crates disabled for random replacement, give the human house
     an existing base and place a fixed money crate by a map trigger on an empty cell.
-    Order the stock chrono miner to jump onto it. Record position, cell-arrival event,
+    Order *T* to jump onto it (a player's order makes the stock chrono miner drive, claim 28). Record position, cell-arrival event,
     crate presence and credits each tick, with within-tick event order where available.
     Expect placement and the arrival event before pickup, crate removal and a money award
     on the jump tick under S-0520 claim 12. A crate remaining despite passing the pickup
@@ -3523,25 +3886,30 @@ cell before *X*.
 - *Procedure:* produce the vehicle with a distant rally cell. In a second run give a move
   order by scripted input during its temporary drive, qualifying only if the order is
   accepted while driving. After the first recorded restoration and fall-back have finished,
-  give a new distant clear-cell move order. Run each case three times.
+  give a new distant clear-cell move order. In a third run, let the miner finish a harvest
+  load and return to a free refinery after its restoration. Run each case three times.
 - *Expected:* while driving, an accepted destination belongs to driving movement and does
   not fix a teleport landing point or move a teleport reservation. Restoration alone takes
-  no occupancy action or jump. After restoration a newly taken destination fixes its landing
-  point and jumps as claim 20 says. Occupancy during the exit follows S-0209's driving
+  no occupancy action or jump. The recorder shows teleporting as the active movement kind
+  after restoration. The new move order then installs driving again: no landing point, a
+  driven path (claim 28). In the third run, the docking-cell offer fixes a landing point and
+  the miner jumps to it, as claims 20 and 27 say. Occupancy during the exit follows S-0209's driving
   rules, not a mark attached to the rally cell. Record any destination that the factory
   supplied before temporary driving began; such a run is not evidence for an initially
   empty suspended state.
 - *Falsified if:* a destination accepted while driving changes the suspended landing point,
   causes a jump before restoration, or moves a teleport mark; or restoration alone resets
-  or moves the recorded teleport state. A post-restoration move that drives rather than
-  jumps also falsifies the restoration hypothesis shared with S-0215 B15 e.
-- A retained pending jump, phasing-in or previous two-record deck-landing control needs
+  or moves the recorded teleport state. A recorded active movement kind other than
+  teleporting after restoration falsifies the restoration hypothesis shared with S-0215
+  B15 e. A jump on the post-restoration move order falsifies claim 28.
+- A pending-jump, phasing-in or previous two-record deck-landing control needs
   a stock event that starts temporary driving in that state. No such event is established.
   If one is found, record both records of the old landing cell before installation,
   at installation, after driving has left it, and at restoration, together with both
   records and actual height of the current cell. Qualify the two-record control only
-  if no earlier destination replacement has already cleared old ground. Expect no
-  clearing just from installation, old deck clear and old ground retained after
+  if no earlier destination replacement has already cleared old ground. Expect a pending
+  jump to be cancelled at installation, with no jump at restoration, no clearing just from
+  installation, old deck clear and old ground retained after
   departure, and the current actual-layer mark unchanged solely by restoration.
   Old ground clearing on departure or restoration, or old deck being recreated on
   restoration, falsifies claim 21. Do not fabricate these controls through memory
@@ -3552,7 +3920,9 @@ cell before *X*.
   away, game speed index 2, stock data apart from named test overrides, no engine add-ons or
   unrelated mods. Give selected cells
   independent one-time entered-by tags with an any-house event and an observable
-  variable-setting action (S-0011). Use an ordinary drive vehicle and a chrono miner.
+  variable-setting action (S-0011). Use an ordinary drive vehicle and D22's teleporting
+  test type *T*. A player's order makes a chrono miner drive (claim 28), so it is not the
+  teleport subject here.
   Named type data may supply a non-harvester teleporter for the phasing-in control,
   and D9 control 1's passive vehicle with acceleration off for a chained curve.
   Observe the lane, bridge and landing cells; void unrelated interference or defeat.
@@ -3573,8 +3943,7 @@ cell before *X*.
   before either corresponding effect falsifies claim 22's ordering; a run without that
   temporal resolution is inconclusive for ordering. For tethered teleporting infantry,
   use S-0417 U10 d/e: record factory contact and tether at the landing tag's variable
-  change, and compare reservation-only and no-jump controls with a later commanded
-  jump. Expect both links ended and the contact place free before that change in the
+  change. Expect both links ended and the contact place free before that change in the
   jump tick, not on reservation, phasing-in completion or falling back to rest.
   A surviving link when the tag action executes, or a release caused solely by one
   of those non-arrival events, falsifies this rule.
@@ -3826,8 +4195,10 @@ Conditional diagnostic: if an ordinary stock dock sequence establishes every
 predicate of claim 27, record those predicates individually and distinguish
 successful temporary-locomotor restoration from the fallback. Record the offered
 destination at each due *enter* processing, distinguishing a building offer from a
-cell offer and ignored unchanged offers from effective assignments. There must be
-no dock activation solely at first contact or at an unchanged offer without refresh.
+cell offer, the refinery's offer from a teleport-capable vehicle's repeated dock test
+(claim 28), and ignored unchanged offers from effective assignments. There must be
+no dock activation solely at first contact, and an unchanged offer without refresh must not
+itself activate docking (claim 28's repeated dock test is a separate source).
 For temporary driving record point presence, heading versus actual horizontal
 position and the restoration lock. A suspended predecessor is restored only with
 no movement report, no lock and no seizure. Compare no predecessor, an unfinished
@@ -3882,7 +4253,175 @@ recorder support to the user; do not write state. This scenario distinguishes st
 not the unestablished immobilized/non-teleporting dock combination; D32 remains the
 conditional diagnostic for that combination and assignment-time restoration.
 
-## Cross-spec changes to confirm
+**D34. A teleport-capable vehicle's choice of locomotor (claim 28; Q-1759).**
+- *Setup:* a tiny flat revealed skirmish map at game speed index 2. Stock data, no engine
+  add-ons and no mods, apart from these named test files: D22's test type *T* (below), the
+  test rules file of D22 run 2 (part e), the named test copy of the refinery type (part g,
+  where stock data needs one) and part f's variant of the test map with no resource cell at
+  all. One human house with a refinery and its resource field, and one bystander computer
+  player kept away, so that nothing damages *H* (S-0215 claim 16). A chrono miner *H* of
+  the human house that has unloaded at least once. D22's test type *T* is the control: it has
+  the teleporting locomotor and lacks the teleport-capable flag. A free open cell *X* 20 cells
+  from *H* holds no resource and is far from every refinery. Record with the read-only
+  recorder every tick: position, active movement kind, contact, order-level destination, landing
+  point, behaviour and harvest phase, in part h its body facing, and in part e whether *H* has
+  a movement report (claim 25) and the tick of each processing of *enter*. Pending destination
+  refresh is not read. A jump is a change of more than 2 cells in one tick (S-0402 scenario H8); in
+  part h, where the scatter cell may be next to the docking cell, a jump is a move to the recorded
+  landing point in one tick.
+- *Procedure:*
+  - Part a: give *H* a move order to *X* in each of these states: seeking, loading, returning
+    full before it reserves, returning in its *enter* approach after it has reserved the
+    refinery, and in *guard* with nothing to do.
+  - Part b: from the seeking state, repeat with an attack-move to *X*, a guard-area order at
+    *X*, a two-point waypoint path, and a harvest order on a resource cell 20 cells away.
+  - Part c: let *H* run its cycle untouched for three loads.
+  - Part d: give *T* part a's move order.
+  - Part e: park a vehicle of the human house on the refinery's docking cell. Let a full *H*
+    reserve the refinery and approach, starting its return from a resource field whose nearest
+    cell is between 15 and 40 cells from the docking cell. The test rules file of D22 run 2 sets
+    the chrono-harvester too-far distance (S-0402 claim 9) to 50 cells, above the field's 40-cell
+    bound, so that *H* reserves and takes the *enter* approach. Move the parked vehicle away while
+    *H* is at least 6 cells from the docking cell.
+  - Part f: on a variant of the map with no resource cell at all, build a refinery and record its free miner for 300 ticks from the tick it
+    appears. With nothing to harvest it gets no destination from its harvest cycle. Repeat on
+    the main map, with a resource field at least 10 cells from the new refinery, up to its
+    first load.
+  - Part g: as part c, with a refinery whose type has a base drain above 0 or the needs-power
+    flag (a named test copy of the refinery type sets one if stock data does not). On the tick
+    after one of *H*'s docking jumps, the scripted input gives the refinery a power-off order
+    (S-0405 claim 10). A run in which the recorder shows *H* tethered before the refinery is
+    off is void.
+  - Part h: as part c, with a second refinery of the house far from the first. The resource
+    field lies within the range of *H*'s long-range ring search from the docking cell (S-0402
+    claim 4), with no vehicle on its cells, and no resource cell lies within 5 cells of the
+    docking cell, so that a scatter cell holds no resource. Run 1: the
+    scripted input sells the first refinery while *H* unloads there, after its first payment. Run 4:
+    as run 1, before the first payment, while *H* is still full. Run 2: it sells the refinery on a
+    tick at which *H* stands on the docking cell after its docking jump, in *enter*, once its body
+    has stopped turning, before it starts unloading. Run 3: as run 2, on the tick after the docking
+    jump, while its body is still turning to the unloading facing. A run whose recorder does not
+    show the stated state at the sale is void.
+  - Part i: give *H*, empty and in *guard*, a move order to a free cell beside its own
+    refinery that holds no resource, and record until its first trip after it has arrived.
+- *Expected:*
+  - Parts a and b: *H* never jumps. It drives a path to every ordered cell, and its active
+    movement kind is driving from the order's tick.
+  - Part c: the only jumps are to the docking cell, one per load, each during *enter* while in
+    contact. Its active movement kind is driving again from each jump tick and stays driving
+    through the docking and the unloading, and its trips to resource cells and to any queueing
+    cell are driven. Its behaviour stays *enter* across the docking restoration, the jump and
+    the installation of driving.
+  - Part d: *T* jumps to *X*.
+  - Part e: while the cell is occupied, *H* drives towards it only on a route found without a
+    substitute; at a path computation that adopts one it stops at the end of its track and stands
+    (S-0402 claim 10a, *A chrono miner*, and its scenario H20 part g). After the cell clears, *H*
+    either jumps to it at a later *enter* processing or, if it reaches the cell by driving before
+    such a processing, arrives there by driving (claim 28, *An occupied docking cell*), and the run
+    records which. If *H* still has a movement report at the first processing after the cell
+    clears, the recorder first shows it stopping, and the jump follows either in that same
+    processing, when a second assignment of the cell there finds it with no movement report,
+    or at the first later processing at which it has no movement report (*One jump*).
+  - Part f: the free miner's behaviour is *harvest* from the tick it appears, and its active
+    movement kind is driving on every recorded tick from its first, including the ticks before
+    any harvest-cycle destination assignment on the variant map. On the main map it drives to
+    the resource field without a jump.
+  - Part g: at the first processing of *enter* after the switch-off, *H* loses its contact
+    without being tethered, its behaviour falls back to rest, and its active movement kind
+    changes from driving to teleporting at that fall-back (S-0215 claim 13). *Falsified if* *H*
+    is tethered or unloads at the switched-off refinery, or keeps driving as its active
+    movement kind after the fall-back.
+  - Part h: in runs 2 and 4, *H* jumps, in the sale's tick or the next, to a landing point at a
+    scatter cell near the docking cell; its active movement kind is driving at the end of the
+    jump tick. In run 4 its behaviour is *harvest*, and after the jump it goes *returning* with
+    its full load; its next trip is driven, or is the docking jump at the second refinery. In
+    run 1 its behaviour is *harvest* from the sale's tick, and it makes no move to a scatter cell:
+    in the sale's tick or the next it jumps to the resource cell that its long-range ring search
+    finds from the docking cell (S-0402 claims 4 and 17, case (f)), with the unpaid rest of its
+    load, its active movement kind is driving at the end of that jump tick, and it then loads
+    there. Since the assignment and the jump can fall in one turn, these runs do not expect
+    teleporting as the active movement kind at the end of any tick. In run 3 it gets no scatter
+    destination and does not move at the sale. In runs 2
+    and 3 *H* has *guard* queued from the sale, and the run records which comes first:
+    - a processing of *enter* at which *H* falls back to rest (the first one if it is not
+      tethered, else the first after the contact has ended): its active movement kind
+      changes from driving to teleporting at that fall-back, and *guard* or *harvest* becomes
+      current (S-0215 claim 15 row 4),
+    - or the queued *guard* becoming current at the first tick at which *H* is ready to
+      change (S-0215 claim 11): in run 2 after its jump, in run 3 once its body turn has
+      ended. Its behaviour goes from *enter* to *guard* with no fall-back, and its active
+      movement kind stays driving.
+
+    *Falsified if* *H* drives to the scatter cell in run 2 or 4, in run 1 moves to a cell that
+    holds no resource or reaches the field by driving before it loads, jumps in run 3, keeps driving
+    as its active movement kind at rest after a fall-back of run 2 or 3, shows teleporting as
+    its active movement kind on the tick at which *guard* becomes current with no fall-back,
+    or has *guard* become current in run 3 while its body turn is still in progress.
+  - Part i: when *H* arrives and its behaviour falls back to rest, its active movement kind
+    changes from driving to teleporting (S-0215 claim 13). *Harvest* is then queued (by the
+    fall-back, S-0215 claim 15 row 4, or by S-0402 claim 17's *guard* rule with the refinery
+    next to it), and at its first seeking processing its active movement kind becomes driving
+    and it drives to the cell the processing sets. *Falsified if* it jumps there, or shows
+    driving as its active movement kind at rest after the fall-back.
+- *Falsified if:* *H* jumps to *X*, to a resource cell (outside part h run 1) or to a queueing
+  cell. Also falsified if *T* drives in part d. In part e it is falsified if *H* jumps while the
+  cell is still occupied,
+  or if, after the cell has cleared, *H* does not jump in the tick of a recorded processing of
+  *enter* or the next, with its contact accepting and the cell clear at that processing, while the
+  recorder shows it with no movement report (claim 25) at the end of the tick before that processing
+  and of the processing's own tick. A stop with no jump at a processing where it still has a
+  movement report is claim 27's fallback and does not falsify. In part c it is
+  falsified if the behaviour becomes *guard* at a jump tick. In part f it is falsified if the
+  free miner's active movement kind is teleporting on any recorded tick, in particular before
+  its first harvest-cycle destination assignment on the variant map, or if it jumps before its first
+  docking.
+- *Runs:* 3 for each part.
+
+## Cross-spec changes
+
+- Q-1759: S-0402 Terms (*chrono miner*), claim 17 and scenario H8 assume that a chrono miner
+  with active teleporting locomotion jumps to resource cells, queueing cells and a player's
+  destinations. Under claim 28 it drives to all of them, and jumps only to a refinery docking cell
+  and at a sale of that refinery. S-0402 carries this, together with claim 11's sale scatter (*A
+  sale of the refinery*, claim 28 here) and claim 10's account of the vehicle's repeated dock test
+  in *enter* (claim 28 here) beside the refinery's docking-cell offer. It rests on claim 28.
+- Q-1759: S-0214 (Terms, *self-teleporting type*) describes the flag as a type that teleports
+  itself to where it is sent. That holds for infantry. A vehicle with the flag drives to a
+  player's destination (claim 28 here), even though claim 11's targeting still takes the
+  clicked cell without a search, so the vehicle can be sent to a cell it then cannot reach.
+  S-0214 should restate the term.
+- Q-1759: S-0417 claim 16 should say that the factory-built chrono miner's temporary
+  driving does not end its driving trips. A later restoration makes it teleport only on a
+  refinery docking assignment (claim 28 here). S-0417 claim 16 carries this.
+- Q-1759: S-0215 scenario B15 part (e) produces a stock teleporting vehicle (a chrono miner,
+  whose type has the teleport-capable flag) and expects that, after the restoration at its
+  first eligible fall-back, an order to a distant clear cell makes it jump, with "later
+  continued driving" as a falsifier. Under claim 28 that order installs driving again and the
+  vehicle drives there. The restoration itself is unchanged and stays visible: the recorder
+  shows the active movement kind change from driving to teleporting at that fall-back, and back
+  to driving on the order's tick. B15 part (e) should expect that sequence, and be falsified by
+  no restoration at the fall-back or by a jump to the ordered cell. A docking jump at a later
+  refinery approach (S-0402) is a further sign that teleporting locomotion was restored.
+- Q-1759: S-0417 scenarios U6 and U15 expect the stock teleporting vehicle to jump after
+  restoration: U6's "a newly taken destination after restoration fixes a landing point and jumps under S-0207 claim 20", with driving for that
+  order as a falsifier, and U15's "the next accepted distant move then uses teleporting
+  locomotion". Under claim 28 both orders are driven, because neither is a qualified docking
+  assignment. Those expectations hold only for a vehicle type with the teleporting locomotor and
+  without the flag, such as D22's test type *T* here. S-0417 should expect driving for the stock
+  vehicle in both scenarios (restoration shown as for B15 above), or run the jump expectation
+  with such a test type. S-0417 carries this: it expects driving for the stock vehicle in both,
+  with the restoration shown as for B15.
+- Q-1759: S-0215 claim 9 lists "an actor whose locomotor is replaced by another" among the
+  guard resets; its backing is magnetic seizure's replacement. It should say that the temporary
+  driving of claim 28 here, and the restorations of claim 27 here and of S-0215 claim 13, are
+  not such replacements and leave the behaviour as it is. Scenario D34 part c here observes
+  both kinds at each ordinary docking jump: claim 27's restoration just before it and claim
+  28's install at it, with *enter* current throughout.
+- Q-1759: claim 20 e here cites S-0215 claim 13 for the fall-back to rest that follows a jump's
+  removal of the destination. After a docking jump that removal does not end *enter*: the
+  behaviour goes on while the refinery accepts the vehicle, and falls back to rest only when
+  the refinery refuses it or the contact ends (claim 20 e, claim 28). S-0215 claim 13, or
+  wherever S-0215 describes a fall-back after a jump, should note that exception.
 
 - Q-1130: S-0514 claims 16 and 17 say an erased object's destination is cleared, and claim 16 says
   that stops its teleporting jump. Under a pending suppression (claim 27 here) the destination is
@@ -3910,12 +4449,25 @@ conditional diagnostic for that combination and assignment-time restoration.
 - S-0502 claim 27 and J24 must use claim 27 here for the effective placement clear,
   assignment-time dock test and same-assignment suppression. Newly enabled refresh
   can remain after that assignment; a qualified repeat is not limited by an entry latch.
+- S-0502 claim 27 must name one exception, claim 28's repeated dock test in *enter*, in
+  two places. In "evaluated at each otherwise eligible destination assignment after
+  unchanged-destination rejection", add after "rejection": ", and at S-0207 claim 28's
+  repeated dock test in *enter*, which that rejection does not precede". Replace the two
+  sentences "First contact, arrival and entry attempts do not independently trigger it. An
+  unchanged offer without refresh does not reach it even if contact or occupancy has
+  changed." with: "First contact, arrival and entry attempts do not independently trigger
+  it, except S-0207 claim 28's repeated dock test in *enter*: at each processing of *enter*
+  at which its contact accepts it, or at which it is tethered, a vehicle whose type has the
+  teleport-capable flag and has a destination has that destination tested as an assignment,
+  whether or not it has changed and whether or not refresh is pending. Apart from that test,
+  an unchanged offer without refresh does not reach it even if contact or occupancy has
+  changed."
 - S-0417 claim 5 and U6 must distinguish completed exit geometry from restoration
   eligibility in claim 27 here: a retained locomotor destination point or restoration
   lock still prevents release. Ordinary restoration enables neither dock pending state.
 - S-0402 claim 10 row 2 and H10 must distinguish repeated docking-cell offers from
-  effective assignments. Only an eligible assignment reaches claim 27's dock test,
-  and fallback normally suppresses that assignment's point while retaining refresh.
+  effective assignments. Only an eligible assignment, or claim 28's repeated dock test in
+  *enter* for a teleport-capable vehicle, reaches claim 27's dock test, and fallback normally suppresses that assignment's point while retaining refresh.
 
 - Q-0797: S-0215 claims 22 and 29 should cite claim 26 for locomotion's cell-goal
   cleanup and distinguish it from due behaviour processing. S-0314 claim 17 and H19 f
@@ -3948,12 +4500,12 @@ conditional diagnostic for that combination and assignment-time restoration.
 - Q-0310: S-0209 must add claim 20 e's aircraft reservation lifecycle, share
   `quirks.teleport_aircraft_ground_reservation`, and distinguish entry outcomes from
   infantry standing-position refusal for the isolated object-present flag below the
-  bridge. Its claim 1's former unmeasured justification no longer covers this fixture.
+  bridge. S-0209 claim 1's unmeasured justification does not cover this fixture.
 - Q-0268 part 1: S-0011 claim 18 should cite claim 22 here for driving and teleporting
   arrival timing; ordinary infantry walking remains S-0208's responsibility.
 
-- Q-0240: hand off this revision with S-0209's matching claim 1 pointer and claim 5
-  reservation consequences. Claim 20 a/e here owns the teleporting vehicle's ground
+- Q-0240: S-0209 claim 1's pointer and claim 5's reservation consequences match this
+  spec. Claim 20 a/e here owns the teleporting vehicle's ground
   reservation, remembered-point clearing and two-record bridge placement; S-0209 owns
   the entry outcomes and shares `quirks.teleport_vehicle_ground_reservation`.
   A reservation is not necessarily in the cell layer where the vehicle is listed.
@@ -3961,22 +4513,25 @@ conditional diagnostic for that combination and assignment-time restoration.
   entry-outcome table.
 - The coordinated blocked-first-check rule is already stated in claim 15, D17(d3)
   and S-0212 claim 22: immediate fresh search despite a running retry timer, then
-  same-tick repeated check when a path is found. Confirm those texts together at sign-off.
+  same-tick repeated check when a path is found.
 - S-0208 claim 19's infantry refused-replacement rule remains different from claim 20 b's
   retained non-infantry landing point; its actual deck landing follows claim 20 e.
   S-0215 claim 10's target-loss exception and restored-target distinction likewise remain
   coordinated with claim 20 e. These checks require no new rule in those companions.
-- Confirm claim 20 b and S-0212 claim 25's non-infantry teleport row together:
+- Claim 20 b and S-0212 claim 25's non-infantry teleport row state the same rules:
   destination-centred search, own unsimplified zone, destination reach region with no
   restriction when absent, strict deck-mode height threshold, no height or further
   condition, bridges allowed, and selection on the landing-point fixation tick.
   S-0208 claim 19 owns the different infantry fallback parameters and distinct deck
   modes; neither search waits until the jump to select its result.
-- Confirm claim 21 with S-0417's temporary-driving contract and S-0215 claim 13's
-  restoration contract: destinations accepted while driving do not change the
-  suspended teleport landing point or reservation, and restoration alone resets
-  neither retained state nor occupancy. Separate later fall-back destination changes
-  from restoration itself.
+- Claim 21, S-0417's temporary-driving contract and S-0215 claim 13's restoration contract agree:
+  destinations accepted while driving do not change the suspended teleport landing point or
+  reservation, and restoration alone resets neither retained state nor occupancy. Later fall-back
+  destination changes are separate from restoration itself.
+- Q-1759: S-0215 claim 13 says that S-0207 claim 21 distinguishes "a retained pending jump,
+  landing point and phase-in expiry". Under claim 21 a jump pending when temporary driving is
+  installed is cancelled then, so none is pending at restoration. S-0215 claim 13 should list
+  only the landing point and the phase-in expiry as retained.
 
 ## Open questions
 
@@ -3989,7 +4544,7 @@ conditional diagnostic for that combination and assignment-time restoration.
   A reading (low confidence) points to a non-naval vehicle arriving by teleport on a water cell
   that is neither a high-bridge cell nor a road, and a unit landing on a cell where it cannot
   exist. Their exact conditions remain for the relevant movement specs to settle. Behaviour
-  once sinking is no longer open: S-0504 claims 4 and 5 own it.
+  once sinking is settled: S-0504 claims 4 and 5 own it.
 - Whether a game started with the capture-the-flag option on places flags that a vehicle can carry
   (scenario D15 checks this as its precondition).
 - The reactions to a curve's second cell (claim 15, T5) were read at low confidence.
@@ -4057,3 +4612,10 @@ conditional diagnostic for that combination and assignment-time restoration.
   its speed fraction straight to the new target fraction of claim 9, without acceleration. The
   second rule would also give a passive vehicle a speed fraction (claim 8). The structures specs
   should settle both.
+- (Claim 28.) Which ways of creating a teleport-capable vehicle make no destination assignment at
+  its placement (the third window), and what the movement kind is after S-0607 claim 4 ends a
+  resource-gathering vehicle's temporary driving. Also the three exclusions and the nested
+  replacements: no ordinary-play fixture is known for any of them.
+- (Claim 21.) How the original handles a jump pending when temporary driving is installed:
+  claim 28's sale branches reach it, but no scenario records the pending jump there. Our
+  engine's cancellation is a design rule.
