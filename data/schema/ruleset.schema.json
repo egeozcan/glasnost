@@ -10877,6 +10877,11 @@
           "type": "boolean",
           "default": true
         },
+        "voxel_debris_cliff_step_faults": {
+          "description": "A debris piece's cliff turn on a north-east or south-west step examines the two cells behind the move with their faces swapped, and a north-west step with only the northern neighbour high gives (c, uₓ, u_y); off: those steps examine the cells beside the corner and the north-west case turns across y.",
+          "type": "boolean",
+          "default": true
+        },
         "voxel_debris_deck_impact_layer": {
           "description": "A debris piece's ground impact that the deck test puts on a high-bridge deck hits the cell's ground layer (the objects under the deck); off: it hits the deck layer of that cell, as a detonation on the deck does.",
           "type": "boolean",
@@ -10884,6 +10889,11 @@
         },
         "voxel_debris_deck_over_water": {
           "description": "A debris piece's ground impact from a high-bridge cell over water is a water impact even on the deck (no bounce animation, no hit, the piece ends in its next turn); off: an impact the deck test puts at the deck height is treated as on land.",
+          "type": "boolean",
+          "default": true
+        },
+        "voxel_debris_deck_rebound_slope": {
+          "description": "A debris piece's contact on a high bridge's deck rebounds off the slope of the ground cell under the deck; off: a contact that the deck test puts at the deck height rebounds by the flat rule.",
           "type": "boolean",
           "default": true
         },

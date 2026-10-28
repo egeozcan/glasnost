@@ -282,6 +282,20 @@ async fn look_up_art(
             a.sprite_height = Some(i32::from(shp.height));
         }
     }
+    // spec: S-0317 claim 23 (a piece draws one section of its own model; the importer warns for an index outside the model's sections)
+    for ((kind, _), a) in arts.iter_mut() {
+        if *kind != kinds::Kind::VoxelAnimations {
+            continue;
+        }
+        let Some(r) = a.voxels.get("body").and_then(|f| vfs.resolve_bytes(f)) else {
+            continue;
+        };
+        if let Ok(bytes) = vfs.read_resolved(&r).await
+            && let Ok(vxl) = glasnost_fmt::vxl::Vxl::parse(&bytes)
+        {
+            a.voxel_sections = Some(vxl.limbs.len());
+        }
+    }
     // spec: S-0005 claim 13 (the loading archives are released before play)
     vfs.finish_loading();
     let in_play = |n: &[u8]| vfs.resolve_bytes(n).is_some();

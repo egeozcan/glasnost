@@ -476,6 +476,43 @@ impl Mat34 {
     }
 }
 
+/// A debris piece's orientation (S-0317 claim 22, F10): the right-handed
+/// turn by `angle` radians about the direction of `axis`, in the model's
+/// frame. `None` when the axis is zero and has no direction (S-0317 F5:
+/// our engine then draws the piece without spin). The matrix is formed in
+/// double precision and stored in single precision; S-0317 F10 fixes only
+/// the turn, to the precision of captured frames (design).
+pub fn piece_rotation(axis: [i32; 3], angle: f64) -> Option<Mat34> {
+    let a = axis.map(f64::from);
+    let len = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
+    if len == 0.0 {
+        return None;
+    }
+    // spec: S-0317 F5 (the axis normalised to unit length)
+    let k = a.map(|c| c / len);
+    let (s, c) = angle.sin_cos();
+    let t = 1.0 - c;
+    // Rodrigues' rotation formula: c I + s [k]× + (1 − c) k kᵀ.
+    let r = |i: usize, j: usize| -> f32 {
+        let cross = match (i, j) {
+            (0, 1) => -k[2],
+            (0, 2) => k[1],
+            (1, 0) => k[2],
+            (1, 2) => -k[0],
+            (2, 0) => -k[1],
+            (2, 1) => k[0],
+            _ => 0.0,
+        };
+        let id = if i == j { c } else { 0.0 };
+        (id + s * cross + t * k[i] * k[j]) as f32
+    };
+    Some(Mat34([
+        [r(0, 0), r(0, 1), r(0, 2), 0.0],
+        [r(1, 0), r(1, 1), r(1, 2), 0.0],
+        [r(2, 0), r(2, 1), r(2, 2), 0.0],
+    ]))
+}
+
 /// The view tilt, −60° about view x, in radians (S-0105 claim 1, F2).
 fn view_tilt() -> f64 {
     // spec: S-0105 claim 1, Constants (view tilt 60 degrees)
@@ -2682,11 +2719,32 @@ pub fn draw_shadow(
     } else {
         1.0
     };
+    // spec: S-0105 Formulas F10 (the corners of the section's bottom face)
+    footprint(sec, &g, mu, sec.min[2], quirks)
+}
+
+/// A debris piece's shadow footprint (S-0317 claim 27, F11): S-0105 F10
+/// for `section` with the corners of its bottom face at height 0 turned by
+/// the piece's rotation `rotation` alone (no view, no section or tilt
+/// transform), a scale of 1 and S-0105 claim 31's shift. Returns `None` if
+/// the placement is not finite (S-0105 claim 22: not drawn).
+pub fn draw_piece_shadow(
+    section: &Section,
+    rotation: &Mat34,
+    quirks: &VoxelQuirks,
+) -> Option<PartImage> {
+    // spec: S-0317 F11 (K̄ = (Kₓ, K_y, 0); G K replaced by R K̄; μ = 1)
+    footprint(section, rotation, 1.0, 0.0, quirks)
+}
+
+/// S-0105 F10's footprint of `sec` under `g`, scale `mu`, with the
+/// bottom-face corners at model height `z`.
+fn footprint(sec: &Section, g: &Mat34, mu: f64, z: f32, quirks: &VoxelQuirks) -> Option<PartImage> {
     let q = |xmax: bool, ymax: bool| -> [f32; 3] {
         let k = [
             if xmax { sec.max[0] } else { sec.min[0] },
             if ymax { sec.max[1] } else { sec.min[1] },
-            sec.min[2],
+            z,
         ];
         let gk = g.apply(k);
         // spec: S-0105 Formulas F10 (Q = (μ·x + 2.9999964, −μ·y))
@@ -2952,16 +3010,6 @@ pub enum ImageKey {
         heading: u8,
         /// The 32-step pitch facing *e*.
         pitch: u8,
-    },
-    /// A debris piece's model (S-0317 claim 15) in our interim pose
-    /// (Q-1835): the model axis it turns about and the 32-step angle
-    /// reached. Ours: the pose is quantised so that a type's images stay
-    /// few.
-    Piece {
-        /// The model axis: 0, 1, 2 for x, y, z; 3 for no turn.
-        axis: u8,
-        /// The 32-step angle about that axis.
-        step: u8,
     },
 }
 

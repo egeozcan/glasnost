@@ -203,6 +203,10 @@ pub struct TypeArt {
     pub sprite_frames: Option<i32>,
     /// The canvas height of [`TypeArt::sprite`]'s header (S-0513 F4).
     pub sprite_height: Option<i32>,
+    /// The section count of a voxel animation's own model (S-0317 claim
+    /// 23), read from the file while the loading archives are mounted; none
+    /// when there is no model or the file does not parse.
+    pub voxel_sections: Option<usize>,
     /// A projectile type's drawing fields (S-0306 claims 28 to 32); none
     /// for the other kinds.
     pub projectile: Option<ProjectileLook>,

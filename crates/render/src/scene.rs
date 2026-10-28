@@ -236,6 +236,12 @@ pub struct Scene {
     /// Single-pixel drawings placed between items ([`spots`]), sorted by
     /// [`SpotGroup::at`]; groups at the same place are drawn in list order.
     pub spots: Vec<SpotGroup>,
+    /// The images rewritten in place by [`Scene::replace_image`]: each
+    /// index with the value of [`Scene::rewrites`] at its last rewrite, so
+    /// that an uploader can find those rewritten since it last looked.
+    pub rewritten: std::collections::BTreeMap<u32, u64>,
+    /// The number of in-place rewrites so far.
+    pub rewrites: u64,
 }
 
 impl Scene {
@@ -243,6 +249,22 @@ impl Scene {
     pub fn add_image(&mut self, image: IndexedImage) -> u32 {
         self.images.push(image);
         (self.images.len() - 1) as u32
+    }
+
+    /// Replaces image `id` in place with `image` of the same size, and
+    /// records the rewrite. Returns false, changing nothing, when there is
+    /// no such image or the sizes differ.
+    pub fn replace_image(&mut self, id: u32, image: IndexedImage) -> bool {
+        let Some(old) = self.images.get_mut(id as usize) else {
+            return false;
+        };
+        if (old.width(), old.height()) != (image.width(), image.height()) {
+            return false;
+        }
+        *old = image;
+        self.rewrites += 1;
+        self.rewritten.insert(id, self.rewrites);
+        true
     }
 
     /// Adds a palette row and returns its index.

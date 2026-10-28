@@ -229,9 +229,9 @@ const PROJECTILE_BIAS: i32 = -30; // spec: S-0102 claim 13 and Constants (projec
 /// A projectile shadow's depth bias before −*L* of the ground under it
 /// (S-0102 claim 13).
 const PROJECTILE_SHADOW_BIAS: i32 = -10; // spec: S-0102 claim 13 and Constants (projectile shadow bias −10)
-/// A debris piece's 32-step pose angle, π/16 radians (ours, the interim of
-/// Q-1835: the angle is quantised to the 32 facing steps of S-0105).
-pub const PIECE_STEP: f64 = std::f64::consts::PI / 16.0; // spec: S-0105 Constants (facing step π/16; its use for a piece's pose is the interim of Q-1835)
+/// The brightness of a piece with no house whose type has no resource
+/// flag, and the off-map cell's brightness (S-0317 claims 20 and 25).
+const PIECE_BRIGHTNESS: i32 = 1000; // spec: S-0317 claims 20 and 25 (brightness 1000: a piece with no house and no resource flag; the off-map cell's U)
 /// A flat voxel projectile's final depth bias (S-0102 claim 13, S-0306
 /// claim 30): no −*L(z)* term.
 const FLAT_VOXEL_PROJECTILE_BIAS: i32 = -65; // spec: S-0306 claim 30 and S-0102 claim 13 (final bias −65, no height-lift term)
@@ -1160,6 +1160,9 @@ pub struct Painter {
     /// answer, for the live game's building slot animations (S-0102 claim
     /// 34, animation rule; S-0513 claim 29b); empty for the static scene.
     protected_cells: BTreeMap<CellXY, super::protection::SlotCell>,
+    /// The live game's debris pieces' image slots (S-0317 claims 22, 24
+    /// and 27).
+    pieces: super::piece_pool::PiecePool<PieceKey>,
 }
 
 /// A voxel part image added to the scene: its index and offset from the
@@ -1291,20 +1294,35 @@ pub struct ProjectileDraw {
     pub shadow: Option<(i32, i32)>,
 }
 
-/// A debris piece in play to draw (S-0317 claim 15; drawing interim of
-/// Q-1835).
+/// A debris piece in play to draw (S-0317 claims 15 and 22 to 28).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PieceDraw {
+    /// Its number in the simulation, which keys its image slots.
+    pub id: u32,
     /// Its type's import registration index (a voxel animation).
     pub idx: usize,
     /// World position in leptons.
     pub pos: (i32, i32, i32),
-    /// The pose: the model axis it turns about (0, 1, 2 for x, y, z; 3 for
-    /// none) and the 32-step angle reached.
-    pub pose: (u8, u8),
+    /// The spin axis (*a*₃, *a*₂, *a*₁) before normalisation (S-0317 F5).
+    pub axis: [i32; 3],
+    /// The spin rate in radians per tick, a double's bits (S-0317 F5).
+    pub spin: u64,
+    /// The net count of its flying turns (S-0317 claim 22, F10).
+    pub turns: i32,
     /// The name of the piece's house; empty without one.
     pub owner: Vec<u8>,
+    /// The ground height *f* at its position (S-0317 claim 27; 0 off the
+    /// legal map, claim 20).
+    pub ground: i32,
+    /// Its cell is a high-bridge cell (S-0317 claim 27).
+    pub bridge: bool,
+    /// Its cell is on the legal map (S-0317 claims 20 and 25).
+    pub on_map: bool,
 }
+
+/// What a piece's images are drawn from (S-0317 claims 22 to 24): its type,
+/// spin axis, spin rate's bits and net turn count.
+pub(super) type PieceKey = (usize, [i32; 3], u64, i32);
 
 /// One entry of the object pass's ground layer (S-0102 claims 5 and 6).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -3332,13 +3350,10 @@ impl<'a> Builder<'a> {
         }]
     }
 
-    /// A debris piece's model (S-0317 claim 15, S-0007 claim 30): its own
-    /// model, with no motion file, turned by its pose; no items when its
-    /// type has no model or the model does not parse. Every other drawing
-    /// choice is our interim of Q-1835: the view of S-0105 claim 1, the
-    /// diffuse shading of S-0306 F16, the 53-shade palette of the piece's
-    /// house (the neutral colour without one) at brightness 1000, no depth
-    /// test, no shadow.
+    /// A debris piece's shadow and body (S-0317 claims 15 and 22 to 28,
+    /// S-0007 claim 30): one section of its own model, with no motion file,
+    /// turned by its orientation alone; no items when its type has no
+    /// model, the model does not parse or the section is not in it.
     fn live_piece(&mut self, d: &PieceDraw) -> Vec<Item> {
         let Some(file) = self
             .import
@@ -3349,53 +3364,147 @@ impl<'a> Builder<'a> {
             return Vec::new();
         };
         let q = VoxelQuirks::default();
-        let (axis, step) = d.pose;
-        let key = voxel::ImageKey::Piece { axis, step };
-        let part = self.cached_part(Kind::VoxelAnimations, d.idx, key, |b| {
-            // spec: S-0007 claim 30 (the own model loads no motion file)
-            let model = b.bare_voxel_model(&file)?;
-            let mode = model.sections.first()?.normal_mode;
-            // Interim of Q-1835: the turn about the chosen model axis, under the fixed view.
-            let angle = f64::from(step) * PIECE_STEP;
-            let turn = match axis {
-                0 => voxel::Mat34::IDENTITY.rotate_x(angle, &q),
-                1 => voxel::Mat34::IDENTITY.rotate_y(angle, &q),
-                2 => voxel::Mat34::IDENTITY.rotate_z(angle, &q),
-                _ => voxel::Mat34::IDENTITY,
-            };
-            let draw = voxel::view(&q).then(&turn);
-            let shades = voxel::projectile_shade_table(&draw, mode, &q);
-            let vpl = b.vpl();
-            let img = voxel::draw_model_shaded(&model, 0, &draw, vpl.as_ref(), &shades, &q);
-            b.limit_checked(&file, "piece", key, img)
-        });
-        let Some(part) = part else {
+        // spec: S-0007 claim 30 (the own model loads no motion file)
+        let Some(model) = self.bare_voxel_model(&file) else {
             return Vec::new();
         };
-        let hsv = if d.owner.is_empty() {
-            [0, 0, 0]
-        } else {
-            self.owner_colour(&d.owner).0
+        // spec: S-0317 claim 23 and Import mapping (the section of the type's VoxelIndex, absent 0; one outside the model draws nothing)
+        let index = rule_int(self.import, Kind::VoxelAnimations, d.idx, b"VoxelIndex", 0);
+        let Some(section) = usize::try_from(index)
+            .ok()
+            .and_then(|i| model.sections.get(i))
+            .cloned()
+        else {
+            return Vec::new();
         };
-        let row = self.house_row(hsv, PROJECTILE_BRIGHTNESS);
-        // spec: S-0101 F1 (the screen point of its position, height lift included)
-        let point = project_lifted(d.pos.0, d.pos.1, d.pos.2);
-        vec![Item {
-            image: part.0,
-            x: point.0 + part.1[0],
-            y: point.1 + part.1[1],
-            test: DepthTest::Ignore,
-            depth: ItemDepth::Profile {
-                profile: Profile::Flat,
-                bias: 0,
-                companion: None,
-            },
-            paint: Paint::Lit(row),
-            group: Group::Effects,
-            provisional: false,
-            object: None,
-            stack: None,
-        }]
+        let key: PieceKey = (d.idx, d.axis, d.spin, d.turns);
+        let images = match self.p.pieces.current(d.id, &key) {
+            Some(i) => i.clone(),
+            None => {
+                // spec: S-0317 claim 22 and F10 (the turn about the axis by the spin rate times the net turn count; no view transform; a zero axis: no spin, F5)
+                let angle = f64::from_bits(d.spin) * f64::from(d.turns);
+                let r = voxel::piece_rotation(d.axis, angle).unwrap_or(voxel::Mat34::IDENTITY);
+                // spec: S-0317 claim 24 (the normal table of the first section's normal mode, S-0105 claim 18's quirks.voxel_light_first_section_mode; off, the drawn section's)
+                let mode = if q.voxel_light_first_section_mode {
+                    model.sections.first().map_or(0, |s| s.normal_mode)
+                } else {
+                    section.normal_mode
+                };
+                // spec: S-0317 claim 24 (S-0306 F16's one diffuse term with L′ = Rᵀ L, no specular term)
+                let shades = voxel::projectile_shade_table(&r, mode, &q);
+                // spec: S-0317 claim 23 (the section drawn with claim 22's transform only, no motion-file transform)
+                let one = voxel::VoxelModel::from_sections(vec![section.clone()], None, &q);
+                let vpl = self.vpl();
+                let body = voxel::draw_model_shaded(&one, 0, &r, vpl.as_ref(), &shades, &q);
+                let body = self.limit_checked(&file, "piece", "its orientation", body);
+                // spec: S-0317 claim 27 and F11 (the footprint of the drawn section under the rotation alone)
+                let shadow = voxel::draw_piece_shadow(&section, &r, &q);
+                self.p
+                    .pieces
+                    .store(
+                        &mut self.built.scene,
+                        d.id,
+                        key,
+                        body.as_ref(),
+                        shadow.as_ref(),
+                    )
+                    .clone()
+            }
+        };
+        let (x, y, z) = d.pos;
+        // spec: S-0317 Terms (the cell of a position: (trunc(x / 256), trunc(y / 256)))
+        let cell = CellXY::new(x / 256, y / 256);
+        let mut items = Vec::new();
+        // spec: S-0317 claim 27 (the shadow before the body)
+        if let Some(part) = images.shadow.placed {
+            let f = d.ground;
+            // spec: S-0317 claim 27 (in a high-bridge cell with the piece at least f + 416 high, lifted by L(f + 417), the depth from f + 416)
+            let (lift, hs) = if d.bridge && z >= f + 416 {
+                (f + 417, f + 416)
+            } else {
+                (f, f)
+            };
+            // spec: S-0317 claim 27 (the ground projection of (x, y) lifted once by L(f))
+            let point = project_lifted(x, y, lift);
+            items.push(Item {
+                image: part.0,
+                x: point.0 + part.1[0],
+                y: point.1 + part.1[1],
+                // spec: S-0317 claim 27 (reads depth with the flat profile, final bias −4 − L(hₛ); never writes depth)
+                test: DepthTest::Reader,
+                depth: ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -4 - height_lift(hs),
+                    companion: None,
+                },
+                // spec: S-0317 claim 27 (the ordinary shadow treatment, not through the light-alpha values)
+                paint: Paint::Shadow,
+                group: Group::Shadows,
+                provisional: false,
+                object: None,
+                stack: None,
+            });
+        }
+        if let Some(part) = images.body.placed {
+            // spec: S-0317 claim 25 and claim 20 (U: the unscaled ground level of the position's cell; off the legal map the off-map cell's 1000)
+            let u = if d.on_map {
+                self.p
+                    .lights
+                    .get(cell)
+                    .map_or(NEUTRAL_BRIGHTNESS, |l| l.unscaled_ground)
+            } else {
+                PIECE_BRIGHTNESS
+            };
+            let row = if !d.owner.is_empty() {
+                // spec: S-0317 claim 25 (a piece that holds a house: its house-colour palette at U, no extra light, height or deck term)
+                let hsv = self.owner_colour(&d.owner).0;
+                self.house_row(hsv, u)
+            } else if rule_bool(
+                self.import,
+                Kind::VoxelAnimations,
+                d.idx,
+                b"IsTiberium",
+                false,
+            ) {
+                // spec: S-0317 claim 25 (no house and the resource flag: the start-up mine table at U)
+                self.startup_row(true, u)
+            } else {
+                // spec: S-0317 claim 25 (any other piece: the start-up mine table at brightness 1000)
+                self.startup_row(true, PIECE_BRIGHTNESS)
+            };
+            // spec: S-0317 claim 25 and Import mapping (Translucent: 50 % by S-0102 F8's row; absent, opaque; through the light-alpha values either way)
+            let paint = if rule_bool(
+                self.import,
+                Kind::VoxelAnimations,
+                d.idx,
+                b"Translucent",
+                false,
+            ) {
+                Paint::Translucent(row, Translucency::Half)
+            } else {
+                Paint::Lit(row)
+            };
+            // spec: S-0317 claim 26 (around the ground projection of the position lifted once by L(z))
+            let point = project_lifted(x, y, z);
+            items.push(Item {
+                image: part.0,
+                x: point.0 + part.1[0],
+                y: point.1 + part.1[1],
+                // spec: S-0317 claim 26 (reads depth with the flat profile and the strict test, final bias −2 − L(z); never writes depth)
+                test: DepthTest::Reader,
+                depth: ItemDepth::Profile {
+                    profile: Profile::Flat,
+                    bias: -2 - height_lift(z),
+                    companion: None,
+                },
+                paint,
+                group: Group::Effects,
+                provisional: false,
+                object: None,
+                stack: None,
+            });
+        }
+        items
     }
 
     /// The single-shade table of a colour definition (S-0103 claim 5): one
@@ -4572,7 +4681,7 @@ impl<'a> Builder<'a> {
         &mut self,
         file: &[u8],
         role: &str,
-        key: voxel::ImageKey,
+        key: impl std::fmt::Debug,
         img: Option<voxel::PartImage>,
     ) -> Option<voxel::PartImage> {
         if let Some(i) = &img
@@ -5616,6 +5725,7 @@ impl Painter {
             field_sources: Vec::new(),
             tile_items: Vec::new(),
             protected_cells: BTreeMap::new(),
+            pieces: Default::default(),
         }
     }
 
@@ -5985,9 +6095,17 @@ impl Painter {
             live_slots: None,
         };
         let out = list.iter().map(|d| b.live_piece(d)).collect();
+        // Pieces no longer in play give their image slots back.
+        b.p.pieces.release_unseen();
         *self = b.p;
         *scene = b.built.scene;
         (out, b.built.notes)
+    }
+
+    /// The number of scene images the debris pieces' slots hold, in use or
+    /// free.
+    pub fn piece_images(&self) -> usize {
+        self.pieces.images()
     }
 
     /// A vehicle's target line from screen pixel `start` to `end` (S-0301
