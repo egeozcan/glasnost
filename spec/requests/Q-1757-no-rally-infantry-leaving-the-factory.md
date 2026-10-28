@@ -3,7 +3,7 @@ id: Q-1757
 title: Whether an infantry unit released with no rally point ever leaves the factory, and what then happens to the next release
 status: open
 related: [S-0417, S-0404, S-0215, S-0208, S-0209]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need
