@@ -434,3 +434,67 @@ sweeps 1 to 16 print the same lines before and after (smallest minimum M6c 4, M7
 sim-gate goldens hold unchanged (`cargo test --release -p glasnost-sim-gate -- --include-ignored`
 without the update flag), so in the gate games the changed paths do not change play. No state
 was added (the killed mark already exists), so the save format stays 76 and the AI game format 38.
+
+## Round 5 (2026-10-26, the lead's build of main of that day; lane `local-lane/m8/a4-r5/ui/`)
+
+The lead's words, in order (notes 21 to 34): "still the released infantry does not leave barracks
+door" · "minimap doesnt have a box to show where we're looking at" · "slave miners do not work" ·
+"Other miners from AI also seem not to work" · "no superweapon countdowns are shown" ·
+"chronosphere building is missing a part" · "no indicator that I'm going to use a superpower, and
+it's impossible to use when a unit is selected" · "no building repair animation" · "no
+possibility to set waypoints (at least not from the GUI)" · "ore drills do not work, no ore
+appears" · "T doesnt work to select all units of the type in screen. also other shortcuts arent
+there" · "when I press D to deploy paratrooping units, they should deploy after landing" · "no
+unit prices can be seen on hover or anywhere at all" · "no range indicator when placing defense
+buildings". This part covers the interface notes (22, 25, 27, 29, 31, 33, 34). The others are
+with the steps named in the table. Lane `r5_lane.rs` (`round_5_notes_on_the_real_data`) plays
+them all in one skirmish on map 0 through the windowless client.
+
+| # | Note | Class | Specs | Request | Status |
+|---|---|---|---|---|---|
+| 21 | Released infantry does not leave the barracks door | With M8 A3 intake 35 (S-0417 r64) | S-0417 | — | With intake 35 |
+| 22 | The radar has no box for the battlefield view | Departure from S-0410 claim 11 (the outline that marks the battlefield view's part of the map is drawn over the radar map). Ledger [S-0410](../m5-claims/S-0410.md) row 11 said "not implemented" | S-0410 claim 11, F1, F2; S-0101 F1 | none | Fixed: `Radar::image_rect` and `view_outline` (`radar.rs`) give the view's four corners on the radar image through the inverse of F1 at height 0 (design: the outline reads height level 0). `hud::view_box_lines` draws a 1-pixel white frame clipped to the image (design). It is drawn only while the radar shows. Tests `view_box_lines_keep_the_edges_on_the_image_and_clip_them` (`hud.rs`), `the_radar_outline_follows_the_view` (client). Lane: outline edges (42, −5, 69, 34) on the image, (64, 16, 92, 56) after the view moved by (900, 450) |
+| 23 | Slave miners do not work | With the S-0402 r76 intake | S-0402 | — | With that intake |
+| 24 | The computer's miners do not work either | With the S-0402 r76 intake | S-0402 | — | With that intake |
+| 25 | No superweapon countdowns | Departure from S-0512 claim 18 (no countdown row was drawn) | S-0512 claim 18, F6; S-0412 Terms | none | Fixed: `Session::countdown_rows` takes the granted records with the countdown flag of non-passive houses in grant order (`charge::countdown_rows`). `hud::countdown_view` draws each at the battlefield's top right: name in the house colour, then *s* = ⌊remaining / 15⌋ as h:mm:ss from an hour, else m:ss; at 0 the time blinks once a real second. Position, font and blink look are ours, as the claim allows. Seam: the client has no string table, so the row shows the type's name in place of its display name. Tests `countdown_time_switches_to_hours_at_an_hour`, `countdown_at_zero_blinks_once_a_real_second` (`hud.rs`), `granted_countdowns_show_on_the_battlefield` (client). Lane: one row for the placed superweapon building, counting down (4:40, later 4:39), its time blinking once it is ready |
+| 26 | The chronosphere building is missing a part | With round 5 part 2 | — | — | With part 2 |
+| 27 | No sign that a superweapon is armed; it cannot be fired with a unit selected | Departure from S-0214 claim 31 / table CS (no aim images), plus our design for the selection (Q-1985) | S-0214 claim 31, table CS; S-0513 claim 1; S-0512 claims 16, 23 | Q-1985 | Fixed: `cursor::Aim` gives table CS's frames for each aim action (nuke, storm, iron curtain, chronosphere both stages, force shield and its refusal, paradrop, spy plane, dominator, genetic converter, psychic reveal), offered while a superweapon is armed (`Session::offer`); a selection still takes precedence (S-0513 claim 1). Design (Q-1985): arming from the icon clears the unit selection, so the next battlefield click aims. Seam: table CS's radar column (the aim image over the radar) is not drawn yet. Tests `claim_31_table_cs` (`cursor.rs`), `arming_from_the_icon_clears_the_selection_and_the_next_click_fires` (`play_tests.rs`), `an_armed_superweapon_offers_its_aim_image` (client). Lane: armed with one tank selected, the selection is 0 after arming, and the battlefield shows the aim image |
+| 28 | No building repair animation | With round 5 part 2 | — | — | With part 2 |
+| 29 | No way to set waypoints from the interface | Request: S-0213 claims 16 and 17 give route mode (Z held, claim 22) but leave how a committed route runs open (low confidence, Open questions); the engine has no route orders or route state | S-0213 claims 16, 17, 22; S-0215 claim 13 | Q-1986 | Waits for Q-1986. Rally points from a selected factory already work (visual-fix list 2, item 6); no substitute was built |
+| 30 | Ore drills give no ore | With the S-0402 r76 intake | S-0402 | — | With that intake |
+| 31 | T does not select every unit of the type on the screen; other shortcuts are missing | Type select: S-0214 Terms and claims 12, 19, 29 were not built. Control groups: our design (no spec gives their input) | S-0214 Terms, claims 12, 19, 29, Constants; S-0111 claim 17; S-0606 claim 7; S-0415 claim 6; S-0701 claim 17 | Q-1987, Q-1988 | Fixed. The type-select role's key is a binding (T by default, `Action::TypeSelect`; an old settings file keeps its keys and T falls back to a free letter if taken). Held during a select or toggle-select click, the click takes every own object of the clicked type on the screen, and a type-select box expands its in-box types in first-encounter order (claims 12, 19, 29; silent). A second press at most 500 ms after the one before (inclusive) widens it to the whole map in creation order. Q-1987 (our reading of scenario T2): a press alone expands the selection's types. Q-1987 (design): only the seed's own owner's objects join, and a held toggle on a selected object drops the type. Control groups (Q-1988, design): Ctrl+digit makes a group, Shift+digit adds to it, the digit selects it, and a second press within 500 ms centres the view on it. An object is in one group; a bunkered vehicle leaves its group (S-0606 claim 7). Digit keys are read by their physical key, so Shift+digit stays a digit. Seams: the group digit over units (S-0111 claim 17) waits for the pip scale; the group's transfer on deploy (S-0415 claim 6) is not done. Tests `type_expansion_takes_the_seed_types_from_the_pool`, `control_groups_make_add_and_select` (`play_tests.rs`), `the_type_select_key_widens_to_the_map_on_a_quick_second_press`, `the_type_select_key_is_held_until_released_or_the_focus_goes`, `control_group_keys_make_select_and_go_to_a_group` (client), `defaults_are_the_specified_ones`, `a_file_older_than_the_report_keys_keeps_its_own` (settings). Lane: 4 tanks on the screen, 2 off it; one press 4, a second press 200 ms later 6, two presses 1 s apart 4; a held click 4, a held toggle 0, a plain click after release 1; group of 3, one press selects it without moving the view, a second moves it |
+| 32 | Paratroopers told to deploy should deploy after landing | With round 5 part 2 | — | — | With part 2 |
+| 33 | No prices on hover | Our design: no spec gives a tooltip | S-0404 (price to the house); S-0512 claim 16, F6 | none | Fixed: hovering a sidebar icon (or focusing it with the keyboard; the pointer wins) shows a tooltip left of it with the type's name and its price to the house, or a superweapon's name with on hold, ready or its time left (`hud::tooltip`). The name has the same string-table seam as note 25. Test `an_icon_tooltip_shows_the_price_or_the_time_left` (`hud.rs`). Lane: a building icon's name and price; a superweapon icon's name and "Ready" |
+| 34 | No range indicator when placing a defence | Our design: no spec gives a placement range indicator | S-0307 claim 2 (weapon range; negative is unlimited); S-0101 F1 | none | Fixed: while placing a building with a weapon of positive range, an ellipse of the longest range, projected by F1 (half-axes 30√2·R/256 and 15√2·R/256 pixels, integer square roots), is drawn around the foundation's centre at the pointer cell or the keyboard aim cell, in yellow, clipped to the battlefield (`Play::placement_range`, `range_axes`, `ellipse`). Tests `the_range_ellipse_follows_the_projection` (`session.rs`), `placing_an_armed_building_offers_its_weapon_range` (`play_tests.rs`). Lane: the first armed defence type, range positive, the ellipse around the placement preview |
+
+**By eye (note 22).** Build a radar. A white frame shows on the radar map around the part of the
+map you see, its edges cut at the map image's edge. Scroll the battlefield or click the radar:
+the frame follows. Frames: `r5-22-25-radar-and-countdown.png`, `r5-22-radar-zoom.png`,
+`r5-22-radar-moved-zoom.png`.
+
+**By eye (note 25).** Build a superweapon whose type shows a timer (the lane used the first such
+building on map 0). A line appears at the battlefield's top right: the type's name in your
+colour and the time left as minutes and seconds (4:40 at first). When it is ready the time
+blinks once a second. The name is the rules name until the string table is
+read. Frame: `r5-22-25-radar-and-countdown.png`.
+
+**By eye (note 27).** Select a tank, then click a ready superweapon's icon: the tank is
+deselected, and over the battlefield the pointer shows that superweapon's aim image (the lane's
+Iron Curtain shows the red target rings). A click on the ground fires it. A right click cancels
+the aim. Frames: `r5-27-aim.png`, `r5-27-aim-zoom.png`.
+
+**By eye (note 31).** Select one tank with others of its type around it and press T: every tank
+of that type on the screen is selected, none off it. Press T twice quickly: every one on the map
+is selected. Hold T and click a tank: the same as the single press, but from the clicked tank's
+type. Hold T and shift-click a selected tank: that type leaves the selection. Ctrl+1 makes group
+1 of the selection, Shift+1 adds to it, 1 selects it, and 1 twice quickly moves the view to it.
+There is no group number over the units yet. On the web, check that the browser does not take
+Ctrl+digit for its tabs. Frames: `r5-31-type-screen.png`, `r5-31-group-went-to.png`.
+
+**By eye (note 33).** Hover a building icon: a small box left of it shows the type's name and
+"$" and its price. Hover a superweapon icon: its name and "Ready", "On hold" or the time left.
+Frames: `r5-33-tooltip-building-zoom.png`, `r5-33-tooltip-superweapon-zoom.png`.
+
+**By eye (note 34).** Start placing a defence: a thin yellow ellipse follows the placement
+preview, as wide as the defence's reach on the ground (twice as wide as high). A building with no
+weapon shows none. Frame: `r5-34-range.png`.
