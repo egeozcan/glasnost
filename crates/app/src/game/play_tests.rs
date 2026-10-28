@@ -995,6 +995,35 @@ fn arming_from_the_icon_clears_the_selection_and_the_next_click_fires() {
     assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
 }
 
+/// Placing an armed building offers its weapon's range in leptons for the
+/// indicator; an unarmed one and other tools offer none (our design, M8 A4
+/// round 5 note 34). spec: S-0307 claim 1 (R₀ in leptons)
+#[test]
+fn placing_an_armed_building_offers_its_weapon_range() {
+    let mut r = fixture::ruleset();
+    r.sim.buildings.get_mut("PILL").unwrap().primary = Some("Gun".into());
+    let mut p = start_with(std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r,
+        "synthetic-skirmish",
+    )));
+    let rules = p.world().rules_arc();
+    let place = |name: &str| {
+        Tool::Place(glasnost_sim::econ::TypeRef {
+            kind: Kind::Building,
+            index: rules.index_of(Kind::Building, name).unwrap() as u32,
+        })
+    };
+    let gun = rules.combat.weapon_index["Gun"];
+    let want = rules.combat.weapon(gun).range;
+    assert!(want > 0);
+    p.tool = place("PILL");
+    assert_eq!(p.placement_range(), Some(want));
+    p.tool = place("POWR");
+    assert_eq!(p.placement_range(), None);
+    p.tool = Tool::Select;
+    assert_eq!(p.placement_range(), None);
+}
+
 fn source_pick(p: &mut Play, house: HouseId) {
     p.effects = vec![Effect::Superweapon {
         event: SwEvent::SourceMarker,

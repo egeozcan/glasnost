@@ -938,6 +938,26 @@ impl Play {
         }
     }
 
+    /// The weapon range of the building type being placed, in leptons
+    /// (S-0307 claim 1's *R*₀): the longest positive range among its
+    /// weapon slots (S-0308 claim 1), for our placement range indicator
+    /// (M8 A4 round 5 note 34); none for a type without such a weapon.
+    pub fn placement_range(&self) -> Option<i32> {
+        let Tool::Place(t) = self.tool else {
+            return None;
+        };
+        let r = self.game.world.rules();
+        let b = r.buildings.get(t.index as usize)?;
+        b.combat
+            .slots
+            .iter()
+            .flatten()
+            .map(|&id| r.combat.weapon(id).range)
+            // An unlimited range (S-0307 claim 2, negative) has no circle.
+            .filter(|&x| x > 0)
+            .max()
+    }
+
     /// The end screen, once the game is over (S-0414), with the active
     /// clock's duration (claim 23).
     pub fn end(&self) -> Option<End> {

@@ -1700,7 +1700,7 @@ impl Session {
             } else {
                 [230, 50, 40, 110]
             };
-            for c in cells {
+            for &c in &cells {
                 let level = self
                     .play
                     .game
@@ -1711,6 +1711,31 @@ impl Session {
                 let (tx, ty) = cell_top(c.x, c.y);
                 let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
                 diamond(&mut d, sx, sy, fill, m);
+            }
+            // design: our placement range indicator (M8 A4 round 5 note
+            // 34): the ground circle of the type's weapon range around the
+            // foundation's centre, projected by S-0101 F1 to an ellipse, at
+            // the height of the foundation's first cell.
+            if let (Some(range), Some(&first)) = (self.play.placement_range(), cells.first()) {
+                let (x0, x1) = cells
+                    .iter()
+                    .fold((i32::MAX, i32::MIN), |(a, b), c| (a.min(c.x), b.max(c.x)));
+                let (y0, y1) = cells
+                    .iter()
+                    .fold((i32::MAX, i32::MIN), |(a, b), c| (a.min(c.y), b.max(c.y)));
+                // spec: S-0307 claim 1 (256 leptons per cell)
+                let (lx, ly) = ((x0 + x1 + 1) * 128, (y0 + y1 + 1) * 128);
+                let level = self
+                    .play
+                    .game
+                    .world
+                    .cells
+                    .cell(first)
+                    .map_or(0, |x| i32::from(x.level));
+                let (qx, qy) = project_lifted(lx, ly, 0);
+                let (cx, cy) = world_to_screen(qx, qy - TERRAIN_LIFT * level);
+                let (a, b) = range_axes(range);
+                ellipse(&mut d, (cx, cy), (a, b), RANGE_INK, m);
             }
         }
         // Our markers for selected objects the S-0111 bracket does not mark.
@@ -1958,6 +1983,48 @@ const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
 /// The keyboard cell's mark (our own; the interface's focus colour, veiled).
 // nocite: our own client setting (keyboard aiming)
 const AIM_INK: [u8; 4] = [96, 208, 255, 90];
+/// The placement range indicator's ink (our own).
+// nocite: our own colour for the placement range indicator
+const RANGE_INK: [u8; 4] = [255, 230, 80, 200];
+
+/// The half-axes in pixels of the screen ellipse of a ground circle of
+/// `range` leptons. S-0101 F1 puts a ground point (X, Y) at
+/// (30(X − Y) / 256, 15(X + Y) / 256), so a circle of radius R becomes an
+/// ellipse with half-axes 30·√2·R / 256 and 15·√2·R / 256.
+fn range_axes(range: i32) -> (i32, i32) {
+    let r = u128::from(range.max(0).unsigned_abs());
+    // spec: S-0101 F1 (30 and 15 pixels per 256 leptons along the projected axes)
+    let half = |k: u128| (glasnost_num::geom::isqrt(2 * (k * r) * (k * r)) / 256) as i32;
+    (half(30), half(15))
+}
+
+/// An ellipse outline centred at `c` with half-axes `ab`, as short lines;
+/// lines outside `clip` are left out.
+fn ellipse(d: &mut DrawList, c: (i32, i32), ab: (i32, i32), rgba: [u8; 4], clip: Rect) {
+    let (a, b) = ab;
+    if a <= 0 || b <= 0 {
+        return;
+    }
+    let y_at = |x: i32| {
+        let (a2, x2) = (i128::from(a) * i128::from(a), i128::from(x) * i128::from(x));
+        let s = glasnost_num::geom::isqrt((a2 - x2).max(0) as u128) as i64;
+        (i64::from(b) * s / i64::from(a)) as i32
+    };
+    let step = (a / 24).max(1);
+    let mut xs: Vec<i32> = (-a..a).step_by(step as usize).collect();
+    xs.push(a);
+    for sign in [-1, 1] {
+        for pair in xs.windows(2) {
+            let (p, q) = (
+                (c.0 + pair[0], c.1 + sign * y_at(pair[0])),
+                (c.0 + pair[1], c.1 + sign * y_at(pair[1])),
+            );
+            if clip.contains(Point::new(p.0, p.1)) && clip.contains(Point::new(q.0, q.1)) {
+                d.line(p, q, rgba);
+            }
+        }
+    }
+}
 
 /// A small flat ring (an ellipse outline, 12 × 6 pixels) centred at
 /// `(x, y)`: the stand-in for the control ring animations (S-0601 claim
@@ -2398,6 +2465,35 @@ mod cursor_palette_tests {
 #[cfg(test)]
 mod aim_tests {
     use super::*;
+
+    /// A ground circle of one cell's radius projects to an ellipse of
+    /// 30·√2 by 15·√2 pixels, and the drawn outline passes through its
+    /// four extreme points. spec: S-0101 F1 (30 and 15 pixels per 256 leptons)
+    #[test]
+    fn the_range_ellipse_follows_the_projection() {
+        assert_eq!(range_axes(256), (42, 21));
+        assert_eq!(range_axes(2560), (424, 212));
+        assert_eq!(range_axes(0), (0, 0));
+        let mut d = DrawList::new();
+        let clip = Rect::new(0, 0, 1000, 1000);
+        ellipse(&mut d, (500, 500), (42, 21), RANGE_INK, clip);
+        let ends: Vec<(i32, i32)> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                glasnost_ui::draw::Prim::Line { from, to, .. } => Some([*from, *to]),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        for p in [(458, 500), (542, 500), (500, 479), (500, 521)] {
+            assert!(ends.contains(&p), "{p:?}");
+        }
+        assert!(
+            ends.iter()
+                .all(|&(x, y)| (458..=542).contains(&x) && (479..=521).contains(&y))
+        );
+    }
 
     /// The keyboard cell's steps go the screen's way, reach every cell and
     /// undo each other. spec: S-0101 F1 (a cell's top corner projects to (30(x − y), 15(x + y)))
