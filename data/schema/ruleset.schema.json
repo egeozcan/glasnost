@@ -8632,6 +8632,11 @@
           "type": "boolean",
           "default": true
         },
+        "aircraft_threat_stays_put": {
+          "description": "An aircraft's threat and corridor exemption stay where it was placed.",
+          "type": "boolean",
+          "default": true
+        },
         "aircraft_unit_step_stall": {
           "description": "A forward step of exactly 1 lepton at a body facing between east and south (facings 16391 to 32766) changes neither coordinate, because each coordinate is truncated and no remainder is kept, so an aircraft slowing toward its destination can hover there with a positive fraction (an ordinary attacker never fires, a move or a return to a pad stops short of landing); off: a forward step of at least 1 lepton that would change neither coordinate moves 1 lepton along the axis of its larger component, in that component's direction, x on equal magnitudes.",
           "type": "boolean",
@@ -8939,6 +8944,11 @@
         },
         "collapsed_pier_span_search": {
           "description": "A span check passes over collapsed piers at both ends, so a pier collapse can join two spans into one checked extent; off: a collapsed pier stays eligible as a start or far piece.",
+          "type": "boolean",
+          "default": true
+        },
+        "corridor_free_part_ignores_height": {
+          "description": "The free part judges each cell at its own height level, not by the height rule.",
           "type": "boolean",
           "default": true
         },
@@ -9842,6 +9852,11 @@
           "type": "boolean",
           "default": true
         },
+        "negative_threat_field": {
+          "description": "A negative threat field takes its amount away from the threat records.",
+          "type": "boolean",
+          "default": true
+        },
         "nominal_survivor_count": {
           "description": "A nominal survivor is not added to the infantry count but is taken off when it leaves.",
           "type": "boolean",
@@ -10719,6 +10734,11 @@
         },
         "thinning_hits_waypoint_only": {
           "description": "The waypoint-thinning action takes every bale from the waypoint's own cell only.",
+          "type": "boolean",
+          "default": true
+        },
+        "threat_rebuild_counts_friends": {
+          "description": "The rebuild of a house's threat records counts its own and its allies' objects.",
           "type": "boolean",
           "default": true
         },
