@@ -7,11 +7,11 @@
 // `glasnost_rules::resolve_ruleset` as a mod patch layer, so it is part of `sim_rules_hash`.
 //
 // An entry is admitted only when (1) an approved spec states the switch's off position and the
-// engine implements it, (2) the on position reads as a bug in play (a unit stuck, giving up,
-// never moving, or a visible glitch), named by a play note or a request, and (3) it is not a
-// balance change (D14). Each entry cites its claim and what it answers. The list is kept short;
-// docs/development.md (Pathing and other fixes, M8 step C7) gives the entries considered and
-// rejected.
+// engine implements it, (2) the on position reads as a bug in play: a play note or a request
+// names it, or the approved spec's own Edge cases or quirk text states its effect as a unit
+// stuck, giving up although an open way exists, never moving again, or a visible glitch, and
+// (3) it is not a balance change (D14). Each entry cites its claim and what it answers. The list
+// is kept short; docs/m8-claims/c7-play-fixes.md gives the entries considered and rejected.
 {
   "globals": {
     "quirks": {
@@ -26,14 +26,14 @@
       // which this entry was admitted, are answered by S-0212 r82: the original finds the way
       // out of its own base on the first cell search, and this entry changes nothing there.
       "corridor_retry_no_fallback": false,
-      // S-0212 claim 13a and Edge cases (quirks.corridor_split_probe off): the progress sector
-      // counts as split when some cell of it inside the usable area is not in the free part,
-      // and as whole otherwise; at a short strip the failure is expected at fewer alignments.
-      // Admitted for pathing reports 1 and 2 (Q-1771, Q-1870) together with the entry above;
-      // since S-0212 r82 those reports' shapes are passed on the first cell search, and with
-      // the entry above off a strip is passed at every alignment whatever this switch says.
-      // Kept until the lead rules on it (docs/m8-claims/c7-play-fixes.md, After intake 34).
-      "corridor_split_probe": false,
+      // S-0212 Edge cases (quirks.corridor_free_part_ignores_height off): the free part and its
+      // borders apply the height rule of claim 10, so a ledge (a line of flat cells one level
+      // above flat ground) stops the free part as a strip does and the retries lead a new coarse
+      // search round it. On (the original), the same cell search fails 5 times at a ledge and
+      // the unit refuses the order although an open way round exists.
+      // Answers: the spec's own Edge case (a ledge across the route), the same gameplay impact
+      // as the strip above.
+      "corridor_free_part_ignores_height": false,
       // S-0314 Edge cases (Hovering vehicle stranded) and Terms, What ends it
       // (quirks.depot_loss_strands_hover off): losing contact with a depot ends being settled,
       // so a hovering vehicle is switched on again and rises. On (the original), a hover whose
@@ -45,6 +45,22 @@
       // Answers: the play seam of docs/m8-claims/intake30-S-0314.md (a hover that never moves
       // again) and the spec's own Edge case.
       "depot_loss_strands_hover": false,
+      // S-0402 claim 11 and Edge cases (Unload without contact stalls; quirks.unload_without_contact_stalls
+      // off): a harvester whose refinery breaks off contact while it unloads without a sale
+      // falls back to rest as if unload were not current and starts what S-0215 claim 15 gives
+      // it. On (the original), it stays in unload for good, processed every tick, until an
+      // order gives it a behaviour. Acts only in that stalled state.
+      "unload_without_contact_stalls": false,
+      // S-0605 claim 17 and Edge cases (Contact outlives enter; quirks.absorber_stale_contact_kept
+      // off): an actor in contact with an absorbing building that has neither enter current nor
+      // enter queued gives the contact up in its own turn. On (the original), it keeps the
+      // building's link place for good and every later entrant waits in line for ever.
+      "absorber_stale_contact_kept": false,
+      // S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off): a landing-first
+      // in-place hover treats its standing landing request as met once it is no longer moving, so
+      // its next deploy step deploys it. On (the original), it never deploys; unload stays
+      // current with a deploy step each tick.
+      "hover_landing_request_stands": false,
     },
   },
 }

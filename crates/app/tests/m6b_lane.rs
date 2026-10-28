@@ -774,8 +774,8 @@ fn follow_move(
 fn base_exit_run(lane: &mut Lane, fixes: bool) {
     let q = lane.world().rules().quirks;
     println!(
-        "-- fixes ticked {fixes}: corridor_retry_no_fallback {}, corridor_split_probe {}",
-        q.corridor_retry_no_fallback, q.corridor_split_probe
+        "-- fixes ticked {fixes}: corridor_retry_no_fallback {}, corridor_free_part_ignores_height {}",
+        q.corridor_retry_no_fallback, q.corridor_free_part_ignores_height
     );
     let Some(block) = plain_block(lane.world()) else {
         println!("no plain 1x1 building type");

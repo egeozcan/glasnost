@@ -11,7 +11,7 @@ use glasnost_rules::layers::Layers;
 // nocite: our own test length
 const TICKS: i32 = 600;
 
-// spec: S-0212 claims 13 and 13a and Edge cases (both corridor switches off) and S-0314 Edge cases (quirks.depot_loss_strands_hover off), as the play-fixes layer sets them: a game with the layer is a game of its own rules, saved, loaded and replayed under them
+// spec: S-0212 claim 13 and Edge cases (both corridor switches off), S-0314 Edge cases (quirks.depot_loss_strands_hover off), S-0402 claim 11, S-0605 claim 17 and S-0503 claim 19 (their switches off), as the play-fixes layer sets them: a game with the layer is a game of its own rules, saved, loaded and replayed under them
 #[test]
 fn a_game_with_the_layer_saves_loads_and_replays_under_its_own_rules() {
     let name = "synthetic-skirmish";
@@ -23,7 +23,14 @@ fn a_game_with_the_layer_saves_loads_and_replays_under_its_own_rules() {
         "no layer: the gate's rules"
     );
     assert_ne!(plain.hash, fixed.hash);
-    assert!(!fixed.quirks.corridor_retry_no_fallback && !fixed.quirks.corridor_split_probe);
+    assert!(
+        !fixed.quirks.corridor_retry_no_fallback && !fixed.quirks.corridor_free_part_ignores_height
+    );
+    assert!(fixed.quirks.corridor_split_probe);
+    assert!(
+        !fixed.quirks.unload_without_contact_stalls && !fixed.quirks.absorber_stale_contact_kept
+    );
+    assert!(!fixed.quirks.hover_landing_request_stands);
     assert!(!fixed.quirks.depot_loss_strands_hover);
     let catalogue = fixture::catalogue();
     let mut g = Game::new(

@@ -163,16 +163,20 @@ mod tests {
 
     /// The switches the play-fixes layer turns off (M8 step C7). Changing the
     /// layer's list means changing this one, its docs section and its tests.
-    const ADMITTED: [&str; 3] = [
+    const ADMITTED: [&str; 6] = [
+        "absorber_stale_contact_kept",
+        "corridor_free_part_ignores_height",
         "corridor_retry_no_fallback",
-        "corridor_split_probe",
         "depot_loss_strands_hover",
+        "hover_landing_request_stands",
+        "unload_without_contact_stalls",
     ];
 
-    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off) and claim 13a and Edge cases (quirks.corridor_split_probe off); S-0314 Edge cases (quirks.depot_loss_strands_hover off): the layer sets exactly these three switches, and only switches
+    // spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off, quirks.corridor_free_part_ignores_height off); S-0314 Edge cases (quirks.depot_loss_strands_hover off); S-0402 claim 11 and Edge cases (quirks.unload_without_contact_stalls off); S-0605 claim 17 and Edge cases (quirks.absorber_stale_contact_kept off); S-0503 claim 19 and Edge cases (quirks.hover_landing_request_stands off): the layer sets exactly these six switches, and only switches
     #[test]
     fn play_fixes_sets_only_the_admitted_switches_off() {
-        let paths = paths(&play_fixes()).unwrap();
+        let mut paths = paths(&play_fixes()).unwrap();
+        paths.sort();
         let want: Vec<String> = ADMITTED
             .iter()
             .map(|n| format!("globals.quirks.{n}"))
@@ -189,7 +193,11 @@ mod tests {
             .collect();
         changed.sort_unstable();
         assert_eq!(changed, ADMITTED);
-        assert!(!q.corridor_retry_no_fallback && !q.corridor_split_probe);
+        assert!(
+            q.corridor_split_probe,
+            "left on: no pass or fail difference with the retry fallback off"
+        );
+        assert!(!q.corridor_retry_no_fallback && !q.corridor_free_part_ignores_height);
         assert!(!q.depot_loss_strands_hover);
         // Every switch the layer changes is on by default (the original),
         // so the layer only ever turns the original's behaviour off.
