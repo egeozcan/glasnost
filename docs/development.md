@@ -2029,7 +2029,9 @@ S-0316 revision 27 (answers Q-1701). Ledger [docs/m8-claims/c5-S-0316.md](m8-cla
 
 ## Debris pieces with voxel models (M8 step C5 part 2)
 
-S-0317 revision 34 (answers Q-1702). Ledger [docs/m8-claims/c5-S-0317.md](m8-claims/c5-S-0317.md).
+S-0317 revision 34 (answers Q-1702), revision 57 since M8 A3 intake 32 (answers Q-1834 to Q-1836).
+Ledgers [docs/m8-claims/c5-S-0317.md](m8-claims/c5-S-0317.md) and
+[docs/m8-claims/intake32-S-0317.md](m8-claims/intake32-S-0317.md).
 
 - **Play.** `glasnost_sim::pieces` holds the pieces in `World::pieces`. A piece is game state:
   saved, hashed and entered in the update order.
@@ -2044,28 +2046,29 @@ S-0317 revision 34 (answers Q-1702). Ledger [docs/m8-claims/c5-S-0317.md](m8-cla
   - **Producers.** A death (`combat::death::deal_debris`, with the object's house), a warhead's
     debris and an exploding overlay's barrel debris (no house) all make pieces through
     `pieces::create_named`.
-  - **Formats.** Save format 72, AI game format 33.
+  - **Contacts (r57).** F8's rebound off the cell's slope (claim 17), F9's cliff turn (claim 18),
+    claim 19's building cells, claim 20's off-map cell, no placement at (0, 0, 0) (claim 21).
+  - **Pose (r57).** `Piece::turns` and `Piece::reversed` keep claim 22's net turn count.
+  - **Formats.** Save format 72, AI game format 33; 82 and 44 since intake 32.
 - **Switches.** New: `quirks.voxel_debris_deck_impact_layer`, `voxel_debris_deck_over_water`,
-  `voxel_debris_trailer_height` and `voxel_debris_expiry_needs_animation`. Wired:
+  `voxel_debris_trailer_height` and `voxel_debris_expiry_needs_animation`; at intake 32
+  `voxel_debris_deck_rebound_slope` and `voxel_debris_cliff_step_faults`. Wired:
   `chop_rounding`, `random_magnitude_overflow`, `update_order_removal_skip` and
   `table_root_distance`.
 - **Import.** `convert::sim_pieces` reads the voxel-animation sections, and warns for zero spans,
   SpawnCount 2147483647, a resource flag without a resource overlay at 127, and an empty splash
-  list. `art::voxel_animation` gives each type its own model I ‖ .vxl with no motion file (S-0007
-  claim 30).
+  list; since intake 32 also for MaxXYVel 256 or more (claim 18) and a VoxelIndex outside the own
+  model (claim 23). `art::voxel_animation` gives each type its own model I ‖ .vxl with no motion
+  file (S-0007 claim 30).
 - **Sound.** The start sound plays at the creation point and its anchor follows the piece
   (`glasnost_audio::events`, `Effect::PieceSound`).
 - **Drawing.** `mapview::live` puts each piece in the air layer (S-0102), and
-  `build::live_piece` draws its model turned by `live::piece_pose`.
-- **Interim rules.**
-  - **Q-1834.** A sloped cell rebounds as a flat one. A cliff turn negates each horizontal
-    component whose cell coordinate changed. Any building in the cell counts, and no overlay
-    does.
-  - **Q-1835.** The pose is a turn about the model axis of the spin axis's largest component, in
-    whole π/16 steps, under the S-0105 view. The light is S-0306 F16's, and the palette the
-    piece's house colour at brightness 1000. No depth test and no shadow.
-  - **Q-1836.** Pieces are always placed and never removed off the map. Off the map: ground 0,
-    level 0, not water, no bridge.
+  `build::live_piece` draws claims 22 to 28: the VoxelIndex section turned by
+  `voxel::piece_rotation` (no view), lit by F16's diffuse term, its F11 shadow
+  (`voxel::draw_piece_shadow`) first, claim 25's palettes, claim 26's depth.
+- **Image slots (design).** A pose is drawn afresh, so each piece holds one body and one shadow
+  image, rewritten in place (`mapview::piece_pool`, `Scene::replace_image`, re-uploaded by
+  `MapRenderer::sync`); a piece leaving play frees its slots. No interims remain.
 - **Seams.**
   - S-0007 claim 30's shared part (a share flag draws nothing and warns), and with it
     `quirks.voxel_anim_share_afresh`.
