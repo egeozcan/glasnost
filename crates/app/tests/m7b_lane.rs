@@ -73,7 +73,10 @@
 //! kills enemy infantry by each death kind and enemy vehicles and counts,
 //! 300 and 1000 ticks later, what stays on the map: animations by kind
 //! (bouncing, corpse, endless, other), voxel debris pieces and particle
-//! systems (S-0107 claim 17; S-0109; S-0317; S-0616).
+//! systems (S-0107 claim 17; S-0109; S-0317; S-0616). `debris-pieces`
+//! destroys six enemy vehicles and follows their debris pieces tick by
+//! tick, with screens of them flying, bouncing and drawn with their shadows
+//! (S-0317 claims 10, 17 to 22 and 27).
 //!
 //! M8 step A4, round 4 (the lead's notes 16 to 18): `carrier-death` puts
 //! each spawner type that launches aircraft on open water of the first map
@@ -197,6 +200,7 @@ const SCENES: &[Scene] = &[
     ("bolt-building", |l| bolts(l, Kind::Building)),
     ("aa-auto", aa_auto),
     ("debris-left", debris_left),
+    ("debris-pieces", debris_pieces),
     ("carrier-death", carrier_death),
     ("mirage-click", mirage_click),
     ("derrick-look", derrick_look),
@@ -2167,6 +2171,83 @@ fn debris_left(lane: &mut Lane) {
     lane.ticks(50);
     leftovers(lane, &before, "debris-left +1000");
     lane.save("debris-left-1000");
+}
+
+/// S-0317 claims 10, 17 to 22 and 27: enemy armed vehicles destroyed, then
+/// their debris pieces watched tick by tick (count, heights, contacts as
+/// reversals of the turn's sense, net turns) with screens of the pieces
+/// flying, bouncing and drawn with their shadows.
+fn debris_pieces(lane: &mut Lane) {
+    let Some(enemy) = lane.enemy() else { return };
+    let home = lane.home();
+    let at = lane.open_land(CellXY::new(home.x + 10, home.y + 10));
+    lane.look_at(at);
+    let vehicles: Vec<String> = {
+        let r = lane.world().rules();
+        (0..r.vehicles.len())
+            .filter(|&i| {
+                r.unit(Kind::Vehicle, i as u32).is_some_and(|u| {
+                    u.strength > 0
+                        && u.combat.slots[0].is_some()
+                        && u.locomotor != glasnost_sim::rules::Locomotor::Ship
+                })
+            })
+            .take(6)
+            .map(|i| r.vehicles[i].name.clone())
+            .collect()
+    };
+    let h = warhead_of_kind(lane.world(), 0).unwrap_or(0);
+    let ids: Vec<ObjectId> = vehicles
+        .iter()
+        .enumerate()
+        .map(|(j, v)| {
+            let x = at.x + 2 * (j as i32 % 3);
+            let y = at.y + 2 * (j as i32 / 3);
+            lane.spawn(Kind::Vehicle, v, enemy, CellXY::new(x, y))
+        })
+        .collect();
+    lane.ticks(2);
+    for id in ids {
+        kill_with(lane, id, h);
+    }
+    let mut flips: std::collections::BTreeMap<ObjectId, (bool, u32)> = Default::default();
+    let mut most = 0;
+    for t in 1..=60 {
+        lane.ticks(1);
+        let w = lane.world();
+        let mut zs = Vec::new();
+        let mut net = Vec::new();
+        for (id, p) in &w.pieces {
+            let e = flips.entry(*id).or_insert((p.reversed, 0));
+            if e.0 != p.reversed {
+                *e = (p.reversed, e.1 + 1);
+            }
+            zs.push(p.pos.z);
+            net.push(p.turns);
+        }
+        let live = w.pieces.len();
+        most = most.max(live);
+        let bounced = flips.values().filter(|f| f.1 > 0).count();
+        println!(
+            "debris-pieces +{t}: in play {live}, height min {:?} max {:?}, net turns min {:?} max {:?}, pieces seen {}, with a contact so far {bounced}",
+            zs.iter().min(),
+            zs.iter().max(),
+            net.iter().min(),
+            net.iter().max(),
+            flips.len(),
+        );
+        if [2, 5, 9, 14, 20, 30].contains(&t) {
+            lane.save(&format!("debris-pieces-{t:02}"));
+        }
+        if t > 5 && live == 0 {
+            break;
+        }
+    }
+    let contacts: u32 = flips.values().map(|f| f.1).sum();
+    println!(
+        "debris-pieces: most in play {most}, pieces {}, reversals (contacts) {contacts}",
+        flips.len()
+    );
 }
 
 /// The first weapon with the electric-bolt flag that makes a bolt (no
