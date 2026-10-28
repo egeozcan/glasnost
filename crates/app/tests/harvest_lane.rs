@@ -4,7 +4,9 @@
 //! ore mines (note 30). Miners of each kind are also placed by the local
 //! base, queued to harvest as a factory releases them (S-0417 claim 8), one
 //! set for the local house and one for a computer house. Screens go to
-//! `local-lane/m8/a3-36/` (git-ignored; `GLASNOST_LANE_OUT` moves it).
+//! `local-lane/m8/a3-36/` (git-ignored; `GLASNOST_LANE_OUT` moves it);
+//! `far_slave_miners_of_a_person_and_a_computer` (Q-1990) writes to
+//! `local-lane/m8/a3-41/`.
 //! Types are chosen by their fields, never by name; it prints counts,
 //! states and booleans only.
 //!
@@ -487,18 +489,13 @@ fn describe(w: &World, id: ObjectId, start: CellXY) -> String {
     )
 }
 
-#[test]
-#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
-fn harvest_notes_on_the_real_data() {
-    let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
-        eprintln!("GLASNOST_GAME_DIR not set: skipped");
-        return;
-    };
-    let out = png::lane_out("m8/a3-36");
-    std::fs::create_dir_all(&out).unwrap();
+/// Starts a skirmish on the `GLASNOST_UI_MAP`-th map through the client,
+/// deploys the local house's base unit and runs 200 ticks. Returns the
+/// client, its clock and the local house.
+fn start(dir: &std::ffi::OsStr) -> (Client, i64, HouseId) {
     let mut c = Client::new();
     c.resize((1280, 800));
-    c.mount(files(std::path::Path::new(&dir)));
+    c.mount(files(std::path::Path::new(dir)));
     run_jobs(&mut c);
     let maps = c.install.as_ref().expect("the install reads").maps.len();
     let map = env_num("GLASNOST_UI_MAP", 0).min(maps - 1);
@@ -506,6 +503,7 @@ fn harvest_notes_on_the_real_data() {
     let r = c.menu_targets.rect_of(&MenuHit::Skirmish).unwrap();
     click(&mut c, r);
     for _ in 0..map {
+        let _ = c.frame();
         let r = c.setup_targets.rect_of(&SetupHit::Map(1)).unwrap();
         click(&mut c, r);
     }
@@ -546,22 +544,233 @@ fn harvest_notes_on_the_real_data() {
     c.key(Key::Char('d'), true);
     c.key(Key::Char('d'), false);
     ticks(&mut c, &mut clock, 200);
+    (c, clock, local)
+}
+
+/// Every player house allied with every other, so that the watched
+/// economy plays on without a house losing and ending the game.
+fn peace(c: &mut Client) {
+    let w = &mut c.session.as_mut().unwrap().play.game.world;
+    let players: Vec<HouseId> = (0..w.houses.len())
+        .filter(|&h| w.houses[h].start.is_some())
+        .map(|h| HouseId(h as u8))
+        .collect();
+    for &h in &players {
+        for &o in &players {
+            if !w.houses[usize::from(h.0)].allies.contains(&o) {
+                w.houses[usize::from(h.0)].allies.push(o);
+            }
+        }
+    }
+}
+
+/// The other player house with the most objects: the computer's.
+fn computer_of(w: &World, local: HouseId) -> Option<HouseId> {
+    (0..w.houses.len())
+        .filter(|&h| h != usize::from(local.0) && w.houses[h].start.is_some())
+        .max_by_key(|&h| {
+            w.objects
+                .values()
+                .filter(|o| o.owner == Some(HouseId(h as u8)))
+                .count()
+        })
+        .map(|h| HouseId(h as u8))
+}
+
+/// Q-1990 (S-0402 r80 claim 14): a slave miner of the local house (a
+/// person's) and one of the computer's (an AI house) placed with no
+/// order far from any field, off tiberium land and with no tiberium land
+/// within the short scan. The person's stays put; the computer's brain
+/// sends its own with a harvest order on a field cell it has explored,
+/// and it travels, deploys and its slaves work. Prints, per miner, the
+/// first tick it had a destination, moved, deployed and had a slave out;
+/// screens of each at the end go to `local-lane/m8/a3-41/`.
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn far_slave_miners_of_a_person_and_a_computer() {
+    let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let out = png::lane_out("m8/a3-41");
+    std::fs::create_dir_all(&out).unwrap();
+    let (mut c, mut clock, local) = start(&dir);
+    peace(&mut c);
+    let w = world(&c);
+    let computer = computer_of(w, local).expect("a computer house");
+    println!(
+        "computer house {} human {} (an AI house)",
+        computer.0,
+        w.houses[usize::from(computer.0)].human
+    );
+    let ti = (0..w.rules().vehicles.len() as u32)
+        .find(|&ti| miner_kind(w, ti) == Some("slave miner"))
+        .expect("a slave miner type");
+    let mut watched = Vec::new();
+    for (who, house) in [("person", local), ("computer", computer)] {
+        let home = home_of(world(&c), house).expect("a base");
+        let id = place_far(&mut c, ti, house, home).expect("placed");
+        let w = world(&c);
+        let cell = w.obj(id).unwrap().pos.cell();
+        // The nearest tiberium land, in cells.
+        let ore = (-150i32..=150)
+            .flat_map(|dy| (-150i32..=150).map(move |dx| CellXY::new(cell.x + dx, cell.y + dy)))
+            .filter(|&o| {
+                w.cells
+                    .cell(o)
+                    .is_some_and(|x| x.land == glasnost_map::terrain::land::TIBERIUM)
+            })
+            .map(|o| (o.x - cell.x).abs().max((o.y - cell.y).abs()))
+            .min();
+        println!(
+            "{who}: miner placed at tick {}, nearest tiberium land {ore:?} cells, short scan {} cells",
+            w.tick,
+            w.rules().econ.harvest.slave_short_scan
+        );
+        // (who, house, the vehicle, its cell, its master now, its last
+        // cell, first ticks of [destination, moved, deployed, slave out]).
+        watched.push((who, house, id, cell, id, cell, [None::<i32>; 4]));
+    }
+    let watch = env_num("GLASNOST_UI_TICKS", 4500);
+    let from = world(&c).tick;
+    let mut hp: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    let mut first_hit: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    for done in 1..=watch {
+        ticks(&mut c, &mut clock, 1);
+        let w = world(&c);
+        for (_, house, id, cell, master, last, firsts) in &mut watched {
+            let t = w.tick - from;
+            match w.obj(*id) {
+                Some(o) => {
+                    if o.dest.is_some() {
+                        firsts[0].get_or_insert(t);
+                    }
+                    if o.pos.cell() != *cell {
+                        firsts[1].get_or_insert(t);
+                    }
+                    *last = o.pos.cell();
+                    // Damage taken, and who has it as their target.
+                    if hp
+                        .insert(*id, o.health)
+                        .is_some_and(|before| o.health < before)
+                    {
+                        first_hit.entry(*id).or_insert(t);
+                        let by: Vec<_> = w
+                            .objects
+                            .values()
+                            .filter(|x| x.target == Some(glasnost_sim::world::Target::Object(*id)))
+                            .map(|x| (x.kind, x.owner.map(|h| h.0)))
+                            .collect();
+                        println!(
+                            "tick +{t}: watched vehicle of house {} hit, health {}, targeted by {by:?}",
+                            house.0, o.health
+                        );
+                    }
+                }
+                None => {
+                    if firsts[2].is_none() {
+                        // Who stood near its last cell when it left the map.
+                        let near: Vec<String> = w
+                            .objects
+                            .values()
+                            .filter(|x| {
+                                let p = x.pos.cell();
+                                x.on_map && (p.x - last.x).abs().max((p.y - last.y).abs()) <= 6
+                            })
+                            .map(|x| {
+                                format!(
+                                    "{:?} house {:?} own {} {:?}",
+                                    x.kind,
+                                    x.owner.map(|h| h.0),
+                                    x.owner == Some(*house),
+                                    x.beh.current
+                                )
+                            })
+                            .collect();
+                        println!("tick +{t}: the watched vehicle left the map; near it {near:?}");
+                    }
+                    firsts[1].get_or_insert(t);
+                    firsts[2].get_or_insert(t);
+                    // The deployed form: the owner's slave master building
+                    // nearest the vehicle's last cell (S-0415 claim 10).
+                    if *master == *id {
+                        if let Some(b) = w
+                            .objects
+                            .values()
+                            .filter(|b| {
+                                b.on_map
+                                    && b.kind == Kind::Building
+                                    && b.owner == Some(*house)
+                                    && slaves::is_master(w, b.id)
+                            })
+                            .min_by_key(|b| {
+                                let p = b.pos.cell();
+                                (p.x - last.x).abs().max((p.y - last.y).abs())
+                            })
+                        {
+                            *master = b.id;
+                        }
+                    }
+                }
+            }
+            let out = w.objects.values().any(|s| {
+                s.on_map && slaves::slave_of(w, s.id).is_some_and(|st| st.master == Some(*master))
+            });
+            if out {
+                firsts[3].get_or_insert(t);
+            }
+        }
+        if done % 1500 == 0 {
+            for (who, _, id, start, master, _, firsts) in &watched {
+                println!(
+                    "tick +{done} {who}: {} | first dest/moved/deployed/slave out {firsts:?}",
+                    describe(w, if w.obj(*id).is_some() { *id } else { *master }, *start)
+                );
+            }
+        }
+    }
+    let credits: Vec<i32> = [local, computer]
+        .iter()
+        .map(|h| world(&c).houses[usize::from(h.0)].credits)
+        .collect();
+    println!("credits person/computer {credits:?}");
+    for (who, _, id, _, master, last, firsts) in &watched {
+        let at = world(&c).obj(*master).map_or(*last, |o| o.pos.cell());
+        look_at(&mut c, at);
+        let _ = c.frame();
+        save(&mut c, &out, &format!("a3-41-{who}-far-slave-miner"));
+        if *who == "person" {
+            // It never gets a destination or sends a slave out, and does
+            // not move until something hits it (the computer's waves still
+            // go for the local house's units: `peace` only sets the sim's
+            // alliances).
+            let hit = first_hit.get(id).copied();
+            println!("person's miner first hit {hit:?}");
+            assert_eq!(firsts[0], None, "no destination");
+            assert_eq!(firsts[3], None, "no slave out");
+            assert!(
+                firsts[1].is_none_or(|m| hit.is_some_and(|h| h <= m)),
+                "the person's miner stays put until hit: {firsts:?}"
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "local lane: needs GLASNOST_GAME_DIR"]
+fn harvest_notes_on_the_real_data() {
+    let Some(dir) = std::env::var_os("GLASNOST_GAME_DIR") else {
+        eprintln!("GLASNOST_GAME_DIR not set: skipped");
+        return;
+    };
+    let out = png::lane_out("m8/a3-36");
+    std::fs::create_dir_all(&out).unwrap();
+    let (mut c, mut clock, local) = start(&dir);
     // Every player house allied with every other (GLASNOST_HARVEST_PEACE=0
     // keeps the war): the economy plays on without the local house losing
     // and ending the game.
     if env_num("GLASNOST_HARVEST_PEACE", 1) != 0 {
-        let w = &mut c.session.as_mut().unwrap().play.game.world;
-        let players: Vec<HouseId> = (0..w.houses.len())
-            .filter(|&h| w.houses[h].start.is_some())
-            .map(|h| HouseId(h as u8))
-            .collect();
-        for &h in &players {
-            for &o in &players {
-                if !w.houses[usize::from(h.0)].allies.contains(&o) {
-                    w.houses[usize::from(h.0)].allies.push(o);
-                }
-            }
-        }
+        peace(&mut c);
     }
     // Note 30: the resource within 2 cells of every mine is taken away, and
     // so is that of a 5 × 5 control patch of the field cell farthest from
@@ -618,15 +827,7 @@ fn harvest_notes_on_the_real_data() {
     // house and for the other player house (the computer's), each by its
     // own base.
     let w = world(&c);
-    let computer = (0..w.houses.len())
-        .filter(|&h| h != usize::from(local.0) && w.houses[h].start.is_some())
-        .max_by_key(|&h| {
-            w.objects
-                .values()
-                .filter(|o| o.owner == Some(HouseId(h as u8)))
-                .count()
-        })
-        .map(|h| HouseId(h as u8));
+    let computer = computer_of(w, local);
     let mut kinds: BTreeMap<&'static str, u32> = BTreeMap::new();
     for ti in 0..w.rules().vehicles.len() as u32 {
         if let Some(k) = miner_kind(w, ti) {

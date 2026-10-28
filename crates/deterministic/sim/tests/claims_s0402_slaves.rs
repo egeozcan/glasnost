@@ -2276,11 +2276,11 @@ struct FarLog {
 /// `s_m` of its *guard*).
 fn far_run(w: &mut World, miners: &[(ObjectId, i32)], n: i32) -> Vec<FarLog> {
     let mut logs: Vec<FarLog> = miners.iter().map(|_| FarLog::default()).collect();
-    let cells: Vec<_> = miners
+    let cells: Vec<_> = miners.iter().map(|&(m, _)| w.obj(m).unwrap().pos).collect();
+    let owners: Vec<_> = miners
         .iter()
-        .map(|&(m, _)| w.obj(m).unwrap().pos)
+        .map(|&(m, _)| w.obj(m).unwrap().owner)
         .collect();
-    let owners: Vec<_> = miners.iter().map(|&(m, _)| w.obj(m).unwrap().owner).collect();
     for _ in 0..n {
         let guard: Vec<bool> = miners
             .iter()
@@ -2318,8 +2318,7 @@ fn far_run(w: &mut World, miners: &[(ObjectId, i32)], n: i32) -> Vec<FarLog> {
                     l.after_wake = Some((o.beh.current, o.beh.queued));
                 } else {
                     let b = &o.beh;
-                    if b.queued == Some(Behaviour::Harvest)
-                        || b.current == Some(Behaviour::Harvest)
+                    if b.queued == Some(Behaviour::Harvest) || b.current == Some(Behaviour::Harvest)
                     {
                         l.harvest_before_wake.get_or_insert(t);
                     }
@@ -2364,7 +2363,10 @@ fn claim_14_far_from_a_field_wakes_only_for_a_computer_controlled_owner() {
         let r = far_rules(FAR_KICK);
         let mut w = owners_game(&r, &field(10, 0, 5));
         let miners = far_miners(&mut w, name, name == "SMVD");
-        assert!(w.houses[0].human && w.houses[1].human, "a person and an AI house");
+        assert!(
+            w.houses[0].human && w.houses[1].human,
+            "a person and an AI house"
+        );
         assert!(!w.houses[2].human && !w.houses[3].human);
         for &(m, _) in &miners {
             let c = w.obj(m).unwrap().pos.cell();
@@ -2396,7 +2398,10 @@ fn claim_14_far_from_a_field_wakes_only_for_a_computer_controlled_owner() {
                 woke, first,
                 "{name}, house {h}: the first processing with t > k + s_m"
             );
-            assert_eq!(l.harvest_before_wake, None, "{name}, house {h}: no claim 13 row");
+            assert_eq!(
+                l.harvest_before_wake, None,
+                "{name}, house {h}: no claim 13 row"
+            );
             assert_eq!(l.restarted_before_wake, None, "{name}, house {h}: s_m kept");
             let moved = l
                 .moved
@@ -2466,7 +2471,10 @@ fn claim_14_harvester_flagged_slave_miner_takes_claim_13_rows_after_no_wake() {
             let q = l
                 .harvest_before_wake
                 .unwrap_or_else(|| panic!("house {h}: {l:?}"));
-            assert!(q < FAR_KICK + miners[h].1, "house {h}: before the kick delay");
+            assert!(
+                q < FAR_KICK + miners[h].1,
+                "house {h}: before the kick delay"
+            );
             assert_eq!(l.woke, None, "house {h}");
         }
     }

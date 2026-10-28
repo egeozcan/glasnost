@@ -1007,9 +1007,8 @@ fn a_moving_slave_miner_stands_for_the_refinery() {
 fn a_resting_slave_miner_far_from_a_field_is_sent_to_harvest() {
     let rules = slave_rules();
     let map = fixture::map();
-    let mut w =
-        glasnost_sim::load::new_game(rules, &map, fixture::catalogue(), &fixture::setup(5))
-            .expect("loads");
+    let mut w = glasnost_sim::load::new_game(rules, &map, fixture::catalogue(), &fixture::setup(5))
+        .expect("loads");
     for id in of(&w, 0, "MCV") {
         objects::remove(&mut w, id);
     }
@@ -1018,7 +1017,8 @@ fn a_resting_slave_miner_far_from_a_field_is_sent_to_harvest() {
     let m = testkit::spawn(&mut w, Kind::Vehicle, "SMV", 0, at(-8, -10), 0);
     testkit::run(&mut w, glasnost_ai::scripted::THINK_PERIOD);
     assert!(slaves::at_rest(&w, m), "the miner rests where it stands");
-    let field = |c: glasnost_map::CellXY| glasnost_sim::econ::resource::resource_at(&w, c).is_some();
+    let field =
+        |c: glasnost_map::CellXY| glasnost_sim::econ::resource::resource_at(&w, c).is_some();
     assert!(
         w.cells
             .grid
