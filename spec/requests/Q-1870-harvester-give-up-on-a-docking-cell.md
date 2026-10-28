@@ -3,7 +3,7 @@ id: Q-1870
 title: A harvester that leaves a refinery's docking cell gives up its way back to the field after 5 corridor searches and stays on the dock; is that the game's behaviour?
 status: answered
 related: [S-0212, S-0402, S-0209, S-0207, Q-1771]
-answered-by: [S-0212]
+answered-by: [S-0212, S-0402]
 ---
 
 ## Need
