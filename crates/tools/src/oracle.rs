@@ -1471,6 +1471,33 @@ fn unanimous(games: &[&Game], side: Side) -> Option<Winner> {
     w.all(|x| x == first).then_some(first)
 }
 
+/// The types whose stock rows M-0017 does not cover: its replay leaves out
+/// every game with one of them on either side, so a pairing with one is not
+/// confirmed as stock.
+pub const UNCONFIRMED_TYPES: [&str; 2] = ["SREF", "V3"]; // measure: M-0017
+
+/// Whether M-0017 confirms a pairing's stock rows.
+pub fn confirmed(pairing: &(String, String)) -> bool {
+    // measure: M-0017
+    !UNCONFIRMED_TYPES
+        .iter()
+        .any(|t| *t == pairing.0 || *t == pairing.1)
+}
+
+/// Whether a stock game crashed: no result, and over before the limit
+/// sample. M-0017: the 7 MIND against E2 games of M-0001 are the only ones
+/// of the records with a `none` and an end frame short of the limit; they
+/// crash in the game and have no result to compare with.
+pub fn crashed(g: &Game) -> bool {
+    // measure: M-0017
+    g.winner == Winner::None && g.end_frame < FRAME_LIMIT
+}
+
+/// The key of a game within its record.
+fn key(g: &Game) -> (&str, &str, Side, u32) {
+    (&g.row, &g.col, g.row_side, g.seed)
+}
+
 /// One pairing compared.
 #[derive(Clone, Debug)]
 pub struct PairingComparison {
@@ -1489,6 +1516,12 @@ pub struct PairingComparison {
     pub same: [Option<(Winner, bool)>; 2],
     /// Our games of the pairing (n).
     pub n: usize,
+    /// Whether M-0017 confirms the pairing's stock rows (neither type is
+    /// one of [`UNCONFIRMED_TYPES`]).
+    pub confirmed: bool,
+    /// Games left out of the comparison because the stock game crashed
+    /// (each counted once; ours of the same game are left out too).
+    pub excluded: usize,
 }
 
 impl PairingComparison {
@@ -1573,6 +1606,8 @@ pub fn compare_pairing(
         ],
         same,
         n: o.len(),
+        confirmed: confirmed(pairing),
+        excluded: 0,
     }
 }
 
@@ -1609,9 +1644,30 @@ pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison 
         pairings: Vec::new(),
         missing: Vec::new(),
     };
+    // measure: M-0017 (crashed stock games have no result: they and our
+    // games of the same row, column, side and seed are not compared)
+    let dead: Vec<(&str, &str, Side, u32)> = record
+        .games
+        .iter()
+        .filter(|g| crashed(g))
+        .map(key)
+        .collect();
+    let stock: Vec<Game> = record
+        .games
+        .iter()
+        .filter(|g| !dead.contains(&key(g)))
+        .cloned()
+        .collect();
+    let ours: Vec<Game> = ours
+        .iter()
+        .filter(|g| !dead.contains(&key(g)))
+        .cloned()
+        .collect();
     for p in pairings(&record.games) {
         if ours.iter().any(|g| g.row == p.0 && g.col == p.1) {
-            out.pairings.push(compare_pairing(&p, &record.games, ours));
+            let mut c = compare_pairing(&p, &stock, &ours);
+            c.excluded = dead.iter().filter(|k| k.0 == p.0 && k.1 == p.1).count();
+            out.pairings.push(c);
         } else {
             out.missing.push(p);
         }
@@ -1649,6 +1705,24 @@ pub fn report(c: &RecordComparison) -> String {
             None => "-".to_owned(),
             Some((w, ok)) => format!("{} {}", w.text(), if ok { "yes" } else { "NO" }),
         };
+        let notes = format!(
+            "{}{}{}",
+            if p.same_reproduced() {
+                ""
+            } else {
+                " (side outcome differs)"
+            },
+            if p.confirmed {
+                ""
+            } else {
+                " [not confirmed by M-0017]"
+            },
+            if p.excluded == 0 {
+                String::new()
+            } else {
+                format!(" [{} crashed stock games left out, M-0017]", p.excluded)
+            }
+        );
         let _ = writeln!(
             s,
             "{:<7} {:<7} {:>2} | {:>2}/{:>2}/{:>2}     {:>2}/{:>2}/{:>2}   | {} | {:>6.3} {:>6.3} {} | {:>6.3} {:>6.3} {} | {:<9} / {:<9} | {}{}",
@@ -1671,11 +1745,7 @@ pub fn report(c: &RecordComparison) -> String {
             same(0),
             same(1),
             if p.pass() { "pass" } else { "FAIL" },
-            if p.same_reproduced() {
-                ""
-            } else {
-                " (side outcome differs)"
-            }
+            notes
         );
     }
     let fail = c.failing();
@@ -1705,6 +1775,26 @@ pub fn report(c: &RecordComparison) -> String {
         "side-wise unanimous stock outcomes: {sides}; reproduced {kept}; pairings with one not reproduced: {}",
         c.not_same().len()
     );
+    // measure: M-0017 (the split: pairings whose stock rows it confirms and
+    // the SREF and V3 pairings it does not cover)
+    for (label, sure) in [
+        ("confirmed by M-0017", true),
+        ("not confirmed by M-0017 (SREF or V3)", false),
+    ] {
+        let part: Vec<&PairingComparison> =
+            c.pairings.iter().filter(|p| p.confirmed == sure).collect();
+        let sides: usize = part.iter().map(|p| p.same.iter().flatten().count()).sum();
+        let kept: usize = part
+            .iter()
+            .map(|p| p.same.iter().flatten().filter(|(_, ok)| *ok).count())
+            .sum();
+        let _ = writeln!(
+            s,
+            "{label}: pairings failing any test {} of {}; side-wise unanimous stock outcomes {sides}, reproduced {kept}",
+            part.iter().filter(|p| !p.pass()).count(),
+            part.len()
+        );
+    }
     let mut ranked: Vec<&PairingComparison> = c
         .pairings
         .iter()
@@ -1818,6 +1908,16 @@ mod tests {
         assert_eq!(cell_of(w, Side::B, 9), CellXY::new(57, 37));
     }
 
+    fn record_of(id: &str, games: Vec<Game>) -> OracleRecord {
+        OracleRecord {
+            id: id.into(),
+            path: PathBuf::new(),
+            map_file: String::new(),
+            map_sha256: String::new(),
+            games,
+        }
+    }
+
     fn g(row_side: Side, seed: u32, winner: Winner, rl: i64, cl: i64) -> Game {
         Game {
             row: "R".into(),
@@ -1881,6 +1981,75 @@ mod tests {
         assert_eq!(
             c.same,
             [Some((Winner::Row, false)), Some((Winner::Row, true))]
+        );
+    }
+
+    #[test]
+    fn crashed_stock_games_are_left_out_of_both_sides() {
+        // measure: M-0017
+        // Stock: side A has no result in any game (a crash before the limit
+        // sample), side B ordinary. Ours: side A won by the row.
+        let mut stock = twelve(|side, s| {
+            if side == Side::A {
+                (Winner::None, 5000, 5000)
+            } else {
+                (Winner::Row, 8000 + i64::from(s) * 100, 0)
+            }
+        });
+        for x in stock.iter_mut().filter(|x| x.row_side == Side::A) {
+            x.end_frame = 304;
+        }
+        // A stock `none` at the limit sample is a real draw, not a crash.
+        stock[6].winner = Winner::None;
+        stock[6].end_frame = FRAME_LIMIT + 80;
+        assert_eq!(stock.iter().filter(|g| crashed(g)).count(), 6);
+        let ours = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+        let record = record_of("M-test", stock);
+        let c = compare_record(&record, &ours);
+        let p = &c.pairings[0];
+        assert_eq!(p.n, 6, "our side-A games are not counted");
+        assert_eq!(p.excluded, 6);
+        assert_eq!(p.counts[0], [5, 0, 1], "stock: the draw stays");
+        assert_eq!(p.counts[1][0], 6);
+        assert_eq!(p.same[0], None, "no stock game on side A");
+        assert!(report(&c).contains("crashed stock games left out"));
+    }
+
+    #[test]
+    fn sref_and_v3_pairings_are_reported_apart() {
+        // measure: M-0017
+        let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
+        assert!(confirmed(&pair("MIND", "E2")));
+        assert!(!confirmed(&pair("SREF", "E2")));
+        assert!(!confirmed(&pair("E1", "V3")));
+        let mk = |row: &str| {
+            let mut v = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+            for x in &mut v {
+                x.row = row.into();
+            }
+            v
+        };
+        let mut stock = mk("SREF");
+        stock.extend(mk("E2"));
+        let mut ours = mk("SREF");
+        ours.extend(mk("E2").into_iter().map(|g| Game {
+            winner: Winner::Col,
+            row_left: 0,
+            col_left: 9000,
+            ..g
+        }));
+        let record = record_of("M-test", stock);
+        let c = compare_record(&record, &ours);
+        assert!(!c.pairings[0].confirmed && c.pairings[0].pass());
+        assert!(c.pairings[1].confirmed && !c.pairings[1].pass());
+        let r = report(&c);
+        assert!(
+            r.contains("confirmed by M-0017: pairings failing any test 1 of 1"),
+            "{r}"
+        );
+        assert!(
+            r.contains("not confirmed by M-0017 (SREF or V3): pairings failing any test 0 of 1"),
+            "{r}"
         );
     }
 

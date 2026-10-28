@@ -181,3 +181,7 @@ Sides on which all six of our games end alike: 178 of 310 before, 179 after (the
 Seed sweeps 1 to 16 (`m6c_seed_sweep`, `m7a_seed_sweep`, `m7b_seed_sweep`): every counter's minimum
 and median are the same before, with claim 25 (g) and after both builds (the smallest minimums: 0 in M6c, 1 in M7a, 3 for the
 drain in M7b).
+
+## After M-0017 (M8 step A3)
+
+The arena's report gives its totals twice: for the pairings whose stock rows M-0017 confirms, and for the pairings with SREF or V3 on either side ("not confirmed by M-0017"; still judged). The 7 crashed MIND against E2 games are left out, so that pairing runs on n = 5. See [intake-M-0017.md](intake-M-0017.md).
