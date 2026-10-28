@@ -460,5 +460,7 @@ fn object_turn<P: Probe>(w: &mut World, id: ObjectId, p: &mut P) {
         crate::combat::behave::infantry_step(w, id);
         // spec: S-0107 State and ordering (the completion follow-up after the firing rules; the movement rule after the follow-up)
         infantry::sequence_turn(w, id, moved, in_progress);
+        // spec: S-0417 claim 17 (a resting unit on a cell that holds a building is sent a scatter request after the rest of its turn: after its late start, its behaviour processing with that processing's draw and its movement, design; turns that end early above make none: being erased, S-0514 claim 17, a warp's leaving stage and earlier update boundaries, S-0513 claim 51; no tunnel is built)
+        crate::scatter::resting_turn(w, id);
     }
 }

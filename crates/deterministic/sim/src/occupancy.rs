@@ -320,6 +320,22 @@ impl<'a> Mover<'a> {
     }
 }
 
+/// Whether a building occupant gives *none* by a row of S-0209 claim 4
+/// (part 4c) that depends on the building alone: WP7, WP11 and WP10, in the
+/// order of the walker's rows (a closed gate goes on to the gate rows).
+pub fn building_gives_none(w: &World, b: ObjectId) -> bool {
+    let Some(o) = w.obj(b) else { return false };
+    let Some(t) = w.rules().buildings.get(o.type_index as usize) else {
+        return false;
+    };
+    // spec: S-0209 claim 4 (row WP7: a building invisible in play gives none)
+    t.invisible
+        // spec: S-0209 claim 4 (row WP11: an open gate gives none; open or closed by S-0215 claim 35)
+        || (t.gate && crate::process::gate_open(w, b))
+        // spec: S-0209 claim 4 (row WP10: a firestorm wall whose owner's firestorm is off gives none; no event turns a firestorm on, S-0211 claim 11)
+        || (!t.gate && t.raw.firestorm_wall.unwrap_or(false))
+}
+
 /// The entry outcome of an infantry mover for cell `c` (S-0209 claim 4).
 pub fn infantry_outcome(w: &World, mover: ObjectId, c: CellXY, reference: i32) -> Outcome {
     Mover::of(w, mover).map_or(Outcome::Blocked, |m| {
@@ -394,11 +410,8 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
             }
         } else if o.kind == Kind::Building {
             let b = &r.buildings[o.type_index as usize];
-            if b.invisible {
-                // spec: S-0209 claim 4 (row WP7: a building invisible in play gives none)
-                (false, None)
-            } else if b.gate && crate::process::gate_open(w, oid) {
-                // spec: S-0209 claim 4 (row WP11: an open gate gives none; open or closed by S-0215 claim 35)
+            if building_gives_none(w, oid) {
+                // spec: S-0209 claim 4 (rows WP7, WP11 and WP10 give none)
                 (false, None)
             } else if b.gate && w.allied(o.owner, m.owner) {
                 // spec: S-0209 claim 4 (row WP12: a closed gate allied with the walker, the gate owner's view)
@@ -413,9 +426,6 @@ pub fn infantry_outcome_of(w: &World, mv: &Mover<'_>, c: CellXY, reference: i32)
                         Outcome::Blocked
                     }),
                 )
-            } else if b.raw.firestorm_wall.unwrap_or(false) {
-                // spec: S-0209 claim 4 (row WP10: firestorm off gives none)
-                (false, None)
             } else if allied {
                 // spec: S-0209 claim 4 (row WP19: allied building blocked)
                 (false, Some(Outcome::Blocked))

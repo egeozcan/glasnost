@@ -7,9 +7,11 @@
 //! track, a naval factory's two processings, the tether of a released unit
 //! and its clear report, the run-away reply and the arrival fallback.
 //!
-//! What stays open (S-0417 Open questions): the later walk-out of an
-//! infantry unit released without a rally destination (none is given),
-//! and the draws of putting a released unit on the map (none are taken).
+//! An infantry unit released without a rally destination rests where it
+//! is put; S-0417 claim 17's request sends it off the factory's cell in
+//! its next turn (`scatter::resting_turn`). What stays open (S-0417 Open
+//! questions): the behaviour of jumpjet infantry released that way, and
+//! the draws of putting a released unit on the map (none are taken).
 //! An infantry unit's cell-arrival update is its walking arrival tick
 //! (S-0208 claim 23), called from `walk`.
 //! The production and idle animations of a factory are not modelled
@@ -846,7 +848,7 @@ fn infantry(w: &mut World, k: ObjectId, unit: ObjectId, copies: bool) -> Outcome
         }
         // spec: S-0417 claim 10 (a jumpjet or teleporting type heads straight for the rally point, with an empty guard spot)
         Some(_) => {}
-        // spec: S-0404 claim 13 and S-0417 claim 10 (no rally point, or one in its own cell: the release gives no destination; any later walk-out is S-0417 Open question 3)
+        // spec: S-0404 claim 13 and S-0417 claim 10 (no rally point, or one in its own cell: the release gives no destination; the unit rests in guard where it is put, and claim 17 sends a walking or teleporting unit off a cell that holds K; for jumpjet infantry S-0417 Open question 3)
         None => {}
     }
     if let Some(o) = w.obj_mut(unit) {
