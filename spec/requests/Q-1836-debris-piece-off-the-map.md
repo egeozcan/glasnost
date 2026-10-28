@@ -1,9 +1,9 @@
 ---
 id: Q-1836
 title: A debris piece off the map, and one whose placement fails
-status: open
+status: answered
 related: [S-0317, S-0106, Q-1702]
-answered-by: []
+answered-by: [S-0317]
 ---
 
 ## Need
