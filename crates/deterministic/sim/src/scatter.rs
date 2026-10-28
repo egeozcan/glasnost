@@ -292,8 +292,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         slot,
         Some(Behaviour::Sleep | Behaviour::Sticky | Behaviour::Unload)
     ) || u.train;
-    // spec: S-0207 claim 16 (b): the teleporting locomotor
-    let b = u.type_locomotor() == glasnost_rules::sim::Locomotor::Teleport;
+    // spec: S-0207 claim 16 (b): the teleporting locomotor, read as the current one (scenario D17 d, the active movement kind; claim 28, a chrono miner driving on the docking cell accepts a sale's request)
+    let b = crate::teleport::is_teleporter(w, id);
     // spec: S-0207 claim 16 (c): not forced and the current behaviour lacks the scatter property (S-0215 claim 19)
     let c = !req.forced && !o.beh.seen().is_some_and(|x| r.behaviour(x).scatter);
     // spec: S-0207 claim 16 (d): its body is turning

@@ -1440,6 +1440,11 @@ pub fn install_temporary_drive(w: &mut World, u: ObjectId) {
         }
         return;
     }
+    if let Some(t) = w.obj_mut(u).and_then(|o| o.teleport.as_mut()) {
+        // spec: S-0207 claim 21 (our engine cancels a jump pending when temporary driving is installed over teleporting, as an empty assignment cancels one, claim 20 h: the landing point's reservation stays and no jump is pending at restoration; no quirk switch)
+        t.landing = None;
+        t.for_dest = None;
+    }
     // Its own cell claim is handed to the driving state's claims.
     // spec: S-0207 claim 21 (the suspended teleporting state keeps its reservation; while driving, destinations do not move it)
     let pending = w
@@ -1517,7 +1522,7 @@ pub fn restore(w: &mut World, id: ObjectId) -> bool {
     // spec: S-0215 claim 13 row 1 (it gets its own locomotor back)
     o.drive = None;
     o.econ.temporary_drive = false;
-    // spec: S-0207 claim 21 (restoration makes no new, empty teleporting state: a fixed landing point, a pending jump and a phasing-in state with its original expiry are retained)
+    // spec: S-0207 claim 21 (restoration makes no new, empty teleporting state: a fixed landing point's reservation and a phasing-in state with its original expiry are retained; no jump is pending, the install cancelled it)
     let pending = o.teleport.as_ref().is_some_and(|t| t.mark.is_some());
     let (c, l) = (o.pos.cell(), o.layer);
     // spec: S-0207 claim 21 (no occupancy mark is moved merely by restoration: a retained reservation stays where it is) and S-0209 claim 1 (otherwise a vehicle without the driving locomotor holds the vehicle-present flag of its cell)

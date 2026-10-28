@@ -250,28 +250,27 @@ fn claim_15_other_buildings_give_no_report() {
     assert!(w.obj(u).unwrap().contact.is_some());
 }
 
-// spec: S-0417 claim 5 and S-0207 claim 27 (revision 19: restoration of a temporarily driving teleporting vehicle needs a suspended predecessor, no driving movement report, no restoration lock and no seizure; completing the exit track alone is insufficient while the locomotor destination point is retained; restoration alone enables neither pending state)
+// spec: S-0417 claim 5 and S-0207 claim 27 (revision 19: restoration of a temporarily driving teleporting vehicle needs a suspended predecessor, no driving movement report, no restoration lock and no seizure; a retained locomotor destination point prevents it; restoration alone enables neither pending state)
+// spec: S-0417 claim 16 (an accepted scatter supplies a destination: its movement point replaces the exit point in the active driving locomotion) and S-0207 claim 16 b (the refusal reads the current locomotor: the temporarily driving vehicle accepts the contact end's scatter request, S-0417 claim 15)
 #[test]
 fn claim_5_restoration_needs_no_movement_report() {
     let mut w = game();
     let k = building(&mut w, "VF");
-    let u = unit(&mut w, Kind::Vehicle, "TELE");
+    let u = unit(&mut w, Kind::Vehicle, "TELEQ");
     assert_eq!(release::release(&mut w, k, u), Outcome::Released);
     // The exit track runs to the apron and the vehicle leaves the factory's contact.
     assert!(until(&mut w, 400, |w| {
         let o = w.obj(u).unwrap();
         o.contact.is_none() && o.econ.temporary_drive
     }));
-    // The track is complete but its destination point is retained: each fall-back to rest leaves the temporary locomotor.
-    run_ticks(&mut w, 100);
-    let o = w.obj(u).unwrap();
-    assert!(
-        o.econ.temporary_drive,
-        "a retained point prevents restoration"
-    );
-    assert!(o.drive.as_ref().unwrap().goal.is_some());
+    // The track is complete but its destination point is retained: it prevents restoration.
+    assert!(w.obj(u).unwrap().drive.as_ref().unwrap().goal.is_some());
     assert!(!release::restore_locomotor(&mut w, u));
-    // A stop removes the point at once; the next fall-back restores.
+    assert!(w.obj(u).unwrap().econ.temporary_drive);
+    // The contact end's scatter request was accepted while driving (its point replaces the exit point at the
+    // next locomotion, claims_s0417_r20); a stop in this same tick removes the destination and the point at
+    // once, and the next fall-back restores.
+    assert!(matches!(w.obj(u).unwrap().dest, Some(Target::Cell(_))));
     glasnost_sim::econ::assign_destination(&mut w, u, None);
     assert!(!glasnost_sim::drive::movement_report(&w, u, false));
     glasnost_sim::process::fall_back(&mut w, u, false);
@@ -298,12 +297,6 @@ fn claim_5_a_different_heading_point_is_a_report() {
     glasnost_sim::drive::stop_point(&mut w, u);
     assert!(glasnost_sim::drive::movement_report(&w, u, false));
     assert!(!glasnost_sim::econ::release::restorable(&w, u, false));
-}
-
-fn run_ticks(w: &mut World, n: i32) {
-    for _ in 0..n {
-        step(w);
-    }
 }
 
 // spec: S-0417 claim 15 (the state is serialisable and hashed: a save taken after the report restores the same world)

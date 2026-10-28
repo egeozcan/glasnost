@@ -289,9 +289,11 @@ fn claim_5a_teleport_journey_and_phasing_in_suppress_it() {
     use glasnost_sim::teleport::{self, TeleportState};
     use glasnost_sim::world::Pos;
     let mut r = ruleset();
-    // The chrono miner with the teleporting locomotor, standing on the field (no journey needed).
-    r.sim.vehicles.get_mut("CHRONO").unwrap().locomotor =
-        Some(glasnost_rules::sim::Locomotor::Teleport);
+    // The chrono miner with the teleporting locomotor, standing on the field (no journey needed),
+    // without the teleport-capable flag: with it, it would drive from placement (S-0207 claim 28).
+    let c = r.sim.vehicles.get_mut("CHRONO").unwrap();
+    c.locomotor = Some(glasnost_rules::sim::Locomotor::Teleport);
+    c.teleporter = None;
     let mut w = game_with_ore(&r, &field(ORE, 0, 0, 11), 7);
     place_building(&mut w, "REFN", 0, refinery_cell());
     let h = place_vehicle(&mut w, "CHRONO", 0, at(1, 1), 0);

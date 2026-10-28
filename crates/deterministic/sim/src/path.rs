@@ -2261,6 +2261,8 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             && let Some(ob) = w.obj_mut(id)
         {
             ob.dest = Some(Target::Cell(goal));
+            // spec: S-0402 claim 10a (A chrono miner: an adopted substitute is a destination given while the miner holds contact, a qualified docking assignment, S-0207 claims 27 and 28)
+            crate::refresh::adopted(w, id, o.dest);
         }
     }
     let congested = match mode {
