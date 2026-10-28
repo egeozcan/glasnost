@@ -1357,11 +1357,10 @@ impl Script {
         }
 
         // 1b. A barracks without a rally point gets one, by a click on a
-        // cell beyond it like a person's (S-0213 claim 20 (a)): without
-        // one a released infantry unit is given no destination and stays
-        // in contact at the barracks (S-0417 claim 10, S-0404 claim 13), so
-        // the next unit's release finds no free place and is cancelled
-        // (S-0404 claim 7, S-0417 claim 14).
+        // cell beyond it like a person's (S-0213 claim 20 (a)), so that its
+        // infantry gather toward the attack goal (design). Without one a
+        // released unit is only sent off the barracks to a cell next to it
+        // (S-0417 claims 10 and 17).
         self.rally_points(w, &own, &mut out);
 
         mark("ai:script:buildings");

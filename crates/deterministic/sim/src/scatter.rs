@@ -53,7 +53,29 @@ fn eighth(f: u16) -> i32 {
 /// Returns whether it accepted. With the movement trace on, the answer is
 /// recorded.
 pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
-    let accepted = answer(w, id, req);
+    request_with(w, id, req, Assign::MoveOrder)
+}
+
+/// How an accepted infantry request assigns its destination.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Assign {
+    /// As under a move order: *move* is queued (S-0208 claim 12).
+    MoveOrder,
+    /// S-0417 claim 17's request to a resting unit on a building cell.
+    Resting,
+}
+
+/// S-0417 claim 17's request to an infantry unit resting on a cell that
+/// holds a building: judged and placed by S-0208 claims 11 and 13, but a
+/// destination from the nearby-cell search leaves the current behaviour as
+/// it was, and a teleporting unit given one jumps at once (*During the
+/// walk-off*). Returns whether it accepted.
+pub fn request_resting(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
+    request_with(w, id, req, Assign::Resting)
+}
+
+fn request_with(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool {
+    let accepted = answer(w, id, req, how);
     crate::trace::record(w, id, || crate::trace::What::Asked {
         accepted,
         dest: w.obj(id).and_then(|o| match o.dest {
@@ -65,8 +87,8 @@ pub fn request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     accepted
 }
 
-/// [`request`] without the trace.
-fn answer(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
+/// [`request_with`] without the trace.
+fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool {
     let t = w.tick;
     let Some(o) = w.obj(id).cloned() else {
         return false;
@@ -83,7 +105,13 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
         return false;
     };
     let seq = o.infantry.as_ref().and_then(|s| s.seq);
-    let moving = occupancy::in_progress(w, id);
+    // design: S-0417 claim 17 leaves open whether a walking unit that holds a destination with no
+    // path (the reachability gate failed, or a fresh search waits for the retry delay) reports
+    // movement in progress; for claim 17's request it does, so the third case below refuses each
+    // later request, with no draw, and the unit keeps its destination (as for a fall-back
+    // destination whose *move* is not yet current). Q-1980.
+    let holds_dest = how == Assign::Resting && o.walk.is_some() && o.dest.is_some();
+    let moving = occupancy::in_progress(w, id) || holds_dest;
     let deploying = seq.is_some_and(Seq::is_deploy);
     if req.forced && req.anywhere && deploying {
         // spec: S-0208 claim 11 (a forced, move-anywhere request to a deploying unit also requests undeploy)
@@ -148,7 +176,7 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
     // spec: S-0208 claim 12 (d = (d₀ + j − 2) mod 8)
     let d = (d0 + j - 2).rem_euclid(8);
     crate::regions::ensure(w);
-    let dest = if req.threat.is_none() {
+    let searched = if req.threat.is_none() {
         // spec: S-0208 claim 13 (the nearby-cell search of S-0212 claim 25, scatter use)
         path::nearby(
             w,
@@ -158,22 +186,92 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool {
                 deck: o.layer == Layer::Deck,
             },
         )
-        .or_else(|| neighbours_choice(w, id, centre, d))
     } else {
-        neighbours_choice(w, id, centre, d)
+        None
     };
-    if let Some(c) = dest {
-        // spec: S-0208 claim 12 (the unit then moves there as under a move order)
-        if let Some(ob) = w.obj_mut(id) {
-            let before = ob.dest;
-            ob.dest = Some(Target::Cell(c));
-            ob.path.steps.clear();
+    let dest = searched.or_else(|| neighbours_choice(w, id, centre, d));
+    let Some(c) = dest else {
+        return true;
+    };
+    // spec: S-0417 claim 17 (During the walk-off: a destination from S-0212 claim 25's search leaves the current behaviour as it was; one from S-0208 claim 13's fall-back to the neighbours queues move)
+    let keep_behaviour = how == Assign::Resting && searched.is_some();
+    if let Some(ob) = w.obj_mut(id) {
+        let before = ob.dest;
+        ob.dest = Some(Target::Cell(c));
+        ob.path.steps.clear();
+        if !keep_behaviour {
+            // spec: S-0208 claim 12 (the unit then moves there as under a move order)
             ob.beh.queue(Some(Behaviour::Move));
-            // spec: S-0107 claim 15 (an accepted scatter that assigns a destination: the destination-driven get-up)
-            crate::infantry::destination_assigned(w, id, before);
         }
+        // spec: S-0107 claim 15 (an accepted scatter that assigns a destination: the destination-driven get-up)
+        crate::infantry::destination_assigned(w, id, before);
+    }
+    if keep_behaviour
+        && crate::teleport::is_teleporter(w, id)
+        && w.obj(id).is_some_and(|o| o.dest.is_some())
+    {
+        // spec: S-0417 claim 17 (During the walk-off: a teleporting unit given a destination from the search gets one movement update at once and jumps, with no wait, to the landing point the destination fixed, S-0208 claim 19 and S-0207 claim 20 d; with no landing point fixed the destination was removed and it does not jump)
+        crate::teleport::tick(w, id);
     }
     true
+}
+
+/// S-0417 claim 17 at the end of an infantry unit's turn: a unit in play on
+/// the map, whose current behaviour is *guard* or *area guard* and whose
+/// cell holds a building that counts, is sent a forced, move-anywhere
+/// scatter request with no threat point. The callers leave out the turns
+/// that end early (being erased, a warp's leaving stage and its earlier
+/// update boundaries); no tunnel is built.
+pub fn resting_turn(w: &mut World, id: ObjectId) {
+    let Some(o) = w.obj(id) else { return };
+    if o.kind != Kind::Infantry || crate::combat::damage::dead(o) {
+        return;
+    }
+    // spec: S-0417 claim 17 (in play on the map: placed in the world, not inside a building or riding a transport, glossary *in play* and *on the map*)
+    if !o.on_map || o.structure.inside.is_some() || crate::transport::riding(w, id).is_some() {
+        return;
+    }
+    // spec: S-0417 claim 17 (its current behaviour is guard or area guard)
+    if !matches!(o.beh.current, Some(Behaviour::Guard | Behaviour::AreaGuard)) {
+        return;
+    }
+    // spec: S-0417 claim 17 (the cell under its position on the ground plane, whatever its height)
+    let c = o.pos.cell();
+    let master = crate::econ::slaves::master_of(w, id);
+    let counts = w.cells.list(c, Layer::Ground).iter().any(|&b| {
+        w.obj(b).is_some_and(|x| x.kind == Kind::Building) && building_counts(w, b, master, c)
+    });
+    if !counts {
+        return;
+    }
+    // spec: S-0417 claim 17 (no threat point, forced, move-anywhere)
+    let req = ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: true,
+    };
+    request_resting(w, id, req);
+}
+
+/// Whether building `b` in cell `c` counts for S-0417 claim 17, for a unit
+/// whose master is `master`.
+fn building_counts(w: &World, b: ObjectId, master: Option<ObjectId>, c: CellXY) -> bool {
+    // spec: S-0417 claim 17 (S-0209 claim 4's rows WP7, WP10 and WP11, whose value is none, leave a building out)
+    if occupancy::building_gives_none(w, b) {
+        return false;
+    }
+    let fence = w.obj(b).is_some_and(|o| {
+        w.rules()
+            .buildings
+            .get(o.type_index as usize)
+            .is_some_and(|t| t.building.laser_fence)
+    });
+    // spec: S-0417 claim 17 and Open question 14 (row WP8: a laser-fence section in the states in which it is down and shows no beam, design); section states are not modelled, so every section counts as down, as for S-0613 claim 10
+    if fence {
+        return false;
+    }
+    // spec: S-0417 claim 17 (row WP2: not for an enslaved unit when the building is its master and the cell is the master's unloading cell)
+    !(master == Some(b) && crate::econ::slaves::unloading_cell(w, b) == Some(c))
 }
 
 /// A vehicle, whatever its locomotor, receives a scatter request (S-0207
