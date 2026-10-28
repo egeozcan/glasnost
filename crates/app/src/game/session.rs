@@ -1488,7 +1488,7 @@ impl Session {
 
     /// What the pointer offers at `p` for table C, and whether the target
     /// is shrouded; `None` keeps the system pointer.
-    fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
+    pub(crate) fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
         let (cell, object) = self.under(p);
         let on = self.play.target(object, cell);
         let w = &self.play.game.world;
@@ -1508,10 +1508,23 @@ impl Session {
             // Placement hover images belong to S-0406's placement display
             // (S-0214 Open questions): the system pointer stays.
             Tool::Place(_) => return None,
-            // S-0214 claim 31's table CS keys the aim images by aim action
-            // (the words are S-0512 claim 23's); the aim images belong to
-            // the cursor work of S-0214, so the system pointer stays.
-            Tool::Superweapon { .. } => return None,
+            Tool::Superweapon { sw, .. } => {
+                if !self.play.sw_offered(sw, on) {
+                    // spec: S-0513 claim 1 (over anything else the cursor shows the no-force-shield action) and S-0214 table CS (no-force-shield)
+                    Offer::Aim(cursor::Aim::NoForceShield)
+                } else {
+                    // spec: S-0214 claim 31 (table CS keys the battlefield image by the type's aim action, S-0512 claim 23, not by its effect kind)
+                    let word = w
+                        .rules()
+                        .superweapons
+                        .types
+                        .get(sw as usize)
+                        .and_then(|t| t.action.as_deref());
+                    // An aim action outside table CS has no image there: the
+                    // system pointer stays.
+                    Offer::Aim(word.and_then(cursor::Aim::of_word)?)
+                }
+            }
             Tool::Mode(m) => {
                 // spec: S-0214 claims 13 and 21 (the sidebar modes' offers and their images in table C)
                 let ok = modes::order(w, local, m, on).is_some();

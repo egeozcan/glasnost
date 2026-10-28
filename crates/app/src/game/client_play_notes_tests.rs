@@ -84,3 +84,66 @@ fn granted_countdowns_show_on_the_battlefield() {
     assert!(rows[0].seconds > 0, "{rows:?}");
     assert!(list.texts().contains(&time.as_str()));
 }
+
+/// The fixture's rules with its superweapon's kind and aim action word.
+fn aim_rules(kind: &str, action: &str) -> Arc<SimRules> {
+    let mut r = fixture::ruleset();
+    let t = r.sim.superweapons.get_mut("NUKE").unwrap();
+    t.kind = Some(kind.into());
+    t.action = Some(action.into());
+    Arc::new(SimRules::new(&r, "synthetic-skirmish"))
+}
+
+/// A started game on `rules`, its superweapon armed with nothing selected,
+/// and the battlefield's centre pixel.
+fn armed(rules: Arc<SimRules>) -> (Client, Point) {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard_with(&mut c, rules);
+    let s = session_mut(&mut c);
+    s.play.selection.clear();
+    s.play.tool = super::super::play::Tool::Superweapon {
+        sw: 0,
+        from_source: false,
+    };
+    let p = s.map_rect().centre();
+    (c, p)
+}
+
+/// The battlefield cursor offers the armed superweapon's table CS image
+/// with no selection, the units' action with one, and the refusal image
+/// for a force shield away from an own building (note 27).
+#[test]
+fn an_armed_superweapon_offers_its_aim_image() {
+    use super::super::cursor::{Aim, Offer};
+    let (mut c, p) = armed(aim_rules("MultiMissile", "Nuke"));
+    let s = session_mut(&mut c);
+    // spec: S-0214 claim 31 and table CS (the image by aim action: nuclear strike)
+    assert_eq!(s.offer(p).map(|o| o.0), Some(Offer::Aim(Aim::Nuke)));
+    // spec: S-0513 claim 1 (while units are selected, the cursor offers their actions)
+    let local = s.play.local;
+    s.play.selection = s
+        .play
+        .world()
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(local) && o.on_map)
+        .map(|o| o.id)
+        .take(1)
+        .collect();
+    assert!(!s.play.selection.is_empty());
+    assert!(matches!(s.offer(p), Some((Offer::Action { .. }, _))));
+    // An aim action outside table CS keeps the system pointer.
+    let (mut c, p) = armed(aim_rules("MultiMissile", "Attack"));
+    assert_eq!(session_mut(&mut c).offer(p), None);
+    // spec: S-0513 claim 1 and S-0214 table CS (a force shield away from an own or allied building shows no-force-shield)
+    let (mut c, p) = armed(aim_rules("ForceShield", "ForceShield"));
+    let s = session_mut(&mut c);
+    let (cell, object) = s.under(p);
+    let on = s.play.target(object, cell);
+    let want = if s.play.sw_offered(0, on) {
+        Aim::ForceShield
+    } else {
+        Aim::NoForceShield
+    };
+    assert_eq!(s.offer(p).map(|o| o.0), Some(Offer::Aim(want)));
+}

@@ -880,6 +880,13 @@ impl Play {
                             sw,
                             from_source: false,
                         };
+                        // design: arming from the icon clears the selection,
+                        // so the next battlefield click aims the superweapon
+                        // instead of acting for the units (S-0513 claim 1's
+                        // precedence then never hides the aim). Whether the
+                        // original clears it is asked in Q-1985 (M8 A4
+                        // round 5, note 27).
+                        self.selection.clear();
                     }
                 }
                 return;

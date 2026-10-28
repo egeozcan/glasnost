@@ -972,6 +972,29 @@ fn s0513_claim_1_a_selection_takes_precedence() {
     );
 }
 
+/// Arming from the icon with units selected clears the selection, so the
+/// next click fires (our design for Q-1985, M8 A4 round 5 note 27); a
+/// selection made after arming still takes precedence (S-0513 claim 1).
+#[test]
+fn arming_from_the_icon_clears_the_selection_and_the_next_click_fires() {
+    let mut p = sw_start("MultiMissile", &[], true);
+    ready_silo(&mut p);
+    let entries = hud::entries(p.world(), p.local, hud::SW_TAB);
+    let n = entries
+        .iter()
+        .position(|e| *e == hud::Entry::Superweapon(0))
+        .expect("the silo's superweapon in the 2nd tab");
+    p.tab = hud::SW_TAB;
+    p.selection = own(&p, Kind::Vehicle);
+    assert!(!p.selection.is_empty());
+    p.cameo_click(n, Button::Left, false);
+    assert!(matches!(p.tool, Tool::Superweapon { sw: 0, .. }));
+    assert!(p.selection.is_empty(), "arming deselects");
+    let at = CellXY::new(10, 10);
+    p.click_map(Button::Left, None, at, Modifiers::default());
+    assert_eq!(fired(&p), vec![Order::FireSuperweapon { sw: 0, cell: at }]);
+}
+
 fn source_pick(p: &mut Play, house: HouseId) {
     p.effects = vec![Effect::Superweapon {
         event: SwEvent::SourceMarker,
