@@ -31,7 +31,7 @@ const SCALES: [u16; 5] = [100, 125, 150, 200, 300];
 /// lowers the largest.
 const SIZES: [(i32, i32); 2] = [(1280, 960), (1024, 768)];
 
-fn install() -> Install {
+pub(super) fn install() -> Install {
     let file = FileRef {
         archive: ArchiveId(0),
         entry: MixEntry {
@@ -78,7 +78,7 @@ fn install() -> Install {
 }
 
 /// A client with the synthetic install, at `size` and interface `scale`.
-fn client(size: (i32, i32), scale: u16) -> Client {
+pub(super) fn client(size: (i32, i32), scale: u16) -> Client {
     let mut c = Client::new();
     c.cpu_map = false;
     c.settings.ui_scale = scale;
@@ -89,19 +89,19 @@ fn client(size: (i32, i32), scale: u16) -> Client {
 }
 
 /// Clicks the screen pixel `p`.
-fn click_at(c: &mut Client, p: Point) {
+pub(super) fn click_at(c: &mut Client, p: Point) {
     c.pointer_down(Button::Left, p);
     c.pointer_up(Button::Left, p, Modifiers::default());
 }
 
 /// Clicks the middle of a target laid out in logical pixels.
-fn click(c: &mut Client, r: Rect) {
+pub(super) fn click(c: &mut Client, r: Rect) {
     let r = c.ui_scale().rect(r);
     click_at(c, Point::new(r.x + r.w / 2, r.y + r.h / 2));
 }
 
 /// Presses and releases a key, then draws a frame (the targets follow).
-fn key(c: &mut Client, k: Key) {
+pub(super) fn key(c: &mut Client, k: Key) {
     c.key(k, true);
     c.key(k, false);
     let _ = c.frame();
@@ -135,7 +135,12 @@ fn check_targets<T: Clone + std::fmt::Debug>(scale: Scale, t: &Targets<T>) {
 }
 
 /// Runs the start job a client hands out on the synthetic data.
-fn run_start(c: &mut Client) {
+pub(super) fn run_start(c: &mut Client) {
+    run_start_with(c, fixture::rules());
+}
+
+/// Runs the start job a client hands out on the synthetic map with `rules`.
+pub(super) fn run_start_with(c: &mut Client, rules: std::sync::Arc<glasnost_sim::rules::SimRules>) {
     let Some(Job::Start {
         vfs,
         lobby,
@@ -147,9 +152,9 @@ fn run_start(c: &mut Client) {
     else {
         panic!("a start job");
     };
-    let gs = ui_setup::game_setup(&lobby, &fixture::rules(), &offered, seed, seed)
+    let gs = ui_setup::game_setup(&lobby, &rules, &offered, seed, seed)
         .expect("the setup makes a game setup");
-    let s = Loaded::bare(fixture::map(), fixture::rules(), fixture::catalogue(), &gs)
+    let s = Loaded::bare(fixture::map(), rules, fixture::catalogue(), &gs)
         .and_then(|l| Session::bare(l, "map-synthetic".into(), local));
     c.done(Done::Started(vfs, Box::new(s), SoundBank::new()));
     assert_eq!(c.shell.screen, Screen::Game);
@@ -157,7 +162,15 @@ fn run_start(c: &mut Client) {
 }
 
 /// Starts a skirmish from the menu with the keyboard only.
-fn start_by_keyboard(c: &mut Client) {
+pub(super) fn start_by_keyboard(c: &mut Client) {
+    start_by_keyboard_with(c, fixture::rules());
+}
+
+/// Starts a skirmish from the menu with the keyboard only, on `rules`.
+pub(super) fn start_by_keyboard_with(
+    c: &mut Client,
+    rules: std::sync::Arc<glasnost_sim::rules::SimRules>,
+) {
     // Enter focuses the first control (Skirmish), the second press opens it.
     key(c, Key::Enter);
     assert_eq!(
@@ -179,18 +192,18 @@ fn start_by_keyboard(c: &mut Client) {
     );
     c.next_seed = 7;
     key(c, Key::Space);
-    run_start(c);
+    run_start_with(c, rules);
 }
 
-fn session(c: &Client) -> &Session {
+pub(super) fn session(c: &Client) -> &Session {
     c.session.as_ref().expect("a game")
 }
 
-fn session_mut(c: &mut Client) -> &mut Session {
+pub(super) fn session_mut(c: &mut Client) -> &mut Session {
     c.session.as_mut().expect("a game")
 }
 
-fn own(c: &Client, kind: Kind) -> Vec<ObjectId> {
+pub(super) fn own(c: &Client, kind: Kind) -> Vec<ObjectId> {
     let p = &session(c).play;
     p.world()
         .objects
@@ -200,7 +213,7 @@ fn own(c: &Client, kind: Kind) -> Vec<ObjectId> {
         .collect()
 }
 
-fn steps(c: &mut Client, n: i32, done: impl Fn(&Client) -> bool) {
+pub(super) fn steps(c: &mut Client, n: i32, done: impl Fn(&Client) -> bool) {
     for _ in 0..n {
         if done(c) {
             return;
@@ -213,7 +226,7 @@ fn steps(c: &mut Client, n: i32, done: impl Fn(&Client) -> bool) {
 /// Moves the base unit two cells and deploys it (a selecting click, a
 /// moving click and D, as a player does), until the first building icon
 /// shows.
-fn deploy_base(c: &mut Client) {
+pub(super) fn deploy_base(c: &mut Client) {
     let mcv = *own(c, Kind::Vehicle).first().expect("a base unit");
     let cell = session(c).play.world().obj(mcv).unwrap().pos.cell();
     session_mut(c)
@@ -353,14 +366,14 @@ fn keyboard_reaches_every_control_of_the_screens() {
     assert!(c.menu_focus.rect(&c.menu_targets).is_none());
     c.pointer_up(Button::Left, Point::new(0, 0), Modifiers::default());
 
-    // The settings screen: 7 values, 7 bindings, Reset and Back.
+    // The settings screen: 7 values, 8 bindings, Reset and Back.
     while c.menu_focus.target(&c.menu_targets) != Some(MenuHit::Settings) {
         key(&mut c, Key::Down);
     }
     key(&mut c, Key::Enter);
     assert_eq!(c.shell.screen, Screen::Settings);
     let _ = c.frame();
-    assert_eq!(c.settings_targets.stops.len(), 16);
+    assert_eq!(c.settings_targets.stops.len(), 17);
     key(&mut c, Key::Tab);
     assert_eq!(
         c.settings_focus.target(&c.settings_targets),

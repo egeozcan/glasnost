@@ -44,6 +44,8 @@ fn defaults_are_the_specified_ones() {
     // Our own diagnostics keys (M8 A4), none of claim 22's.
     assert_eq!(s.bindings.key(Action::PathReport), 'p');
     assert_eq!(s.bindings.key(Action::Mark), 'm');
+    // Our key for S-0214's type-select role, whose key is the player's.
+    assert_eq!(s.bindings.key(Action::TypeSelect), 't');
     assert_eq!(Settings::mixer_level(100), 16384);
     assert_eq!(Settings::mixer_level(0), 0);
 }
@@ -155,6 +157,16 @@ fn a_file_older_than_the_report_keys_keeps_its_own() {
     let s = Settings::from_text("key.stop=q\n");
     assert_eq!(s.bindings.key(Action::PathReport), 'p');
     assert_eq!(s.bindings.key(Action::Mark), 'm');
+    assert_eq!(s.bindings.key(Action::TypeSelect), 't');
+    // A file older than the type-select key that gives T to a command.
+    let s = Settings::from_text("key.stop=t\nkey.report=a\n");
+    assert_eq!(s.bindings.key(Action::Stop), 't');
+    assert_eq!(s.bindings.key(Action::TypeSelect), 'b');
+    assert_eq!(s.bindings.key(Action::PathReport), 'a');
+    // A written type-select key comes back.
+    let s = Settings::from_text("key.typeselect=y\n");
+    assert_eq!(s.bindings.key(Action::TypeSelect), 'y');
+    assert_eq!(Settings::from_text(&s.to_text()).bindings, s.bindings);
 }
 
 #[test]

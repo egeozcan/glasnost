@@ -153,12 +153,17 @@ pub struct Session {
     cursor_shown: Option<(u16, (i32, i32))>,
     /// The modifiers held, for the hovered action.
     pub mods: Modifiers,
+    /// The type-select role's key (S-0214 claim 12).
+    type_select: TypeSelect,
+    /// The last control group selected and when, for the double press
+    /// that goes to it.
+    last_group: Option<(usize, i64)>,
     /// The interface's real-time clock, milliseconds (S-0214 claim 22: not
     /// simulation ticks).
     pub clock_ms: i64,
     /// Each house's display colour by house index (the radar colours,
     /// S-0410 claim 8), for the psychic sensor's intent-line end squares.
-    house_colours: Vec<[u8; 3]>,
+    pub(crate) house_colours: Vec<[u8; 3]>,
     /// The last drawn sidebar's targets, in the interface's logical pixels.
     targets: Targets<HudHit>,
     pause_targets: Targets<PauseHit>,
@@ -443,6 +448,8 @@ impl Session {
             animator: cursor::Animator::default(),
             cursor_shown: None,
             mods: Modifiers::default(),
+            type_select: TypeSelect::default(),
+            last_group: None,
             clock_ms: 0,
             house_colours,
             targets: Targets::new(),
@@ -645,6 +652,45 @@ impl Session {
         // origin is given in them too (equal to the screen's at 100 %).
         let r = self.layout().radar;
         (r.x, r.y)
+    }
+
+    /// The superweapon countdown rows every player sees (S-0512 claim 18),
+    /// in grant order, with each house's colour.
+    pub fn countdown_rows(&self) -> Vec<hud::CountdownRow> {
+        let w = &self.play.game.world;
+        let types = &w.rules().superweapons.types;
+        // spec: S-0512 claim 18 (every granted record with the countdown flag of a house that is not passive, seen by every player whatever the house and the alliances, in grant order)
+        glasnost_sim::superweapons::charge::countdown_rows(w)
+            .into_iter()
+            .map(|r| hud::CountdownRow {
+                // Seam (countdown display name): claim 18 shows the type's
+                // display name, a string-table label (S-0512 Import mapping);
+                // the client reads no string table yet, so the row shows the
+                // type's name, as the sidebar's icons do.
+                name: types
+                    .get(r.sw as usize)
+                    .map_or_else(String::new, |t| t.name.clone()),
+                // spec: S-0512 claim 18 (the name in its house's colour)
+                colour: self
+                    .house_colours
+                    .get(usize::from(r.house.0))
+                    .copied()
+                    .unwrap_or([255, 255, 255]),
+                seconds: r.seconds,
+            })
+            .collect()
+    }
+
+    /// The battlefield view's outline on the radar map (S-0410 claim 11),
+    /// in radar map pixels; none without a radar map.
+    pub fn radar_view_box(&self) -> Option<hud::ViewBox> {
+        let r = self.radar.as_ref()?;
+        let v = self.view();
+        let (x, y, w, h) = r.image_rect();
+        Some(hud::ViewBox {
+            image: Rect::new(x, y, w, h),
+            edges: r.view_outline(v.origin, (v.size.0 as i32, v.size.1 as i32)),
+        })
     }
 
     /// The sidebar's layout in the interface's logical pixels.
@@ -1012,16 +1058,50 @@ impl Session {
             Some(HudHit::Map) if dragged && self.play.tool == Tool::Select => {
                 let end = band::limit(p, self.map_rect());
                 let inside = self.box_candidates(start, end);
+                let (before, spoken) = (self.play.selection.clone(), self.play.selected.len());
                 // spec: S-0214 claim 19 (an unmodified box without a live candidate continues as the ordinary release click at the final pixel)
                 if self.play.select_box(&inside, mods.force_select) {
                     let (cell, object) = self.under(end);
                     self.play.click_map(b, object, cell, mods);
                     self.show_markers();
+                } else if self.type_select.held {
+                    // spec: S-0214 claims 19 and 29 (a type-select drag expands the types of its in-box candidates in the order of first in-box encounter, each type in the pool's order, matching candidates outside the box included; the box still replaces the selection or, with force-select, adds to it) and S-0701 claim 17 (silent)
+                    self.play.selected.truncate(spoken);
+                    let seeds: Vec<ObjectId> = inside
+                        .iter()
+                        .copied()
+                        .filter(|id| self.play.selection.contains(id))
+                        .collect();
+                    self.play.selection = if mods.force_select {
+                        before
+                    } else {
+                        Vec::new()
+                    };
+                    let pool = self.type_pool(self.type_select.wide);
+                    self.play.expand_types(&seeds, &pool, false);
                 }
             }
             Some(HudHit::Map) if !dragged => {
                 let (cell, object) = self.under(p);
+                let typed = self.type_select_click(b, object, cell, mods);
+                let before = self.play.selection.clone();
                 self.play.click_map(b, object, cell, mods);
+                if let Some((t, replace)) = typed {
+                    let (was, now) = (before.contains(&t), self.play.selection.contains(&t));
+                    // spec: S-0214 claim 12 (while the type-select role is held, select and toggle select act on every object of the clicked object's type on the screen, or across the map after a double press: select replaces the selection with them, toggle select adds or removes them)
+                    if now {
+                        // A toggle that acted as select (claim 12) replaced it too.
+                        let kept = before.iter().all(|x| self.play.selection.contains(x));
+                        self.play.selection = if replace || !kept { Vec::new() } else { before };
+                    }
+                    if now || was {
+                        let mut pool = self.type_pool(self.type_select.wide);
+                        if !pool.contains(&t) {
+                            pool.insert(0, t);
+                        }
+                        self.play.expand_types(&[t], &pool, was && !now);
+                    }
+                }
                 self.show_markers();
             }
             Some(HudHit::Radar) if b == Button::Left => {
@@ -1046,6 +1126,33 @@ impl Session {
             _ => {}
         }
         SessionEvent::None
+    }
+
+    /// The clicked object of a left click whose action is *select*,
+    /// *toggle select* or *nothing* (an object clicked that the selection
+    /// already holds) while the type-select role is held, and whether the
+    /// type replaces the selection (*select*) rather than joining it
+    /// (S-0214 claim 12).
+    fn type_select_click(
+        &self,
+        b: Button,
+        object: Option<ObjectId>,
+        cell: CellXY,
+        mods: Modifiers,
+    ) -> Option<(ObjectId, bool)> {
+        if b != Button::Left || !self.type_select.held || self.play.tool != Tool::Select {
+            return None;
+        }
+        let on = self.play.target(object, cell);
+        let ClickOn::Object(t) = on else {
+            return None;
+        };
+        let w = &self.play.game.world;
+        match targeting::cursor(w, self.play.local, &self.play.selection, on, mods) {
+            targeting::Action::Select => Some((t, true)),
+            targeting::Action::ToggleSelect | targeting::Action::Nothing => Some((t, false)),
+            _ => None,
+        }
     }
 
     /// A sidebar control pressed with button `b` (a click, or the
@@ -1287,6 +1394,22 @@ impl Session {
     /// are the position projected with height lift, aircraft at their
     /// lifted origin.
     fn box_candidates(&mut self, press: Point, end: Point) -> Vec<ObjectId> {
+        let m = self.map_rect();
+        let (press, end) = (
+            Point::new(press.x - m.x, press.y - m.y),
+            Point::new(end.x - m.x, end.y - m.y),
+        );
+        self.screen_candidates()
+            .into_iter()
+            .filter(|&(_, q)| band::inside(press, end, q))
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    /// The screen candidates of S-0214 claims 24 and 25, admitted by claim
+    /// 20, in candidate order, each with its box point relative to the
+    /// battlefield view's top-left corner.
+    fn screen_candidates(&mut self) -> Vec<(ObjectId, Point)> {
         let drawn = self
             .with_live(|live, inputs, _| live.drawn_mobiles(inputs))
             .unwrap_or_default();
@@ -1318,16 +1441,88 @@ impl Session {
             .map(|o| (o.id, point(o)))
             .filter(|&(_, q)| band::mobile_point_in(q, m.w, m.h));
         // spec: S-0214 claims 20 and 25 (500 screen candidates, buildings before mobile objects, places consumed whether eligible or not)
-        let admitted = band::admit(buildings, mobile);
-        let (press, end) = (
-            Point::new(press.x - m.x, press.y - m.y),
-            Point::new(end.x - m.x, end.y - m.y),
-        );
-        admitted
-            .into_iter()
-            .filter(|&(_, q)| band::inside(press, end, q))
-            .map(|(id, _)| id)
-            .collect()
+        band::admit(buildings, mobile)
+    }
+
+    /// The objects a type selection draws from (S-0214 claims 12 and
+    /// 29): the screen candidates in candidate order, or with `map` every
+    /// object in creation order.
+    fn type_pool(&mut self, map: bool) -> Vec<ObjectId> {
+        if map {
+            // spec: S-0214 claim 29 (the whole-map expansion follows creation order among surviving objects)
+            self.play.game.world.objects.keys().copied().collect()
+        } else {
+            // spec: S-0214 claim 12 (every object of the type that is on the screen) and claim 29 (in the candidate order of claim 25)
+            self.screen_candidates()
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect()
+        }
+    }
+
+    /// The type-select role's key went down or up (S-0214 claim 12). A
+    /// press that comes at most 500 whole milliseconds after the one
+    /// before widens the role to the whole map while it is held. A press
+    /// alone also selects every object of the selection's types, on the
+    /// screen or across the map (scenario T2; our reading, Q-1987).
+    /// A key repeat while held is no new press.
+    pub fn type_select_key(&mut self, down: bool) {
+        if !down {
+            self.type_select.held = false;
+            return;
+        }
+        if self.type_select.held || self.paused {
+            return;
+        }
+        let now = self.clock_ms;
+        // spec: S-0214 claim 12 and Constants (the second press counts when its time minus the first press's time is at most 500 whole milliseconds; our interface's input clock, Edge cases)
+        let wide = self
+            .type_select
+            .last
+            .is_some_and(|t| (0..=TYPE_SELECT_DOUBLE_MS).contains(&(now - t)));
+        self.type_select = TypeSelect {
+            held: true,
+            wide,
+            last: Some(now),
+        };
+        let seeds = self.play.selection.clone();
+        if !seeds.is_empty() {
+            let pool = self.type_pool(wide);
+            self.play.expand_types(&seeds, &pool, false);
+        }
+    }
+
+    /// Whether the type-select role is held (S-0214 claim 12).
+    pub fn type_select_held(&self) -> bool {
+        self.type_select.held
+    }
+
+    /// A control-group key (our design, Q-1988): with force-fire (Ctrl)
+    /// it makes group `g` of the selection, with force-select (Shift) it
+    /// adds the selection to it, and alone it selects the group; selecting
+    /// the same group twice within [`GROUP_DOUBLE_MS`] also centres the
+    /// view on its first object.
+    pub fn group_key(&mut self, g: usize, mods: Modifiers) {
+        if self.paused {
+            return;
+        }
+        if mods.force_fire || mods.force_select {
+            self.play.group_assign(g, !mods.force_fire);
+            self.last_group = None;
+            return;
+        }
+        let now = self.clock_ms;
+        let again = self
+            .last_group
+            .is_some_and(|(h, t)| h == g && (0..=GROUP_DOUBLE_MS).contains(&(now - t)));
+        self.last_group = Some((g, now));
+        if let Some(first) = self.play.group_recall(g)
+            && again
+            && let Some(o) = self.play.game.world.obj(first)
+        {
+            let (x, y, z) = (o.pos.x, o.pos.y, o.pos.z);
+            self.set_centre(project_lifted(x, y, z));
+        }
     }
 
     /// A key command (S-0213 table T2).
@@ -1449,7 +1644,7 @@ impl Session {
 
     /// What the pointer offers at `p` for table C, and whether the target
     /// is shrouded; `None` keeps the system pointer.
-    fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
+    pub(crate) fn offer(&mut self, p: Point) -> Option<(Offer, bool)> {
         let (cell, object) = self.under(p);
         let on = self.play.target(object, cell);
         let w = &self.play.game.world;
@@ -1469,10 +1664,23 @@ impl Session {
             // Placement hover images belong to S-0406's placement display
             // (S-0214 Open questions): the system pointer stays.
             Tool::Place(_) => return None,
-            // S-0214 claim 31's table CS keys the aim images by aim action
-            // (the words are S-0512 claim 23's); the aim images belong to
-            // the cursor work of S-0214, so the system pointer stays.
-            Tool::Superweapon { .. } => return None,
+            Tool::Superweapon { sw, .. } => {
+                if !self.play.sw_offered(sw, on) {
+                    // spec: S-0513 claim 1 (over anything else the cursor shows the no-force-shield action) and S-0214 table CS (no-force-shield)
+                    Offer::Aim(cursor::Aim::NoForceShield)
+                } else {
+                    // spec: S-0214 claim 31 (table CS keys the battlefield image by the type's aim action, S-0512 claim 23, not by its effect kind)
+                    let word = w
+                        .rules()
+                        .superweapons
+                        .types
+                        .get(sw as usize)
+                        .and_then(|t| t.action.as_deref());
+                    // An aim action outside table CS has no image there: the
+                    // system pointer stays.
+                    Offer::Aim(word.and_then(cursor::Aim::of_word)?)
+                }
+            }
             Tool::Mode(m) => {
                 // spec: S-0214 claims 13 and 21 (the sidebar modes' offers and their images in table C)
                 let ok = modes::order(w, local, m, on).is_some();
@@ -1648,7 +1856,7 @@ impl Session {
             } else {
                 [230, 50, 40, 110]
             };
-            for c in cells {
+            for &c in &cells {
                 let level = self
                     .play
                     .game
@@ -1659,6 +1867,31 @@ impl Session {
                 let (tx, ty) = cell_top(c.x, c.y);
                 let (sx, sy) = world_to_screen(tx, ty - TERRAIN_LIFT * level);
                 diamond(&mut d, sx, sy, fill, m);
+            }
+            // design: our placement range indicator (M8 A4 round 5 note
+            // 34): the ground circle of the type's weapon range around the
+            // foundation's centre, projected by S-0101 F1 to an ellipse, at
+            // the height of the foundation's first cell.
+            if let (Some(range), Some(&first)) = (self.play.placement_range(), cells.first()) {
+                let (x0, x1) = cells
+                    .iter()
+                    .fold((i32::MAX, i32::MIN), |(a, b), c| (a.min(c.x), b.max(c.x)));
+                let (y0, y1) = cells
+                    .iter()
+                    .fold((i32::MAX, i32::MIN), |(a, b), c| (a.min(c.y), b.max(c.y)));
+                // spec: S-0307 claim 1 (256 leptons per cell)
+                let (lx, ly) = ((x0 + x1 + 1) * 128, (y0 + y1 + 1) * 128);
+                let level = self
+                    .play
+                    .game
+                    .world
+                    .cells
+                    .cell(first)
+                    .map_or(0, |x| i32::from(x.level));
+                let (qx, qy) = project_lifted(lx, ly, 0);
+                let (cx, cy) = world_to_screen(qx, qy - TERRAIN_LIFT * level);
+                let (a, b) = range_axes(range);
+                ellipse(&mut d, (cx, cy), (a, b), RANGE_INK, m);
             }
         }
         // Our markers for selected objects the S-0111 bracket does not mark.
@@ -1782,6 +2015,11 @@ impl Session {
             ui.fill(Rect::new(lm.x, lm.bottom() - 16, lm.w, 16), [0, 0, 0, 200]);
             ui.text(lm.x + 4, lm.bottom() - 13, f.clone(), colour::BAD, lm);
         }
+        ui.extend(hud::countdown_view(
+            &self.countdown_rows(),
+            lm,
+            self.clock_ms,
+        ));
         // A shared handle: a copy of the rules each frame cost more than the
         // rest of the draw list (M8 step C4).
         let rules = self.play.game.world.rules_arc();
@@ -1803,7 +2041,12 @@ impl Session {
             let img = icons.get(&t)?;
             Some((id, 0, img.width() as i32, img.height() as i32))
         };
-        let model = self.play.hud_model(&name, &art);
+        let mut model = self.play.hud_model(&name, &art);
+        model.view_box = self.radar_view_box();
+        model.focus_cameo = match self.hud_focus.at {
+            Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),
+            _ => None,
+        };
         let pointer = self.pointer;
         let hover = pointer.map(|p| self.ui.to_ui(p));
         let (hud_list, targets) = hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover);
@@ -1896,6 +2139,65 @@ const PERMA_RING_INK: [u8; 4] = [255, 120, 255, 255];
 /// The keyboard cell's mark (our own; the interface's focus colour, veiled).
 // nocite: our own client setting (keyboard aiming)
 const AIM_INK: [u8; 4] = [96, 208, 255, 90];
+/// The type-select double press's longest gap, whole milliseconds.
+const TYPE_SELECT_DOUBLE_MS: i64 = 500; // spec: S-0214 Constants (type-select double press: 500 milliseconds, inclusive)
+/// The longest gap between two presses of a control-group key that go to
+/// the group, milliseconds (our own).
+// nocite: our own client setting (control groups), the same gap as S-0214's type-select double press
+pub const GROUP_DOUBLE_MS: i64 = 500;
+
+/// The type-select role's key (S-0214 claim 12): whether it is held,
+/// whether the press that holds it came soon enough after the one before
+/// to widen the role to the whole map, and when it was pressed last.
+#[derive(Clone, Copy, Debug, Default)]
+struct TypeSelect {
+    held: bool,
+    wide: bool,
+    last: Option<i64>,
+}
+
+/// The placement range indicator's ink (our own).
+// nocite: our own colour for the placement range indicator
+const RANGE_INK: [u8; 4] = [255, 230, 80, 200];
+
+/// The half-axes in pixels of the screen ellipse of a ground circle of
+/// `range` leptons. S-0101 F1 puts a ground point (X, Y) at
+/// (30(X − Y) / 256, 15(X + Y) / 256), so a circle of radius R becomes an
+/// ellipse with half-axes 30·√2·R / 256 and 15·√2·R / 256.
+fn range_axes(range: i32) -> (i32, i32) {
+    let r = u128::from(range.max(0).unsigned_abs());
+    // spec: S-0101 F1 (30 and 15 pixels per 256 leptons along the projected axes)
+    let half = |k: u128| (glasnost_num::geom::isqrt(2 * (k * r) * (k * r)) / 256) as i32;
+    (half(30), half(15))
+}
+
+/// An ellipse outline centred at `c` with half-axes `ab`, as short lines;
+/// lines outside `clip` are left out.
+fn ellipse(d: &mut DrawList, c: (i32, i32), ab: (i32, i32), rgba: [u8; 4], clip: Rect) {
+    let (a, b) = ab;
+    if a <= 0 || b <= 0 {
+        return;
+    }
+    let y_at = |x: i32| {
+        let (a2, x2) = (i128::from(a) * i128::from(a), i128::from(x) * i128::from(x));
+        let s = glasnost_num::geom::isqrt((a2 - x2).max(0) as u128) as i64;
+        (i64::from(b) * s / i64::from(a)) as i32
+    };
+    let step = (a / 24).max(1);
+    let mut xs: Vec<i32> = (-a..a).step_by(step as usize).collect();
+    xs.push(a);
+    for sign in [-1, 1] {
+        for pair in xs.windows(2) {
+            let (p, q) = (
+                (c.0 + pair[0], c.1 + sign * y_at(pair[0])),
+                (c.0 + pair[1], c.1 + sign * y_at(pair[1])),
+            );
+            if clip.contains(Point::new(p.0, p.1)) && clip.contains(Point::new(q.0, q.1)) {
+                d.line(p, q, rgba);
+            }
+        }
+    }
+}
 
 /// A small flat ring (an ellipse outline, 12 × 6 pixels) centred at
 /// `(x, y)`: the stand-in for the control ring animations (S-0601 claim
@@ -2336,6 +2638,35 @@ mod cursor_palette_tests {
 #[cfg(test)]
 mod aim_tests {
     use super::*;
+
+    /// A ground circle of one cell's radius projects to an ellipse of
+    /// 30·√2 by 15·√2 pixels, and the drawn outline passes through its
+    /// four extreme points. spec: S-0101 F1 (30 and 15 pixels per 256 leptons)
+    #[test]
+    fn the_range_ellipse_follows_the_projection() {
+        assert_eq!(range_axes(256), (42, 21));
+        assert_eq!(range_axes(2560), (424, 212));
+        assert_eq!(range_axes(0), (0, 0));
+        let mut d = DrawList::new();
+        let clip = Rect::new(0, 0, 1000, 1000);
+        ellipse(&mut d, (500, 500), (42, 21), RANGE_INK, clip);
+        let ends: Vec<(i32, i32)> = d
+            .prims
+            .iter()
+            .filter_map(|p| match p {
+                glasnost_ui::draw::Prim::Line { from, to, .. } => Some([*from, *to]),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        for p in [(458, 500), (542, 500), (500, 479), (500, 521)] {
+            assert!(ends.contains(&p), "{p:?}");
+        }
+        assert!(
+            ends.iter()
+                .all(|&(x, y)| (458..=542).contains(&x) && (479..=521).contains(&y))
+        );
+    }
 
     /// The keyboard cell's steps go the screen's way, reach every cell and
     /// undo each other. spec: S-0101 F1 (a cell's top corner projects to (30(x − y), 15(x + y)))

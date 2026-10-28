@@ -64,6 +64,87 @@ pub enum Offer {
     /// a berserk infantry or vehicle representative with
     /// `quirks.berserk_action_cursor` off (S-0214 Edge cases).
     BerserkArrow,
+    /// A superweapon aim action of table CS (claim 31).
+    Aim(Aim),
+}
+
+/// The superweapon aim actions with a battlefield image in table CS
+/// (S-0214 claim 31).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Aim {
+    /// Nuclear strike.
+    Nuke,
+    /// Lightning storm.
+    LightningStorm,
+    /// Iron curtain (invulnerability).
+    IronCurtain,
+    /// Chronosphere source pick or destination: one image for both.
+    Chronosphere,
+    /// Force shield.
+    ForceShield,
+    /// No-force-shield: refused force-shield aiming (S-0513 claim 1).
+    NoForceShield,
+    /// Paradrop, either kind.
+    Paradrop,
+    /// Spy plane.
+    SpyPlane,
+    /// Psychic domination.
+    PsychicDominator,
+    /// Genetic mutation.
+    GeneticConverter,
+    /// Psychic reveal.
+    PsychicReveal,
+}
+
+impl Aim {
+    /// The aim action of a superweapon type's action word (S-0512 claim 23
+    /// and Import mapping, lower case), when table CS has an image for it;
+    /// `None` for no action and for a word outside table CS.
+    pub fn of_word(word: &str) -> Option<Self> {
+        // spec: S-0214 table CS (the aim action rows) and S-0512 Import mapping (the action words)
+        Some(match word {
+            "nuke" => Self::Nuke,
+            "lightningstorm" => Self::LightningStorm,
+            "ironcurtain" => Self::IronCurtain,
+            "chronosphere" | "chronowarp" => Self::Chronosphere,
+            "forceshield" => Self::ForceShield,
+            "noforceshield" => Self::NoForceShield,
+            "paradrop" | "amerparadrop" => Self::Paradrop,
+            "spyplane" => Self::SpyPlane,
+            "psychicdominator" => Self::PsychicDominator,
+            "geneticconverter" => Self::GeneticConverter,
+            "psychicreveal" => Self::PsychicReveal,
+            _ => return None,
+        })
+    }
+
+    /// Its battlefield image, revealed or shrouded alike (table CS).
+    pub fn frames(self) -> Frames {
+        match self {
+            // spec: S-0214 table CS (nuclear strike 319–328)
+            Self::Nuke => Frames::range(319, 328),
+            // spec: S-0214 table CS (lightning storm 279–298)
+            Self::LightningStorm => Frames::range(279, 298),
+            // spec: S-0214 table CS (iron curtain 346)
+            Self::IronCurtain => Frames::one(346),
+            // spec: S-0214 table CS and claim 31 (chronosphere source pick and destination: the same static 357)
+            Self::Chronosphere => Frames::one(357),
+            // spec: S-0214 table CS (force shield 450–459)
+            Self::ForceShield => Frames::range(450, 459),
+            // spec: S-0214 table CS (no-force-shield 460–469)
+            Self::NoForceShield => Frames::range(460, 469),
+            // spec: S-0214 table CS (paradrop, either kind, 259)
+            Self::Paradrop => Frames::one(259),
+            // spec: S-0214 table CS (spy plane 504–511)
+            Self::SpyPlane => Frames::range(504, 511),
+            // spec: S-0214 table CS (psychic domination 488–495)
+            Self::PsychicDominator => Frames::range(488, 495),
+            // spec: S-0214 table CS (genetic mutation 470–479)
+            Self::GeneticConverter => Frames::range(470, 479),
+            // spec: S-0214 table CS (psychic reveal 496–503)
+            Self::PsychicReveal => Frames::range(496, 503),
+        }
+    }
 }
 
 /// The cursor choice for an offer: an image, or the previous image kept.
@@ -168,6 +249,8 @@ pub fn table_c(offer: Offer, shrouded: bool, retain_damaging_entry: bool) -> Cho
         Offer::Power => Choice::Show(Frames::one(384)),
         // spec: S-0214 claim 21 and Edge cases (with quirks.berserk_action_cursor off the arrow replacement takes precedence over table C, revealed or shrouded)
         Offer::BerserkArrow => Choice::Show(arrow),
+        // spec: S-0214 claim 31 (shrouded and revealed targets use the same superweapon image)
+        Offer::Aim(a) => Choice::Show(a.frames()),
     }
 }
 
@@ -300,6 +383,40 @@ mod tests {
             action,
             in_range: false,
             shroud_moves: false,
+        }
+    }
+
+    // spec: S-0214 claim 31 and table CS (the battlefield aim images by aim action word, revealed or shrouded alike; both teleport stages share 357; the centre hot spot of claim 22)
+    #[test]
+    fn claim_31_table_cs() {
+        let rows: [(&str, Frames); 13] = [
+            ("nuke", Frames::range(319, 328)),
+            ("lightningstorm", Frames::range(279, 298)),
+            ("ironcurtain", Frames::one(346)),
+            ("chronosphere", Frames::one(357)),
+            ("chronowarp", Frames::one(357)),
+            ("forceshield", Frames::range(450, 459)),
+            ("noforceshield", Frames::range(460, 469)),
+            ("paradrop", Frames::one(259)),
+            ("amerparadrop", Frames::one(259)),
+            ("spyplane", Frames::range(504, 511)),
+            ("psychicdominator", Frames::range(488, 495)),
+            ("geneticconverter", Frames::range(470, 479)),
+            ("psychicreveal", Frames::range(496, 503)),
+        ];
+        for (word, frames) in rows {
+            let aim = Aim::of_word(word).expect(word);
+            for shrouded in [false, true] {
+                assert_eq!(
+                    table_c(Offer::Aim(aim), shrouded, true),
+                    Choice::Show(frames),
+                    "{word}"
+                );
+            }
+            assert_eq!(hot_spot(frames, 55, 43), (27, 21), "{word}");
+        }
+        for word in ["none", "attack", "airstrike", ""] {
+            assert_eq!(Aim::of_word(word), None, "{word}");
         }
     }
 

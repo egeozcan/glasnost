@@ -165,6 +165,7 @@ fn label(a: Action) -> &'static str {
         Action::Guard => "Guard",
         Action::Deploy => "Deploy",
         Action::Cheer => "Cheer",
+        Action::TypeSelect => "Select type (twice: map)",
         Action::PathReport => "Save pathing report",
         Action::Mark => "Mark (pathing report)",
     }

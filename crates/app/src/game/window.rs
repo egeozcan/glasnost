@@ -25,6 +25,28 @@ use super::session::{MAP_IMAGE, Session};
 use crate::Status;
 use glasnost_ui::shell::Screen;
 
+/// The digit a digit key or a keypad digit key stands for.
+fn digit_of(k: keyboard::PhysicalKey) -> Option<char> {
+    use keyboard::KeyCode as C;
+    let keyboard::PhysicalKey::Code(c) = k else {
+        return None;
+    };
+    let n = match c {
+        C::Digit0 | C::Numpad0 => 0,
+        C::Digit1 | C::Numpad1 => 1,
+        C::Digit2 | C::Numpad2 => 2,
+        C::Digit3 | C::Numpad3 => 3,
+        C::Digit4 | C::Numpad4 => 4,
+        C::Digit5 | C::Numpad5 => 5,
+        C::Digit6 | C::Numpad6 => 6,
+        C::Digit7 | C::Numpad7 => 7,
+        C::Digit8 | C::Numpad8 => 8,
+        C::Digit9 | C::Numpad9 => 9,
+        _ => return None,
+    };
+    char::from_digit(n, 10)
+}
+
 /// Options for [`run_game`].
 #[derive(Clone, Debug, Default)]
 pub struct GameOptions {
@@ -395,7 +417,12 @@ impl ApplicationHandler<GameEvent> for GameApp {
                 // Auto-repeated key-downs are not new presses: holding an arrow
                 // first pressed during an order block must not become an
                 // accepted press afterwards (S-0213 claim 23).
+                // A digit key is its digit whatever Shift or the layout
+                // makes of it, for the control-group keys (Shift+digit).
+                let digit = digit_of(event.physical_key);
                 let key = match &event.logical_key {
+                    _ if event.repeat && digit.is_some() => None,
+                    _ if digit.is_some() => digit.map(Key::Char),
                     // Backspace repeats while held, as in any text field
                     // (and only there: in the game it holds or cancels).
                     keyboard::Key::Named(NamedKey::Backspace)

@@ -166,6 +166,39 @@ impl Radar {
         out
     }
 
+    /// The radar image's rectangle in the radar map: left, top, width,
+    /// height (S-0410 F2).
+    pub fn image_rect(&self) -> (i32, i32, i32, i32) {
+        (self.img.left, self.img.top, self.img.width, self.img.height)
+    }
+
+    /// The outline of the battlefield view on the radar map (S-0410 claim
+    /// 11: the outline that marks the battlefield view's part of the map is
+    /// drawn over the radar map), in radar map pixels: the left, top, right
+    /// and bottom edges, unclipped (the drawing clips them to the image).
+    /// `origin` and `size` are the view's top-left world pixel and its size
+    /// (S-0101 F3).
+    ///
+    /// design: the view's corners are taken at height level 0 and placed
+    /// by F4, as an object at that ground point would be; the outline's
+    /// look and the height it reads are not specified ("other details
+    /// belong to the interface specs").
+    pub fn view_outline(&self, origin: (i32, i32), size: (i32, i32)) -> (i32, i32, i32, i32) {
+        let corner = |px: i32, py: i32| {
+            let (px, py) = (i64::from(px), i64::from(py));
+            // The inverse of S-0101 F1 at height 0: 30(X − Y) = 256 px and
+            // 15(X + Y) = 256 py, so X = (128 px + 256 py) / 30 and
+            // Y = (256 py − 128 px) / 30.
+            let x = (128 * px + 256 * py).div_euclid(30);
+            let y = (256 * py - 128 * px).div_euclid(30);
+            let (p, q) = minimap::object_pixel(&self.grid, &self.img, x as i32, y as i32, false);
+            (p + self.img.left, q + self.img.top)
+        };
+        let (l, t) = corner(origin.0, origin.1);
+        let (r, b) = corner(origin.0 + size.0, origin.1 + size.1);
+        (l, t, r, b)
+    }
+
     /// The cell a click on radar map pixel (x, y) names (S-0410 F3), when
     /// it is inside the radar image.
     pub fn cell_at(&self, w: &World, x: i32, y: i32) -> Option<CellXY> {
