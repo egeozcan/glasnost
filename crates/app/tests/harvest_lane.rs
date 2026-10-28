@@ -678,6 +678,38 @@ fn harvest_notes_on_the_real_data() {
                 watched.push((format!("{who} far slave miner"), id, cell));
             }
         }
+        // The same far from ore, ordered to harvest the nearest tiberium
+        // cell as a player's click does (S-0402 claim 22).
+        if let Some(home) = home_of(world(&c), local)
+            && let Some(id) = place_far(&mut c, ti, local, CellXY::new(home.x - 4, home.y - 4))
+        {
+            let cell = world(&c).obj(id).unwrap().pos.cell();
+            let w = world(&c);
+            let ore = (-150i32..=150)
+                .flat_map(|dy| (-150i32..=150).map(move |dx| CellXY::new(cell.x + dx, cell.y + dy)))
+                .filter(|&o| {
+                    w.cells
+                        .cell(o)
+                        .is_some_and(|x| x.land == glasnost_map::terrain::land::TIBERIUM)
+                })
+                .min_by_key(|o| (o.x - cell.x).abs().max((o.y - cell.y).abs()));
+            if let Some(ore) = ore {
+                let n = c.session.as_mut().unwrap().play.issue(vec![
+                    glasnost_sim::orders::Order::Behaviour {
+                        actor: id,
+                        behaviour: Behaviour::Harvest,
+                        attack_move: false,
+                        target: None,
+                        dest: Some(glasnost_sim::world::Target::Cell(ore)),
+                    },
+                ]);
+                println!(
+                    "ordered far slave miner: ore at {}, orders taken {n}",
+                    (ore.x - cell.x).abs().max((ore.y - cell.y).abs())
+                );
+                watched.push(("local ordered far slave miner".into(), id, cell));
+            }
+        }
     }
     // Note 23 through the factory: a slave miner built by the local house
     // and released by its own vehicle factory.
