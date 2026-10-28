@@ -105,7 +105,13 @@ fn answer(w: &mut World, id: ObjectId, req: ScatterRequest, how: Assign) -> bool
         return false;
     };
     let seq = o.infantry.as_ref().and_then(|s| s.seq);
-    let moving = occupancy::in_progress(w, id);
+    // design: S-0417 claim 17 leaves open whether a walking unit that holds a destination with no
+    // path (the reachability gate failed, or a fresh search waits for the retry delay) reports
+    // movement in progress; for claim 17's request it does, so the third case below refuses each
+    // later request, with no draw, and the unit keeps its destination (as for a fall-back
+    // destination whose *move* is not yet current). Q-1980.
+    let holds_dest = how == Assign::Resting && o.walk.is_some() && o.dest.is_some();
+    let moving = occupancy::in_progress(w, id) || holds_dest;
     let deploying = seq.is_some_and(Seq::is_deploy);
     if req.forced && req.anywhere && deploying {
         // spec: S-0208 claim 11 (a forced, move-anywhere request to a deploying unit also requests undeploy)

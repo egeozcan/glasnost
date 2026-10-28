@@ -131,6 +131,46 @@ fn claim_17_one_draw_then_refusals() {
     assert_eq!(probe.obj(g).unwrap().dest, first, "the destination is kept");
 }
 
+// design: S-0417 claim 17 (whether a walking unit holding a destination with no path reports movement in progress is not established; for claim 17's request it does, so each later request is refused with no draw and the destination kept, Q-1980)
+#[test]
+fn claim_17_destination_without_a_path_is_kept() {
+    let (mut w, k, g) = released(&ruleset());
+    // The retry delay of a fresh search runs past the next ticks.
+    let wait = w.tick + 30;
+    w.obj_mut(g).unwrap().path.retry_at = wait;
+    step(&mut w);
+    let d = w.obj(g).unwrap().dest;
+    assert!(d.is_some(), "the first request gives a destination");
+    for _ in 0..20 {
+        step(&mut w);
+        assert!(!glasnost_sim::occupancy::in_progress(&w, g));
+    }
+    // A refused request takes no draw.
+    let req = ScatterRequest {
+        threat: None,
+        forced: true,
+        anywhere: true,
+    };
+    let mut probe = w.clone();
+    let before = probe.rng.taken();
+    assert!(!scatter::request_resting(&mut probe, g, req));
+    assert_eq!(probe.rng.taken(), before, "no draw");
+    let asked = answers(&trace::take(&w), g);
+    assert_eq!(asked.len(), 21, "a request in each turn: {asked:?}");
+    assert!(asked[0].1);
+    assert!(
+        asked[1..].iter().all(|a| !a.1),
+        "the later ones refused: {asked:?}"
+    );
+    assert_eq!(w.obj(g).unwrap().dest, d, "the destination is kept");
+    assert!(holds(&w, cell_of(&w, g), k), "still on K");
+    // Once the delay is over it walks there.
+    let n = until_free(&mut w, g, 200).expect("contact ends");
+    assert!(n < 200);
+    let asked = answers(&trace::take(&w), g);
+    assert!(asked.iter().all(|a| !a.1), "no new destination: {asked:?}");
+}
+
 /// Runs until `g`'s contact with K ends, at most `limit` ticks; returns
 /// the ticks taken.
 fn until_free(w: &mut World, g: ObjectId, limit: i32) -> Option<i32> {
