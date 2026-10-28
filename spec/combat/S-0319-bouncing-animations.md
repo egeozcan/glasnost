@@ -2,13 +2,13 @@
 id: S-0319
 title: Bouncing animations (sprite debris and meteors): motion, landing and end
 topic: combat
-revision: 9
+revision: 26
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-25
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-1762]
+requests: [Q-1762, Q-1846, Q-1847]
 supersedes: []
 ---
 
@@ -20,15 +20,17 @@ S-0109 Terms define a *bouncing type*: an animation type with the bouncer flag o
 whose animation follows its own motion and is ended by its landing. This spec gives that motion
 and that landing for sprite animations: the first velocity formed from the creation draws, the
 flight under gravity, what counts as landing (ground, high-bridge deck, building cell, cliff), the
-effects of the landing and of the end that follows at once, the ends without a landing, and the
-draws all of these take. It also gives the trailer animation that any animation type can name,
-since moving bouncing animations are its main users. It answers Q-1762 in part: the parts left
-open are listed under Open questions.
+rebound that decides between an impact and a stopping landing, the effects of the landing and of
+the end that follows at once, the new resource a landing makes, the ends without a landing, the
+behaviour off the map, and the draws all of these take. It also gives the trailer animation that
+any animation type can name, since moving bouncing animations are its main users. It answers
+Q-1762, Q-1846 and Q-1847; the points left open are listed under Open questions.
 
 Debris pieces with voxel models are not animations of this kind: S-0317 owns
-them. The two share one flight and contact rule, which this spec states for sprite animations
-and which S-0317 states for pieces, apart from the differences claims 6 and 7 name. The main difference: a sprite animation ends at its first
-landing, while a piece rebounds and flies on.
+them. The two share one flight and contact rule. This spec states it in full for sprite
+animations; S-0317 states it for pieces, apart from the differences claims 6 and 7 name, and
+its cliff test (S-0317 claim 10) agrees with claim 6 here. The main difference: a sprite
+animation ends at its first landing, while a piece rebounds and flies on.
 
 ## Terms
 
@@ -64,6 +66,14 @@ In addition:
 - **Deck height.** 416 leptons (4 height levels of 104) above the ground height at a point.
 - **Motion measure.** The number *S* of S-0317 F6, formed from the velocity and from the height
   above the ground height after a move (claim 7).
+- **Cell read for a position.** The cell that every reading of this spec takes for a position
+  (*x*, *y*, *z*) in leptons. Its cell coordinates are (*c*ₓ, *c*ᵧ) = (trunc(*x*/256),
+  trunc(*y*/256)), so a coordinate between −255 and 0 falls in cell 0. When that cell is a legal
+  cell (glossary, S-0009 claim 1) the cell read is that cell; otherwise it is the **off-map
+  cell** (claim 11). A position is **off the legal map** when its cell read is the off-map
+  cell.
+- **High cell.** In the cliff turn (claim 7, F7), a cell whose height level is at least the level
+  of the cell of the old position plus 2.
 
 ## Behaviour
 
@@ -78,12 +88,12 @@ In addition:
    - Confidence: high for a type with both flags. Medium for a type with neither flag at creation
      and a flagged follow-up type, until BA8 part d runs.
 
-2. **Creation of a falling animation.** The animation is placed at its creation point. Its flight
-   position starts 10 leptons above the creation point, and its first velocity is given by F1 from
-   three raw values on the scenario stream, taken in this order: *r*₁ (vertical speed), *r*₂
-   (second horizontal axis), *r*₃ (first horizontal axis). Then three ranged draws R(−65535,
-   65535) are taken; their values have no effect on the animation. The vertical speed lies from
-   *Z*ₘᵢₙ up to *Z*ₘᵢₙ + |*W*_z| − 1 leptons per tick, where
+2. **Creation of a falling animation.** The animation is placed at its creation point, unless that
+   point is exactly (0, 0, 0) (claim 11). Its flight position starts 10 leptons above the creation
+   point, and its first velocity is given by F1 from three raw values on the scenario stream, taken
+   in this order: *r*₁ (vertical speed), *r*₂ (second horizontal axis), *r*₃ (first horizontal
+   axis). Then three ranged draws R(−65535, 65535) are taken; their values have no effect on the
+   animation. The vertical speed lies from *Z*ₘᵢₙ up to *Z*ₘᵢₙ + |*W*_z| − 1 leptons per tick, where
    *W*_z is formed with a fixed upper vertical limit of 3.5 leptons per tick that no key changes
    (F1, `quirks.anim_fixed_upper_vertical_speed`). Each horizontal speed lies from −*M* to
    |*W*ₓᵧ| − 1 − *M*; for a negative span (claim 14) the remainder takes the span's size, so the
@@ -99,19 +109,20 @@ In addition:
 
 3. **Creation of a meteor animation.** A meteor animation's creation takes three raw values: *q*₁
    and *q*₂ give its horizontal speeds and *q*₃ its travel time *T* of 51 to 70 turns (F2). Its
-   vertical speed is the type's lower vertical limit *Z*ₘᵢₙ. When the first horizontal speed is
-   less than minus the second, both change sign, so the meteor's two horizontal speeds never sum
-   to less than 0 (F2). The animation is placed at its start position, the
-   creation point moved back by *T* times its velocity (F2), and its flight position starts
-   there. Three ranged draws R(−65535, 65535) follow, as in claim 2. A meteor animation then flies
-   in a straight line (claim 4), but the start position does not put the creation point on that
-   line. Each turn's move takes the 1.4 of claim 4 off the vertical speed before the move and adds
-   it back only after it, so every move is (*v*ₓ, *v*ᵧ, *Z*ₘᵢₙ − 1.4), up to the rounding of F3.
-   After *T* turns the line is over the creation point horizontally and 1.4 *T* leptons (about
-   71 to 98) below it. A descending meteor whose creation point is on the ground therefore meets
-   the ground by its *T*-th turn, at the first turn whose move takes it below the ground height
-   (claim 6), unless a stopping landing of claim 7 comes first. Its landing point lies short of the creation point along its line, by
-   (*T* − *k*)(*v*ₓ, *v*ᵧ) horizontally for a landing in turn *k*.
+   vertical speed is the type's lower vertical limit *Z*ₘᵢₙ. When the first horizontal speed is less
+   than minus the second, both change sign, so the meteor's two horizontal speeds never sum to less
+   than 0 (F2). The animation is placed at its start position, the creation point moved back by *T*
+   times its velocity (F2), unless that position is exactly (0, 0, 0) (claim 11), and its flight
+   position starts there. Three ranged draws R(−65535, 65535) follow, as in claim 2. A meteor
+   animation then flies in a straight line (claim 4), but the start position does not put the
+   creation point on that line. Each turn's move takes the 1.4 of claim 4 off the vertical speed
+   before the move and adds it back only after it, so every move is (*v*ₓ, *v*ᵧ, *Z*ₘᵢₙ − 1.4), up
+   to the rounding of F3. After *T* turns the line is over the creation point horizontally and 1.4
+   *T* leptons (about 71 to 98) below it. A descending meteor whose creation point is on the ground
+   therefore meets the ground by its *T*-th turn, at the first turn whose move takes it below the
+   ground height (claim 6), unless a stopping landing of claim 7 comes first. Its landing point lies
+   short of the creation point along its line, by (*T* − *k*)(*v*ₓ, *v*ᵧ) horizontally for a landing
+   in turn *k*.
    - Backing: `measurable` (scenario BA6)
    - Confidence: high for the draws, the sign change, the travel time range and the move of
      (*v*ₓ, *v*ᵧ, *Z*ₘᵢₙ − 1.4) in every turn, and for the start position of F2.
@@ -157,8 +168,8 @@ In addition:
      at 20 leptons below the deck height (landing under the deck). Either is a landing. A low
      bridge has no deck: a low-bridge cell is not a high-bridge cell, so a move there is tested as
      on any other cell, by the ground test below at the cell's ground height, with the land type
-     of its bridge overlay (S-0211 claim 9). The cells of a destroyed high bridge are no longer
-     marked (S-0211 claim 15) and are tested in the same way.
+     of its bridge overlay (S-0211 claim 9). The cells of a destroyed high bridge lose their mark
+     (S-0211 claim 15) and are tested in the same way.
    - **Ground.** Otherwise, when the new height is below the ground height, the move is a
      landing. The height is set to the ground height when it is less than 100 leptons below it,
      and is otherwise kept below the ground (Edge cases, `quirks.bouncing_anim_deep_landing`).
@@ -167,65 +178,156 @@ In addition:
      made as on any other cell.
    - **Building cell.** Otherwise, when the new height is at least the ground height and less
      than 150 leptons above it, and the cell of the new position holds a building, the move is a
-     landing and the height is set to the ground height. Some buildings do not count, and some
-     overlays count as a building does (Open questions).
+     landing and the height is set to the ground height. The cell holds a building for this test
+     in either of two cases:
+     - *A building is listed there.* The first building listed in the cell's ground layer
+       (S-0209 claim 13) counts, unless it is an inactive laser-fence section (a laser-fence
+       section that is not active, S-0211 Terms) or a vehicle-like building (S-0214 Terms). When
+       the first building listed is one of those two kinds the cell does not count, whatever is
+       listed after it and whatever overlay the cell holds.
+     - *No building is listed there.* The cell counts when its overlay is one of the three wall
+       overlays of S-0306's constants (S-0307 claim 11).
+
+     Every other building counts: one in the construction state (glossary), whether in its
+     build-up just after it is placed or being sold, one awaiting removal (S-0312 claim 21),
+     one of any house or of no owner, a gate whether open or closed, and an active
+     laser-fence section. No other overlay counts. Only the ground layer is examined, whatever
+     the animation's height: an object on a high bridge's deck makes no building contact.
    - **Cliff.** After any landing of the three kinds above, the move is undone when the cell of
      the new position is at least 2 height levels above the cell of the old position and the
      height *z*₁ after the landing's adjustment above is higher than the move could reach. With
-     *u* the vertical speed at the start of the turn (before the 1.4 is taken off) and *z*₀ the
+     *u*_z the vertical speed at the start of the turn (before the 1.4 is taken off) and *z*₀ the
      height of the flight position before the move (not of the position in play, which is the
      flight position truncated toward zero, Terms, and which in a falling animation's first turn
-     stands 10 leptons below it, at the creation point, claim 2), that is: for a
-     descending animation (*u* < 0), when *z*₁ > *z*₀; for a rising
-     one (*u* > 0), when *z*₁ > *z*₀ + *u* + 1. Our engine applies the two conditions as written,
-     so an animation whose *u* is exactly 0 meets neither. Where the original's line between them
-     lies, for an animation whose *u* is zero or within a small fraction of a lepton per tick of
-     zero at the top of its arc, is `unmeasured` (below). This is S-0317 claim 10's cliff test
-     for pieces, with one difference: for a sprite animation *z*₀ is the flight position's height,
-     where S-0317 claim 10 takes the height of the piece's position before the move. The
-     flight position and the velocity then become those before the move, and the velocity is
-     turned off the cliff face. The position in play is then set from that restored flight position,
+     stands 10 leptons below it, at the creation point, claim 2), that is: when *u*_z is below
+     −0.0002 leptons per tick, when *z*₁ > *z*₀; for every other *u*_z, 0 included, when
+     *z*₁ > *z*₀ + *u*_z + 1. The comparison with −0.0002 is made in double precision, with *u*_z
+     (stored in single precision) widened exactly, and our engine draws the line at the same
+     place. So an animation whose *u*_z is exactly 0 is undone when the landing lifts it more
+     than 1 lepton above its height before the move. S-0317 claim 10 states the same test for
+     pieces: the same line,
+     the same condition for a vertical speed of 0 and the same *z*₀. After the first turn the two
+     heights differ by less than 1 lepton, unless the height's conversion is out of the integer
+     range (S-0205 claim 7). The flight position and the velocity then become those before the
+     move, and the velocity is
+     turned off the cliff face (claim 7, F7). The position in play is then set from that restored flight position,
      truncated toward zero (Terms), so the landing point is the position in play before the move,
      except in a falling animation's first turn, where it stands 10 leptons above the creation
      point at which the animation stood before the move. So an animation that
      the landing would lift onto the higher cell by more than its own motion carried it lands at
      the foot of the cliff, while a rising animation that the landing lifts by little enough
      lands on the higher cell.
+   - **Cells read.** Every cell these tests take is the cell read for the position (Terms). Off
+     the legal map that is the off-map cell of claim 11, S-0009 claim 44's stand-in, which our
+     engine reads as a blank cell: flat, at height level 0 and ground height 0, of the clear land
+     type, with no high-bridge mark, no building and no overlay. So there the
+     ground test meets height 0 and no building contact is made. A deck is met off the legal map
+     only through the cell of the old position, when a move leaves a high-bridge cell for the
+     off-map cell, and is then tested as for any move from that cell. The cliff test compares height levels with level 0,
+     so a move from off the legal map onto a legal cell 2 or more levels high is tested as at any
+     other cliff.
    These are the *contacts*. A move with no contact is still a landing when its motion measure is
    below 2.5 (claim 7). Every landing ends the animation in the same turn (claims 7 and 8): a
    bouncing animation lands once.
    - Backing: `measurable` (scenario BA2 for the ground, BA4 for high-bridge decks and the low
      bridge, BA5 part a for building
-     cells and part b for the cliff test of a descending animation, BA2 part i for the 100-lepton limit,
-     BA4's low run under the bridge for the ground test on a high-bridge cell whose deck the move
-     does not cross). The cliff test's condition for a
-     rising animation, and the line between the two conditions, are `unmeasured`: BA5 part b flies
-     a meteor animation that meets the cliff cell while descending, and no scenario here builds one that
-     meets it while rising or with a vertical speed within a small fraction of a lepton per tick
-     of zero, which F1 and F3 make only by chance. Our engine's line at *u* = 0 is not claimed to
-     match the original's within that margin. That *z*₀ is the flight position's height is
-     `unmeasured`: the two heights differ by the 10-lepton lift in a falling animation's first
-     turn, which no scenario here makes meet a cliff, and otherwise only by the fraction of a
-     lepton that the truncation drops, which no scenario here can resolve. For the same reason
-     the landing point of an undone first move of a falling animation, 10 leptons above the
-     creation point, is `unmeasured`.
+     cells, part a′ for the kinds of building and the wall overlays, part b for the cliff test of a
+     descending animation and part c for an animation whose *u*_z is 0, BA2 part i for the
+     100-lepton limit, BA4's low run under the bridge for the ground test on a high-bridge cell
+     whose deck the move does not cross, BA13 for the off-map cell). BA5 part c shows that an
+     animation with *u*_z = 0 is undone. It cannot tell which of the two conditions undoes it: in
+     that run both give the same result. Five items are `unmeasured`:
+     - Which condition *u*_z = 0 takes, and the line at −0.0002. Only a vertical speed from −0.0002
+       up to 0, or a lift of the landing by at most 1 lepton, would separate the two conditions.
+       F1 and F3 make such cases only by chance, and no scenario here builds one.
+     - The first-listed rule for buildings. No scenario here builds a cell that lists two
+       buildings, which stock play rarely makes.
+     - An active laser-fence section. No spec gives a route by which a scenario can make one
+       (S-0211), so BA5 part a′ judges it only where a run happens to hold one.
+     - A building awaiting removal. BA5 part a′ does not set one up: such a building stays listed
+       in its cells only for the short time S-0312 claim 21 gives, and no scenario here times a
+       landing into that window. S-0317 claim 19 leaves the same case `unmeasured`.
+     - A building of no owner. S-0009 claim 27 drops a map object whose owner matches no house,
+       so no map can place such a building, and no scenario here makes one in play. S-0317 claim
+       19 leaves the same case `unmeasured`.
+
+     The rising condition (*u*_z > 0) and the flight position's height as *z*₀ are `measurable`
+     together (BA5 part e). Part e's first moves rise into a cell 2 levels higher, with *u*_z of
+     197.5 or 198.5, and the two heights differ there by the 10-lepton lift of a falling
+     animation's first turn. Its expected result, a move that is not undone, holds only when both
+     rules hold: the descending condition would undo those moves from either height, and the
+     rising condition measured from the position in play would undo them too. So part e
+     falsifies the pair, and its failure would not say which of the two failed. It builds no
+     rising move that the cliff test undoes, so it does not show the lift above *z*₀ + *u*_z + 1 at
+     which such a move is undone. After the first turn the two heights differ by less than 1
+     lepton unless the height's conversion is out of the integer range (S-0205 claim 7), and no
+     scenario here resolves a lift that close to the line. The
+     landing point of an undone first move of a falling animation, 10 leptons above the creation
+     point, is `unmeasured`: in part e's band the move is not undone, and no scenario here builds
+     an undone first move whose landing point is recorded.
    - Confidence: high for ground landings and for ending at the first landing. Medium for the
      high-bridge rules, the low bridge, the 150-lepton building band and the descending cliff
      test, until BA4 and BA5 run, and for the 100-lepton limit until BA2 part i runs. Medium for
-     the ground test under a high bridge until BA4 runs, for which height *z*₀ is and for the
-     landing point of an undone first move (`unmeasured`). Low for
-     the rising cliff condition, for which buildings and overlays count, and for the velocity
-     turned off the cliff face (Open questions).
+     the ground test under a high bridge until BA4 runs, for which height *z*₀ is until BA5 part e
+     runs, and for the landing point of an undone first move (`unmeasured`). Medium for the cliff test with
+     *u*_z = 0 until BA5 part c runs, and for the rising condition with *u*_z > 0 until BA5 part e
+     runs. Medium for the condition that *u*_z = 0 takes and for the line at −0.0002
+     (`unmeasured`). Medium for the kinds of building and the wall overlays until BA5 part a′
+     runs, for an active laser-fence section, a building awaiting removal and a building of no
+     owner (`unmeasured`), and
+     for the off-map cell's readings
+     until BA13 runs. Low for the first-listed rule (`unmeasured`).
 
 7. **Impact landing or stopping landing.** At a contact (claim 6) the velocity is first
-   rebounded as S-0317 claim 10 gives it: on a flat cell the vertical speed is reversed and the
-   whole velocity scaled by the type's elasticity *e*, on a sloped cell the component across the
-   cell's surface is reversed instead (low confidence there, Open questions), and off a cliff face
-   it turns as S-0317 leaves open. After every motion step, with or without a contact, the motion measure *S*
-   is then taken from the velocity the step has left and the height above the ground height, as
-   S-0317 F6 gives it, before a meteor's addition of 1.4. When *S* < 2.5 the step is a stopping
-   landing, with or without a contact. Otherwise a step with a contact is an impact landing, and
-   a step without one is no landing.
+   rebounded, and then the motion measure decides.
+   - **Rebound.** At a contact that the cliff test does not undo, the velocity is reflected in a
+     plane fixed by the slope shape (S-0106) of the cell of the new position, through that
+     shape's original tilt transform (S-0106 table C4), and scaled by the type's elasticity *e*
+     (F6).
+     - On a flat cell, and on the saddle shapes, which C4 gives the identity, this is S-0317
+       claim 10's flat rule: the vertical speed is reversed and the whole velocity scaled by *e*.
+     - On the other shapes the plane's normal leans toward the downhill side, by C4's tilt (about
+       29.31° for the edge and steep shapes, about 21.36° for the corner and valley shapes), not by
+       the terrain as drawn. The component along that normal is reversed, so with a positive *e* an
+       animation that comes straight down leaves with a horizontal speed toward the downhill side.
+     - At a deck contact the rebound still takes the slope shape of the ground cell under the
+       deck. Over sloped ground an animation therefore rebounds as off the slope, not off the flat
+       deck: a bug of the original (Edge cases, `quirks.bouncing_anim_rebound_faults`).
+   - **Cliff turn.** When the cliff test undoes the move, the velocity *u* of the start of the turn
+     (before gravity) is turned off a face of the cliff and scaled by *e* instead (F7). Every face
+     only exchanges or reverses the two horizontal components and keeps the vertical one, so
+     *S* below is that of *e u* whichever face it is, and which face it is has no effect on a
+     sprite animation. The one exception is the original's north-west turn of F7, in which the
+     vertical speed takes the old second-axis speed: a bug of the original
+     (`quirks.bouncing_anim_rebound_faults`). A move whose cell changes by more than one in either
+     axis needs a horizontal speed of 256 leptons per tick or more, unless a coordinate's conversion
+     is out of the integer range (S-0205 claim 7), which can change the cell by more than one at
+     any speed. The original's face for such a move is undefined. This case is a **departure**:
+     our engine takes the step direction from the signs of the two changes and turns the velocity
+     as for that step (F7). The importer warns for a
+     type when a bound *H* on its first horizontal speed's magnitude by claim 2's ranges, which F1
+     and F2 share, is 256 or more: *H* = max(|*M*|, | |*W*ₓᵧ| − 1 − *M* |) and, while
+     `quirks.random_magnitude_overflow` is on, also |*M* + |*W*ₓᵧ| − 1| for the raw value
+     −2147483648. *H* may lie above every speed the type reaches, so the warning can come for a
+     type that never makes such a move. No later turn changes the horizontal speed before the
+     landing (F3; claim 6: it lands once).
+   - **Measure.** After every motion step, with or without a contact, the motion measure *S*
+     is then taken from the velocity the step has left (after the rebound or the cliff turn) and
+     the height above the ground height, by S-0317 F6's form, before a meteor's addition of 1.4.
+     The form is the same for a sprite animation and a piece. When *S* < 2.5 the step is a
+     stopping landing, with or without a contact. Otherwise a step with a contact is an impact
+     landing, and a step without one is no landing.
+   - **After a cliff turn.** After an undone move the height is counted from the ground of the cell
+     of the restored flight position, the lower cell. Between flat cells of level 0 or above that no
+     high bridge marks, a descending animation whose move is undone stands more than 108 leptons
+     above that ground. The higher cell is at least 208 leptons higher, and claim 6's snap reaches
+     only less than 100 below it. The height also grows with the downward speed: the move is undone
+     only when the position before it stood above the snap's reach by more than that speed, so a
+     faster fall leaves a greater height above the lower ground. So with an elasticity *e* with
+     0 ≤ *e* ≤ 1 and any turn but the north-west turn, *S* exceeds 150 however fast the fall, within
+     the sums S-0317 F6 covers, and the landing is an impact landing. Between such cells, only a
+     rising animation can be undone close to the lower ground, so in practice only for one can the
+     turned velocity decide between the two kinds of landing.
    - A **stopping landing** has no effect of its own; the end of claim 8 follows.
    - An **impact landing** first makes the type's bounce animation, when it names one, at the
      position in play before the move (the one the previous turn left, or in the first turn the
@@ -233,13 +335,33 @@ In addition:
      request. Then each object listed in the ground layer of the one cell that holds the landing
      point whose horizontal distance |Δ*x*| + |Δ*y*| from the landing point is at most the type's
      damage radius receives a hit of the type's damage amount truncated toward zero, with its
-     warhead, exactly as a piece's ground impact of S-0317 claim 7 (no attacker, no attacking
-     house, defences not ignored, no no-escape marker, the lifted distance of S-0317 F4). The hits
-     form a set, whose order matters only where one hit's result can affect another object of the
-     cell before that object's hit, or where more than one hit takes draws from the scenario random
-     stream (which draw each hit receives); there they come in the ground layer's listing order
-     (S-0209 claim 13). Whether they skip a listed object that has no health left is open, as it is for a
-     piece's impact (Open questions). The hits take the ground layer whatever the height of the
+     warhead, with the same hit as a piece's ground impact of S-0317 claim 7 (no attacker, no
+     attacking house, defences not ignored, no no-escape marker, the lifted distance of S-0317
+     F4). The hits go through the cell's ground-layer listing in its order (S-0209 claim 13). The
+     walk below is stated for sprite animations only: S-0317 leaves open whether a removed object
+     stops a piece's hits (S-0317 Open questions). Its results:
+     - a hit that takes its own object out of the cell's ground layer ends the hits, and no object
+       listed after it is hit. A destroyed vehicle that does not crash or sink leaves play at the
+       end of its death effects, at the moment its damage is applied (S-0312 claim 15, S-0203
+       claim 6 (a)), and so within its hit. For example, a vehicle
+       standing in a building's cell is listed before the building, and when its hit destroys it
+       the building takes no hit. Our engine ends the hits in the same way after a killing hit on
+       infantry removed at once or on a building that leaves at once (S-0203 claim 6 (b) and
+       (c)), whether or not the original takes them out within the hit (Open questions); design
+       rule, decided under the delegation, 2026-10-27,
+     - an object that a hit takes out of the listing before it is reached is not hit,
+     - an object that enters the cell's ground layer during the hits is hit only when it is
+       listed after the object being hit, which by S-0209 claim 13 only a building can be.
+
+     This walk is a bug of the original (Edge cases, `quirks.bouncing_anim_impact_hits_walk`).
+     With that switch on or off, each object's radius test and hit distance are taken at its own
+     hit, from its position then (for the switch off a design rule, decided at the delegated
+     sign-off, 2026-10-26: it keeps one distance rule for both settings).
+     No object is skipped for having no health left: such an object receives its hit, and S-0302
+     claim 8's no-health rows decide what the hit does. S-0317 claim 7 states the same for a
+     piece's hits. The order matters only where one hit's
+     result can affect another object of the cell, or where more than one hit takes draws from
+     the scenario random stream (which draw each hit receives). The hits take the ground layer whatever the height of the
      landing: a landing on a high-bridge deck hits the objects under the deck in that cell, never
      one standing on the deck, as a piece's impact does (S-0317 claim 7). This is a bug of the
      original (Edge cases, `quirks.bouncing_anim_deck_impact_layer`). Then the end of claim 8
@@ -256,31 +378,71 @@ In addition:
    test: on a water cell it makes the bounce animation and the hits too, before claim 8's water
    row (Edge cases, `quirks.bouncing_anim_water_impact_hits`).
    - Backing: `measurable` (scenario BA2 parts b, c and f, BA2 part j for the distance *D*, the
-     radius limit (part j1), the defences and the no-escape marker, BA3 part b for the bounce animation and the hits on
-     water, BA11 part a for the order of bounce animation, hits and end). No attacker is
-     `unmeasured`: BA2 part f judges house credit, not an attacker object, and no run here judges
-     retaliation, as for S-0317 claim 7. The
-     listing order, where one hit's result can affect another object or more than one hit takes
-     draws, is `unmeasured`: no scenario here gives an object hit at a landing a death that
-     affects another object of the cell, or two hit objects that both take draws. The ground
-     layer at a landing on a deck is `unmeasured` here: BA4 places no object on the deck or under
-     it, and S-0317 V7 part b's run with objects tests the same rule for pieces. A stopping
-     landing without a contact is `unmeasured`: BA6, BA2 part j and BA8 part a′ admit a stop in
-     flight only as an allowed alternative, and whether and when it comes rests on S-0317 F6's
-     form, itself `unmeasured` there, which no scenario here pins to a turn.
-   - Confidence: low for a stopping landing without a contact, which rests on S-0317 F6's exact
-     form; that a sprite animation then ends in the same turn, where a piece ends in the turn
-     after, is medium. Medium for the bounce animation and the hits on water, until BA3 part b
-     runs. Medium for the ground layer at a deck landing. High for the elasticity-0 case at the
-     ground height, where the velocity and the height are both 0, so *S* = 0 under any form of
-     S-0317 F6. Medium for the order of bounce animation, hits and end, as S-0317 claim 7 rates
-     it, until BA11 part a runs. Low for the stop decision on a rebounded velocity that is not 0,
-     which rests on S-0317 F6's exact form: that form is `unmeasured` there, and no scenario
-     here pins such a stop to a turn (Open questions). Medium for the deck case with an
-     elasticity of 0, until BA4 runs; low for the under-deck and deep cases, which rest on F6's
-     form. Medium for the distance *D*, the radius limit, the defences and the no-escape marker
-     until BA2 part j runs, and for no attacker. Medium for no attacking house until BA2 part f and its check of
-     the S-0414 claim 21 reading run (Changes for other specs). Low for the listing order.
+     radius limit (part j1), the defences and the no-escape marker, BA2 part m for the stop
+     decision on a rebounded velocity at the ground, BA2 part n for the hits' end after a
+     destroyed vehicle, BA3 part b for the bounce animation and the hits on water, BA5 part b for
+     the impact landing after an undone descending move, BA5 part d for a sloped cell's rebound
+     against the flat rule, BA11 part a for the order of bounce animation, hits and end). Nine
+     items are
+     `unmeasured`:
+     - No attacker. BA2 part f judges house credit, not an attacker object, and no run here
+       judges retaliation, as for S-0317 claim 7.
+     - The rest of the listing walk and the hit on an object with no health left. No scenario here
+       removes a later object during the hits, makes an object enter during them, or holds a
+       no-health object in the landing cell. The end of the hits after infantry or a building
+       that leaves at once is a design rule.
+     - The ground layer at a landing on a deck. BA4 places no object on the deck or under it,
+       and S-0317 V7 part b's run with objects tests the same rule for pieces.
+     - A stopping landing without a contact. BA6, BA2 part j and BA8 part a′ admit a stop in
+       flight only as an allowed alternative, and no scenario here pins one to a turn.
+     - The north-west turn and the measure after a rising animation's undone move. No scenario
+       here builds a rising animation whose move the cliff test undoes: BA5 part e's rising first
+       moves meet a cliff, but are not undone.
+     - The rebound over a deck, which takes the ground cell's slope. A run would need a high
+       bridge over sloped ground, and no spec shows that a test map can hold one.
+     - The exact plane of a sloped rebound. BA5 part d tells the sloped rebound from the flat
+       rule only by whether the bounce animation appears, which does not tell one tilted plane
+       from another.
+     - The cliff turn's scaling by *e* as imported, not narrowed first (F7). BA5's cliff runs use
+       an elasticity of 0, which scales alike either way, and no scenario here turns an animation
+       off a cliff with an elasticity that single precision does not hold.
+     - F6's stores and its narrowing of *e*: each completed vector component kept in single
+       precision, not in double precision, and *ε* taken as *e* narrowed once to single
+       precision, not as *e* as imported. BA5 part d judges the landing kind, which the rebounded
+       velocity's truncated components decide, with an elasticity of 0.5, which single precision
+       holds exactly, and BA2 part m
+       judges the stop at whole-number thresholds. The roundings differ only in the last places
+       of a component, so no run here tells them apart. S-0317 V3 part e tests the same
+       narrowing for a piece's flat rebound, not for a sprite animation's.
+   - Confidence:
+     - High for the elasticity-0 case at the ground height, where the velocity and the height are
+       both 0, so *S* = 0 under any form of S-0317 F6.
+     - Medium for the stop decision on a rebounded velocity that is not 0 until BA2 part m runs,
+       and for a sloped cell's rebound against the flat rule until BA5 part d runs. Medium for the
+       exact plane of a sloped rebound, for the rebound over a
+       deck, for the cliff turn's unnarrowed *e*, and for F6's single-precision stores and its
+       narrowed *e* (`unmeasured`).
+     - Medium for the impact landing after an undone descending move until BA5 part b runs.
+     - Medium for a stopping landing without a contact on a flat cell, low on a sloped cell. It
+       rests on S-0317 F6's form, which is `unmeasured` there and which sprite animations share.
+       S-0317 rates that form medium on a flat cell and low on a sloped cell, where its ground
+       height is S-0106's surface height and no run checks the stop. BA2 part m checks that form
+       at a contact only. Medium that a sprite animation then ends in the same turn, where a piece
+       ends in the turn after.
+     - Medium for the bounce animation and the hits on water until BA3 part b runs, and for the
+       ground layer at a deck landing.
+     - Medium for the order of bounce animation, hits and end, as S-0317 claim 7 rates it, until
+       BA11 part a runs. Medium for the design rule that ends the hits after infantry or a
+       building that leaves at once.
+     - Medium for the deck case with an elasticity of 0 until BA4 runs, and for the under-deck
+       and deep cases, which rest on S-0317 F6's form.
+     - Medium for the distance *D*, the radius limit, the defences and the no-escape marker
+       until BA2 part j runs, and for no attacker. Medium for no attacking house until BA2 part f
+       and its check of S-0414 claim 21's crediting run.
+     - Medium for the listing walk's end after a destroyed vehicle until BA2 part n runs, and for
+       the rest of the walk, the hit on an object with no health left and the north-west turn
+       (`unmeasured`). The multi-cell move's turn is a departure, a design rule, not an oracle
+       value.
 
 8. **The end at a landing.** In the turn of its landing, after claim 7, the animation ends. Two
    tests are made at its landing point: *on water* (its cell has the water land type) and *at deck
@@ -329,7 +491,7 @@ In addition:
      Medium for the deck-height test in a cell that no high bridge marks (`unmeasured`). Medium for the order of the effects at an end, as claim 13 rates
      it, until BA11 runs. Medium for the splash lift of 3, for which splash entry each kind makes
      and for the meteor's splash row until BA3 runs. Medium for no source object and no house
-     until BA2 part f and its check of the S-0414 claim 21 reading run, for resources affected
+     until BA2 part f and its check of S-0414 claim 21's crediting run, for resources affected
      until BA2 part k runs, for no scorch mark or crater until BA2 part d runs, and for the light
      flash, no sound
      and the stage and follow-up type in the landing turn (`unmeasured`).
@@ -361,16 +523,60 @@ In addition:
     cells of the radius
     (`quirks.anim_resource_spread_neighbours_only`). A type with the resource flag and no spawn
     overlay type makes no resource and takes no draws for it.
-    - Backing: `measurable` (scenario BA10, part b for a meteor animation; BA11 part b′ for the
-      placement's place among the draws)
+    - **The resource lists.** A cell that receives resource this way is offered to neither of
+      S-0401's lists. It joins no growth list and no spread list, and takes no growth-list draw. A
+      meteor piece's new resource cell (S-0317 claim 12) and the new resource cell of S-0401 claim
+      11 are both offered to the growth list. This is a bug of the original (Edge cases,
+      `quirks.anim_resource_no_growth_entry`).
+    - **A cell with a terrain object.** This offer places no overlay in a cell that holds a
+      terrain object, although S-0401 claim 10 counts such a cell (a tree's, for example) as
+      germinable. Such a cell receives no overlay from the offer. Its overlay draw and its stage
+      draw are still taken, and the stage has no visible effect. It stays germinable, so each
+      further pair of F5 that offers it in the same landing takes both draws again. This rule is
+      for a bouncing animation's resource offer only. It differs from S-0401's own new resource,
+      which S-0401 claim 10 and its scenario E8 let a tree's cell receive; this spec does not
+      cover that placement (Changes for other specs, S-0401 claim 10).
+    - **The placement's own conditions.** Of the offered cell, the offer itself tests only that it
+      is germinable. The placement it then makes is an overlay placement of S-0202 claim 10, with
+      that claim's conditions as well as its effects. Of the types the offer can place, the vein
+      overlay is placed only when S-0202 claim 10's vein placement test passes, and a
+      bridge-building end marker has that claim's end-row results and never stays on the cell
+      itself. A placement that such a condition refuses changes nothing and takes no placement draw.
+      The offer's overlay draw and stage draw are still taken, and the cell stays germinable, as a
+      cell with a terrain object does.
+    - **Places of 255 or more.** In play a cell's overlay is identified by its place in the
+      overlay list, however large. A place of 255 or more within the list is an ordinary overlay:
+      the value 255 means no overlay only in the map file's overlay array (S-0012 claim 7).
+    - **Past the end of the list.** When the drawn place lies past the end of the overlay list,
+      which a spawn overlay type among the list's last three entries allows, the original's
+      result is undefined: the cell may take an overlay that is no entry of the list, or the
+      program may stop with an error. This case
+      is a **departure**: our engine places no overlay and takes the overlay draw and the stage
+      draw as usual, and the cell stays germinable, as a cell with a terrain object does. The
+      importer warns for a type whose spawn overlay type has fewer than three entries after it in
+      the overlay list.
+    - Backing: `measurable` (scenario BA10, part b for a meteor animation, part c for the list's
+      last entries and places of 255 or more, part d for a cell with a terrain object; BA11 part
+      b′ for the placement's place among the draws, for the absent growth-list draw and for no
+      growth-list entry). `unmeasured` for the absence of a spread-list entry: part b′ shows that
+      the new cells never grow, which a spread-list entry would not change, and no scenario here
+      empties a neighbour of a new cell or rebuilds the lists, which would show it. The past-list
+      departure is a design rule, not an oracle value. `unmeasured` for the original's result
+      past the end of the list: it is undefined, and BA10 part c only records what one run
+      gives there. `unmeasured` for the placement's own conditions (a vein overlay or a
+      bridge-building end marker as the placed type): no scenario here names such a spawn overlay
+      type, and S-0202 claim 10 states those conditions.
     - Confidence: medium for the neighbour choice, the draws and the stage set after the
-      placement. Low for how the new overlay enters the resource lists of S-0401 (Open
-      questions).
+      placement. Medium for the growth list until BA11 part b′ runs, and for the spread list
+      (`unmeasured`). Medium for the cell with a
+      terrain object until BA10 part d runs, and for places of 255 or more until BA10 part c
+      runs. Medium for the original's result past the end of the list (`unmeasured`, as above)
+      and for the departure there, a design rule. Medium for the placement's own conditions
+      (`unmeasured`).
 
 11. **Ends without a landing, and follow-up types.** Apart from its owner's removal (S-0109
-    claim 22), nothing ends a bouncing animation in flight over the map except its stage (no time
-    limit, no distance, no screen edge). Whether leaving the map ends it is open (Open questions).
-    When its last pass ends:
+    claim 22), nothing ends a bouncing animation in flight except its stage (no time limit, no
+    distance, no screen edge, no leaving the map: below). When its last pass ends:
     - with no follow-up type it ends and leaves play by S-0109 claim 16, including its exceptions, with none of claim 8's
       effects.
     - with a follow-up type it switches to it by S-0109 claim 15 and keeps its flight position,
@@ -384,8 +590,8 @@ In addition:
     down under gravity, so zero speeds do not keep it up. A meteor animation moves vertically by its lower vertical limit less 1.4 in
     every turn (claim 3). With a lower limit of 1.4 it keeps its height, so high above the ground
     it never lands and ends only with its passes. With a lower limit below 1.4 it sinks, and lands
-    when a move meets the ground, a deck or a building cell by claim 6 while it is over the map.
-    What happens when its line leaves the map first is open (Open questions). With a lower limit
+    when a move meets the ground, a deck or a building cell by claim 6, on the map or off it
+    (below). With a lower limit
     above 1.4 it rises in every turn: it lands when a move still ends below the ground height
     (for example a first turn whose start position F2 puts below the ground there) or crosses a
     high-bridge deck from below (claim 6).
@@ -396,6 +602,87 @@ In addition:
     - Confidence: high for the pass end without landing effects. Medium for the absence of other
       ends over the map, for a follow-up type's continued motion and for its use of the
       follow-up's fields, until BA8 runs. Medium for the rising meteor.
+
+    **Off the legal map.** A bouncing animation is never removed for leaving the map, at once or
+    later: it takes its turns wherever it is. Every reading of claims 6 to 10 that takes the cell
+    of a position takes the cell read for it (Terms). For a position off the legal map that is the
+    **off-map cell**, S-0009 claim 44's stand-in. Our engine reads it as a blank cell at every
+    position and at every time: flat (slope shape 0), at height level 0 and ground height 0, of the
+    clear land type, with no overlay, no object listed in any layer and no high bridge. This is
+    S-0009 claim 44's departure, with no switch. In the original the stand-in is one shared cell
+    whose state can change: a low bridge whose end row or pieces reach outside the map gives it
+    that overlay at map load, and every later read of any off-map cell, in the same game or in a
+    later game of the same program run, sees that state (S-0009 claim 44). On a map with no such
+    low bridge, in a fresh program run or one with no earlier game whose low bridge reached off its
+    map, the original's stand-in reads as the same blank cell, and the rest of this claim describes
+    that blank cell. So off the legal map an animation:
+    - lands on the ground at height 0 and rebounds there as on a flat cell (claims 6 and 7), and
+      makes no building contact there. The off-map cell has no high-bridge mark, so claim 6's
+      deck test applies there only through the cell of the old position, on a move from a
+      high-bridge cell into the off-map cell,
+    - is never on water, so an impact landing makes its bounce animation and its hits, which find
+      no object (claim 7),
+    - at an end at a landing makes the first and fourth rows of claim 8 at its landing point: the
+      expiry animation, an area damage in which cells off the map take part in nothing (S-0303),
+      the light flash and the spawned animations (claim 9). An end when its passes are over has
+      none of claim 8's effects, off the map as on it (above),
+    - at an end at a landing, offers new resource (claim 10) to the eight neighbours of the
+      landing point's cell, found as below. A neighbour that is a legal, germinable cell becomes
+      a resource cell as on the map; any other takes no draws. Whether a neighbour of a position
+      off the legal map can be germinable depends on whether the map's usable area reaches its
+      outermost legal cells.
+
+    A position outside the usable area but on a legal cell is on the map. Its cell is a real cell
+    with its own height, land type, overlay and contents, and every claim applies to it unchanged.
+    - **Neighbours.** A neighbouring cell (the steps of claim 7's cliff turn, F7, and claim 10's
+      resource cells) is found by adding the step to the cell coordinates of the old position (for
+      the cliff turn) or of the landing point (for the resource cells). When the sum names a legal
+      cell, that cell is the neighbour. Otherwise the neighbour is the off-map cell.
+    - **Far off the map.** Our engine reads the off-map cell for every position off the legal map,
+      however far away, and for every neighbour that names no legal cell (design rule, decided at
+      the delegated sign-off, 2026-10-25). The original departs from it for some positions far off
+      the legal map and some neighbours of them, and, on a map whose legal cells reach the
+      highest columns, for some positions just beyond the lowest or highest legal column: these
+      read a legal cell elsewhere on the map. These are the cell readings S-0317 claim 20 states
+      for pieces, since an animation's cell is read in the same way. Reading the off-map cell
+      there keeps an animation that has flown far away free of terrain it is nowhere near.
+    - **Placement.** An animation is placed at its creation point (a falling animation) or its start
+      position (a meteor animation, F2), except a point of exactly (0, 0, 0) (below), with no test
+      against the map's bounds, so a meteor animation whose start position lies off the legal map is
+      placed there and flies in. All the creation draws (claims 2, 3 and 13) come at creation.
+
+    No switch for the placement anywhere: our engine places an animation as the original does,
+    at every placement point this claim establishes other than (0, 0, 0).
+    - **The point (0, 0, 0).** Our engine does not place an animation whose placement point is
+      exactly (0, 0, 0), as S-0317 claim 21 states for a debris piece. Such an animation has taken
+      all its creation draws (claims 2, 3 and 13), but it never takes a turn, so it never moves,
+      lands or ends by itself and is never drawn. This is a design rule (decided at the delegated
+      sign-off, 2026-10-27), with no switch: pieces and animations then share one placement rule,
+      and no producer in stock play is known to name that point. The original's behaviour is in
+      Open questions.
+    - Backing: `measurable` (scenario BA13, on a map with no low bridge, in a program run with no
+      earlier such map: no removal, the landing at height 0, the end's effects off the map, a
+      start position off the map, the ordinary behaviour of legal cells outside the usable
+      area). Four items are `unmeasured`:
+      - The original's off-map cell being the same blank cell at every position and every time on
+        such a map in such a program run: BA13 samples only some, and S-0009 claim 44 leaves
+        changes in play open. Our engine's blank cell is S-0009 claim 44's departure, not a
+        measured fact.
+      - The light flash of an end off the map: it is drawing-only and the harness records no
+        lighting, as for the flash on the map (claim 8).
+      - The readings far from the map. Our engine's reading of the off-map cell there is a design
+        rule. For the original's far readings that it replaces: for a position about 2³¹ leptons
+        off the map in *y*, S-0317 claim 20 and its V4 part f test the same cell reading with a
+        piece, and no scenario here flies a sprite animation that far; the column readings and
+        the far neighbours are reached by no scenario here or in S-0317.
+      - The point (0, 0, 0): our engine's rule there is a design rule, and no producer here can be
+        made to name exactly that point.
+    - Confidence: medium until BA13 runs. Medium for the light flash off the map and for the
+      design rules far from the map and at the point (0, 0, 0): choices, which no measurement of
+      the original confirms.
+      Medium for the original's far reading in *y*, until S-0317 V4 part f runs, since it rests
+      on that run and on the shared cell reading; low for the original's column readings and far
+      neighbours (`unmeasured`, as above).
 
 12. **Trailer animation.** Every animation whose type names a trailer animation, bouncing or not,
     makes one in each of its turns that a landing does not end, while it is in play, after its
@@ -426,19 +713,28 @@ In addition:
     landing, the stage update's own draws (S-0109); at an impact landing, the
     bounce animation's creation draws, then the draws of the hits (S-0302); at the end, the
     expiry animation's creation draws, the area damage's draws (S-0303), the two spawn-count
-    draws and then each spawned animation's creation draws, then for each cell that receives
-    resource, cells in F5's order, the overlay draw R(0, 3), the draws of the overlay's placement
-    (S-0202 claim 10: none for the overlay itself; when the overlay type has a cell animation, that
-    animation's creation draws; then any tile-animation draws of the cell's recalculation) and
-    the stage draw R(0, 2); on water,
+    draws and then each spawned animation's creation draws, then for each germinable cell that is
+    offered resource, offers in F5's order, the overlay draw R(0, 3), the draws of the overlay's
+    placement and the stage draw R(0, 2), with no growth-list draw (claim 10); on water,
     the wake's and then the splash's creation draws. All are on the scenario stream. The light
     flash takes none.
+
+    The draws of the overlay's placement are all those that S-0202 claim 10's overlay placement
+    gives for the placed type, in its order, and none when no overlay is placed (claim 10). The
+    placed type can be any overlay type up to 3 places after the spawn overlay type, not only a
+    resource overlay, so they can include, for example, a cell animation's creation draws, the
+    tile-animation draws of a recalculated cell, and, for a low-bridge end marker that writes its
+    end row and finds a partner, the pieces' raw values with the recalculation draws between
+    them. The overlay itself takes none.
     - Backing: `measurable` (scenario BA11 with the random-state recorder: part a for a dry end
-      with an impact landing and spawns, part b for the resource draws, part b′ for the placement draws among them, part c for the
-      water end)
+      with an impact landing and spawns, part b for the resource draws, part b′ for the placement
+      draws among them, part c for the water end). `unmeasured` for the placement draws of a
+      placed type that is no resource overlay, such as a low-bridge end marker: no scenario here
+      names a spawn overlay type that reaches one, and those draws are S-0202 claim 10's.
     - Confidence: high for the creation draws and the spawn draws. Medium for the full order at
-      an end, which follows from claims 7 to 10, until BA11 runs. Low for whether a new resource
-      cell also takes a growth-list draw of S-0401 claim 11 (Open questions).
+      an end, which follows from claims 7 to 10, until BA11 runs, for the absence of a
+      growth-list draw until BA11 part b′ runs, and for the placement draws of a type that is no
+      resource overlay (`unmeasured`, as above).
 
 14. **Zero spans.** F1 and F2 divide by spans made from the type's fields. A span of 0 makes the
     original stop with a program error (S-0205 claim 3). For field values whose span sums
@@ -454,8 +750,7 @@ In addition:
     `quirks.random_magnitude_overflow`), which faults as S-0205 claim 3 says; our engine gives it
     S-0205 claim 3's result. A span of 0 is a **departure**: our engine takes that remainder as 0,
     so every animation of the type gets the same speed on that axis, and the importer warns for
-    such a type. S-0317 claim 16 gives pieces a different result for the same case (Changes for
-    other specs).
+    such a type. S-0317 claim 16 gives pieces a different result for the same case.
     - Backing: `measurable` (scenario BA12 for the original's stop). The departure's result is a
       design rule, not an oracle value.
     - Confidence: high for the horizontal span. Medium for the vertical span until BA12 part b
@@ -528,9 +823,57 @@ still taken). No draw and no animation when *c* ≤ 0 or no spawn type is named.
 in the inner, each from lowest to highest. A pair is used when trunc(√(*i*² + *j*²)) ≤ *R*. The cell
 it offers is the neighbour of (*X*, *Y*) in step direction *i* mod 8 (least non-negative residue,
 step directions 0 to 7 of S-0204). *j* does not change the cell. With *R* = 0 the one pair (0, 0)
-offers the neighbour in step direction 0. A cell offered again after it has received resource is
-no longer germinable and takes no draws. Under `quirks.anim_resource_spread_neighbours_only` off,
-the pair offers the cell (*X* + *i*, *Y* + *j*) instead, in the same order.
+offers the neighbour in step direction 0. Each offer tests whether the cell is germinable at that
+offer, and a cell that is not takes no offer draws. A cell that received no overlay from this
+offer (claim 10: a cell with a terrain object, a placement that one of S-0202 claim 10's
+conditions refuses, or a place past the overlay list) stays germinable and takes both draws at
+each offer. Under `quirks.anim_resource_spread_neighbours_only` off,
+the pair offers the cell (*X* + *i*, *Y* + *j*) instead, in the same order. Neighbours are found
+as claim 11 says.
+
+**F6. Rebound** (claim 7). Let *v* = (*v*ₓ, *v*ᵧ, *v*_z) be the velocity that the turn's move
+leaves (*v*′ of F3), and *M* the matrix of S-0106 table C4 for the slope shape of the cell of the
+new position (at a deck contact, of the ground cell under the deck). *M*'s rows are as C4 lists
+them; shapes 0 and 17 to 20 give the identity. Write *D* = diag(1, −1, 1), *Z* = diag(1, 1, −1)
+and *ε* for *e* narrowed once to single precision. Then
+
+> *w* = *M*ᵀ · *D* · *v*,  *w*′ = *Z* · (*ε* *w*),  *v*″ = *D* · *M* · *w*′
+
+and *v*″ is the velocity after the rebound. Read the formula from right to left.
+- **Stores.** Each completed vector component is stored in single precision: the three
+  components of *M*ᵀ · *D* · *v*, each product *ε* *w*ᵢ, and the three components of
+  *D* · *M* · *w*′. A change of sign is exact.
+- **Sums.** A matrix-vector product groups its row sums as S-0613 F3 does: (*a*ᵧ + *a*_z) + *a*ₓ
+  for *x*, and (*a*ᵧ + *a*ₓ) + *a*_z for *y* and *z*, with no fused operations.
+- **Flat cell.** With *M* the identity, *v*″ = (*ε* *v*ₓ, *ε* *v*ᵧ, −*ε* *v*_z), each product
+  stored.
+- **Exact arithmetic.** *v*″ = *ε*(*v* − 2(*v* · *n*)*n*) with *n* = (*m*₁₃, −*m*₂₃, *m*₃₃),
+  where *m*ᵢⱼ is *M*'s entry in row *i* and column *j*, to C4's precision (its rows are unit
+  vectors only to single precision). The tilt of *n* from the vertical is arccos *m*₃₃. The stored
+  result can differ from this exact form in its last place: the stores and sums above decide the
+  result, and this form only describes it.
+
+For the default elasticity *ε* is the single-precision 0.8; for an elasticity of 0.5 it is 0.5
+exactly. With `quirks.bouncing_anim_rebound_faults` off, a deck contact takes the identity.
+Units: leptons per tick.
+
+**F7. Cliff turn** (claim 7). Let *u* = (*u*ₓ, *u*ᵧ, *u*_z) be the velocity at the start of the
+turn, before gravity, (*x*, *y*) the cell of the old position and *d* the step direction (glossary)
+of the cell of the new position from it. The turned velocity, before scaling, is one of
+(±*u*ₓ, ±*u*ᵧ, *u*_z) or (±*u*ᵧ, ±*u*ₓ, *u*_z), the face deciding which, except in one case:
+
+> **North-west turn.** When *d* = 7 and, of the cells (*x* − 1, *y*) and (*x*, *y* − 1), only
+> (*x*, *y* − 1) is a high cell (Terms): (*c*, *u*ₓ, *u*ᵧ), with *c* = 2.3771235942840576.
+
+Each component of the result is then multiplied by *e* as imported, in double precision and not
+narrowed first (unlike F6), and stored in single precision. A reversal or an exchange leaves the
+pair of horizontal sizes and the vertical speed unchanged, so for every face claim 7's measure *S*
+is that of (*e* *u*ₓ, *e* *u*ᵧ, *e* *u*_z). After the north-west turn it is that of
+(*c* *e*, *e* *u*ₓ, *e* *u*ᵧ), whose vertical speed is the scaled old second-axis speed. *c* is
+a single-precision number a little below 2.38. With `quirks.bouncing_anim_rebound_faults` off, the
+north-west case turns as a face across the second axis: (*e* *u*ₓ, −*e* *u*ᵧ, *e* *u*_z). For a
+move whose cell changes by more than one in either axis, *d* is the step direction whose two
+components have the signs of the two changes (claim 7's departure). Units: leptons per tick.
 
 ## Constants
 
@@ -547,6 +890,9 @@ the pair offers the cell (*X* + *i*, *Y* + *j*) instead, in the same order.
 | ground snap limit | 100 | leptons below the ground height | claim 6 |
 | building band | 150 | leptons above the ground height | claim 6 |
 | cliff | 2 | height levels | claim 6 |
+| cliff speed line | −0.0002 (double precision) | leptons per tick | claim 6: below it the descending condition |
+| north-west turn constant *c* | 2.3771235942840576 (single precision) | leptons per tick, before scaling by *e* | F7 |
+| multi-cell move warning | 256 | leptons per tick | claim 7: importer warning when the bound *H* on the first horizontal speed is at or above it |
 | water splash lift | 3 | leptons | claim 8 |
 | resource overlay choice | R(0, 3) | overlay-list places | claim 10 |
 | resource stage | R(0, 2) | stages | claim 10 |
@@ -555,7 +901,7 @@ the pair offers the cell (*X* + *i*, *Y* + *j*) instead, in the same order.
 
 | State | Event | Result |
 |---|---|---|
-| Created | creation | placed (falling: creation point, meteor: start position); creation draws (claim 13) |
+| Created | creation | placed (falling: creation point, meteor: start position), except at (0, 0, 0) (claim 11); creation draws (claim 13) |
 | Flying | turn with no landing | motion step; trailer when due (claim 12); stage update by S-0109 |
 | Flying | turn with a stopping landing | motion step; end (claim 8); leaves play |
 | Flying | turn with an impact landing | motion step; bounce animation and hits (claim 7); end (claim 8); leaves play |
@@ -607,8 +953,56 @@ update.
   landing point is on water and not at deck height (claim 8's water test) makes no bounce
   animation and no hits, and the end of claim 8's water rows follows. No switch of S-0317
   covers this case, so this one is new.
+- **Rebound faults** (`quirks.bouncing_anim_rebound_faults`, default on; claim 7, F6, F7). One
+  switch covers two faults of the original's rebound, both of which change only claim 7's choice
+  between an impact and a stopping landing:
+  - a deck contact rebounds off the plane of the ground cell's slope shape under the deck,
+  - the north-west cliff turn gives (*c* *e*, *e* *u*ₓ, *e* *u*ᵧ), which matches no face.
+
+  With the switch off, a deck contact rebounds by the flat rule (F6 with the identity), and the
+  north-west case turns across the second axis (F7). The switch covers sprite animations only.
+- **Resource joins no list** (`quirks.anim_resource_no_growth_entry`, default on; claims 10 and
+  13). A new resource cell of claim 10 is offered to neither of S-0401's lists. With the switch
+  off, each such cell is offered to its tiberium's growth list as S-0401 claim 11 offers a new
+  resource cell, and the offer takes S-0401 claim 7's raw draw when it adds an entry. That draw
+  comes after the overlay's placement and its draws and before the stage draw R(0, 2). A cell
+  that receives no overlay (claim 10) is not offered, and neither is a cell whose overlay is no
+  resource overlay of any tiberium: it has no tiberium whose list could take it, and it takes no
+  draw for the offer (design rule, decided at the delegated sign-off, 2026-10-25). This switch
+  is separate from `quirks.anim_resource_spread_neighbours_only`, which chooses the cells.
+- **Impact hits follow the listing** (`quirks.bouncing_anim_impact_hits_walk`, default
+  on, claim 7). The hits go through the cell's listing as it changes, so a hit that takes its object
+  out of the cell ends the hits, an object taken out before it is reached is not hit, and a
+  building that enters within the radius is hit. With the switch off, the objects listed in the cell's ground layer
+  when the hits begin each receive their hit in that order, unless an earlier hit has taken them
+  out of play, and an object that enters during the hits receives none. The radius test and the
+  hit's distance are taken for each object at its own hit, from its position then, as with the
+  switch on (design rule, decided at the delegated sign-off, 2026-10-26: it keeps one distance
+  rule for both settings). Either way the hits go
+  through the layer that claim 7 hits: the ground layer, or, with
+  `quirks.bouncing_anim_deck_impact_layer` off, the deck layer for an impact landing at the deck
+  height of a high-bridge cell. So with both switches off, such a landing hits the objects
+  listed in the deck layer when the hits begin.
+- **No switch for the cliff line at −0.0002** (claim 6): our engine draws it where the original
+  does.
+- **No switch for the original's choice of face for a diagonal cliff step** (F7): it has no effect
+  on a sprite animation.
+- **The off-map cell is always blank** in our engine (claim 11): S-0009 claim 44's departure,
+  with no switch. The original's stand-in can take a low bridge's overlay at map load, and every
+  later off-map read sees it, in later games of the same program run too.
+- **No switch for the placement anywhere** (claim 11): our engine places an animation as the
+  original does, at every placement point claim 11 establishes. At the point (0, 0, 0) our engine
+  does not place it: its creation draws are taken and it never takes a turn, as for a debris
+  piece (S-0317 claim 21; design rule, decided at the delegated sign-off, 2026-10-27).
+- **A far cell read as a legal cell** is a departure (claim 11). In the original some positions
+  far off the legal map, and some neighbours of them, read a legal cell elsewhere on the map. Our
+  engine reads the off-map cell for them (decided at the delegated sign-off, 2026-10-25). No
+  switch: such positions are reached only far from play or beyond the edge of a map of the
+  largest sizes, and a far cell's terrain there is a fault with no use in play.
 - **Zero spans** (claim 14) and **a trailer separation of 0** (claim 12) are departures.
 - **An empty splash list** is a departure (claim 8).
+- **A move of more than one cell at a cliff** (claim 7, F7) and **a place past the overlay list**
+  (claim 10) are departures.
 
 ## Import mapping
 
@@ -637,6 +1031,12 @@ landing deals no hit that a run can see, so no run tells the stated default from
 that also deals nothing. Confidence: high for the read and unread keys. Medium for the
 horizontal and lower vertical defaults until BA1 part c runs, and for the `unmeasured`
 defaults.
+
+Two further importer warnings come with departures. A type whose first horizontal speed can
+reach a magnitude of 256 or more by claim 7's bound *H*, from its horizontal speed limit, gets one
+(claim 7's move of more than one cell). So does a type whose resource spawn
+overlay type has fewer than three entries after it in the overlay list (claim 10's place past
+the list).
 
 ## Measurement scenarios
 
@@ -690,10 +1090,8 @@ house's count of units destroyed on the score screen (the kill tally of S-0414 c
 in the tick before the infantry's death and in the tick after it. Short game is off, so E and C
 stay undefeated, and every object of C stands beyond the sight and weapon range of E's surviving
 infantry. A hit with C as its attacking house and no attacker would raise C's count (S-0302
-claim 14), but only if the reading of S-0414 claim 21 that Changes for other specs gives holds
-in the original: under claim 21 as it stands, a destruction without an attacking object gives no
-house a kill, and C's count would not change whether or not the hit carries a house. So a
-separate run first checks that reading, on the same map with the same two houses: an infantry
+claim 14), as S-0414 claim 21 credits such a hit to its attacking house. A separate run first
+checks that crediting, on the same map with the same two houses: an infantry
 object of E is destroyed by a hit with C as attacking house and no attacker, for example the gas
 particle damage of a particle system owned by C (S-0302 claim 1, S-0613 claim 13). *Expected of
 the check:* C's count rises by one. If it does not, part f cannot tell a hit with a house from
@@ -765,6 +1163,35 @@ S-0303 claim 17 gives for the area damage there. *Falsifier:* no loss, which a p
 does not allow resource reduction would give. Parts j and k, and BA3 part b, use trigger-played
 animations, so they are read only once part e has shown that such an animation deals the same
 damage; if it does not, they are inconclusive.
+*(m) Stop decision at a contact (claim 7).* Part j's motion and setup with a bounce animation and
+an expiry animation named, a damage amount of 0, and two runs: elasticity 0.4 and elasticity 0.5.
+In every run the animation lands by a ground contact in its seventh turn, whose move is
+(−0.5, −0.5, about −6.3), with the height set to the ground height. *Expected:* with elasticity
+0.4 the rebounded velocity is about (−0.2, −0.2, 2.52), so *S* = trunc(*ρ*(0 + 0 + 2²)) = 2: a
+stopping landing, the expiry animation and no bounce animation. With elasticity 0.5 it is about
+(−0.25, −0.25, 3.15), so *S* = trunc(*ρ*(3²)) = 3: an impact landing, with the bounce animation.
+In the sixth turn S-0317 F6 gives a height term of trunc(1.4 × 1 − 4.9) = −3 and *S* = 3, so
+neither run stops in flight. *Falsifier:* a bounce animation at elasticity 0.4, none at 0.5, or a
+landing in another turn.
+*(n) Hits after a destroyed vehicle (claim 7).* Part j's setup played at a waypoint in a building
+cell that a test vehicle can stand in, such as a repair depot's pad, with the vehicle standing
+there within the damage radius of the landing point. The test vehicle's type throws no debris,
+has no death weapon, is not exploding and names no destruction animation, so that its death
+effects do not touch the building (S-0312 claims 4 to 9), and part j's type has no expiry
+animation, so that its end deals no area damage (claim 8). The building is listed after the vehicle
+(S-0209 claim 13). Because the building makes the first move a building contact (claim 6), the
+type has elasticity 1.5: the first turn's rebounded velocity, about (−0.75, −0.75, −3.15), then
+gives *S* = 3 and an impact landing. The warhead has a versus value of 100 % against both the
+vehicle's and the building's armour. The type's damage amount and the warhead's spread are
+chosen so that the amount after S-0302's falloff for the vehicle's distance *D* (S-0317 F4),
+floored at 0 (S-0302 claim 6), exceeds the vehicle's health. The building lies within the radius
+too, at a distance *D* at which the same falloff still leaves a loss of at least 1, so a hit on it
+would show. The harness records the landing point, the vehicle's position and health, and the
+building's health. *Expected:* the vehicle is destroyed, and the building's health does not
+change. *Falsifier:* the vehicle is destroyed and the building loses health, which a hit on every
+object listed at the start would give (`quirks.bouncing_anim_impact_hits_walk` off). The run is
+void if the vehicle survives its hit (then claim 7 lets the hits go on to the building), and
+inconclusive if the vehicle crashes or sinks instead of leaving play at once (S-0312 claim 15).
 
 **BA3. Water (claims 7, 8).** *Setup:* the BA2 type thrown over a water cell (a dying test vehicle
 on a bridge end or a shore). A temporary test rules file sets the splash list to three distinct
@@ -805,7 +1232,7 @@ bridge, a landing anywhere but the ground height; for the low bridge, a landing
 at deck height or a wake or splash on the low-bridge cell.
 
 **BA5. Building cells and cliffs (claim 6).** *(a) Building cell.* *Setup:* an ordinary test building type (no wall or
-fence section, none of the kinds the Open question on which buildings count concerns) with a footprint of at least 3 × 3 cells on flat ground, and a waypoint in the centre cell of its
+fence section, and not of claim 6's two excluded kinds) with a footprint of at least 3 × 3 cells on flat ground, and a waypoint in the centre cell of its
 footprint. A meteor test type with a horizontal speed limit of 0.5, a lower vertical limit of
 −8.6, elasticity 0, a damage amount of 0, an expiry animation named and looping for ever is
 played at that waypoint, 20 seeds. By F2 both horizontal speeds are then 0.5 in every seed (each
@@ -826,8 +1253,22 @@ hundredth of a lepton of 150 above the ground is not judged. *Falsifier:* a land
 turn than *k*ᵦ, in particular at the ground-landing prediction (which a move through the building
 cell with no contact would give) or in a turn whose move ends 150 or more above the ground; or an
 expiry animation at any height but the ground height, such as the height of the move's end or the
-building's roof. Repeats with other kinds of building, or with an overlay in place of the
-building, bear on the Open question of which count and judge nothing here.
+building's roof.
+*(a′) Kinds of building and overlay.* Part a's meteor type and procedure, repeated with the
+waypoint at the centre of a cell holding, in turn:
+- each of the three wall overlays, with no building,
+- a gate, closed and open,
+- an active laser-fence section and an inactive one,
+- a vehicle-like building (S-0214 Terms), a test type if no stock type is one,
+- where the run can time it, a building still under construction.
+
+The meteor drifts less than 128 leptons from the waypoint, so a one-cell building or overlay
+suffices. *Expected:* a building contact as in part a for the wall overlays, the gate in both
+states, the active section and the building under construction; for
+the inactive section and the vehicle-like building, no building contact, and the landing at the
+ground-landing prediction of part a. *Falsifier:* the other result for any of them. No spec gives
+a route to an active laser-fence section, so that cell is set up only where a run happens to
+hold one; without it, the active section stays `unmeasured` (claim 6).
 *(b) Cliff.* *Setup:* a long straight cliff whose cells step directly from flat low ground to flat
 high ground 2 height levels higher, with no slope cell between, running along the second axis,
 the low ground lying toward lower first-axis values and stretching at least three cells from
@@ -841,16 +1282,64 @@ appears. *Qualifying seeds:* those whose speed *v*ₓ along the first axis is po
 position lies over the low ground, and for which F2 and F3 put the flight position, before the
 move that enters the high cell, below the high ground by more than 1 and less than 96.6 leptons.
 That move is then a ground landing less than 100 leptons below the high ground, set to it, with
-*u* = −1 and *z*₁ > *z*₀, so it is undone. Most seeds with *v*ₓ from 5 to 7 qualify, and some with
+*u*_z = −1 and *z*₁ > *z*₀, so it is undone. Most seeds with *v*ₓ from 5 to 8 qualify, and some with
 *v*ₓ = 4: about 45 % of seeds. *Expected:* for each qualifying seed, the expiry animation appears
 at the flight position before that move, truncated, in the air over the low cell. The
 qualifying bounds allow about 111 to 207 leptons above the low ground (more than 1 and less than
-96.6 leptons below the high ground, which lies 208 above it); over all raw values and travel
-times the qualifying seeds lie from about 151 to 206 above it. Whether the bounce animation also appears there (an impact
-landing) or not (a stopping landing) is recorded for the Open question on the velocity turned
-off the cliff face and judges nothing. *Falsifier:* for a qualifying seed, an expiry animation in
-the high cell at its ground height, or anywhere but that position. Seeds that do not qualify are
-not judged.
+96.6 leptons below the high ground, which lies 208 above the low ground); over all raw values
+and travel times the qualifying seeds lie from about 151 to 206 above it. The bounce animation
+appears at the same position, since the landing is an impact landing: the height above the low
+ground gives *S* above 150 whatever the turned velocity (claim 7). *Falsifier:* for a qualifying
+seed, an expiry animation in the high cell at its ground height, or anywhere but that position, or
+no bounce animation there. Seeds that do not qualify are not judged.
+*(c) Vertical speed 0.* As part b, but with a lower vertical limit of 0. Each move is then
+(*v*ₓ, *v*ᵧ, −1.4), *u*_z is exactly 0 in every turn (F3), and the start position lies at the
+waypoint's height, the high ground's (F2). *Qualifying seeds:* those whose *v*ₓ is positive and
+whose start position lies over the low ground at least one move short of the cliff edge, so that
+the move entering the high cell is not the first. About 60 % of seeds qualify, most of those
+with *v*ₓ from 3 to 8 and some with *v*ₓ = 2. That move ends 1.4(*k* + 1) leptons below the high
+ground after *k* ≥ 1 earlier moves, and is a ground landing set to the high ground. Its lift
+above the height before the move is 1.4*k*, more than 1, so the move is undone. *Expected:* for
+each qualifying seed, the expiry animation and the bounce animation (an impact landing, as in
+part b) appear at the flight position before that move, truncated, in the air over the low cell,
+1.4*k* leptons below the high ground. *Falsifier:* for a qualifying seed, the expiry animation in
+the high cell at its ground height with no bounce animation, which a test that undoes no move
+with *u*_z = 0 would give (a stopping landing there, with elasticity 0). Both of claim 6's
+conditions undo these moves, so this part does not tell which of them *u*_z = 0 takes.
+*(d) Sloped cells.* A meteor test type with a horizontal speed limit of 0.5, a lower vertical
+limit of −4.9, elasticity 0.5, a bounce animation and an expiry animation named, a damage amount
+of 0, looping for ever, played at a waypoint at the centre of a cell of each slope shape 1 to 8
+and of a flat cell, 20 seeds each. By F2 both horizontal speeds are 0.5, and each move is
+(0.5, 0.5, about −6.3): the meteor drifts less than 40 leptons and stays in its cell. *Record:*
+the logged raw values, the per-tick position in play, and whether the bounce animation appears.
+*Qualifying seeds:* those for which F2, F3, S-0106's surface height at each truncated point and
+S-0317 F6 give no stop in flight. Their landing is then a ground contact with the move (0.5, 0.5,
+about −6.3), set to the surface. About a third of the seeds qualify. In the others a turn whose
+height above the surface truncates to 3 to 6 leptons stops in flight, as F6 predicts. *Expected:*
+for each qualifying seed, on every sloped shape F6 gives a rebounded velocity whose truncated
+components give *S* = 2: a stopping landing, with the expiry animation and no bounce animation. On
+the flat cell *S* = trunc(*ρ*(3²)) = 3: an impact landing,
+with the bounce animation. *Falsifier:* a bounce animation on a sloped cell, which the flat rule
+would give, or none on the flat cell. The part tells the sloped rebound from the flat rule; it
+does not tell one tilted plane from another (claim 7).
+*(e) Height before the move.* Part b's cliff. A falling test type with a horizontal speed limit
+of 255, a lower vertical limit of 197.5, elasticity 0, an expiry animation and a bounce animation
+named, is played at a waypoint at the centre of a low cell next to the cliff edge, over a sweep
+of seeds with the random-state recorder. By F1 each vertical speed is a whole number plus 0.5,
+from 197.5 to 389.5, and each horizontal speed is a whole number from −255 to 254.
+*Qualifying seeds:* those whose logged raw values give, by F1, *v*ₓ above 128 and |*v*ᵧ| below
+128, so that the first move ends in the high cell next to the waypoint's, and a vertical speed of
+197.5 or 198.5. About 1 creation in 800 qualifies, and the sweep runs until at least 5 do. The
+first move then ends 0.9 or 1.9 leptons below the high ground, 208 leptons above the low ground,
+a ground landing set to the high ground. Measured from the flight position before the move,
+10 leptons above the low ground, that lifts the animation by less than *u*_z + 1, so the move is
+not undone. Measured from the position in play, at the low ground, it would lift it by more, and
+the move would be undone. *Record:* the logged raw values, the per-tick position in play, and
+where the expiry animation and any bounce animation appear. *Expected:* for each qualifying seed,
+a stopping landing on the high cell: the expiry animation at the high ground's height in the
+first turn, and no bounce animation. *Falsified by:* for a qualifying seed, the expiry animation
+over the low cell, about 10 leptons above the low ground, which a *z*₀ taken from the position in
+play would give. Seeds that do not qualify are not judged.
 
 **BA6. Meteor (claims 1, 3, 4).** *Setup:* a named test meteor type with a horizontal speed
 limit *M* of 8 and a lower vertical limit *Z*ₘᵢₙ of −8, played at a waypoint on flat open ground,
@@ -922,6 +1411,31 @@ neighbours in step directions 7, 0 and 1 (S-0204) of the landing cell, received 
 with the recorded R(0, 3) and R(0, 2) per cell and no draws for the six further pairs that offer
 them again. *Falsifier:* resource on the landing cell, on any of the other five neighbours or on
 a cell two away, or another order of the draws.
+*(c) End of the overlay list.* Part b with a temporary test rules file that orders the overlay
+list so that the spawn overlay type is *(c1)* its last entry and *(c2)* its second-last entry, the
+entries after it being test resource overlay types; and *(c3)* a list lengthened with test
+resource overlay types to more than 258 entries, with the spawn overlay type at place 254, so
+that the four places it can give are 254 to 257. 20 seeds each, with the random-state recorder.
+*Record:* each offered cell's overlay type and stage, the draws of the landing tick, and whether
+the game goes on. *Expected:* in c1 and c2, each cell whose overlay draw names a place within the
+list receives the type at that place, at the drawn stage. A draw that names a place past the
+list is recorded with its result and judges nothing, since the original's result there is
+undefined and may be a stop with a program error; cells after it in that landing are not judged.
+In c3 every offered cell receives the type at place 254 plus its draw, at the drawn stage,
+places 255 to 257 included, each an ordinary overlay of its type. *Falsifier:* within the list, a
+cell with another type, no overlay or another stage; in c3, no overlay or another type for a
+place of 255 or more.
+*(d) Cell with a terrain object.* Part b with a tree standing on the neighbour in step direction 0,
+a cell that S-0401 claim 10 counts as germinable. As in BA11 part b, the spawn overlay type and the
+overlay types after it have no cell animation, and the cells around hold no tile animation, so that
+the placements take no draws (S-0202 claim 10). The part tests this offer's placement only (claim
+10), not S-0401's own new resource. With radius 1 each of the three neighbours is offered by three
+pairs (F5). *Record:* as part c. *Expected:* no overlay from the offer under the tree, and two
+draws, an overlay draw and a stage draw, at each of the three offers of that cell, so ten draws in
+all for the three neighbours, all of them the offer's overlay and stage draws, in F5's order: two
+for direction 7, six for direction 0, two for direction 1. *Falsifier:* resource under the tree; two
+draws in all for that cell, which a cell that stops being germinable after its first offer would
+give; or no draws for it.
 
 **BA11. Draw order (claim 13).** *Setup:* every test animation is played at a waypoint by a
 trigger action (so no dying object's draws mix in), on a map with no object other than those
@@ -934,7 +1448,11 @@ germinable ground; the spawn overlay type and the overlay types after it have no
 and the cells around hold no tile animation, so that their placements take no draws (S-0202
 claim 10). *(b′)* As part b, but the spawn overlay type and the three overlay types after it
 each name a cell animation, a test bouncing type as below, so that each placement takes that
-animation's creation draws. *(c)* BA3 part b's motion at a waypoint in open water, elasticity 0 and no bounce
+animation's creation draws. Part b′ runs with settings under which S-0401's growth update runs,
+and with one ordinary resource cell of the same tiberium, in its growth list, a few cells from the
+landing. The harness logs the stage of the new cells and of that cell for long enough for the
+ordinary cell to grow several stages, and short enough that S-0401's F7 rebuilds no list in that
+time. *(c)* BA3 part b's motion at a waypoint in open water, elasticity 0 and no bounce
 animation named, so that the landing is a stopping landing (claim 7) with no bounce animation and
 no hits, with a temporary test rules file that names one test type as the game-wide wake
 animation and another as the only splash entry. Every animation made at a landing (bounce,
@@ -954,7 +1472,9 @@ took (its position modulo 250, resolved by matching the state).
 *Expected:* *(1) No draws in flight.* In each tick in which the test animation flies, makes no
 trailer and does not land, the stream does not advance. This part is judged only where the ticks
 before the trigger fires show no advance either; otherwise other objects' draws hide the
-animation's and it is inconclusive. *(2) Order at the landing.* The first
+animation's and it is inconclusive. Part b′ is not judged by this check, since its growth
+updates (S-0401 claim 7) take draws in ticks in which the animation flies. *(2) Order at the
+landing.* The first
 velocity of each animation made in the landing tick, read from its first two turns'
 displacements as BA1 reads them, matches F1 for the three raw values at one draw position of
 that tick; a match by chance at another position of the tick is less likely than one in a
@@ -966,12 +1486,16 @@ ranged draw, the number of spawned animations seen; then the spawned animations'
 after another with no draw between them. In part b, after the last spawned animation's draws,
 the cells in F5's order, each with a draw that gives by R(0, 3) the overlay type seen in that cell
 and the next draw giving by R(0, 2) its stage, with no other draw between two cells; in part b′
-the cell animation's six draws come between each cell's overlay draw and its stage draw. In part c
+the cell animation's six draws come between each cell's overlay draw and its stage draw, and no
+further draw comes between them (no growth-list draw, claim 10). *(3) Resource lists, part b′.*
+In the logged time the new cells' stages never change, while the ordinary cell grows. In part c
 the wake's six draws, then the splash's. *Falsifier:* in a judged flying tick, any advance; in
 the landing tick, a made animation whose velocity matches no draw position of the tick, made
 animations whose positions come in another order, a spawn count, overlay type or stage that does
 not match the draws at the positions claim 13's order gives it, a draw between two resource
-cells, or in part b′ a cell animation's draws outside its cell's overlay and stage draws.
+cells, or in part b′ a cell animation's draws outside its cell's overlay and stage draws, a
+further draw between them (which an offer to the growth list would give,
+`quirks.anim_resource_no_growth_entry` off), or a new cell whose stage rises in the logged time.
 
 **BA12. Zero spans (claim 14, claim 12).** *Setup:* test types with *(a)* *M* = 0.3, *(b)*
 *Z*ₘᵢₙ = 4.0 and the bouncer flag, *(c)* a trailer and no separation key. *Expected:* the original
@@ -979,6 +1503,50 @@ stops with a program error at creation in parts a and b, and at the first animat
 Our engine's run (departure) shows the departure's results: in parts a and b every animation of
 the type has the same first speed on the zero-span axis (claim 14), and in part c a trailer is
 made in every turn, as with separation 1; the importer warns for each type.
+
+**BA13. Off the map (claims 6, 11).** *Setup:* a small test map whose legal cells are all at
+height level 4, those outside the usable area included, with no low bridge, played in a freshly
+started program (or one whose earlier games had no low bridge reaching off their map), so that
+the original's stand-in cell stays blank (S-0009 claim 44). The legal cells' ground is 416
+leptons high, so a landing on a legal cell can be told from one off the legal map, at height 0. Each run is
+played at a waypoint near one edge of the usable area, close enough to the legal map's edge that
+some flights leave it.
+- *Falling run:* a named test falling type with a horizontal speed limit of 20, a lower vertical
+  limit of 40 (so a first vertical speed of 40 to 74, claim 2), elasticity 1, a bounce animation,
+  an expiry animation and a spawn type with a spawn count of 1 named, looping for ever, played at
+  such a waypoint, 40 seeds. A flight lasts about 60 to 110 turns and can carry it up to about
+  eight cells.
+- *Resource run:* the same type with the resource flag, a spawn overlay type and radius 1.
+- *Meteor run:* a named test meteor type with a horizontal speed limit of 40 and a lower vertical
+  limit of −10, otherwise as the falling run, played at such a waypoint, 40 seeds, so that many
+  start positions (F2), up to about eleven cells from the waypoint, lie off the legal map.
+
+*Record:* each animation's position each tick with the read-only recorder, which follows objects
+off the map too; each animation made, with its position; overlay changes; and the draws, with
+the random-state recorder.
+*Expected:*
+- no animation leaves play for being off the map. Each ends only at its landing, its path from
+  the logged raw values by F1 to F3 throughout, off the map included,
+- on legal cells outside the usable area, landings at their ground height of 416 leptons, and
+  there the end that any other legal cell would give,
+- off the legal map, ordinary ground landings at height 0, each an impact landing with its
+  bounce animation, then the expiry animation and any spawned animations at the landing point,
+  and never a wake or splash. A move undone by the cliff test (claim 6) lands at the position in
+  play before the move, at whatever height that is; a stopping landing (claim 7) makes no bounce
+  animation; and a deep landing, 100 leptons or more below height 0, stays at the height its move reached
+  (claim 6),
+- in the resource run, an end off the legal map makes resource, with its draws, only on
+  neighbours that are legal, germinable cells (claim 11), and so none when the usable area does
+  not reach the legal map's outermost cells,
+- in the meteor run, animations placed at start positions off the legal map that move from
+  their first turn, fly in by F3 and land as claim 6 says, any landing on entering the map
+  tested as at a cliff from level 0, and every seed's six creation draws in the creation tick.
+
+*Falsifier:* an animation removed while flying, a landing at height 0 on a legal cell outside the
+usable area (which would show such a cell read as off the map), an ordinary ground landing off
+the legal map at another height than 0, a water end off it, resource or resource draws on a cell that is not a legal
+germinable neighbour, or a meteor animation with a start off the legal map that never appears,
+never moves or takes fewer creation draws.
 
 ## Changes for other specs
 
@@ -988,9 +1556,6 @@ made in every turn, as with separation 1; the importer warns for each type.
 - **S-0109:** an animation type's own trailer animation (S-0319 claim 12) applies to every
   animation; S-0109's list of what it does not cover can point there.
 - **S-0312 claim 4:** sprite debris animations move and end by S-0319.
-- **S-0317 claim 16:** its departure for a zero span (the remainder equals the dividend) gives a
-  piece a speed of up to the size of a raw value. S-0319 claim 14 takes the remainder as 0 instead,
-  a fixed speed. S-0317 can adopt the same result at its next revision.
 - **S-0302 claim 1, its table of sources:** add a bouncing animation's landing hits and expiry
   damage (S-0319 claims 7 and 8): no attacker and no attacking house.
 - **S-0303 claim 23:** besides the disc laser and a debris piece's end (S-0317 claim 11), the end
@@ -999,49 +1564,38 @@ made in every turn, as with separation 1; the importer warns for each type.
   effects of claims 21 and 22, and, like a piece's end, makes the warhead's light flash. As for a
   piece, it happens only when the type names an expiry animation and the end is not on water or
   is at deck height (`quirks.bouncing_anim_expiry_needs_animation`).
-- **S-0414 claim 21:** the reading that S-0317's Changes for other specs proposes, "A
-  destruction with neither an attacking object nor an attacking house gives no house a kill
-  (S-0302 claim 14), but still gives the victim's house a loss when it qualifies", is the one
-  S-0319 BA2 part f reads the tally in, and that part's check tests it.
+- **S-0302 claim 8, *No-health targets*:** a bouncing animation's landing hits (S-0319 claim 7)
+  are a source with no filter: they hit a listed object that has no health left, and the
+  no-health rows decide what the hit does. So claim 8 should name them as a known source of such
+  hits.
+- **S-0312 claim 21, a building awaiting removal:** "it cannot be hit" holds for detonations
+  (S-0303 claim 9). A bouncing animation's landing hits (S-0319 claim 7) still reach it, since
+  it stays listed in its cells.
+- **S-0401 claim 10:** a germinable cell that holds a terrain object (a tree's, for example)
+  receives no overlay from a bouncing animation's resource offer (S-0319 claim 10): the offer
+  takes its draws and leaves the cell germinable. S-0401 claim 10 can note this for S-0319's
+  offers, beside its own rule that trees do not prevent a cell from being germinable. This spec
+  does not cover S-0401's own new resource cells (its claims 9 and 11, scenario E8).
 
 ## Open questions
 
-Q-1762 is answered in part. Question 5 is answered in full. Question 1 is answered apart from
-the elasticity, damage, radius and warhead defaults, which are stated but `unmeasured` (Import
-mapping). Question 6 is answered apart from whether a new resource cell takes a growth-list draw
-(below). Questions 2, 3 and 4 leave the items below open: leaving the map (questions 2 and 4), and
-which buildings and overlays count, the turn off a cliff face, the rebound on a sloped cell, the
-stop decision on S-0317 F6's form, the rising cliff condition and the height that the cliff test
-compares (question 3).
+Q-1762, Q-1846 and Q-1847 are answered. Q-1762's question 1 leaves the elasticity, damage,
+radius and warhead defaults stated but `unmeasured` (Import mapping). Several answers rest on
+`unmeasured` claims, each rated where it is stated: the condition that a vertical speed of 0
+takes and the line at −0.0002 (claim 6), the landing point of an undone first move (claim 6) and the rest of the hits' listing
+walk (claim 7). Two points are left open:
 
-- Which buildings do not count for the building band of claim 6, and which overlays count as a
-  building does. Low confidence; BA5.
-- The velocity turned off the cliff face at a cliff landing (claim 6). Only the landing point
-  matters for a sprite animation's position, but claim 7's stop decision uses the velocity the
-  step has left. Low; BA5.
-- The rebound at a contact on a sloped cell (claim 7): the component across the cell's surface
-  is reversed, by S-0317 claim 10's rule. Low; no scenario here lands on a sloped cell, and it
-  decides between a stopping and an impact landing there.
-- The stop decision where the rebounded velocity is not 0, and a stop without a contact (claim
-  7): both rest on S-0317 F6's exact form, which is `unmeasured` there. Low.
-- The cliff test of a rising animation (claim 6): whether the condition *z*₁ > *z*₀ + *u* + 1
-  holds as stated, and where the line between the two conditions lies near *u* = 0. Low,
-  `unmeasured`.
-- The height *z*₀ of claim 6's cliff test. This spec takes the flight position's height before
-  the move, where S-0317 claim 10 takes the height of a piece's position before the move. For a
-  sprite animation the two differ by the 10-lepton lift in a falling animation's first turn, and
-  otherwise only by the fraction of a lepton that the truncation drops; no scenario here
-  separates them, and the landing point of an undone first move (claim 6) rests on the same
-  reading. Medium, `unmeasured`.
-- Leaving the map in flight: whether an animation that flies off the map is removed for that, and
-  what land type and ground height its landing reads there. A meteor's start position (F2) can
-  lie off the map; whether its placement there succeeds is not established.
-- How a resource overlay placed by claim 10 enters the resource lists of S-0401 (growth and
-  spread), and so whether each new resource cell also takes the growth-list raw draw of S-0401
-  claim 11, and where among that cell's draws it would fall (claim 13).
-- The hits of an impact landing in a cell whose listing they change (S-0317's open question,
-  the same here).
-- Whether the hits of an impact landing (claim 7) skip a listed object with no health left, as
-  S-0613 claim 13's gas hits do. The landing hits are a piece's ground-impact hits (S-0317 claim
-  7), where the same question is open. For a building awaiting removal with 0 health (S-0312
-  claim 21) skipping it and hitting it give the same result.
+- Which killing hits take their object out of the cell's ground layer within the hit, and so end
+  the remaining impact hits of claim 7. A destroyed vehicle that neither crashes nor sinks does,
+  since it leaves play at the moment its damage is applied (S-0312 claim 15, S-0203 claim 6 (a)),
+  and a building awaiting removal does not (S-0312 claim 21). Infantry removed at once and
+  buildings that leave at once leave play the same way (S-0203 claim 6 (b) and (c)); this spec
+  does not establish whether every such leaving unlinks the object before its hit is over. Our
+  engine ends the hits after them too (claim 7's design rule). Medium for the vehicle; BA2 part n.
+- Whether the original places an animation whose placement point (claim 11) is exactly the point
+  (0, 0, 0), off the legal map. It is believed not to, so that such an animation would take its
+  creation draws and never take a turn. Low and `unmeasured`: no producer here can be made to
+  name exactly that point, and none in stock play is known to. S-0317 claim 21 states that a
+  debris piece whose placement point is exactly (0, 0, 0) is not placed; this entry concerns
+  sprite animations, which S-0317 does not cover. Our engine's rule there is claim 11's design
+  rule, so the entry does not affect an implementation.
