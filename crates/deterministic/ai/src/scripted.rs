@@ -1256,6 +1256,27 @@ impl Script {
             || self.field_spent(w)
     }
 
+    /// The base role the plan builds next: the first missing role the
+    /// house can build a type for now (a role it cannot build yet, such as
+    /// a refinery that needs a factory first, does not hold up the others).
+    /// Power is read off the plants without a blackout (`power::short`): a
+    /// blackout is not answered with power plants.
+    pub(crate) fn wanted_role(&self, w: &World) -> Option<Role> {
+        let low_power =
+            crate::power::short(w, self.house) || self.of_role(w, Role::Power).is_empty();
+        low_power
+            .then_some(Role::Power)
+            .into_iter()
+            .chain((!self.has_refinery(w)).then_some(Role::Refinery))
+            .chain(
+                FACTORIES
+                    .into_iter()
+                    .map(Role::Factory)
+                    .filter(|&f| self.of_role(w, f).is_empty()),
+            )
+            .find(|&r| !self.candidates(w, r).is_empty())
+    }
+
     /// The power plant the plan builds next: the cheapest power plant type
     /// the house can build and place now.
     pub(crate) fn plant_type(&self, w: &World) -> Option<TypeRef> {
@@ -1389,24 +1410,7 @@ impl Script {
                 });
             }
         } else if !selling {
-            // The first missing role the house can build a type for now
-            // (a role it cannot build yet, such as a refinery that needs a
-            // factory first, does not hold up the others). Power is read
-            // off the plants without a blackout (`power::short`): a
-            // blackout is not answered with power plants.
-            let low_power =
-                crate::power::short(w, house) || self.of_role(w, Role::Power).is_empty();
-            let wanted = low_power
-                .then_some(Role::Power)
-                .into_iter()
-                .chain((!self.has_refinery(w)).then_some(Role::Refinery))
-                .chain(
-                    FACTORIES
-                        .into_iter()
-                        .map(Role::Factory)
-                        .filter(|&f| self.of_role(w, f).is_empty()),
-                )
-                .find(|&r| !self.candidates(w, r).is_empty());
+            let wanted = self.wanted_role(w);
             let walk = || {
                 // The cheapest power plant with a cell toward the water.
                 let goal = self.water_goal(w)?;

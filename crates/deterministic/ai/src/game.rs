@@ -166,6 +166,15 @@ impl Game {
             .collect()
     }
 
+    /// What each brain's economy sees now (`Brain::economy_probe`), in the
+    /// order of the brains (local-lane reports).
+    pub fn economy_probes(&self) -> Vec<String> {
+        self.brains
+            .iter()
+            .map(|b| b.economy_probe(&self.world))
+            .collect()
+    }
+
     /// The AI houses.
     pub fn ai_houses(&self) -> Vec<HouseId> {
         self.brains.iter().map(Brain::house).collect()
