@@ -1091,6 +1091,8 @@ fn travel(w: &mut World, id: ObjectId, d: i32) {
         // spec: S-0503 claim 6 (its occupancy is moved from cell to cell as its position crosses a cell edge)
         w.cells.leave(old, o.layer, id);
         w.cells.enter(new, layer, id, false);
+        // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
+        crate::threat::relisted(w, id, new);
         if state(w, id).is_some_and(|h| h.between) {
             // spec: S-0503 claim 13 (a crossing while still between steps clears the flag at the old actual position and sets it at the new one; otherwise crossings neither set nor clear flags)
             unmark(w, id, o.pos);

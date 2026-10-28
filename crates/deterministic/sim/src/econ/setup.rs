@@ -131,6 +131,10 @@ pub struct HouseSetupState {
     pub person_played: bool,
     /// The difficulty index (S-0412 Terms; claims 4 and 5).
     pub difficulty: i32,
+    /// An AI house (glossary *AI house*): counted as computer-controlled
+    /// in a rebuild of threat records (S-0212 claim 16a).
+    #[serde(default)]
+    pub ai: bool,
 }
 
 /// Game-start values that change country data for one game (S-0413 claims
@@ -620,6 +624,7 @@ pub fn house_values(setup: &GameSetup, i: usize, rules: &SimRules) -> (HouseSetu
         person_played: player && h.human && !h.ai && !v.observer,
         // spec: S-0412 claims 4 and 5 (index 1 for a human-controlled house, which an AI house counts as, and for the neutral and special houses)
         difficulty: 1,
+        ai: h.ai,
     };
     let credits = if setup.sandbox || !player {
         // spec: S-0412 claim 2 (the neutral and special houses start with 0 credits)
@@ -768,6 +773,7 @@ fn start_alliances(w: &mut World) {
             }
         }
     }
+    let mut made: Vec<HouseId> = Vec::new();
     for (a, b) in pairs {
         // spec: S-0412 claim 8 (a one-way alliance is made only when the house to be allied does not play a country of the civilian side)
         if civilian(w, b) {
@@ -776,7 +782,15 @@ fn start_alliances(w: &mut World) {
         let allies = &mut w.houses[usize::from(a.0)].allies;
         if let Err(p) = allies.binary_search(&b) {
             allies.insert(p, b);
+            if !made.contains(&a) {
+                made.push(a);
+            }
         }
+    }
+    made.sort_unstable();
+    for h in made {
+        // spec: S-0212 claim 16a (a house that makes the alliances of game start is rebuilt then, after the map's objects and the starting units are placed)
+        crate::threat::rebuild(w, h);
     }
     // spec: S-0409 claim 2 (who reveals for whom follows the alliances in force)
     crate::econ::shroud::alliance_changed(w);

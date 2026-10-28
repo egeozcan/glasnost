@@ -602,6 +602,8 @@ fn list_at(w: &mut World, id: ObjectId, layer: Layer) {
         ob.layer = layer;
     }
     w.cells.enter(cell, layer, id, false);
+    // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
+    crate::threat::relisted(w, id, cell);
     upd(w, id, |j| j.listed = Some((cell, layer)));
 }
 

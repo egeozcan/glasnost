@@ -244,6 +244,8 @@ fn go_inside(w: &mut World, unit: ObjectId, b: ObjectId) {
         // spec: S-0508 claim 5 (added at the end of the building's occupant list; the shared index is kept, claim 18)
         bb.structure.occupants.push(unit);
     }
+    // spec: S-0212 claim 16a (an infantry unit entering a building as an occupant: the building's amount is figured again)
+    crate::threat::refigure(w, b);
     if first {
         // spec: S-0508 claim 6 (the garrisoned announcement and sound when the entry makes the count 1 and the entering unit's owner is the local player; the sound at the entering unit's last position)
         w.effects.push(Effect::Sound {
@@ -499,6 +501,8 @@ fn finish_action(w: &mut World, b: ObjectId) {
         // spec: S-0508 claim 18 (after a completed eviction or clearing action the shared index is 0)
         bb.structure.index = 0;
     }
+    // spec: S-0212 claim 16a (a building's occupants leave: its amount is figured again)
+    crate::threat::refigure(w, b);
 }
 
 /// *Unload* of a garrisonable building (S-0213 claim 10, S-0508 claim 13
@@ -697,6 +701,8 @@ pub fn removing(w: &mut World, b: ObjectId) {
                 h.structure.index = 0;
             }
         }
+        // spec: S-0212 claim 16a (an occupant killed or removed inside: the building's amount is figured again)
+        crate::threat::refigure(w, home);
         return;
     }
     if w.obj(b).is_none_or(|o| o.structure.occupants.is_empty()) {

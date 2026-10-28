@@ -132,6 +132,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     crate::cloak::owner_changed(w, id, old);
     // spec: S-0601 claim 11 (a controller that changes owner keeps its victims; the switch off releases them)
     crate::mind::owner_changed(w, id);
+    // spec: S-0212 claim 16a (an owner change moves the object's threat amount between the recording houses)
+    crate::threat::owner_changed(w, id, old);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)
         for h in [old, new].into_iter().flatten() {

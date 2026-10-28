@@ -594,6 +594,8 @@ fn set_pos(w: &mut World, id: ObjectId, x: i32, y: i32, at_point: bool) {
     if new != old {
         w.cells.leave(old, o.layer, id);
         w.cells.enter(new, layer, id, false);
+        // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
+        crate::threat::relisted(w, id, new);
         crate::load::recalc_cells(w, &[old, new]);
         crate::crush::entered_cell(w, id, new);
     }

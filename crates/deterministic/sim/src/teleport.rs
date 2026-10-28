@@ -685,6 +685,8 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
         ob.layer = layer;
     }
     w.cells.enter(new, layer, id, false);
+    // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
+    crate::threat::relisted(w, id, new);
     // The reservation the object holds after the jump: the remembered landing point's.
     let mut held = st.mark.map(|c| (c, st.mark_layer));
     let mut deck_mark = None;

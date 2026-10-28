@@ -1949,7 +1949,7 @@ pub fn coarse_estimate_layers(
     // spec: S-0212 claim 13b (a bridge cell read as on its deck has its coarse end cell at a bridge end; any other cell is its own)
     let found_end = coarse_end(w, found, found_deck);
     let dest_end = coarse_end(w, dest, dest_deck);
-    // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted)
+    // spec: S-0212 claim 24 (the coarse search alone, between the coarse end cells; when it fails the cell is not adopted). With no threat term: whether this search reads the unit's threat is asked in Q-1975
     let chains = corridor::coarse(
         w,
         &w.regions.sectors,
@@ -2061,8 +2061,17 @@ fn corridor_searches(
     let mut searches = 0;
     let mut first = true;
     loop {
-        let chains = match corridor::coarse_why(w, secs, coarse_zone, start_end, dest_end, &closed)
-        {
+        // spec: S-0212 claim 13 and F5 (the coarse search adds the threat term of the unit's owner's records when its coefficient exceeds the binary64 value nearest 0.00001)
+        let threat = corridor::threat_of(w, req.unit);
+        let chains = match corridor::coarse_why(
+            w,
+            secs,
+            coarse_zone,
+            start_end,
+            dest_end,
+            &closed,
+            threat,
+        ) {
             Ok(c) => c,
             Err(why) => {
                 // spec: S-0212 claim 13 (a first coarse search that fails: one cell search without a corridor, final)
@@ -2304,11 +2313,20 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
         }
     }
     let deck_at = |c: CellXY| layers.get(&c).copied().unwrap_or(Layer::Ground);
+    let mode = r.mode;
+    let owner = o.owner;
+    // trunc₅₃(t × k) for the threat value t of cell `c` (S-0212 F7): the
+    // record of the unit's owner (claim 16a; none without an owner).
+    let tk = |c: CellXY| {
+        let t = owner.map_or(0, |h| crate::threat::value(w, h, c));
+        F64::from_i64(i64::from(t), mode).mul(k, mode)
+    };
     // Whether the steps `shape` from cell `s` enter only clear cells without
-    // a congestion mark. No threat records exist before the combat topics
-    // (M4), so every cell has threat value 0 and every threat test passes
-    // (S-0212 claims 17 and 18, F7).
-    let enters_clear = |s: CellXY, shape: &mut dyn Iterator<Item = u8>| -> bool {
+    // a congestion mark, each passing `threat_ok` (S-0212 claims 17 and 18).
+    let enters_clear = |s: CellXY,
+                        shape: &mut dyn Iterator<Item = u8>,
+                        threat_ok: &mut dyn FnMut(CellXY) -> bool|
+     -> bool {
         let mut prev = s;
         // The height level of the search pair the shape starts from: the
         // unit's own at its start cell, else that of the ground or deck the
@@ -2325,13 +2343,13 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             if step_outcome(w, id, prev, n, lvl) != Outcome::Clear
                 || congested.contains(&n)
                 || excluded.contains(&n)
+                || !threat_ok(n)
             {
                 return false;
             }
             lvl = pair_level(w, n, candidate_layer(w, lvl, n));
             prev = n;
         }
-        let _ = k;
         true
     };
     let ok = |path: &[u8], start: usize, d3: u8, j: usize| -> bool {
@@ -2341,11 +2359,28 @@ fn compute_untraced(w: &mut World, id: ObjectId, mode: Mode) -> Search {
             let (sx, sy) = STEPS[usize::from(s % 8)]; // spec: S-0212 Terms (step directions 0 to 7)
             c = CellXY::new(c.x + sx, c.y + sy);
         }
+        // spec: S-0212 claim 17 (every cell the 2j new steps pass through has threat value × k below 1.0, F7, the value read at the cell where the new steps start; quirks.flatten_threat_start_cell off: each cell's own)
+        let mut below = |n: CellXY| {
+            let at = if q.flatten_threat_start_cell { c } else { n };
+            tk(at).lt(crate::consts::ONE)
+        };
         // spec: S-0212 claim 17 (2j new steps)
-        enters_clear(c, &mut std::iter::repeat_n(d3, 2 * j))
+        enters_clear(c, &mut std::iter::repeat_n(d3, 2 * j), &mut below)
     };
     let steps = flatten(&steps, q.flatten_straight_run_v, &ok);
-    let ok18 = |s: CellXY, shape: &[u8], _limit: u32| enters_clear(s, &mut shape.iter().copied());
+    // spec: S-0212 claim 18 and F7 (threat counted only when k exceeds the binary64 value nearest 0.00001)
+    let counts = k.gt(crate::consts::THREAT_COEFFICIENT_MIN);
+    let ok18 = |s: CellXY, shape: &[u8], limit: u32| {
+        let mut n = 0u32;
+        let mut within = |c: CellXY| {
+            // spec: S-0212 claim 18 (the count of entered cells with threat value × k ≥ the binary64 value nearest 0.01, each cell's own value, stays within the limit)
+            if counts && tk(c).ge(crate::consts::THREAT_COUNTED) {
+                n += 1;
+            }
+            n <= limit
+        };
+        enters_clear(s, &mut shape.iter().copied(), &mut within)
+    };
     let received: Vec<PathStep> = steps.iter().map(|&d| PathStep::Dir(d)).collect();
     // spec: S-0212 claim 18 (early detours are shortened, after claim 17)
     let steps: Vec<u8> = shorten(
