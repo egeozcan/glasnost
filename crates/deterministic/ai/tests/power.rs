@@ -87,7 +87,7 @@ fn builds_a_power_plant_before_a_building_it_cannot_carry() {
         Order::Build { what: powr },
         Order::Build { what: gunr },
     ];
-    assert_eq!(power::plant_first(&w, h, Some(powr), &mut out), 1);
+    assert_eq!(power::plant_first(&w, h, Some(powr), None, &mut out), 1);
     assert_eq!(
         out,
         vec![

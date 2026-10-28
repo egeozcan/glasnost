@@ -18,9 +18,10 @@ const LIMIT: i32 = 40_000;
 /// The seed of the synthetic game.
 const SEED: u32 = 5;
 
-/// The seed of the naval game (29 of the seeds 1 to 32 pass; 5, 7 and 17
-/// do not, because their ships never leave the harbour before the game ends).
-const NAVAL_SEED: u32 = 6;
+/// The seed of the naval game (18 of the seeds 1 to 32 pass; in the others
+/// a house wins on land, by tick 18 000, before the ships meet: since the
+/// refinery stands beside the field (M8 step B8) the land war ends sooner).
+const NAVAL_SEED: u32 = 2;
 
 fn run_for(ticks: i32) -> skirmish::Run {
     skirmish::run(

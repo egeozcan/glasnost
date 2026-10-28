@@ -22,6 +22,9 @@
 //!   while the house is not safe (neither fights); a yard vehicle bought to
 //!   expand is cancelled (S-0404 claim 6) while the house is broke for the
 //!   expansion; the brain reads its income off the credits and the lines.
+//! - M8 step B8: a house whose harvesters wait for a lost refinery clears
+//!   the building line for it (cancels the item there) and orders it before
+//!   power; selling out, it keeps the construction yard that builds it.
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::scripted::{Plan, Role, all_types, role_of};
@@ -29,6 +32,7 @@ use glasnost_ai::{fixture, game::Game};
 use glasnost_map::Map;
 use glasnost_sim::econ::production::{Hold, LineKind};
 use glasnost_sim::econ::{TypeRef, tech};
+use glasnost_sim::objects;
 use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::Kind;
 use glasnost_sim::testkit;
@@ -838,4 +842,164 @@ fn a_cancelled_engineer_leaves_its_line_and_is_not_started_again() {
         !orders.contains(&Order::Build { what: soldier }),
         "{orders:?}"
     );
+}
+
+/// House 0's live objects of `role`.
+fn of_role(w: &World, role: Role) -> Vec<ObjectId> {
+    w.objects
+        .values()
+        .filter(|o| o.owner == Some(H) && o.on_map && o.health > 0)
+        .filter(|o| role_of(w, tech::type_of(o)) == Some(role))
+        .map(|o| o.id)
+        .collect()
+}
+
+/// Removes every refinery of house 0.
+fn lose_the_refineries(w: &mut World) {
+    for id in of_role(w, Role::Refinery) {
+        objects::remove(w, id);
+    }
+    assert!(!has_role(w, Role::Refinery));
+}
+
+// S-0402 claim 13 (a harvester whose owner owns no refinery guards and stands), S-0404 claim 6 (the cancel-all order) and PLAN §4.7 (M8 step B8): a house that lost its refinery while a power plant waits for money on the building line cancels the power plant, so the line is free for the refinery; once it is free the house orders the refinery, not a power plant, though short of power.
+#[test]
+fn rebuilds_a_lost_refinery_before_power() {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    w.econ.lines.lines.retain(|l| l.house != H);
+    let powr = first(&w, Role::Power, Kind::Building);
+    let refinery = first(&w, Role::Refinery, Kind::Building);
+    assert!(orders::issue(&mut w, H, Order::Build { what: powr }));
+    to_think(&mut w);
+    assert!(item_of(&w, powr).owed > 0);
+    // With the refinery standing, the waiting plant stays on its line.
+    let orders = think(&mut w.clone(), &map, plan(2));
+    assert!(
+        !orders.contains(&Order::CancelAll { what: powr }),
+        "{orders:?}"
+    );
+    lose_the_refineries(&mut w);
+    // Short of power as well: the refinery still comes first.
+    for id in of_role(&w, Role::Power) {
+        objects::remove(&mut w, id);
+    }
+    let orders = think(&mut w, &map, plan(2));
+    assert!(
+        orders.contains(&Order::CancelAll { what: powr }),
+        "{orders:?}"
+    );
+    assert!(orders::issue(&mut w, H, Order::CancelAll { what: powr }));
+    testkit::run(&mut w, 1);
+    w.houses[0].credits = glasnost_sim::econ::production::cost_field(&w, refinery);
+    let orders = think(&mut w, &map, plan(2));
+    assert!(
+        orders.contains(&Order::Build { what: refinery }),
+        "{orders:?}"
+    );
+    assert!(!orders.contains(&Order::Build { what: powr }), "{orders:?}");
+}
+
+// S-0408 claim 3 (a building with a build-up sprite is sellable), S-0402 claim 13 and PLAN §4.7 (M8 step B8): a broke house whose harvesters wait for a lost refinery sells its other buildings, not the construction yard that would build the refinery, though the yard is the costliest.
+#[test]
+fn keeps_the_yard_while_selling_for_a_lost_refinery() {
+    let mut r = fixture::ruleset();
+    for n in ["YARD", "POWR"] {
+        let b = r.sim.buildings.get_mut(n).expect("fixture building");
+        b.econ.buildup = Some(true);
+        b.econ.buildup_frames = Some(8);
+    }
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(&r, "synthetic-economy"));
+    let mut g = Game::new(
+        rules,
+        &fixture::map(),
+        "synthetic-economy",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the skirmish loads");
+    while g.world.tick < 8000
+        && !(has_role(&g.world, Role::Refinery)
+            && has_role(&g.world, Role::Power)
+            && harvesters(&g.world) >= 1)
+    {
+        g.step();
+    }
+    assert!(harvesters(&g.world) >= 1, "a harvester by tick 8000");
+    let yards = of_role(&g.world, Role::Yard);
+    assert!(!yards.is_empty());
+    lose_the_refineries(&mut g.world);
+    g.world.houses[0].credits = 0;
+    let from = g.world.tick;
+    let mut sold = Vec::new();
+    // Until the refinery stands again or the harvester is gone (then
+    // nothing waits for a refinery).
+    while g.world.tick < from + 6000
+        && g.outcome().is_none()
+        && harvesters(&g.world) >= 1
+        && !has_role(&g.world, Role::Refinery)
+    {
+        g.step();
+        for o in g.world.objects.values() {
+            if o.owner == Some(H) && o.econ.sale.is_some() && !sold.contains(&o.id) {
+                sold.push(o.id);
+            }
+        }
+    }
+    assert!(!sold.is_empty(), "the broke house sold a building");
+    // (The enemy house may destroy the yard meanwhile; it is never sold.)
+    assert!(sold.iter().all(|id| !yards.contains(id)), "{sold:?}");
+}
+
+/// The squared distance from `c` to the nearest resource cell of `w`.
+fn to_ore(w: &World, c: glasnost_map::CellXY) -> i64 {
+    w.cells
+        .grid
+        .iter()
+        .map(|(o, _)| o)
+        .filter(|&o| glasnost_sim::econ::resource::resource_at(w, o).is_some())
+        .map(|o| {
+            let (dx, dy) = (i64::from(o.x - c.x), i64::from(o.y - c.y));
+            dx * dx + dy * dy
+        })
+        .min()
+        .expect("a resource cell")
+}
+
+// PLAN §4.7 (M8 step B8): the house puts its refinery beside its field, nearer the ore than its construction yard stands, with no ore under the foundation.
+#[test]
+fn places_the_refinery_beside_the_field() {
+    let map = fixture::map();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-economy",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the skirmish loads");
+    while g.world.tick < 8000 && !has_role(&g.world, Role::Refinery) {
+        g.step();
+    }
+    let w = &g.world;
+    let yard = *of_role(w, Role::Yard).first().expect("a yard");
+    let refinery = *of_role(w, Role::Refinery).first().expect("a refinery");
+    let centre = |id: ObjectId| {
+        let o = w.obj(id).expect("own object");
+        let c = o.pos.cell();
+        glasnost_map::CellXY::new(c.x + o.foundation.0 / 2, c.y + o.foundation.1 / 2)
+    };
+    assert!(
+        to_ore(w, centre(refinery)) < to_ore(w, centre(yard)),
+        "refinery at {:?}, yard at {:?}",
+        centre(refinery),
+        centre(yard)
+    );
+    let o = w.obj(refinery).expect("the refinery");
+    for dy in 0..o.foundation.1 {
+        for dx in 0..o.foundation.0 {
+            let c = glasnost_map::CellXY::new(o.pos.cell().x + dx, o.pos.cell().y + dy);
+            assert!(glasnost_sim::econ::resource::resource_at(w, c).is_none());
+        }
+    }
 }

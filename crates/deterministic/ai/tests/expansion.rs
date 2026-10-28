@@ -17,6 +17,9 @@
 //! - M8 step B5: that house must also earn the yard vehicle's cost per
 //!   income window and have no superweapon building left to climb to (a
 //!   person climbs to his superweapons first, then expands).
+//! - M8 step B8: a house whose explored ore within reach of its refineries
+//!   has run dry builds a refinery beside the field nearest home that it
+//!   has scouted, when one fits there (tuning of our own opponent).
 
 use glasnost_ai::brain::Brain;
 use glasnost_ai::{fixture, game::Game};
@@ -151,12 +154,67 @@ fn a_rich_house_with_a_far_field_builds_a_yard_vehicle() {
     let (orders, builds, _) = think(&mut w, &map);
     assert!(builds_mcv(&w, &orders), "{orders:?}");
     assert_eq!(builds, 1);
-    // Without the far field scouted, none.
-    let mut w = g.world.clone();
+    // Without the far field, none. (On the far-field map the harvesters
+    // explore it themselves once the refinery beside the home field has
+    // mined that field down, M8 step B8.)
+    let plain = fixture::map();
+    let mut w = built_up(&plain).world;
     w.houses[0].credits = 100_000;
-    let (orders, builds, _) = think(&mut w, &map);
+    let (orders, builds, _) = think(&mut w, &plain);
     assert!(!builds_mcv(&w, &orders), "{orders:?}");
     assert_eq!(builds, 0);
+}
+
+// Tuning of our own opponent (M8 step B8): a house whose explored ore within reach of its refinery has run dry builds a second refinery beside the far field it has scouted, its foundation within reach of the field; while the home field is rich it builds none there.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn builds_a_refinery_by_the_far_field_once_the_home_field_runs_dry() {
+    let map = far_field_map();
+    let (mut rich, mut dry) = (built_up(&map), built_up(&map));
+    scout(&mut rich.world);
+    scout(&mut dry.world);
+    // The reach the house counts harvesters in (14 cells).
+    let r = 14;
+    let by_far = |w: &World| {
+        of(w, "PROC")
+            .into_iter()
+            .filter_map(|id| w.obj(id))
+            .any(|o| dist2(o.pos.cell(), far()) <= r * r)
+    };
+    assert!(!by_far(&rich.world));
+    let start = rich.world.tick;
+    while rich.world.tick < start + 3000 {
+        rich.world.houses[0].credits = 3000;
+        rich.step();
+    }
+    assert!(
+        !by_far(&rich.world),
+        "no refinery by the far field while the home field is rich"
+    );
+    // Everything but the far field is mined out.
+    let ore: Vec<CellXY> = dry
+        .world
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            glasnost_sim::econ::resource::resource_at(&dry.world, c).is_some()
+                && dist2(c, far()) > 8
+        })
+        .collect();
+    for c in ore {
+        glasnost_sim::crush::remove_overlay(&mut dry.world, c);
+    }
+    while dry.world.tick < start + 3000 && !by_far(&dry.world) {
+        dry.world.houses[0].credits = 3000;
+        dry.step();
+    }
+    assert!(
+        by_far(&dry.world),
+        "a refinery by the far field by tick {}",
+        dry.world.tick
+    );
 }
 
 /// The yard vehicle type.

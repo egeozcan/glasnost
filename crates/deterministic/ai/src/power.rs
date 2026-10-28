@@ -105,12 +105,15 @@ pub fn short_after(w: &World, house: HouseId, t: TypeRef) -> bool {
 /// plant the plan would build, first, as a person does. A building on the
 /// plant's own line (the two cannot run together) is replaced by the
 /// plant; one on another line (a defence) keeps its order, and the plant is
-/// ordered beside it once. Two orders for the plant become one. Returns
-/// how many orders it changed or added.
+/// ordered beside it once. Two orders for the plant become one. An order
+/// for `before_power` keeps its place: a house that lost its refinery
+/// rebuilds it first, short of power or not (M8 step B8, the brain's
+/// `Script::refinery_lost`). Returns how many orders it changed or added.
 pub fn plant_first(
     w: &World,
     house: HouseId,
     plant: Option<TypeRef>,
+    before_power: Option<TypeRef>,
     out: &mut Vec<Order>,
 ) -> usize {
     let Some(plant) = plant else { return 0 };
@@ -131,6 +134,7 @@ pub fn plant_first(
         if let Order::Build { what } = o
             && what.kind == Kind::Building
             && *what != plant
+            && Some(*what) != before_power
             && !on_line(*what)
             && short_after(w, house, *what)
         {

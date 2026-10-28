@@ -666,6 +666,14 @@ fn play_ai(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
+    // `GLASNOST_AI_ECOPROBE=n`: every n ticks, per house, what the AI's
+    // economy sees (`glasnost_ai::brain::Brain::economy_probe`), and at the
+    // end each house's harvester cycles (M8 step B8).
+    let eco_probe: i32 = std::env::var("GLASNOST_AI_ECOPROBE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let mut cycles = CycleTrace::default();
     let t = Instant::now();
     let mut game = AiGame::new(rules.clone(), map, "install", tiles.clone(), setup.clone())
         .map_err(|e| format!("{e:?}"))?;
@@ -825,6 +833,14 @@ fn play_ai(
                 );
             }
         }
+        if eco_probe > 0 {
+            cycles.observe(w);
+            if w.tick % eco_probe == 0 {
+                for line in game.economy_probes() {
+                    println!("{line}");
+                }
+            }
+        }
         if trace > 0 && w.tick % trace == 0 {
             print!("{}", timeline(w));
         }
@@ -885,6 +901,9 @@ fn play_ai(
         }
     }
     g.run_ms = t.elapsed().as_millis();
+    if eco_probe > 0 {
+        print!("{}", cycles.report());
+    }
     g.loads = tally.loads;
     g.hover_loads = tally.hover_loads;
     g.unloads = tally.unloads;
@@ -2038,6 +2057,136 @@ pub(crate) fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
         "armed"
     } else {
         "unarmed"
+    }
+}
+
+/// The harvester cycles of `GLASNOST_AI_ECOPROBE` (M8 step B8): per
+/// harvester of a player house (not a slave miner), the ticks at which it
+/// starts and ends loading and unloading, and per finished cycle (from one
+/// unloading start to the next) the ticks out to the field, loading, back
+/// to the refinery and unloading, with the distance in cells from the
+/// cell where loading started to the nearest refinery of its house.
+#[derive(Default)]
+struct CycleTrace {
+    /// Per harvester: whether it was loading and unloading at the last
+    /// tick, and the ticks of the current cycle's marks.
+    now: BTreeMap<glasnost_sim::world::ObjectId, CycleMarks>,
+    /// Per house: the finished cycles.
+    done: [Vec<Cycle>; PLAYERS],
+}
+
+#[derive(Default, Clone, Copy)]
+struct CycleMarks {
+    loading: bool,
+    unloading: bool,
+    unload_start: Option<i32>,
+    unload_end: Option<i32>,
+    load_start: Option<i32>,
+    load_end: Option<i32>,
+    distance: Option<i64>,
+}
+
+#[derive(Clone, Copy)]
+struct Cycle {
+    out: i32,
+    loading: i32,
+    back: i32,
+    unloading: i32,
+    distance: i64,
+}
+
+impl CycleTrace {
+    fn observe(&mut self, w: &World) {
+        use glasnost_sim::econ::harvest::Phase;
+        let t = w.tick;
+        for o in w.objects.values().filter(|o| o.on_map && o.health > 0) {
+            let Some(h) = o.owner.map(|h| usize::from(h.0)).filter(|&h| h < PLAYERS) else {
+                continue;
+            };
+            let Some(hs) = &o.econ.harvest else { continue };
+            if glasnost_sim::econ::slaves::is_master(w, o.id) {
+                continue;
+            }
+            let m = self.now.entry(o.id).or_default();
+            let loading = hs.phase == Phase::Loading
+                && o.beh.current == Some(glasnost_sim::rules::Behaviour::Harvest);
+            let unloading = hs.unloading;
+            if loading && !m.loading && m.load_start.is_none() {
+                m.load_start = Some(t);
+                let c = o.pos.cell();
+                m.distance = w
+                    .objects
+                    .values()
+                    .filter(|r| {
+                        r.on_map
+                            && r.owner == o.owner
+                            && r.kind == Kind::Building
+                            && role_of(w, tech::type_of(r)) == Some(Role::Refinery)
+                    })
+                    .map(|r| {
+                        let (dx, dy) = (
+                            i64::from(r.pos.cell().x - c.x),
+                            i64::from(r.pos.cell().y - c.y),
+                        );
+                        (dx * dx + dy * dy).isqrt()
+                    })
+                    .min();
+            }
+            if !loading && m.loading {
+                m.load_end = Some(t);
+            }
+            if unloading && !m.unloading {
+                if let (Some(us), Some(ue), Some(ls), Some(le), Some(d)) = (
+                    m.unload_start,
+                    m.unload_end,
+                    m.load_start,
+                    m.load_end,
+                    m.distance,
+                ) && us <= ue
+                    && ue <= ls
+                    && ls <= le
+                {
+                    self.done[h].push(Cycle {
+                        out: ls - ue,
+                        loading: le - ls,
+                        back: t - le,
+                        unloading: ue - us,
+                        distance: d,
+                    });
+                }
+                m.unload_start = Some(t);
+                m.unload_end = None;
+                m.load_start = None;
+                m.load_end = None;
+            }
+            if !unloading && m.unloading {
+                m.unload_end = Some(t);
+            }
+            m.loading = loading;
+            m.unloading = unloading;
+        }
+    }
+
+    fn report(&self) -> String {
+        fn median<T: Copy + Ord>(mut v: Vec<T>) -> Option<T> {
+            v.sort_unstable();
+            v.get(v.len() / 2).copied()
+        }
+        let mut s = String::new();
+        for (h, cs) in self.done.iter().enumerate() {
+            let _ = writeln!(
+                s,
+                "ecoprobe cycles house {h}: {} cycles; median ticks out {:?} loading {:?} back {:?} unloading {:?}; median distance from the refinery {:?}, most {:?}",
+                cs.len(),
+                median(cs.iter().map(|c| c.out).collect()),
+                median(cs.iter().map(|c| c.loading).collect()),
+                median(cs.iter().map(|c| c.back).collect()),
+                median(cs.iter().map(|c| c.unloading).collect()),
+                median(cs.iter().map(|c| c.distance).collect()),
+                cs.iter().map(|c| c.distance).max(),
+            );
+        }
+        s
     }
 }
 
