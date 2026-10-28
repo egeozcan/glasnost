@@ -8,9 +8,9 @@
 //! of a projectile's warhead (S-0303 claim 22, F6) and the barrel debris of
 //! an exploding overlay (S-0303 claim 19) are made here.
 //!
-//! Interims (requests): the rebound on a sloped cell, the turn off a cliff
-//! face and which buildings count as a building contact (Q-1834); a piece
-//! off the map (Q-1836).
+//! The rebound on a sloped cell (claim 17, F8), the turn off a cliff face
+//! (claim 18, F9), the cells that count as holding a building (claim 19)
+//! and a piece off the legal map (claim 20) follow S-0317 r57.
 
 use glasnost_map::CellXY;
 use glasnost_map::terrain::land;
@@ -18,6 +18,7 @@ use glasnost_num::{F32, F64, Rounding};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::data::WarheadId;
+use crate::rules::Kind;
 use crate::world::{HouseId, Layer, ObjectId, Pos, World};
 
 /// The gravity *g* of every piece (S-0317 claim 5, F3, Constants): the
@@ -28,6 +29,10 @@ pub(crate) fn gravity() -> F64 {
 
 /// The deck height above the ground (S-0317 claims 10 and 11, Constants).
 pub(crate) const DECK: i32 = 416; // spec: S-0317 claim 10 and Constants (the deck height: the ground height plus 416 leptons, 4 height levels)
+
+/// The height levels above the old cell from which a cell is high (S-0317
+/// claim 10's cliff test, claim 18, Terms, Constants).
+const HIGH: i32 = 2; // spec: S-0317 Terms and Constants (high cell: 2 height levels above the old cell)
 
 /// One piece type (a voxel-animation type, S-0317 Import mapping), with the
 /// spans of F1, F2 and F5 formed once.
@@ -51,8 +56,12 @@ pub struct PieceType {
     pub sa: i32,
     /// The lower spin limit *A*ₘᵢₙ in radians per tick (F5).
     pub amin: F64,
-    /// The elasticity *e* (claim 10): a single widened to a double.
+    /// The elasticity *e* as imported (claim 10), a double: F9's cliff
+    /// turn scales by it.
     pub elasticity: F64,
+    /// *ε*, the elasticity narrowed once to single precision (F8): the
+    /// rebound scales by it.
+    pub epsilon: F32,
     /// The damage amount (claims 7 and 11).
     pub damage: i32,
     /// The damage radius in leptons (claim 7).
@@ -127,6 +136,11 @@ impl PieceRules {
                 let sxy = m.mul(F64::from_i64(2, mode), mode).to_i32_common();
                 let sz = zmax.sub(zmin, mode).add(one, mode).to_i32_common();
                 let sa = amax.sub(amin, mode).add(one, mode).to_i32_common();
+                // spec: S-0317 Import mapping (Elasticity absent 0.8 in single precision, widened; a double field otherwise) and claim 10 (e as imported)
+                let elasticity = t.elasticity.as_ref().map_or_else(
+                    || crate::gas::nearest_single("0.8").to_f64(),
+                    |d| d.value(mode),
+                );
                 PieceType {
                     name: n.clone(),
                     // spec: S-0317 Import mapping (Duration absent 30)
@@ -139,11 +153,9 @@ impl PieceRules {
                     sz,
                     sa,
                     amin,
-                    // spec: S-0317 Import mapping (Elasticity absent 0.8, single precision)
-                    elasticity: t.elasticity.as_ref().map_or_else(
-                        || crate::gas::nearest_single("0.8").to_f64(),
-                        |d| d.single_value(mode).to_f32(mode).to_f64(),
-                    ),
+                    elasticity,
+                    // spec: S-0317 F8 (ε: the imported elasticity narrowed once to single precision)
+                    epsilon: single(elasticity, mode),
                     // spec: S-0317 Import mapping (Damage and DamageRadius absent 0, no warhead)
                     damage: t.damage.unwrap_or(0),
                     radius: t.damage_radius.unwrap_or(0),
@@ -302,22 +314,29 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
     // spec: S-0317 F5 (spin rate = (|u| rem S_a) + A_min, kept in double precision)
     let spin = d(mag_rem(u, t.sa, ov)).add(t.amin, mode);
     let id = w.new_id();
-    w.pieces.insert(
-        id,
-        Piece {
-            type_index: ti,
-            house,
-            counter,
-            pos,
-            flight,
-            velocity,
-            spin,
-            axis: [a3, a2, a1],
-            born: w.tick,
-        },
-    );
-    // spec: S-0317 claims 1 and 6 (a piece enters play during its creation) and S-0203 claim 3 (appended to the update order)
-    w.update.enter_new(id);
+    // spec: S-0317 claim 21 and Constants (a piece whose placement point is exactly (0, 0, 0) is not placed: it never enters the update order, never takes a turn and is never drawn; its system and start sound are still made)
+    // Our engine keeps no record of a piece that is not placed (design):
+    // nothing reads it again, its system keeps it as an owner that never
+    // moves and is never marked (S-0616 claims 4 and 5), and its start sound
+    // stays at the creation point. The returned number is still its own.
+    if pos != Pos::new(0, 0, 0) {
+        w.pieces.insert(
+            id,
+            Piece {
+                type_index: ti,
+                house,
+                counter,
+                pos,
+                flight,
+                velocity,
+                spin,
+                axis: [a3, a2, a1],
+                born: w.tick,
+            },
+        );
+        // spec: S-0317 claims 1 and 6 (a piece enters play during its creation) and S-0203 claim 3 (appended to the update order)
+        w.update.enter_new(id);
+    }
     if let Some(si) = t.system {
         crate::emitters::voxel_animation_system(w, si, id, at, pos);
     }
@@ -345,21 +364,62 @@ pub fn create_named(w: &mut World, name: &str, at: Pos, house: Option<HouseId>) 
 }
 
 /// The ground height at a position (S-0317 claim 10: S-0106 claim 2's
-/// surface height at the position truncated toward zero). Off the map it
-/// is 0 (interim, Q-1836).
+/// surface height at the position truncated toward zero). Off the legal map
+/// it is the off-map cell's 0 (S-0317 claim 20).
 pub(crate) fn ground(w: &World, p: Pos) -> i32 {
+    // spec: S-0317 claim 20 and Constants (the off-map cell: ground height 0)
     w.surface_at(p.x, p.y)
 }
 
-/// A cell's height level; 0 off the map (interim, Q-1836).
+/// A cell's height level; the off-map cell's 0 for a cell that is not
+/// legal (S-0317 claim 20).
 pub(crate) fn level(w: &World, c: CellXY) -> i32 {
+    // spec: S-0317 claim 20 and Constants (the off-map cell: height level 0)
     w.cells.cell(c).map_or(0, |x| i32::from(x.level))
 }
 
-/// Whether a cell has the water land type (claims 8 and 11); a cell off
-/// the map is not water (interim, Q-1836).
+/// Whether a cell has the water land type (claims 8 and 11); the off-map
+/// cell is of the clear land type (S-0317 claim 20).
 pub(crate) fn water(w: &World, c: CellXY) -> bool {
+    // spec: S-0317 claim 20 (the off-map cell is clear, not water)
     w.cells.cell(c).is_some_and(|x| x.land == land::WATER)
+}
+
+/// The slope shape of a cell (S-0106); the off-map cell's 0 (S-0317 claim
+/// 20).
+fn slope(w: &World, c: CellXY) -> usize {
+    // spec: S-0317 claims 17 and 20 (the slope shape of the cell read; the off-map cell is flat, shape 0)
+    w.cells.cell(c).map_or(0, |x| usize::from(x.slope))
+}
+
+/// Whether the cell of a new position counts as holding a building for
+/// claim 10's building contact (S-0317 claim 19).
+fn building_cell(w: &World, c: CellXY) -> bool {
+    let rules = w.rules();
+    // spec: S-0317 claim 19 (the first building listed in the cell's ground layer, S-0209 claim 13's listing order, decides)
+    let first = w
+        .cells
+        .list(c, Layer::Ground)
+        .iter()
+        .copied()
+        .find(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Building));
+    match first {
+        Some(id) => {
+            let Some(o) = w.obj(id) else { return false };
+            // spec: S-0317 claim 19 (an inactive laser-fence section does not count; section states are not modelled, so every section counts as inactive, as for S-0613 claim 10)
+            let fence = rules
+                .buildings
+                .get(o.type_index as usize)
+                .is_some_and(|b| b.building.laser_fence);
+            // spec: S-0317 claim 19 (a vehicle-like building, S-0214 Terms, does not count)
+            !fence && !crate::targeting::vehicle_like(w, id)
+        }
+        // spec: S-0317 claim 19 (no building listed: the cell counts when its overlay is one of S-0306's three wall overlays)
+        None => w
+            .cells
+            .cell(c)
+            .is_some_and(|cell| crate::gas::WALLS.contains(&cell.overlay)),
+    }
 }
 
 /// What a move met (claim 10).
@@ -478,12 +538,10 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
             p[2] = at(f);
         }
         contact = Contact::Ground;
-    } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode)) // spec: S-0317 claim 10 (less than 150 leptons above the ground height)
-        && w.cells
-            .occ(nc, Layer::Ground)
-            .is_some_and(|o| o.buildings > 0)
+    } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode)) // spec: S-0317 claim 10 and Constants (less than 150 leptons above the ground height: the building band)
+        && building_cell(w, nc)
     {
-        // spec: S-0317 claim 10 (at least the ground height and less than 150 leptons above it, in a cell that holds a building: a contact at the ground height; which buildings count is interim, Q-1834)
+        // spec: S-0317 claims 10 and 19 (at least the ground height and less than 150 leptons above it, in a cell that counts as holding a building: a contact at the ground height)
         p[2] = at(f);
         contact = Contact::Ground;
     }
@@ -491,32 +549,43 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
     let mut undone = false;
     if contact != Contact::None {
         let z1 = p[2].to_f64(); // nocite: vector and matrix dimensions (three axes)
-        let z0 = F64::from_i64(i64::from(old.z), mode);
+        // spec: S-0317 claim 10 (z₀: the single-precision height of the flight position before the move, not of the position)
+        let z0 = z0f;
         let one = F64::from_i64(1, mode);
-        // spec: S-0317 claim 10 (the cliff test: the new cell at least 2 height levels above the old one; undone when u < 0 and z₁ > z₀, or u > 0 and z₁ > z₀ + u + 1)
-        let cliff = level(w, nc) >= level(w, oc) + 2;
-        let zero = F64::from_i64(0, mode);
-        if cliff
-            && ((u.lt(zero) && z1.gt(z0)) || (u.gt(zero) && z1.gt(z0.add(u, mode).add(one, mode))))
-        {
+        // spec: S-0317 claim 10 and Constants (the cliff test: the new cell at least 2 height levels above the old one)
+        let cliff = level(w, nc) >= level(w, oc) + HIGH;
+        // spec: S-0317 claim 10 and Constants (the cliff speed line −0.0002, compared in double precision with u widened exactly)
+        let line = crate::rules::nearest_double("-0.0002");
+        // spec: S-0317 claim 10 (undone when u < −0.0002 and z₁ > z₀; for any other u, 0 included, when z₁ > z₀ + u + 1)
+        let lifted = if u.lt(line) {
+            z1.gt(z0)
+        } else {
+            z1.gt(z0.add(u, mode).add(one, mode))
+        };
+        if cliff && lifted {
             undone = true;
             // spec: S-0317 claim 10 (the move undone: the flight position and the velocity become those at the start of the turn; the impact's position is the position before the move)
             p = p0;
-            v = v0;
-            // Interim (Q-1834): the turn off the cliff face reverses each horizontal component along which the cell changed.
-            if nc.x != oc.x {
-                v[0] = v[0].to_f64().negated().to_f32(mode);
-            }
-            if nc.y != oc.y {
-                v[1] = v[1].to_f64().negated().to_f32(mode);
-            }
+            // spec: S-0317 claim 18 and F9 (the velocity of the start of the turn turned off the cliff face and scaled by e as imported)
+            v = cliff_turn(
+                w,
+                v0,
+                oc,
+                nc,
+                t.elasticity,
+                q.voxel_debris_cliff_step_faults,
+                mode,
+            );
             impact_at = old;
         } else {
-            // spec: S-0317 claim 10 (a flat cell: v′ = e(v_x, v_y, −v_z)); a sloped cell's rebound is interim, the flat one (Q-1834)
-            v[2] = v[2].to_f64().negated().to_f32(mode);
+            // spec: S-0317 claim 17 (the slope shape of the cell of the new position; at a deck contact the ground under the deck, quirks.voxel_debris_deck_rebound_slope; off: the flat rule there)
+            let shape = if contact == Contact::OnDeck && !q.voxel_debris_deck_rebound_slope {
+                0
+            } else {
+                slope(w, nc)
+            };
+            v = rebound(&rules.gas.ramps, shape, v, t.epsilon, mode);
         }
-        // spec: S-0317 claim 10 (the velocity scaled by the elasticity e, each component stored in single precision)
-        v = v.map(|c| single(c.to_f64().mul(t.elasticity, mode), mode));
     }
     // spec: S-0317 claim 9 and F6 (the stop test after the move and any rebound, before a meteor piece's addition of g)
     let stop = stopped(w, &p, &v, g, mode, q.table_root_distance);
@@ -545,6 +614,115 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
     }
     // spec: S-0317 claim 7 (the hits in the one cell that holds the new position; the position before the move when a cliff undoes the move, claim 10)
     Some((impact_at.cell(), impact_at, on_deck))
+}
+
+/// F8: the rebound of the velocity `v` that the move leaves, off a cell of
+/// slope shape `shape`, scaled by *ε*.
+// nocite: vector and matrix dimensions (three axes)
+fn rebound(
+    ramps: &[[[F32; 3]; 3]],
+    shape: usize,
+    v: [F32; 3],
+    eps: F32,
+    mode: Rounding,
+) -> [F32; 3] {
+    use crate::gas::{diagonal, identity, transform, transposed};
+    // spec: S-0317 F8 (M: S-0106 table C4 for the slope shape, rows as C4 lists them; shapes 0 and 17 to 20 give the identity)
+    let m = ramps.get(shape).copied().unwrap_or_else(identity);
+    // spec: S-0317 F8 (S = diag(1, −1, 1), Z = diag(1, 1, −1))
+    let s = diagonal("1", "-1", "1");
+    let z = diagonal("1", "1", "-1");
+    // spec: S-0317 F8 (w = Mᵀ · S · v, each completed component stored in single precision, the row sums grouped as S-0613 F3; a change of sign is exact)
+    let w = transform(&transposed(&m), transform(&s, v, mode), mode);
+    // spec: S-0317 F8 (w′ = Z · (ε w), each product ε wᵢ stored in single precision)
+    let scaled = w.map(|c| single(c.to_f64().mul(eps.to_f64(), mode), mode));
+    let w = transform(&z, scaled, mode);
+    // spec: S-0317 F8 (v″ = S · M · w′, each completed component stored in single precision)
+    transform(&s, transform(&m, w, mode), mode)
+}
+
+/// The face of F9's table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Face {
+    /// Across *x*: (−*u*ₓ, *u*ᵧ, *u*_z).
+    X,
+    /// Across *y*: (*u*ₓ, −*u*ᵧ, *u*_z).
+    Y,
+    /// Diagonal.
+    Diagonal,
+    /// The north-west turn (*c*, *u*ₓ, *u*ᵧ).
+    NorthWest,
+}
+
+/// F9: the cliff turn of the velocity `u` of the start of the turn, for a
+/// move from the cell `oc` to `nc`, scaled by *e* as imported.
+// nocite: vector and matrix dimensions (three axes)
+fn cliff_turn(
+    w: &World,
+    u: [F32; 3],
+    oc: CellXY,
+    nc: CellXY,
+    e: F64,
+    faults: bool,
+    mode: Rounding,
+) -> [F32; 3] {
+    // spec: S-0317 claim 18 (the step direction d from the old cell to the new, glossary); a move of more than one cell is a departure: design, the step direction of the signs of the two cell changes
+    let dx = nc.x.wrapping_sub(oc.x).signum();
+    let dy = nc.y.wrapping_sub(oc.y).signum();
+    let base = level(w, oc);
+    // spec: S-0317 Terms and Constants (a high cell: a height level at least the old cell's plus 2) and claim 20 (a neighbour that names no legal cell is the off-map cell, level 0)
+    let high = |ox: i32, oy: i32| {
+        let c = CellXY::new(oc.x.wrapping_add(ox), oc.y.wrapping_add(oy));
+        level(w, c) >= base + HIGH
+    };
+    // spec: S-0317 F9 (only P high gives the first face, only Q high the second, otherwise diagonal)
+    let pick = |p: (i32, i32), q: (i32, i32), on_p: Face, on_q: Face| match (
+        high(p.0, p.1),
+        high(q.0, q.1),
+    ) {
+        (true, false) => on_p,
+        (false, true) => on_q,
+        _ => Face::Diagonal,
+    };
+    let face = match (dx, dy) {
+        // spec: S-0317 F9 (d = 0 and 4: across y)
+        (0, _) => Face::Y,
+        // spec: S-0317 F9 (d = 2 and 6: across x)
+        (_, 0) => Face::X,
+        // spec: S-0317 F9 (d = 1, quirks.voxel_debris_cliff_step_faults: P = (x − 1, y) across y, Q = (x, y + 1) across x)
+        (1, -1) if faults => pick((-1, 0), (0, 1), Face::Y, Face::X),
+        // spec: S-0317 F9 (d = 1 with the switch off: (x + 1, y) across x, (x, y − 1) across y)
+        (1, -1) => pick((1, 0), (0, -1), Face::X, Face::Y),
+        // spec: S-0317 F9 (d = 3: P = (x + 1, y) across x, Q = (x, y + 1) across y)
+        (1, _) => pick((1, 0), (0, 1), Face::X, Face::Y),
+        // spec: S-0317 F9 (d = 5, quirks.voxel_debris_cliff_step_faults: P = (x + 1, y) across y, Q = (x, y − 1) across x)
+        (-1, 1) if faults => pick((1, 0), (0, -1), Face::Y, Face::X),
+        // spec: S-0317 F9 (d = 5 with the switch off: (x − 1, y) across x, (x, y + 1) across y)
+        (-1, 1) => pick((-1, 0), (0, 1), Face::X, Face::Y),
+        // spec: S-0317 F9 (d = 7: P = (x − 1, y) across x, Q = (x, y − 1) the north-west turn; with the switch off across y)
+        _ => pick(
+            (-1, 0),
+            (0, -1),
+            Face::X,
+            if faults { Face::NorthWest } else { Face::Y },
+        ),
+    };
+    let neg = |c: F32| c.to_f64().negated().to_f32(mode);
+    let [ux, uy, uz] = u;
+    let turned = match face {
+        // spec: S-0317 F9 (across x: (−uₓ, u_y, u_z))
+        Face::X => [neg(ux), uy, uz],
+        // spec: S-0317 F9 (across y: (uₓ, −u_y, u_z))
+        Face::Y => [ux, neg(uy), uz],
+        // spec: S-0317 F9 (diagonal, d = 1 or 5: (u_y, uₓ, u_z))
+        Face::Diagonal if dx * dy < 0 => [uy, ux, uz],
+        // spec: S-0317 F9 (diagonal, d = 3 or 7: (−u_y, −uₓ, u_z))
+        Face::Diagonal => [neg(uy), neg(ux), uz],
+        // spec: S-0317 F9 and Constants (the north-west turn: (c, uₓ, u_y), c the single-precision 2.3771235942840576)
+        Face::NorthWest => [crate::gas::nearest_single("2.3771235942840576"), ux, uy],
+    };
+    // spec: S-0317 F9 (each component multiplied by e as imported, in double precision, not narrowed first, and stored in single precision)
+    turned.map(|c| single(c.to_f64().mul(e, mode), mode))
 }
 
 /// F6: whether the piece stops.

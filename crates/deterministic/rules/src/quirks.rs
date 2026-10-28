@@ -624,6 +624,14 @@ pub struct Quirks {
     // spec: S-0317 claim 11 and Edge cases
     #[serde(default = "on")]
     pub voxel_debris_expiry_needs_animation: bool,
+    /// A debris piece's contact on a high bridge's deck rebounds off the slope of the ground cell under the deck; off: a contact that the deck test puts at the deck height rebounds by the flat rule.
+    // spec: S-0317 claim 17 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_deck_rebound_slope: bool,
+    /// A debris piece's cliff turn on a north-east or south-west step examines the two cells behind the move with their faces swapped, and a north-west step with only the northern neighbour high gives (c, uₓ, u_y); off: those steps examine the cells beside the corner and the north-west case turns across y.
+    // spec: S-0317 claim 18, F9 and Edge cases
+    #[serde(default = "on")]
+    pub voxel_debris_cliff_step_faults: bool,
     /// A sprite type's upper vertical speed key is not read: F1 always uses 3.5 for the upper vertical limit; off: F1 uses the type's upper vertical speed field.
     // spec: S-0319 claim 2, F1, Edge cases
     #[serde(default = "on")]
@@ -2156,6 +2164,8 @@ impl Default for Quirks {
             voxel_debris_deck_over_water: true,
             voxel_debris_trailer_height: true,
             voxel_debris_expiry_needs_animation: true,
+            voxel_debris_deck_rebound_slope: true,
+            voxel_debris_cliff_step_faults: true,
             anim_fixed_upper_vertical_speed: true,
             bouncing_anim_expiry_needs_animation: true,
             bouncing_anim_deck_impact_layer: true,
@@ -2865,6 +2875,14 @@ impl Quirks {
             (
                 "voxel_debris_expiry_needs_animation",
                 self.voxel_debris_expiry_needs_animation,
+            ),
+            (
+                "voxel_debris_deck_rebound_slope",
+                self.voxel_debris_deck_rebound_slope,
+            ),
+            (
+                "voxel_debris_cliff_step_faults",
+                self.voxel_debris_cliff_step_faults,
             ),
             (
                 "anim_fixed_upper_vertical_speed",
@@ -3951,6 +3969,14 @@ pub const EXTERNAL_QUIRKS: &[(&str, &str)] = &[
     (
         "colour_list_item_triples",
         "importer (convert::sim::SimQuirks), S-0202 claim 17 and Edge cases",
+    ),
+    (
+        "voxel_light_first_section_mode",
+        "renderer (render::voxel::VoxelQuirks), S-0105 claim 18; S-0317 claim 24 names it for debris pieces (S-0317 r57)",
+    ),
+    (
+        "voxel_mode0_misread",
+        "renderer (render::voxel::VoxelQuirks), S-0105 claim 35; S-0317 claim 24 names it for debris pieces (S-0317 r57)",
     ),
 ];
 

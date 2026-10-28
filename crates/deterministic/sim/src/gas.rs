@@ -84,7 +84,7 @@ const RAILGUN_MODULUS: i32 = 10; // spec: S-0202 claim 15 (modulo 10 for railgun
 
 /// The wall overlays that are obstacles in a cell without a building (claim
 /// 10, by position in the imported overlay list).
-const WALLS: [u8; 3] = [2, 26, 243]; // spec: S-0613 claim 10 and S-0306 Constants (wall overlays 2, 26, 243)
+pub(crate) const WALLS: [u8; 3] = [2, 26, 243]; // spec: S-0613 claim 10 and S-0306 Constants (wall overlays 2, 26, 243)
 
 /// A behaviour kind of a particle or particle-system type (Import mapping).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -435,7 +435,7 @@ pub fn nearest_single(text: &str) -> F32 {
 }
 
 // nocite: vector and matrix dimensions (three axes)
-fn identity() -> [[F32; 3]; 3] {
+pub(crate) fn identity() -> [[F32; 3]; 3] {
     let one = nearest_single("1");
     let zero = nearest_single("0");
     [[one, zero, zero], [zero, one, zero], [zero, zero, one]]
@@ -1379,7 +1379,7 @@ fn obstacle(w: &World, c: CellXY) -> bool {
 /// in double precision, grouped (a_y + a_z) + a_x for x and (a_y + a_x) +
 /// a_z for y and z, each completed component stored as a single.
 // nocite: vector and matrix dimensions (three axes)
-fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
+pub(crate) fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
     let mut out = [F32(0); 3]; // nocite: vector and matrix dimensions (three axes)
     for (i, row) in m.iter().enumerate() {
         let a: [F64; 3] = [0, 1, 2].map(|j| row[j].to_f64().mul(v[j].to_f64(), mode)); // nocite: vector and matrix dimensions (three axes)
@@ -1396,7 +1396,7 @@ fn transform(m: &[[F32; 3]; 3], v: [F32; 3], mode: Rounding) -> [F32; 3] {
 }
 
 // nocite: vector and matrix dimensions (three axes)
-fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
+pub(crate) fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
     let mut t = *m;
     for (i, row) in t.iter_mut().enumerate() {
         for (j, e) in row.iter_mut().enumerate() {
@@ -1407,7 +1407,7 @@ fn transposed(m: &[[F32; 3]; 3]) -> [[F32; 3]; 3] {
 }
 
 // nocite: vector and matrix dimensions (three axes)
-fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] {
+pub(crate) fn diagonal(a: &str, b: &str, c: &str) -> [[F32; 3]; 3] {
     let z = nearest_single("0");
     [
         [nearest_single(a), z, z],
