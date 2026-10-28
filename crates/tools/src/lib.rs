@@ -23,6 +23,7 @@ pub mod local_lane;
 pub mod net_client;
 pub mod netem;
 pub mod oracle;
+pub mod oracle_trace;
 pub mod path_report;
 pub mod side_audit;
 pub mod skirmish_lane;

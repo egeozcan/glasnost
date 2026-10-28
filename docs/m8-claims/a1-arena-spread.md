@@ -114,7 +114,7 @@ pairings, before this step, with what our games show:
 | 4 | M-0001 YTNK against E2 | side B ends `none` in every game | Q-1713 |
 | 5 | M-0001 TELE against BFRT | the BFRT take no target and fire no shot in 6080 frames; the TELE fire thousands of shots at one BFRT with no effect; both shares stay 1 | Q-1712, and the magnetron item of *Arena mode (M7b)* |
 | 6 | M-0003 MGTK against APOC | the MGTK side wins every game; the APOC stop firing at a disguised MGTK | S-0309 claim 25 (g), built at this step: the pairing now passes, see (d) |
-| 7 | M-0001 CAOS against BFRT | always `none`, the CAOS group untouched | Q-1712 |
+| 7 | M-0001 CAOS against BFRT | always `none`, the CAOS group untouched | Q-1712; answered in part by M-0011 (M8 A3 intake 38, [ledger](intake38-M-0011.md)): in the stock games the berserk fortresses crush the drones, in ours they never take a drone as target, so no drone leaves play; the rule that would let them choose one is open, Q-2005 |
 | 8 | M-0002 INIT against E2 | INIT on side A: the five INIT on the cliff cells survive, always `none` | Q-1713 |
 | 9 | M-0003 ROBO against APOC | as rank 1: disabled ROBO, all destroyed | Q-1710 |
 | 10 | M-0003 ROBO against HTNK | as rank 1 | Q-1710 |

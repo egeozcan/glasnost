@@ -2434,7 +2434,8 @@ target/release/glasnost-headless arena --record all --threads 8      # all three
 # Options: --pairing ROW,COL (repeatable; replays only these and merges them into the stored CSV), --out DIR (default local-lane/m7b/arena),
 #          --compare-only (compare the stored ours-<ID>.csv without playing), --groups (list each type's kind, group size and cost),
 #          --ai-houses, --watch ROW,COL,A|B,SEED (play one game and print per-sample counts and every unit's final state),
-#          --spread ROW,COL,A|B (play the side's six seeds and print, per seed, the first tick and the state that differs from seed 0's).
+#          --spread ROW,COL,A|B (play the side's six seeds and print, per seed, the first tick and the state that differs from seed 0's),
+#          --trace ROW,COL,A|B,SEED (one game, every unit's changes tick by tick: berserk time, target, shots, how it leaves play), --trace-summary (its per-unit totals only).
 cargo test --release -p glasnost-tools --test arena arena_matches_the_oracle -- --nocapture   # the same as a test; GLASNOST_ARENA_RECORD=M-0003 picks one record
 ```
 
