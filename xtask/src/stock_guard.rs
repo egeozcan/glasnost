@@ -227,7 +227,14 @@ pub fn check_measurement(path: &str, text: &str) -> Vec<String> {
             seen_separator = false;
             continue;
         }
-        if !in_result || !line.trim_start().starts_with('|') {
+        if !in_result {
+            continue;
+        }
+        if !line.trim_start().starts_with('|') {
+            // A line outside a table ends it: the next table's own header row
+            // names its columns.
+            columns.clear();
+            seen_separator = false;
             continue;
         }
         let cells: Vec<&str> = line
@@ -410,5 +417,17 @@ mod tests {
         let committed = record("| rate | ticks/s | 20 | 15 | 0 | 0 |")
             .replace("local # kept local", "committed");
         assert!(check_measurement("m.md", &committed).is_empty());
+    }
+
+    #[test]
+    fn each_result_table_is_read_with_its_own_header() {
+        let text = "---\nid: M-0001\nvalue-visibility: local\n---\n\n# M-0001: x\n\n\
+                    ## Result\n\n| Seed | Left |\n|---|---|\n| 0 | 3 of 9 |\n\n\
+                    | Quantity | Value | Tolerance for tests |\n|---|---|---|\n\
+                    | reload | local | range only |\n\n\
+                    | Quantity | Seed 0 | Seed 1 |\n|---|---|---|\n| hits | 15 | 18 |\n";
+        assert!(check_measurement("m.md", text).is_empty());
+        let leaked = text.replace("| reload | local |", "| reload | 45 |");
+        assert_eq!(check_measurement("m.md", &leaked).len(), 1);
     }
 }
