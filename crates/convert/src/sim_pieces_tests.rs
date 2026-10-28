@@ -157,7 +157,7 @@ fn spawn_count_and_resource_warnings() {
 #[test]
 fn piece_keys_are_covered() {
     let i = import(
-        "[VoxelAnims]\n1=Chunk\n[Chunk]\nDuration=3\nElasticity=0.5\nStopSound=Clunk\nMinAngularVelocity=1\n",
+        "[VoxelAnims]\n1=Chunk\n[Chunk]\nDuration=3\nElasticity=0.5\nStopSound=Clunk\nMinAngularVelocity=1\nVoxelIndex=1\nTranslucent=yes\n",
         "",
     );
     let row = |cat: &str, key: &str| {
@@ -168,7 +168,81 @@ fn piece_keys_are_covered() {
             .unwrap_or_else(|| panic!("{cat} {key}"))
     };
     use crate::coverage::Outcome::Field;
-    for k in ["Duration", "Elasticity", "StopSound", "MinAngularVelocity"] {
+    for k in [
+        "Duration",
+        "Elasticity",
+        "StopSound",
+        "MinAngularVelocity",
+        "VoxelIndex",
+        "Translucent",
+    ] {
         assert_eq!(row("voxel_animations", k).0, Field, "{k}");
     }
+}
+
+/// spec: S-0317 claim 18 and Constants (the importer warns for a type whose horizontal limit M is 256 or more)
+#[test]
+fn piece_fast_horizontal_limit_warns() {
+    let base = "[VoxelAnims]\n1=Fast\n2=Edge\n3=Slow\n[Fast]\nMaxXYVel=300\n[Edge]\nMaxXYVel=256\n[Slow]\nMaxXYVel=255.5\n";
+    let (_, w) = sim(base, "");
+    assert!(warned(&w, "voxel animation Fast: MaxXYVel 256 or more"));
+    assert!(warned(&w, "voxel animation Edge: MaxXYVel 256 or more"));
+    assert!(!warned(&w, "voxel animation Slow: MaxXYVel"));
+}
+
+/// spec: S-0317 claim 23 and Import mapping (VoxelIndex absent 0; an index outside the own model's sections is a departure, and the importer warns)
+#[test]
+fn piece_section_outside_the_model_warns() {
+    use std::collections::BTreeMap;
+
+    use glasnost_ini::Document;
+
+    use crate::art::TypeArt;
+    use crate::kinds::Kind;
+    use crate::sim::{SimInputs, build};
+
+    let base = "[VoxelAnims]\n1=Two\n2=Last\n3=Plain\n4=Neg\n5=None\n\
+                [Two]\nVoxelIndex=2\n[Last]\nVoxelIndex=1\n[Plain]\nX=1\n[Neg]\nVoxelIndex=-1\n[None]\nVoxelIndex=9\n";
+    let layers = [crate::layers::Layer {
+        role: crate::layers::Role::Base,
+        file: "rules.ini".into(),
+        doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
+    }];
+    let art = Document::empty(Default::default());
+    let outcome = crate::layers::apply(
+        &layers,
+        &art,
+        "art.ini",
+        Default::default(),
+        &crate::layers::LayerQuirks::default(),
+    );
+    let sections = |n| TypeArt {
+        voxel_sections: Some(n),
+        ..TypeArt::default()
+    };
+    // The fifth type has no model: nothing to compare with.
+    let arts = BTreeMap::from([
+        ((Kind::VoxelAnimations, 0), sections(2)),
+        ((Kind::VoxelAnimations, 1), sections(2)),
+        ((Kind::VoxelAnimations, 2), sections(1)),
+        ((Kind::VoxelAnimations, 3), sections(2)),
+        ((Kind::VoxelAnimations, 4), TypeArt::default()),
+    ]);
+    let (_, w) = build(SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: Some(&arts),
+        quirks: &Default::default(),
+        art_quirks: &Default::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &Default::default(),
+    });
+    assert!(warned(
+        &w,
+        "voxel animation Two: VoxelIndex 2 is outside its model's 2 sections"
+    ));
+    assert!(warned(&w, "voxel animation Neg: VoxelIndex -1 is outside"));
+    assert!(!warned(&w, "voxel animation Last: VoxelIndex"));
+    assert!(!warned(&w, "voxel animation Plain: VoxelIndex"));
+    assert!(!warned(&w, "voxel animation None: VoxelIndex"));
 }

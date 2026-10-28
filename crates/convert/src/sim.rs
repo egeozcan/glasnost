@@ -1766,7 +1766,7 @@ impl Builder<'_> {
                 Kind::Animations => self.animation(&mut rec, i, t),
                 Kind::Particles => self.particle(&mut rec, t),
                 Kind::ParticleSystems => self.particle_system(&mut rec, t),
-                Kind::VoxelAnimations => self.voxel_animation(&mut rec, t),
+                Kind::VoxelAnimations => self.voxel_animation(&mut rec, i, t),
                 Kind::Tiberiums => self.tiberium(&mut rec, t),
                 Kind::Superweapons => self.superweapon(&mut rec, t),
                 _ => {}

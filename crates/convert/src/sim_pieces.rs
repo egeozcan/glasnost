@@ -52,6 +52,8 @@ pub fn piece_keys() -> Vec<String> {
     out.extend(ANGULAR.iter().map(|a| a.1.to_owned()));
     // spec: S-0317 claim 14 and Import mapping (StopSound is read and has no effect)
     out.push("StopSound".to_owned());
+    // spec: S-0317 claims 23 and 25 and Import mapping (VoxelIndex, the section drawn, absent 0; Translucent, absent no: drawing keys the app reads from the type)
+    out.extend(["VoxelIndex", "Translucent"].map(str::to_owned));
     out
 }
 
@@ -96,7 +98,7 @@ fn in_range(x: F64) -> bool {
 
 impl Builder<'_> {
     /// A voxel-animation type's record (S-0317 Import mapping).
-    pub(super) fn voxel_animation(&mut self, rec: &mut Rec, t: &TypeRec) {
+    pub(super) fn voxel_animation(&mut self, rec: &mut Rec, index: usize, t: &TypeRec) {
         self.fields(rec, t, Kind::VoxelAnimations, VOXEL_ANIMATION_FIELDS);
         for (field, k) in ANGULAR {
             if let Some(d) = angular(key(t, k)) {
@@ -104,6 +106,30 @@ impl Builder<'_> {
             }
         }
         self.piece_type_checks(t);
+        self.piece_section_check(index, t);
+    }
+
+    /// Claim 23's departure: a section index outside the type's own model.
+    fn piece_section_check(&mut self, index: usize, t: &TypeRec) {
+        let Some(n) = self
+            .i
+            .arts
+            .and_then(|a| a.get(&(Kind::VoxelAnimations, index)))
+            .and_then(|a| a.voxel_sections)
+        else {
+            return;
+        };
+        let state = key(t, "VoxelIndex");
+        // spec: S-0317 Import mapping (VoxelIndex absent 0)
+        let at = int_of(state).unwrap_or(0);
+        if usize::try_from(at).is_ok_and(|s| s < n) {
+            return;
+        }
+        // spec: S-0317 claim 23 (a section index outside the model's sections is a departure: our engine draws nothing for such a piece, and the importer warns)
+        self.warn_at(state, format!(
+            "voxel animation {}: VoxelIndex {at} is outside its model's {n} sections; the original's result is undefined, our engine draws nothing for it (S-0317 claim 23, a departure)",
+            show(&t.name),
+        ));
     }
 
     /// The importer warnings of one piece type (S-0317 claims 12 and 16,
@@ -145,6 +171,12 @@ impl Builder<'_> {
             spans.push(("vertical", "MaxZVel", sz));
         }
         spans.push(("spin", "MaxAngularVelocity", sa));
+        // spec: S-0317 claim 18 and Constants (a horizontal limit M of 256 or more can move a piece more than one cell; the importer warns)
+        if big_m.ge(F64::from_i64(256, m)) {
+            self.warn_at(key(t, "MaxXYVel"), format!(
+                "voxel animation {name}: MaxXYVel 256 or more can move a piece more than one cell in a turn; the original's cliff face is then undefined, our engine turns it as for the step the signs give (S-0317 claim 18, a departure)"
+            ));
+        }
         for (what, k, s) in spans {
             if !in_range(s) {
                 // spec: S-0317 Terms (the importer warns for a type whose fields make a conversion of this spec out of range, S-0205)
