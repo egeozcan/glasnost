@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 76
+revision: 80
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-28
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870, Q-1990]
 supersedes: []
 ---
 
@@ -26,7 +26,10 @@ themselves (stages, bales, growth) are S-0401's. This spec covers skirmish only;
 games and campaigns are out of scope. It answers Q-1870 in part: that a harvester left on a docking cell by a failed
 departure stays there, except a chrono miner (claim 3a), and what a second harvester does at
 that occupied docking cell (claim 10a). Whether the path computation gives up (the request's
-first question) is S-0212's.
+first question) is S-0212's. It answers Q-1990: a slave miner in *guard* that rests far from
+any field and not on tiberium land wakes by itself only for a computer-controlled owner, and
+our AI gets that behaviour by ordering the miner to harvest (claim 14). The separate area-guard
+effect of claim 14 wakes a resting group in *area guard* whatever the owner.
 
 ## Terms
 
@@ -961,11 +964,45 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
       Here *k* is the kick delay in ticks, *s*<sub>m</sub> is the current behaviour's start tick,
       *s*<sub>g</sub> is the group's last-rest tick, and *t* is the tick number. “Group at rest”
-      means no slave has been sent out since the group last came together. The original's
-      computer-controlled condition does not apply to player houses in our engine; it may apply
-      to the neutral and special houses. The initial value of *s*<sub>g</sub> is 0 ticks,
-      not the miner's creation tick (claim 21). The short-scan test is the ring search from the
-      miner with the slave-miner short scan range.
+      means no slave has been sent out since the group last came together. The initial value
+      of *s*<sub>g</sub> is 0 ticks, not the miner's creation tick (claim 21). The short-scan
+      test is the ring search from the miner with the slave-miner short scan range.
+
+      **Who takes the owner alternative (Q-1990).** In the original, an owner counts as
+      computer-controlled when its house is not played by a person: every computer player of a
+      skirmish, and, by the same rule, the neutral and special houses (`unmeasured`, low: no
+      scenario here places a slave miner of those houses). For such an owner the wake needs only the
+      kick test on *s*<sub>m</sub> and a group at rest: no rest-tick test, no scan and no land
+      test. While the miner stays in the same *guard*, every later processing of *guard* that
+      finds the group at rest wakes it again, so a computer player's miner far from any field
+      wakes, seeks a field with the long scan and moves to a site (claim 22). A person's miner
+      that rests away from tiberium land with no cell in its short scan never wakes through this
+      rule and does not move without an order. Nothing else wakes it in *guard*: claim 13's
+      guard rows do not apply to it (below), and the separate area-guard effect below needs
+      *area guard*, which an idle miner without a destination does not get (claim 22).
+
+      **Claim 13's guard rows and the slave miner.** At a processing of *guard*, this wake-up
+      rule is tested first, and when it wakes the slaves the processing ends there. Claim 13's
+      guard rows are tested only after a processing that did not wake, and only for a type with
+      the harvester or the weeder flag (Terms): a slave miner is a type with an enslaves field
+      and the two resource fields (Import mapping), and the harvester flag is a separate field.
+      So for a slave miner whose type has neither flag, no row of claim 13 applies, for either
+      owner: a computer-controlled owner's processing that does not wake the slaves queues
+      nothing under claim 13, so claim 13 leaves its *guard* and *s*<sub>m</sub> as they were
+      until the wake. A type that
+      has both an enslaves field and the harvester flag gets claim 13's rows after each
+      processing that did not wake, so for a computer-controlled owner with a dock-type refinery
+      and an unset no-field record such a processing queues *harvest* (claim 13, row 2), and
+      claim 22 then applies to that *harvest*.
+
+      In our engine the owner alternative applies to units of the neutral and special houses
+      and of a test-only computer-controlled player house. An AI house takes the
+      human-controlled alternatives (glossary, *AI house*): the miner on tiberium land, or the
+      rest-tick test with the short scan. So in a normal game no player house's idle
+      miner wakes far from a field. DECIDED (autonomy, 2026-10-28): our AI reproduces the
+      original computer player's behaviour with an ordinary order, a harvest order on a field
+      cell, which finds a site, travels and deploys under claim 22. The person's miner keeps
+      the original's behaviour.
 
       The sums are signed 32-bit integers that wrap around (Formulas F5): with a very large kick
       delay, such as the absent-key default 2147483647, any start tick of 1 or more makes the sum
@@ -1004,12 +1041,22 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       supported harvest-order and automatic-deploy outcomes. Claim 24 fixes site selection, and
       claim 25 gives relocation-failure inputs and the immediate post-pack-up destination.
     - Backing: `measurable` (scenario H7; its variant b for the kick wrap and its switch, variant e
-      for the group's rest tick, variant f for the deployed miner and the slaves' health, and
+      for the group's rest tick, variant f for the deployed miner and the slaves' health,
+      variants d and g for a person's and a computer player's miner far from a field, part g
+      also for claim 13's rows not applying to a miner type with neither flag, and
       S-0215 scenario B31 for the separate area-guard effect; S-0616 claim 1, scenario P20
-      for refinery smoke)
-    - Confidence: high for the smoke events; medium for the slave cycle and the wake-up rule.
-      Low for the miner's own
-      movement
+      for refinery smoke). `unmeasured` for the owner alternative of the neutral and special
+      houses: no scenario here gives a slave miner to those houses. `unmeasured` for a type with
+      both an enslaves field and the harvester flag: no scenario here uses such a type, and what
+      follows the queued *harvest* rests on claim 22's path for that type
+    - Confidence: high for the smoke events. Medium for the slave cycle and the wake-up rule,
+      including the owner alternative for a skirmish computer player, until H7 parts (d) and
+      (g) run. Low for the owner alternative of the neutral
+      and special houses (`unmeasured`, above). Low for the miner's own movement. Medium, as
+      for the wake-up rule until H7 (g) runs, that the wake-up rule is tested first and that
+      claim 13's rows do not apply to a slave miner type with neither the harvester nor the
+      weeder flag. Medium for a type with both an enslaves field and the harvester flag
+      (`unmeasured`, above)
 
 15. **Loads of several tiberiums.** A harvester may carry bales of several tiberiums; each is
     paid separately (claim 11). Only the tiberiums with registration indices 0 to 3 can be held. In the
@@ -2136,7 +2183,7 @@ select which harvester takes the earlier turn.
 | User data | Feeds | Form | Absent |
 |---|---|---|---|
 | No data key | seeking tests the order-level destination, not the locomotor point; final-track arrival adds no processing or timer reset (claim 3b, F1a) | fixed behaviour; seeking's standard delay and its rate/default are imported by S-0215 claim 6; load timing inputs remain claim 5's | fixed |
-| Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a) | boolean | no |
+| Rules, vehicle type section, `Harvester` | harvester (Terms); eligibility for the vehicle harvesting sprite (claim 5a); whether claim 13's guard rows apply to a slave miner (claim 14) | boolean | no |
 | Fixed harvesting asset | vehicle harvesting sprite of claim 5a; loaded as a fixed engine asset, not by a rules or art animation name | sprite file; ordinary asset precedence of S-0005 claim 1 | no alternate harvesting asset is selected |
 | No data key | harvesting-display phase and movement gates, frame selection, 15-tick stationary repetition and 30-lepton anchor displacement (claim 5a, F8) | engine behaviour and constants; ground movement gate uses S-0207 claim 2's integer step, whose speed and acceleration inputs and absent-key defaults are imported by S-0207; no separate display-speed threshold or per-type or per-resource animation setting | fixed |
 | Rules, `[AudioVisual]`, `ExtraUnitLight` | harvesting sprite uses the same extra brightness as its vehicle (claim 5a) | decimal converted to integer per-mille; S-0104 claim 13 owns the vehicle light rule and its cell/bridge inputs | 0 per-mille |
@@ -2191,7 +2238,9 @@ All scenarios run under the measurement setup on purpose-made skirmish maps with
 one bystander computer player. Each scenario's observed area is the region that holds its test
 objects (the field, the refineries and the harvesters of the part); the bystander is kept away from
 it, and the void rule of the glossary applies. H5 part C and H6 part c use the bystander's own
-objects, which the void rule exempts there. Named test data is the map's override sections; values
+objects, which the void rule exempts there, and H7 part (g) uses the bystander's slave miner
+and its slaves, which the void rule exempts in that part only. Named test data is the map's
+override sections; values
 are invented. Tick
 numbers, behaviours and phases, loads (pips, or a recorder that reads them), cell stages, the balance
 and the scenario stream's draw count come from a recorder (a read-only memory recorder, glossary
@@ -2568,6 +2617,31 @@ with no engine add-on and no mods (the named test files of a scenario and the pu
   cell. Damage an outside slave without killing it before delivery. At the first group
   update after its reload delay expires, expect full strength, not its delivery health.
   A different health or restoration between group updates falsifies that part of claim 14.
+  (g) Q-1990: a skirmish with one bystander computer player. Place a slave miner of the person
+  and one of the computer player, each with no destination, kick delay 300, on a clear non-ore
+  area more than the short scan from every field and within the long scan of one ore field.
+  The person's miner is given a stop order at tick 100, as in the main run. The computer
+  player's miner gets no human stop order (S-0213 claim 3 does not let one take effect, as in
+  H5 part C): the map pre-places it in *guard* with no destination, and the recorder logs the
+  start tick of that *guard* as its *s*<sub>m</sub> (S-0215, claim 3). Record each group's
+  first wake, the slaves' first emergence tick and the miner's first move tick, for 3000
+  ticks, and log the computer player's behaviour changes and destinations for its miner
+  separately. Expected: the computer player's group wakes at the first processing of *guard*
+  with *t* > 300 + *s*<sub>m</sub>, with the miner still in the *guard* that started at
+  *s*<sub>m</sub>, and its miner then moves towards a site near the field. The person's miner
+  and slaves stay put for the whole run, as in part (d). Falsified if the computer player's
+  group wakes at or before 300 + *s*<sub>m</sub>, or stays at rest past the first qualifying
+  processing with no behaviour change, or if the person's group wakes. A wake counts for this
+  rule only when no behaviour change or destination of the computer player's own came first.
+  Independent computer intervention makes the affected interval inconclusive (as in H5 part
+  D). The miner type used has neither the harvester nor the weeder flag (check the data; a type
+  with either is the other case of claim 14 and does not test this part). Claim 13's rows then
+  do not apply, so before the wake the recorder shows no *harvest* queued for the computer
+  player's miner and no new *guard* start, and *s*<sub>m</sub> stays at its logged value. A
+  *harvest* queued in that interval with no order of the computer player's own falsifies
+  that part of claim 14. The void rule exempts the computer player's slave miner and its slaves
+  in this part and applies to the bystander's other objects. The person's run uses part (d)'s
+  expectation, and only the computer player's run tests the owner alternative.
 - *Runs:* 3 for the main run, 1 for each variant.
 
 **H8. Chrono miner (claim 17).**
@@ -3432,6 +3506,13 @@ is wrong). *Runs:* 3.
   still tethered (claim 11). A contact still held after the first processing by a unit that is
   not tethered does not hold up the release. A tethered unit holds up only the releases and the
   build-down, not the end of its contact.
+- **S-0215 claim 24, the vehicle table's backing and the player houses.** Its backing names
+  S-0402 scenario H7 "variants b to e" for row 1. Add variants (d) and (g): (d) for a person's
+  miner far from a field, (g) for a computer player's and for claim 13's rows not applying to a
+  slave miner type with neither the harvester nor the weeder flag (claim 14). Its sentence
+  "since no player house is computer-controlled" holds except for the test-only
+  computer-controlled player house (glossary), which takes row 2's case and the owner
+  alternative of claim 14, like the neutral and special houses.
 
 ## Questions for the project lead
 
