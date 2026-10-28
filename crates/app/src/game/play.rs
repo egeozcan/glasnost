@@ -89,6 +89,9 @@ pub enum Button {
     Right,
 }
 
+/// The number of control groups (S-0111 claim 17: groups 0 to 9).
+pub const GROUPS: usize = 10; // spec: S-0111 claim 17 (the local player's ten control groups)
+
 /// The local player's game.
 pub struct Play {
     /// The game.
@@ -97,6 +100,11 @@ pub struct Play {
     pub local: HouseId,
     /// The selection, in selection order.
     pub selection: Vec<ObjectId>,
+    /// The local player's ten control groups, 0 to 9 (S-0111 claim 17
+    /// draws their numbers), each in the order its objects joined. Our
+    /// own keys make and select them (M8 A4 round 5, Q-1988); an object is
+    /// in one group at most.
+    pub groups: [Vec<ObjectId>; GROUPS],
     /// What a battlefield click does.
     pub tool: Tool,
     /// The sidebar tab asked for (S-0411 claim 2 picks the one shown).
@@ -184,6 +192,7 @@ impl Play {
             game,
             local,
             selection: Vec::new(),
+            groups: Default::default(),
             tool: Tool::Select,
             tab: 0,
             scroll: 0,
@@ -403,8 +412,11 @@ impl Play {
                 self.selection.retain(|&x| x != id);
             }
             if let Effect::Bunkered { vehicle, .. } = *e {
-                // spec: S-0606 claim 7 (the bunkered vehicle is removed from the selection; the client has no control groups yet)
+                // spec: S-0606 claim 7 (the vehicle leaves any control group it belonged to and is removed from the selection)
                 self.selection.retain(|&x| x != vehicle);
+                for g in &mut self.groups {
+                    g.retain(|&x| x != vehicle);
+                }
             }
             if let Effect::Seized { unit } = *e {
                 // spec: S-0607 claim 5 (the seized unit is deselected)
@@ -728,6 +740,98 @@ impl Play {
         // spec: S-0701 claim 17 and S-0214 claims 20 and 29 (only the earliest successful addition in candidate order speaks, not the eventual first selected object)
         self.selected.extend(first);
         false
+    }
+
+    /// Type selection (S-0214 claim 12): every object of `pool` whose
+    /// type is one of `seeds`' types joins the selection, or with `remove`
+    /// leaves it. Types are taken in the order of their first seed and,
+    /// within a type, objects in `pool`'s order (claim 29: the on-screen
+    /// candidate order, or creation order across the map); each addition
+    /// follows claim 12's front/end rule. Silent (S-0701 claim 17).
+    ///
+    /// design: a type counts only with the seed's owner, so that clicking
+    /// an own tank does not take an ally's tanks of the same type; asked
+    /// in Q-1987.
+    pub fn expand_types(&mut self, seeds: &[ObjectId], pool: &[ObjectId], remove: bool) {
+        let w = &self.game.world;
+        let local = Some(self.local);
+        let key = |id: ObjectId| w.obj(id).map(|o| (o.kind, o.type_index, o.owner));
+        let mut types = Vec::new();
+        for &id in seeds {
+            if let Some(k) = key(id)
+                && !types.contains(&k)
+            {
+                types.push(k);
+            }
+        }
+        for k in types {
+            for &id in pool {
+                if key(id) != Some(k) {
+                    continue;
+                }
+                if remove {
+                    // spec: S-0214 claim 12 (removing an object keeps the others' order)
+                    self.selection.retain(|&x| x != id);
+                } else if targeting::selectable_by(w, id, local) {
+                    // spec: S-0214 claim 12 (positive-primary-damage objects at the front, the others at the end) and claim 29 (already-selected objects are not added again or repositioned)
+                    targeting::add_to_selection(w, &mut self.selection, id);
+                }
+            }
+        }
+    }
+
+    /// Makes control group `g` of the selection's own objects (`add`
+    /// false), or adds them to it (`add` true); each leaves any other
+    /// group (our design, Q-1988).
+    pub fn group_assign(&mut self, g: usize, add: bool) {
+        let Some(_) = self.groups.get(g) else {
+            return;
+        };
+        let w = &self.game.world;
+        let own: Vec<ObjectId> = self
+            .selection
+            .iter()
+            .copied()
+            .filter(|&id| w.obj(id).is_some_and(|o| o.owner == Some(self.local)))
+            .collect();
+        if !add {
+            self.groups[g].clear();
+        }
+        for (i, group) in self.groups.iter_mut().enumerate() {
+            if i != g {
+                group.retain(|id| !own.contains(id));
+            }
+        }
+        for id in own {
+            if !self.groups[g].contains(&id) {
+                self.groups[g].push(id);
+            }
+        }
+    }
+
+    /// Selects control group `g`: its own objects that can still be
+    /// selected replace the selection, each added by S-0214 claim 12's
+    /// rule, and the first to join speaks (S-0701 claim 17). Returns the
+    /// selection's first object; an empty group leaves the selection.
+    pub fn group_recall(&mut self, g: usize) -> Option<ObjectId> {
+        let w = &self.game.world;
+        let local = self.local;
+        let group = self.groups.get_mut(g)?;
+        group.retain(|&id| w.obj(id).is_some_and(|o| o.owner == Some(local)));
+        let members: Vec<ObjectId> = group
+            .iter()
+            .copied()
+            .filter(|&id| targeting::selectable_by(w, id, Some(local)))
+            .collect();
+        let &first = members.first()?;
+        self.selection.clear();
+        for id in members {
+            // spec: S-0214 claim 12 (the selection order of an addition)
+            targeting::add_to_selection(w, &mut self.selection, id);
+        }
+        // spec: S-0701 claim 17 (the first object the input selects speaks)
+        self.selected.push(first);
+        self.selection.first().copied()
     }
 
     /// A key command for the selection (S-0213 table T2).

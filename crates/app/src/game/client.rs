@@ -860,6 +860,14 @@ impl Client {
         if down {
             self.gesture();
         }
+        // The type-select role ends when its key comes up, wherever the
+        // focus is (S-0214 claim 12: held).
+        if !down
+            && bound_with(&self.settings.bindings, k) == Some(Bound::TypeSelect)
+            && let Some(s) = self.session.as_mut()
+        {
+            s.type_select_key(false);
+        }
         // Enter presses the open options menu's focused control, or places
         // at the keyboard cell, before it opens a network game's chat.
         if down
@@ -931,6 +939,15 @@ impl Client {
                 s.save_path_report(self.save_path_report);
             }
             Some(Bound::Mark) => s.mark(),
+            Some(Bound::TypeSelect) => s.type_select_key(true),
+            None => {
+                // Our control-group keys (Q-1988): a digit no binding takes.
+                if let Key::Char(c) = k
+                    && let Some(g) = c.to_digit(10)
+                {
+                    s.group_key(g as usize, self.mods);
+                }
+            }
             _ => {}
         }
     }
@@ -1077,6 +1094,10 @@ impl Client {
         self.focused = on;
         if !on {
             self.held = [false; 4];
+            // The key-up of a held type-select key may not come back.
+            if let Some(s) = self.session.as_mut() {
+                s.type_select_key(false);
+            }
         }
     }
 
@@ -1371,6 +1392,8 @@ pub enum Bound {
     PathReport,
     /// Mark the moment for the pathing report (M8 A4).
     Mark,
+    /// The type-select role (S-0214 claim 12), held or pressed.
+    TypeSelect,
 }
 
 /// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
@@ -1391,6 +1414,7 @@ pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
             Action::Cheer => Bound::Cheer,
             Action::PathReport => Bound::PathReport,
             Action::Mark => Bound::Mark,
+            Action::TypeSelect => Bound::TypeSelect,
         });
     }
     match k {

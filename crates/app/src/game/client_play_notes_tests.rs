@@ -7,10 +7,14 @@
 
 use std::sync::Arc;
 
-use super::access_tests::{client, session_mut, start_by_keyboard, start_by_keyboard_with};
+use super::access_tests::{
+    client, key, own, session, session_mut, start_by_keyboard, start_by_keyboard_with,
+};
 use super::*;
 use glasnost_ai::fixture;
-use glasnost_sim::rules::SimRules;
+use glasnost_map::CellXY;
+use glasnost_sim::rules::{Kind, SimRules};
+use glasnost_sim::world::ObjectId;
 use glasnost_ui::hud;
 
 /// The fixture's rules with its superweapon showing a countdown.
@@ -146,4 +150,144 @@ fn an_armed_superweapon_offers_its_aim_image() {
         Aim::NoForceShield
     };
     assert_eq!(s.offer(p).map(|o| o.0), Some(Offer::Aim(want)));
+}
+
+/// Two GUNR of the local house beside its base unit and one far off the
+/// screen, then a tick and a frame.
+fn three_gunrs(c: &mut Client) -> [ObjectId; 3] {
+    let base = *own(c, Kind::Vehicle).first().expect("a base unit");
+    let s = session_mut(c);
+    let local = s.play.local;
+    let w = &mut s.play.game.world;
+    let at = w.obj(base).unwrap().pos.cell();
+    let far = if at.x < fixture::SIZE { 30 } else { -30 };
+    let t = w
+        .rules()
+        .index_of(Kind::Vehicle, "GUNR")
+        .expect("fixture type");
+    let ids = [(2, 3), (3, 3), (far, 0)].map(|(dx, dy)| {
+        let id = glasnost_sim::objects::create(w, Kind::Vehicle, t, Some(local));
+        let cell = CellXY::new(at.x + dx, at.y + dy);
+        let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
+        glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::centre(cell, z), 0);
+        id
+    });
+    session_mut(c).step();
+    let _ = c.frame();
+    ids
+}
+
+fn sorted(mut v: Vec<ObjectId>) -> Vec<ObjectId> {
+    v.sort();
+    v
+}
+
+/// A press of the type-select key selects the selection's type on the
+/// screen, and a second press at most 500 ms after the one before across
+/// the map (note 31). The bare session imports no art, so it draws no
+/// mobile object and its screen holds no candidate: a press on the screen
+/// adds nothing here (the local lane shows it on the real data), the
+/// map-wide press adds the type wherever it is.
+#[test]
+fn the_type_select_key_widens_to_the_map_on_a_quick_second_press() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let [a, b, far] = three_gunrs(&mut c);
+    session_mut(&mut c).play.selection = vec![a];
+    let press = |c: &mut Client, at: i64| {
+        session_mut(c).clock_ms = at;
+        key(c, Key::Char('t'));
+        sorted(session(c).play.selection.clone())
+    };
+    // spec: S-0214 claim 12 (on the screen only; Q-1987: a press alone acts, scenario T2)
+    assert_eq!(press(&mut c, 1000), vec![a]);
+    // spec: S-0214 Constants (501 ms after the press before is too late for the double press)
+    assert_eq!(press(&mut c, 1501), vec![a]);
+    // spec: S-0214 claim 12 and Constants (500 ms, inclusive, widens it to the whole map)
+    let wide = press(&mut c, 2001);
+    assert!([a, b, far].iter().all(|id| wide.contains(id)), "{wide:?}");
+    // Every own GUNR, the fixture's own ones too, and nothing else.
+    let w = session(&c).play.world();
+    let ty = w.obj(a).unwrap().type_index;
+    let gunrs: Vec<ObjectId> = own(&c, Kind::Vehicle)
+        .into_iter()
+        .filter(|&id| w.obj(id).unwrap().type_index == ty)
+        .collect();
+    assert_eq!(wide, sorted(gunrs));
+    assert!(!session(&c).type_select_held(), "released");
+}
+
+/// The type-select key is held from its press to its release, and losing
+/// the window's focus lets go of it, since its release may not come back;
+/// a key that is not the binding does not hold it (note 31).
+#[test]
+fn the_type_select_key_is_held_until_released_or_the_focus_goes() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    // spec: S-0214 Terms (the type-select role's key is the player's binding; ours defaults to T)
+    c.key(Key::Char('t'), true);
+    assert!(session(&c).type_select_held());
+    c.key(Key::Char('y'), false);
+    assert!(session(&c).type_select_held(), "another key's release");
+    c.key(Key::Char('t'), false);
+    assert!(!session(&c).type_select_held());
+    c.key(Key::Char('t'), true);
+    c.focus(false);
+    assert!(!session(&c).type_select_held());
+    c.focus(true);
+    // Rebound to K, T is no longer the role's key.
+    let k = Action::TypeSelect;
+    c.settings.bindings.rebind(k, 'k').expect("K is free");
+    c.key(Key::Char('t'), true);
+    assert!(!session(&c).type_select_held());
+    c.key(Key::Char('t'), false);
+    c.key(Key::Char('k'), true);
+    assert!(session(&c).type_select_held());
+    c.key(Key::Char('k'), false);
+    assert!(!session(&c).type_select_held());
+}
+
+/// The control-group keys: Ctrl+digit makes a group, Shift+digit adds to
+/// it, the digit selects it, and a second press within the interval goes
+/// to it (note 31, our design, Q-1988).
+#[test]
+fn control_group_keys_make_select_and_go_to_a_group() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let [a, b, far] = three_gunrs(&mut c);
+    let with = |c: &mut Client, mods: Modifiers, d: char| {
+        c.modifiers(mods);
+        key(c, Key::Char(d));
+        c.modifiers(Modifiers::default());
+    };
+    let ctrl = Modifiers {
+        force_fire: true,
+        ..Modifiers::default()
+    };
+    let shift = Modifiers {
+        force_select: true,
+        ..Modifiers::default()
+    };
+    session_mut(&mut c).play.selection = vec![a, b];
+    with(&mut c, ctrl, '3');
+    session_mut(&mut c).play.selection = vec![far];
+    with(&mut c, shift, '3');
+    assert_eq!(session(&c).play.groups[3], vec![a, b, far]);
+    session_mut(&mut c).play.selection.clear();
+    let start = (session(&c).centre().0 + 300, session(&c).centre().1);
+    session_mut(&mut c).set_centre(start);
+    let start = session(&c).centre();
+    session_mut(&mut c).clock_ms = 5000;
+    with(&mut c, Modifiers::default(), '3');
+    assert_eq!(
+        sorted(session(&c).play.selection.clone()),
+        sorted(vec![a, b, far])
+    );
+    assert_eq!(session(&c).centre(), start, "one press only selects");
+    session_mut(&mut c).clock_ms = 5000 + crate::game::session::GROUP_DOUBLE_MS;
+    with(&mut c, Modifiers::default(), '3');
+    assert_ne!(session(&c).centre(), start, "the second press goes to it");
+    // Another group's digit with nothing in it keeps the selection.
+    with(&mut c, Modifiers::default(), '4');
+    assert_eq!(session(&c).play.selection.len(), 3);
 }

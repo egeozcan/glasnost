@@ -18,7 +18,8 @@ pub const VERSION: u32 = 1;
 // nocite: our own client setting (storage name)
 pub const WEB_KEY: &str = "glasnost.settings";
 
-/// A bindable command key (S-0213 table T2 without route mode).
+/// A bindable command key (S-0213 table T2 without route mode), or the
+/// key that plays S-0214's type-select role.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     /// Stop.
@@ -31,6 +32,9 @@ pub enum Action {
     Deploy,
     /// Cheer.
     Cheer,
+    /// The type-select role (S-0214 Terms and claim 12): held during a
+    /// selecting click, or pressed.
+    TypeSelect,
     /// Save a pathing report (M8 A4, our own diagnostics).
     PathReport,
     /// Mark the moment in the pathing report's window (M8 A4).
@@ -38,12 +42,13 @@ pub enum Action {
 }
 
 /// Every bindable action, in the order the screen lists them.
-pub const ACTIONS: [Action; 7] = [
+pub const ACTIONS: [Action; 8] = [
     Action::Stop,
     Action::Scatter,
     Action::Guard,
     Action::Deploy,
     Action::Cheer,
+    Action::TypeSelect,
     Action::PathReport,
     Action::Mark,
 ];
@@ -57,6 +62,7 @@ impl Action {
             Action::Guard => "guard",
             Action::Deploy => "deploy",
             Action::Cheer => "cheer",
+            Action::TypeSelect => "typeselect",
             Action::PathReport => "report",
             Action::Mark => "mark",
         }
@@ -75,12 +81,13 @@ pub const FIXED_KEYS: [(&str, &str); 2] = [
     ("Scroll the view", "Arrow keys"),
 ];
 
-/// Our own keyboard-only keys (M8 step C3), for the screen to list. None is
-/// a letter or a digit, so no rebinding of a command key can take one, and
-/// none is Escape or a plain arrow in running play (S-0213 claims 22 and
-/// 23 keep their meaning there).
-// nocite: our own client setting (keyboard-only play of the menus and the sidebar)
-pub const KEYBOARD_KEYS: [(&str, &str); 9] = [
+/// Our own keyboard-only keys (M8 step C3) and control-group keys (M8 A4
+/// round 5), for the screen to list. None but the group digits is a
+/// letter or a digit, and a digit bound to a command key keeps the
+/// command (the group keys give way); none is Escape or a plain arrow in
+/// running play (S-0213 claims 22 and 23 keep their meaning there).
+// nocite: our own client setting (keyboard-only play of the menus and the sidebar; control groups)
+pub const KEYBOARD_KEYS: [(&str, &str); 12] = [
     ("Next, previous control", "Tab, Shift+Tab"),
     ("Move in menus", "Up, Down"),
     ("Change a value", "Left, Right"),
@@ -90,12 +97,15 @@ pub const KEYBOARD_KEYS: [(&str, &str); 9] = [
     ("Hold, cancel (sidebar)", "Backspace"),
     ("Sidebar tab", "Page Up, Page Down"),
     ("Placement cell; place", "Ctrl+arrows; Enter"),
+    ("Make a control group", "Ctrl+0 to Ctrl+9"),
+    ("Add to a control group", "Shift+0 to Shift+9"),
+    ("Select a group; twice: go to it", "0 to 9"),
 ];
 
 /// The key bindings of the command keys. Keys are lower-case letters or
 /// digits, and no two actions share one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bindings([char; 7]);
+pub struct Bindings([char; 8]);
 
 /// Why a key could not be bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,8 +119,8 @@ pub enum BindError {
 impl Default for Bindings {
     fn default() -> Self {
         // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer)
-        // nocite: our own client setting (P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22, Z included)
-        Self(['s', 'x', 'g', 'd', 'c', 'p', 'm'])
+        // nocite: our own client setting (T plays S-0214's type-select role, whose key is the player's binding; P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22, Z included)
+        Self(['s', 'x', 'g', 'd', 'c', 't', 'p', 'm'])
     }
 }
 
@@ -363,11 +373,12 @@ impl Settings {
         for &(a, c) in &taken {
             keys.0[a.index()] = c;
         }
-        // A pathing-report key the file leaves out (a file written before
-        // M8 A4) keeps its default unless the file gives that key to
-        // another action; it then takes the first letter or digit free.
-        // The command keys of S-0213 table T2 are left as they were.
-        for a in [Action::PathReport, Action::Mark] {
+        // A type-select or pathing-report key the file leaves out (a file
+        // written before M8 A4) keeps its default unless the file gives
+        // that key to another action; it then takes the first letter or
+        // digit free. The command keys of S-0213 table T2 are left as they
+        // were.
+        for a in [Action::TypeSelect, Action::PathReport, Action::Mark] {
             if taken.iter().any(|(t, _)| *t == a) {
                 continue;
             }

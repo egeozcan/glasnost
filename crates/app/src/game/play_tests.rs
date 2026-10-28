@@ -1143,3 +1143,95 @@ fn a_click_finds_an_enemy_disguised_as_scenery_but_not_a_cloaked_one() {
     p.game.world.obj_mut(e).unwrap().cloak.state = CloakState::Cloaked;
     assert_eq!(p.target(Some(e), cell), ClickOn::Cell(cell), "cloaked");
 }
+
+/// A GUNR of the other player's house beside the local base unit.
+fn their_gunr(p: &mut Play) -> ObjectId {
+    let other = others(p)
+        .into_iter()
+        .find_map(|id| p.world().obj(id).and_then(|o| o.owner))
+        .expect("another house's object");
+    let base = own(p, Kind::Vehicle)[0];
+    let w = &mut p.game.world;
+    let at = w.obj(base).unwrap().pos.cell();
+    let t = w
+        .rules()
+        .index_of(Kind::Vehicle, "GUNR")
+        .expect("fixture type");
+    let id = glasnost_sim::objects::create(w, Kind::Vehicle, t, Some(other));
+    let c = CellXY::new(at.x + 2, at.y + 5);
+    let z = w.surface_at(256 * c.x + 128, 256 * c.y + 128);
+    glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::centre(c, z), 0);
+    id
+}
+
+/// spec: S-0214 claim 12 (type selection adds every object of the clicked object's type through the front/end rule, or removes them) and claim 29 (types in first-encounter order, within a type the pool's order, already-selected objects not added again)
+#[test]
+fn type_expansion_takes_the_seed_types_from_the_pool() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let (g1, n1, g2, n2) = (m[1], m[2], m[3], m[4]);
+    let theirs = their_gunr(&mut p);
+    let mut pool = m.clone();
+    pool.push(theirs);
+    p.selection = vec![g1];
+    p.expand_types(&[g1], &pool, false);
+    assert_eq!(p.selection, claim_12_order(&p, &[g1, g2]));
+    // design: the same type of another house is not taken (Q-1987)
+    assert!(!p.selection.contains(&theirs));
+    // Two types come in seed order; the pool decides the order within one.
+    p.selection = vec![n2];
+    p.expand_types(&[n2, g2], &[n2, n1, g2, g1], false);
+    assert_eq!(p.selection, claim_12_order(&p, &[n2, n1, g2, g1]));
+    // A pool without the other GUNR leaves it out (the screen's pool).
+    p.selection = vec![g1];
+    p.expand_types(&[g1], &[g1, n1], false);
+    assert_eq!(p.selection, vec![g1]);
+    // Removing takes the type out and keeps the rest's order.
+    p.selection = vec![g2, g1, n1, n2];
+    p.expand_types(&[g1], &pool, true);
+    assert_eq!(p.selection, vec![n1, n2]);
+}
+
+/// Our control groups (Q-1988): making a group, adding to it, selecting
+/// it, an object in one group at most, and an object lost to the house
+/// leaving it.
+#[test]
+fn control_groups_make_add_and_select() {
+    let mut p = start();
+    let m = mixed_mobiles(&mut p);
+    let theirs = their_gunr(&mut p);
+    p.selection = vec![m[1], m[2], theirs];
+    p.group_assign(1, false);
+    // design: only own objects join a group
+    assert_eq!(p.groups[1], vec![m[1], m[2]]);
+    p.selection = vec![m[3]];
+    p.group_assign(1, true);
+    assert_eq!(p.groups[1], vec![m[1], m[2], m[3]]);
+    // Making group 2 of one of them takes it out of group 1.
+    p.selection = vec![m[2]];
+    p.group_assign(2, false);
+    assert_eq!(p.groups[1], vec![m[1], m[3]]);
+    assert_eq!(p.groups[2], vec![m[2]]);
+    // Selecting group 1 replaces the selection, by claim 12's rule, and
+    // the first member speaks.
+    p.selection = vec![m[4]];
+    p.selected.clear();
+    let first = p.group_recall(1);
+    // spec: S-0214 claim 12 (the selection order of an addition) and S-0701 claim 17 (one response)
+    assert_eq!(p.selection, claim_12_order(&p, &[m[1], m[3]]));
+    assert_eq!(first, p.selection.first().copied());
+    assert_eq!(p.selected, vec![m[1]]);
+    // An empty group leaves the selection as it was.
+    assert_eq!(p.group_recall(5), None);
+    assert_eq!(p.selection, claim_12_order(&p, &[m[1], m[3]]));
+    // A member given to another house leaves the group.
+    let other = p.world().obj(theirs).unwrap().owner;
+    p.game.world.obj_mut(m[1]).unwrap().owner = other;
+    p.group_recall(1);
+    assert_eq!(p.groups[1], vec![m[3]]);
+    assert_eq!(p.selection, vec![m[3]]);
+    // Making a group of an empty selection empties it.
+    p.selection.clear();
+    p.group_assign(1, false);
+    assert!(p.groups[1].is_empty());
+}
