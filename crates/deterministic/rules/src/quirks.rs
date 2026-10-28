@@ -656,6 +656,18 @@ pub struct Quirks {
     // spec: S-0319 claim 7, Edge cases
     #[serde(default = "on")]
     pub bouncing_anim_water_impact_hits: bool,
+    /// A deck contact rebounds off the ground cell's slope under the deck, and the north-west cliff turn gives (c e, e u_x, e u_y); off: a deck contact rebounds by the flat rule and the north-west case turns across the second axis.
+    // spec: S-0319 claim 7, F6, F7, Edge cases
+    #[serde(default = "on")]
+    pub bouncing_anim_rebound_faults: bool,
+    /// The impact hits go through the cell's listing as it changes; off: through the objects listed when the hits begin.
+    // spec: S-0319 claim 7, Edge cases
+    #[serde(default = "on")]
+    pub bouncing_anim_impact_hits_walk: bool,
+    /// A bouncing animation's new resource cell joins neither of S-0401's lists; off: it is offered to its tiberium's growth list.
+    // spec: S-0319 claim 10, Edge cases
+    #[serde(default = "on")]
+    pub anim_resource_no_growth_entry: bool,
     /// Tracked flying objects are considered only by a detonation above the terrain at the centre of its cell.
     // spec: S-0303 claim 6
     #[serde(default = "on")]
@@ -2172,6 +2184,9 @@ impl Default for Quirks {
             anim_resource_spread_neighbours_only: true,
             bouncing_anim_deep_landing: true,
             bouncing_anim_water_impact_hits: true,
+            bouncing_anim_rebound_faults: true,
+            bouncing_anim_impact_hits_walk: true,
+            anim_resource_no_growth_entry: true,
             ground_detonation_misses_aircraft: true,
             flying_search_sectors: true,
             flying_candidates_unfiltered: true,
@@ -2907,6 +2922,18 @@ impl Quirks {
             (
                 "bouncing_anim_water_impact_hits",
                 self.bouncing_anim_water_impact_hits,
+            ),
+            (
+                "bouncing_anim_rebound_faults",
+                self.bouncing_anim_rebound_faults,
+            ),
+            (
+                "bouncing_anim_impact_hits_walk",
+                self.bouncing_anim_impact_hits_walk,
+            ),
+            (
+                "anim_resource_no_growth_entry",
+                self.anim_resource_no_growth_entry,
             ),
             (
                 "ground_detonation_misses_aircraft",

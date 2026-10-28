@@ -2313,15 +2313,15 @@ S-0105 r35 claims 12, 16, 31 and 43, state table S3, the turret table pairs and 
 - Seam: the derived charge index also follows the countdown in ticks without a turn. The view cannot see a turn, so this is a limit of the view, not a case the spec leaves open.
 - No new state: save format 78, AI game format 40.
 
-### Bouncing animations (M8 step A3 intake 15 part 1)
+### Bouncing animations (M8 step A3 intakes 15 part 1 and 33)
 
-S-0319 r9 (Q-1762 answered in part). The ledger, [m8-claims/intake15a-S-0319.md](m8-claims/intake15a-S-0319.md), holds the notes.
+S-0319 r9 (Q-1762 answered in part), then r26 at intake 33 (Q-1846 and Q-1847, the rest of Q-1762). The ledgers, [m8-claims/intake15a-S-0319.md](m8-claims/intake15a-S-0319.md) and [m8-claims/intake33-S-0319.md](m8-claims/intake33-S-0319.md), hold the notes.
 - A sprite animation whose type is a bouncing type at its creation carries a flight (`glasnost_sim::bounce`, `Anim::flight`). Its creation takes the three raw values of S-0202 claim 10's row and places it (F1, F2). Each turn takes the motion step first; a stopping or impact landing ends it in the same turn with its effects (claims 6 to 10). This fills A5's "bouncing motion" seam: sprite debris now ends (play notes 6, 10, 12 and 13).
 - Any animation type that names a trailer makes it on ticks divisible by its separation (claim 12), bouncing or not; 0 or absent acts as 1 and the importer warns. A zero span takes the remainder 0 and the importer warns (claim 14); the importer checks the vertical span under both settings of `quirks.anim_fixed_upper_vertical_speed`, which it cannot see.
-- All six S-0319 switches are consulted. `pieces::land_impact`'s hits are shared as `pieces::ground_hits`, unchanged.
-- **Interim rules.** **Q-1846:** every ground-layer building counts for the building band and no overlay does; the cliff turn and the flat rebound on slopes are Q-1834's; off the map is Q-1836's (ground 0, level 0, not water, no bridge, never removed). **Q-1847:** a new resource cell enters neither of S-0401's lists; a place past the overlay list places nothing, takes both draws, and bars the cell for the rest of the landing.
-- **Seams.** The start sound does not follow the flight (claim 5, presentation only). The warhead's light flash at the end is not drawn.
-- Save format 78, AI game format 40.
+- All nine S-0319 switches are consulted (three new at intake 33). `pieces::land_impact`'s hits are shared as `pieces::ground_hits`; since intake 33 it takes a `walk` flag (S-0317's pieces pass false).
+- Intake 33 (r26): the building cell, F6's sloped rebound and F7's cliff turn are S-0317's helpers (`pieces::building_cell`, `rebound`, `cliff_turn`); the cliff line is −0.0002. The impact hits walk the live listing (`quirks.bouncing_anim_impact_hits_walk`). A resource offer repeats on a cell that received nothing (a terrain object, a refused vein or end-marker placement, a place past the list) and places through `overlays::place_in_play`. Three new switches, all default on: `bouncing_anim_rebound_faults`, `bouncing_anim_impact_hits_walk`, `anim_resource_no_growth_entry`. No animation is placed at (0, 0, 0). The start sound follows the animation (audio). Importer warnings for the bound *H* ≥ 256 and for a spawn overlay type near the list's end.
+- **Seams.** A place of 255 or more within the overlay list places nothing (cells hold a one-byte overlay). The warhead's light flash at the end is not drawn.
+- Save format 78, AI game format 40 at intake 15; no new state at intake 33.
 
 ### A docked hover lost at a naval yard (M8 step A3 intake 18)
 

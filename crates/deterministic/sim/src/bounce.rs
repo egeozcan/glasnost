@@ -11,21 +11,21 @@
 //!
 //! The flight and contact rule is shared with the debris pieces of S-0317
 //! (`crate::pieces`), apart from the differences claims 6 and 7 name; each
-//! spec keeps its own switches.
+//! spec keeps its own switches. The building cell, the rebound (F6) and the
+//! cliff turn (F7) are S-0317's `pieces::building_cell`, `pieces::rebound`
+//! and `pieces::cliff_turn`; the impact hits are `pieces::ground_hits` with
+//! the listing walk of claim 7.
 //!
-//! Interims (requests): which buildings count for the building band, the
-//! turn off a cliff face, the rebound on a sloped cell, and an animation
-//! off the map (Q-1846, reusing S-0317's Q-1834 and Q-1836 interims); how a
-//! new resource cell enters the resource lists, and a spawn overlay type
-//! whose place plus the overlay draw lies past the overlay list (Q-1847).
+//! Seam: a place of 255 or more within the overlay list (claim 10) cannot
+//! be held by a cell, so it places nothing, as a place past the list.
 
-use glasnost_map::CellXY;
+use glasnost_map::{CellXY, NO_OVERLAY};
 use glasnost_num::{F32, F64, Rounding};
 use serde::{Deserialize, Serialize};
 
 use crate::combat::data::WarheadId;
-use crate::pieces::{DECK, gravity, ground, level, stopped, water};
-use crate::rules::AnimRules;
+use crate::pieces::{DECK, building_cell, gravity, ground, level, slope, stopped, water};
+use crate::rules::{AnimRules, Kind};
 use crate::world::{Layer, Pos, World};
 
 /// The raw values a bouncing animation's creation takes (claims 2 and 3).
@@ -51,8 +51,12 @@ pub struct BounceType {
     pub wxy: i32,
     /// *W*_z = trunc(*Z*ₘₐₓ − *Z*ₘᵢₙ + 1) (F1).
     pub wz: i32,
-    /// The elasticity *e* (claim 7): a single widened to a double.
+    /// The elasticity *e* as imported (claim 7), a double: F7's cliff turn
+    /// scales by it.
     pub elasticity: F64,
+    /// *ε*, the elasticity narrowed once to single precision: F6's rebound
+    /// scales by it.
+    pub epsilon: F32,
     /// The damage radius in leptons (claim 7).
     pub radius: i32,
     /// The warhead's name as given (claims 7 and 8).
@@ -116,6 +120,11 @@ impl BounceType {
             dec(&t.max_z_vel, "3.5")
         };
         let one = F64::from_i64(1, mode);
+        // spec: S-0319 Import mapping (Elasticity absent 0.8, the single-precision value widened; a floating-point field otherwise) and F7 (e as imported, not narrowed)
+        let elasticity = t.elasticity.as_ref().map_or_else(
+            || crate::gas::nearest_single("0.8").to_f64(),
+            |d| d.value(mode),
+        );
         // spec: S-0319 F1 (W_xy = trunc(2M), W_z = trunc(Z_max − Z_min + 1), formed in double precision; S-0205 claim 7's conversion)
         let wxy = m.mul(F64::from_i64(2, mode), mode).to_i32_common();
         let wz = zmax.sub(zmin, mode).add(one, mode).to_i32_common();
@@ -126,11 +135,9 @@ impl BounceType {
             zmin,
             wxy,
             wz,
-            // spec: S-0319 Import mapping (Elasticity absent 0.8, the single-precision value widened)
-            elasticity: t.elasticity.as_ref().map_or_else(
-                || crate::gas::nearest_single("0.8").to_f64(),
-                |d| d.single_value(mode).to_f32(mode).to_f64(),
-            ),
+            elasticity,
+            // spec: S-0319 F6 (ε: e narrowed once to single precision)
+            epsilon: elasticity.to_f32(mode),
             // spec: S-0319 Import mapping (DamageRadius absent 0; Warhead absent none)
             radius: t.damage_radius.unwrap_or(0),
             warhead_name: t.warhead.clone(),
@@ -223,7 +230,7 @@ pub(crate) fn create(w: &World, a: &AnimRules, raws: Raws, at: Pos) -> (Pos, Fli
                 .to_i32_common()
         };
         let start = Pos::new(back(at.x, vx), back(at.y, vy), back(at.z, vz));
-        // spec: S-0319 claim 3 (placed at its start position; its flight position starts there); a start position off the map is placed too (interim, Q-1846)
+        // spec: S-0319 claim 3 (placed at its start position; its flight position starts there) and claim 11 (with no test against the map's bounds: a start position off the legal map is placed there)
         let p = [start.x, start.y, start.z].map(|c| d(i64::from(c)).to_f32(mode));
         (start, Flight { p, v: [vx, vy, vz] })
     } else {
@@ -293,8 +300,8 @@ pub(crate) fn step(
     };
     // spec: S-0319 claim 6 (the ground and deck heights are taken at the new position, truncated toward zero)
     let new = trunc(&p);
+    // spec: S-0319 Terms and claims 6 and 11 (the cell read for a position: (trunc(x/256), trunc(y/256)); a cell that is not legal reads as the off-map cell, blank: flat, level 0, ground height 0, clear, no high-bridge mark, no building, no overlay; never removed for being there)
     let (oc, nc) = (old.cell(), new.cell());
-    // Interim (Q-1846, as S-0317's Q-1836): off the map the ground height and height level are 0, the land type is not water and there is no high bridge; the animation is not removed for being there.
     let f = ground(w, new);
     let fd = F64::from_i64(i64::from(f), mode);
     let z0f = p0[2].to_f64(); // nocite: vector and matrix dimensions (three axes)
@@ -321,11 +328,9 @@ pub(crate) fn step(
         }
         contact = Contact::Ground;
     } else if z1f.lt(F64::from_i64(i64::from(f) + 150, mode)) // spec: S-0319 claim 6 and Constants (less than 150 leptons above the ground height)
-        && w.cells
-            .occ(nc, Layer::Ground)
-            .is_some_and(|o| o.buildings > 0)
+        && building_cell(w, nc)
     {
-        // spec: S-0319 claim 6 (a building cell: the height is put at the ground height); which buildings and overlays count is interim, every ground-layer building and no overlay (Q-1846)
+        // spec: S-0319 claim 6 (a building cell, S-0317 claim 19's rule: the first building listed in the ground layer counts unless an inactive laser-fence section or a vehicle-like building; with none listed, one of S-0306's three wall overlays; the height is put at the ground height)
         p[2] = at(f);
         contact = Contact::Ground;
     }
@@ -335,32 +340,41 @@ pub(crate) fn step(
         // spec: S-0319 claim 6 (z₀: the flight position's height before the move, not the position in play's)
         let z0 = z0f;
         let one = F64::from_i64(1, mode);
-        let zero = F64::ZERO;
-        // spec: S-0319 claim 6 and Constants (the cliff test: the new cell at least 2 height levels above the old one; undone when u < 0 and z₁ > z₀, or u > 0 and z₁ > z₀ + u + 1; u = 0 meets neither)
+        // spec: S-0319 claim 6 and Constants (the cliff test: the new cell at least 2 height levels above the old one)
         let cliff = level(w, nc) >= level(w, oc) + 2;
-        if cliff
-            && ((u.lt(zero) && z1.gt(z0)) || (u.gt(zero) && z1.gt(z0.add(u, mode).add(one, mode))))
-        {
+        // spec: S-0319 claim 6 and Constants (the cliff speed line −0.0002, compared in double precision with u_z widened exactly)
+        let line = crate::rules::nearest_double("-0.0002");
+        // spec: S-0319 claim 6 (undone when u_z < −0.0002 and z₁ > z₀; for every other u_z, 0 included, when z₁ > z₀ + u_z + 1)
+        let lifted = if u.lt(line) {
+            z1.gt(z0)
+        } else {
+            z1.gt(z0.add(u, mode).add(one, mode))
+        };
+        if cliff && lifted {
             undone = true;
             // spec: S-0319 claim 6 (the flight position and the velocity become those before the move)
             p = p0;
-            v = v0;
-            // Interim (Q-1846, as S-0317's Q-1834): the turn off the cliff face reverses each horizontal component along which the cell changed.
-            if nc.x != oc.x {
-                v[0] = v[0].to_f64().negated().to_f32(mode);
-            }
-            if nc.y != oc.y {
-                v[1] = v[1].to_f64().negated().to_f32(mode);
-            }
+            // spec: S-0319 claim 7 and F7 (the velocity u of the start of the turn turned off the cliff face by S-0317 F9's table, each component scaled by e as imported in double precision and stored in single precision; the north-west turn (c, u_x, u_y) under quirks.bouncing_anim_rebound_faults, off: across the second axis; a move of more than one cell takes the step direction of the signs of the two changes, a departure)
+            v = crate::pieces::cliff_turn(
+                w,
+                v0,
+                oc,
+                nc,
+                t.bounce.elasticity,
+                q.bouncing_anim_rebound_faults,
+                mode,
+            );
         } else {
-            // spec: S-0319 claim 7 (the rebound of S-0317 claim 10: on a flat cell the vertical speed reversed); a sloped cell's rebound is interim, the flat one (Q-1846)
-            v[2] = v[2].to_f64().negated().to_f32(mode);
+            // spec: S-0319 claim 7 and F6 (reflected through the original tilt transform of the new cell's slope shape, S-0106 table C4, and scaled by ε; at a deck contact the ground cell's shape under the deck, quirks.bouncing_anim_rebound_faults; off: the identity there)
+            let shape = if contact == Contact::OnDeck && !q.bouncing_anim_rebound_faults {
+                0
+            } else {
+                slope(w, nc)
+            };
+            v = crate::pieces::rebound(&rules.gas.ramps, shape, v, t.bounce.epsilon, mode);
         }
-        // spec: S-0319 claim 7 (the whole velocity scaled by the elasticity e, each component stored in single precision)
-        v = v.map(|c| c.to_f64().mul(t.bounce.elasticity, mode).to_f32(mode));
     }
-    // spec: S-0319 claim 7 (the motion measure S of S-0317 F6 from the velocity the step has left and the height, before a meteor's addition of 1.4; stopping when S < 2.5)
-    // Interim (Q-1846): S-0317 F6 as `pieces::stopped` computes it, with or without a contact and whatever the rebounded velocity.
+    // spec: S-0319 claim 7 (the motion measure S of S-0317 F6, with or without a contact, from the velocity the step has left after the rebound or the cliff turn and the height, before a meteor's addition of 1.4; stopping when S < 2.5)
     let stop = stopped(w, &p, &v, g, mode, q.table_root_distance);
     if t.bounce.meteor {
         // spec: S-0319 claims 4 and 11 and F3 (the current type's meteor flag: v_z = RZ₂₄(w_z + g) after the tests)
@@ -382,6 +396,25 @@ pub(crate) fn step(
             on_deck: c == Contact::OnDeck && !undone,
         }),
     }
+}
+
+/// Test hook: the motion step of the bouncing animation `id` alone, as its
+/// next turn would make it (claims 4, 6 and 7), with no landing effects and
+/// no change to the world. Returns the flight and the position in play the
+/// step leaves, and the landing: `Some(true)` an impact landing,
+/// `Some(false)` a stopping one, `None` no landing.
+#[doc(hidden)]
+pub fn step_for_test(w: &World, id: crate::world::ObjectId) -> (Flight, Pos, Option<bool>) {
+    let a = &w.anims.anims[&id];
+    let rules = w.rules();
+    let t = a
+        .anim
+        .and_then(|i| rules.animations.get(i as usize))
+        .expect("a registered type");
+    let mut f = a.flight.expect("a flight");
+    let mut p = a.pos.expect("in play");
+    let landing = step(w, &mut f, &mut p, t).map(|l| matches!(l, Landing::Impact { .. }));
+    (f, p, landing)
 }
 
 /// Claim 8's water and deck-height tests at the landing point `at`.
@@ -417,8 +450,17 @@ pub(crate) fn land(w: &mut World, t: &AnimRules, at: Pos, landing: Landing) {
         } else {
             Layer::Ground
         };
-        // spec: S-0319 claim 7 (the hits of S-0317 claim 7 in the landing point's cell: |Δx| + |Δy| at most the radius, the lifted distance, no attacker, no house, defences not ignored, no no-escape marker; listing order; no skip for an object with no health left, as S-0317's reading; interim for a listing a hit changes, Q-1846)
-        crate::pieces::ground_hits(w, cell, layer, at, b.radius, damage, b.warhead);
+        // spec: S-0319 claim 7 (the hits of S-0317 claim 7 in the landing point's cell: |Δx| + |Δy| at most the radius, the lifted distance, no attacker, no house, defences not ignored, no no-escape marker; listing order; no skip for an object with no health left) and Edge cases (quirks.bouncing_anim_impact_hits_walk: the listing as it changes; off: as it stands when the hits begin)
+        crate::pieces::ground_hits(
+            w,
+            cell,
+            layer,
+            at,
+            b.radius,
+            damage,
+            b.warhead,
+            q.bouncing_anim_impact_hits_walk,
+        );
     }
     if !on_water || at_deck {
         // spec: S-0319 claim 8 and Edge cases (the area damage only when the type names an expiry animation; quirks.bouncing_anim_expiry_needs_animation off: also when its damage amount is not 0)
@@ -497,28 +539,33 @@ fn resources(w: &mut World, b: &BounceType, c: CellXY) {
     };
     if w.rules().quirks.anim_resource_spread_neighbours_only {
         // spec: S-0319 F5 and Edge cases (the pair offers the neighbour in step direction i mod 8, least non-negative residue; j does not change the cell)
-        // The pairs of one i offer one cell, which after its first offer is not germinable or has received resource and is no longer (F5), so one offer per i is the whole of its pairs; and eight successive i that take no draws cover every direction without changing the world, so the offers after them repeat theirs and change nothing.
-        // Interim (Q-1847): a cell whose offer took the draws and placed nothing (a place past the overlay list) takes no further offer in this landing.
-        let mut barred = [false; DIRECTIONS];
+        // The pairs of one i are those j with j² < (R + 1)² − i², all offering the one cell: an offer that takes no draws changes nothing, so the rest of that i's pairs take none either, and one that placed an overlay leaves the cell not germinable; one that placed nothing leaves it germinable, and the next pair offers it again (F5). Eight successive i whose offers take no draws cover every direction without changing the world, so the offers after them take none either.
         let mut idle = 0;
         let mut i = -r;
         while i <= r && idle < DIRECTIONS {
-            debug_assert!(used(i, 0));
+            let rest = (i128::from(r) + 1).pow(2) - i128::from(i).pow(2); // spec: S-0319 F5 (trunc(√(i² + j²)) ≤ R exactly when i² + j² < (R + 1)²)
+            debug_assert!(rest > 0 && used(i, 0));
+            // spec: S-0319 F5 (the used pairs of this i: |j| ≤ ⌊√((R + 1)² − i² − 1)⌋)
+            let pairs = 2 * (rest - 1).cast_unsigned().isqrt() + 1;
             let d = i.rem_euclid(DIRECTIONS as i64) as usize; // spec: S-0319 F5 (i mod 8, least non-negative residue)
             let (dx, dy) = crate::regions::STEPS[d]; // spec: S-0319 F5 (step directions 0 to 7 of S-0204)
-            let took = if barred[d] {
-                Offer::NoDraws
-            } else {
-                offer(w, spawn, CellXY::new(c.x + dx, c.y + dy))
-            };
-            match took {
-                Offer::NoDraws => idle += 1,
-                Offer::Placed => idle = 0,
-                Offer::Nothing => {
-                    barred[d] = true;
-                    idle = 0;
+            // spec: S-0319 claim 11 (the neighbour: the step added to the landing cell's coordinates; a sum naming no legal cell is the off-map cell, not germinable)
+            let n = CellXY::new(c.x.wrapping_add(dx), c.y.wrapping_add(dy));
+            let mut drew = false;
+            let mut k = 0;
+            while k < pairs {
+                match offer(w, spawn, n) {
+                    Offer::NoDraws => break,
+                    Offer::Placed => {
+                        drew = true;
+                        break;
+                    }
+                    // spec: S-0319 claim 10 and F5 (a cell that received no overlay stays germinable and takes both draws at each offer)
+                    Offer::Nothing => drew = true,
                 }
+                k += 1;
             }
+            idle = if drew { 0 } else { idle + 1 };
             i += 1;
         }
     } else {
@@ -539,38 +586,55 @@ fn resources(w: &mut World, b: &BounceType, c: CellXY) {
 }
 
 /// One offered cell of claim 10: when germinable, the overlay draw, the
-/// placement and the stage draw.
+/// placement, the growth-list offer under
+/// `quirks.anim_resource_no_growth_entry` off, and the stage draw.
 fn offer(w: &mut World, spawn: usize, c: CellXY) -> Offer {
     // spec: S-0319 claim 10 (each offered cell that is germinable, S-0401 claim 10; others take no draws)
     if !crate::econ::resource::germinable(w, c) {
         return Offer::NoDraws;
     }
-    let half = w.rules().quirks.ranged_draw_half_span;
+    let rules = w.rules_arc();
+    let half = rules.quirks.ranged_draw_half_span;
     // spec: S-0319 claim 10 and Constants (the overlay draw R(0, 3) first: that many places after the spawn overlay type)
     let k = w.rng.ranged(0, 3, half);
     let place = spawn + k as usize;
-    // Interim (Q-1847): a place past the overlay list (or past the last index a cell can hold) places nothing; the stage draw is still taken.
-    let o = u8::try_from(place)
-        .ok()
-        .filter(|&o| place < w.rules().overlays.len() && o != glasnost_map::NO_OVERLAY);
-    if let Some(o) = o {
-        // spec: S-0319 claim 10 (the overlay is placed with the effects and draws of an overlay placement, S-0202 claim 10)
-        crate::overlays::place_overlay(w, c, o);
-    }
-    // spec: S-0319 claim 10 and Constants (the stage draw R(0, 2) last)
-    let stage = w.rng.ranged(0, 2, half);
-    if o.is_some() {
-        if let Some(cell) = w.cells.grid.get_mut(c) {
-            // spec: S-0319 claim 10 (the stage it gives is the cell's stage whatever the placement set)
-            cell.overlay_data = stage as u8;
-        }
-        // spec: S-0401 claim 5 (a cell whose overlay changed has its land type worked out again; the placement recalculated it) and S-0212 claim 5 (its category recomputed)
-        crate::regions::cell_changed(w, c);
-        // Interim (Q-1847): the new resource cell is not offered to S-0401's growth or spread lists and takes no growth-list draw.
-        Offer::Placed
+    // spec: S-0319 claim 10 (a cell that holds a terrain object receives no overlay from the offer)
+    let tree = w
+        .cells
+        .list(c, Layer::Ground)
+        .iter()
+        .any(|&id| w.obj(id).is_some_and(|o| o.kind == Kind::Terrain));
+    let placed = if place >= rules.overlays.len() {
+        // spec: S-0319 claim 10 (a place past the end of the overlay list is a departure: no overlay)
+        false
+    } else if let Some(o) = u8::try_from(place).ok().filter(|&o| o != NO_OVERLAY) {
+        // spec: S-0319 claim 10 (the overlay is placed as an overlay placement of S-0202 claim 10, with its conditions, effects and draws: the vein placement test, the end markers' end row; a refused placement changes nothing and takes no placement draw)
+        !tree && crate::overlays::place_in_play(w, c, o)
     } else {
-        Offer::Nothing
+        // Seam: a cell holds an overlay by a one-byte place, 255 meaning none (glasnost_map::Cell), so a place of 255 or more within the list, an ordinary overlay by claim 10, places nothing here, as past the list.
+        false
+    };
+    if placed && !rules.quirks.anim_resource_no_growth_entry {
+        let o = w.cells.cell(c).map_or(NO_OVERLAY, |x| x.overlay);
+        // spec: S-0319 Edge cases (quirks.anim_resource_no_growth_entry off: the cell is offered to its tiberium's growth list as S-0401 claim 11 offers a new resource cell, with S-0401 claim 7's raw draw when it adds an entry, after the placement and its draws and before the stage draw; a cell whose overlay is no resource overlay is not offered and takes no draw)
+        if let Some(t) = crate::econ::resource::tiberium_of_overlay(w, o) {
+            crate::econ::resource::offer_growth(w, t, c);
+        }
     }
+    // spec: S-0319 claim 10 and Constants (the stage draw R(0, 2) last, taken whether or not an overlay was placed)
+    let stage = w.rng.ranged(0, 2, half);
+    if !placed {
+        // spec: S-0319 claim 10 (no overlay received: the stage has no visible effect, and the cell stays germinable)
+        return Offer::Nothing;
+    }
+    if let Some(cell) = w.cells.grid.get_mut(c) {
+        // spec: S-0319 claim 10 (the stage it gives is the cell's stage whatever the placement set)
+        cell.overlay_data = stage as u8;
+    }
+    // spec: S-0401 claim 5 (a cell whose overlay changed has its land type worked out again; the placement recalculated it) and S-0212 claim 5 (its category recomputed)
+    crate::regions::cell_changed(w, c);
+    // spec: S-0319 claim 10 (quirks.anim_resource_no_growth_entry: the new resource cell joins neither of S-0401's lists and takes no growth-list draw)
+    Offer::Placed
 }
 
 /// What one offer of claim 10 did.
@@ -578,9 +642,10 @@ fn offer(w: &mut World, spawn: usize, c: CellXY) -> Offer {
 enum Offer {
     /// The cell was not germinable: no draws.
     NoDraws,
-    /// The draws were taken and the overlay placed.
+    /// The draws were taken and an overlay placed.
     Placed,
-    /// The draws were taken and nothing placed (Q-1847's interim).
+    /// The draws were taken and no overlay placed: the cell stays
+    /// germinable (claim 10).
     Nothing,
 }
 

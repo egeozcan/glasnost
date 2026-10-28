@@ -55,7 +55,8 @@ cannot see the simulation's `quirks.anim_fixed_upper_vertical_speed`, so it chec
 span under both settings and says which one gives 0. That is our choice, not the spec's text.
 The splash-list warning now names S-0319 claim 8 as well.
 
-**Requests and interim rules.**
+**Requests and interim rules.** Both interims below were retired at A3 intake 33 (S-0319 r26,
+[intake33-S-0319.md](intake33-S-0319.md)).
 - **Q-1846** (S-0319's open contact and map-edge items). Every ground-layer building counts for
   the building band and no overlay does; the cliff turn reverses each horizontal component along
   which the cell changed; a sloped cell rebounds as a flat one; the stop measure is
@@ -66,7 +67,7 @@ The splash-list warning now names S-0319 claim 8 as well.
   growth-list draw. A place past the overlay list (or at or past the no-overlay index) places
   nothing; both draws are taken, and the cell takes no further offer in that landing.
 
-**Seams.**
+**Seams.** The start-sound seam was closed at A3 intake 33.
 - Claim 5's start sound: it plays where the animation was created and does not follow the
   flight (presentation only; `Effect::Anim` carries no animation id for the audio crate to
   follow).

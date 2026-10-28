@@ -6,7 +6,7 @@ by construction" or "built, no test", whose spec is approved and whose blocker i
 request, minus the specs intake 15 revises (S-0108, S-0109, S-0212, S-0319, S-0201, S-0105, S-0703,
 S-0701, S-0314) and the rows that need a real install. Each row was checked against the spec's
 current revision (S-0318 r13, S-0503 r27, S-0501 r41, S-0306 r34, S-0317, S-0405 r36). Rows that an
-open request blocks (Q-1600 and Q-1621 for the S-0513 and S-0519 interims, Q-1702 and Q-1762 (since answered in part by S-0319 r9, built at A3 intake 15 part 1; its open rest is Q-1846 and Q-1847) for
+open request blocks (Q-1600 and Q-1621 for the S-0513 and S-0519 interims, Q-1702 and Q-1762 (since answered by S-0319 r9 and r26, built at A3 intakes 15 part 1 and 33) for
 voxel animations, Q-1772 for unmanned tech buildings, Q-1834, Q-1835 and Q-1836 for debris)
 are left out by that rule and are not listed.
 
@@ -60,7 +60,7 @@ flag is not read (row 23 below).
 | S-0213 | *Deployed*: sorted at the press, applied later; a transition ending in the tick of the press | satisfied, no test | The observable is the order of two calls in one tick; `press` in `claims_s0213_deploy_rule.rs` applies at once. |
 | S-0503 | claim 11, a naval-yard hover's water spin (S-0314 H4 part i run 6) | not implemented as a test | Belongs to S-0314, which intake 15 revises. |
 | S-0301 | claim 14, the render-layer row for a lifting jumper | seam | Our engine has no render layer row to test. |
-| S-0316, S-0317, S-0612 | the "partly" rows | interims | Their blockers are open requests (Q-1834 to Q-1836, Q-1762) or our own tuning. Q-1762 was answered in part by S-0319 r9 and built at A3 intake 15 part 1 ([intake15a-S-0319.md](intake15a-S-0319.md)); the sprite path's open items are Q-1846 and Q-1847. |
+| S-0316, S-0317, S-0612 | the "partly" rows | interims | Their blockers are open requests (Q-1834 to Q-1836, Q-1762) or our own tuning. Q-1762 was answered by S-0319 r9 and r26, its rest (Q-1846, Q-1847) at r26, built at A3 intakes 15 part 1 and 33 ([intake15a-S-0319.md](intake15a-S-0319.md), [intake33-S-0319.md](intake33-S-0319.md)). |
 
 ## Ledger rows changed
 

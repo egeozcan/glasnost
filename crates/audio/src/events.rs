@@ -51,6 +51,9 @@ const SPIN_ANCHOR: u64 = 1 << 41;
 /// Anchors of debris pieces' start sounds (S-0317 claim 14), offset from
 /// the others.
 const PIECE_ANCHOR: u64 = 1 << 42;
+/// Anchors of bouncing animations' start sounds (S-0319 claim 5), offset
+/// from the others.
+const BOUNCE_ANCHOR: u64 = 1 << 43;
 
 /// Interface cues the client reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,6 +185,9 @@ pub struct Audio {
     spins: BTreeMap<ObjectId, (bool, Option<InstanceId>)>,
     /// The debris pieces whose start sound follows them (S-0317 claim 14).
     pieces: std::collections::BTreeSet<ObjectId>,
+    /// The bouncing animations whose start sound follows them (S-0319
+    /// claim 5).
+    bouncing: std::collections::BTreeSet<ObjectId>,
     ranks: BTreeMap<ObjectId, Rank>,
     radar: Vec<RadarEvent>,
     radar_map: Option<(Grid, Image)>,
@@ -277,6 +283,7 @@ impl Audio {
             turrets: BTreeMap::new(),
             spins: BTreeMap::new(),
             pieces: std::collections::BTreeSet::new(),
+            bouncing: std::collections::BTreeSet::new(),
             ranks: BTreeMap::new(),
             radar: Vec::new(),
             radar_map: None,
@@ -953,9 +960,24 @@ impl Audio {
     fn effect(&mut self, w: &World, e: &Effect, unsync: &mut Rng) {
         match e {
             // spec: S-0701 claim 22, S-0109 claim 13 (an animation's start sound, positional, any owner)
-            Effect::Anim { name, pos, .. } => {
+            Effect::Anim { name, pos, id, .. } => {
                 let s = self.names.anim_report(name).map(str::to_owned);
-                self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+                // spec: S-0319 claim 5 (a bouncing animation's start sound follows its position in play while it plays: from where it was placed, a meteor's start position)
+                let flying = id.and_then(|id| {
+                    let a = w.anims.anims.get(&id)?;
+                    a.flight?;
+                    Some((id, a.pos?))
+                });
+                match flying {
+                    Some((id, at)) => {
+                        let anchor = BOUNCE_ANCHOR | u64::from(id.0);
+                        self.play_in(w, s.as_deref(), Where::Attached { anchor, pos: at });
+                        self.bouncing.insert(id);
+                    }
+                    None => {
+                        self.play_in(w, s.as_deref(), Where::Fixed(*pos));
+                    }
+                }
             }
             // spec: S-0301 claim 22 and S-0109 claim 13 (a shot animation's start sound, at its launch point, as any animation's)
             Effect::ShotAnim { name, pos, .. } => {
@@ -1733,6 +1755,17 @@ impl Audio {
                 // The piece plays no sound when it ends (S-0317 claim 14): its start sound plays on where it was.
                 None => {
                     self.pieces.remove(&id);
+                }
+            }
+        }
+        let bouncing: Vec<ObjectId> = self.bouncing.iter().copied().collect();
+        for id in bouncing {
+            match w.anims.anims.get(&id).and_then(|a| a.pos) {
+                // spec: S-0319 claim 5 (the start sound, while it plays, follows the animation's position in play)
+                Some(p) => self.mixer.move_anchor(BOUNCE_ANCHOR | u64::from(id.0), p),
+                // design: an animation that has left play stops moving its sound, which plays on where it was, as a debris piece's (S-0317 claim 14).
+                None => {
+                    self.bouncing.remove(&id);
                 }
             }
         }

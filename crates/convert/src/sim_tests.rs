@@ -1162,7 +1162,8 @@ fn animation_fields() {
 /// spec: S-0319 Import mapping (the bouncing keys: decimals kept as text, integers, IsTiberium a boolean, the named types canonicalised and none naming none) and claims 9, 12 and 14 (the importer's warnings)
 #[test]
 fn bouncing_animation_fields() {
-    let base = "[Animations]\n0=DROP\n1=FLAT\n2=PUFF\n3=TRAIL\n[Warheads]\n0=Boom\n[OverlayTypes]\n0=Ore1\n";
+    let base = "[Animations]\n0=DROP\n1=FLAT\n2=PUFF\n3=TRAIL\n[Warheads]\n0=Boom\n\
+                [OverlayTypes]\n0=Ore1\n1=Ore2\n2=Ore3\n3=Ore4\n";
     let art = "[DROP]\nBouncer=yes\nMaxXYVel=2.5\nMinZVel=1.25\nMaxZVel=4\nElasticity=0.5\n\
                DamageRadius=96\nWarhead=BOOM\nBounceAnim=puff\nExpireAnim=<none>\nTrailerAnim=trail\n\
                TrailerSeperation=3\nSpawns=PUFF\nSpawnCount=2\nIsTiberium=yes\nTiberiumSpawnType=ORE1\n\
@@ -1202,6 +1203,40 @@ fn bouncing_animation_fields() {
     ));
     assert!(warned(&w, "animations FLAT: SpawnCount 2147483647"));
     assert_eq!(s.animations["PUFF"].spawn_count, None);
+}
+
+/// spec: S-0319 claim 7 and Constants (the importer warns when the bound H = max(|M|, ||W_xy| − 1 − M|) on the first horizontal speed is 256 or more, and names quirks.random_magnitude_overflow when only |M + |W_xy| − 1| reaches it) and claim 10 (a spawn overlay type with fewer than three overlay types after it)
+#[test]
+fn bouncing_importer_warnings() {
+    let base = "[Animations]\n0=FAST\n1=BACK\n2=OVER\n3=CALM\n4=TIBEND\n5=TIBOK\n\
+                [OverlayTypes]\n0=Ore1\n1=Ore2\n2=Ore3\n3=Ore4\n";
+    // FAST: |M| = 256. BACK: M = −100, W = −200, |199 + 100| = 299. OVER: M = 200, W = 400,
+    // 200 and 199 plainly, 599 for −2147483648 only. CALM: M = 15, W = 30, 15, 14 and 44.
+    let art = "[FAST]\nBouncer=yes\nMaxXYVel=256\n[BACK]\nBouncer=yes\nMaxXYVel=-100\n\
+               [OVER]\nIsMeteor=yes\nMaxXYVel=200\n[CALM]\nBouncer=yes\n\
+               [TIBEND]\nIsTiberium=yes\nTiberiumSpawnType=Ore2\n\
+               [TIBOK]\nIsTiberium=yes\nTiberiumSpawnType=Ore1\n";
+    let (_, w) = sim(base, "", art);
+    let speed = |who: &str, note: &str| {
+        format!(
+            "animations {who}: its first horizontal speed can reach a magnitude of 256 or more{note}, which"
+        )
+    };
+    assert!(warned(&w, &speed("FAST", "")));
+    assert!(warned(&w, &speed("BACK", "")));
+    assert!(warned(
+        &w,
+        &speed(
+            "OVER",
+            " under quirks.random_magnitude_overflow (the default), for the raw value −2147483648"
+        )
+    ));
+    assert!(!w.iter().any(|w| w.message.contains("animations CALM")));
+    assert!(warned(
+        &w,
+        "animations TIBEND: TiberiumSpawnType has fewer than three overlay types after it"
+    ));
+    assert!(!w.iter().any(|w| w.message.contains("animations TIBOK")));
 }
 
 /// spec: S-0319 claim 2 and claim 14 (the importer checks the vertical span under both settings of quirks.anim_fixed_upper_vertical_speed and names the one that gives 0)

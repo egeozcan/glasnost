@@ -392,7 +392,7 @@ pub fn germinable(w: &World, c: CellXY) -> bool {
 }
 
 /// Offers a cell to tiberium `t`'s growth list (S-0401 claim 7).
-fn offer_growth(w: &mut World, t: usize, c: CellXY) {
+pub(crate) fn offer_growth(w: &mut World, t: usize, c: CellXY) {
     let Some(d) = w.cells.cell(c).map(|x| x.overlay_data) else {
         return;
     };
