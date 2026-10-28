@@ -1494,6 +1494,8 @@ fn touchdown(w: &mut World, id: ObjectId) {
         a.released = false;
     }
     set_mark(w, id);
+    // spec: S-0212 claim 13 (each landing records the aircraft in its landing cell)
+    crate::threat::landed(w, id);
     let pad = o
         .contact
         .filter(|&k| w.obj(k).is_some_and(|b| b.kind == Kind::Building) && pad_cell(w, k, id));

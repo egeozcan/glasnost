@@ -27,6 +27,19 @@ pub const PATH_MARGIN: F64 = F64(0x3ff0_24dd_2f1a_9fbe);
 // spec: S-0212 F9 (λ: the double nearest 0.001)
 pub const DIAGONAL_CONNECTION: F64 = F64(0x3f50_624d_d2f1_a9fc);
 
+/// The threat coefficient a unit must exceed for the threat term and the
+/// threat count (S-0212 claims 13 and 18, F7).
+// spec: S-0212 F7 (the binary64 value nearest 0.00001)
+pub const THREAT_COEFFICIENT_MIN: F64 = F64(0x3ee4_f8b5_88e3_68f1);
+
+/// The threat a cell must reach to count in claim 18's limit (S-0212 F7).
+// spec: S-0212 F7 (≥ the binary64 value nearest 0.01)
+pub const THREAT_COUNTED: F64 = F64(0x3f84_7ae1_47ae_147b);
+
+/// 1.0 (exact in binary).
+// spec: S-0212 F7 (claim 17's threat test: below 1.0)
+pub const ONE: F64 = F64(0x3ff0_0000_0000_0000);
+
 /// 0.5 (exact in binary).
 // spec: S-0207 claim 9 (d) (0.5 where g × u = 0) and S-0213 Formulas (the half cell of the look line)
 pub const HALF: F64 = F64(0x3fe0_0000_0000_0000);
@@ -117,7 +130,7 @@ mod tests {
         );
     }
 
-    // spec: S-0212 F1 and F9, S-0210 F4, S-0207 F4, S-0211 Formulas, S-0208 F3 (the doubles nearest the decimals)
+    // spec: S-0212 F1, F7 and F9, S-0210 F4, S-0207 F4, S-0211 Formulas, S-0208 F3 (the doubles nearest the decimals)
     #[test]
     fn nearest_doubles() {
         assert_eq!(PATH_MARGIN, nearest_double("1.009"));
@@ -125,6 +138,9 @@ mod tests {
         assert_eq!(CRUSH_CAP, nearest_double("0.2"));
         assert_eq!(SEVENTH, nearest_double("0.142857142857142857142857142857"));
         assert_eq!(LOW_MULTIPLIER, nearest_double("0.01"));
+        assert_eq!(THREAT_COEFFICIENT_MIN, nearest_double("0.00001"));
+        assert_eq!(THREAT_COUNTED, nearest_double("0.01"));
+        assert_eq!(ONE, dec("1"));
         assert_eq!(WALK_C2, nearest_double("-0.00009587672516830327"));
         assert_eq!(WALK_C, nearest_double("-0.00009587379924285257"));
         assert_eq!(HALF, dec("0.5"));

@@ -759,6 +759,8 @@ pub fn alliance(w: &mut World, house: HouseId, other: HouseId) {
             // spec: S-0309 claim 16 (a house made an enemy of another, here one whose alliance ended: its anger towards it grows by 1)
             if was {
                 crate::combat::acquire::alliance_anger(w, a, b, false);
+                // spec: S-0212 claim 16a (a house that breaks an alliance has its records rebuilt; the order ends it in both directions, so each house whose alliance ended)
+                crate::threat::rebuild(w, a);
             }
         }
     } else {
@@ -781,6 +783,8 @@ pub fn alliance(w: &mut World, house: HouseId, other: HouseId) {
         // spec: S-0309 claim 16 (made an ally: the anger towards it becomes 0, the enemy house worked out again)
         crate::combat::acquire::alliance_anger(w, house, other, true);
         drop_allied_targets(w, house);
+        // spec: S-0212 claim 16a (a house that makes an alliance has its records rebuilt)
+        crate::threat::rebuild(w, house);
     }
     // spec: S-0409 claim 2 and Edge cases (the sights follow the new alliances)
     crate::econ::shroud::alliance_changed(w);

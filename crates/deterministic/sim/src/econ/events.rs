@@ -22,6 +22,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         house.econ.acquired.push(id);
     }
     let _ = by_order;
+    // spec: S-0212 claim 13 (a building's exemption rectangle and an aircraft's exemption from its placement)
+    crate::threat::entered(w, id);
     if kind == Kind::Building {
         // spec: S-0501 claim 30 (a placed helipad building adds to its house's pad total)
         super::tech::pad_placed(w, id);
@@ -64,6 +66,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
 pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     let Some(o) = w.obj(id) else { return };
     let (kind, owner) = (o.kind, o.owner);
+    // spec: S-0212 claim 13 (the exemption a building or an aircraft gave is taken away when it leaves the map)
+    crate::threat::leaving(w, id);
     if kind == Kind::Building {
         // spec: S-0501 claim 30 (a helipad building removed from the map takes its count from the pad total)
         super::tech::pad_removed(w, id);
@@ -128,6 +132,8 @@ pub fn owner_changed(w: &mut World, id: ObjectId, old: Option<HouseId>) {
     crate::cloak::owner_changed(w, id, old);
     // spec: S-0601 claim 11 (a controller that changes owner keeps its victims; the switch off releases them)
     crate::mind::owner_changed(w, id);
+    // spec: S-0212 claim 16a (an owner change moves the object's threat amount between the recording houses)
+    crate::threat::owner_changed(w, id, old);
     if kind.is_mobile() && !w.rules().quirks.unit_changes_no_recheck {
         // spec: S-0407 claim 12 (n) and quirks.unit_changes_no_recheck (both houses)
         for h in [old, new].into_iter().flatten() {

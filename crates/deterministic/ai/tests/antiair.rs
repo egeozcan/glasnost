@@ -488,7 +488,7 @@ fn an_anti_air_unit_near_home_answers() {
 fn an_anti_air_unit_standing_off_the_drainer_does_not_answer() {
     let mut w = bench(defence_rules());
     let proc_ = spawn(&mut w, "PROC", Kind::Building, 1, -14, -4);
-    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -3, 3);
+    let flak = spawn(&mut w, "FLAKT", Kind::Vehicle, 1, -1, 3);
     let d = spawn(&mut w, "DISC", Kind::Vehicle, 0, -18, -4);
     let mut br = Brain::new(&w, &kit::map(), BETA);
     drain_it(&mut w, &mut br, d, proc_);

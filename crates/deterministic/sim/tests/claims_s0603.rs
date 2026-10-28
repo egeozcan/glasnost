@@ -1167,13 +1167,8 @@ struct PastALine {
     later: Option<(Option<Behaviour>, Option<Behaviour>)>,
 }
 
-/// Sends a BUGGY (or, with `infantry`, a WALKER) from (-20, 0) towards the
-/// grinder at (0, 0) with the recycle order (`grinder`), or with a move to
-/// the cell (-2, 0), with a north–south line of WALL buildings at x = -4
-/// from y = `shift` − `half` to `shift` + `half`, under
-/// `quirks.corridor_retry_no_fallback` = `no_fallback`. On a larger map
-/// than [`game`]'s (size 50), where the outcome depends on how the line
-/// falls in the corridor's blocks.
+/// [`past`] with a north–south line of WALL buildings at x = -4 from
+/// y = `shift` − `half` to `shift` + `half`.
 fn past_a_line(
     half: i32,
     shift: i32,
@@ -1181,6 +1176,30 @@ fn past_a_line(
     infantry: bool,
     no_fallback: bool,
 ) -> PastALine {
+    let walls: Vec<(i32, i32)> = (-half..=half).map(|y| (-4, y + shift)).collect();
+    past(&walls, grinder, infantry, no_fallback)
+}
+
+/// [`past`] with a closed ring of WALL buildings round the grinder, 2 cells
+/// from its foundation: no cell next to the grinder can be reached.
+fn ringed(grinder: bool, infantry: bool) -> PastALine {
+    let mut walls = Vec::new();
+    for x in -3..=4 {
+        for y in -3..=4 {
+            if x == -3 || x == 4 || y == -3 || y == 4 {
+                walls.push((x, y));
+            }
+        }
+    }
+    past(&walls, grinder, infantry, true)
+}
+
+/// Sends a BUGGY (or, with `infantry`, a WALKER) from (-20, 0) towards the
+/// grinder at (0, 0) with the recycle order (`grinder`), or with a move to
+/// the cell (-2, 0), with WALL buildings at `walls`, under
+/// `quirks.corridor_retry_no_fallback` = `no_fallback`. On a larger map
+/// than [`game`]'s (size 50).
+fn past(walls: &[(i32, i32)], grinder: bool, infantry: bool, no_fallback: bool) -> PastALine {
     const BIG: i32 = 50;
     let at = |dx, dy| testkit::mid(BIG, dx, dy);
     let mut r = rules();
@@ -1188,8 +1207,8 @@ fn past_a_line(
     let mut w = testkit::game_with(&r, BIG, 7);
     testkit::run(&mut w, 2);
     let b = testkit::spawn(&mut w, Kind::Building, "GRND", 0, at(0, 0), 0);
-    for y in -half..=half {
-        testkit::spawn(&mut w, Kind::Building, "WALL", 0, at(-4, y + shift), 0);
+    for &(x, y) in walls {
+        testkit::spawn(&mut w, Kind::Building, "WALL", 0, at(x, y), 0);
     }
     testkit::run(&mut w, 3);
     let car = if infantry {
@@ -1237,39 +1256,28 @@ fn past_a_line(
     out
 }
 
-// spec: S-0603 claims 3 and 4 and S-0212 Edge cases (short line of buildings, Q-1280 answered) with claims 1, 13 and 23 (the entrant's approach is an ordinary path computation to the building: round a line of three it is consumed; with quirks.corridor_retry_no_fallback on, the original, past a line of seven at this alignment the corridor's retries leave the level-2 corridor unchanged, the new coarse search fails, the computation fails and the destination is cleared at once, exactly as for a move order to a cell behind the line, for a vehicle and an infantry unit alike)
+// spec: S-0603 claims 3 and 4 and S-0212 Edge cases (short line of buildings, Q-1280 answered in r82) with claims 1 and 13 (the entrant's approach is an ordinary path computation to the building; the corridor exemption includes every building's exemption rectangle, so the first cell search goes round the line's end: lines of 3, 5, 7 and 9 are passed, for a vehicle and an infantry unit alike, and so is a move to a cell behind the line)
 #[test]
 fn claims_3_4_approach_past_a_line_of_buildings() {
-    assert!(
-        past_a_line(1, 0, true, false, true).arrived,
-        "round a line of three"
-    );
-    assert!(
-        past_a_line(2, 0, true, false, true).arrived,
-        "round a line of five"
-    );
+    for half in 1..=4 {
+        assert!(
+            past_a_line(half, 0, true, false, true).arrived,
+            "round a line of {}",
+            2 * half + 1
+        );
+    }
     for infantry in [false, true] {
         let x = past_a_line(3, 0, true, infantry, true);
-        assert!(!x.arrived, "not past a line of seven (infantry {infantry})");
-        // The order applies in the next tick (S-0213 claim 1); the first path
-        // computation fails in the one after.
-        assert_eq!(
-            x.lost,
-            Some(1),
-            "the destination is cleared at once (infantry {infantry})"
-        );
+        assert!(x.arrived, "past a line of seven (infantry {infantry})");
+        assert_eq!(x.lost, None, "the destination stays (infantry {infantry})");
         let m = past_a_line(3, 0, false, infantry, true);
-        assert_eq!(
-            m.lost,
-            Some(1),
-            "a move to a cell behind the line fails alike (infantry {infantry})"
-        );
+        assert!(m.arrived, "a move past the line (infantry {infantry})");
     }
 }
 
-// spec: S-0212 claim 13 and Edge cases (quirks.corridor_retry_no_fallback off: a failed repeated coarse search is followed by one cell search without a corridor, so an open way round a short line is found at every alignment) and S-0603 claims 3 and 4
+// spec: S-0212 claim 13 and Edge cases (short line of buildings: the first cell search goes round the line on the buildings' exemption rectangles, so no retry is made and quirks.corridor_retry_no_fallback, off here, changes nothing) and S-0603 claims 3 and 4
 #[test]
-fn corridor_retry_no_fallback_off_passes_the_line() {
+fn lines_are_passed_with_corridor_retry_no_fallback_off() {
     for shift in 0..8 {
         assert!(
             past_a_line(3, shift, true, false, false).arrived,
@@ -1290,7 +1298,7 @@ fn corridor_retry_no_fallback_off_passes_the_line() {
     );
 }
 
-// spec: S-0212 Edge cases (short line of buildings) and scenario P12 run S with quirks.corridor_retry_no_fallback on (lines of 3 and 5 are passed at all eight shifts; some shift of the 7- and 9-lines fails at once; in this synthetic geometry the 7-line fails at shifts 0 and 1 and the 9-line at shift 0)
+// spec: S-0212 Edge cases (short line of buildings, Q-1280 answered in r82) and scenario P12 run S with quirks.corridor_retry_no_fallback on (the original): the corridor exemption includes every building's exemption rectangle (claim 13), so lines of 3, 5, 7 and 9 are passed at all eight shifts
 #[test]
 fn run_s_shifts_with_the_switch_on() {
     let mut fails = Vec::new();
@@ -1308,15 +1316,16 @@ fn run_s_shifts_with_the_switch_on() {
             }
         }
     }
-    assert_eq!(fails, vec![(7, 0), (7, 1), (9, 0)]);
+    assert_eq!(fails, Vec::<(i32, i32)>::new());
 }
 
-// spec: S-0603 claim 3 and S-0212 claim 23 row 2 and Departure D5 (an entrant whose approach search failed more than 1 cell from the building gives up: its destination is cleared and it queues guard, an AI house's unit as a human-controlled one); revision 6, Q-1157 answered (eaten does not hold the queued guard back: a unit idle at the order is ready at the failing tick's late start, so guard is current at the end of that tick, nothing queued, and still 10 ticks later; scenario G9)
+// spec: S-0603 claim 3 and S-0212 claim 23 row 2 and Departure D5 (an entrant whose approach search failed more than 1 cell from the building gives up: its destination is cleared and it queues guard, an AI house's unit as a human-controlled one); revision 6, Q-1157 answered (eaten does not hold the queued guard back: a unit idle at the order is ready at the failing tick's late start, so guard is current at the end of that tick, nothing queued, and still 10 ticks later; scenario G9); S-0212 Edge cases (buildings do not separate regions: a destination enclosed by buildings passes the gate and fails in the cell searches)
 #[test]
 fn claim_3_failed_approach_gives_up() {
     for infantry in [false, true] {
-        let x = past_a_line(3, 0, true, infantry, true);
-        assert_eq!(x.lost, Some(1));
+        let x = ringed(true, infantry);
+        assert!(!x.arrived, "infantry {infantry}");
+        assert_eq!(x.lost, Some(1), "infantry {infantry}");
         assert_eq!(
             x.after,
             Some((Some(Behaviour::Guard), None)),

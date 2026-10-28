@@ -360,6 +360,10 @@ pub struct Quirks {
     // spec: S-0212 claim 13a
     #[serde(default = "on")]
     pub corridor_free_part_unusable_cells: bool,
+    /// The free part judges each cell at its own height level, not by the height rule.
+    // spec: S-0212 claim 13a and Edge cases (quirks.corridor_free_part_ignores_height)
+    #[serde(default = "on")]
+    pub corridor_free_part_ignores_height: bool,
     /// Destination substitution judges heights around the ground of a bridge-cell destination.
     // spec: S-0212 claim 24
     #[serde(default = "on")]
@@ -388,6 +392,18 @@ pub struct Quirks {
     // spec: S-0212 claim 16
     #[serde(default = "on")]
     pub train_exclusion_search_only: bool,
+    /// The rebuild of a house's threat records counts its own and its allies' objects.
+    // spec: S-0212 claim 16a and Edge cases (quirks.threat_rebuild_counts_friends)
+    #[serde(default = "on")]
+    pub threat_rebuild_counts_friends: bool,
+    /// A negative threat field takes its amount away from the threat records.
+    // spec: S-0212 claim 16a and Edge cases (quirks.negative_threat_field)
+    #[serde(default = "on")]
+    pub negative_threat_field: bool,
+    /// An aircraft's threat and corridor exemption stay where it was placed.
+    // spec: S-0212 claims 13 and 16a and Edge cases (quirks.aircraft_threat_stays_put)
+    #[serde(default = "on")]
+    pub aircraft_threat_stays_put: bool,
     /// Each house's pending list holds at most 128 orders.
     // spec: S-0213 claim 2
     #[serde(default = "on")]
@@ -2110,6 +2126,7 @@ impl Default for Quirks {
             corridor_split_probe: true,
             corridor_retry_no_fallback: true,
             corridor_free_part_unusable_cells: true,
+            corridor_free_part_ignores_height: true,
             substitution_centre_ground_level: true,
             substitution_distance_flat_destination: true,
             path_refresh_keeps_old_step: true,
@@ -2117,6 +2134,9 @@ impl Default for Quirks {
             opposite_facing_reversal: true,
             coarse_limit_records_cost: true,
             train_exclusion_search_only: true,
+            threat_rebuild_counts_friends: true,
+            negative_threat_field: true,
+            aircraft_threat_stays_put: true,
             pending_order_limit: true,
             detonate_in_planter_name: true,
             cheer_memory_spans_session: true,
@@ -2730,6 +2750,10 @@ impl Quirks {
                 self.corridor_free_part_unusable_cells,
             ),
             (
+                "corridor_free_part_ignores_height",
+                self.corridor_free_part_ignores_height,
+            ),
+            (
                 "substitution_centre_ground_level",
                 self.substitution_centre_ground_level,
             ),
@@ -2748,6 +2772,12 @@ impl Quirks {
                 "train_exclusion_search_only",
                 self.train_exclusion_search_only,
             ),
+            (
+                "threat_rebuild_counts_friends",
+                self.threat_rebuild_counts_friends,
+            ),
+            ("negative_threat_field", self.negative_threat_field),
+            ("aircraft_threat_stays_put", self.aircraft_threat_stays_put),
             ("pending_order_limit", self.pending_order_limit),
             ("detonate_in_planter_name", self.detonate_in_planter_name),
             (

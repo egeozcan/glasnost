@@ -1082,6 +1082,9 @@ pub struct CombatGeneral {
     pub self_heal_amount: [i32; 2], // spec: S-0314 claim 10 (two amounts)
     /// Threat per occupant.
     pub threat_per_occupant: i32,
+    /// The per-occupant threat of the threat records (S-0212 claim 16a),
+    /// whose absent-key default differs from S-0309's.
+    pub record_threat_per_occupant: i32,
     /// Enemy-house bonus B.
     pub enemy_house_bonus: F64,
     /// Disguise-detection list.
@@ -1954,6 +1957,8 @@ pub fn combat_rules(
         ],
         // spec: S-0309 Import mapping (ThreatPerOccupant absent 0, EnemyHouseThreatBonus absent 0)
         threat_per_occupant: g.threat_per_occupant.unwrap_or(0),
+        // spec: S-0212 Import mapping ([General] ThreatPerOccupant absent: 5, the per-occupant threat of claim 16a)
+        record_threat_per_occupant: g.threat_per_occupant.unwrap_or(5),
         enemy_house_bonus: dec(&g.enemy_house_threat_bonus, mode).unwrap_or(F64::ZERO),
         disguise_detection: g.disguise_detection_percent.clone().unwrap_or_default(),
         gravity,

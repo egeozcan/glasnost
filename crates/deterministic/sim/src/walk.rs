@@ -802,6 +802,8 @@ fn changed_cell(w: &mut World, id: ObjectId, from: CellXY, to: CellXY, layer: La
     }
     w.cells.leave(from, old, id);
     w.cells.enter(to, layer, id, false);
+    // spec: S-0212 claims 13 and 16a (recorded in a cell of another threat block: its threat amount moves there)
+    crate::threat::relisted(w, id, to);
     crate::load::recalc_cells(w, &[from, to]);
 }
 

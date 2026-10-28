@@ -18,7 +18,7 @@ use crate::occupancy::{self, Outcome};
 use crate::passability::{self, Answer, category};
 use crate::regions::{Dsu, STEPS};
 use crate::rules::Kind;
-use crate::world::{ObjectId, World};
+use crate::world::{HouseId, ObjectId, World};
 
 /// No sector.
 pub const NONE: u32 = u32::MAX; // nocite: a marker of our own for "no sector", not behaviour
@@ -45,6 +45,9 @@ pub struct SectorLevel {
     pub category: Vec<u8>,
     /// The origin of each sector's block.
     pub block: Vec<CellXY>,
+    /// The first cell of each sector in row order (smallest y, then
+    /// smallest x): its seed block's cell (S-0212 F5).
+    pub first: Vec<CellXY>,
     /// The connections of each sector: (other sector, diagonal), ordered by
     /// the other sector, whose number follows its first cell (claim 12a).
     pub conns: Vec<Vec<(u32, bool)>>,
@@ -145,6 +148,8 @@ pub fn build(w: &World) -> Sectors {
                 lv.category.push(w.cells.category[i]);
                 let (bx, by) = block_of(c, b);
                 lv.block.push(CellXY::new(bx * b, by * b));
+                // spec: S-0212 F5 (a sector's seed block holds its first cell in row order)
+                lv.first.push(c);
             }
             lv.of_cell[i] = id;
         }
@@ -316,15 +321,84 @@ impl PartialOrd for Route {
     }
 }
 
+/// The threat a coarse search reads (S-0212 claim 16a, F5 and F7): the
+/// moving unit's owner, whose records are read, and its threat
+/// coefficient, which exceeds the binary64 value nearest 0.00001.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Threat {
+    /// The house whose threat records are read.
+    pub house: HouseId,
+    /// The threat coefficient *k*.
+    pub k: F64,
+}
+
+/// The threat a coarse search of unit `id` reads, or `None` when the
+/// threat term is not used (S-0212 claim 13 and F7: *k* must exceed the
+/// binary64 value nearest 0.00001).
+pub fn threat_of(w: &World, id: ObjectId) -> Option<Threat> {
+    let o = w.obj(id)?;
+    let k = w.rules().unit(o.kind, o.type_index)?.threat_avoidance;
+    // spec: S-0212 F7 and claim 13 (the threat term only when k exceeds the binary64 value nearest 0.00001; no unit is a team member, so k is its type's field)
+    if !k.gt(crate::consts::THREAT_COEFFICIENT_MIN) {
+        return None;
+    }
+    // spec: S-0212 claim 16a (the records read are always those of the moving unit's owner)
+    Some(Threat { house: o.owner?, k })
+}
+
+/// The coarse threat *t*(*q*, *s*, *L*) of house `h` for the step from
+/// sector `q` to sector `s` of level `l` (S-0212 F5).
+fn coarse_threat(w: &World, lv: &SectorLevel, l: usize, q: u32, s: u32, h: HouseId) -> i64 {
+    let rec = |b: crate::threat::Block| i64::from(crate::threat::record(w, h, b));
+    match l {
+        // spec: S-0212 F5 (level 0: t = 0 always)
+        0 => 0,
+        // spec: S-0212 F5 (level 1: the record of the threat block holding the entered sector, which is its block; q plays no part)
+        1 => rec(crate::threat::block_of(lv.block[s as usize])),
+        _ => {
+            let seed = |x: u32| crate::threat::block_of(lv.first[x as usize]);
+            let (qb, sb) = (seed(q), seed(s));
+            // spec: S-0212 F5 (level 2: the same seed block, that block's record)
+            if qb == sb {
+                return rec(qb);
+            }
+            // spec: S-0212 F5 (d from the signs of the differences of the seed blocks' coordinates, y growing to the south)
+            let (dx, dy) = ((sb.0 - qb.0).signum(), (sb.1 - qb.1).signum());
+            // The smallest record of the quarters of the 8 × 8 block at
+            // `origin` on its side towards (dx, dy).
+            let side = |origin: CellXY, dx: i32, dy: i32| {
+                let o = crate::threat::block_of(origin);
+                // spec: S-0212 F5 (the quarters of an 8 × 8 block are threat blocks: north-west, north-east, south-west, south-east; the table's quarters on the side towards d)
+                [(0, 0), (1, 0), (0, 1), (1, 1)]
+                    .into_iter()
+                    .filter(|&(ox, oy)| {
+                        (dx == 0 || (ox == 1) == (dx > 0)) && (dy == 0 || (oy == 1) == (dy > 0))
+                    })
+                    .map(|(ox, oy)| rec((o.0 + ox, o.1 + oy)))
+                    .min()
+                    .unwrap_or(0)
+            };
+            // spec: S-0212 F5 (a: q's quarters towards d; b: s's quarters towards the opposite direction; t = ⌊(a + b) / 2⌋)
+            let a = side(lv.block[q as usize], dx, dy);
+            let b = side(lv.block[s as usize], -dx, -dy);
+            // spec: S-0212 F5 (t = ⌊(a + b) / 2⌋)
+            (a + b).div_euclid(2)
+        }
+    }
+}
+
 /// The coarse search of one level (S-0212 claim 13, F9): the chain of
 /// sectors from `start` to `dest`, or `None`.
+#[allow(clippy::too_many_arguments)]
 fn coarse_level(
     w: &World,
     lv: &SectorLevel,
+    l: usize,
     start: u32,
     dest: u32,
     allowed: &dyn Fn(u32) -> bool,
     closed: &BTreeSet<(u32, u32)>,
+    threat: Option<Threat>,
 ) -> Option<Vec<u32>> {
     let r = w.rules();
     let mode = r.mode;
@@ -362,7 +436,15 @@ fn coarse_level(
             if closed.contains(&pair(s, t)) || !allowed(t) {
                 continue;
             }
-            // spec: S-0212 F9 (cost(s) = trunc₂₄(trunc₅₃(trunc₅₃(κ + cost(q)) + T) + λ); no threat records exist before M4, so T = 0)
+            // spec: S-0212 F5 (T = trunc(trunc₅₃(t × k)); 0 when the coefficient test fails, F9)
+            let big_t = threat.map_or(F64::ZERO, |th| {
+                let t = coarse_threat(w, lv, l, s, t, th.house);
+                let tk = F64::from_i64(t, mode).mul(th.k, mode);
+                // An integer, added back as a double (F9).
+                let whole = tk.trunc_i128().unwrap_or(0);
+                F64::from_i64(i64::try_from(whole).unwrap_or(0), mode)
+            });
+            // spec: S-0212 F9 (cost(s) = trunc₂₄(trunc₅₃(trunc₅₃(κ + cost(q)) + T) + λ))
             let lambda = if diagonal {
                 crate::consts::DIAGONAL_CONNECTION
             } else {
@@ -370,7 +452,7 @@ fn coarse_level(
             };
             let cost = F64::from_i64(kappa(lv.category[t as usize]), mode)
                 .add(cq.to_f64(), mode)
-                .add(F64::ZERO, mode)
+                .add(big_t, mode)
                 .add(lambda, mode)
                 .to_f32(mode);
             let better = match recorded[t as usize] {
@@ -412,7 +494,7 @@ pub enum CoarseFail {
 
 /// The coarse search of S-0212 claim 13 at every level, from the top level
 /// down, for movement zone `zone`, from cell `start` to cell `dest` (the
-/// coarse end cells).
+/// coarse end cells), with no threat term.
 pub fn coarse(
     w: &World,
     secs: &Sectors,
@@ -421,11 +503,11 @@ pub fn coarse(
     dest: CellXY,
     closed: &Closed,
 ) -> Option<Chains> {
-    coarse_why(w, secs, zone, start, dest, closed).ok()
+    coarse_why(w, secs, zone, start, dest, closed, None).ok()
 }
 
-/// [`coarse`], telling a chain-length failure (departure D2) from the
-/// others.
+/// [`coarse`] with the threat term of `threat` (S-0212 F5), telling a
+/// chain-length failure (departure D2) from the others.
 pub fn coarse_why(
     w: &World,
     secs: &Sectors,
@@ -433,6 +515,7 @@ pub fn coarse_why(
     start: CellXY,
     dest: CellXY,
     closed: &Closed,
+    threat: Option<Threat>,
 ) -> Result<Chains, CoarseFail> {
     let mut chains: Chains = Default::default();
     let mut upper: BTreeSet<u32> = BTreeSet::new();
@@ -453,7 +536,8 @@ pub fn coarse_why(
         if !allowed(s) || !allowed(t) {
             return Err(CoarseFail::NoChain);
         }
-        let chain = coarse_level(w, lv, s, t, &allowed, &closed[l]).ok_or(CoarseFail::NoChain)?;
+        let chain = coarse_level(w, lv, l, s, t, &allowed, &closed[l], threat)
+            .ok_or(CoarseFail::NoChain)?;
         // spec: S-0212 Constants and departure D2 (a chain of more than 500 sectors: a failed coarse search)
         if chain.len() > 500 {
             return Err(CoarseFail::ChainLength);
@@ -465,12 +549,22 @@ pub fn coarse_why(
 }
 
 /// Whether a ground-layer cell has the corridor exemption (S-0212 claim
-/// 13): one of its eight neighbours holds a vehicle, an infantry unit, an
-/// aircraft, a terrain object or a wall section, on either layer.
+/// 13): it lies in the exemption rectangle of a building on the map, or
+/// one of its eight neighbours holds a vehicle, an infantry unit, a terrain
+/// object or a wall section, on either layer, or is the cell an aircraft
+/// gives the exemption around ([`crate::threat`]).
 pub fn exempt(w: &World, c: CellXY) -> bool {
+    // spec: S-0212 claim 13 (a cell in the exemption rectangle of a building on the map)
+    if crate::threat::in_rect(w, c) {
+        return true;
+    }
     let r = w.rules();
     STEPS.iter().any(|&(dx, dy)| {
         let n = CellXY::new(c.x + dx, c.y + dy);
+        // spec: S-0212 claim 13 (an aircraft gives the exemption around its placement cell and its landing cells, not in flight)
+        if crate::threat::aircraft_around(w, n) {
+            return true;
+        }
         let Some(cell) = w.cells.cell(n) else {
             return false;
         };
@@ -482,23 +576,27 @@ pub fn exempt(w: &World, c: CellXY) -> bool {
         wall || [crate::world::Layer::Ground, crate::world::Layer::Deck]
             .iter()
             .flat_map(|&l| w.cells.list(n, l).iter())
-            // spec: S-0212 claim 13 (a vehicle, an infantry unit, an aircraft or a terrain object in a neighbour, on its ground or its deck)
+            // spec: S-0212 claim 13 (a vehicle, an infantry unit or a terrain object in a neighbour, on its ground or its deck)
             .any(|&o| {
                 w.obj(o).is_some_and(|x| {
-                    matches!(
-                        x.kind,
-                        Kind::Vehicle | Kind::Infantry | Kind::Aircraft | Kind::Terrain
-                    )
+                    matches!(x.kind, Kind::Vehicle | Kind::Infantry | Kind::Terrain)
                 })
             })
     })
 }
 
-/// The outcome-or-category condition of S-0212 claim 13a for cell `c`.
-fn free_condition(w: &World, unit: ObjectId, zone: MovementZone, c: CellXY) -> bool {
+/// The outcome-or-category condition of S-0212 claim 13a for cell `c`,
+/// entered by a step from cell `from`.
+fn free_condition(w: &World, unit: ObjectId, zone: MovementZone, from: CellXY, c: CellXY) -> bool {
     let Some(i) = w.cells.idx(c) else {
         return false;
     };
+    // spec: S-0212 claim 13a and Edge cases (quirks.corridor_free_part_ignores_height off: a cell whose entry from the step's start the height rule of claim 10 refuses is not in the free part and does not count for its borders)
+    if !w.rules().quirks.corridor_free_part_ignores_height
+        && !crate::path::height_ok(w, from, false, c)
+    {
+        return false;
+    }
     let usable = passability::zone_table(zone, w.cells.category[i]) == Answer::Yes;
     let level = level_of(w, c);
     // spec: S-0212 claim 13a (the entry outcome for the unit at the cell's own height level)
@@ -548,7 +646,7 @@ pub fn retry(
         for (dx, dy) in STEPS {
             let n = CellXY::new(c.x + dx, c.y + dy);
             let t = lv.sector(w, n);
-            if t == NONE || !free_condition(w, unit, zone, n) {
+            if t == NONE || !free_condition(w, unit, zone, c, n) {
                 continue;
             }
             if t == s {
@@ -662,6 +760,7 @@ mod build_tests {
                     lv.category.push(w.cells.category[i]);
                     let (bx, by) = block_of(c, b);
                     lv.block.push(CellXY::new(bx * b, by * b));
+                    lv.first.push(c);
                 }
                 lv.of_cell[i] = id;
             }
@@ -755,6 +854,7 @@ mod build_tests {
             assert_eq!(g.parent, e.parent, "level {l}");
             assert_eq!(g.category, e.category, "level {l}");
             assert_eq!(g.block, e.block, "level {l}");
+            assert_eq!(g.first, e.first, "level {l}");
             assert_eq!(g.conns, e.conns, "level {l}");
             conns += e.conns.iter().map(Vec::len).sum::<usize>();
             assert!(

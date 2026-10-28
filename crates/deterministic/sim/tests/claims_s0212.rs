@@ -2150,18 +2150,24 @@ fn corridor_confines_the_search() {
     assert!(!corridor::exempt(&w, cell(5, 5)));
 }
 
-// spec: S-0212 claims 13 and 15 (the corridor exemption and the entry outcomes are read from the world of the computation; a blocked destination is approached from a neighbour); our tooling for speed (M8 C4 part 5): a path computation keeps what its searches asked of the world, and nothing it kept reaches a later computation on a changed world, with another destination, or in a copy of the world
+// spec: S-0212 claims 13 and 15 (the corridor exemption and the entry outcomes are read from the world of the computation; a blocked destination is approached from a neighbour) and claim 13a (quirks.corridor_free_part_ignores_height off: a ledge stops the free part, so the retries lead round it); our tooling for speed (M8 C4 part 5): a path computation keeps what its searches asked of the world, and nothing it kept reaches a later computation on a changed world, with another destination, or in a copy of the world
 #[test]
 fn a_computation_keeps_nothing_for_the_next() {
     for (barrier, held) in [(false, false), (true, false), (false, true), (true, true)] {
         let mut s = scene();
         if barrier {
-            // A wall of enemy huts, blocked for the unarmed car but open
-            // to the coarse search (claim 1): the first corridor runs into
-            // it and the computation retries.
+            // A ledge: flat clear cells one level up with no slope, which
+            // the coarse search connects to the ground round it (claim
+            // 13b) and the height rule closes to every step (claim 10).
+            // The first corridor runs into it and, with
+            // `quirks.corridor_free_part_ignores_height` off, the
+            // computation retries round it (claim 13a). A wall of huts no
+            // longer makes it retry: their exemption rectangles let the
+            // first cell search round it (claim 13).
             for y in -6..=5 {
-                s.place_structure(1, HUT, cell(5, y));
+                s.set_cell(cell(5, y), 0, 1);
             }
+            s.ruleset.globals.quirks.corridor_free_part_ignores_height = false;
         }
         let to = cell(9, 4);
         if held {
@@ -2466,4 +2472,187 @@ fn give_up_destination_is_a_nearby_cell() {
     let o5 = cell(5, 0);
     assert!((c.x - o5.x).abs().max((c.y - o5.y).abs()) <= 1, "{c:?}");
     assert_eq!(w.rng, rng);
+}
+
+/// A north–south ledge of `2 × half + 1` flat clear cells one level up at
+/// x = 0, shifted `shift` cells south, the car 12 cells west of it and its
+/// destination 12 cells east, under the two switches as given: the result
+/// of the path computation and, for each of its cell searches, whether it
+/// ran inside a corridor and whether it found the path.
+fn across_a_ledge(
+    half: i32,
+    shift: i32,
+    ignores_height: bool,
+    no_fallback: bool,
+) -> (Search, Vec<(bool, bool)>) {
+    let mut s = scene();
+    for y in -half..=half {
+        s.set_cell(cell(0, y + shift), 0, 1);
+    }
+    s.ruleset.globals.quirks.corridor_free_part_ignores_height = ignores_height;
+    s.ruleset.globals.quirks.corridor_retry_no_fallback = no_fallback;
+    s.place_unit(0, CAR, cell(-12, shift), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)[0];
+    glasnost_sim::trace::switch_on(&mut w);
+    let r = compute_to(&mut w, id, cell(12, shift), Mode::Fresh);
+    let mut n = Vec::new();
+    for e in glasnost_sim::trace::take(&w) {
+        if let glasnost_sim::trace::What::Search { searches, .. } = e.what {
+            n = searches
+                .iter()
+                .map(|s| (s.corridor, s.found.is_some()))
+                .collect();
+        }
+    }
+    (r, n)
+}
+
+// spec: S-0212 Edge cases (a ledge: open to the coarse searches, refused by the cell search's height rule, claim 10; the free part of claim 13a ignores height, so a retry closes nothing, each new coarse search finds the same corridor, and the 5th cell search inside it fails the computation whatever quirks.corridor_retry_no_fallback is set to; the 7-ledges fail at every shift) and claim 13 (the limit of 5 cell searches)
+#[test]
+fn a_ledge_reaches_the_limit_of_five_searches() {
+    for half in [1, 3] {
+        for shift in 0..8 {
+            for no_fallback in [true, false] {
+                let (r, n) = across_a_ledge(half, shift, true, no_fallback);
+                let case = format!(
+                    "ledge {} shift {shift} no_fallback {no_fallback}",
+                    2 * half + 1
+                );
+                assert_eq!(r, Search::SearchFailed, "{case}: {n:?}");
+                assert_eq!(n, vec![(true, false); 5], "{case}");
+            }
+        }
+    }
+}
+
+// spec: S-0212 Edge cases (quirks.corridor_free_part_ignores_height off: the free part and its borders apply the height rule of claim 10, so a ledge stops the free part as a strip does and the retries close connections and lead a new coarse search round it) and claim 13a
+#[test]
+fn corridor_free_part_ignores_height_off_goes_round_a_ledge() {
+    for half in [1, 3] {
+        for shift in 0..8 {
+            for no_fallback in [true, false] {
+                let (r, n) = across_a_ledge(half, shift, false, no_fallback);
+                let case = format!(
+                    "ledge {} shift {shift} no_fallback {no_fallback}",
+                    2 * half + 1
+                );
+                assert_eq!(r, Search::Found, "{case}: {n:?}");
+                let (last, before) = n.split_last().unwrap();
+                assert_eq!(*last, (true, true), "{case}: found inside a corridor");
+                assert!(before.iter().all(|&s| s == (true, false)), "{case}: {n:?}");
+                assert!(n.len() < 5, "{case}: before the limit");
+            }
+        }
+    }
+}
+
+/// The tracked test vehicle of the strip tests.
+const TANK: &str = "TESTTANK";
+
+/// A north–south strip of `2 × half + 1` cells of rough ground at x = 6,
+/// from y = 10 + `shift` − `half` to 10 + `shift` + `half`, whose land row
+/// has multiplier 0 for the track class only (so the category, which reads
+/// the wheel column, is *open*: S-0211 claim 11), the tracked TESTTANK at
+/// (−10, 10) and its destination (8, 10), 2 cells behind the strip, under
+/// the two switches as given: the result of the path computation and, for
+/// each of its cell searches, whether it ran inside a corridor and whether
+/// it found the path.
+fn across_a_strip(
+    half: i32,
+    shift: i32,
+    no_fallback: bool,
+    split: bool,
+) -> (Search, Vec<(bool, bool)>) {
+    let mut s = scene();
+    s.vehicle(TANK, unit_type(common::TRACK, 40, 6));
+    let one = || Some(Decimal("1".into()));
+    let row = LandRow {
+        foot: one(),
+        track: Some(Decimal("0".into())),
+        wheel: one(),
+        hover: one(),
+        float: one(),
+        amphibious: one(),
+        float_beach: one(),
+        buildable: None,
+    };
+    s.ruleset.sim.land_types.insert(LandType::Rough, row);
+    for y in -half..=half {
+        // The rough terrain code of the scene's tile catalogue.
+        s.set_cell(cell(6, 10 + y + shift), code_tile(14), 0);
+    }
+    s.ruleset.globals.quirks.corridor_retry_no_fallback = no_fallback;
+    s.ruleset.globals.quirks.corridor_split_probe = split;
+    s.place_unit(0, TANK, cell(-10, 10), 64);
+    let mut w = s.build();
+    regions::ensure(&mut w);
+    let id = vehicles(&w)[0];
+    glasnost_sim::trace::switch_on(&mut w);
+    let r = compute_to(&mut w, id, cell(8, 10), Mode::Fresh);
+    let mut n = Vec::new();
+    for e in glasnost_sim::trace::take(&w) {
+        if let glasnost_sim::trace::What::Search { searches, .. } = e.what {
+            n = searches
+                .iter()
+                .map(|s| (s.corridor, s.found.is_some()))
+                .collect();
+        }
+    }
+    (r, n)
+}
+
+/// The (length, shift) pairs of strips of 3, 5, 7 and 9 cells at shifts 0
+/// to 7 whose path computation fails under the two switches.
+fn failing_strips(no_fallback: bool, split: bool) -> Vec<(i32, i32)> {
+    let mut fails = Vec::new();
+    for half in 1..=4 {
+        for shift in 0..8 {
+            let (r, n) = across_a_strip(half, shift, no_fallback, split);
+            if r != Search::Found {
+                assert_eq!(r, Search::SearchFailed);
+                // Cell searches inside corridors fail until a new coarse
+                // search after a retry fails, and with it the computation
+                // (claim 13's table), before the limit of 5.
+                assert!(
+                    n.len() < 5 && n.iter().all(|&s| s == (true, false)),
+                    "{} {shift}: {n:?}",
+                    2 * half + 1
+                );
+                fails.push((2 * half + 1, shift));
+            }
+        }
+    }
+    fails
+}
+
+// spec: S-0212 Edge cases (a short strip of ground the unit cannot enter, open to the coarse searches through the wheel column: strips of 3 and 5 are passed, and some alignment of the 7- and 9-strips fails at once, the new coarse search after a retry failing at level 1 while the level-2 corridor stays the same; which shifts fail is not predicted, so these are this synthetic geometry's) and claim 13 (the table: a repeated coarse search that fails fails the computation), scenario P12 run T
+#[test]
+fn a_strip_fails_at_some_alignments() {
+    assert_eq!(failing_strips(true, true), vec![(7, 0), (7, 1), (9, 0)]);
+}
+
+// spec: S-0212 Edge cases (quirks.corridor_retry_no_fallback off: when the new coarse search after a retry fails, one more cell search without a corridor, so an open way round a short strip is found at every alignment)
+#[test]
+fn corridor_retry_no_fallback_off_goes_round_a_strip() {
+    assert_eq!(failing_strips(false, true), Vec::<(i32, i32)>::new());
+    // With quirks.corridor_split_probe off as well (the play-fixes layer).
+    assert_eq!(failing_strips(false, false), Vec::<(i32, i32)>::new());
+    for (half, shift) in [(3, 0), (3, 1), (4, 0)] {
+        let (r, n) = across_a_strip(half, shift, false, true);
+        assert_eq!(r, Search::Found);
+        let (last, before) = n.split_last().unwrap();
+        assert_eq!(*last, (false, true), "found without a corridor: {n:?}");
+        assert!(before.iter().all(|&s| s == (true, false)), "{n:?}");
+    }
+}
+
+// spec: S-0212 Edge cases (quirks.corridor_split_probe off: every block that holds a strip cell reads as split whatever the probe cell, so the failure is expected at fewer alignments) and claim 13a
+#[test]
+fn corridor_split_probe_off_fails_at_fewer_alignments() {
+    let on = failing_strips(true, true);
+    let off = failing_strips(true, false);
+    assert!(off.len() < on.len(), "{off:?} against {on:?}");
+    assert!(off.iter().all(|f| on.contains(f)), "{off:?} against {on:?}");
 }

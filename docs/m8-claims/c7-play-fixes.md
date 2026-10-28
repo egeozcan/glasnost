@@ -134,3 +134,58 @@ main b5b62ba and `after/` from this branch):
   beside the yard. It should go there. Unticked, it should come down just outside the yard and
   ignore orders from then on.
 Selling the yard was not tried.
+
+## After intake 34 (S-0212 r82)
+
+S-0212 r82 ([intake34-S-0212.md](intake34-S-0212.md)) answers Q-1771 and Q-1870: **the original
+walks out of its own base.** Every building gives the corridor exemption to its exemption
+rectangle, the foundation grown by one cell on every side, so the first cell search inside the
+first corridor follows the band of cells round the buildings and finds the way. No retry is made.
+Pathing reports 1 and 2's shapes were our engine's missing rectangles, not the original's
+behaviour, and the reference ruleset now passes them.
+
+Neither switch is removed or changed: both keep their off position as stated. What changed is
+the case they stand for: S-0212's short-line entry no longer fails, and both switches are now
+stated for *a short strip of ground the unit cannot enter* (a land type open to the coarse
+searches through the wheel column but blocked for the unit). A ledge gives the give-up at the
+limit of 5 whatever `corridor_retry_no_fallback` says (`a_ledge_reaches_the_limit_of_five_searches`,
+with the layer's other entry, `corridor_split_probe`, on); its own new switch, `corridor_free_part_ignores_height`, is the one
+that lets the retries go round it.
+
+Re-judged by the admission rule, **both corridor entries now fail condition 2**: no play note
+or request names a bug that either fixes. Conditions 1 and 3 still hold.
+- `corridor_retry_no_fallback`: reports 1 and 2 are passed with it on or off
+  (`claims_s0212_cap.rs`: `play_fixes_change_nothing_in_the_reports_shapes`; the lane below).
+  Only the spec's own strip case names the bug, which is neither a play note nor a request, and
+  whether stock data has such a land type is not checked (S-0212 Edge cases).
+- `corridor_split_probe`: with the entry above off, a strip is passed at every alignment whatever
+  this switch says (`corridor_retry_no_fallback_off_goes_round_a_strip`): no pass or fail
+  difference in the strip tests, though the split reading can still close another connection
+  and so give another route.
+- `corridor_free_part_ignores_height` (new, not in the layer): the ledge's give-up (a unit refuses
+  an order although an open way round exists) is condition 2's kind of bug, but no play note or
+  request names it yet.
+
+**Reports 1 and 2's cases, with the layer and without** (local lane, scene `base-exit` of
+`m6b_lane.rs`; outputs in the git-ignored `local-lane/m8/a3-34/lane/`). The reports' own files
+were written by older builds and no longer load, so the scene rebuilds their shapes on the
+install: P31's 3 × 2 block with a row of ten (an infantry unit and a vehicle at the block's exit,
+sent 16 cells north and 3 west), and a harvester on a dock-unload refinery's docking cell with two
+rows of eight 1 × 1 buildings west of it, sent 16 cells west. On the seventh offered map
+(`GLASNOST_UI_MAP=6`), with *Pathing and other fixes* ticked and unticked alike: no destination is
+cleared, each first path computation makes one cell search, inside the corridor, which finds
+the path, and the units arrive after 602 (infantry), 500 (vehicle) and 618 (harvester) ticks. The
+first and sixth offered maps give the same for P31 and the fourth for the harvester; the others
+have no open area large enough.
+
+The M6c, M7a and M7b sweeps 1 to 16 now print the same lines with `GLASNOST_PLAY_FIXES=1` as
+without (before this intake the layer changed 23, 39 and 27 lines): their duels have no strip
+and no stranded hover, so no entry of the layer acts there. The layer is not inert in games on
+the install: in the quick lane (seed 7, maps 8, 2 and 0, 9 games) one game on map 0 ends at tick
+34 205 with it and 34 217 without, with the same winner; which of the three entries acted (the
+hover entry among them) was not isolated. The other 8 games are the same.
+
+The layer is unchanged in this intake (its comments now say the above), and so is
+`sim-gate/tests/play_fixes.rs`. For the lead: by the rule, drop both corridor
+entries; readmit `corridor_retry_no_fallback` (and `corridor_free_part_ignores_height`) when a
+play note names a strip or ledge give-up.
