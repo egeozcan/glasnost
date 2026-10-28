@@ -115,6 +115,9 @@ pub struct CameoView {
     /// A drain-mode superweapon's *charging* or *active* label (S-0512
     /// claim 16).
     pub state: Option<&'static str>,
+    /// A superweapon's time left in game seconds, *s* of S-0512 F6, while
+    /// it is not ready (for the tooltip).
+    pub seconds: Option<i32>,
 }
 
 /// One tab button.
@@ -205,6 +208,9 @@ pub struct HudModel {
     pub flash_extra: bool,
     /// The battlefield view's outline on the radar (S-0410 claim 11).
     pub view_box: Option<ViewBox>,
+    /// The icon the keyboard focus is on, whose tooltip shows when the
+    /// pointer is on no icon.
+    pub focus_cameo: Option<usize>,
 }
 
 /// The outline that marks the battlefield view's part of the map on the
@@ -321,6 +327,7 @@ pub fn model(
                     art: art(e),
                     charge: None,
                     state: None,
+                    seconds: None,
                 }
             }
             Entry::Superweapon(k) => {
@@ -345,6 +352,10 @@ pub fn model(
                         Label::Active => Some("Active"),
                         _ => None,
                     },
+                    // spec: S-0512 F6 (s = ⌊remaining / 15⌋ game seconds)
+                    seconds: charge::get(w, house, k)
+                        .filter(|r| !r.ready)
+                        .map(|r| r.remaining(w.tick).div_euclid(15)),
                 }
             }
         })
@@ -626,10 +637,14 @@ pub fn view(
     d.fill(l.grid, colour::BACKDROP);
     let rows = l.rows();
     let first = m.scroll.min(max_scroll(m.cameos.len(), rows)) * 2;
+    let mut tip = None;
     for (n, c) in m.cameos.iter().enumerate().skip(first).take(rows * 2) {
         let r = l.cameo(n - first);
         cameo(&mut d, r, c, hot(r));
         t.push(r, HudHit::Cameo(n));
+        if hot(r) || (tip.is_none() && m.focus_cameo == Some(n)) {
+            tip = Some((r, c));
+        }
     }
     // spec: S-0411 claim 18 (both page buttons disabled when all icons fit)
     let enabled = overflows(m.cameos.len(), rows);
@@ -639,7 +654,52 @@ pub fn view(
             t.push(*r, HudHit::Scroll(if k == 0 { -1 } else { 1 }));
         }
     }
+    // The pointer's icon wins over the keyboard's.
+    if let Some((r, c)) = tip {
+        tooltip(&mut d, r, c, size);
+    }
     (d, t)
+}
+
+/// The lines of an icon's tooltip: its name, then a build type's price
+/// (S-0404) or a superweapon's state and time left (S-0512 claim 16, F6).
+///
+/// design: M8 A4 round 5 note 33 asks for prices on the icons; no spec
+/// covers a tooltip, so its content and look are ours.
+pub fn tooltip_lines(c: &CameoView) -> Vec<String> {
+    let mut v = vec![c.name.clone()];
+    match c.entry {
+        // spec: S-0404 (the price to the house)
+        Entry::Type(_) => v.push(format!("$ {}", c.price)),
+        Entry::Superweapon(_) => {
+            if c.on_hold {
+                v.push("On hold".into());
+            } else if c.ready {
+                v.push("Ready".into());
+            } else if let Some(s) = c.seconds {
+                let state = c.state.unwrap_or("Charging");
+                v.push(format!("{state}: {}", countdown_time(s)));
+            }
+        }
+    }
+    v
+}
+
+/// Draws an icon's tooltip beside its rectangle `r`, on the battlefield
+/// side of the sidebar, kept on the screen.
+fn tooltip(d: &mut DrawList, r: Rect, c: &CameoView, size: (i32, i32)) {
+    let lines = tooltip_lines(c);
+    let w = lines.iter().map(|s| font::text_width(s)).max().unwrap_or(0) + 8;
+    let h = lines.len() as i32 * (font::LINE_HEIGHT + 2) + 4;
+    let x = (r.x - w - 4).max(0);
+    let y = r.y.min(size.1 - h).max(0);
+    let b = Rect::new(x, y, w, h);
+    d.fill(b, [0, 0, 0, 210]);
+    d.frame(b, colour::EDGE);
+    for (i, s) in lines.into_iter().enumerate() {
+        let ink = if i == 0 { colour::TEXT } else { colour::ACCENT };
+        d.text(x + 4, y + 3 + i as i32 * (font::LINE_HEIGHT + 2), s, ink, b);
+    }
 }
 
 fn cameo(d: &mut DrawList, r: Rect, c: &CameoView, hot: bool) {
@@ -818,6 +878,7 @@ mod tests {
             art: None,
             charge: None,
             state: None,
+            seconds: None,
         }
     }
 
@@ -1020,6 +1081,47 @@ mod tests {
         assert_eq!(lines(&m), 0, "no radar, no outline");
         m.radar = true;
         assert_eq!(lines(&m), 4);
+    }
+
+    #[test]
+    fn an_icon_tooltip_shows_the_price_or_the_time_left() {
+        // spec: S-0404 (the price to the house)
+        assert_eq!(tooltip_lines(&cameo_view(3)), ["T3", "$ 100"]);
+        let sw = |ready, seconds| CameoView {
+            entry: Entry::Superweapon(0),
+            ready,
+            seconds,
+            ..cameo_view(0)
+        };
+        // spec: S-0512 F6 (the time left in game seconds)
+        assert_eq!(
+            tooltip_lines(&sw(false, Some(75))),
+            ["T0", "Charging: 1:15"]
+        );
+        assert_eq!(tooltip_lines(&sw(true, None)), ["T0", "Ready"]);
+        // Shown for the hovered icon, or else the keyboard's.
+        let mut m = HudModel {
+            cameos: vec![cameo_view(0), cameo_view(1)],
+            ..HudModel::default()
+        };
+        let texts = |m: &HudModel, hover| {
+            view(m, (800, 600), None, hover)
+                .0
+                .texts()
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<_>>()
+        };
+        assert!(!texts(&m, None).contains(&"$ 100".to_string()));
+        m.focus_cameo = Some(1);
+        let t = texts(&m, None);
+        assert!(t.contains(&"T1".to_string()) && t.contains(&"$ 100".to_string()));
+        let l = Layout::new((800, 600));
+        let over = l.cameo(0);
+        let t = texts(&m, Some(Point::new(over.x + 2, over.y + 2)));
+        // The pointer's icon: T0's name shows twice (the placeholder card and the tooltip).
+        assert_eq!(t.iter().filter(|s| *s == "T0").count(), 2);
+        assert_eq!(t.iter().filter(|s| *s == "T1").count(), 1);
     }
 
     #[test]

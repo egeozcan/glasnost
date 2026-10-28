@@ -1862,6 +1862,10 @@ impl Session {
         };
         let mut model = self.play.hud_model(&name, &art);
         model.view_box = self.radar_view_box();
+        model.focus_cameo = match self.hud_focus.at {
+            Some(HudHit::Cameo(n)) if self.hud_focus.shown => Some(n),
+            _ => None,
+        };
         let pointer = self.pointer;
         let hover = pointer.map(|p| self.ui.to_ui(p));
         let (hud_list, targets) = hud::view(&model, self.ui.ui, Some(RADAR_IMAGE), hover);
