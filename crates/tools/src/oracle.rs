@@ -154,7 +154,8 @@ impl Side {
         }
     }
 
-    fn text(self) -> &'static str {
+    /// `A` or `B`.
+    pub fn text(self) -> &'static str {
         ["A", "B"][self.index()]
     }
 }
@@ -1150,7 +1151,7 @@ pub fn merge(stored: &[Game], fresh: &[Game], order: &[(String, String)]) -> Vec
 // Command line
 
 /// The usage of `arena --record`.
-pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED] [--spread ROW,COL,A|B]";
+pub const USAGE: &str = "arena --record <ID|all> [--pairing ROW,COL]… [--threads N] [--out DIR] [--measurements DIR] [--compare-only] [--groups] [--ai-houses] [--watch ROW,COL,A|B,SEED] [--trace|--trace-summary ROW,COL,A|B,SEED] [--spread ROW,COL,A|B]";
 
 /// The `arena --record` command line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1169,6 +1170,10 @@ pub struct Cli {
     pub compare_only: bool,
     /// Play this one game and describe it.
     pub watch: Option<Job>,
+    /// Play this one game and print its per-unit trace
+    /// ([`crate::oracle_trace::trace`]); the flag asks for every change,
+    /// not only the summary.
+    pub trace: Option<(Job, bool)>,
     /// List each type's kind, group size and cost, and play nothing.
     pub groups: bool,
     /// Report the seed-to-seed spread of one pairing and side ([`spread`]).
@@ -1191,6 +1196,7 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
         measurements: PathBuf::from("measurements"),
         compare_only: false,
         watch: None,
+        trace: None,
         groups: false,
         spread: None,
         ai_houses: false,
@@ -1245,6 +1251,21 @@ pub fn parse_cli(args: &[String]) -> Result<Cli, String> {
                     .and_then(|s| s.parse().ok())
                     .ok_or("--watch needs ROW,COL,A|B,SEED")?;
                 cli.watch = Some((f[0].to_owned(), f[1].to_owned(), side, seed));
+            }
+            "--trace" | "--trace-summary" => {
+                let detail = a == "--trace";
+                let v = value(a)?;
+                let f: Vec<&str> = v.split(',').map(str::trim).collect();
+                let side = match f.get(2).copied() {
+                    Some("A" | "a") => Side::A,
+                    Some("B" | "b") => Side::B,
+                    _ => return Err(format!("{a} needs ROW,COL,A|B,SEED")),
+                };
+                let seed = f
+                    .get(3)
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(|| format!("{a} needs ROW,COL,A|B,SEED"))?;
+                cli.trace = Some(((f[0].to_owned(), f[1].to_owned(), side, seed), detail));
             }
             other => return Err(format!("unknown argument {other:?}")),
         }
@@ -1350,6 +1371,14 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
             side.text()
         );
         out.push_str(&spread(&ground, row, col, *side)?);
+        return Ok(out);
+    }
+    if let Some(((row, col, side, seed), detail)) = &cli.trace {
+        let r = chosen[0];
+        let ground = ground_of(r)?;
+        out.push_str(&crate::oracle_trace::trace(
+            &ground, row, col, *side, *seed, *detail,
+        )?);
         return Ok(out);
     }
     if let Some((row, col, side, seed)) = &cli.watch {
@@ -1880,5 +1909,27 @@ mod tests {
         let c = parse_cli(&args(&["--record", "M-0003", "--spread", "MGTK,APOC,B"])).unwrap();
         assert_eq!(c.spread, Some(("MGTK".into(), "APOC".into(), Side::B)));
         assert!(parse_cli(&args(&["--record", "M-0003", "--spread", "MGTK,APOC"])).is_err());
+    }
+
+    #[test]
+    fn trace_options_name_one_game_with_or_without_detail() {
+        let args = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let c = parse_cli(&args(&["--record", "M-0001", "--trace", "CAOS,BFRT,A,1"])).unwrap();
+        assert_eq!(
+            c.trace,
+            Some((("CAOS".into(), "BFRT".into(), Side::A, 1), true))
+        );
+        let c = parse_cli(&args(&[
+            "--record",
+            "M-0001",
+            "--trace-summary",
+            "CAOS,BFRT,b,0",
+        ]))
+        .unwrap();
+        assert_eq!(
+            c.trace,
+            Some((("CAOS".into(), "BFRT".into(), Side::B, 0), false))
+        );
+        assert!(parse_cli(&args(&["--record", "M-0001", "--trace", "CAOS,BFRT,A"])).is_err());
     }
 }

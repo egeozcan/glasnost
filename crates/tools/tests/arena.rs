@@ -204,6 +204,7 @@ fn arena_matches_the_oracle() {
         measurements: measurements(),
         compare_only: false,
         watch: None,
+        trace: None,
         groups: false,
         spread: None,
         ai_houses: false,
