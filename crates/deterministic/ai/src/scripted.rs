@@ -343,6 +343,19 @@ pub(crate) fn is_slave_miner(w: &World, t: TypeRef) -> bool {
             .is_some_and(|u| u.slave_miner)
 }
 
+/// Whether `t` is a building type whose objects keep slaves (S-0402
+/// claim 19: its type names a slave type), such as a slave miner's
+/// deployed form.
+pub(crate) fn keeps_slaves(w: &World, t: TypeRef) -> bool {
+    t.kind == Kind::Building
+        && w.rules()
+            .econ
+            .harvest
+            .buildings
+            .get(t.index as usize)
+            .is_some_and(|b| b.group.is_some())
+}
+
 /// Whether type `kind`/`index` is a vehicle that deploys into a
 /// construction yard (a slave miner deploys too, but into its own building).
 pub fn deploys_into_yard(w: &World, kind: Kind, index: u32) -> bool {
@@ -1293,7 +1306,8 @@ impl Script {
 
     /// The refinery type the house rebuilds before anything else, when it
     /// keeps harvesters (not slave miners, which are their slaves' own
-    /// refinery, S-0402 claim 14) and has lost every refinery: the cheapest
+    /// refinery, S-0402 claim 14) and owns no refinery (it lost them all,
+    /// or, starting with a harvester, has built none yet): the cheapest
     /// refinery type it can build and place now. A harvester whose owner
     /// owns no refinery queues *guard* and stands (S-0402 claim 13), so the
     /// house earns nothing until one stands again; a person rebuilds it
@@ -1311,7 +1325,7 @@ impl Script {
         }
         self.candidates(w, Role::Refinery)
             .into_iter()
-            .find(|&t| self.placeable(w, t))
+            .find(|&t| !keeps_slaves(w, t) && self.placeable(w, t))
     }
 
     /// Whether the house builds a refinery beside a new field (M8 step
@@ -1361,7 +1375,11 @@ impl Script {
         let Some(goal) = self.ore_goal(w) else {
             return false;
         };
-        let types = self.candidates(w, Role::Refinery);
+        let types: Vec<TypeRef> = self
+            .candidates(w, Role::Refinery)
+            .into_iter()
+            .filter(|&t| !keeps_slaves(w, t))
+            .collect();
         !refineries.iter().any(|&r| dist2(r, goal) <= reach)
             && !types.iter().any(|&t| self.in_line(w, t))
             && types
@@ -2121,9 +2139,13 @@ impl Script {
     /// lies wherever the spiral starts (M8 step B8: in the quick lane the
     /// Allied miners loaded 10 to 16 cells from their refinery and spent a
     /// third of each cycle on the way out). None for a house whose
-    /// refineries are slave miners (S-0402 claim 14), or for another role.
+    /// refineries are slave miners (S-0402 claim 14), for a type that keeps
+    /// slaves ([`keeps_slaves`]: a slave miner's building goes where the
+    /// slave-miner rules send it; before its first war factory a Yuri-style
+    /// house builds no slave-miner vehicle, M8 step B8), or for another
+    /// role.
     pub(crate) fn place_refinery(&self, w: &World, t: TypeRef) -> Option<CellXY> {
-        if role_of(w, t) != Some(Role::Refinery) || self.slave_miners(w) {
+        if role_of(w, t) != Some(Role::Refinery) || self.slave_miners(w) || keeps_slaves(w, t) {
             return None;
         }
         let goal = self.ore_goal(w)?;
