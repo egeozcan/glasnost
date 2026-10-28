@@ -1,9 +1,9 @@
 ---
 id: Q-1834
 title: How a debris piece rebounds on a sloped cell and off a cliff face, and which buildings and overlays it meets
-status: open
+status: answered
 related: [S-0317, S-0106]
-answered-by: []
+answered-by: [S-0317]
 ---
 
 ## Need
