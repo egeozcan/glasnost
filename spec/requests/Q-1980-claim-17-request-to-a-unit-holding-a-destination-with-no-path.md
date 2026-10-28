@@ -1,9 +1,9 @@
 ---
 id: Q-1980
 title: Does S-0417 claim 17's request refuse a walking unit that holds a destination with no path?
-status: open
+status: answered
 related: [S-0417, S-0208, S-0212]
-answered-by: []
+answered-by: [S-0417]
 ---
 
 ## Need
