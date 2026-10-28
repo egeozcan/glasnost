@@ -1,8 +1,9 @@
 //! Local lane for the M8 A4 round 5 play notes, part 2 (never in CI): with
 //! `GLASNOST_GAME_DIR` set, starts a skirmish through the windowless client
-//! and plays notes 26 (the superweapon buildings' slot animations), 28 (a
-//! building under repair) and 32 (the deploy key pressed for falling
-//! paratroopers). Each screen drawn on the CPU goes to
+//! and plays notes 26 (the superweapon buildings' slot animations) and 28 (a
+//! building under repair). Note 32 (the deploy key pressed for falling
+//! paratroopers) needs no picture: the specs give what the game does, and
+//! `claims_s0522`'s claim-17 test plays it. Each screen drawn on the CPU goes to
 //! `local-lane/m8/a4-r5/part2/` (git-ignored; `GLASNOST_LANE_OUT` moves
 //! it). Types are chosen by their fields, never by name; it prints counts
 //! and booleans only.
