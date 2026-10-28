@@ -1,9 +1,9 @@
 ---
 id: Q-1751
 title: Which cells count as threatened for a unit's path, and when
-status: open
+status: answered
 related: [S-0212, S-0309]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
