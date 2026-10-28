@@ -1,9 +1,9 @@
 ---
 id: Q-1975
 title: Does a unit's threat coefficient steer the coarse search of the substitution estimate?
-status: open
+status: answered
 related: [S-0212]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
