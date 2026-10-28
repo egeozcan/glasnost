@@ -1360,7 +1360,7 @@ pub struct Quirks {
     // spec: S-0501 claim 47 (c), Edge cases
     #[serde(default = "on")]
     pub aircraft_corner_sector_untracked: bool,
-    /// A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; released at most 20 leptons up, it then goes on unsteered at height 0 along its released facing until it climbs or reaches its destination's halving zone; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, holding the object-present flag in that cell, and it leaves by an ordinary take-off, which steers it toward its destination.
+    /// A factory release whose docking position lies above the terrain under it leaves the aircraft resting in the air, in neither cell layer and not tracked, and its first movement update descends; released at most 20 leptons up, it reaches height 0 there and, on a move, takes off at the move's first processing, before its second movement update; off: the release puts it at the docking position's horizontal location at the landing height above the terrain there, listed in its cell layer like an aircraft docked by landing, holding the object-present flag in that cell, and it leaves by an ordinary take-off at the order, which steers it toward its destination.
     // spec: S-0501 claim 48 (c) and (e), Edge cases
     #[serde(default = "on")]
     pub aircraft_released_above_pad: bool,

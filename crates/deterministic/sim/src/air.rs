@@ -257,6 +257,10 @@ pub struct AirState {
     /// cleared at its next re-file moment. S-0309 claim 7's ground-layer
     /// pass and the drawing read it.
     pub ground_filed: bool,
+    /// The start tick of the *move* whose first processing gave the
+    /// aircraft its destination, until that move's next processing gives
+    /// its flight point once more (claim 40).
+    pub regive: Option<i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -355,11 +359,11 @@ pub fn on_ground(w: &World, id: ObjectId) -> bool {
 }
 
 /// Claim 48 (c)'s low release while it stays at height 0 (*At height 0*):
-/// released above its pad and not yet climbing. Guidance's distance bands,
-/// its close-approach trigger and claim 8's landing in flight do not apply
-/// to it; claims 5, 6 and 8 apply as written to every other aircraft.
+/// released above its pad and not yet climbing. It is on the ground by its
+/// height (Terms), so claim 8's landing of an aircraft in flight that has
+/// no destination does not apply to it.
 fn low_release_at_height_0(w: &World, id: ObjectId, a: &AirState) -> bool {
-    // spec: S-0501 claim 48 (c) (At height 0: while the low-released aircraft stays at height 0); Q-1941 interim (the exemptions are the low release's only: claims 5 and 6 carry no height condition for any other aircraft, such as an attacker whose holding approach holds height 0)
+    // spec: S-0501 claim 48 (c) (At height 0: while the low-released aircraft stays at height 0) and Terms (on the ground: h at most the landing height 0)
     a.released && height(w, id) <= 0
 }
 
@@ -839,7 +843,7 @@ pub(crate) fn destination_taken(w: &mut World, id: ObjectId, dest: Option<Target
         return;
     };
     // spec: S-0501 claim 48 (c) and S-0417 claim 11 (its contact ends at the order when it takes a destination other than the pad; the rule reads the cell of its horizontal position, which must belong to the pad it is in contact with, not its height; a docking position outside the foundation leaves the contact held)
-    // spec: S-0213 table T3 (b) and S-0417 claim 11; Q-1940 interim (T3 (b) as written: a person's order has already ended the contact of a pad-bound type, which S-0417 claim 11 leaves untethered, so only a destination given without a person's order, or a tethered type, reaches this with its contact held outside the foundation)
+    // spec: S-0501 claim 48 (c) (Pad contact: a behaviour order, from a person or from our AI, has already ended a pad-bound type's contact by S-0213 table T3 (b), since S-0417 claim 11 leaves it untethered; so only a destination without a behaviour order, such as the release's rally move, or a tethered type, reaches this with its contact held outside the foundation, Q-1940)
     if d != Target::Object(k)
         && w.obj(k).is_some_and(|b| b.kind == Kind::Building)
         && pad_cell(w, k, id)
@@ -1104,7 +1108,7 @@ fn flight_target(w: &World, id: ObjectId) -> Option<Target> {
 /// facing requests of the update.
 fn guidance(w: &mut World, id: ObjectId, t: &Ty) {
     let a = st(w, id);
-    // spec: S-0501 claim 42 (after each movement tick of a living aircraft that has a flight point, is neither landing nor taking off and is above the terrain; a settled aircraft has completed its flight, claim 40) and claim 48 (c) (At height 0: no rule steers the low release, so its body keeps its released facing until it climbs)
+    // spec: S-0501 claim 42 (after each movement tick of a living aircraft that has a flight point, is neither landing nor taking off and is above the terrain; a settled aircraft has completed its flight, claim 40) and claim 48 (c) (At height 0: guidance applies only above the terrain, so it requests no facing for the low release at height 0, whose take-off steering, claim 8, keeps the released facing up to trunc(H / 2))
     if a.landing || a.taking_off || a.ground || height(w, id) <= 0 {
         return;
     }
@@ -1175,8 +1179,10 @@ fn take_off(w: &mut World, id: ObjectId, cruise: i32) {
     }
     let Some(o) = w.obj(id).cloned() else { return };
     // spec: S-0501 claim 8 and claim 24 (standing on a pad, it leaves its reservation for any destination other than that pad); S-0417 claim 11 (the tether ends when it leaves the ground)
+    // spec: S-0501 claim 48 (c) (Pad contact: claim 8's rule reads the cell that holds the aircraft's horizontal position, which must belong to the pad it is in contact with, so a low release from a docking position outside the foundation keeps its contact as it takes off, Q-1940)
     if let Some(k) = o.contact
         && dest != Some(Target::Object(k))
+        && (w.obj(k).is_none_or(|b| b.kind != Kind::Building) || pad_cell(w, k, id))
         && let Some(ob) = w.obj_mut(id)
     {
         ob.contact = None;
@@ -1740,6 +1746,31 @@ fn st_opt(w: &World, id: ObjectId) -> Option<&AirState> {
     w.obj(id).and_then(|o| o.air.as_ref())
 }
 
+/// The locomotor accepts the flight point of `dest` (claims 6, 8 and 40):
+/// at a movement update that finds a new destination, and at *move*'s
+/// first and next processing, which give it once more ([`move_`]). An
+/// aircraft that is then on the ground by its height, or landing, takes
+/// off.
+fn give_point(w: &mut World, id: ObjectId, t: &Ty, dest: Option<Target>) {
+    let raised = raise_now(w, id);
+    if let Some(a) = st_mut(w, id) {
+        a.flying_to = dest;
+        // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
+        a.raised = raised;
+        // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
+        a.unfinished = true;
+    }
+    let a = st(w, id);
+    // spec: S-0501 claim 8 and Terms (it takes off only when landing or on the ground by its height, whichever render-layer list it is filed in: claim 48 (c)'s released aircraft above the terrain starts no take-off)
+    if a.ground || a.landing || on_ground(w, id) {
+        take_off(w, id, t.cruise);
+        if t.landable {
+            // spec: S-0102 claim 4 (the first movement update after a take-off starts re-files, after that update's climb: the drawing evaluates after the tick)
+            crate::combat::effects::layer_refile(w, id);
+        }
+    }
+}
+
 fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     if !is_aircraft(w, id) {
         return false;
@@ -1814,22 +1845,24 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
     // Claim 8: a new destination makes an aircraft on the ground (or landing) take off.
     let new_dest = dest.is_some() && dest != a.flying_to;
     if alive && new_dest {
-        a.flying_to = dest;
-        // spec: S-0501 claim 6 (the height replacement is fixed with the point when it is accepted: a target and ammunition now)
-        a.raised = raise_now(w, id);
-        // spec: S-0501 claim 40 (a movement point accepted by the locomotor is an unfinished flight)
-        a.unfinished = true;
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
-        // spec: S-0501 claim 8 and Terms (it takes off only when landing or on the ground by its height, whichever render-layer list it is filed in: claim 48 (c)'s released aircraft above the terrain starts no take-off)
-        if a.ground || a.landing || on_ground(w, id) {
-            take_off(w, id, t.cruise);
-            if t.landable {
-                // spec: S-0102 claim 4 (the first movement update after a take-off starts re-files, after that update's climb: the drawing evaluates after the tick)
-                crate::combat::effects::layer_refile(w, id);
-            }
+        give_point(w, id, &t, dest);
+        a = st(w, id);
+    } else if alive
+        && dest.is_some()
+        && !a.landing
+        && !a.taking_off
+        && low_release_at_height_0(w, id, &a)
+        && w.obj(id)
+            .is_some_and(|o| o.beh.current != Some(Behaviour::Move))
+    {
+        // design: S-0501 claim 48 (c) and Open question 26 (a low release whose destination came with a behaviour other than move, such as the attack of (d), takes off at the start of its next movement update at height 0 with that destination, as a move's first processing takes it off before that update: the low release makes no movement update at height 0 with a destination but without a take-off, whatever gave it the destination; on a move, claim 40's processing alone gives the take-off)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.air = Some(a.clone());
         }
+        give_point(w, id, &t, dest);
         a = st(w, id);
     }
     if alive && dest.is_none() {
@@ -1859,7 +1892,7 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         if !a.released {
             a.held = ordinary_held(&a);
         } else if !a.taking_off && a.held == 0 && a.tgt.eq_num(F64::from_i64(1, mode)) {
-            // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update) and (c) (At height 0, Past the destination: the first update that ends with its distance at least S leaves that fraction of 1, and the next update climbs)
+            // spec: S-0501 claim 48 (b) (a movement update that it begins neither landing nor taking off, with held height 0 and a target speed fraction of 1, gives the held height of ordinary flight: it climbs in that same update)
             a.held = ordinary_held(&a);
             a.released = false;
         }
@@ -2033,13 +2066,13 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
             a.cur = approach_fraction(a.cur, a.tgt, ar, mode);
         }
         // spec: S-0501 claim 5 (the approach target replacement, without the fixed-full-speed case or the fly-by flag; the next ordinary calculation recomputes τ, so it governs only an adjustment in a later tick that skips that calculation)
-        // spec: S-0501 claim 48 (c) (At height 0: guidance's distance bands do not apply to the low release at height 0, claim 42 confining guidance to an aircraft above the terrain, so a low release 512 to 767 leptons from its destination keeps claim 5's ordinary target and climbs once that is 1); Q-1941 interim (any other aircraft keeps the replacement at any height)
+        // spec: S-0501 claims 5 and 42 and claim 48 (c) (At height 0: the replacement is part of guidance, which runs only for an aircraft above the terrain at the end of that movement update, whatever the aircraft; at height 0 its target fraction is claim 5's ordinary one, Q-1941)
         if let Some(p) = dp
             && !a.landing
             && !a.taking_off
             && !fixed
             && !t.fly_by
-            && !low_release_at_height_0(w, id, &a)
+            && height(w, id) > 0
         {
             let dd = planar(w, w.obj(id).map_or(here, |x| x.pos), p);
             let replacement = if dd < 128 {
@@ -2154,18 +2187,16 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         return;
     }
     let trigger = match o.dest {
-        // spec: S-0501 claim 8 (no destination in flight: it lands where it is; claim 48 (c)'s low release at height 0 is on the ground by Terms, as after its fall-back to rest, which stays at height 0 in its cell); Q-1941 interim (claim 8 as before for any other aircraft)
+        // spec: S-0501 claim 8 (no destination in flight: it lands where it is) and Terms (claim 48 (c)'s low release at height 0 is on the ground by its height, not in flight, as after its fall-back to rest, which stays at height 0 in its cell)
         None => !low_release_at_height_0(w, id, &a),
         Some(dd) => {
             let p = flight_point(w, id, dd);
             let dist = planar(w, o.pos, p);
             // spec: S-0501 claim 6 (standing in its destination cell with a target fraction of 0)
             let exact = o.pos.cell() == p.cell() && a.tgt.eq_num(F64::ZERO);
-            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claim 48 (c) (At height 0: the close-approach trigger is a request of guidance, which claim 42 confines to an aircraft above the terrain, so not for the low release at height 0); Q-1941 interim (any other aircraft keeps it at any height)
-            let close = dist < 128
-                && !fixed
-                && a.cur.lt(w.rules().air.twentieth)
-                && !low_release_at_height_0(w, id, &a);
+            // spec: S-0501 claim 6 (close approach: below 128 leptons, ordinary slowing, current fraction below 0.05) and claims 42 and 48 (c) (At height 0: the close-approach trigger is a request of guidance, which runs only for an aircraft above the terrain, whatever the aircraft; the exact-cell trigger applies at any height, Q-1941)
+            let close =
+                dist < 128 && !fixed && a.cur.lt(w.rules().air.twentieth) && height(w, id) > 0;
             exact || close
         }
     };
@@ -2185,8 +2216,8 @@ fn landing_trigger(w: &mut World, id: ObjectId, t: &Ty, fixed: bool) {
         set_dest(w, id, Some(next));
         return;
     }
-    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead) and claim 48 (c) (At height 0, Into the halving zone: a low release from a docking position inside the pad's foundation has no contact, so it falls back by T2's ground row and stays at height 0 in that cell)
-    // design: S-0501 Open question 26 (a low release from a docking position outside the foundation still holds its contact: in a destination cell holding no building it is in contact with it falls back, and T2's after-the-row enter is claim 24's, which takes the pad as its destination and takes off toward it; in a destination cell of the pad it is in contact with the restriction does not hold, so it starts to land and its touchdown docks it there, claim 24)
+    // spec: S-0501 claim 6 (a pad-bound aircraft whose cell holds no building it is in contact with falls back to rest instead)
+    // design: S-0501 Open question 26 (a pad-bound aircraft released from a docking position outside the foundation that took its destination without a behaviour order still holds its contact in flight: in a destination cell holding no building it is in contact with it falls back, and T2's after-the-row enter is claim 24's, which takes the pad as its destination; in a destination cell of the pad it is in contact with the restriction does not hold, so it starts to land and its touchdown docks it there, claim 24)
     if t.bound && !o.contact.is_some_and(|k| pad_cell(w, k, id)) {
         if t.docks.is_empty() && armed(w, id) && ammo_left(w, id) {
             // spec: S-0501 claims 6 and 45 (except a pad-bound type with no dock types and ammunition left: it keeps its cell and stays above it)
@@ -3157,6 +3188,17 @@ fn process(w: &mut World, id: ObjectId) -> i32 {
     }
 }
 
+/// *Move*'s processing gives the aircraft its destination's flight point
+/// (claim 40): the locomotor accepts it as at a new destination, so an
+/// aircraft on the ground by its height, or landing, takes off (claim 8).
+fn regive(w: &mut World, id: ObjectId) {
+    let Some(t) = ty(w, id) else { return };
+    let dest = flight_target(w, id);
+    if dest.is_some() {
+        give_point(w, id, &t, dest);
+    }
+}
+
 /// *Move* (claim 33).
 fn move_(w: &mut World, id: ObjectId) -> i32 {
     let lost = w
@@ -3169,8 +3211,11 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         fall_back(w, id);
         return standard(w, id);
     }
+    let (first, start) = w
+        .obj(id)
+        .map_or((false, 0), |o| (o.beh.expired, o.beh.start_tick));
     if let Some(o) = w.obj(id)
-        && o.beh.expired
+        && first
         && let Some(orig) = o.dest
     {
         // spec: S-0501 claim 40 (the first processing of every ordinary move applies the selection to its destination, also one the aircraft already flies to; its own earlier choice does not count against it: retained, or a replacement cell with its draws)
@@ -3178,6 +3223,17 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         if sel != orig {
             set_dest(w, id, Some(sel));
         }
+        // spec: S-0501 claim 40 (whether kept or replaced, the selected destination is given to the aircraft at that processing, as any destination is: a destination it gets in claim 8's sense, so one then on the ground by its height, or landing, takes off; claim 48 (c), Q-1942)
+        regive(w, id);
+        if let Some(a) = st_mut(w, id) {
+            a.regive = Some(start);
+        }
+    } else if !first && st(w, id).regive == Some(start) {
+        // spec: S-0501 claim 40 (the move's next processing gives its flight point to the flight once more, a destination it gets in claim 8's sense)
+        if let Some(a) = st_mut(w, id) {
+            a.regive = None;
+        }
+        regive(w, id);
     }
     let has_dest = w.obj(id).is_some_and(|o| o.dest.is_some());
     // spec: S-0501 claim 33 (when its locomotor has stopped there it falls back to rest)

@@ -462,11 +462,13 @@ fn claim_8_take_off_test_reads_height() {
 }
 
 /// Per-tick samples of `a` from the order on: (height, position, current
-/// fraction, tracked, listed, ground-filed).
+/// and target fraction, tracked, listed, ground-filed).
+#[derive(Debug)]
 struct Sample {
     h: i32,
     p: Pos,
     cur: glasnost_num::F64,
+    tgt: glasnost_num::F64,
     tracked: bool,
     listed: bool,
     filed: bool,
@@ -477,6 +479,7 @@ fn sample(w: &World, a: ObjectId) -> Sample {
         h: air::height(w, a),
         p: pos(w, a),
         cur: st(w, a).cur,
+        tgt: st(w, a).tgt,
         tracked: tracked(w, a),
         listed: listed(w, a),
         filed: air::ground_filed(w, a),
@@ -574,6 +577,13 @@ fn claim_48_leaving_near() {
         .expect("a cell 512 to 767 leptons away");
     let (_, first, second) = leave(&mut w, a, dest);
     assert_eq!(first.h, 80, "{}", describe(&w, a));
+    // spec: S-0501 claim 5 (the approach target replacement: 0.75 from 512 to below 768 leptons) and AC30 part k (4) (a target fraction of 0.75 at the end of the first update, which ends at 80 leptons, above the terrain, Q-1941)
+    assert!(
+        first
+            .tgt
+            .eq_num(glasnost_sim::rules::nearest_double("0.75")),
+        "{first:?}"
+    );
     assert!(
         st(&w, a).tgt.lt(glasnost_sim::rules::nearest_double("1")),
         "target fraction below 1"
@@ -582,7 +592,7 @@ fn claim_48_leaving_near() {
     assert!(second.tracked);
 }
 
-// spec: S-0501 claim 48 (c) (the low release: released at most 20 leptons up, the first update's descent reaches 0 and it is listed in its cell's ground layer at the end of that update, (b)'s end-of-update rule not applying; at the start of its second it is tracked at height 0 and, with a target fraction of 1, takes its cruise height as held height and climbs by F1, leaving the ground listing)
+// spec: S-0501 claim 48 (c) (the low release: released at most 20 leptons up, the first update's descent reaches 0 and it is listed in its cell's ground layer at the end of that update, (b)'s end-of-update rule not applying, not yet tracked; Low release on a move: it takes off at the move's first processing, before its second movement update, tracked at that take-off, claim 47 (a), its held height its cruise height; in its second update it climbs by F1 and leaves the ground listing, and that update, its first after the take-off starts, re-files it into the top render layer, S-0102 claim 4, Q-1942)
 #[test]
 fn claim_48_low_release() {
     let r = rules();
@@ -592,16 +602,17 @@ fn claim_48_low_release() {
     let (_, first, second) = leave(&mut w, a, testkit::mid(SIZE, 10, 0));
     assert_eq!(first.h, 0, "{}", describe(&w, a));
     assert!(first.listed && !first.tracked, "listed, not yet tracked");
-    assert!(second.tracked, "tracked in its second update");
+    assert!(first.filed, "still filed in the ground render layer");
+    assert!(second.tracked, "tracked at its take-off");
     // spec: S-0501 F1 (a climb step of 20 without passengers)
     assert_eq!(second.h, 20, "{}", describe(&w, a));
     assert!(!second.listed, "it left the ground listing");
-    assert!(second.filed, "still filed in the ground render layer");
-    // spec: S-0501 claim 48 (c) (no landing has brought it to height 0: its second update climbs by (b) without a take-off, so nothing re-files it)
-    assert!(!st(&w, a).taking_off, "{}", describe(&w, a));
+    assert!(!second.filed, "re-filed into the top render layer");
+    assert!(st(&w, a).taking_off, "{}", describe(&w, a));
+    assert_eq!(st(&w, a).held, air::cruise_height(&w, a));
 }
 
-// spec: S-0501 claim 48 (c) and (d) and S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it at the release, which ends its contact with the pad in the same way as a person's order and starts no take-off; its first movement update descends from 100 to 80 by F2, and its second climbs)
+// spec: S-0501 claim 48 (c) and (d) and S-0404 claim 13 (with a rally point, a type that need not return to a dock gets a move order to it at the release, which is not a behaviour order: the release gives the rally point as its destination and queues move, which becomes current in its first movement update; its docking position lies in a cell of the pad's foundation, so claim 8's rule ends its contact as it takes that destination; no take-off; its first movement update descends from 100 to 80 by F2, and its second climbs)
 #[test]
 fn claim_48_rally_point_at_the_release() {
     let r = rules();
@@ -610,6 +621,8 @@ fn claim_48_rally_point_at_the_release() {
     let o = w.obj(a).unwrap();
     assert_eq!(o.dest, Some(Target::Cell(dest)), "{}", describe(&w, a));
     assert_ne!(o.contact, Some(k), "the contact ended at the release");
+    assert_eq!(o.beh.queued, Some(Behaviour::Move), "{}", describe(&w, a));
+    assert_ne!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
     assert_eq!(air::height(&w, a), 100);
     assert!(!st(&w, a).taking_off && !tracked(&w, a));
     let mut hs = Vec::new();
@@ -620,6 +633,8 @@ fn claim_48_rally_point_at_the_release() {
     assert!(moved, "{hs:?} {}", describe(&w, a));
     assert_eq!(air::height(&w, a), 80, "{}", describe(&w, a));
     assert!(!st(&w, a).taking_off, "no take-off: {}", describe(&w, a));
+    // spec: S-0501 claim 31 (the queued move becomes current at the first start opportunity of its first movement update)
+    assert_eq!(w.obj(a).unwrap().beh.current, Some(Behaviour::Move));
     step(&mut w);
     // spec: S-0501 F1 (a climb step of 20 without passengers)
     assert_eq!(air::height(&w, a), 100, "{}", describe(&w, a));
@@ -891,7 +906,7 @@ fn low_update(
     )
 }
 
-// spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (a) (the low release at 10 leptons with a far move order: at the end of its first movement update at height 0, listed in its cell's ground layer and holding the ground flag there and in no other recorded cell; at the end of its second, which climbs with a target fraction of 1, a positive height and no flag and no listing in any recorded cell, as after claim 44's take-off)
+// spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (a) (the low release at 10 leptons with a far move order: at the end of its first movement update at height 0, listed in its cell's ground layer and holding the ground flag there and in no other recorded cell; it takes off at the move's first processing, and at the end of its second update, which climbs, a positive height and no flag and no listing in any recorded cell, as after claim 44's take-off)
 #[test]
 fn claim_48_e_low_release_climbs_and_clears() {
     let r = rules_k7();
@@ -949,30 +964,26 @@ fn centre(c: glasnost_map::CellXY) -> Pos {
     Pos::centre(c, 0)
 }
 
-/// Claim 5's halving zone (Terms): a post-step distance *d* below 86
-/// leptons and below *S* / 10, compared exactly as 10 *d* < *S*.
-fn in_zone(d: i32, s: i32) -> bool {
-    // spec: S-0501 Terms (halving zone: d < 86 and d < S / 10) and AC30 part k (7) (b) (read from the recorded positions)
-    d < 86 && 10 * d < s
-}
-
 /// One sample of AC30 part k (7)'s recorder, at the end of a movement
-/// update: height, horizontal position, body facing, speed fractions,
-/// behaviour (current, queued), destination and cell, with its listing in
-/// that cell's ground layer.
+/// update: height, held height, horizontal position, body facing, speed
+/// fractions, behaviour (current, queued), destination and cell, with its
+/// listing in that cell's ground layer and its render layer (whether it is
+/// still filed in the ground render layer).
 #[derive(Clone, Debug)]
 struct Up {
     h: i32,
+    held: i32,
     pos: Pos,
     cell: glasnost_map::CellXY,
     listed: bool,
+    filed: bool,
     facing: u16,
     tgt: glasnost_num::F64,
-    cur: glasnost_num::F64,
     beh: (Option<Behaviour>, Option<Behaviour>),
     dest: Option<Target>,
     contact: Option<ObjectId>,
     landing: bool,
+    taking_off: bool,
     ground: bool,
 }
 
@@ -982,22 +993,20 @@ fn sample_up(w: &World, a: ObjectId, cells: &mut Vec<glasnost_map::CellXY>) -> U
     let s = st(w, a);
     Up {
         h,
+        held: s.held,
         pos: o.pos,
         cell,
         listed,
+        filed: air::ground_filed(w, a),
         facing: o.body.value(w.tick),
         tgt: s.tgt,
-        cur: s.cur,
         beh: (o.beh.current, o.beh.queued),
         dest: o.dest,
         contact: o.contact,
         landing: s.landing,
+        taking_off: s.taking_off,
         ground: s.ground,
     }
-}
-
-fn one(w: &World) -> glasnost_num::F64 {
-    glasnost_num::F64::from_i64(1, w.rules().mode)
 }
 
 /// The result of a low-release run: the world, the pad, the aircraft, the
@@ -1051,27 +1060,6 @@ fn low_run_by(
     (w, k, a, to, cells, samples)
 }
 
-/// [`low_run_by`] with a person's move order to the destination.
-fn low_run_with(
-    r: &Ruleset,
-    pad: &str,
-    name: &str,
-    dest: impl Fn(&World, ObjectId) -> glasnost_map::CellXY,
-    go: impl FnMut(&World, ObjectId, &[Up]) -> bool,
-) -> Run {
-    low_run_by(r, pad, name, dest, move_to, go)
-}
-
-/// [`low_run_with`] under AC30 part k (7)'s rules.
-fn low_run(
-    pad: &str,
-    name: &str,
-    dest: impl Fn(&World, ObjectId) -> glasnost_map::CellXY,
-    go: impl FnMut(&World, ObjectId, &[Up]) -> bool,
-) -> Run {
-    low_run_with(&rules_k7(), pad, name, dest, go)
-}
-
 /// A destination given without a person's order, as a behaviour of the
 /// aircraft's own gives it: straight to the locomotor (S-0501 claim 48 (c),
 /// *Pad contact*, reads only the cell; S-0213 table T3 (b) applies only to
@@ -1087,116 +1075,113 @@ fn abeam(w: &World, a: ObjectId, rows: i32) -> glasnost_map::CellXY {
     glasnost_map::CellXY::new(c.x, c.y - rows)
 }
 
-/// Every sample up to and including index `n` is at height 0 with the
-/// released facing, listed in its cell's ground layer.
-fn unsteered_through(samples: &[Up], n: usize) {
-    for (u, s) in samples.iter().take(n + 1).enumerate() {
-        // spec: S-0501 claim 48 (c) (At height 0: nothing steers it; its body keeps the facing it was released with, S-0404 claim 13) and AC30 part k (7) (falsified by a change of body facing while it is at height 0)
-        assert_eq!(s.h, 0, "update {u}: {s:?}");
-        assert_eq!(s.facing, EAST, "update {u}: {s:?}");
-        assert!(s.listed, "update {u}: in its cell's ground layer: {s:?}");
-        assert!(!s.landing && !s.ground, "update {u}: {s:?}");
-    }
-}
-
-/// The first update that ends with a target fraction of 1, and the next
-/// one, which climbs; every update before the climb is at height 0 with
-/// the released facing. Returns the index of the first.
-fn climbs_after_full_fraction(w: &World, samples: &[Up]) -> usize {
+/// AC30 part k (7)'s expectations common to every run, on the samples of
+/// [`low_run_by`] (index 0 the end of the first movement update):
+/// - at the end of the first update, height 0 and listed in its cell's
+///   ground layer, still on the released facing (its flag there is checked
+///   by the recorder);
+/// - at the end of the second, after the take-off at the move's first
+///   processing (claim 8): a positive height, its cruise height as held
+///   height, taking off, in neither cell layer of any recorded cell and no
+///   longer filed in the ground render layer (S-0102 claim 4);
+/// - no change of body facing up to and including the first update that
+///   ends above trunc(*H* / 2).
+///
+/// Returns the index of that update.
+fn k7_expect(w: &World, a: ObjectId, cells: &[glasnost_map::CellXY], samples: &[Up]) -> usize {
+    let first = &samples[0];
+    // spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (height 0 at the end of the first movement update, listed in the ground layer of its cell, with that cell's ground flag set)
+    assert_eq!(first.h, 0, "{first:?}");
+    assert!(first.listed, "in its cell's ground layer: {first:?}");
+    assert!(!first.taking_off && !first.landing, "{first:?}");
+    assert_eq!(first.facing, EAST, "{first:?}");
+    let second = samples
+        .get(1)
+        .unwrap_or_else(|| panic!("a second update: {first:?}"));
+    let cruise = air::cruise_height(w, a);
+    // spec: S-0501 claim 48 (c) (Low release on a move: the move's first processing gives the destination again, kept or replaced, claim 40, and an aircraft on the ground by its height takes off, claim 8: held height its cruise height, tracked at that take-off; in the second update it climbs and leaves the ground listing) and AC30 part k (7) (falsified by height 0 or a held height of 0 at the end of the second update, kept or replaced)
+    assert!(second.h > 0, "it climbs: {second:?}");
+    assert_eq!(second.held, cruise, "{second:?}");
+    assert!(second.taking_off, "a take-off: {second:?}");
+    assert!(!second.listed, "{second:?}");
+    assert_unlisted(w, cells, a);
+    // spec: S-0501 claim 48 (c) (for a landable type the second movement update is its first after the take-off starts and re-files it into the top render layer, S-0102 claim 4) and AC30 part k (7) (falsified by the ground render layer at the end of the second update)
+    assert!(!second.filed, "re-filed: {second:?}");
+    // spec: S-0501 claim 8 (at or below trunc(H / 2) no new heading request: it goes on along the released facing, which the release also requested) and AC30 part k (7) (falsified by a change of body facing before the first update that ends above trunc(H / 2))
+    let half = cruise / 2;
     let n = samples
         .iter()
-        .position(|s| s.tgt.eq_num(one(w)))
-        .unwrap_or_else(|| panic!("a target fraction of 1: {:?}", samples.last()));
-    unsteered_through(samples, n);
-    // spec: S-0501 claim 48 (b) third case and (c) (Past the destination: in the next update its held height becomes that of ordinary flight at the start, and it climbs by F1) and AC30 part k (7) (c) (falsified by no climb in the update after that)
-    let next = samples
-        .get(n + 1)
-        .unwrap_or_else(|| panic!("the update after: {:?}", samples.last()));
-    assert!(next.h > 0, "it climbs in the next update: {next:?}");
+        .position(|s| s.h > half)
+        .unwrap_or_else(|| panic!("above trunc(H / 2): {:?}", samples.last()));
+    for (u, s) in samples.iter().take(n + 1).enumerate() {
+        assert_eq!(s.facing, EAST, "update {u}: {s:?}");
+    }
     n
 }
 
-// spec: S-0501 claim 48 (c) (At height 0, Into the halving zone: a type that is not pad-bound starts to land there, claim 7) and (e) (at height 0 at the end of every movement update until its landing starts, listed in the ground layer of the cell it is in at that tick and holding the ground flag there and in no other recorded cell, so that a cell it has left is clear; then it holds the flag at the end of its touchdown, in the cell that then holds it). DRIFT, not pad-bound, with a destination 512 leptons straight ahead along its released facing; MIDPAD releases it above a cell's middle, so that its path runs through the destination cell's centre. Its landing starts in the first update that ends in claim 5's halving zone, not before; the run crosses at least one cell boundary at height 0
-#[test]
-fn claim_48_e_low_release_at_height_0_carries_its_flag() {
-    let (mut w, _, a, to, mut cells, samples) = low_run(
-        "MIDPAD",
-        "DRIFT",
-        |w, a| ahead(w, a, 512),
-        |_, _, s| s.last().is_some_and(|s| !s.landing && !s.ground),
-    );
-    let z = samples
-        .iter()
-        .position(|s| s.landing)
-        .unwrap_or_else(|| panic!("its landing starts: {}", describe(&w, a)));
-    unsteered_through(&samples, z - 1);
-    let s = &samples[z];
-    assert!(in_zone(dist(&w, s.pos, centre(to)), 2000), "{s:?}");
-    assert!(
-        samples[..z]
-            .iter()
-            .all(|s| !in_zone(dist(&w, s.pos, centre(to)), 2000)),
-        "no earlier update ends in the zone"
-    );
-    assert_eq!(s.cell, to, "{s:?}");
-    let mut seen: Vec<_> = samples.iter().map(|s| s.cell).collect();
-    seen.dedup();
-    assert!(seen.len() > 1, "it crosses a cell at height 0: {seen:?}");
-    // spec: S-0501 claim 48 (e) (it next holds the flag at the end of its touchdown, in the cell that then holds it)
-    let down = run_until(&mut w, 400, |w| st(w, a).ground);
-    assert!(down, "{}", describe(&w, a));
-    let (h, c, _) = low_update(&w, a, &mut cells);
-    assert_eq!(h, 0);
-    assert_flags_only(&w, &cells, Some(c));
-}
-
-// spec: S-0501 claim 48 (b), (c) and (e) (At height 0, Past the destination: a low release at height 0 with a destination off its heading goes straight on along its released facing, unturned; the first update that ends with a target fraction of 1 is followed by an update that climbs, and at the end of that update it holds no flag and is in neither list). Until then the flag goes with it from cell to cell at height 0
-#[test]
-fn claim_48_e_low_release_off_its_heading_goes_straight_on() {
-    let (w, _, a, _, cells, samples) = low_run(
-        "TENPAD",
-        "DRIFT",
-        |w, a| {
-            let p = pos(w, a);
-            let c = p.cell();
-            // A destination 512 to 767 leptons away and not straight ahead.
-            [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                .iter()
-                .flat_map(|&(ux, uy)| (1..4).map(move |d| (ux * d, uy * d)))
-                .map(|(dx, dy)| glasnost_map::CellXY::new(c.x + dx, c.y + dy))
-                .find(|&q| {
-                    let m = Pos::centre(q, 0);
-                    let d = (m.x - p.x).abs().max((m.y - p.y).abs());
-                    (512..768).contains(&d) && (1..4).all(|n| q != ahead(w, a, n * 256))
-                })
-                .expect("a destination off its heading")
-        },
-        |_, _, s| s.last().is_some_and(|s| s.h == 0),
-    );
-    climbs_after_full_fraction(&w, &samples);
-    let mut seen: Vec<_> = samples.iter().map(|s| s.cell).collect();
-    seen.dedup();
-    assert!(seen.len() > 1, "it crosses a cell at height 0: {seen:?}");
-    assert!(
-        air::height(&w, a) > 0 && !st(&w, a).landing,
-        "{}",
-        describe(&w, a)
-    );
-    assert_flags_only(&w, &cells, None);
-    assert_unlisted(&w, &cells, a);
-    assert_eq!(st(&w, a).mark, None);
-}
-
-// spec: S-0501 claim 48 (c) (At height 0, Into the halving zone: a pad-bound type whose docking position lies in a cell of the pad's foundation has no pad contact there, so it falls back to rest by T2's ground row: it forgets its target and destination and takes guard, its house being human-controlled; with full ammunition it looks for no pad; it stays at height 0 in that cell, listed there) and AC30 part k (7) (b) (NEAR, pad-bound, a destination 512 leptons straight ahead along facing 16384, its centre on the line; at every update before the first that ends in the halving zone: height 0, the released facing, its destination and move kept; in that update a target fraction of 0 and the fall-back, with no landing; no climb, no stop outside the destination cell)
-#[test]
-fn claim_48_c_low_release_straight_ahead_falls_back_in_the_halving_zone() {
+/// Runs [`low_run_by`] until `extra` updates after the first that ends
+/// above trunc(*H* / 2).
+fn low_run_k7(
+    pad: &str,
+    dest: impl Fn(&World, ObjectId) -> glasnost_map::CellXY,
+    give: impl FnOnce(&mut World, ObjectId, glasnost_map::CellXY),
+    extra: usize,
+) -> Run {
     let r = rules_k7();
-    let s_near = r.sim.aircraft["NEAR"].slowdown_distance.unwrap();
-    let after = std::cell::Cell::new(0);
-    let (w, _, a, to, _, samples) = low_run_with(
-        &r,
+    let half = std::cell::Cell::new(None);
+    low_run_by(&r, pad, "NEAR", dest, give, |w, a, s| {
+        let n = s.len() - 1;
+        if half.get().is_none() && s[n].h > air::cruise_height(w, a) / 2 {
+            half.set(Some(n));
+        }
+        half.get().is_none_or(|m| n < m + extra)
+    })
+}
+
+/// The bearing from a sample's position to the centre of `to`.
+fn bearing(s: &Up, to: glasnost_map::CellXY) -> u16 {
+    glasnost_num::geom::direction(
+        i64::from(centre(to).x - s.pos.x),
+        i64::from(centre(to).y - s.pos.y),
+        true,
+    )
+}
+
+/// After the update `n`, the body turns toward `to`: the last sample's
+/// facing is nearer the bearing than the facing at `n` (S-0206 claim 1).
+fn turns_toward(samples: &[Up], n: usize, to: glasnost_map::CellXY) {
+    let off = |s: &Up| glasnost_num::geom::delta(s.facing, bearing(s, to)).abs();
+    let (at, last) = (&samples[n], samples.last().unwrap());
+    // spec: S-0501 claim 8 (above trunc(H / 2), up to and including the upper threshold, its body is requested to face the destination) and AC30 part k (7) (from then on a turn toward the destination)
+    assert!(
+        last.facing != EAST && off(last) < off(at),
+        "{at:?} {last:?}"
+    );
+}
+
+// spec: S-0501 claim 48 (c) and (e) and AC30 part k (7) (a) (a move order as in (3): the low release takes off at the move's first processing, before its second movement update; at the end of that update a positive height, no flag and no listing in any recorded cell, as after claim 44's take-off)
+#[test]
+fn ac30_k7_a_far_move_takes_off_at_the_first_processing() {
+    let (w, _, a, to, cells, samples) =
+        low_run_k7("TENPAD", |_, _| testkit::mid(SIZE, 10, 0), move_to, 5);
+    k7_expect(&w, a, &cells, &samples);
+    assert_flags_only(&w, &cells, None);
+    assert_eq!(st(&w, a).mark, None);
+    assert_eq!(
+        samples[1].dest,
+        Some(Target::Cell(to)),
+        "kept: {:?}",
+        samples[1]
+    );
+    // spec: S-0501 claim 47 (a) (tracked at the take-off)
+    assert!(tracked(&w, a), "{}", describe(&w, a));
+}
+
+// spec: S-0501 claims 5 and 42 and AC30 part k (7) (b) (a move order as in (4), 512 to 767 leptons straight ahead along the released facing: at the end of the first update, at height 0, claim 5's ordinary target fraction, no approach target replacement, since guidance runs only above the terrain, Q-1941; then the take-off of every run)
+#[test]
+fn ac30_k7_b_straight_ahead_takes_off_with_the_ordinary_fraction() {
+    let (w, _, a, to, cells, samples) = low_run_k7(
         "MIDPAD",
-        "NEAR",
         |w, a| {
             let p = pos(w, a);
             let to = ahead(w, a, 512);
@@ -1205,235 +1190,189 @@ fn claim_48_c_low_release_straight_ahead_falls_back_in_the_halving_zone() {
             assert!((m.y - p.y).abs() <= 20 && (512..768).contains(&dist(w, p, m)));
             to
         },
-        |_, _, s| {
-            if s.last().is_some_and(|s| s.dest.is_none()) {
-                after.set(after.get() + 1);
-            }
-            after.get() <= 30
-        },
+        move_to,
+        5,
     );
-    let zone = |s: &Up| in_zone(dist(&w, s.pos, centre(to)), s_near);
-    let z = samples
-        .iter()
-        .position(zone)
-        .unwrap_or_else(|| panic!("an update that ends in the zone: {:?}", samples.last()));
-    // Before the zone: unsteered, at height 0, still on its move.
-    unsteered_through(&samples, z - 1);
-    for s in &samples[..z] {
-        assert_eq!(
-            s.dest,
-            Some(Target::Cell(to)),
-            "no fall-back before the zone: {s:?}"
-        );
-        assert_eq!(s.beh.0, Some(Behaviour::Move), "{s:?}");
-    }
-    // The first update in the zone: a target fraction of 0, the fall-back.
-    let s = &samples[z];
-    // spec: S-0501 claim 5 (in the halving zone τ = 0) and claim 6 (the exact-cell trigger, with its pad-bound restriction)
-    assert!(s.tgt.eq_num(glasnost_num::F64::ZERO), "{s:?}");
-    assert_eq!(s.cell, to, "{s:?}");
-    assert_eq!(s.dest, None, "the destination forgotten: {s:?}");
-    assert!(
-        s.beh.0 == Some(Behaviour::Guard) || s.beh.1 == Some(Behaviour::Guard),
-        "guard (T2's ground row, a human-controlled house): {s:?}"
-    );
-    // After it: at rest at height 0 in that cell, listed there; no landing, no climb, no pad.
-    for s in &samples[z..] {
-        assert_eq!(s.h, 0, "{s:?}");
-        assert_eq!(s.cell, to, "{s:?}");
-        assert!(s.listed && !s.landing, "{s:?}");
-        assert_eq!(s.facing, EAST, "{s:?}");
-        assert_eq!(s.dest, None, "{s:?}");
-        assert_eq!(s.contact, None, "{s:?}");
-        assert_ne!(
-            s.beh.0,
-            Some(Behaviour::Enter),
-            "it looks for no pad: {s:?}"
-        );
-    }
-    let last = samples.last().unwrap();
-    assert!(last.cur.eq_num(glasnost_num::F64::ZERO), "{last:?}");
-    assert_eq!(
-        samples[samples.len() - 2].pos,
-        last.pos,
-        "it rests: {last:?}"
-    );
-    assert!(after.get() > 30, "{}", describe(&w, a));
-}
-
-// spec: S-0501 claim 48 (c) (At height 0, Past the destination) and AC30 part k (7) (c) (NEAR, a destination 512 leptons away at a right angle to facing 16384: it goes straight on along its released facing, past the destination, at height 0 and unturned, until the first update that ends with its distance at least its slowdown distance, which leaves a target fraction of 1; in the next update it climbs; from then on guidance turns its body toward the destination, S-0206 claim 1, and its flag and listing end as in (a)); falsified by a stop before it climbs, a climb before its distance reaches its slowdown distance, or no climb in the update after that
-#[test]
-fn claim_48_c_low_release_at_a_right_angle_goes_past_then_climbs() {
-    let r = rules_k7();
-    let s_near = r.sim.aircraft["NEAR"].slowdown_distance.unwrap();
-    let climbed = std::cell::Cell::new(0);
-    let (w, _, a, to, cells, samples) = low_run_with(
-        &r,
-        "MIDPAD",
-        "NEAR",
-        |w, a| abeam(w, a, 2),
-        |_, _, s| {
-            if s.last().is_some_and(|s| s.h > 0) {
-                climbed.set(climbed.get() + 1);
-            }
-            climbed.get() <= 80
-        },
-    );
-    let n = climbs_after_full_fraction(&w, &samples);
-    for (u, s) in samples.iter().take(n + 1).enumerate() {
-        let d = dist(&w, s.pos, centre(to));
-        // spec: S-0501 claim 5 (τ = min(1, d / S)) and claim 48 (c) (no distance band at height 0)
-        assert_eq!(d >= s_near, u == n, "update {u}: d {d}: {s:?}");
-        assert_eq!(
-            s.dest,
-            Some(Target::Cell(to)),
-            "no stop before it climbs: {s:?}"
-        );
+    let first = &samples[0];
+    let mode = w.rules().mode;
+    let s = rules_k7().sim.aircraft["NEAR"].slowdown_distance.unwrap();
+    let d = dist(&w, first.pos, centre(to));
+    // spec: S-0501 claim 5 (τ = min(1, d / S) in ordinary slowing) and AC30 part k (4) (the named type's slowdown distance chosen so that d / S differs from 0.75 and 0.5 by at least 0.05)
+    let ordinary = glasnost_num::F64::from_i64(i64::from(d), mode)
+        .div(glasnost_num::F64::from_i64(i64::from(s), mode), mode);
+    assert!(first.tgt.eq_num(ordinary), "{first:?} d {d} S {s}");
+    for x in ["0.75", "0.5"] {
         assert!(
-            u == 0 || s.pos.x > samples[u - 1].pos.x,
-            "straight on east: {s:?}"
+            !first.tgt.eq_num(glasnost_sim::rules::nearest_double(x)),
+            "{first:?}"
         );
     }
-    // spec: S-0501 claim 42 (guidance above the terrain: the body toward the flight point) and S-0206 claim 1 (turning)
-    let bearing = |s: &Up| {
-        glasnost_num::geom::direction(
-            i64::from(centre(to).x - s.pos.x),
-            i64::from(centre(to).y - s.pos.y),
-            true,
-        )
-    };
-    let start = &samples[n + 1];
-    let last = samples.last().unwrap();
-    let off = |s: &Up| glasnost_num::geom::delta(s.facing, bearing(s)).abs();
-    assert!(
-        last.facing != EAST && off(last) < off(start),
-        "{start:?} {last:?}"
-    );
-    assert!(last.h > 0 && !last.listed, "{last:?}");
-    assert_flags_only(&w, &cells, None);
-    assert_unlisted(&w, &cells, a);
+    k7_expect(&w, a, &cells, &samples);
 }
 
-// spec: S-0501 claim 48 (c) (At height 0: guidance's distance bands, claim 5's approach target replacement, do not apply at height 0, so a destination 512 to 767 leptons away is treated like any other below the slowdown distance S). NEAR6 (S = 600) with a destination 512 leptons away at a right angle: the first update that ends at a distance of at least 600 leaves a target fraction of 1, not the 0.75 of the 512-to-768 band, and the next update climbs while it is still within 768 leptons. On the interim (bands at height 0) it would climb only at 768 leptons
+// spec: S-0501 claim 48 (c) and AC30 part k (7) (c) (a move order as in (4) at a right angle to the released facing: the ordinary target fraction at the end of the first update, the take-off at the move's first processing, the released facing kept up to trunc(H / 2) and then a turn toward the destination; the take-off does not depend on the destination's direction)
 #[test]
-fn claim_48_c_no_distance_bands_at_height_0() {
-    let r = rules_k7();
-    let (w, _, _, to, _, samples) = low_run_with(
-        &r,
-        "MIDPAD",
-        "NEAR6",
-        |w, a| abeam(w, a, 2),
-        |_, _, s| s.last().is_some_and(|s| s.h == 0),
-    );
-    let n = climbs_after_full_fraction(&w, &samples);
-    let d = dist(&w, samples[n].pos, centre(to));
-    assert!((600..768).contains(&d), "d {d}: {:?}", samples[n]);
-}
-
-// spec: S-0501 claim 48 (c) (At height 0, Past the destination: passing through the destination cell with a positive target fraction starts no landing; claim 6's close-approach trigger and claim 5's distance bands are guidance's and do not apply at height 0). DRIFT, not pad-bound, at SIDEPAD: its path runs 100 leptons beside the destination cell's centre, inside the cell and below 128 leptons, never in the halving zone; it goes on past and climbs once its target fraction is 1. On the interim (the 0 band below 128 leptons at height 0) the exact-cell trigger would land it in that cell
-#[test]
-fn claim_48_c_positive_fraction_through_the_destination_cell_starts_no_landing() {
-    let (w, _, _, to, _, samples) = low_run(
-        "SIDEPAD",
-        "DRIFT",
-        |w, a| {
-            let to = ahead(w, a, 512);
-            assert_eq!((centre(to).y - pos(w, a).y).abs(), 100);
-            to
-        },
-        |_, _, s| s.last().is_some_and(|s| s.h == 0),
-    );
-    let n = climbs_after_full_fraction(&w, &samples);
-    let inside: Vec<_> = samples[..=n].iter().filter(|s| s.cell == to).collect();
-    assert!(!inside.is_empty(), "it passes through the destination cell");
-    for s in &inside {
-        let d = dist(&w, s.pos, centre(to));
-        assert!(!in_zone(d, 2000), "void: in the zone: {s:?}");
-        assert!(s.tgt.gt(glasnost_num::F64::ZERO), "{s:?}");
+fn ac30_k7_c_right_angle_takes_off_then_turns() {
+    let (w, _, a, to, cells, samples) = low_run_k7("MIDPAD", |w, a| abeam(w, a, 2), move_to, 12);
+    let first = &samples[0];
+    for x in ["0.75", "0.5"] {
+        assert!(
+            !first.tgt.eq_num(glasnost_sim::rules::nearest_double(x)),
+            "{first:?}"
+        );
     }
+    let n = k7_expect(&w, a, &cells, &samples);
+    turns_toward(&samples, n, to);
+}
+
+// spec: S-0501 claim 40 and AC30 part k (7) (d) (a move order naming a cell of the pad's own foundation next to the docking position's cell, which claim 40 replaces at the move's first processing: the replaced destination is given to the aircraft at that processing, and it takes off as with a kept one, turning toward the replacement cell above trunc(H / 2)); void if the destination after that processing is the order's cell. MIDPAD docks above the middle of a foundation cell, so that claim 4's descent nudge keeps it in the docking cell: from TENPAD's corner docking position the nudge can carry it into the destination cell, which F7 then accepts as the cell that holds the lander itself
+#[test]
+fn ac30_k7_d_replaced_destination_takes_off_too() {
+    let (w, k, a, to, cells, samples) = low_run_k7(
+        "MIDPAD",
+        |w, a| {
+            let c = pos(w, a).cell();
+            let o = w.obj(a).unwrap();
+            let feet = glasnost_sim::econ::placement::foundation_cells(
+                w,
+                w.obj(o.contact.unwrap()).unwrap().type_index,
+                w.obj(o.contact.unwrap()).unwrap().pos.cell(),
+            );
+            *feet
+                .iter()
+                .find(|q| **q != c && (q.x - c.x).abs() <= 1 && (q.y - c.y).abs() <= 1)
+                .expect("a foundation cell next to the docking cell")
+        },
+        move_to,
+        12,
+    );
+    assert!(pad_feet(&w, k).contains(&to));
+    // spec: S-0501 AC30 part k (7) (d) (void if the recorded behaviour after the order is not move, or if the recorded destination after that processing is the order's cell)
+    assert_eq!(samples[0].beh.0, Some(Behaviour::Move), "{:?}", samples[0]);
+    let Some(Target::Cell(got)) = samples[1].dest else {
+        panic!("a cell destination: {:?}", samples[1]);
+    };
+    assert_ne!(
+        got,
+        to,
+        "void: claim 40 kept the order's cell: {:?} {}",
+        &samples[..3],
+        describe(&w, a)
+    );
+    let n = k7_expect(&w, a, &cells, &samples);
+    if bearing(&samples[n], got) != EAST {
+        turns_toward(&samples, n, got);
+    }
+}
+
+// spec: S-0501 claim 40 (the move's first processing gives the selected destination to the aircraft, and the move's next processing gives its flight point to the flight once more)
+#[test]
+fn claim_40_the_next_processing_gives_the_flight_point_once_more() {
+    let r = rules_k7();
+    let start = std::cell::Cell::new(None);
+    let (w, _, a, to, _, samples) = low_run_by(
+        &r,
+        "TENPAD",
+        "NEAR",
+        |_, _| testkit::mid(SIZE, 10, 0),
+        move_to,
+        |w, a, _| {
+            let o = w.obj(a).unwrap();
+            match (start.get(), st(w, a).regive) {
+                (None, Some(t)) => {
+                    // spec: S-0501 claim 40 (given at the move's first processing: the move's start)
+                    assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(w, a));
+                    assert_eq!(t, o.beh.start_tick, "{}", describe(w, a));
+                    start.set(Some(t));
+                    true
+                }
+                (Some(t), Some(u)) => {
+                    assert_eq!(t, u);
+                    true
+                }
+                (Some(_), None) => false,
+                (None, None) => true,
+            }
+        },
+    );
+    let t = start
+        .get()
+        .unwrap_or_else(|| panic!("no first processing: {samples:?}"));
+    let o = w.obj(a).unwrap();
+    // spec: S-0501 claim 40 (the next processing of the same move gives the point once more: the flight's point is the destination's, an unfinished flight)
+    assert_eq!(o.beh.current, Some(Behaviour::Move), "{}", describe(&w, a));
+    assert_eq!(o.beh.start_tick, t, "the same move: {}", describe(&w, a));
+    assert_eq!(st(&w, a).flying_to, Some(Target::Cell(to)));
+    assert!(st(&w, a).unfinished);
+    assert_eq!(
+        st(&w, a).regive,
+        None,
+        "a later processing: {}",
+        describe(&w, a)
+    );
     assert!(
-        inside.iter().any(|s| dist(&w, s.pos, centre(to)) < 128),
-        "within 128 leptons of the centre"
+        (2..600).contains(&samples.len()),
+        "a later processing: {samples:?}"
     );
 }
 
-// spec: S-0213 table T3 (b) (an order breaks off the contact of an actor that is not tethered) and S-0417 claim 11 (a type that must return to a dock refuses the release's tether), interim of Q-1940: a person's move order ends the contact of a pad-bound low release from a docking position outside the foundation too, so in the halving zone it falls back to rest as from a docking position inside it (claim 48 (c)): guard, no pad, no enter
+// spec: S-0501 claim 48 (c) (Pad contact: for a pad-bound type a behaviour order ends the contact at the order wherever the docking position lies, S-0213 table T3 (b), the type refusing the release's tether, S-0417 claim 11, Q-1940) and AC30 part k (7) (e) (from a docking position outside the foundation, a person's move order as in (3): contact and no tether at the release; no contact at the first sample after the order, on either object; then the take-off of every run)
 #[test]
-fn claim_48_c_person_order_ends_a_pad_bound_contact_outside_the_foundation() {
-    let after = std::cell::Cell::new(0);
-    let (w, k, _, to, _, samples) = low_run(
-        "OUTPAD",
-        "NEAR",
-        |w, a| ahead(w, a, 512),
-        |_, _, s| {
-            if s.last().is_some_and(|s| s.dest.is_none()) {
-                after.set(after.get() + 1);
-            }
-            after.get() <= 30
-        },
-    );
-    let feet = pad_feet(&w, k);
-    assert!(!feet.contains(&samples[0].cell) && !feet.contains(&to));
+fn ac30_k7_e_person_order_ends_a_pad_bound_contact_outside_the_foundation() {
+    let r = rules_k7();
+    let (w, k, a) = built_at(&r, "OUTPAD", "NEAR");
+    // spec: S-0417 claim 11 (docked at K: contact; a type that must return to a dock refuses the tether)
+    assert_eq!(w.obj(a).unwrap().contact, Some(k));
+    assert!(!glasnost_sim::econ::release::tethered(&w, a));
+    assert!(!pad_feet(&w, k).contains(&pos(&w, a).cell()));
+    drop(w);
+    let (w, k, a, _, cells, samples) =
+        low_run_k7("OUTPAD", |_, _| testkit::mid(SIZE, 10, 0), move_to, 5);
+    assert!(!pad_feet(&w, k).contains(&samples[0].cell));
+    // spec: S-0501 AC30 part k (7) (e) (no contact at the first sample after the order, on either object: the pad has no aircraft in contact)
     assert!(
         samples.iter().all(|s| s.contact.is_none()),
         "{:?}",
         samples[0]
     );
-    let z = samples.iter().position(|s| s.dest.is_none()).unwrap();
-    unsteered_through(&samples, z);
-    assert_eq!(samples[z].cell, to);
-    assert!(in_zone(dist(&w, samples[z].pos, centre(to)), 2000));
-    for s in &samples[z..] {
-        assert_eq!((s.h, s.cell, s.dest), (0, to, None), "{s:?}");
-        assert!(s.beh.0 != Some(Behaviour::Enter) && s.beh.1 != Some(Behaviour::Enter));
-    }
+    assert!(w.objects.values().all(|o| o.contact != Some(k)));
+    k7_expect(&w, a, &cells, &samples);
 }
 
-// design: S-0501 claim 48 (c) and Open question 26 (a pad-bound low release from a docking position outside its pad's foundation keeps its contact; in the halving zone of a destination cell holding no building it is in contact with it falls back to rest by T2's ground row, and T2's after-the-row entry gives it enter). Our design: that enter is claim 24's as for any aircraft in contact on the ground off its pad: it takes the pad as its destination and takes off toward it. The destination is given without a person's order (Q-1940)
+// spec: S-0501 claim 48 (c) and (d) (the rally point's move at the release is not a behaviour order; a type that need not return to a dock is tethered, and its contact ends only by claim 8's rule, which reads the cell of its horizontal position: from a docking position outside the foundation it keeps its contact as it takes off at the move's first processing) and S-0417 claim 11 (the tether ends when it leaves the ground)
 #[test]
-fn open_question_26_outside_the_foundation_falls_back_then_enters() {
-    let found = std::cell::Cell::new(false);
-    let (w, k, a, to, _, samples) = low_run_by(
-        &rules_k7(),
-        "OUTPAD",
-        "NEAR",
-        |w, a| ahead(w, a, 512),
-        assign,
-        |_, _, s| {
-            let s = s.last().unwrap();
-            if s.dest.is_none() {
-                found.set(true);
-            }
-            !(found.get() && s.h > 0)
-        },
-    );
-    let z = samples
-        .iter()
-        .position(|s| s.dest.is_none())
-        .unwrap_or_else(|| panic!("the fall-back: {}", describe(&w, a)));
-    unsteered_through(&samples, z);
-    let feet = pad_feet(&w, k);
-    assert!(!feet.contains(&samples[0].cell) && !feet.contains(&to));
-    for s in &samples[..=z] {
-        // spec: S-0501 claim 48 (c) (Pad contact: a docking position outside the pad's foundation leaves the contact held after the order)
+fn claim_48_c_tethered_type_keeps_its_contact_outside_the_foundation() {
+    let r = rules_k7();
+    let dest = testkit::mid(SIZE, 10, 0);
+    let (mut w, k, a) = built_rally(&r, "OUTPAD", "SCOUT", Some(dest));
+    assert_resting(&w, k, a, 10);
+    assert_eq!(w.obj(a).unwrap().contact, Some(k), "{}", describe(&w, a));
+    assert!(glasnost_sim::econ::release::tethered(&w, a));
+    let p = pos(&w, a);
+    let moved = run_until(&mut w, 20, |w| pos(w, a) != p);
+    assert!(moved, "{}", describe(&w, a));
+    assert_eq!(air::height(&w, a), 0, "{}", describe(&w, a));
+    step(&mut w);
+    assert!(air::height(&w, a) > 0, "{}", describe(&w, a));
+    assert!(st(&w, a).taking_off, "{}", describe(&w, a));
+    assert_eq!(w.obj(a).unwrap().contact, Some(k), "{}", describe(&w, a));
+    assert!(!glasnost_sim::econ::release::tethered(&w, a));
+}
+
+// design: S-0501 claim 48 (c) and Open question 26 (whether a low release given its destination by a behaviour other than move takes off as one on a move does is open). Our design: it takes off at the start of its next movement update at height 0 with that destination, so no low release makes a movement update at height 0 with a destination but without a take-off. The destination is given straight to the locomotor, without a behaviour order or a move (as the attack of claim 48 (d) gives one); a pad-bound type from a docking position outside the foundation keeps its contact as it takes off (Pad contact)
+#[test]
+fn open_question_26_destination_without_a_move_takes_off_too() {
+    let (w, k, a, _, cells, samples) =
+        low_run_k7("OUTPAD", |_, _| testkit::mid(SIZE, 10, 0), assign, 5);
+    assert_ne!(samples[0].beh.0, Some(Behaviour::Move), "{:?}", samples[0]);
+    k7_expect(&w, a, &cells, &samples);
+    for s in &samples {
+        // spec: S-0501 claim 48 (c) (Pad contact: a docking position outside the pad's foundation leaves the contact held after a destination without a behaviour order)
         assert_eq!(s.contact, Some(k), "{s:?}");
     }
-    assert_eq!(samples[z].cell, to);
-    assert!(in_zone(dist(&w, samples[z].pos, centre(to)), 2000));
-    let enters = samples[z..]
-        .iter()
-        .any(|s| s.beh.0 == Some(Behaviour::Enter) || s.beh.1 == Some(Behaviour::Enter));
-    assert!(enters, "T2's after-the-row entry: enter");
-    let last = samples.last().unwrap();
-    assert!(last.h > 0, "it takes off: {last:?}");
-    assert_eq!(
-        last.dest,
-        Some(Target::Object(k)),
-        "toward its pad: {last:?}"
-    );
 }
 
-// design: S-0501 claim 48 (c) and Open question 26 (a pad-bound low release that holds its contact, with a destination cell of that pad: claim 6's pad-bound restriction does not hold there). Our design: claim 6 as written, so in the halving zone it starts to land (claim 7), and its touchdown in a cell of the pad it is in contact with docks it there, outside enter (claim 24). The destination is given without a person's order (Q-1940)
+// design: S-0501 claim 48 (c) and Open question 26 (a pad-bound aircraft that holds its contact in flight after a destination without a behaviour order, with a destination cell of that pad: claim 6's pad-bound restriction does not hold there). Our design: claim 6 as written, so it starts to land (claim 7), and its touchdown in a cell of the pad it is in contact with docks it there, outside enter (claim 24)
 #[test]
 fn open_question_26_destination_on_its_pad_lands_and_docks() {
     let (mut w, k, a, to, _, samples) = low_run_by(
@@ -1447,21 +1386,20 @@ fn open_question_26_destination_on_its_pad_lands_and_docks() {
     // The destination is a cell of the pad's foundation; the docking position's cell is not.
     let feet = pad_feet(&w, k);
     assert!(feet.contains(&to) && !feet.contains(&samples[0].cell));
+    assert!(samples[1].taking_off, "{:?}", samples[1]);
     let z = samples
         .iter()
         .position(|s| s.landing)
         .unwrap_or_else(|| panic!("its landing starts: {}", describe(&w, a)));
-    unsteered_through(&samples, z - 1);
-    assert_eq!(samples[z].cell, to);
     assert_eq!(samples[z].contact, Some(k));
-    let down = run_until(&mut w, 100, |w| st(w, a).ground);
+    let down = run_until(&mut w, 400, |w| st(w, a).ground);
     assert!(down, "{}", describe(&w, a));
     assert_eq!(air::height(&w, a), 0);
-    assert_eq!(pos(&w, a).cell(), to);
+    assert!(feet.contains(&pos(&w, a).cell()), "{}", describe(&w, a));
     assert_eq!(w.obj(a).unwrap().contact, Some(k), "{}", describe(&w, a));
 }
 
-// spec: S-0501 Edge cases (quirks.aircraft_released_above_pad off: the release settles it at the landing height, and it leaves by an ordinary take-off, which claim 8 steers toward its destination instead of the low release's unsteered run at height 0). TENPAD, facing 16384, a destination at a right angle: it climbs in its first movement update and its body turns toward the destination during the take-off
+// spec: S-0501 Edge cases (quirks.aircraft_released_above_pad off: the release settles it at the landing height, and it takes off at the order, as any aircraft on the ground does, claim 8, which steers it toward its destination; the low release on a move would take off only at the move's first processing, after a first movement update that descends). MIDPAD, facing 16384, a destination at a right angle: it climbs in its first movement update and its body turns toward the destination during the take-off
 #[test]
 fn claim_48_quirk_off_takes_off_toward_a_right_angle_destination() {
     let mut r = rules_k7();
