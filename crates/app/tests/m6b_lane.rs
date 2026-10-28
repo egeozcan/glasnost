@@ -733,7 +733,12 @@ fn hover_stranded_run(lane: &mut Lane, fixes: bool, part: &str) {
             (at.x..at.x + fw).contains(&c.x) && (at.y..at.y + fh).contains(&c.y)
         })
     };
-    let away = CellXY::new(sea.x, sea.y + 3);
+    // Open water clear of the yard's foundation (`area` takes no occupied
+    // cell and, with a margin of 1, none next to the yard either).
+    let Some(away) = lane.area(CellXY::new(at.x + fw + 2, at.y + fh / 2), (1, 1), 1, water) else {
+        println!("no open water beside the yard: unreached");
+        return;
+    };
     if part == "drift" {
         let arrived = |w: &World| glasnost_sim::depot::settled(w, v);
         let ok = hover_trace(lane, v, 3000, arrived) && arrived(lane.world());
