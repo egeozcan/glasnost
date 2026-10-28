@@ -14,9 +14,11 @@
 //! What S-0111 asks that is not drawn yet: the culling of claim 1 (the
 //! scene has no on-screen culling, S-0101 claim 6), the shading of claim 2
 //! (no shroud or fog), the corner brackets of selected buildings (claim 8:
-//! which corners are drawn is not established), the pip scale (claims 9 to
-//! 15), the self-heal marker (claim 16), the control-group number (claim
-//! 17: there are no control groups yet). The bomb icon of S-0519 claim 24
+//! which corners are drawn is not established), the pip scale's rows
+//! (claims 11 to 15) and the self-heal marker (claim 16). Of the pip scale
+//! only its origin (claim 10, [`pip_origin`]), who sees it (claim 9) and the
+//! control-group number (claim 17, [`group_number_at`],
+//! [`Cache::group_number_item`]) are drawn. The bomb icon of S-0519 claim 24
 //! is drawn: the first status extra of its carrier, through the cursor
 //! palette ([`Cache::bomb_item`], [`CURSOR_PALETTE`]; S-0111 claim 19a),
 //! and so is the repair wrench of claim 19 ([`Cache::wrench_item`]).
@@ -314,6 +316,88 @@ pub fn insignia(v: F32, infantry: bool) -> Option<Pip> {
         // spec: S-0111 claim 18 (at (5, 2) for infantry, (10, 6) for everything else)
         at: if infantry { (5, 2) } else { (10, 6) },
     })
+}
+
+/// The pip-scale origin *o* from the status anchor (S-0111 claim 10):
+/// (−10, +10) for a vehicle, aircraft or infantry unit, and for a building
+/// of foundation `w` × `d` (`building`) the projected displacement of its
+/// box's left corner at the base of the box, P(−α, β, 0).
+pub fn pip_origin(building: Option<(i32, i32)>) -> (i32, i32) {
+    match building {
+        Some((w, d)) => {
+            // spec: S-0111 claim 10 (a building: o = P(−α, β, 0), α = 128·W, β = 128·D, at the base of the box)
+            displacement(-128 * w, 128 * d, 0)
+        }
+        // spec: S-0111 claim 10 (vehicles, aircraft and infantry: o = (−10, +10))
+        None => (-10, 10),
+    }
+}
+
+/// The digit control group `index` shows (S-0111 claim 17). Our group
+/// keys put the group of key *k* at index *k* (Q-1988), so the keyboard's
+/// group 1 is index 1 and its tenth group, key 0, is index 0: index *k* is
+/// claim 17's group γ = (*k* + 9) mod 10.
+pub fn group_digit(index: usize) -> u8 {
+    let gamma = (index + 9) % 10;
+    // spec: S-0111 claim 17 (group γ shows the digit (γ + 1) mod 10: the first group 1, the tenth 0)
+    ((gamma + 1) % 10) as u8
+}
+
+/// The point the control-group number is placed at, from the status
+/// anchor (S-0111 claim 17): (−4, −39) from the pip-scale origin for
+/// infantry and (−4, −36) for everything else.
+pub fn group_number_at(infantry: bool, building: Option<(i32, i32)>) -> (i32, i32) {
+    let o = pip_origin(building);
+    // spec: S-0111 claim 17 ((−4, −39) from o for infantry, (−4, −36) for others)
+    let (dx, dy) = if infantry && building.is_none() {
+        (-4, -39)
+    } else {
+        (-4, -36)
+    };
+    (o.0 + dx, o.1 + dy)
+}
+
+/// Our digit glyphs, 3 × 5 pixels, one row of three bits per line (top
+/// first, the high bit leftmost).
+// design: our own digit glyphs for the control-group number (S-0111 claim 17 leaves the font open; Q-2040)
+const DIGITS: [[u8; 5]; 10] = [
+    [0b111, 0b101, 0b101, 0b101, 0b111],
+    [0b010, 0b110, 0b010, 0b010, 0b111],
+    [0b111, 0b001, 0b111, 0b100, 0b111],
+    [0b111, 0b001, 0b011, 0b001, 0b111],
+    [0b101, 0b101, 0b111, 0b001, 0b001],
+    [0b111, 0b100, 0b111, 0b001, 0b111],
+    [0b111, 0b100, 0b111, 0b101, 0b111],
+    [0b111, 0b001, 0b010, 0b010, 0b010],
+    [0b111, 0b101, 0b111, 0b101, 0b111],
+    [0b111, 0b101, 0b111, 0b001, 0b111],
+];
+
+/// The size of the group number's image: the glyph, a one-pixel gap and a
+/// one-pixel border round it.
+// design: a 1-pixel border 1 pixel clear of the 3 × 5 glyph (S-0111 claim 17 leaves the border's size open; Q-2040)
+pub const GROUP_NUMBER_SIZE: (u32, u32) = (7, 9);
+
+/// The group number's image for `digit` (S-0111 claim 17: the digit inside
+/// a small border of the same colour), every drawn pixel index 1, the rest
+/// 0 (transparent). The image's top-left corner goes at the placement point.
+// design: the image's top-left corner at claim 17's placement point (the alignment is open; Q-2040)
+pub fn group_number_image(digit: u8) -> IndexedImage {
+    let (w, h) = GROUP_NUMBER_SIZE;
+    let glyph = DIGITS[usize::from(digit % 10)];
+    let mut px = vec![0u8; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let border = x == 0 || y == 0 || x == w - 1 || y == h - 1;
+            let ink = (2..5).contains(&x)
+                && (2..7).contains(&y)
+                && glyph[(y - 2) as usize] & (0b100 >> (x - 2)) != 0;
+            if border || ink {
+                px[(y * w + x) as usize] = 1;
+            }
+        }
+    }
+    IndexedImage::new(w, h, px).expect("size matches")
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +729,8 @@ pub struct Cache {
     mouse_row: Option<Option<usize>>,
     markers: BTreeMap<Marker, u32>,
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
+    group_rows: BTreeMap<[u8; 3], usize>,
+    group_digits: BTreeMap<u8, u32>,
 }
 
 impl Cache {
@@ -736,6 +822,46 @@ impl Cache {
             object,
             stack: None,
         })
+    }
+
+    /// The control-group number's item (S-0111 claim 17): `digit` in the
+    /// house colour `colour`, placed at `at` from the status anchor
+    /// `anchor`. Unshaded, as the pips are (claim 2).
+    pub fn group_number_item(
+        &mut self,
+        scene: &mut Scene,
+        anchor: (i32, i32),
+        at: (i32, i32),
+        digit: u8,
+        colour: [u8; 3],
+        object: Option<u32>,
+    ) -> Item {
+        let row = *self.group_rows.entry(colour).or_insert_with(|| {
+            let [r, g, b] = colour;
+            let mut pal = [Rgb8 { r: 0, g: 0, b: 0 }; 256];
+            // spec: S-0111 claim 17 (the digit and its border in the owner's house colour)
+            pal[1] = Rgb8 { r, g, b };
+            scene.add_row(row565(&pal))
+        });
+        let image = *self
+            .group_digits
+            .entry(digit)
+            .or_insert_with(|| scene.add_image(group_number_image(digit)));
+        Item {
+            image,
+            // design: the image's top-left corner at claim 17's placement point (Q-2040)
+            x: anchor.0 + at.0,
+            y: anchor.1 + at.1,
+            // spec: S-0102 claim 1 (a status extra: after the object layers, with no depth test)
+            test: DepthTest::Ignore,
+            depth: flat(),
+            // design: unshaded like the pips (S-0111 claim 2 names the shaded overlay images; the group number is not among them; Q-2040)
+            paint: Paint::Row(row),
+            group: Group::Status,
+            provisional: false,
+            object,
+            stack: None,
+        }
     }
 
     /// A marker's image, added on first use.
@@ -984,6 +1110,70 @@ mod tests {
         );
         assert_eq!(insignia(v(5, 2), false).map(|p| p.frame), Some(15));
         assert_eq!(insignia(F32::ZERO, false), None);
+    }
+
+    /// spec: S-0111 claim 17 and scenario OV12 (groups 1, 5 and 10 of the
+    /// keyboard show 1, 5 and 0; the number at (−14, −26) from a vehicle's
+    /// anchor, (−14, −29) from an infantry unit's, and (−4, −36) from a
+    /// building's pip-scale origin), claim 10 (o = (−10, +10), and for a
+    /// building P(−α, β, 0), the box's left corner at its base)
+    #[test]
+    fn group_number_digits_and_places() {
+        // Our keys: group k of the keyboard at index k, the tenth (key 0) at index 0.
+        assert_eq!(group_digit(1), 1);
+        assert_eq!(group_digit(5), 5);
+        assert_eq!(group_digit(0), 0);
+        assert_eq!(
+            (0..10).map(group_digit).collect::<Vec<_>>(),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        );
+        assert_eq!(pip_origin(None), (-10, 10));
+        assert_eq!(group_number_at(false, None), (-14, -26));
+        assert_eq!(group_number_at(true, None), (-14, -29));
+        // Buildings: o = (−15(W + D), trunc(15(D − W) / 2)) for whole cells, then (−4, −36).
+        assert_eq!(pip_origin(Some((2, 2))), (-60, 0));
+        assert_eq!(group_number_at(false, Some((2, 2))), (-64, -36));
+        assert_eq!(pip_origin(Some((1, 2))), (-45, 7));
+        assert_eq!(group_number_at(false, Some((1, 2))), (-49, -29));
+        assert_eq!(pip_origin(Some((3, 1))), (-60, -15));
+        assert_eq!(group_number_at(false, Some((3, 1))), (-64, -51));
+        for (w, d) in [(1, 1), (1, 4), (3, 4), (4, 2), (5, 5)] {
+            assert_eq!(
+                pip_origin(Some((w, d))),
+                (-15 * (w + d), 15 * (d - w) / 2),
+                "{w} × {d}"
+            );
+        }
+        // A building's place does not depend on the infantry flag.
+        assert_eq!(group_number_at(true, Some((2, 2))), (-64, -36));
+    }
+
+    /// spec: S-0111 claim 17 (the digit inside a small border of the same
+    /// colour); the glyphs and the border's size are our design (Q-2040)
+    #[test]
+    fn group_number_images() {
+        let (w, h) = GROUP_NUMBER_SIZE;
+        let mut seen = std::collections::BTreeSet::new();
+        for d in 0..10u8 {
+            let img = group_number_image(d);
+            assert_eq!((img.width(), img.height()), (w, h));
+            let px = img.pixels();
+            // The border is drawn all round, the gap inside it is clear.
+            for x in 0..w {
+                assert_eq!(px[x as usize], 1);
+                assert_eq!(px[((h - 1) * w + x) as usize], 1);
+            }
+            for y in 0..h {
+                assert_eq!(px[(y * w) as usize], 1);
+                assert_eq!(px[(y * w + w - 1) as usize], 1);
+            }
+            for x in 1..w - 1 {
+                assert_eq!(px[(w + x) as usize], 0);
+                assert_eq!(px[((h - 2) * w + x) as usize], 0);
+            }
+            assert!(px.iter().all(|&p| p <= 1));
+            assert!(seen.insert(px.to_vec()), "digit {d} has its own glyph");
+        }
     }
 
     /// Our placeholder lifetimes and burst sizes.

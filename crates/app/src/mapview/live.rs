@@ -367,6 +367,12 @@ pub struct Live {
     marked: Vec<ObjectId>,
     /// The object under the pointer (presentation state).
     hovered: Option<ObjectId>,
+    /// The digit each member of the local player's control groups shows
+    /// (S-0111 claim 17; presentation state, the client's groups).
+    group_digits: BTreeMap<ObjectId, u8>,
+    /// Each house's display RGB, in house order (S-0103 claim 15), for the
+    /// control-group number's house colour.
+    house_colours: Vec<[u8; 3]>,
     /// Notes the drawing of the live objects met.
     pub notes: BTreeSet<String>,
     /// Simulation types with no import type of the same name (not drawn).
@@ -1090,6 +1096,8 @@ impl Live {
             counts: Counts::default(),
             marked: Vec::new(),
             hovered: None,
+            group_digits: BTreeMap::new(),
+            house_colours: Vec::new(),
             notes: BTreeSet::new(),
             undrawn_types: undrawn,
             failed: None,
@@ -3571,6 +3579,54 @@ impl Live {
         true
     }
 
+    /// Sets the digit each control-group member shows (S-0111 claim 17).
+    /// Returns whether it changed; then call [`Live::redraw_status`].
+    pub fn set_group_digits(&mut self, digits: BTreeMap<ObjectId, u8>) -> bool {
+        if self.group_digits == digits {
+            return false;
+        }
+        self.group_digits = digits;
+        true
+    }
+
+    /// Sets each house's display RGB, in house order (S-0103 claim 15),
+    /// which the control-group number is drawn in.
+    pub fn set_house_colours(&mut self, colours: Vec<[u8; 3]>) {
+        self.house_colours = colours;
+    }
+
+    /// Whether the pip scale of object `o` is drawn with its health bar
+    /// for the viewer (S-0111 claims 9 and 11): an owner that is the
+    /// viewer's house or allied with it, or for a building whose type draws
+    /// its pips for all or can be occupied; never for a building whose
+    /// pip-scale kind is resource while `quirks.building_resource_pips_hidden`
+    /// is on. With no viewer every owner passes.
+    fn pip_scale_shown(&self, inputs: &Inputs, o: &Object) -> bool {
+        let building = o.kind == SimKind::Building;
+        let import_idx = self.types.get(&(o.kind, o.type_index)).copied().flatten();
+        let key = |k: &[u8]| -> Option<&[u8]> {
+            let (kind, i) = (import_kind(o.kind)?, import_idx?);
+            super::build::rule(inputs.import, kind, i, k)
+        };
+        let flag = |k: &[u8]| key(k).and_then(glasnost_ini::value::boolean);
+        // spec: S-0111 claim 11 and Edge cases (quirks.building_resource_pips_hidden: a building whose pip-scale kind is resource shows no pip scale at all, no group number included; Import mapping PipScale, absent none)
+        if building
+            && self.view_quirks.building_resource_pips_hidden
+            && key(b"PipScale").is_some_and(|v| v.trim_ascii().eq_ignore_ascii_case(b"tiberium"))
+        {
+            return false;
+        }
+        let Some(v) = self.viewer else {
+            return true;
+        };
+        // spec: S-0111 claim 9 (the owner is the local player's house or allied with it)
+        if o.owner == Some(v) || self.world.allied(Some(v), o.owner) {
+            return true;
+        }
+        // spec: S-0111 claim 9 and Import mapping (a building only: PipsDrawForAll or CanBeOccupied, both absent no)
+        building && (flag(b"PipsDrawForAll") == Some(true) || flag(b"CanBeOccupied") == Some(true))
+    }
+
     /// Redraws only the status extras (after [`Live::set_marks`]).
     pub fn redraw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
         self.draw_status(inputs, scene);
@@ -3732,6 +3788,28 @@ impl Live {
                 &pips,
                 Some(sim_code(o.id)),
             ));
+            // spec: S-0111 claim 17 and State and ordering (the group number is drawn with the pip scale, so with the health bar, when claim 9 lets the viewer see the pip scale; claim 10: it covers the pip scale's rows and the self-heal marker); design: pushed last of the object's extras, so over its bar too (Q-2040)
+            if bar.is_some()
+                && let Some(&digit) = self.group_digits.get(&o.id)
+                && self.pip_scale_shown(inputs, o)
+            {
+                let building = (o.kind == SimKind::Building).then_some(o.foundation);
+                let at = combat::group_number_at(infantry, building);
+                // spec: S-0111 claim 17 (the owner's house colour); design: the house display RGB of S-0103 claim 15, white for no owner (Q-2040)
+                let colour = o
+                    .owner
+                    .and_then(|h| self.house_colours.get(usize::from(h.0)))
+                    .copied()
+                    .unwrap_or([255, 255, 255]);
+                items.push(self.cache.group_number_item(
+                    scene,
+                    anchor,
+                    at,
+                    digit,
+                    colour,
+                    Some(sim_code(o.id)),
+                ));
+            }
         }
         scene.items.extend(items);
     }

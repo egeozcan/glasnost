@@ -175,7 +175,6 @@ Every quirk switch of the implemented specs has a field in `ini::Quirks` (includ
 | `anim_hide_at_level_15` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played (the played animations have *t* = 0) |
 | `anim_low_detail_shows_cloaked` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played |
 | `anim_translucency_levels` | S-0109 claim 20 | only building slot animations have a translucency level *t* > 0, and they are not played |
-| `building_resource_pips_hidden` | S-0111 | claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch) |
 
 **Coverage.** `convert::coverage` gives every (category, key) of the rules and art files an outcome: `field` and `render` for keys interpreted per an approved spec, `folded` for type lists and similar, `unsupported` for keys kept as INI text because no approved spec maps them yet (the `spec` column names the specs whose import mapping mentions a key that is not converted yet).
 

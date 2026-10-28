@@ -5289,3 +5289,198 @@ fn cursor_palette_component_wrap() {
     assert_eq!((on.colors[63].r, off.colors[63].r), (252, 252));
     assert!(cursor_palette(b"short", &PaletteQuirks::default()).is_none());
 }
+
+/// The control-group number items (our 7 × 9 image) of object `id` in
+/// `scene`, with their place and the colour their row gives index 1.
+fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
+    use glasnost_render::scene::Group;
+    scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
+        .filter(|i| {
+            let img = &scene.images[i.image as usize];
+            (img.width(), img.height()) == super::combat::GROUP_NUMBER_SIZE
+        })
+        .map(|i| {
+            let row = match i.paint {
+                Paint::Row(r) => scene.rows[r][1],
+                _ => panic!("the group number is drawn through a row"),
+            };
+            ((i.x, i.y), row)
+        })
+        .collect()
+}
+
+/// spec: S-0111 claim 17 and scenario OV12 (the group digit at (−14, −26)
+/// from a vehicle's anchor and (−14, −29) from an infantry unit's, in the
+/// owner's house colour), claims 3 and 9 and State and ordering (drawn with
+/// the pip scale: only with the health bar, only for an owner the viewer
+/// may inspect, after the object's other status extras). The image's
+/// top-left corner at the point and the house display RGB are our design
+/// (Q-2040).
+#[test]
+fn the_group_number_follows_the_pip_scale() {
+    use glasnost_render::compose::pack565;
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, cart, walker) =
+        combat_live_with(3, assets.clone());
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let red = [200, 40, 40];
+    let blue = [40, 40, 200];
+    let px = |c: [u8; 3]| {
+        pack565(glasnost_fmt::image::Rgb8 {
+            r: c[0],
+            g: c[1],
+            b: c[2],
+        })
+    };
+    live.set_house_colours(vec![red, blue]);
+    live.set_viewer(Some(HouseId(0)));
+    // spec: S-0111 claim 17 (keyboard groups 5 and 10: index 5 shows 5, index 0 shows 0)
+    let digits: std::collections::BTreeMap<_, _> = [
+        (cart, super::combat::group_digit(5)),
+        (walker, super::combat::group_digit(0)),
+    ]
+    .into();
+    assert!(live.set_group_digits(digits.clone()));
+    assert!(!live.set_group_digits(digits));
+    let anchor = |l: &Live, id: ObjectId| {
+        let p = l.world.reference_point(id);
+        project_lifted(p.x, p.y, p.z)
+    };
+    // Neither selected nor hovered: no pip scale, so no number.
+    live.set_marks(&[], None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(group_numbers(&scene, cart).is_empty());
+    // The cart selected: its number at (−14, −26), in its owner's colour, last of its extras.
+    live.set_marks(&[cart], None);
+    live.redraw_status(&inputs, &mut scene);
+    let (ax, ay) = anchor(&live, cart);
+    assert_eq!(
+        group_numbers(&scene, cart),
+        vec![((ax - 14, ay - 26), px(red))]
+    );
+    let last = scene
+        .items
+        .iter()
+        .rfind(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
+        .unwrap();
+    assert_eq!((last.x, last.y), (ax - 14, ay - 26), "it covers the bar");
+    // The enemy walker hovered: a health bar but no pip scale (claim 9), so no number.
+    live.set_marks(&[cart], Some(walker));
+    live.redraw_status(&inputs, &mut scene);
+    assert!(group_numbers(&scene, walker).is_empty());
+    // Seen as its owner: the infantry place (−14, −29), in its owner's colour.
+    live.set_viewer(Some(HouseId(1)));
+    live.redraw_status(&inputs, &mut scene);
+    let (wx, wy) = anchor(&live, walker);
+    assert_eq!(
+        group_numbers(&scene, walker),
+        vec![((wx - 14, wy - 29), px(blue))]
+    );
+    assert!(
+        group_numbers(&scene, cart).is_empty(),
+        "the cart is now the enemy's"
+    );
+}
+
+/// spec: S-0111 claims 10, 11 and 17, Edge cases
+/// (`quirks.building_resource_pips_hidden`; claim 9's draw-for-all mark):
+/// a building's number at (−4, −36) from its pip-scale origin P(−α, β, 0);
+/// a building of the resource pip-scale kind shows none with the switch on.
+#[test]
+fn a_building_group_number_and_the_resource_switch() {
+    use glasnost_sim::rules::Kind as SimKind;
+    let assets = overlay_assets();
+    let rules = format!(
+        "{}[TOWER]\nPipScale=Tiberium\nPipsDrawForAll=yes\n",
+        RULES.replace(
+            "[BuildingTypes]\n1=HUTX\n",
+            "[BuildingTypes]\n1=HUTX\n2=TOWER\n"
+        )
+    );
+    assert!(rules.contains("2=TOWER"));
+    let (import, catalogue, _) = context_with(&rules);
+    assert!(
+        import.outcome.registries[&Kind::Buildings]
+            .iter()
+            .any(|e| e.keys.contains_key(b"PipScale".as_slice())),
+        "the import holds the tower's pip-scale kind"
+    );
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let own = testkit::spawn(
+        &mut world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, -3, 0),
+        0,
+    );
+    let theirs = testkit::spawn(
+        &mut world,
+        SimKind::Building,
+        "TOWER",
+        1,
+        testkit::mid(24, 3, 0),
+        0,
+    );
+    let rules = world.rules_arc();
+    let mut live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    let mut scene = built.scene;
+    live.set_house_colours(vec![[200, 40, 40], [40, 40, 200]]);
+    live.set_viewer(Some(HouseId(0)));
+    live.set_group_digits([(own, 1), (theirs, 2)].into());
+    live.set_marks(&[own], Some(theirs));
+    // Switch on (the original): a resource-kind building shows no number.
+    live.redraw_status(&inputs, &mut scene);
+    assert!(group_numbers(&scene, own).is_empty());
+    assert!(group_numbers(&scene, theirs).is_empty());
+    // Switch off: the number at o + (−4, −36); the enemy's through its draw-for-all mark.
+    live.set_view_quirks(super::quirks::ViewQuirks {
+        building_resource_pips_hidden: false,
+        ..Default::default()
+    });
+    live.redraw_status(&inputs, &mut scene);
+    for id in [own, theirs] {
+        let (w, d) = live.world.obj(id).unwrap().foundation;
+        let p = live.world.reference_point(id);
+        let (ax, ay) = project_lifted(p.x, p.y, p.z);
+        // spec: S-0111 claim 10 (whole-cell foundations: o = (−15(W + D), trunc(15(D − W) / 2)))
+        let o = (-15 * (w + d), 15 * (d - w) / 2);
+        let at = group_numbers(&scene, id);
+        assert_eq!(at.len(), 1, "one number for {id:?}");
+        assert_eq!(at[0].0, (ax + o.0 - 4, ay + o.1 - 36));
+    }
+}

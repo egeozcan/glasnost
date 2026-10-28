@@ -65,6 +65,12 @@ pub struct ViewQuirks {
     /// An ownership change of any other building re-enables nothing. Off:
     /// only when it is in operation right after the re-enabling.
     pub enable_unfreezes_unpowered: bool,
+    /// `quirks.building_resource_pips_hidden` (S-0111 claim 11 and Edge
+    /// cases): a building whose pip-scale kind is resource shows no pip
+    /// scale at all, its control-group number included. Off: it shows its
+    /// group number as usual (the resource row of claim 14 is not drawn
+    /// yet).
+    pub building_resource_pips_hidden: bool,
 }
 
 impl Default for ViewQuirks {
@@ -78,13 +84,15 @@ impl Default for ViewQuirks {
             unsorted_upper_layers: true,
             layer_change_on_events_only: true,
             enable_unfreezes_unpowered: true,
+            // spec: S-0111 Edge cases (quirks.building_resource_pips_hidden, default on)
+            building_resource_pips_hidden: true,
         }
     }
 }
 
 impl ViewQuirks {
     /// The switches by name.
-    pub fn named(&self) -> [(&'static str, bool); 7] {
+    pub fn named(&self) -> [(&'static str, bool); 8] {
         [
             (
                 "cliff_fudge_far_cliff_weaker",
@@ -104,6 +112,10 @@ impl ViewQuirks {
             (
                 "enable_unfreezes_unpowered",
                 self.enable_unfreezes_unpowered,
+            ),
+            (
+                "building_resource_pips_hidden",
+                self.building_resource_pips_hidden,
             ),
         ]
     }
@@ -289,11 +301,6 @@ pub const NOT_IMPLEMENTED: &[(&str, &str)] = &[
         "anim_translucency_levels",
         "S-0109 claim 20: only building slot animations have a translucency level t > 0, and they are not played (the played animations have t = 0)",
     ),
-    // S-0111
-    (
-        "building_resource_pips_hidden",
-        "S-0111 claim 11: the pip scale is not drawn (health bars, unit brackets and insignia are; they have no switch)",
-    ),
 ];
 
 #[cfg(test)]
@@ -313,6 +320,7 @@ mod tests {
             unsorted_upper_layers: false,
             layer_change_on_events_only: false,
             enable_unfreezes_unpowered: false,
+            building_resource_pips_hidden: false,
         }
     }
 
