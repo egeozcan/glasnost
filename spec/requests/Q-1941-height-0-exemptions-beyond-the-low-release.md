@@ -1,9 +1,9 @@
 ---
 id: Q-1941
 title: Do claim 48 (c)'s height-0 exemptions from guidance's distance bands and close-approach trigger apply to any aircraft in flight at height 0, or only to the low release?
-status: open
+status: answered
 related: [S-0501]
-answered-by: []
+answered-by: [S-0501]
 ---
 
 ## Need
