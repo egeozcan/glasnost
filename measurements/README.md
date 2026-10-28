@@ -25,3 +25,4 @@ Records of what the original game does when run and observed: timings, counts, c
 | [M-0001](combat/M-0001-arena-yuri-vehicles.md) | Unit arena: Yuri vehicles against Allied and Soviet units at equal cost | combat | new finding | committed |
 | [M-0002](combat/M-0002-arena-yuri-infantry.md) | Unit arena: Yuri infantry against infantry and main battle tanks at equal cost | combat | new finding | committed |
 | [M-0003](combat/M-0003-arena-allied-soviet-vehicles.md) | Unit arena: Allied against Soviet vehicles at equal cost | combat | new finding | committed |
+| [M-0011](combat/M-0011-arena-caos-against-bfrt-replay.md) | Unit arena, CAOS against BFRT, stock replay watched per unit | combat | confirms | local |
