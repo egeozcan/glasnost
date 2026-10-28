@@ -2402,6 +2402,7 @@ impl Live {
                 | Effect::Infiltrated { .. }
                 | Effect::Cloak { .. }
                 | Effect::Bunkered { .. }
+                | Effect::Converted { .. }
                 | Effect::Seized { .. }
                 | Effect::Deactivated { .. }
                 | Effect::Dropped { .. }

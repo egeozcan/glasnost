@@ -444,6 +444,8 @@ fn complete(w: &mut World, id: ObjectId, b: u32, at: CellXY) -> Option<ObjectId>
         house: None,
         pos: Some(o.pos),
     });
+    // spec: S-0415 claim 6 (the building takes over the vehicle's control group and selection: the client's, told by a presentation effect once the building is on the map)
+    w.effects.push(Effect::Converted { old: id, new: bid });
     w.note("S-0415 claims 6 and 10: control groups, selection and trigger tags are the input's and the triggers'");
     Some(bid)
 }
@@ -538,6 +540,8 @@ pub fn pack_up(w: &mut World, id: ObjectId) {
             }
         }
         retarget(w, id, vid, false);
+        // spec: S-0415 claim 10 (the vehicle takes over the building's control group and selection, on successful placement only: the client's, told by a presentation effect)
+        w.effects.push(Effect::Converted { old: id, new: vid });
     } else {
         // spec: S-0415 claim 11 (the vehicle cannot be put on the map: the sale refund instead)
         let amount = crate::econ::sell::refund(

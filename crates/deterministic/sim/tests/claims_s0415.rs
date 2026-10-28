@@ -767,3 +767,74 @@ fn claim_2_deploy_order_while_moving_deploys() {
         "at {at:?}, order at {stop:?}"
     );
 }
+
+/// The conversions reported to the presentation since the effects were
+/// last cleared.
+fn conversions(w: &World) -> Vec<(ObjectId, ObjectId)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match *e {
+            Effect::Converted { old, new } => Some((old, new)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0415 claim 6 (the building takes over the vehicle's control group and selection: the client's; the deploy reports the hand-over once the building is on the map)
+#[test]
+fn claim_6_deploy_reports_the_hand_over() {
+    let mut w = game(&rules());
+    let v = spawn_v(&mut w, "MCV", c(0, 0), facing_d());
+    order(&mut w, Order::Deploy { actor: v });
+    w.effects.clear();
+    until(&mut w, 30, |w| w.obj(v).is_none()).expect("deployed");
+    let y = buildings(&w)[0];
+    assert_eq!(conversions(&w), vec![(v, y)]);
+}
+
+// spec: S-0415 claims 4 and 6 (a refused deploy puts no building on the map and reports no hand-over)
+#[test]
+fn claim_6_refused_deploy_reports_nothing() {
+    let mut w = game(&rules());
+    let v = spawn_v(&mut w, "KIT", c(0, 0), facing_d());
+    testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(1, 1), 0);
+    order(&mut w, Order::Deploy { actor: v });
+    w.effects.clear();
+    until(&mut w, 30, |w| sounds(w).contains(&Sound::CannotDeploy)).expect("refused");
+    assert!(conversions(&w).is_empty());
+}
+
+// spec: S-0415 claim 10 (the vehicle takes over the building's control group and selection, reported on a successful pack-up)
+#[test]
+fn claim_10_pack_up_reports_the_hand_over() {
+    let mut w = game(&rules());
+    let y = deployed_yard(&mut w);
+    let spot = Target::Cell(c(6, 6));
+    order(&mut w, Order::GuardSpot { actor: y, spot });
+    step(&mut w);
+    order(&mut w, Order::Sell { actor: y });
+    w.effects.clear();
+    until(&mut w, 60, |w| w.obj(y).is_none()).expect("packed up");
+    let v = w
+        .objects
+        .values()
+        .find(|o| o.kind == Kind::Vehicle && o.owner == Some(A))
+        .map(|o| o.id)
+        .expect("the vehicle");
+    assert_eq!(conversions(&w), vec![(y, v)]);
+}
+
+// spec: S-0415 claims 10 and 11 (the take-overs require successful placement: a failed pack-up reports no hand-over)
+#[test]
+fn claim_11_failed_pack_up_reports_nothing() {
+    let mut w = game(&rules());
+    let y = deployed_yard(&mut w);
+    let spot = Target::Cell(c(6, 6));
+    order(&mut w, Order::GuardSpot { actor: y, spot });
+    step(&mut w);
+    testkit::spawn(&mut w, Kind::Vehicle, "CART", 1, c(0, 0), 0);
+    order(&mut w, Order::Sell { actor: y });
+    w.effects.clear();
+    until(&mut w, 60, |w| w.obj(y).is_none()).expect("removed");
+    assert!(conversions(&w).is_empty());
+}
