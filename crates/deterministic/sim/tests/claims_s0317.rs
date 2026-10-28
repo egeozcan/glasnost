@@ -347,6 +347,43 @@ fn claim_4_meteor_piece_creation() {
     }
 }
 
+/// spec: S-0317 claim 2 (a meteor counter of −2147483648 + j wraps at creation or at the first turn; F2's start then lies some 2³¹ turns back along the velocity, each coordinate converted by S-0205 claim 7; the piece is placed there, claim 21, and flies, claim 20)
+#[test]
+fn claim_2_wrapped_meteor_start() {
+    for j in [0, 10] {
+        let mut r = rules();
+        let dur = i32::MIN + j;
+        r.sim.voxel_animations.get_mut("STAR").unwrap().duration = Some(dur);
+        let mut w = world(&r);
+        let m = mode(&w);
+        let at = centre(mid(0, 0), 0);
+        for _ in 0..12 {
+            let mut probe: Rng = w.rng.clone();
+            let id = make(&mut w, "STAR", at);
+            let (q1, q2, q3) = (probe.raw(), probe.raw(), probe.raw());
+            let p = piece(&w, id);
+            let mm = s("6");
+            let mut vy = d(mag_rem(q1, 12), m).sub(mm, m);
+            let mut vx = d(mag_rem(q2, 12), m).sub(mm, m);
+            if vx.lt(vy.negated()) {
+                vx = vx.negated();
+                vy = vy.negated();
+            }
+            let counter = dur.wrapping_sub(glasnost_num::int::rem(q3 as i32, 20).abs());
+            assert_eq!(p.counter, counter, "j = {j}");
+            let t = d(i64::from(counter), m);
+            let back = |c: i32, v: F64| d(i64::from(c), m).sub(t.mul(v, m), m).to_i32_common();
+            let start = Pos::new(back(at.x, vx), back(at.y, vy), back(at.z, s("-10")));
+            assert_eq!(p.pos, start, "placed at F2's start, j = {j}");
+            assert!(w.update.contains(id), "in play");
+            pieces::turn(&mut w, id);
+            // spec: S-0317 claim 6 (the count-down: −2147483648 wraps to 2147483647; a counter of 0 or less after it ends the piece)
+            let flies = counter == i32::MIN || counter > 1;
+            assert_eq!(w.pieces.contains_key(&id), flies, "counter {counter}");
+        }
+    }
+}
+
 /// spec: S-0317 claim 5 and F3 (gravity 1.4 off the vertical speed, then the move by the whole velocity, each stored in single precision; a meteor piece gets g back after the move) and claim 11 (after a flying turn the position is the flight point)
 #[test]
 fn claim_5_flight_step() {

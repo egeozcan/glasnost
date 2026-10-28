@@ -2212,7 +2212,8 @@ fn debris_pieces(lane: &mut Lane) {
     }
     let mut flips: std::collections::BTreeMap<ObjectId, (bool, u32)> = Default::default();
     let mut most = 0;
-    for t in 1..=60 {
+    let mut first_contact: Option<usize> = None;
+    for t in 1..=600 {
         lane.ticks(1);
         let w = lane.world();
         let mut zs = Vec::new();
@@ -2236,13 +2237,29 @@ fn debris_pieces(lane: &mut Lane) {
             net.iter().max(),
             flips.len(),
         );
-        if [2, 5, 9, 14, 20, 30].contains(&t) {
-            lane.save(&format!("debris-pieces-{t:02}"));
+        // The first contact: centre the view on that piece, then screens
+        // of it and of the ticks after the bounce.
+        if first_contact.is_none() && bounced > 0 {
+            first_contact = Some(t);
+            let at = flips
+                .iter()
+                .find(|(_, f)| f.1 > 0)
+                .and_then(|(id, _)| w.pieces.get(id))
+                .map(|p| CellXY::new(p.pos.x / 256, p.pos.y / 256));
+            if let Some(c) = at {
+                println!("debris-pieces: first contact at +{t}, view centred on cell {c:?}");
+                lane.look_at(c);
+            }
+        }
+        let after = first_contact.map(|f| t - f);
+        if [2, 5, 9, 14, 20, 30].contains(&t) || matches!(after, Some(0 | 2 | 4 | 8)) {
+            lane.save(&format!("debris-pieces-{t:03}"));
         }
         if t > 5 && live == 0 {
             break;
         }
     }
+    lane.save("debris-pieces-end");
     let contacts: u32 = flips.values().map(|f| f.1).sum();
     println!(
         "debris-pieces: most in play {most}, pieces {}, reversals (contacts) {contacts}",
