@@ -2,7 +2,12 @@
 //! M-0011): what each unit of the two groups does tick by tick, with the
 //! facts M-0011 tabulates for CAOS against BFRT (berserk entries, their
 //! remaining time at each hit, resets, fire of one unit at another of its
-//! own group, and how each unit leaves play).
+//! own group, and how each unit leaves play). Since intake 40 also the
+//! magnetic-lift facts M-0015 tabulates for TELE against BFRT: each unit's
+//! lifter (the record's *holder*), whether it is seized, set down or
+//! dropped, the record's sorting of the lifters' fire events, every hold
+//! with its release and landing, the restorations, and the hits between
+//! the two groups.
 //!
 //! Tooling only: it plays the game exactly as [`oracle::play`] does and
 //! reads state after each tick; it touches no simulation state. Our own
@@ -26,6 +31,14 @@ struct Seen {
     target: Option<Target>,
     dest: Option<Target>,
     berserk: Option<i32>,
+    /// Magnetic lift (M-0015): its lifter (the record's *holder*), and
+    /// whether it is seized, set down or dropped (S-0607 Terms).
+    lifter: Option<ObjectId>,
+    seized: bool,
+    set_down: bool,
+    dropped: bool,
+    /// Height above the surface (S-0607 claim 13).
+    above: i32,
 }
 
 fn seen(w: &World, id: ObjectId) -> Option<Seen> {
@@ -38,6 +51,11 @@ fn seen(w: &World, id: ObjectId) -> Option<Seen> {
         target: o.target,
         dest: o.dest,
         berserk: o.combat.berserk,
+        lifter: o.lift.lifter,
+        seized: o.lift.seized,
+        set_down: o.lift.set_down,
+        dropped: o.lift.dropped,
+        above: glasnost_sim::jump::height_above(w, id),
     })
 }
 
@@ -141,15 +159,38 @@ pub fn trace(
             .count();
         let _ = writeln!(out, "  {} may crush {n} of the units", label(&units, a));
     }
+    // M-0015: every unit's lifter and height above the surface at the end
+    // of each tick (index 0 the state before the first tick), the fire
+    // events and the hits.
+    let mut lift = LiftLog::default();
+    lift.record(&w, &all);
     let end = loop {
         glasnost_sim::tick::step(&mut w);
         let t = w.tick;
         let effects = std::mem::take(&mut w.effects);
+        lift.record(&w, &all);
         let mut crush_sounds = 0;
         for e in &effects {
             match e {
+                Effect::Hit {
+                    id,
+                    result,
+                    attacker,
+                    ..
+                } if all.contains(id) => {
+                    lift.hits.push((t, *id, *attacker, format!("{result:?}")));
+                }
+                Effect::Detonation { .. } if detail => {
+                    let _ = writeln!(out, "  {t}: {e:?}");
+                }
+                _ => {}
+            }
+            match e {
                 Effect::Shot { firer, .. } if all.contains(firer) => {
                     let tg = w.obj(*firer).and_then(|o| o.target);
+                    if let Some(Target::Object(x)) = tg {
+                        lift.fires.push((t, *firer, x));
+                    }
                     let (fs, ts) = (
                         side_of(&units, *firer),
                         match tg {
@@ -290,6 +331,20 @@ pub fn trace(
                         {
                             parts.push(format!("berserk {:?} -> {:?}", b.berserk, n.berserk));
                         }
+                        if b.lifter != n.lifter {
+                            parts.push(format!(
+                                "lifter {} -> {}",
+                                b.lifter.map_or("-".into(), |x| label(&units, x)),
+                                n.lifter.map_or("-".into(), |x| label(&units, x))
+                            ));
+                        }
+                        if (b.seized, b.set_down, b.dropped) != (n.seized, n.set_down, n.dropped) {
+                            parts.push(format!(
+                                "seized/set down/dropped {:?} -> {:?}",
+                                (b.seized, b.set_down, b.dropped),
+                                (n.seized, n.set_down, n.dropped)
+                            ));
+                        }
                         if b.z != n.z && (b.z - n.z).abs() > 8 {
                             parts.push(format!("z {} -> {}", b.z, n.z));
                         }
@@ -352,9 +407,190 @@ pub fn trace(
             );
         }
     }
+    lift.summary(
+        &mut out,
+        &units,
+        match row_side {
+            Side::A => 0,
+            Side::B => 1,
+        },
+    );
     let notes: Vec<&String> = w.notes.iter().collect();
     for n in notes {
         let _ = writeln!(out, "  note: {n}");
     }
     Ok(out)
+}
+
+/// One unit's lift state at the end of a tick: its lifter, its height above
+/// the surface, and whether it is seized.
+type LiftSeen = (Option<ObjectId>, i32, bool);
+
+/// The magnetic-lift facts M-0015 tabulates for TELE against BFRT, read
+/// from the state after each tick.
+#[derive(Default)]
+struct LiftLog {
+    /// Per tick (index 0 before the first tick), the units in play.
+    ticks: Vec<BTreeMap<ObjectId, LiftSeen>>,
+    /// Fire events at an object: tick, firer, target.
+    fires: Vec<(i32, ObjectId, ObjectId)>,
+    /// Hits: tick, target, attacker, result.
+    hits: Vec<(i32, ObjectId, Option<ObjectId>, String)>,
+}
+
+impl LiftLog {
+    fn record(&mut self, w: &World, all: &[ObjectId]) {
+        let m = all
+            .iter()
+            .filter_map(|&id| {
+                let o = w.obj(id)?;
+                Some((
+                    id,
+                    (
+                        o.lift.lifter,
+                        glasnost_sim::jump::height_above(w, id),
+                        o.lift.seized,
+                    ),
+                ))
+            })
+            .collect();
+        self.ticks.push(m);
+    }
+
+    fn holder(&self, t: i32, id: ObjectId) -> Option<ObjectId> {
+        let t = t.clamp(0, self.ticks.len() as i32 - 1) as usize;
+        self.ticks[t].get(&id).and_then(|s| s.0)
+    }
+
+    /// `mag`: the side of the row group (the lifters in TELE against BFRT).
+    fn summary(&self, out: &mut String, units: &[Vec<ObjectId>; 2], mag: usize) {
+        let other = 1 - mag;
+        let last = self.ticks.len() as i32 - 1;
+        let mut started = 0;
+        let mut met_held = 0;
+        let mut free = 0;
+        let mut free_seized = 0;
+        let mut while_holding = 0;
+        for (i, &(t, firer, x)) in self.fires.iter().enumerate() {
+            if side_of(units, firer) != Some(mag) || side_of(units, x) != Some(other) {
+                continue;
+            }
+            // The firer held a unit at the end of the tick before.
+            if self.ticks[(t - 1).max(0) as usize]
+                .values()
+                .any(|s| s.0 == Some(firer))
+            {
+                while_holding += 1;
+            }
+            let next = self.fires[i + 1..]
+                .iter()
+                .find(|f| f.1 == firer)
+                .map_or(i32::MAX, |f| f.0);
+            let window = (t + 10).min(next - 1).min(last);
+            let before = self.holder(t - 1, x);
+            if before != Some(firer) && self.holder(window, x) == Some(firer) {
+                started += 1;
+            } else if self.holder(t, x).is_some_and(|h| h != firer) {
+                met_held += 1;
+            } else {
+                free += 1;
+                let t2 = t.clamp(0, last) as usize;
+                if self.ticks[t2].get(&x).is_some_and(|s| s.2) {
+                    free_seized += 1;
+                }
+            }
+        }
+        let _ = writeln!(
+            out,
+            "lift: magnetron fire events at fortresses {}: started a hold {started}; met a fortress held by another {met_held}; else {free} (of those, target seized at the end of the fire tick {free_seized}); made while holding {while_holding}",
+            started + met_held + free
+        );
+        // Holds: runs of ticks with a lifter.
+        for &x in &units[other] {
+            let mut t = 0;
+            while t <= last {
+                let h = self.holder(t, x);
+                if h.is_none() || !self.ticks[t as usize].contains_key(&x) {
+                    t += 1;
+                    continue;
+                }
+                let start = t;
+                while t <= last && self.holder(t, x) == h {
+                    t += 1;
+                }
+                let release = t;
+                let above = self.ticks[(release.min(last)) as usize]
+                    .get(&x)
+                    .map(|s| s.1);
+                let landing = (release..=last)
+                    .find(|&u| self.ticks[u as usize].get(&x).is_none_or(|s| s.1 <= 0));
+                let gone = landing.is_some_and(|u| !self.ticks[u as usize].contains_key(&x));
+                let hits: Vec<String> = landing
+                    .map(|u| {
+                        self.hits
+                            .iter()
+                            .filter(|h| h.0 == u && h.1 == x)
+                            .map(|h| {
+                                format!("{} {}", h.2.map_or("-".into(), |a| label(units, a)), h.3)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let _ = writeln!(
+                    out,
+                    "  hold {} by {}: ticks {start}..{release} ({}); above at release {above:?}; landing {landing:?}{}; hits at landing [{}]",
+                    label(units, x),
+                    h.map_or("-".into(), |a| label(units, a)),
+                    if release > last {
+                        "running at the end"
+                    } else {
+                        "released"
+                    },
+                    if gone { " (left play)" } else { "" },
+                    hits.join(", ")
+                );
+            }
+        }
+        for &x in &units[other] {
+            let restored: Vec<usize> = (1..self.ticks.len())
+                .filter(|&u| {
+                    self.ticks[u - 1].get(&x).is_some_and(|s| s.2)
+                        && self.ticks[u].get(&x).is_some_and(|s| !s.2)
+                })
+                .collect();
+            let _ = writeln!(
+                out,
+                "  {}: restored (seized cleared) at ticks {:?}",
+                label(units, x),
+                restored
+            );
+        }
+        let fortress_hits_on_magnetrons = self
+            .hits
+            .iter()
+            .filter(|h| side_of(units, h.1) == Some(mag))
+            .filter(|h| h.2.is_some_and(|a| side_of(units, a) == Some(other)))
+            .count();
+        let magnetron_attacks = self
+            .hits
+            .iter()
+            .filter(|h| h.2.is_some_and(|a| side_of(units, a) == Some(mag)))
+            .count();
+        let _ = writeln!(
+            out,
+            "lift: hits on magnetrons by fortresses {fortress_hits_on_magnetrons}; hits with a magnetron as attacker {magnetron_attacks}"
+        );
+        for h in &self.hits {
+            if h.2.is_some_and(|a| side_of(units, a) == Some(mag)) {
+                let _ = writeln!(
+                    out,
+                    "  {}: hit on {} by {} result {}",
+                    h.0,
+                    label(units, h.1),
+                    label(units, h.2.expect("an attacker")),
+                    h.3
+                );
+            }
+        }
+    }
 }
