@@ -1,9 +1,9 @@
 ---
 id: Q-1771
 title: Does a unit at a factory's exit find its way out through a built-up base, or give up after 5 corridor searches?
-status: open
+status: answered
 related: [S-0212, S-0209, Q-1280]
-answered-by: []
+answered-by: [S-0212]
 ---
 
 ## Need
