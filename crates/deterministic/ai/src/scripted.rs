@@ -2168,7 +2168,7 @@ impl Script {
         };
         let p = search.place_type();
         let (fw, fh) = p.size;
-        let centre = |c: CellXY| CellXY::new(c.x + fw / 2, c.y + fh / 2);
+        let centre = |c: CellXY| CellXY::new(c.x + fw / 2, c.y + fh / 2); // nocite: the middle cell of the foundation
         let mut cells: Vec<CellXY> = self
             .spiral(w, WIDE_RINGS)
             .filter(|&c| within.is_none_or(|r| dist2(centre(c), goal) <= r))
