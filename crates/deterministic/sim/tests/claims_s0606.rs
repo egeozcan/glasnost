@@ -566,6 +566,15 @@ fn claim_6_clearing_scatters_a_blocker() {
     );
 }
 
+/// Puts `s` in *sleep*, so that S-0417 claim 17's request to a resting unit
+/// in *guard* on a building cell does not move it: only the bunker's own
+/// clearing request can.
+fn asleep(w: &mut World, s: ObjectId) {
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    w.obj_mut(s).unwrap().beh.force(Behaviour::Sleep, t, stale);
+}
+
 // spec: S-0606 Edge cases (quirks.bunker_clear_chosen_only on: the vehicle is the chosen object of its docking cell, a second object there is neither asked to scatter nor waited for; off: it is asked to scatter and waited for)
 #[test]
 fn claim_6_chosen_only_both_positions() {
@@ -585,6 +594,7 @@ fn claim_6_chosen_only_both_positions() {
         // The second object stands in the docking cell, off the centre the
         // vehicle stands on.
         let s = testkit::spawn(&mut w, Kind::Infantry, "STAY", 0, dock.cell(), 0);
+        asleep(&mut w, s);
         let near = Pos::new(dock.x - 64, dock.y - 64, dock.z);
         w.obj_mut(s).unwrap().pos = near;
         assert_ne!(near, w.obj(u).unwrap().pos);
@@ -990,6 +1000,7 @@ fn claim_6_far_point_both_positions() {
             && w.obj(u).unwrap().pos == dock));
         assert_eq!(stage(&w, b), Stage::Clearing);
         let s = testkit::spawn(&mut w, Kind::Infantry, "STAY", 0, dock.cell(), 0);
+        asleep(&mut w, s);
         // Towards the bottom corner of the docking cell.
         let near = Pos::new(dock.x + 100, dock.y + 100, dock.z);
         w.obj_mut(s).unwrap().pos = near;

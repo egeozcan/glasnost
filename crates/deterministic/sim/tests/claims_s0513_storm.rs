@@ -323,6 +323,13 @@ fn building_strike_debris(
     let mut w = game(&r);
     // The infantry unit is placed first, so it also precedes the building in the listing.
     let walker = spawn(&mut w, "WALKER", BETA, walker_cell.0, walker_cell.1);
+    // In sleep, so that S-0417 claim 17 does not send it off the building's cell.
+    let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
+    let t = w.tick;
+    w.obj_mut(walker)
+        .unwrap()
+        .beh
+        .force(glasnost_sim::rules::Behaviour::Sleep, t, stale);
     let bld = spawn(&mut w, "AUXB", BETA, 0, 0);
     let base = at(walker_cell.0, walker_cell.1);
     let o = w.obj_mut(walker).unwrap();

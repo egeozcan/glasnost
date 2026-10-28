@@ -214,6 +214,7 @@ const SCENES: &[Scene] = &[
     ("sprite-barrel", sprite_barrel),
     ("sinking-list", sinking_list),
     ("placed-off", placed_off),
+    ("barracks-no-rally", barracks_no_rally),
 ];
 
 #[test]
@@ -2269,6 +2270,113 @@ fn debris_pieces(lane: &mut Lane) {
     println!(
         "debris-pieces: most in play {most}, pieces {}, reversals (contacts) {contacts}",
         flips.len()
+    );
+}
+
+/// Play note 7 (S-0417 r64 claim 17, Q-1850): an infantry factory of the
+/// local house with no rally point releases five walking infantry units,
+/// one every 60 ticks (one line finishes its items at least 54 ticks
+/// apart, S-0404 claim 7). Each is sent off the factory's cell in its next
+/// turn; the scene prints every release, when each unit's contact ends and
+/// where each one ends up.
+fn barracks_no_rally(lane: &mut Lane) {
+    use glasnost_sim::econ::release::{self, Outcome};
+    let local = lane.local();
+    let (factory, foot, unit) = {
+        let r = lane.world().rules();
+        let Some(b) = r.buildings.iter().find(|b| {
+            b.factory == Some(glasnost_sim::rules::FactoryKind::Infantry)
+                && b.raw.econ.cloning != Some(true)
+        }) else {
+            println!("barracks-no-rally: no infantry factory type");
+            return;
+        };
+        let Some(u) = (0..r.infantry.len()).find(|&i| {
+            r.unit(Kind::Infantry, i as u32).is_some_and(|u| {
+                u.strength > 0
+                    && u.locomotor == glasnost_sim::rules::Locomotor::Walk
+                    && !u.jumpjet
+                    && !u.raw.teleporter.unwrap_or(false)
+            })
+        }) else {
+            println!("barracks-no-rally: no walking infantry type");
+            return;
+        };
+        (b.name.clone(), b.foundation, u as u32)
+    };
+    let home = lane.home();
+    let Some(at) = lane.area(CellXY::new(home.x + 8, home.y + 8), foot, 3, |l| {
+        l != land::WATER && l != land::ROCK
+    }) else {
+        println!("barracks-no-rally: no open area");
+        return;
+    };
+    let k = lane.spawn(Kind::Building, &factory, local, at);
+    println!(
+        "barracks-no-rally: factory {factory} ({}x{}) at {at:?}, rally point {:?}",
+        foot.0,
+        foot.1,
+        lane.world().obj(k).and_then(|o| o.guard_spot)
+    );
+    lane.look_at(at);
+    let holds = |w: &World, c: CellXY| w.cells.list(c, Layer::Ground).contains(&k);
+    let mut units: Vec<ObjectId> = Vec::new();
+    let mut freed: Vec<Option<i32>> = Vec::new();
+    for t in 0..600 {
+        if t % 60 == 0 && units.len() < 5 {
+            let w = lane.world_mut();
+            let u = glasnost_sim::objects::create(w, Kind::Infantry, unit, Some(local));
+            let out = release::release(w, k, u);
+            let c = w.obj(u).map(|o| o.pos.cell());
+            println!(
+                "barracks-no-rally +{t}: release {} {out:?}, at {c:?}",
+                units.len() + 1
+            );
+            if out == Outcome::Released {
+                units.push(u);
+                freed.push(None);
+            }
+        }
+        lane.ticks(1);
+        let w = lane.world();
+        for (i, &u) in units.iter().enumerate() {
+            if freed[i].is_none() && w.obj(u).is_some_and(|o| o.contact.is_none()) {
+                freed[i] = Some(t);
+                let o = w.obj(u).unwrap();
+                println!(
+                    "barracks-no-rally +{t}: unit {} out of contact at {:?}, destination {:?}",
+                    i + 1,
+                    o.pos.cell(),
+                    o.dest
+                );
+            }
+        }
+        if [1, 30, 120, 300].contains(&t) {
+            lane.save(&format!("barracks-no-rally-{t:03}"));
+        }
+    }
+    lane.ticks(200);
+    lane.save("barracks-no-rally-end");
+    let w = lane.world();
+    let mut cells = Vec::new();
+    for (i, &u) in units.iter().enumerate() {
+        let Some(o) = w.obj(u) else { continue };
+        let c = o.pos.cell();
+        cells.push(c);
+        println!(
+            "barracks-no-rally: unit {} rests at {c:?}, on the factory {}, behaviour {:?}, contact {:?}",
+            i + 1,
+            holds(w, c),
+            o.beh.current,
+            o.contact
+        );
+    }
+    cells.sort_by_key(|c| (c.y, c.x));
+    cells.dedup();
+    println!(
+        "barracks-no-rally: {} released, {} different cells",
+        units.len(),
+        cells.len()
     );
 }
 
