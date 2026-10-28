@@ -2,11 +2,11 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 83
+revision: 87
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-10-29
 measurements: []
 requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870, Q-1975]
 supersedes: []
@@ -1627,7 +1627,8 @@ Terms specific to this spec:
     after each is as follows. A fresh search, and the immediate new path of S-0209 claim 7, behave
     as a fresh search of the drive locomotor: no delay after a found path, *R* after a failed search
     or a failed gate. After a re-path for a moving blocker the delay *R* starts again whatever its
-    result, a failed gate included.
+    result, a failed gate included. A new destination does not cut a running delay short for the
+    walk locomotor: the first search for it waits for what remains of *R*.
     For the hovering locomotor, a fresh search with no stored steps left waits for *R* to
     expire. Every such fresh search starts *R* again from its tick, whether it finds a path,
     fails in the search or fails at the gate. In particular, a successful fresh search does not
@@ -1649,7 +1650,10 @@ Terms specific to this spec:
       S-0503 H12 and H15 for the two destinations and stop-time retry eligibility,
       scenarios P6, P7 run 5, P9 follower run 3 for the follower-car
       exception; for the walk locomotor, S-0209's scenarios C2 (c, d) and C5 for the delay between
-      re-paths and C19 for the immediate new path). P25(a, b) additionally reads the retry
+      re-paths and C19 for the immediate new path). That a new destination given while the delay
+      runs does not cut it short for the walk locomotor is `unmeasured`. S-0417 scenario U10
+      part g run 2 tests it once input exists that takes effect after a unit's release and before
+      its first turn. P25(a, b) additionally reads the retry
       timer immediately after a walker's failed search/gate and a follower car's computation.
       It does not infer that timer from a later search decided by another reaction.
       S-0504 N11 tests the ship's successful fresh-search clearing, failed-search delay,
@@ -1704,14 +1708,16 @@ Terms specific to this spec:
 
     | Case | Result |
     |---|---|
-    | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the driving or ship locomotor has its destination cleared, so it stops where it is. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
+    | The gate of claim 6 fails | The path computation ends at once with no path. The unit does not leave its team, no behaviour is queued and its house gives it no new destination. A unit with the driving, ship or walk locomotor has its destination cleared, so it stops where it is. For the walk locomotor this holds after a fresh search and after a re-path for a moving blocker, and its movement in progress ends in the same movement update. The retry delay runs after a fresh search, and after a re-path only for the walk locomotor (claim 21). What its *move* behaviour does without a destination belongs to S-0215 (it falls back to rest). No other row of this claim applies. |
     | The search fails (including the immediate failure of claim 14), and the unit is more than 1 cell (Chebyshev) from the destination, or is not on a bridge deck while the destination is a bridge cell | The unit stops (its current motion ends) and the retry delay *R* starts. It gives up: it leaves its team, its destination is cleared, and it queues *guard* if it has a human-controlled owner or *area guard* if it has a computer-controlled owner. A unit with a computer-controlled owner in a skirmish is given the house-selected destination of claim 23a, provided that choice yields a cell; otherwise it gets none. These two computer-controlled rules (*area guard*, the new destination) describe the original only. In our engine the rule for a human-controlled owner holds for every player-house unit, those of an *AI house* included (glossary *AI house*): such a unit queues *guard* and its house gives it no destination. Units of the neutral and special houses keep the original's non-human-owner rule; those houses are not AI houses. This is Departure D5, with no switch. Our AI may give the same unit a destination as an ordinary order. |
     | The search fails in any other case (within 1 cell) | The unit stops and the retry delay *R* starts. It does not give up: it stays in its team and no behaviour is queued. A unit with the drive locomotor also has its destination cleared, so it ends up standing where it is without a destination. For locomotors other than driving, ship and hovering, the destination is kept, and the unit tries again once its behaviour starts it moving towards it (S-0215), which the retry delay holds back. A unit with the ship or hovering locomotor also has its destination cleared, like a unit with the driving locomotor. |
 
     The same clearing ends every failed search of a unit with the driving, ship or hovering
     locomotor, so in rows 2 and 3 such a unit is left without a destination, unless its house has
     just given it a new one (row 2, in the original only). Being within the close-enough distance
-    of the destination makes no difference to any row.
+    of the destination makes no difference to any row. For the walk locomotor, the stop of rows 2
+    and 3 ends its movement in progress in the same movement update, whether or not the unit keeps
+    its destination.
 
     For a hovering unit, stopping and clearing these points do not cancel a positive
     travel distance already computed on an arrival tick. In either failed-search
@@ -1733,14 +1739,25 @@ Terms specific to this spec:
     After an accepted stop, an equal retained movement destination and heading point can
     still complete with a non-refusing no-point choice and an update; unequal points
     follow the no-movement-destination arrival cases (S-0503 claim 16).
-    - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P19 for ship and hovering
-      units in row 3; S-0503 H3 and H9 for cached arrival-tick travel, H12 and H15
+    - Backing: `measurable` (P3, P4, P7 runs 5, 5b and 6, P8, P11; P7 run 7b for the walk
+      locomotor's fresh search in the gate row; P19 for ship and hovering units in row 3; S-0503
+      H3 and H9
+      for cached arrival-tick travel, H12 and H15
       for retained movement destinations and the arrival-search outcome distinctions).
-      `unmeasured` for destination retention and restart with locomotors other
+      `unmeasured` for destination retention and restart in row 3 with locomotors other
       than driving, ship and hovering: no scenario tests those locomotors after this failure,
-      and the rule remains a low-confidence assumption (Open questions). The neutral/special
-      distinction is our engine's scope rule from the glossary, not an additional oracle claim
-    - Confidence: medium for driving, ship and hovering. Low for the remaining locomotors in row 3
+      and the rule remains a low-confidence assumption (Open questions). `unmeasured` for the walk
+      locomotor's re-path in the gate row: that row needs a destination that becomes unreachable
+      while a moving blocker holds the walker back, in the tick window before its re-path, and no
+      scenario of this spec times that change. It is rated medium because the original clears the
+      destination at a failed gate after a re-path as it does after a fresh search.
+      `unmeasured` for the end of the walk locomotor's movement in progress in rows 2 and 3: no
+      scenario of this spec observes it, and S-0417 claim 17 relies on it.
+      The neutral/special distinction is our engine's scope rule from the glossary, not an
+      additional oracle claim
+    - Confidence: medium for driving, ship and hovering, and for the walk locomotor in the gate
+      row. Low for the remaining locomotors in row 3, and for the end of the walk locomotor's
+      movement in progress in rows 2 and 3
 
 23a. **House-selected destination after give-up (Q-0238).** For both the neutral
     and special houses, row 2 assigns the house-selected destination on the same tick as
@@ -2595,7 +2612,7 @@ south and west.
 | stored path, driving or ship locomotor | next step *moving blocker* | blockage timer starts if not running. When the retry delay is over, re-path in mode 1, or 2 once the blockage timer has run out |
 | stored path, driving or ship locomotor | first check of the track's first cell: outcome *blocked* | stored path cleared, fresh search on this tick regardless of the retry timer; a found path gets a repeated check on this tick (claim 22) |
 | stored path, walk locomotor | next step of any outcome other than *clear* | reacts as S-0209 claims 7 to 10 say, with the delays of claim 21 |
-| any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21; whether a new order also clears the delay is S-0213's and S-0209's) |
+| any | destination changes | stored path cleared, fresh search, which waits for a running retry delay like any fresh search (claims 20 and 21). For the walk locomotor claim 21 settles it: a new destination does not cut the delay short. For the other locomotors this spec applies the same rule, at low confidence (`unmeasured`, Open questions) |
 
 Ordering consequences:
 - A search made after the only enabled bridge connection is destroyed, even later in the same
@@ -3331,8 +3348,12 @@ acquisition, not a path computation's gate or subsequent route search.
     to 4, a friendly vehicle stands on a guard behaviour with no destination, so a vehicle mover gets
     *stationary friendly* for its cell (claim 27). For runs 5 and 6, a test override gives one land
     type (say rough) a track multiplier of 0 and a wheel multiplier of 1.0, and a single cell of that
-    land type lies in clear land. The mover is a tracked vehicle. For run 7, a small island holds a
-    building of the human house. For runs 8 and 8b, a separate flat map: a straight barrier along
+    land type lies in clear land. The mover is a tracked vehicle. For runs 7 and 7b, a small island
+    holds a building of the human house and clear cells. For run 7b, an infantry unit of the
+    human house stands on clear mainland ground 10 cells from the island's shore, as the only
+    member of a team that a trigger creates at the start, whose script's one step is a move to a
+    clear cell of the island. For runs 8 and 8b, a separate flat
+    map: a straight barrier along
     row *y*₀ from *x* − 15 to *x* + 15, one cell thick, with *x* even and *y*₀ odd. The barrier cells
     must have a passability category that the mover's movement zone cannot use (for example
     water), not merely a land multiplier of 0, because the coarse search reads categories only
@@ -3358,13 +3379,17 @@ acquisition, not a path computation's gate or subsequent route search.
     leptons). Run 5: order the tracked vehicle onto the single cell of the overridden land type, from
     10 cells away. Run 5b: as run 5, with a test override setting the close-enough field to half a
     cell (128 leptons). Run 6: as run 5, with a further override marking the tracked vehicle's type
-    passive. Run 7: order a vehicle on the mainland onto the island building's cell. Runs 8, 8b and
+    passive. Run 7: order a vehicle on the mainland onto the island building's cell. Run 7b:
+    order an infantry unit on the mainland onto a clear cell of the island, through a team script,
+    because an interface order would have the island cell replaced by a mainland cell before any
+    path computation (S-0214 claim 11). Runs 8, 8b and
     9: order the mover onto *D*. Run 10: order a wheeled vehicle onto *Q*, once from the ground of
     the near bank 10 cells from *Q* along the bridge's axis, and once (control) from the deck of the
     same bridge, 5 cells from *Q*.
   - Observable: the cell where the vehicle stops, the tick its destination is cleared, team and
     behaviour changes as in P3. In runs 8, 8b, 9 and 10, the recorded destination in the ticks after
-    the order.
+    the order. In run 7b, the recorded destination and whether the unit has movement in progress,
+    in each tick after the order.
   - Expected: run 1: a cell next to the building, the qualifying ring-1 cell nearest to the
     vehicle's start (on equal distance, the first in the ring order of claim 25). The building's
     other cells are in ring 1 too but do not qualify, since their occupancy record is not empty
@@ -3384,7 +3409,10 @@ acquisition, not a path computation's gate or subsequent route search.
     from the cell's centre than the close-enough distance. Run 6: the passive vehicle gets no path
     (claim 15 does not apply, the search exhausts the reach region and fails), takes no step, and
     gives up (claim 23). Run 7: no step. The destination is cleared at once by the gate, with no
-    substitution (claims 6 and 24). Runs 8 and 8b: the unit's distance to *D* is 11 cells, far above
+    substitution (claims 6 and 24). Run 7b: the infantry unit takes no step. In its first movement
+    update after the order its destination is cleared and its movement in progress ends. It stays
+    in its team and no behaviour is queued (claim 23, the gate row). Runs 8 and 8b: the
+    unit's distance to *D* is 11 cells, far above
     the close-enough distance, so the nearby-cell search runs. Ring 1 holds no qualifying cell
     (barrier or occupied), so the scan ends with ring 2, and its qualifying cell nearest to the
     mover is *F* = (*x*, *y*₀ − 1), on the mover's side, 512 leptons from *D* (closer than the
@@ -3415,7 +3443,9 @@ acquisition, not a path computation's gate or subsequent route search.
     5b enters the cell, is given a substitute, or keeps its destination and goes on searching (which
     would mean the drive locomotor does not clear it), or run 5b keeps it while run 5 clears it
     (which would mean the close-enough distance matters). Run 6 moves towards the cell. Run 7
-    drives to a cell near the island, which would mean substitution came before the gate. Run 8
+    drives to a cell near the island, which would mean substitution came before the gate. Run 7b
+    walks towards the island, or keeps its destination or its movement in progress after that
+    update (which would mean the walk locomotor does not clear it at the gate). Run 8
     changes the destination to *F*, or to any other cell on the mover's side of the barrier, before
     the mover has passed a barrier end (which would mean there is no route-length test, or a much
     looser one). Run 8b keeps *D* as its destination (which would mean the test refuses a short
@@ -4598,6 +4628,8 @@ proposed recorder runs, not completed measurements.
   applies them in both.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
+- For locomotors other than walking, whether a new destination clears a running retry delay
+  (claim 21) is not established. The state table applies the walk locomotor's rule to them.
 - Which alignments of a straight strip of ground the unit cannot enter fail, and whether lengths
   3, 5, 7 and 9 of such a strip, and of a ledge, behave as P12 run T expects (see the strip entry in
   Edge cases and quirks): not established until run T is run. That lines of buildings (P12 run S,
