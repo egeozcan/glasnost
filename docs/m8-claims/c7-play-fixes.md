@@ -6,7 +6,7 @@ Brief: `.claude/worktrees/M8-C7-FIXES-BRIEF.md`. Our own engine and client: the 
 
 Our own rules patch layer, `data/layers/play-fixes.jsonc` (`glasnost_rules::layers`), shown to the person as *Pathing and other fixes*. It sets chosen quirk switches to the off position their spec states; the defaults in `quirks.rs` stay the original's (PLAN.md D6, D8). Decision of 2026-10-25 (m8-plan.md): on by default in the client's new-game setup; the measurement runs stay on the reference ruleset.
 
-**Admission.** An entry is admitted only when (1) an approved spec states the off position and the engine implements it, (2) the on position reads as a bug in play (a unit stuck, giving up, never moving, a visible glitch), named by a play note or a request, and (3) it is not a balance change (D14). The file cites each entry's claim and what it answers; `layers::tests::an_unknown_switch_is_refused` and `play_fixes_sets_only_the_admitted_switches_off` keep the file to known switches and to these two.
+**Admission.** An entry is admitted only when (1) an approved spec states the off position and the engine implements it, (2) the on position reads as a bug in play: a play note or a request names it, or (widened in part 3, 2026-10-28) the approved spec's own Edge cases or quirk text states its effect as a unit stuck, giving up although an open way exists, never moving again, or a visible glitch, and (3) it is not a balance change (D14). Part 3 (below) changed the list: see its table. The file cites each entry's claim and what it answers; `layers::tests::an_unknown_switch_is_refused` and `play_fixes_sets_only_the_admitted_switches_off` keep the file to known switches and to these two.
 
 | Switch (off) | Spec | Answers | Why |
 |---|---|---|---|
@@ -189,3 +189,71 @@ The layer is unchanged in this intake (its comments now say the above), and so i
 `sim-gate/tests/play_fixes.rs`. For the lead: by the rule, drop both corridor
 entries; readmit `corridor_retry_no_fallback` (and `corridor_free_part_ignores_height`) when a
 play note names a strip or ledge give-up.
+
+## Part 3: the layer re-judged (2026-10-28)
+
+Brief: `.claude/worktrees/M8-C7-PART3-BRIEF.md`. Decision of the main session, under *Decisions of
+2026-10-25*: condition 2 is widened as the *Admission* paragraph above says; conditions 1 and 3
+stand. No simulation code changed: the layer, its tests and its comments only. Save format (83),
+AI game format (45), wire 9, pathing report 2 and desync bundle 3 are unchanged.
+
+**The layer after part 3** (six entries; each off position is stated by its spec and built):
+
+| Switch (off) | Spec | Why it passes | Test (layer file read through `Layers::apply_quirks`) |
+|---|---|---|---|
+| `corridor_retry_no_fallback` | S-0212 claim 13, Edge cases | kept; the strip Edge case: a unit refuses an order "although an open way round exists" | `claims_s0212_cap.rs` and `claims_s0212.rs` strip tests (unchanged) |
+| `corridor_free_part_ignores_height` | S-0212 claim 13a, Edge cases (ledge) | admitted: the Edge case gives the ledge "the same gameplay impact as the strip (a unit refuses an order although an open way round exists)" and states the off position (the free part and its borders apply the height rule) | `play_fixes_layer_goes_round_a_ledge` (ledges of 3 and 7 cells at 8 shifts: the reference fails after 5 cell searches, the layer finds the way); the switch's own `corridor_free_part_ignores_height_off_goes_round_a_ledge` |
+| `depot_loss_strands_hover` | S-0314 | part 2, unchanged | `claims_s0314_stranded.rs` |
+| `unload_without_contact_stalls` | S-0402 claim 11, Edge cases | admitted: "stays in *unload* for good ... until an order gives it a behaviour"; off falls back to rest and the harvester queues what S-0215 claim 15 gives it. Acts only in that state. | `play_fixes_layer_frees_a_harvester_unloading_without_contact` (reference stalls in unload, layer does not); `claim_11_quirk_unload_without_contact_stalls` |
+| `absorber_stale_contact_kept` | S-0605 claim 17, Edge cases | admitted: the contact "keeps the building's link place for good, and every later entrant waits in line for ever"; off gives the contact up when the actor has neither *enter* current nor queued. Acts only in that state. | `play_fixes_layer_lets_the_waiting_entrant_in`; `claim_17_stale_contact_both_positions` |
+| `hover_landing_request_stands` | S-0503 claim 19, Edge cases | admitted: a landing-first in-place hover whose first deploy step found it above the ground "never deploys"; off treats the request as met once the hover no longer moves. Acts only while the request stands. | `play_fixes_layer_deploys_a_hover_with_a_standing_landing_request`; `quirk_hover_landing_request_stands` |
+
+**Dropped: `corridor_split_probe`.** With `corridor_retry_no_fallback` off a strip is passed at
+every alignment whatever this switch says (`corridor_retry_no_fallback_off_goes_round_a_strip`),
+and the ledge is answered by its own switch above: no pass or fail difference in any test. The
+caveat of *After intake 34* stands (the split reading could still close another connection and so
+give another route), but a layer entry with no shown effect is not kept. Its default stays on.
+
+**The brief's candidates**
+
+| Candidate | Verdict | Reason |
+|---|---|---|
+| `bouncing_anim_impact_hits_walk` (S-0319) | rejected | Its Edge case states no stuck, give-up or glitch; it decides who an impact's hits reach (a hit that takes its object out ends the hits; a building entering is hit). Combat damage: condition 3. |
+| `bouncing_anim_rebound_faults` (S-0319) | rejected | Names two faults of the rebound but their only effect is claim 7's choice between an impact and a stopping landing, so which objects are hit: no stuck or glitch stated, and combat: conditions 2 and 3. |
+| `anim_resource_no_growth_entry` (S-0319) | rejected | Whether a new resource cell is offered to the growth list, with one more RNG draw: an economy and random-stream change, nothing stuck: conditions 2 and 3. |
+| Intake 32 (S-0317) | none named | The intake 32 ledger names no quirk for C7. Its two switches (`voxel_debris_deck_rebound_slope`, `voxel_debris_cliff_step_faults`) are of the rebound family above and fail for the same reasons. |
+
+**Other quirks whose text reads as a bug.** The search was over the quirk doc lines and the specs'
+Edge cases for stuck, stall, never, for good, strand, freeze and give-up wording; 43 of the 498
+switches are not read by the sim at all (presentation, UI, crates) and were not candidates.
+Near misses, with the condition each fails:
+
+| Switch | Spec | Condition |
+|---|---|---|
+| `aircraft_unit_step_stall` | S-0501 claims 4, 5, Edge cases | Stated as stuck (an attacker hovers and "never fires"; a move or pad return stops short), but the off position changes F3's step for every aircraft in flight at those facings, not only the stalled state, and the spec rates it "a design rule, not an oracle measurement": not clearly condition 3. |
+| `aircraft_zero_step_attack_stall` | S-0501 claim 42 | "A proposed design alternative", `unmeasured`; changes when an attacker fires: not clearly condition 3. |
+| `unstartable_queue_head_stalls` | S-0404 | A production line, not a unit; low confidence; off changes which items the queue drops: not clearly condition 2 (no unit stuck) or 3. |
+| `absorber_release_bridge_ends_search` | S-0605 claim 12, Edge cases | The passenger "stays inside this processing", no stuck stated: condition 2. |
+| `lift_standin_stays_seized` | S-0607 claim 24 | Stated as never restored, but the off position changes what a lift does to the units it takes: not clearly condition 3. |
+| `drain_relink_strands_previous` | S-0608 | A building stays drained until the drainer dies; off ends a drain earlier: combat, condition 3. |
+| `parasite_carrier_loss_strands_unit`, `parasite_suppressed_latch_strands_unit` | S-0614 | A parasite left off the map; rare removal causes, `unmeasured` for most; off changes what a weapon leaves behind: not clearly conditions 2 and 3. |
+| `rocket_stalls_at_map_edge` | S-0506 | Keeps the last legal position; no stuck stated: condition 2. |
+| `permanent_grant_freezes_suspension` | S-0512 claim 13 | A trigger action's side effect on a superweapon record, not a unit; maps with triggers only: condition 2. |
+
+The data-triggered stalls are one group, judged by one policy (the main session's design): not
+admitted, because the stuck state needs a value in the rules data that the spec itself does not
+show in the stock rules or marks as a data error, so no play shows an effect, and the layer is
+kept to bugs a game reaches by playing. They are `zero_load_period_stalls` (S-0402, a load
+period of 0), `slave_negative_capacity_stalls` (S-0402, a negative capacity, data the spec treats as non-positive capacity),
+`slow_walker_stall` (S-0208, speed 1; no off-position test either), `single_stage_buildup_never_completes`
+(S-0406: "No stock data reaches this case"), `airstrike_empty_strike_stuck` (S-0519: "Stock data
+has no designator whose elite strike size is 0"), `anim_fast_rate_freezes` (S-0109, a rate above
+900), `cloak_zero_speed_stall` and `zero_rate_freezes_ambient`. A person who sets such a value in a
+mod can still add the switch to the layer; each has an off-position test already.
+
+**Results** (local lane; outputs in the git-ignored `local-lane/m8/c7-3/`, built from this branch on main 70eef44).
+- *Default runs.* No simulation, importer or default changed, so every default run is main's. The reference M6c, M7a and M7b sweeps 1 to 16 were run on this branch to compare with the layer-on ones (below).
+- *Layer-on sweeps 1 to 16* (`GLASNOST_PLAY_FIXES=1`): all three pass, no seed ends early. M6c and M7a print the same lines as the reference (smallest minimum 3 and 0; the M7a 0 is an informational counter that is 0 on the reference too). M7b differs from the reference in one seed, 8: mutator launches 2 (reference 3), infantry mutated 6 (8), drain counters 2/6/7/14 against 3/9/7/17, so the smallest drain minimum is 2 (reference 3; part 2's layer: 3), objects taken over median 16 (17). Isolated by switching each entry back on in turn for seed 8: only `absorber_stale_contact_kept` off changes it (the duel's absorbers); the other five entries leave seed 8 as the layer has it. No stall, no panic.
+- *Quick lane with the layer* (seeds 7 to 14, maps 8, 2 and 0, Yuri as house 1 against Allied and against Soviet, 48 games): every game over with a winner (house 1 wins 36, house 0 wins 12), no panic, median length 36 560 ticks. The reference quick lane was not re-run in part 3 (about 4 minutes a game batch; parts 1 and 2 ran it); the layer-on run is the no-stall check the brief asks for.
+
+**Version effects.** Only the layered `sim_rules_hash` changes (the layer file's content is in it). A save, replay, report or room made with part 2's layer matches neither the reference nor the new layered hash and is refused on the rules hash, as part 2 said. Reference files are unaffected. Wire 9, pathing report 2, desync bundle 3, save 83 and AI game format 45 are unchanged.
