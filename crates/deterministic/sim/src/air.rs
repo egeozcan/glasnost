@@ -1855,8 +1855,10 @@ fn tick_flight(w: &mut World, id: ObjectId) -> bool {
         && !a.landing
         && !a.taking_off
         && low_release_at_height_0(w, id, &a)
+        && w.obj(id)
+            .is_some_and(|o| o.beh.current != Some(Behaviour::Move))
     {
-        // design: S-0501 claim 48 (c) and Open question 26 (a low release whose destination came with a behaviour other than move, such as the attack of (d), takes off at the start of its next movement update at height 0 with that destination, as a move's first processing takes it off before that update: the low release makes no movement update at height 0 with a destination but without a take-off, whatever gave it the destination)
+        // design: S-0501 claim 48 (c) and Open question 26 (a low release whose destination came with a behaviour other than move, such as the attack of (d), takes off at the start of its next movement update at height 0 with that destination, as a move's first processing takes it off before that update: the low release makes no movement update at height 0 with a destination but without a take-off, whatever gave it the destination; on a move, claim 40's processing alone gives the take-off)
         if let Some(ob) = w.obj_mut(id) {
             ob.air = Some(a.clone());
         }
