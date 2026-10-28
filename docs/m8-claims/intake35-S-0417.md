@@ -103,13 +103,16 @@ and `claims_s0513_storm.rs` (`building_strike_debris`). What they check is uncha
 
 **Goldens, arena, sweeps.** Before the rebase no golden moved. After the rebase onto main
 21651b9 (intake 34 in), `duel-m6c` moves from its line 746 (tick 7460 to 7470): at tick 7467 a
-garrison infantry in *guard* stands on a cell of a 2x2 hut of house 2. Claim 17's request is
-accepted once and the unit walks to the next cell, after which each request is refused while it
-walks. The goldens are regenerated; no other golden moved (`cargo xtask gate` ok, native and
-wasm32). Main against this branch, after the rebase: arena M-0001 30 of 96 pairings failing,
+garrison infantry of the second side, in *guard*, stands on a cell of a 2x2 hut of the
+neutral house. Claim 17's request is accepted once, with one draw, and the unit walks to the
+next cell; each later request until it is off the hut is refused, with no draw (traced). The
+golden is regenerated (its own commit); no other golden moved (`cargo xtask gate` ok, native
+and wasm32). Main against this branch, after the rebase: arena M-0001 30 of 96 pairings failing,
 M-0002 13 of 24, M-0003 2 of 35, before and after; the arena folders are identical. Seed sweeps
 1 to 16, reference and with `GLASNOST_PLAY_FIXES=1`, all exit 0. M7a and M7b are identical.
-M6c (both, the same changes) differs: jumpjet orders median 51 to 52 (max 77 to 132), jumpjets
+On main 21651b9 the play-fixes layer changes no sweep counter in these games (a fact of main,
+before and after this intake), so each reference and play-fixes pair is the same.
+M6c (both) differs: jumpjet orders median 51 to 52 (max 77 to 132), jumpjets
 built and flown median 9 to 10, deploy orders min 62 to 65 and median 106 to 102, sabotage
 orders median 17 to 15, crates picked up median 17 to 16, radiation exits max 54 to 94. The
 minimum and median of every counter are in `local-lane/m8/a3-35/sweep-tables-rebased.md`.
@@ -147,12 +150,13 @@ local house (a 3x2 barracks), no rally point, five releases 60 ticks apart. All 
 released at the same contact cell; each unit left it 29 to 50 ticks after its release, so
 every later release found the place free. They rest on five different cells next to the
 barracks, none on it, in *guard*, out of contact. Screens 001, 030, 120, 300 and end.
-The same run after the Q-1980 design gives the same output (`lane2/`).
+The same run after the Q-1980 design gives the same output (`lane2/`), and so does the run
+after the rebase onto main 21651b9 (`lane3/`).
 
 Quick skirmish (`glasnost-headless ai-sides 120000 7 <map>` with `GLASNOST_AI_QUICK=1`; maps 8,
 2 and 0; Yuri as house 1 against Allied and against Soviet; reference and with the play-fixes
 layer; 12 games, `local-lane/m8/a3-35/quick/`): every game is over with a winner, between 26 199
-and 65 571 ticks, and none panicked.
+and 65 571 ticks, and none panicked. Run on the build before the rebase (main a2584dd).
 
 **Requests.** Q-1980 (claim 17's request to a walking unit that holds a destination with no
 path), with the interim above. Q-1981 to Q-1984 unused.
