@@ -169,6 +169,22 @@ fn a_file_older_than_the_report_keys_keeps_its_own() {
     assert_eq!(Settings::from_text(&s.to_text()).bindings, s.bindings);
 }
 
+/// A file written before the make-group key (M8 A4 round 5 seams, our
+/// design) keeps N for it unless the file gives N to another action; it
+/// then takes the first free key. A written make-group key comes back.
+#[test]
+fn a_file_older_than_the_make_group_key_keeps_its_own() {
+    let s = Settings::from_text("key.stop=q\n");
+    assert_eq!(s.bindings.key(Action::MakeGroup), 'n');
+    let s = Settings::from_text("key.stop=n\n");
+    assert_eq!(s.bindings.key(Action::Stop), 'n');
+    assert_eq!(s.bindings.key(Action::MakeGroup), 'a');
+    let s = Settings::from_text("key.group=j\n");
+    assert_eq!(s.bindings.key(Action::MakeGroup), 'j');
+    assert!(s.to_text().contains("key.group=j"));
+    assert_eq!(Settings::from_text(&s.to_text()).bindings, s.bindings);
+}
+
 #[test]
 fn steps_stay_in_range() {
     let mut s = Settings::default();

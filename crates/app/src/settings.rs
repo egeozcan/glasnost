@@ -39,10 +39,14 @@ pub enum Action {
     PathReport,
     /// Mark the moment in the pathing report's window (M8 A4).
     Mark,
+    /// Held with a digit, makes that control group: the web build's
+    /// stand-in for Ctrl+digit, which browsers may keep for themselves
+    /// (M8 A4 round 5 seams, design).
+    MakeGroup,
 }
 
 /// Every bindable action, in the order the screen lists them.
-pub const ACTIONS: [Action; 8] = [
+pub const ACTIONS: [Action; 9] = [
     Action::Stop,
     Action::Scatter,
     Action::Guard,
@@ -51,6 +55,7 @@ pub const ACTIONS: [Action; 8] = [
     Action::TypeSelect,
     Action::PathReport,
     Action::Mark,
+    Action::MakeGroup,
 ];
 
 impl Action {
@@ -65,6 +70,7 @@ impl Action {
             Action::TypeSelect => "typeselect",
             Action::PathReport => "report",
             Action::Mark => "mark",
+            Action::MakeGroup => "group",
         }
     }
 
@@ -97,7 +103,7 @@ pub const KEYBOARD_KEYS: [(&str, &str); 12] = [
     ("Hold, cancel (sidebar)", "Backspace"),
     ("Sidebar tab", "Page Up, Page Down"),
     ("Placement cell; place", "Ctrl+arrows; Enter"),
-    ("Make a control group", "Ctrl+0 to Ctrl+9"),
+    ("Make a control group", "Ctrl+0 to 9; web: group key+digit"),
     ("Add to a control group", "Shift+0 to Shift+9"),
     ("Select a group; twice: go to it", "0 to 9"),
 ];
@@ -105,7 +111,7 @@ pub const KEYBOARD_KEYS: [(&str, &str); 12] = [
 /// The key bindings of the command keys. Keys are lower-case letters or
 /// digits, and no two actions share one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Bindings([char; 8]);
+pub struct Bindings([char; 9]);
 
 /// Why a key could not be bound.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,7 +126,8 @@ impl Default for Bindings {
     fn default() -> Self {
         // spec: S-0213 claim 22 (fresh-profile bindings: S stop, X scatter, G guard, D deploy, C cheer)
         // nocite: our own client setting (T plays S-0214's type-select role, whose key is the player's binding; P saves a pathing report and M marks, M8 A4: no command key of S-0213 claim 22, Z included)
-        Self(['s', 'x', 'g', 'd', 'c', 't', 'p', 'm'])
+        // design: N held with a digit makes a group on the web (M8 A4 round 5 seams; no command key of S-0213 claim 22, Z included)
+        Self(['s', 'x', 'g', 'd', 'c', 't', 'p', 'm', 'n'])
     }
 }
 
@@ -377,8 +384,13 @@ impl Settings {
         // written before M8 A4) keeps its default unless the file gives
         // that key to another action; it then takes the first letter or
         // digit free. The command keys of S-0213 table T2 are left as they
-        // were.
-        for a in [Action::TypeSelect, Action::PathReport, Action::Mark] {
+        // were. The make-group key (M8 A4 round 5 seams) does the same.
+        for a in [
+            Action::TypeSelect,
+            Action::PathReport,
+            Action::Mark,
+            Action::MakeGroup,
+        ] {
             if taken.iter().any(|(t, _)| *t == a) {
                 continue;
             }
