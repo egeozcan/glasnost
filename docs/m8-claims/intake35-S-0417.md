@@ -54,10 +54,14 @@ S-0212 r82 are on main and belong to other intakes; not taken in here.
   the down, no-beam states and never counts (claim 17's design, Open question 14), as for
   S-0613 claim 10 and S-0317 claim 19. The walker's entry test has no WP8 row yet, so an
   infantry unit cannot rest on a section anyway.
-- A walking unit whose path fails at the reachability gate keeps its destination with no path.
-  `occupancy::in_progress` reports no movement then, so each later request is accepted again,
-  with its draw and a new destination (claim 17 leaves open whether it is refused;
-  `unmeasured`, no stock setup gives it).
+- A walking unit that holds a destination with no path (its path failed at the reachability
+  gate, or a fresh search waits for the retry delay): claim 17 leaves open whether it reports
+  movement in progress. For claim 17's request ours does (`scatter::answer`, Q-1980), so each
+  later request is refused with no draw and the destination is kept, as for a fall-back
+  destination whose *move* is not yet current. A first build accepted it again: in the M7a fix
+  sweep, seed 1, a slave stuck on a bio-reactor cell (below) took a draw and a new destination
+  in every tick, and the new destination never got searched because the retry delay was still
+  running. Every other S-0208 claim 11 caller is unchanged.
 - Jumpjet infantry released with no rally point (Open question 3): our engine rests it in
   *guard* like the others, so the rule applies by its conditions. Its ascent report (claim 15)
   ends contact first in practice.
@@ -85,7 +89,7 @@ intake takes in.
 | 17 (fall-back neighbours queue move) | by construction | `scatter::answer`; no setup where the search finds nothing (spec: `unmeasured`). |
 | 17 (teleporting unit jumps in the request's turn) | tested | `claim_17_teleporting_unit_jumps_in_the_request_turn` (it jumps and reports clear in that tick). |
 | 17 (*Unit after unit*, Q-1850) | tested | `claim_17_unit_after_unit` (five built by production orders, all released, no refund, five different cells, none on K). Lane `barracks-no-rally`. |
-| 17 (the path failed at the reachability gate) | design | Above. |
+| 17 (a destination with no path: the gate failed, or the retry delay runs) | design, Q-1980 | `claim_17_destination_without_a_path_is_kept` (later requests refused, the destination kept, then it walks off). |
 | 17 (jumpjet infantry) | design | Above. |
 | Import mapping (contact retention row) | text | No import change. |
 | Scenarios U10 b, e, f, U13 a | not ours | Oracle scenarios. |
@@ -97,17 +101,49 @@ put an infantry unit on a building cell in *guard* to test something else now pu
 `claims_s0606.rs` (`claim_6_chosen_only_both_positions`, `claim_6_far_point_both_positions`)
 and `claims_s0513_storm.rs` (`building_strike_debris`). What they check is unchanged.
 
-**Goldens, arena, sweeps.** No golden moved (`glasnost-sim-gate` with the ignored tests). Arena
-M-0001 31/96, M-0002 13/24, M-0003 2/35 before and after, the arena folders identical. The m7b
-sweeps are identical. The m6c and m7a sweeps differ: in m6c seed 1 over 12000 ticks only two
-units met claim 17's conditions, each for two ticks, both jumpjet infantry in *guard* over a
-building (a prism tower, a pillbox) while landing; the request changed their course and the
-games went apart from there. No unit was sent more than once in a row.
+**Goldens, arena, sweeps.** No golden moved (`cargo xtask gate` ok, native and wasm32):
+the gate games put no infantry in *guard* on a building cell. Arena M-0001 31 of 96 pairings
+failing, M-0002 13 of 24, M-0003 2 of 35, before and after; the arena folders are identical.
+Seed sweeps 1 to 16, reference and with `GLASNOST_PLAY_FIXES=1`, all exit 0. M7b is identical.
+M6c (both) and M7a (reference seeds 1 and 2, play fixes seed 1) differ; the minimum and median
+of every counter, before and after, are in `local-lane/m8/a3-35/sweep-tables.md`. Most changes
+are a median moving by one or two. Two stand out: M6c reference jumpjet orders, median 47 to 53,
+and M7a play fixes seed 1, whose infantry absorbed fell from 6 to 2 and now shows in its
+below-3 list. Each traces to claim 17 firing where the spec says it should, after which the game
+goes its own way:
+- M6c, reference, seeds 1 to 16 traced: in 11 seeds, one to four units met claim 17's
+  conditions, mostly for 1 to 30 ticks. Most are jumpjet infantry in *guard* over a pillbox, a
+  prism tower or a yard, at 300 to 470 leptons (claim 17 ignores the unit's height). The others
+  are infantry standing on a building cell of their own or the neutral house. One walker in seed
+  5 came back to a pillbox's cell over 2 500 ticks and was sent off each time. The M6c play
+  fixes sweep was not traced; its changes are of the same size.
+- M7a, reference, seed 1: an enemy walker in *guard* on a bio reactor's cell is sent off at
+  tick 7856. Seed 2: one slave on a slave-miner building's cell takes a request about once in
+  every ten of its turns over 1 900 ticks.
+- M7a, play fixes, seed 1: slave 797 (below) is sent a request on a bio reactor's cell. Under
+  the first build it was accepted in every tick from 7706 on (4 270 draws). Under the Q-1980
+  design it is accepted 430 times, once in each of its own retry cycles, and refused 3 843
+  times. Against the first build the design also changed M6c reference and M7a reference seed
+  2, where units held a destination with no path; M6c play fixes and M7b did not change.
+
+**Found, not ours to fix.** In M7a play fixes seed 1, slave 797 walks onto its own house's bio
+reactor's cell under an entry order (S-0605) and stays there in *guard* from about tick 7740 to
+the end of the game. Its search back to its master's unloading cell (S-0402 claim 14) fails in
+every retry cycle. The same happens with claim 17 switched off, so it predates this intake. It
+is a play-fix candidate: the AI gives an absorber entry order to an enslaved unit, and the slave
+does not get out of the building's cells.
 
 **Local lane.** Scene `barracks-no-rally` (`m7b_lane.rs`): the first infantry factory of the
 local house (a 3x2 barracks), no rally point, five releases 60 ticks apart. All five were
 released at the same contact cell; each unit left it 29 to 50 ticks after its release, so
 every later release found the place free. They rest on five different cells next to the
 barracks, none on it, in *guard*, out of contact. Screens 001, 030, 120, 300 and end.
+The same run after the Q-1980 design gives the same output (`lane2/`).
 
-**Requests.** None; Q-1980 to Q-1984 unused.
+Quick skirmish (`glasnost-headless ai-sides 120000 7 <map>` with `GLASNOST_AI_QUICK=1`; maps 8,
+2 and 0; Yuri as house 1 against Allied and against Soviet; reference and with the play-fixes
+layer; 12 games, `local-lane/m8/a3-35/quick/`): every game is over with a winner, between 26 199
+and 65 571 ticks, and none panicked.
+
+**Requests.** Q-1980 (claim 17's request to a walking unit that holds a destination with no
+path), with the interim above. Q-1981 to Q-1984 unused.
