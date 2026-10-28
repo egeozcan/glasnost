@@ -26,7 +26,9 @@
 //! the powered-unit flag and a control centre given in a local rules
 //! copy), and a hover stranded at a naval yard (S-0314 claim 22, Edge
 //! cases, `quirks.depot_loss_strands_hover`) with *Pathing and other fixes*
-//! ticked and unticked in the setup (M8 step C7 part 2). A new scene is one
+//! ticked and unticked in the setup (M8 step C7 part 2), and the cases of
+//! the lead's pathing reports 1 and 2 (S-0212 r82 scenario P31 and a
+//! harvester on a docking cell, M8 A3 intake 34), likewise. A new scene is one
 //! more function and one more
 //! row of [`SCENES`].
 //!
@@ -86,6 +88,7 @@ const SCENES: &[Scene] = &[
     ("hover-yard", hover_at_yard),
     ("hover-away", hover_disabled_away),
     ("hover-stranded", hover_stranded),
+    ("base-exit", base_exit),
 ];
 
 #[test]
@@ -679,6 +682,213 @@ fn hover_stranded(lane: &mut Lane) {
             };
             hover_stranded_run(lane, fixes, part);
         }
+    }
+}
+
+/// S-0212 r82 (M8 A3 intake 34), the cases of the lead's pathing reports 1
+/// and 2 on the install's data: scenario P31's layout of 1 × 1 buildings of
+/// the local house (a 3 × 2 block, a row of ten 4 cells north of it) with
+/// an infantry unit and then a plain vehicle at the block's exit, sent 16
+/// cells north and 3 west; and a dock-unload refinery of the local house
+/// with a harvester on its docking cell, two north–south rows of eight
+/// 1 × 1 buildings west of it, sent 16 cells west. Each with *Pathing and
+/// other fixes* ticked and unticked. Prints, per run, whether the
+/// destination was cleared in the first 3 ticks, the cell searches of the
+/// first path computation, and the tick of arrival.
+fn base_exit(lane: &mut Lane) {
+    let map = env_num("GLASNOST_UI_MAP", 0);
+    for fixes in [true, false] {
+        let mut fresh;
+        let lane: &mut Lane = if fixes {
+            &mut *lane
+        } else {
+            fresh = Lane::start_with(map, fixes).expect("the install is set");
+            &mut fresh
+        };
+        base_exit_run(lane, fixes);
+    }
+}
+
+/// The name of a 1 × 1 building type with no weapon that is not a wall,
+/// gate or naval type.
+fn plain_block(w: &World) -> Option<String> {
+    w.rules()
+        .buildings
+        .iter()
+        .enumerate()
+        .find(|(i, b)| {
+            b.foundation == (1, 1)
+                && !b.gate
+                && !b.naval
+                && !b.invisible
+                && b.combat.slots.iter().all(Option::is_none)
+                && !glasnost_sim::econ::placement::place_type(w, *i as u32).wall
+        })
+        .map(|(_, b)| b.name.clone())
+}
+
+/// Orders `id` to `to` and follows it for up to `ticks` ticks: whether the
+/// destination was cleared in the first 3, the cell searches (inside a
+/// corridor, found) of its first path computation, and the tick of arrival
+/// counted from the order.
+fn follow_move(
+    lane: &mut Lane,
+    id: ObjectId,
+    to: CellXY,
+    ticks: usize,
+) -> (bool, Vec<(bool, bool)>, Option<usize>) {
+    use glasnost_sim::trace::{self, What};
+    trace::switch_on(lane.world_mut());
+    let local = lane.local();
+    let n = lane.order(local, id, ClickOn::Cell(to));
+    let mut cleared = false;
+    let mut searches = None;
+    let mut arrived = None;
+    for t in 0..ticks {
+        lane.ticks(1);
+        let w = lane.world();
+        if searches.is_none() {
+            searches = trace::take(w).into_iter().find_map(|e| match e.what {
+                What::Search { searches, .. } if e.unit == id => Some(
+                    searches
+                        .iter()
+                        .map(|s| (s.corridor, s.found.is_some()))
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            });
+        }
+        let Some(o) = w.obj(id) else { break };
+        if t < 3 && o.dest.is_none() && o.pos.cell() != to {
+            cleared = true;
+        }
+        if o.pos.cell() == to {
+            arrived = Some(t);
+            break;
+        }
+    }
+    println!("  {n} orders issued");
+    (cleared, searches.unwrap_or_default(), arrived)
+}
+
+fn base_exit_run(lane: &mut Lane, fixes: bool) {
+    let q = lane.world().rules().quirks;
+    println!(
+        "-- fixes ticked {fixes}: corridor_retry_no_fallback {}, corridor_split_probe {}",
+        q.corridor_retry_no_fallback, q.corridor_split_probe
+    );
+    let Some(block) = plain_block(lane.world()) else {
+        println!("no plain 1x1 building type");
+        return;
+    };
+    let w = lane.world();
+    let walker = find_type(w, Kind::Infantry, |_, u| {
+        u.locomotor == Locomotor::Walk && !u.jumpjet
+    });
+    let car = find_type(w, Kind::Vehicle, |_, u| plain_vehicle(u));
+    let harvester = find_type(w, Kind::Vehicle, |_, u| {
+        u.harvester && u.locomotor == Locomotor::Drive
+    });
+    let refinery = w
+        .rules()
+        .buildings
+        .iter()
+        .enumerate()
+        .find(|(i, _)| {
+            w.rules()
+                .econ
+                .harvest
+                .buildings
+                .get(*i)
+                .is_some_and(|h| h.dock_unload)
+        })
+        .map(|(_, b)| (b.name.clone(), b.foundation));
+    let land_ok = |l| l != land::WATER && l != land::ROCK;
+    let local = lane.local();
+    let home = lane.home();
+    // P31: offsets from the origin; the layout spans x −5..6, y −15..3.
+    for (what, unit) in [("infantry", walker), ("vehicle", car)] {
+        let Some(unit) = unit else {
+            println!("P31 {what}: no type");
+            continue;
+        };
+        let near = CellXY::new(home.x + 14, home.y + 14);
+        let Some(tl) = lane.area(near, (12, 19), 1, land_ok) else {
+            println!("P31 {what}: no open area");
+            continue;
+        };
+        let o = CellXY::new(tl.x + 5, tl.y + 15);
+        let at = |dx: i32, dy: i32| CellXY::new(o.x + dx, o.y + dy);
+        let mut cells: Vec<CellXY> = Vec::new();
+        for x in 1..=3 {
+            for y in 0..=1 {
+                cells.push(at(x, y));
+            }
+        }
+        for x in -4..=5 {
+            cells.push(at(x, -4));
+        }
+        let placed: Vec<ObjectId> = cells
+            .iter()
+            .map(|&c| lane.spawn(Kind::Building, &block, local, c))
+            .collect();
+        lane.ticks(2);
+        let kind = if what == "infantry" {
+            Kind::Infantry
+        } else {
+            Kind::Vehicle
+        };
+        let id = lane.spawn(kind, &unit, local, at(2, 2));
+        lane.ticks(2);
+        let (cleared, searches, arrived) = follow_move(lane, id, at(-1, -14), 1500);
+        println!(
+            "P31 {what} from {:?}: cleared at once {cleared}, first computation's searches {searches:?}, arrived after {arrived:?} ticks",
+            at(2, 2)
+        );
+        lane.look_at(at(0, -6));
+        lane.save(&format!("a3-34-p31-{what}-fixes-{fixes}"));
+        for b in placed {
+            glasnost_sim::objects::remove(lane.world_mut(), b);
+        }
+        if lane.world().obj(id).is_some() {
+            glasnost_sim::objects::remove(lane.world_mut(), id);
+        }
+        lane.ticks(2);
+    }
+    // Report 2's case: a harvester on a refinery's docking cell.
+    let (Some(h), Some((rn, (fw, fh)))) = (harvester, refinery) else {
+        println!("dock: no harvester or dock-unload refinery type");
+        return;
+    };
+    let near = CellXY::new(home.x - 14, home.y + 14);
+    let Some(tl) = lane.area(near, (fw + 19, fh + 10), 1, land_ok) else {
+        println!("dock: no open area");
+        return;
+    };
+    let r = CellXY::new(tl.x + 17, tl.y + 5);
+    let k = lane.spawn(Kind::Building, &rn, local, r);
+    let mut placed = vec![k];
+    for x in [r.x - 4, r.x - 8] {
+        for y in r.y - 3..r.y + 5 {
+            placed.push(lane.spawn(Kind::Building, &block, local, CellXY::new(x, y)));
+        }
+    }
+    lane.ticks(2);
+    let Some(dock) = glasnost_sim::econ::harvest::docking_cell(lane.world(), k) else {
+        println!("dock: no docking cell");
+        return;
+    };
+    let v = lane.spawn(Kind::Vehicle, &h, local, dock);
+    lane.ticks(2);
+    let to = CellXY::new(r.x - 16, r.y + 1);
+    let (cleared, searches, arrived) = follow_move(lane, v, to, 1500);
+    println!(
+        "dock: refinery {fw}x{fh} at {r:?}, harvester on {dock:?} sent to {to:?}: cleared at once {cleared}, first computation's searches {searches:?}, arrived after {arrived:?} ticks"
+    );
+    lane.look_at(CellXY::new(r.x - 6, r.y + 1));
+    lane.save(&format!("a3-34-dock-fixes-{fixes}"));
+    for b in placed {
+        glasnost_sim::objects::remove(lane.world_mut(), b);
     }
 }
 
