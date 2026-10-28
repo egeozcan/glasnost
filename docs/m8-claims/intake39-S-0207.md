@@ -118,8 +118,8 @@ flag: since claim 28 itself moved none of these games, none of them has such a v
 - Oracle arena (local lane): the three game files are byte for byte the same. M-0001 30 of 96
   pairings failing, 150 of 171 unanimous outcomes reproduced; M-0002 12 of 24, 42 of 47; M-0003 2
   of 35, 60 of 64.
-- Goldens: all pass unchanged (`GLASNOST_UPDATE_GOLDEN=1` rewrote nothing; run again with the
-  scatter-request hook by `cargo xtask gate`).
+- Goldens: all pass unchanged (`GLASNOST_UPDATE_GOLDEN=1` rewrote nothing; with the
+  scatter-request hook, `cargo xtask gate` passes on native and wasm32).
 - Quick skirmish (`glasnost-headless ai-sides 120000 7 <map>` with `GLASNOST_AI_QUICK=1`; maps 8,
   2 and 0; Allied as house 0 against Soviet and against Yuri; main and this branch; 12 games,
   `local-lane/m8/a3-39/quick/`): every game is over with a winner and none panicked. The Allied
