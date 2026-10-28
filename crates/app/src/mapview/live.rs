@@ -3157,7 +3157,6 @@ impl Live {
     /// nothing.
     fn piece_items(&mut self, inputs: &Inputs, scene: &mut Scene) -> BTreeMap<ObjectId, Vec<Item>> {
         use super::build::PieceDraw;
-        let now = self.shown_tick();
         let mut list = Vec::new();
         let mut ids = Vec::new();
         for (id, p) in &self.world.pieces {
@@ -3177,7 +3176,7 @@ impl Live {
             list.push(PieceDraw {
                 idx,
                 pos: (p.pos.x, p.pos.y, p.pos.z),
-                pose: piece_pose(p.axis, f64::from_bits(p.spin.0), now.saturating_sub(p.born)),
+                pose: piece_pose(p.axis, f64::from_bits(p.spin.0), p.turns),
                 owner,
             });
             ids.push(*id);

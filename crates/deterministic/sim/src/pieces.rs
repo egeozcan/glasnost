@@ -213,9 +213,13 @@ pub struct Piece {
     /// The spin axis (*a*₃, *a*₂, *a*₁) before normalisation (F5); drawing
     /// only.
     pub axis: [i32; 3], // nocite: vector and matrix dimensions (three axes)
-    /// The tick of its creation, from which the drawing turns the model
-    /// (claim 15).
-    pub born: i32,
+    /// The net count *n*₊ − *n*₋ of its flying turns (claim 22, F10): the
+    /// drawing turns the model about its axis by the spin rate times this.
+    /// Wraps as an `i32`; drawing only.
+    pub turns: i32,
+    /// Whether the sense of the turn is reversed (claim 22: each contact
+    /// reverses it); drawing only.
+    pub reversed: bool,
 }
 
 impl Piece {
@@ -331,7 +335,9 @@ pub fn create(w: &mut World, ti: u32, at: Pos, house: Option<HouseId>) -> Option
                 velocity,
                 spin,
                 axis: [a3, a2, a1],
-                born: w.tick,
+                // spec: S-0317 claim 22 (the identity at creation)
+                turns: 0,
+                reversed: false,
             },
         );
         // spec: S-0317 claims 1 and 6 (a piece enters play during its creation) and S-0203 claim 3 (appended to the update order)
@@ -593,6 +599,12 @@ fn fly(w: &mut World, pc: &mut Piece, t: &PieceType) -> Option<(CellXY, Pos, boo
         // spec: S-0317 claim 5 and F3 (a meteor piece: v_z = RZ₂₄(w_z + g) after the move and any rebound)
         v[2] = single(v[2].to_f64().add(g, mode), mode);
     }
+    // spec: S-0317 claim 22 (every contact, one the cliff test undoes included, reverses the sense of the turn before this flying turn's rotation; every flying turn then turns once in the current sense)
+    if contact != Contact::None {
+        pc.reversed = !pc.reversed;
+    }
+    // spec: S-0317 claim 22 and F10 (the net count n₊ − n₋ of flying turns)
+    pc.turns = pc.turns.wrapping_add(if pc.reversed { -1 } else { 1 });
     pc.flight = p;
     pc.velocity = v;
     // spec: S-0317 F3 and claim 11 (the position after the move: p′ truncated toward zero in each axis)

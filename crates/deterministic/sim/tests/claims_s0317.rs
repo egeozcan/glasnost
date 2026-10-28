@@ -1428,3 +1428,51 @@ fn claim_21_no_placement_at_the_origin() {
     assert_eq!(sys.pos, origin, "nor does it move");
     round_trip(&w);
 }
+
+/// spec: S-0317 claim 22 and F10 (the orientation is the identity at creation; each flying turn turns once in the current sense; every contact, an undone one and one whose turn stops the piece included, reverses the sense before that turn's rotation; the net count is n₊ − n₋)
+#[test]
+fn claim_22_net_turns_and_reversal() {
+    let r = rules();
+    let mut w = world(&r);
+    let c = mid(0, 0);
+    let at = centre(c, 0);
+    let id = make(&mut w, "ROCK", at);
+    let fresh = piece(&w, id);
+    assert_eq!(
+        (fresh.turns, fresh.reversed),
+        (0, false),
+        "the identity at creation"
+    );
+    let fly = |w: &mut World, z: i32, v: [&str; 3]| {
+        set(w, id, [at.x, at.y, z], v);
+        w.pieces.get_mut(&id).unwrap().counter = 100;
+        pieces::turn(w, id);
+        let p = piece(w, id);
+        (p.turns, p.reversed)
+    };
+    // Three free turns high above the ground.
+    for n in 1..=3 {
+        assert_eq!(fly(&mut w, 2000, ["0", "0", "0"]), (n, false));
+    }
+    // A ground contact: the contact turn already turns in the reversed sense.
+    assert_eq!(fly(&mut w, 5, ["0", "0", "-20"]), (2, true));
+    // Two free turns in the reversed sense: net 0.
+    assert_eq!(fly(&mut w, 2000, ["0", "0", "0"]), (1, true));
+    assert_eq!(fly(&mut w, 2000, ["0", "0", "0"]), (0, true));
+    // A contact whose turn stops the piece reverses the sense too.
+    assert_eq!(fly(&mut w, 0, ["0", "0", "0"]), (1, false));
+    assert_eq!(piece(&w, id).counter, 0, "stopped");
+    // The ending turn (claim 6) leaves play before any flight, so it has no pose to change.
+    // A contact that the cliff test undoes reverses the sense (claim 10's undone case).
+    let mut w = world(&r);
+    let low = mid(0, 0);
+    w.cells.grid.get_mut(mid(1, 0)).unwrap().level = 2;
+    let at = centre(low, 0);
+    let id = make(&mut w, "ROCK", at);
+    set(&mut w, id, [at.x + 120, at.y, 150], ["30", "0", "-5"]);
+    let before = piece(&w, id);
+    pieces::turn(&mut w, id);
+    let p = piece(&w, id);
+    assert_eq!(p.flight, before.flight, "undone");
+    assert_eq!((p.turns, p.reversed), (-1, true));
+}
