@@ -25,8 +25,8 @@ This intake takes in one spec revision and answers the lead's round 5 notes 23, 
 
 The cross-specs it names were read as they stand: S-0207 claims 15, 16, 27 and 28, S-0212 claims
 23 to 25 and F6a, S-0215 claims 6, 11 and 15, S-0408 claim 6, S-0209 claim 5. None was revised for
-this intake. Spec commits on origin/main not taken in: S-0212 r83 (5d1e9f5) and its Q-1975 answer
-(9cdf2a6).
+this intake. S-0212 r83 (5d1e9f5), its Q-1975 answer (9cdf2a6), M-0011 and the Q-1712 partial
+answer reach this branch through main (intake 37 built r83); this intake builds none of them.
 
 **Code.**
 - `econ::harvest::refinery_sold` (the sale's first processing): the new order for an unloading
@@ -75,8 +75,8 @@ tethered harvester docked therefore starts its build-down one processing later t
 **Notes 23, 24 and 30** (local lane `crates/app/tests/harvest_lane.rs`, map 0, outputs in the
 git-ignored `local-lane/m8/a3-36/`).
 - 30: fixed by the import. Before: frame count 0, all 14 mines animating for good, 35 of 286
-  emptied cells near the mines had ore again at tick 9000 (from field spread only). After: frame
-  count 22, the mines start and stop, 123 of 286 cells by tick 9000. A 5 × 5 control patch far
+  emptied cells near the mines had ore again at tick 9000 (from field spread only). After: the
+  sprite's frame count, the mines start and stop, 123 of 286 cells by tick 9000. A 5 × 5 control patch far
   from any mine stays empty in both. Seam: the client does not draw a mine's animation frames.
 - 23: a slave miner vehicle with no destination, off tiberium land and with no field within its
   short scan, never wakes its slaves (claim 14; our player houses never take the
@@ -94,8 +94,9 @@ git-ignored `local-lane/m8/a3-36/`).
   172 unanimous outcomes reproduced; M-0002 13 of 24, 43 of 47; M-0003 2 of 35, 61 of 64. After:
   M-0001 31 of 96, 150 of 172; M-0002 12 of 24, 42 of 47; M-0003 2 of 35, 60 of 64. Bisected: with
   the sale change alone every arena game is the same; the import change moves them. The arena
-  plays on the record's stock map, so its terrain objects take the new frame count (an animated
-  mine that now stops draws again). The same binary run twice gives the same games.
+  plays on the record's stock map, which holds 12 animated ore mines (checked with a local-lane
+  probe of the loaded map): with the frame count filled, a mine's animation now ends, so it draws
+  again and the random stream shifts. The same binary run twice gives the same games.
 - Quick skirmish (`glasnost-headless ai-sides 120000 7 <map>` with `GLASNOST_AI_QUICK=1`; maps 8,
   2 and 0; Yuri as house 1 against Allied and against Soviet; reference and with the play-fixes
   layer; 12 games, `local-lane/m8/a3-36/quick/`): every game is over with a winner, between
