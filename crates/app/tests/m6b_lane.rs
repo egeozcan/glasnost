@@ -883,7 +883,7 @@ fn base_exit_run(lane: &mut Lane, fixes: bool) {
     let to = CellXY::new(r.x - 16, r.y + 1);
     let (cleared, searches, arrived) = follow_move(lane, v, to, 1500);
     println!(
-        "dock: refinery {fw}x{fh} at {r:?}, harvester on {dock:?} sent to {to:?}: cleared at once {cleared}, first computation's searches {searches:?}, arrived after {arrived:?} ticks"
+        "dock: refinery at {r:?}, harvester on {dock:?} sent to {to:?}: cleared at once {cleared}, first computation's searches {searches:?}, arrived after {arrived:?} ticks"
     );
     lane.look_at(CellXY::new(r.x - 6, r.y + 1));
     lane.save(&format!("a3-34-dock-fixes-{fixes}"));
