@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 82
+revision: 83
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-28
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870, Q-1975]
 supersedes: []
 ---
 
@@ -735,6 +735,7 @@ Terms specific to this spec:
       a path computation, while the reach regions of claims 6 and 14 and the free part of claim 13a
       still use its own movement zone. The estimate *E* of claim 24 is not a path computation: it
       runs the coarse search for the unit's own movement zone, a jumpjet infantry type included.
+      It adds the threat term exactly as the coarse search of a path computation does (claim 24).
     - When start and destination lie in the same sector at a level, that level's corridor is that
       one sector.
     - The corridor of each level is only the chain of sectors on the one route the coarse search
@@ -1800,6 +1801,16 @@ Terms specific to this spec:
       on the same bridge), where *E* is the Chebyshev distance alone. When the coarse search fails,
       the cell is not adopted. This substitution allowance is 6 cells, not the 8-cell detour
       allowance of the obstructed approach-position choice in S-0307 claim 16.
+    - **Threat in the estimate (Q-1975).** The coarse search of the estimate adds the threat term
+      *T* (F5) to a sector's entry cost exactly as the coarse search of a path computation does:
+      from the threat records of the unit's owner (claim 16a), with the unit's own threat
+      coefficient *k* (the type's field, or exactly 1.0 for a member of a team marked to avoid
+      threats), whenever *k* exceeds 0.00001 (F7). The subterranean case changes only the movement
+      zone: the coefficient and the house are still the unit's own. *T* is 0 at level 0 (F5), so
+      threat changes *E* only through the level-1 and level-2 corridors, which bound the level-0
+      corridor (claim 13). A unit with a coefficient above the limit can therefore get a longer
+      level-0 corridor from the found cell, so a larger *E*, and the found cell can be refused where
+      a unit with coefficient 0 in the same place adopts it.
     - When the destination cell's outcome is *blocked* and the cell holds a building, the original
       always adopts the cell found by the nearby-cell search, with no distance or estimate test. When
       that search finds no cell, the original's new destination is undefined. Our engine keeps the
@@ -1841,17 +1852,21 @@ Terms specific to this spec:
       true distance decides, so height alone does not keep the substitution going.
     - Backing: `measurable` (scenario P7, run 3b for the height rule, run 10 for the destination's
       level on a bridge and so for `quirks.substitution_centre_ground_level`, run 9 for wall cells,
-      runs 8 and 8b for the estimate test). `unmeasured` for the subterranean destination's
+      runs 8 and 8b for the estimate test; scenario P30 part j for the threat term in the
+      estimate). `unmeasured` for the subterranean destination's
       further-test gating and resulting estimate zone: P16 (t) tests the no-move caller instead,
-      not this substitution caller. `unmeasured` for the movement zone of the estimate *E*
+      not this substitution caller, and so for the coefficient and house of that case's
+      estimate, which are the same as in every other case. `unmeasured` for the movement zone of
+      the estimate *E*
       of a jumpjet infantry type, which no scenario sets up, and for the legs of F8, which apply only
       when the found cell or the destination is a bridge cell and change *E* by a few cells, an
       effect no scenario of this spec isolates. `measurable` (S-0402 scenario H20, parts e and
       f) for the repeated substitution on high ground
     - Confidence: medium for the triggers, the distance test and the height rule, and for the
       repeated substitution on high ground (derived from these rules, not observed). High for the
-      wall-cell consequence. Medium for the estimate away from bridges. Low for the legs of F8 and
-      the coarse end cells on a bridge (claim 13b)
+      wall-cell consequence. Medium for the estimate away from bridges. High that the estimate's
+      coarse search adds the threat term with the unit's coefficient and house, except in the
+      subterranean case. Low for the legs of F8 and the coarse end cells on a bridge (claim 13b)
 
 25. **The nearby-cell search.** Around a centre cell (*c*ₓ, *c*ᵧ), the original examines square
     rings of Chebyshev radius *r* = 0, 1, 2, … cells, up to a largest radius of 31 cells, or of
@@ -4288,7 +4303,7 @@ is at the next no-track update, not completion itself. Search-dependent cleanup 
 unconditional same-cell building-goal removal falsifies that distinction. These are
 proposed recorder runs, not completed measurements.
 
-### P30: Threat records and the cells a path avoids (claim 16a, Q-1751)
+### P30: Threat records and the cells a path avoids (claims 16a and 24, Q-1751, Q-1975)
 
 - **Setup:** a purpose-made flat skirmish map of open clear ground, stock rules and art, no engine
   add-on and no mods (the named test files of this scenario excepted), speed index 2, short game
@@ -4327,7 +4342,7 @@ proposed recorder runs, not completed measurements.
   placeholder to the computer player first in house order, and gives the human house no
   building (S-0009 claim 27); the earlier lobby slot of the two computer players comes first in
   house order (S-0009 claim 19). The lobby order is therefore set per part:
-  - in parts a, a2, b, d and h, C takes the earlier lobby slot, so the map's computer-owned
+  - in parts a, a2, b, d, h and j, C takes the earlier lobby slot, so the map's computer-owned
     objects (B, B3, D and F) go to C.
   - variant c2 has runs of its own, in which A takes the earlier lobby slot, so its map-placed
     B goes to A, and the map places no object for C.
@@ -4464,6 +4479,21 @@ proposed recorder runs, not completed measurements.
   the tick it is unloaded. Falsified if any variant of E gives an amount other than *a*, if T's
   amount changes with its passengers, or if a unit's pattern stays while it is inside T. No route
   check: the part reads only C's records (part e gives the route effect of a vehicle's amount).
+- **Part j (threat in the substitution estimate, claim 24, Q-1975):** a separate flat map with
+  scenario P7's barrier for run 8b (the one-cell gap, the six guarding vehicles on *D* and its
+  ring, the close-enough field of 1.375 cells), the guarding vehicles of H, but with the
+  barrier running from *x* − 30 to *x* + 30. B of C is placed by the map on the mover's side, beside
+  the gap but off the cells of the gap's route, so that the gap lies inside B's nine threat blocks
+  and both barrier ends lie outside them. The mover is V1 in one set of runs and V0 in the other,
+  at P7's start cell, ordered to *D* at tick 60.
+  - Control j0 (no substitution): the six guarding vehicles are left out, and V1 and V0 each start
+    on *F* and are ordered to *D*. The part is valid only if V0 drives through the gap and V1 drives
+    round a barrier end, which shows that B's threat moves V1's corridor at this layout.
+  - Expected: V0 is given *F* as its destination in the tick of the order's path computation and
+    stops on *F*, as in P7 run 8b. V1 keeps *D* as its destination and drives off towards a barrier
+    end, because its estimate from *F* follows the corridor round the end (*E* > 8).
+  - Falsified if, in a valid part, V1 is given *F* or any other cell on the mover's side of the
+    barrier before it has passed a barrier end: the estimate would then ignore the threat term.
 
 ### P31: Out of a factory exit across the unit's own base (claims 1, 13; Q-1771, Q-1870)
 
