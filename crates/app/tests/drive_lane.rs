@@ -382,8 +382,21 @@ fn vehicles_drive_and_the_chrono_miner_jumps_only_to_dock() {
                     target: None,
                     dest: Some(Target::Cell(goal)),
                 }]);
-        let usable = world(&c).cells.usable(goal);
-        println!("driver {i}: from {at:?} to {goal:?} (usable {usable}), move order taken {n}");
+        let w = world(&c);
+        let usable = w.cells.usable(goal);
+        // Whether the driver's movement zone joins its cell with the goal (S-0212 claim 4);
+        // read only from up-to-date regions.
+        let reach = match w.rules().unit(Kind::Vehicle, ti).map(|u| u.zone) {
+            Some(z) if !w.regions.dirty && !w.regions.region.is_empty() => {
+                let a = glasnost_sim::regions::reach_in(w, at, z);
+                let b = glasnost_sim::regions::reach_in(w, goal, z);
+                format!("start {a:?}, goal {b:?}")
+            }
+            _ => "not read".to_string(),
+        };
+        println!(
+            "driver {i}: from {at:?} to {goal:?} (usable {usable}; reach {reach}), move order taken {n}"
+        );
         watched.push((format!("driver {i}"), id, at));
     }
     // Every house's own chrono miners join the tally as they appear.
