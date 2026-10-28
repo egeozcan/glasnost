@@ -465,12 +465,22 @@ pub fn coarse_why(
 }
 
 /// Whether a ground-layer cell has the corridor exemption (S-0212 claim
-/// 13): one of its eight neighbours holds a vehicle, an infantry unit, an
-/// aircraft, a terrain object or a wall section, on either layer.
+/// 13): it lies in the exemption rectangle of a building on the map, or
+/// one of its eight neighbours holds a vehicle, an infantry unit, a terrain
+/// object or a wall section, on either layer, or is the cell an aircraft
+/// gives the exemption around ([`crate::threat`]).
 pub fn exempt(w: &World, c: CellXY) -> bool {
+    // spec: S-0212 claim 13 (a cell in the exemption rectangle of a building on the map)
+    if crate::threat::in_rect(w, c) {
+        return true;
+    }
     let r = w.rules();
     STEPS.iter().any(|&(dx, dy)| {
         let n = CellXY::new(c.x + dx, c.y + dy);
+        // spec: S-0212 claim 13 (an aircraft gives the exemption around its placement cell and its landing cells, not in flight)
+        if crate::threat::aircraft_around(w, n) {
+            return true;
+        }
         let Some(cell) = w.cells.cell(n) else {
             return false;
         };
@@ -482,23 +492,27 @@ pub fn exempt(w: &World, c: CellXY) -> bool {
         wall || [crate::world::Layer::Ground, crate::world::Layer::Deck]
             .iter()
             .flat_map(|&l| w.cells.list(n, l).iter())
-            // spec: S-0212 claim 13 (a vehicle, an infantry unit, an aircraft or a terrain object in a neighbour, on its ground or its deck)
+            // spec: S-0212 claim 13 (a vehicle, an infantry unit or a terrain object in a neighbour, on its ground or its deck)
             .any(|&o| {
                 w.obj(o).is_some_and(|x| {
-                    matches!(
-                        x.kind,
-                        Kind::Vehicle | Kind::Infantry | Kind::Aircraft | Kind::Terrain
-                    )
+                    matches!(x.kind, Kind::Vehicle | Kind::Infantry | Kind::Terrain)
                 })
             })
     })
 }
 
-/// The outcome-or-category condition of S-0212 claim 13a for cell `c`.
-fn free_condition(w: &World, unit: ObjectId, zone: MovementZone, c: CellXY) -> bool {
+/// The outcome-or-category condition of S-0212 claim 13a for cell `c`,
+/// entered by a step from cell `from`.
+fn free_condition(w: &World, unit: ObjectId, zone: MovementZone, from: CellXY, c: CellXY) -> bool {
     let Some(i) = w.cells.idx(c) else {
         return false;
     };
+    // spec: S-0212 claim 13a and Edge cases (quirks.corridor_free_part_ignores_height off: a cell whose entry from the step's start the height rule of claim 10 refuses is not in the free part and does not count for its borders)
+    if !w.rules().quirks.corridor_free_part_ignores_height
+        && !crate::path::height_ok(w, from, false, c)
+    {
+        return false;
+    }
     let usable = passability::zone_table(zone, w.cells.category[i]) == Answer::Yes;
     let level = level_of(w, c);
     // spec: S-0212 claim 13a (the entry outcome for the unit at the cell's own height level)
@@ -548,7 +562,7 @@ pub fn retry(
         for (dx, dy) in STEPS {
             let n = CellXY::new(c.x + dx, c.y + dy);
             let t = lv.sector(w, n);
-            if t == NONE || !free_condition(w, unit, zone, n) {
+            if t == NONE || !free_condition(w, unit, zone, c, n) {
                 continue;
             }
             if t == s {

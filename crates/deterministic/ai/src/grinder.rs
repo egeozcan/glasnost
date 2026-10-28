@@ -30,10 +30,13 @@
 //!
 //! A unit far from the grinder is first moved to its side with a click on
 //! the ground, then sent in from there. A direct recycle click from afar
-//! can fail at once when a short line of buildings stands across the route
-//! (S-0603 claim 3, S-0212 Edge cases "short line of buildings": the
-//! original's behaviour with `quirks.corridor_retry_no_fallback` on, its
-//! default), and a person would then click a nearer cell first. When the
+//! can fail at once when a strip of ground the unit cannot enter or a
+//! ledge stands across the route (S-0603 claim 3, S-0212 Edge cases "short
+//! strip" and "ledge": the original's behaviour with
+//! `quirks.corridor_retry_no_fallback` and
+//! `quirks.corridor_free_part_ignores_height` on, their defaults; since
+//! S-0212 r82 a short line of buildings no longer makes it fail), and a
+//! person would then click a nearer cell first. When the
 //! unit does not take that click either (it stands idle on the same cell:
 //! the order memory), the next think clicks another side of the grinder,
 //! the nearest one not yet failed from there, rather than the same cell

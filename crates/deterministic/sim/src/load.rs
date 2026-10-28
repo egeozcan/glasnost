@@ -486,6 +486,7 @@ pub fn new_game(
         scaled_spawn_delay: Default::default(),
         flying: Default::default(),
         jump_slots: Default::default(),
+        threat: Default::default(),
         cloak: Default::default(),
         sw: Default::default(),
         radiation: Default::default(),

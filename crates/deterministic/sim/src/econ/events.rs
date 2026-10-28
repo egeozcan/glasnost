@@ -22,6 +22,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
         house.econ.acquired.push(id);
     }
     let _ = by_order;
+    // spec: S-0212 claim 13 (a building's exemption rectangle and an aircraft's exemption from its placement)
+    crate::threat::entered(w, id);
     if kind == Kind::Building {
         // spec: S-0501 claim 30 (a placed helipad building adds to its house's pad total)
         super::tech::pad_placed(w, id);
@@ -64,6 +66,8 @@ pub fn entered_map(w: &mut World, id: ObjectId, by_order: bool) {
 pub fn leaving_map(w: &mut World, id: ObjectId, for_good: bool) {
     let Some(o) = w.obj(id) else { return };
     let (kind, owner) = (o.kind, o.owner);
+    // spec: S-0212 claim 13 (the exemption a building or an aircraft gave is taken away when it leaves the map)
+    crate::threat::leaving(w, id);
     if kind == Kind::Building {
         // spec: S-0501 claim 30 (a helipad building removed from the map takes its count from the pad total)
         super::tech::pad_removed(w, id);

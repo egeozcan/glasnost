@@ -222,7 +222,7 @@ fn candidate_layer(w: &World, from_level: i32, c: CellXY) -> Layer {
 /// rule compares `t`'s height level with `f`'s, which for a deck pair is
 /// the level of the ground under the deck; the layer of `t` entered is
 /// claim 7's ([`candidate_layer`]).
-fn height_ok(w: &World, f: CellXY, deck: bool, t: CellXY) -> bool {
+pub(crate) fn height_ok(w: &World, f: CellXY, deck: bool, t: CellXY) -> bool {
     let (Some(cf), Some(ct)) = (w.cells.cell(f), w.cells.cell(t)) else {
         return false;
     };

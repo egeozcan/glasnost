@@ -480,6 +480,9 @@ pub struct World {
     /// cell, at most one per cell.
     #[serde(default)]
     pub jump_slots: BTreeMap<CellXY, ObjectId>,
+    /// The corridor exemption of buildings and aircraft (S-0212 claim 13).
+    #[serde(default)]
+    pub threat: crate::threat::ThreatWorld,
     /// The pathfinder in use (S-0212, behind a swappable interface).
     pub pathfinder: PathfinderChoice,
     /// The rules (not saved).

@@ -20,18 +20,19 @@
       // made, with the same limits as the others, and the path computation fails only if it
       // fails too. On (the original), the computation fails and the unit gives up at once
       // although an open way round exists (claim 23 row 2).
-      // Answers: pathing reports 1 and 2 (docs/m8-claims/a4-play-notes.md), Q-1771 (a unit at
-      // a factory's exit) and Q-1870 (a harvester on a refinery's docking cell). Works only
-      // together with the next entry: alone it changes neither report's computations.
+      // Answers: the spec's own Edge case (a short strip of ground the unit cannot enter, open
+      // to the coarse searches, fails at some alignments; off, it is passed at every one).
+      // Pathing reports 1 and 2 (docs/m8-claims/a4-play-notes.md), Q-1771 and Q-1870, for
+      // which this entry was admitted, are answered by S-0212 r82: the original finds the way
+      // out of its own base on the first cell search, and this entry changes nothing there.
       "corridor_retry_no_fallback": false,
       // S-0212 claim 13a and Edge cases (quirks.corridor_split_probe off): the progress sector
       // counts as split when some cell of it inside the usable area is not in the free part,
-      // and as whole otherwise. In both reports' synthetic shapes a retry beside the buildings reads
-      // its sector as split and closes its connections, the new coarse search fails, and the
-      // search without a corridor of the entry above finds the way. On (the original), the
-      // retries keep running corridors into the buildings and the 5th cell search inside a
-      // corridor ends the computation (claim 13's cap).
-      // Answers: the same reports and requests (Q-1771, Q-1870).
+      // and as whole otherwise; at a short strip the failure is expected at fewer alignments.
+      // Admitted for pathing reports 1 and 2 (Q-1771, Q-1870) together with the entry above;
+      // since S-0212 r82 those reports' shapes are passed on the first cell search, and with
+      // the entry above off a strip is passed at every alignment whatever this switch says.
+      // Kept until the lead rules on it (docs/m8-claims/c7-play-fixes.md, After intake 34).
       "corridor_split_probe": false,
       // S-0314 Edge cases (Hovering vehicle stranded) and Terms, What ends it
       // (quirks.depot_loss_strands_hover off): losing contact with a depot ends being settled,
