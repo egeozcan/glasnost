@@ -1,9 +1,9 @@
 ---
 id: Q-1846
 title: A bouncing animation's contacts on buildings, cliff faces and slopes, and off the map
-status: open
+status: answered
 related: [S-0319, S-0317, Q-1762, Q-1834, Q-1836]
-answered-by: []
+answered-by: [S-0319]
 ---
 
 ## Need
