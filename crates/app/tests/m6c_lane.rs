@@ -814,9 +814,11 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
     // The first traced update can still show the release height; a climb
     // counts only after the run has been at height 0.
     let mut been_at_0 = false;
-    // Updates that end at height 0 with a destination and no take-off, and
-    // the update (counted from the order) whose end first shows a take-off.
+    // Updates that begin at height 0 and end with a destination and no
+    // take-off, and the update (counted from the order) whose end first
+    // shows a take-off.
     let mut at_0_unsteered = 0;
+    let mut began_at_0 = false;
     let mut take_off = None;
     let mut updates = 0;
     let mut turned_low = false;
@@ -850,9 +852,10 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
         if h == 0 && climbed.is_none() && df != 0 {
             turned_at_0 = true;
         }
-        if h == 0 && o.dest.is_some() && !s.taking_off {
+        if began_at_0 && o.dest.is_some() && !s.taking_off {
             at_0_unsteered += 1;
         }
+        began_at_0 = h == 0;
         if take_off.is_none() && s.taking_off {
             take_off = Some(updates);
         }
@@ -890,7 +893,7 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
         c == to
     );
     println!(
-        "{run}: updates at height 0 with a destination and no take-off: {at_0_unsteered}, take-off first seen at the end of update {take_off:?} after the order, turned at or below half its cruise height: {turned_low}"
+        "{run}: updates begun at height 0 that end with a destination and no take-off: {at_0_unsteered}, take-off first seen at the end of update {take_off:?} after the order, turned at or below half its cruise height: {turned_low}"
     );
     lane.look_at(c);
     lane.ticks(1);
