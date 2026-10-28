@@ -2,13 +2,13 @@
 id: S-0212
 title: Pathfinding (observable behaviour)
 topic: movement
-revision: 51
+revision: 82
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-19
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280]
+requests: [Q-0017, Q-0041, Q-0042, Q-0043, Q-0088, Q-0238, Q-0371, Q-0634, Q-1280, Q-1751, Q-1771, Q-1870]
 supersedes: []
 ---
 
@@ -18,19 +18,16 @@ supersedes: []
 
 How a ground or naval unit of the original chooses the cells it will drive or walk through on the
 way to a destination: which cells count as connected at all, the reachability test made before
-any search, the cost of each step, the search and its limits, the two straightening passes applied
+any search, the cost of each step, which cells a house's threat records mark as threatened, the
+search and its limits, the two straightening passes applied
 to a found path, how many steps are kept, when a path is computed again, what happens when no path
 exists, and when the destination is replaced by a nearby cell. How a unit then moves along the kept
 steps (speed, turning, collisions, blocked-step reactions) belongs to the movement specs. The spec
 covers skirmish games. Network games and campaigns are out of scope for now, and the few mentions
 of them describe the original only.
 
-**Cross-spec confirmation at hand-off.** Retain the coordinated immediate fresh search of
-claim 22 and S-0207 claim 15, its state table and D17 part d3. S-0207's current draft
-has removed the former delayed-search Open question; hand off these revisions together.
-Claim 25's infantry teleport fallback parameters agree with S-0208 claim 19, and its
-failed-approach row includes close-range searches covered by S-0307 claim 17. Retain the
-other parameters and exclusions of that row. Hand off these coordinated texts together.
+**Cross-spec agreements.** Claim 25's infantry teleport fallback parameters agree with S-0208 claim
+19, and its failed-approach row includes close-range searches covered by S-0307 claim 17.
 Claim 25's non-infantry teleport search removes the reach-region restriction when the
 ordered destination lies in no reach region, agreeing with S-0207 claim 20 b and D22 run 10.
 The aircraft-factory edge-entry row and release-tick selection agree with S-0417 claim 14.
@@ -38,42 +35,40 @@ Claim 25's click-search conditions agree with S-0214 claim 11: direct destinatio
 search, and a free mover's no-move search has no reach-region restriction, including inside
 the usable area. P16 distinguishes move orders from rally-point searches.
 Claim 27 remains a summary of S-0209 claim 5, which owns the full vehicle entry-outcome table.
-Retain S-0207 claim 20 a and e with S-0209 claims 1 and 5 for Q-0240's vehicle ground
-reservation, remembered-point clearing, bridge placement marks and shared
-`quirks.teleport_vehicle_ground_reservation`. Retain S-0208 claim 19's landing choices
-and S-0215 claim 10's jump-time target-loss and reversion contract with those companions.
-Retain S-0207 claim 20 e and S-0209 claim 1's aircraft reservation lifecycle and shared
-`quirks.teleport_aircraft_ground_reservation` alongside the vehicle contract above.
 Claims 20–22 include the ship refresh, chase-cut and retry rules of S-0504 claim 9.
-S-0504's current draft claim 9 now agrees with the spatial table-root distance of claim 20
+S-0504 claim 9 agrees with the spatial table-root distance of claim 20
 and S-0204 claim 5, truncated toward zero to integer leptons, for both refresh and chase
 cutting. There is no ship-specific exact-root exception. The shared
-`quirks.table_root_distance` alternative applies as stated under Formulas. Hand off these
-coordinated texts together; the currently approved S-0504 claim 9 distance wording agrees with this contract.
+`quirks.table_root_distance` alternative applies as stated under Formulas.
 Claim 25a completes the aircraft landing footprint search used by S-0501 claim 41.
 S-0501 claim 41 owns building and fallback-object selection, including equal-distance
 fallback objects, and the unchecked no-result landing destination. Those caller rules are
-separate from the nearby search's candidate tie rule. Retain the coordinated texts at hand-off.
-At hand-off update the approved index to match this draft. The new table T5 row and the enter-processing tick for the waiting absorber approach (S-0605 claim 4) answer the request in the S-0212 entry of approved S-0605's cross-reference list (lines 66 to 69). S-0605's revision in the same hand-off drops that request.
+separate from the nearby search's candidate tie rule. The new table T5 row and the enter-processing tick for the waiting absorber approach (S-0605 claim 4) answer the request in the S-0212 entry of S-0605's cross-reference list, which S-0605 should then drop.
 Q-0238 is answered here for the failure tick, behaviour queue, final nearby-search parameters
 and absence of additional search draws. S-0215 claim 38 and F11–F12 supply the upstream
 centre geometry, base-record refresh, no-base usable-area correction and radius-then-direction
-draws. Table T5 includes that refresh's separate nearby search. Keep the request open until
-these complementary revisions are approved together.
+draws. Table T5 includes that refresh's separate nearby search.
+
+Claim 16a answers Q-1751 (a house's threat records and their rebuild, in which an *AI house*
+counts as computer-controlled). Claim 13 answers Q-1771 (every building's exemption rectangle is
+in the corridor exemption, taken away when the building leaves the map, a to-tile building
+included). For Q-1870, claim 24's repeated substitution on high ground and a harvester's
+departure from a docking cell are stated under Edge cases.
 
 ### Evidence scope
 
 The detailed route rules below are a behavioural hypothesis, not a record of measured paths:
-there are no M-records for this revision. In particular, a matching whole route does not establish
-all of the search decisions that could have produced it. The remaining unsupported detail is
-consolidated into three **unmeasured rule families**, with the individual reasons retained at the
-claims so that no aggregate check is mistaken for independent evidence:
+there are no M-records for this spec. In particular, a matching whole route does not establish
+all of the search decisions that could have produced it. Much of the remaining unsupported
+detail falls into three **unmeasured rule families**, listed below; the list is not complete, and
+every claim states its own backing and reasons, so that no aggregate check is mistaken for
+independent evidence:
 
 | Family | Detail still unmeasured | Why it is retained |
 |---|---|---|
 | Search selection | first-recorded route retention and its margin (11), original tie differences (12a), corridor progress, free-part and closure predicates, individual sector and connection choices (13 to 13b), flattening precedence and straight-run V's (17), threat and post-tunnel transformations (18) | These jointly predict a stored path, but no proposed scenario separates each remaining predicate from the others. They are unmeasured route hypotheses, not settled observations of intermediate work. Their exact definitions keep the reference predictions falsifiable as a family. |
 | Unreachable or oversized cases | comparisons involving off-map cells (2, 4), unobservable connectivity changes and same-tick update timing (3, 5), unknown-zone gate exception (6), unusual train start state (7), exact gate and remaining train cost entries (8), permanent marks (9), same-cell computation and search limits (12, 13), absent-link bridge reads and estimate legs (3, 4, 13b, 24), loaner and retreat conditions (14), duplicate/hidden-centre and hidden-ring limits (25) | Normal input cannot force the relevant state, or no discriminating fixture is known. Limits and undefined-result departures still need deterministic answers in our engine. The local backing states which parts are original hypotheses and which are design rules. |
-| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations must not be used to confirm them. |
+| Remaining caller/state distinctions | lepton-scale refresh boundary and table-root distinction, ship retained-step and ship/hover/walker chase-cut isolation (20), post-substitution gate and jumpjet estimate zone (14, 24), mode-2 path-length conditions and independently existing marks (19), remaining locomotors' failure retention (23), untested no-move/object-order parameters (25) | The scenarios do not isolate these states from other reactions. They remain explicitly unmeasured; ordinary caller observations are no backing for them. |
 
 Scenarios P20 to P25 add separate probes of reachable height, nearby-search, blocker-chain,
 cost and timing rules. Their qualification conditions are checked against observable state.
@@ -227,8 +222,12 @@ Terms specific to this spec:
 - **Drive locomotor, walk locomotor:** the locomotor of driving vehicles and the locomotor of
   walking infantry (glossary *locomotor*).
 - **Corridor exemption:** a ground-layer cell is exempt when one of its eight neighbours holds a
-  vehicle, an infantry unit, an aircraft, a terrain object or a wall section, on either layer
-  (claim 13).
+  vehicle, an infantry unit, an aircraft, a terrain object or a wall section, on either layer, or
+  when it lies in the exemption rectangle of a building on the map (claim 13).
+- **Exemption rectangle:** a building's foundation rectangle (S-0406 claim 2) grown by one cell on
+  every side: for a foundation rectangle of *w* × *h* cells, the (*w* + 2) × (*h* + 2) cells whose
+  top-left cell lies one cell lower in map x and one lower in map y than the rectangle's top-left
+  cell (claim 13).
 - **Corridor:** at each level, the chain of sectors, from the start's sector to the destination's,
   that the coarse search of claim 13 selects.
 - **Cost unit:** the unit of every path cost in this spec, in the cell search and in the coarse
@@ -246,12 +245,16 @@ Terms specific to this spec:
   known to define tunnels.
 - **Congestion mark:** a mark a cell can carry that makes steps onto it cost four times as much
   (claim 9) and keeps it out of straightened stretches (claims 17 and 18).
-- **Threat value** of a cell for a house: the integer threat the original records for that house at
-  that cell. How it is computed belongs to the combat and AI-visible-rules specs. This spec only uses
-  it through the threat coefficient, in the straightening passes (claims 17 and 18).
-- **Coarse threat** *t*(*q*, *s*, *L*): the integer threat a house's records give for a step of the
-  coarse search from sector *q* to sector *s* of level *L* (F5). It is not the threat value of a
-  cell, and how the house's records are kept belongs to the combat and AI-visible-rules specs.
+- **Threat block:** an aligned square of 4 × 4 cells; the threat block of cell (*x*, *y*) is
+  (⌊*x*/4⌋, ⌊*y*/4⌋). It is the same square as a block of level 1.
+- **Threat record:** a non-negative integer that a house keeps for each threat block, built from
+  the threat amounts of objects on the map (claim 16a).
+- **Threat amount** of an object: the integer it adds to threat records (claim 16a).
+- **Threat value** of a cell for a house: the house's threat record for the threat block holding
+  the cell (claim 16a). It is used through the threat coefficient, in the straightening passes
+  (claims 17 and 18).
+- **Coarse threat** *t*(*q*, *s*, *L*): the integer threat that a house's threat records give for a
+  step of the coarse search from sector *q* to sector *s* of level *L* (F5).
 - **Threat coefficient** *k* of a unit: its type's threat-avoidance field (Import mapping), or
   exactly 1.0 when the unit is a team member whose team type is marked to avoid threats (never the
   case for a unit of an *AI house*, which has no teams, Departure D5). The field is
@@ -739,12 +742,47 @@ Terms specific to this spec:
       Ground-layer cells whose level-0 sector is off the corridor are not considered, except cells
       with the **corridor exemption**: a cell one of whose eight neighbours holds a vehicle, an
       infantry unit, an aircraft, a terrain object or a wall section (placed by the map or built in
-      play). The exemption belongs to the cell, not to a layer: an object on a neighbour's bridge deck
+      play), and a cell in the exemption rectangle (Terms) of a building on the map. The exemption belongs to the cell, not to a layer: an object on a neighbour's bridge deck
       gives it as one on that neighbour's ground does. A unit counts in the cell it was last
-      recorded in, from the moment it enters play, and that cell follows it as it moves (Open
-      questions). An aircraft counts like a vehicle, so one standing on the ground gives the
-      exemption; whether one in flight keeps giving it, and from which cell, is not established. Bridge-deck cells are never
-      excluded this way. Consequently every ground-layer cell of a path *found* with a corridor lies
+      recorded in, from the moment it enters play. A vehicle's or infantry unit's recorded cell
+      follows it as it moves (Open questions). An aircraft gives the exemption around the cell
+      where it is placed on the map and, after each landing, around the cell it landed in; the
+      exemption does not follow it in flight. When it lands, the exemption moves from around its
+      recorded cell to around the landing cell, except at the first landing of an aircraft placed
+      in the air: that one has no recorded cell, so the exemption around its placement cell stays
+      for as long as the map lasts. At that first landing the exemption is still added around the
+      landing cell, as at every landing; only its removal around a recorded cell is missing.
+      When an aircraft leaves the map, the exemption is taken away around its recorded cell
+      (`quirks.aircraft_threat_stays_put`, claim 16a). One placed in the air that leaves the map
+      before its first landing has never had a recorded cell: the exemption around its placement
+      cell stays, and the removal is made around the cell whose two coordinates are both 0, as
+      claim 16a's threat removal is. None of that cell's neighbours is a legal cell on a map at
+      least 2 cells wide (S-0009 claim 1), so that removal changes no cell a path can use.
+      Every building gives the exemption to every cell of its exemption rectangle, whatever its
+      owner, gates included: a building on a foundation rectangle of *w* × *h* cells covers
+      (*w* + 2) × (*h* + 2) cells. The rectangle is used, not the list of foundation cells, so the
+      8-cell 3 × 3 foundation (S-0406 claim 2) covers the full 5 × 5 cells; the zero-size foundation
+      covers 2 × 2 cells: the building's own cell and its neighbours one lower in map x, one lower
+      in map y and one lower in both. A building gives it from the moment it is put on the map,
+      whether the map places it at game start or a house places it in play (so throughout its
+      build-up), until it leaves the map; a capture or any other change of owner leaves it as it is.
+      When a building leaves the map the exemption is taken away from its rectangle, also for a
+      building whose type has a to-tile field (S-0406 Import mapping). The original leaves such a
+      building's rectangle exempt for as long as the map lasts; that is a bug, fixed here with no
+      switch, as the project lead decided on 2026-10-24. A wall section gives
+      the exemption only to its eight neighbours, never to its own cell, both when the map places
+      it and when it is built from a wall type: such a type becomes its wall overlay without any
+      building being placed (S-0406 claim 10), so it has no exemption rectangle. Exemptions from
+      several sources add up: a cell stays exempt until every source that gave it the exemption
+      has taken it away. The coarse searches see building cells as *open* (claim 1), while a wall
+      section's cell is *wall-like* and a terrain object's cell *wall-like* or *partial obstacle*
+      (S-0211 claim 11), which the zone table closes to movement zone *normal* and, apart from
+      *partial obstacle*, to *infantry*. So a corridor often runs straight through a building or a
+      row of buildings, and seldom through walls or trees; the buildings' exemption rectangles let
+      the cell search inside such a corridor follow the cells round the buildings' edge, off the
+      corridor, and rejoin it on the far side (Edge cases and quirks: a unit routed through its own
+      base). Bridge-deck cells
+      are never excluded this way. Consequently every ground-layer cell of a path *found* with a corridor lies
       in that chain or has the exemption (straightening, claims 17 and 18, may later move cells off
       it). In particular the first step of a path is normally not held to the corridor, because the
       moving unit itself gives every neighbour of the cell it is recorded in the exemption.
@@ -789,27 +827,60 @@ Terms specific to this spec:
       is at most the 5th. Like every cell search it ends as failed at the expansion limit of the
       search (`quirks.path_search_10000_failure`), and it is deterministic (no draw). When the first coarse search fails, the
       single search without a corridor is the only cell search made, so the limit plays no part.
-    - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12). `unmeasured`
+    - Backing: `measurable` through path shape and failure (scenarios P1, P10, P12; failure after
+      retries only through P12 run T, since the building maps of P12 make no retry). `unmeasured`
       for the internal ordering of the coarse search, its end rule and for the limit of 9999 pending routes, which
       needs thousands of sector routes pending at once. No proposed fixture reaches that
-      threshold with a route result separated from the other search failures. `unmeasured` for the corridor
-      exemption: whether a found path needs an exempt cell off the chain depends on which chain the
-      coarse search picks, and on open ground that comes down to the order of equal routes (claim
-      12a), which a test map cannot set apart from the rest of the search, so no practical map makes the exemption decide a route by itself. P1 (a) allows for it,
-      and the secondary checks of P1 and P12 compare whole routes with it included, but neither is a
-      test of the exemption alone
+      threshold with a route result separated from the other search failures. That a unit goes
+      round a row of buildings that open ground surrounds, instead of giving up, is `measurable`
+      (P31, P12 and P12 run S). That it does so because of the exemption rectangles of buildings,
+      on the first cell search, is `unmeasured`: without the rectangles the first cell search
+      inside the corridor would fail, and a retry within the limit of 5 could then find a corridor
+      round the row's ends and give the same walk. None of those scenarios records the number of
+      cell searches or which cells were exempt, so the walk does not tell the rectangles from a
+      successful retry. `unmeasured` for
+      the exemption that units, aircraft, terrain objects and wall sections give: whether a found
+      path needs such an exempt cell off the chain depends on which chain the coarse search picks,
+      and on open ground that comes down to the order of equal routes (claim 12a), which a test map
+      cannot set apart from the rest of the search, so no practical map makes that exemption decide
+      a route by itself. P1 (a) allows for it, and the secondary checks of P1 and P12 compare whole
+      routes with it included, but neither is a test of it alone. `unmeasured` for the removal of a to-tile
+      building's exemption: once the building has gone, its rectangle holds nothing, so an exemption left there could decide a
+      route only as the exemption of units and terrain objects does, by letting a found path use a
+      cell off the chain, which no practical map isolates (above)
     - Confidence: medium for the overall scheme, the cost formula, the progress rule, the retry's
-      two branches and the corridor exemption. High for the limit of 5 cell searches, the end of a
-      level's search, that the exemption ignores layers and that aircraft count, and that the
-      threat term is 0 at level 0. Low for the coarse threat at levels 1 and 2 (F5), the per-category
-      constants' effect, and for when a moving unit's recorded cell changes. The sectors and
+      two branches and the corridor exemption of units, aircraft, terrain objects and wall
+      sections, including that the exemption ignores layers and that aircraft count (both rest on
+      the corridor exemption's `unmeasured` backing above). Medium that a unit goes round a row of
+      buildings that open ground surrounds instead of giving up, until P31, P12 and P12 run S have
+      run (they tell this from giving up). Medium (`unmeasured`, above) that this comes from the
+      corridor exemption that a building gives the cells round its foundation: the same scenarios
+      would pass with any exempt band that reaches round the row's ends, or with a successful retry.
+      Medium (`unmeasured`, above) that the unit walks out on the first cell search. Medium for the
+      details of the exemption rectangle of buildings: its size and position, that every building
+      placed on the map gets it at placement (by the map or by a house), that it is taken away when
+      the building leaves the map, that a wall type gives none, and that a change of owner leaves
+      it. They are `unmeasured`: those scenarios judge only whether the unit walks out, which any
+      exempt band reaching round the row's ends, or a successful retry, would give, and none of them
+      records which cells were exempt or how many cell searches were made. Medium for the threat
+      term being 0 at level 0, and for the limit of 5 cell searches until P12 run T has run. Medium
+      (`unmeasured`, above) for the end of a level's search, which is the coarse search's end rule.
+      Medium for the coarse threat at levels 1 and 2 (F5; which records hold threat is claim 16a).
+      Low for the per-category constants' effect, and for when a moving vehicle's or infantry unit's
+      recorded cell changes; medium for an aircraft's exemption cells around a cell it was placed on
+      the ground in or landed in. Low for the exemption around the placement cell of an aircraft
+      placed in the air, which stays after its first landing or after it leaves the map unlanded, as
+      claim 16a and S-0009 claim 38 rate the aircraft placed in the air. Low, for the same
+      reason, for the removal around the cell whose coordinates are both 0 when such an aircraft
+      leaves the map unlanded (`unmeasured`: it changes no legal cell, so no run can observe it).
+      The sectors and
       connections carry the confidence of claim 13b
-
     13a. **Free part, whole and split.** The *free part* of *S* is the set of cells of *S* that
     can be reached from the progress cell by steps in the eight directions that stay inside *S*,
     through cells whose entry outcome for the unit (entering from the step's direction, at the
     cell's own height level) is *clear* or whose category the zone table does not answer *yes* for
-    the unit's movement zone. The free part *borders* a sector other than *S* when a cell of that
+    the unit's movement zone; the height rule of claim 10 plays no part
+    (`quirks.corridor_free_part_ignores_height`). The free part *borders* a sector other than *S* when a cell of that
     sector next to the free part meets the same outcome-or-category condition. Whether *S* is
     *split* is decided at one *probe cell*: with the progress cell at (*x*, *y*) and *B* the block
     size of level *L*, the probe cell is (*x* + (*x* mod *B*), *y* + (*y* mod *B*)), in exact integer
@@ -838,15 +909,19 @@ Terms specific to this spec:
     coarse search. The category part, and the switch, can change a retry only for an infantry type
     with the jumpjet flag whose own movement zone cannot use a category that movement zone
     *infantry* can.
-    - Backing: `measurable` only for aggregate retry success/failure through P12. The free-part
+    - Backing: `measurable` only for aggregate retry success/failure through P12 run T (the strip
+      and ledge maps; the building maps of P12 make no retry). The free-part
       predicate, probe coordinates, whole/split classification and individual closure choices
-      are `unmeasured` separately: P12 observes routes and failures, not these judgements, and
+      are `unmeasured` separately: run T observes routes and failures, not these judgements, and
       its outcomes also depend on corridor ties. `unmeasured` for the effect of
       `quirks.corridor_free_part_unusable_cells`, which shows only for a jumpjet infantry type as
       described above whose corridor search fails, a case no scenario of this spec sets up
-    - Confidence: high for the outcome-or-category condition as stated and for the movement zone it
-      uses. Medium for the probe cell and for the reasoning on where the category part can show. The
-      effect of both on the original's routes has not been checked
+    - Confidence: high for the outcome-or-category condition as stated, apart from the height
+      clause, and for the movement zone it uses. Medium that the height rule of claim 10 plays no
+      part, as the entry for `quirks.corridor_free_part_ignores_height` rates it: run T shows only
+      the give-up at a ledge, not the free part itself. Medium for the probe cell and for the
+      reasoning on where the category part can show. The effect of both on the original's routes
+      has not been checked
 
     13b. **Sectors, connections and coarse end cells.**
     - *Sectors.* At each level, the cells of one region that lie in one block form one sector or
@@ -955,7 +1030,7 @@ Terms specific to this spec:
     search with the gate passed, so the search-failure rows of claim 23 apply. Without the corridor,
     the cell search runs over the whole map even when the reach regions differ.
     - Backing: `measurable` (P11 run 1 for a unit that has not yet entered the usable area,
-      run 2 for the team condition; P12 with the train type for trains). `unmeasured` for the
+      run 2 for the team condition; P12 run T with the train type for trains). `unmeasured` for the
       post-substitution reach-region comparison: no scenario changes a passed gate to different
       reach regions while preserving corridor eligibility. `unmeasured`
       for the loaner and *retreat* conditions: no order or map setting of the measurement setup is
@@ -989,6 +1064,176 @@ Terms specific to this spec:
       train for the exclusion, the orders to cells further behind it for the first step after
       straightening). Stock data is not known to use trains
     - Confidence: medium (low for which search layer is excluded on a bridge)
+
+### Threat records
+
+16a. **Threat records of a house (Q-1751).** Every house keeps a threat record for each threat
+    block of the map (Terms). The threat value of a cell (claims 17 and 18) and the coarse threat
+    (claim 13, F5) are read from these records, always from those of the moving unit's owner. The
+    records describe objects, not danger: they are kept the same way for human-controlled and
+    computer-controlled houses, apart from one test of the rebuild (below). They are read only for
+    a unit whose threat coefficient *k* exceeds 0.00001 (claim 13, F7) or, in the straightening
+    tests, multiplied by *k*.
+
+    *What poses a threat.* Each vehicle, infantry unit, aircraft and building on the map has a
+    threat amount, an integer:
+
+    | Object | Threat amount |
+    |---|---|
+    | A building with at least one occupant (S-0508) | the number of occupants × the per-occupant threat (Import mapping) |
+    | A building with no occupant that holds a bunkered vehicle (S-0606) | the threat field of the bunkered vehicle's type |
+    | Any other building, vehicle, infantry unit or aircraft | the threat field of its own type (Import mapping) |
+
+    Nothing else enters the amount: not the object's weapons, range, damage, health, veterancy or
+    cloaking, not the passengers of a transport, and not whether the recording house can see the
+    object or has ever seen it. An object off the map (glossary *on the map*), such as a passenger
+    or a garrison occupant, contributes nothing of its own.
+
+    *Whose records.* An object's amount goes into the records of every house other than its owner
+    that does not ally its owner. The recording house's own side of the relation decides (glossary
+    *alliance*): when only house A allies house B, B's objects stay out of A's records, while A's
+    objects are in B's. So, under the incremental rules below, a house's records never hold its own
+    objects or those of houses it allies.
+
+    *Where.* An amount *a* is spread over 3 × 3 threat blocks centred on the object's threat block:
+    *a* in that block, ⌊*a*/2⌋ in each of the four blocks sharing an edge with it and ⌊*a*/4⌋ in each
+    of the four diagonal ones. A building's block is the one holding its top-left foundation cell,
+    not its centre, so the area of a large building lies towards its top-left side; a vehicle's or
+    infantry unit's block is the one holding the cell it was last recorded in (claim 13), and an
+    aircraft's block follows the aircraft rule below. The spread footprint is therefore 12 × 12
+    cells, reaching between 4 and 7 cells from that cell along each axis, whatever the object's
+    weapon range. So, for Q-1751 question 1, an object adds to the records only within its 12 × 12
+    footprint, from 4 to 7 cells away along each axis. Where a route bends follows from the coarse
+    search and the straightening rules over those records, and depends on the unit's coefficient
+    *k* times the amount in each block it crosses (the full amount in the object's own block, a
+    half or a quarter in the blocks round it), through
+    the threat value of claims 17 and 18 and the coarse threat of F5. Taking a contribution away
+    subtracts the same three amounts, and a record that would fall below 0 becomes 0 instead.
+
+    *When.* The records change at once, in the same tick, at these events:
+
+    | Event | Change |
+    |---|---|
+    | An object is placed on the map (built, deployed, unloaded, leaving a building, or placed at the start) | its current amount is added at its block |
+    | An object leaves the map (sold, entering a transport or a building, or a destroyed object when it is taken off the map, which for some destroyed objects is only after a death sequence: glossary *on the map*) | the amount last added for it is taken away where it was added (for an aircraft, see the aircraft rule below) |
+    | A vehicle or infantry unit is recorded in a cell of another threat block | the amount last added is taken away at the old block, and its current amount is added at the new block |
+    | An object's owner changes | the amount last added is taken away from the records of the houses that record the old owner's objects, and, if the object is on the map, its current amount is added to the records of the houses that record the new owner's objects |
+    | An infantry unit enters a building as an occupant, or a building's occupants leave or are killed | the building's amount last added is taken away and its current amount is added, at its block |
+    | A house makes or breaks an alliance | that house's records are rebuilt (below) |
+
+    Moving within one threat block changes nothing. There is no periodic refresh. A building's
+    amount follows a change of bunkered vehicle only at the building's next event of the table.
+    The amount last added for an object is one figure, the same for every house that records it:
+    the amount added at its latest event of the table other than a rebuild. A rebuild (below) adds
+    the object's current amount but leaves that figure unchanged. So after a change of bunkered
+    vehicle and a rebuild of only one recording house, a later event takes the older figure away
+    from that house too, which then keeps the difference or loses more than was added (floor 0).
+
+    *Aircraft.* An aircraft's threat does not follow it in flight. Its amount is added at the block
+    of the cell where it is placed on the map, whether it is placed on the ground (for example at
+    an airfield) or in the air. Placed on the ground, it is recorded in that cell; placed in the
+    air, it has no recorded cell yet. Its movement changes no record, however far it flies. Each
+    time it lands, it is recorded in the cell it lands in, and again no record changes. At an
+    owner change its amount is taken away and added again at the block of its recorded cell or, if
+    it has never had one, at the block of the cell whose two coordinates are both 0. When it leaves
+    the map, its amount is taken away at the block of its recorded cell at that moment or, if it
+    has never had one, at the block of that same cell, the one whose two coordinates are both 0.
+    So an aircraft that has landed in another block, or that was placed in the air, leaves its
+    amount at its placement block ("stale threat", until the house's next rebuild) and takes the
+    amount away at a block where it was never added, lowering what other objects put there (floor
+    0). In a rebuild an aircraft counts at the block of its recorded cell; one that has never had a
+    recorded cell is skipped (`quirks.aircraft_threat_stays_put`).
+
+    *Rebuild.* When a house makes or breaks an alliance (S-0412 claim 8, S-0414), its records are
+    set to 0 and filled again from every object on the map that is not destroyed and whose current
+    amount is above 0, spread as above:
+    - A vehicle, infantry unit or aircraft that has a recorded cell and is not the house's own
+      counts at its block when the house is human-controlled and does not ally the object's owner,
+      and always when the house is computer-controlled, allies included. An *AI house* counts as
+      computer-controlled here (decided at the delegated sign-off, 2026-10-25). This house test
+      is the one exception to the glossary's rule that an AI house has the rules of a
+      human-controlled house (glossary *AI house*); Departure D5 still applies to its units.
+    - Every building counts at its block, whoever owns it: the house's own and its allies'
+      buildings included.
+
+    The same holds however the alliance is made or broken: by the teams of game start, by a
+    player's alliance order, or by a map trigger's action. A map trigger's action that makes or
+    ends an alliance acts on both houses at once (S-0209, the backing of its alliance views), so
+    it rebuilds the records of both houses.
+
+    The incremental rules never change a house's records for its own or its allies' objects, so
+    those extra contributions stay ("stale threat") after the object moves, is destroyed or leaves
+    the map, until the house's next rebuild (`quirks.threat_rebuild_counts_friends`). A house that
+    makes the alliances of game start (S-0412 claim 8) is rebuilt then, and those alliances are
+    made after the map's objects and the starting units are placed. So such a house starts with
+    stale threat from every building that the map places for it or for a house it allies, and, if
+    it is computer-controlled, from its allies' starting units. A game-start rebuild omits every
+    aircraft that the map places in the air (it has no recorded cell), so such an aircraft is not
+    in the rebuilt house's records until a later rebuild after it has landed, unless an owner
+    change adds it first (below).
+
+    *Effect on paths.* A unit with a large enough coefficient is steered away from threatened blocks
+    by the coarse search: at levels 1 and 2 it adds the threat term to the entry cost of a sector
+    (F5), so a long route can take the other side of a lake or a base. The straightening passes test
+    threat too (claims 17 and 18). A path can still pass threatened cells: the level-0 corridor and
+    the cell search ignore threat, cells with the corridor exemption (claim 13) are not held to the
+    corridor, and the right-angle flattening reads only one cell's threat value
+    (`quirks.flatten_threat_start_cell`).
+    - Backing: `measurable` by scenario P30, with the threat records read by the read-only recorder
+      and each part's route check, and by P10 for the aggregate route effect, for:
+      - the threat blocks, the spread, the first and third rows of the amount table and the
+        removal and occupant rows of the event table (P30)
+      - the placement row for objects placed in play: the infantry units placed on leaving a
+        building (part f2) and on unloading from a transport (part i)
+      - the building's top-left cell (part a2)
+      - a computer-controlled house's rebuild counting an allied vehicle (part c)
+      - what the amount leaves out, and entering and leaving a transport (part i)
+      - entering and leaving a building (part f2)
+      - the rebuild skipping an aircraft placed in the air (part h2, which places one in the air
+        by its placement cell, S-0009 claim 38).
+
+      `unmeasured` for the following rules, which no part of P30 isolates:
+      - the placement row for the objects that the map places: the alliances of game start
+        (S-0412 claim 8) can rebuild the reading house's records after those placements and give
+        the same records, so parts a, a2, b, d, e, h and i show the same pattern whether or not
+        the placement added it, and no part places a building, a vehicle or an aircraft in play
+        and reads an enemy house's records then
+      - where an aircraft's amount is taken away, and its effect on other objects' threat at that
+        block (as Quirk switches, `quirks.aircraft_threat_stays_put`, says)
+      - a computer-controlled house's counting of its allies' infantry units and aircraft in a
+        rebuild: part c tests that count with an allied vehicle only
+      - for an aircraft placed in the air, its owner change and its removal at the block of the
+        cell whose two coordinates are both 0, and its corridor exemption around the placement
+        cell (claim 13)
+      - the owner-change row: an owner change inside the recorded window needs a capturing or
+        controlling unit there too, whose own amount changes the same records in the same ticks
+      - the bunkered-vehicle amount, its refresh only at the building's next event and the one
+        figure last added that a rebuild leaves unchanged: the
+        amount shows only after a later event of the table, such as a rebuild, and a part
+        would have to follow a bunker, its vehicle and that event in one window, with the
+        vehicle's own amount changing the same records
+      - the negative threat field (Edge cases and quirks, `quirks.negative_threat_field`): stock
+        data is not known to use one, and the floor at 0 makes its effect depend on the order of
+        placements around it
+      - the one-sided alliance: in P30, H and A ally each other, so no part tells a test of the
+        recording house's own side of the relation from a test of both sides.
+    - Confidence: medium, until the part of P30 that tells each rule from its alternatives has
+      run, for the threat blocks, the spread, the amounts of the first and third rows of the amount
+      table, what the amount leaves out (the sentence after the table), the placement row for
+      objects placed in play, the removal and occupant rows of the event table (entering and
+      leaving a transport or a building included), and which houses record an object, the
+      one-sided alliance excepted. Medium, as an `unmeasured` rule with its stated reason, for the
+      placement row for the objects that the map places. Medium for the building's
+      top-left cell, the aircraft rule for an aircraft that is not placed in the air, the rebuild
+      with its house test and its place at game start, the owner-change row, the bunkered-vehicle
+      amount with its delayed refresh and the one figure last added, the negative threat field
+      and the one-sided alliance. Low for
+      the aircraft rule for an aircraft placed in the air (where its amount is added, its omission
+      from a rebuild until it has landed, its owner change, its removal at the block of the cell
+      whose coordinates are both 0, and the corridor exemption round its placement cell), as S-0009
+      claim 38 rates the aircraft placed in the air: part h2 rests on that placement. Low for the
+      timing of a moving unit's change of block: it follows the recorded cell of claim 13, whose
+      moment of change is rated low there.
 
 ### Straightening
 
@@ -1059,7 +1304,7 @@ Terms specific to this spec:
     the replaced steps end: *j* steps in each of two straight directions move the path *j* cells
     along each axis, the 2*j* diagonal steps move it 2*j* cells along each. For the pair 6 and 0,
     *d₃* is 0 (north), not 7: the 2*j* steps all lead north. In every case each later step of the
-    path is shifted by the same amount, and the stored path no longer ends on the cell the search
+    path is shifted by the same amount, and the stored path does not end on the cell the search
     reached.
 
     After a V of straight runs is replaced, the eligible suffix likewise begins at the first new
@@ -1574,6 +1819,26 @@ Terms specific to this spec:
       movement zone may enter a cell with a wall section (S-0211
       claim 10), so a wall cell is never adopted here, even for a unit whose own movement zone passes
       walls, except by a unit of locomotion class *winged*, for which claim 25 skips the class rule.
+    - **Repeated substitution on high ground (Q-1870).** Once a substitute is adopted it is the
+      unit's destination, and later path computations apply the ordinary substitution rules to that
+      new destination: while the substitute stays free they substitute nothing. So a single order
+      onto an occupied cell substitutes once while its substitute stays free, and the unit stops at
+      the substitute. A substitute that becomes occupied later is an occupied destination in its
+      own right, and the ordinary rules apply to it. Repeated substitution around the original
+      occupied cell requires that a caller give the unit that cell again, as S-0402 claim 10 row 2
+      does at each processing of *enter*. *D*ᵤ counts the unit's own world height in
+      full, so for a unit whose *D*ᵤ stays above the close-enough distance wherever it stands next
+      to the destination, each such path computation runs the nearby-cell search while the occupant
+      stays. This holds, for one, whenever the unit's world height alone exceeds the close-enough
+      distance, which a base raised by enough height levels of 104 leptons gives. For a unit
+      whose occupancy record holds it, its own cell does not qualify in the search unless the
+      unit is of locomotion class *winged* (claim 25), so each substitute is another cell. S-0208
+      claim 13 gives the cases in which a unit is not marked in its own cell, and this inference
+      does not cover them. A unit that comes
+      within the close-enough distance gets its route onto the occupied cell instead, and S-0207
+      claim 15 decides what it does there. S-0402 claim 10a gives the consequence for a harvester
+      at an occupied docking cell. With `quirks.substitution_distance_flat_destination` off, the
+      true distance decides, so height alone does not keep the substitution going.
     - Backing: `measurable` (scenario P7, run 3b for the height rule, run 10 for the destination's
       level on a bridge and so for `quirks.substitution_centre_ground_level`, run 9 for wall cells,
       runs 8 and 8b for the estimate test). `unmeasured` for the subterranean destination's
@@ -1581,8 +1846,10 @@ Terms specific to this spec:
       not this substitution caller. `unmeasured` for the movement zone of the estimate *E*
       of a jumpjet infantry type, which no scenario sets up, and for the legs of F8, which apply only
       when the found cell or the destination is a bridge cell and change *E* by a few cells, an
-      effect no scenario of this spec isolates
-    - Confidence: medium for the triggers, the distance test and the height rule. High for the
+      effect no scenario of this spec isolates. `measurable` (S-0402 scenario H20, parts e and
+      f) for the repeated substitution on high ground
+    - Confidence: medium for the triggers, the distance test and the height rule, and for the
+      repeated substitution on high ground (derived from these rules, not observed). High for the
       wall-cell consequence. Medium for the estimate away from bridges. Low for the legs of F8 and
       the coarse end cells on a bridge (claim 13b)
 
@@ -2035,7 +2302,9 @@ Terms specific to this spec:
 
     Once there without contact, the harvester may remain at rest until an order,
     its standing behaviour or a general scatter rule moves it. Pathfinding does not
-    evict it just because another harvester reserves the dock. A field destination
+    evict it just because another harvester reserves the dock. A contacting harvester driving
+    onto the cell can send it a scatter request; that is S-0207 claim 15's movement rule,
+    not an eviction by pathfinding (S-0402 claim 10a; Q-1870). A field destination
     supplied by S-0402 claim 3a uses the ordinary route rules: the departure cell's
     docking role adds no forbidden exit direction and does not require dock ownership.
     Destination changes and movement start use claims 20 and 21, including any
@@ -2057,9 +2326,15 @@ Terms specific to this spec:
     destination still obeys claim 21's retry delay and its stated exceptions. A
     contacting harvester's repeated docking offers are a separate case, owned by
     S-0402 claim 10a, not evidence of automatic retries by this non-contact occupant.
-    - Backing: `measurable` (P27; S-0402 H20 for the harvest and docking exchange)
-    - Confidence: high for no docking-specific route restriction and the failure
-      reactions; medium for entry and resting persistence pending P27
+    - Backing: `measurable` (P27 for entry and resting persistence; S-0402 H20 for the harvest
+      and docking exchange, its part e for the rest after a stop order). The failure reactions
+      in the table are claim 23's and carry its backing. `unmeasured` for the rest after a
+      give-up from the docking cell: no setup is known that is sure to give a departure from the
+      docking cell that gives up (S-0402 claim 3a)
+    - Confidence: high for no docking-specific route restriction; the failure reactions as
+      claim 23 rates them; medium for entry and resting persistence pending P27; medium for the
+      rest after a stop order pending S-0402 H20 part e, and for the rest after a give-up; the
+      contacting harvester's scatter request and its results as S-0402 claim 10a rates them (low)
 
 ## Formulas
 
@@ -2128,17 +2403,42 @@ its team's current script step instead, which belongs to the team specs.
 and *t* = *t*(*q*, *s*, *L*) is the coarse threat (Terms) of the unit's house for the step from sector
 *q* to sector *s* at level *L*, an integer:
 - Level 0: *t* = 0 always.
-- Level 1: *t* is a value the house's records hold for the entered sector *s* alone; *q* plays no
-  part.
-- Level 2: *t* comes from the house's coarse threat record, read near both sectors. When the two
-  sectors read the same place, *t* is the value there. Otherwise *t* = ⌊(*a* + *b*) / 2⌋ (rounded
-  down), where *a* is the smaller of two readings on the side of *q* that faces *s*, and *b* the
-  smaller of two readings on the side of *s* that faces *q*. Which places are read is not
-  established (Open questions).
+- Level 1: *t* is the house's threat record (claim 16a) for the threat block holding the entered
+  sector *s*. A level-1 sector lies inside one block of level 1, which is one threat block (Terms).
+  *q* plays no part.
+- Level 2: a sector of level 2 lies inside one block of 8 × 8 cells, whose four **quarters** are
+  threat blocks: north-west, north-east, south-west and south-east. The **seed block** of a sector
+  is the threat block holding its first cell in row order (the cell with the smallest *y*, and
+  among those the smallest *x*). When *q* and *s* have the same seed block, *t* is that block's
+  record. Otherwise let *d* be the direction from the seed block of *q* to that of *s*, one of eight,
+  from the signs of the differences of their block coordinates (*y* grows to map south). Then
+  *t* = ⌊(*a* + *b*) / 2⌋, where *a* is the smaller record of the quarters of *q*'s 8 × 8 block on
+  its side towards *d*, and *b* the smaller record of the quarters of *s*'s 8 × 8 block on its side
+  towards the opposite direction:
 
-*T* is an integer. The term is used only when *k* > 0.00001 (F7). Confidence: high that *t* is 0 at
-level 0, low for levels 1 and 2. How the house's records are kept belongs to the combat and
-AI-visible-rules specs.
+  | *d* | Quarters of *q* | Quarters of *s* |
+  |---|---|---|
+  | north | north-west, north-east | south-west, south-east |
+  | north-east | north-east | south-west |
+  | east | north-east, south-east | north-west, south-west |
+  | south-east | south-east | north-west |
+  | south | south-west, south-east | north-west, north-east |
+  | south-west | south-west | north-east |
+  | west | north-west, south-west | north-east, south-east |
+  | north-west | north-west | south-east |
+
+  So a step between level-2 sectors is charged for the threat on the facing sides of the two
+  8 × 8 blocks. The same rule holds when *q* and *s* lie in one 8 × 8 block with different seed
+  blocks: *d* still comes from their seed blocks, and *a* and *b* are then read from opposite sides
+  of that one block (for *d* east, *a* is the smaller of its north-east and south-east records and
+  *b* the smaller of its north-west and south-west records). For a straight direction, *a* and *b* are each the smaller of two records, so
+  threat on only one of the two facing quarters of a block adds nothing for that block.
+
+*T* is an integer. The term is used only when *k* > 0.00001 (F7). Confidence: medium that *t* is 0
+at level 0 and for levels 1 and 2. Their aggregate effect is `measurable` (scenario P10 for the
+route, P30 part a for the records). The level-2 choice of quarters is `unmeasured`: one object's
+spread always reaches neighbouring quarters as well, and no proposed fixture separates threat on one
+facing quarter from threat on two.
 
 **F6. Lepton distances.** Each is ⌊*r*(*n*)⌋ leptons, with *r* the table square root of S-0204
 (its Formulas F1) and *n* the exact integer sum of squared coordinate differences in leptons:
@@ -2228,6 +2528,8 @@ large arise only with large threat terms.
 | Substitution detour allowance | 6 | cells | claim 24 |
 | Straightening scan | 20 | steps | claim 18 |
 | Threat cells allowed in the closing stretch | 3 | cells | claim 18 |
+| Threat block | 4 × 4 | cells | Terms, claim 16a |
+| Threat spread | 1, ½, ¼ (each share rounded down) | fraction of the amount, for the object's block, each edge neighbour and each diagonal neighbour | claim 16a |
 | Congestion block | 5 × 5 | cells | claim 19 |
 | Close-case distance | 511 | leptons | claim 27 |
 | Close-case facing reversal | 32767 | facing units | claim 27, `quirks.opposite_facing_reversal` |
@@ -2317,7 +2619,7 @@ Ordering consequences:
   of a V of straight runs that was not flattened, and the new steps of a flattened V of straight
   runs of the pair 6 and 0 can open a V of straight runs. Such a V is replaced by 2*j* steps, which
   are diagonal except for the pair 6 and 0, displace every later step of the path by *j* cells
-  along each axis, and the pair 6 and 0 gives direction 0 instead of 7. The stored path then no longer ends on the
+  along each axis, and the pair 6 and 0 gives direction 0 instead of 7. The stored path then does not end on the
   cell the search reached. Off: no run of straight steps opens a V, so only V's of diagonal runs are
   flattened and the path always ends where the search ended.
 - **`quirks.detour_mirrored_reference`** (default: on). From the third leg of claim 18 on, the
@@ -2336,9 +2638,28 @@ Ordering consequences:
   cell carries the mark when it carried it before or its count is at least 1.
 - **`quirks.corridor_retry_no_fallback`** (default: on). When the new coarse search that follows a
   corridor retry (claim 13) fails at any level, except the chain-length failure of departure D2 (Edge cases and quirks), the path computation fails, and a unit can stop at
-  once at a short line of buildings across an open route (Edge cases below, Run S). Off: one more
+  once at a short strip of ground it cannot enter that the coarse searches count as open (Edge
+  cases below, P12 run T). Off: one more
   cell search without a corridor is made, with the same limits as the other cell searches, and the
   computation fails only if that fails too.
+- **A to-tile building's exemption is taken away (fixed, no switch).** Every building, a type with
+  a to-tile field (Import mapping) included, loses the corridor exemption of its rectangle when it
+  leaves the map (claim 13). In the original a to-tile building's rectangle stays exempt for the rest
+  of the game, so a later corridor search can use those cells; the project lead ruled this a plain
+  bug, fixed with no switch, on 2026-10-24. Backing: `unmeasured`, for the reason given in claim 13's
+  backing. Confidence: medium.
+- **`quirks.corridor_free_part_ignores_height`** (default: on). The free part of claim 13a, and the
+  sectors it borders, judge each cell by its entry outcome at its own height level only, not by the
+  height rule of claim 10, so a ledge (a line of flat cells one level above flat ground, no slope
+  between) does not stop the free part; a retry at a ledge then closes nothing, and the unit gives
+  up after 5 identical cell searches (Edge cases below, P12 run T). Off: a cell whose entry from
+  the step's start the height rule refuses does not belong to the free part and does not count for
+  its borders. Independent of `quirks.corridor_split_probe` and
+  `quirks.corridor_free_part_unusable_cells`. Backing: `measurable` (P12 run T, ledge maps) for the
+  give-up; the free part and the corridor are `unmeasured` separately (claim 13a). Confidence:
+  medium that a ledge stops no free part, so no retry changes the corridor; medium that the 7- and
+  9-ledges of run T fail at every shift; low for the shifts at which the 3- and 5-ledges fail (as
+  the ledge entry under Edge cases rates them).
 - **`quirks.corridor_split_probe`** (default: on). Whether the progress sector counts as split
   (claim 13a) is decided at the probe cell, which need not lie in that sector at all, and a sector
   that does not fill its block counts as split whenever the probe cell is in it. Off: *S* counts as
@@ -2396,57 +2717,176 @@ Ordering consequences:
   claim 1 both change regions and reach regions here too.
 - **Buildings do not separate regions** (claim 1). A destination enclosed by buildings passes the
   gate and costs a full search, up to 5 cell searches, before it fails. This is original behaviour.
-- **A short line of buildings across the route, with open ground round it** (claims 1, 13, 13a; Q-1280).
-  The coarse searches see through buildings, so the first cell search inside the corridor fails at
-  the line, exactly as for an enclosed destination. The way round is then found only if the retry
-  changes a corridor in a way that lets a new coarse search route round it. In the retry table, a
-  level at which the progress cell's sector is *whole* and whose free part borders every sector
-  connected to it closes no connection at that level. A new coarse search uses only the
-  connections of its own level and the corridor of the level above, so that level's corridor is
-  then found again unchanged (closures at other levels do not alter it). A sector below level 2
-  can be on a corridor only when its parent is, or its category is *crushable* (claim 13). When the
-  line lies inside one level-2 sector (blocks of 8 cells) whose free part borders every sector
-  connected to it, and the probe of claim 13a reads that sector as whole, the level-2 corridor
-  stays the same through every retry. A new coarse search can then fail at level 1 because the
-  remaining way round lies outside that corridor, and the path computation fails (claim 13's
-  last-but-one row); the unit does not move and its destination is cleared (claim 23). This follows
-  from the rules of claims 13 and 13a as written, and Run S (below) tests it on the original.
-  This failure has gameplay impact (a unit refuses an order although an open way round exists), so
-  it gets a switch, **`quirks.corridor_retry_no_fallback`** (default: on, the original).
-  Off: when the new coarse search after a retry fails, one more cell search is made without a
-  corridor, bounded by the same limits as the other cell searches (it counts towards the 5 of claim
-  13 and ends as failed at the expansion limit) and deterministic; the path computation fails only
-  if that search fails too. With it off (our engine's alternative, which the original does not have), an open way round a short line is expected at every
-  alignment. This is an engine check, not a claim about the original, so no oracle measurement backs it. With it on, whether a given line fails depends
-  on its alignment with the sector grid and on the probe cell. With `quirks.corridor_split_probe`
-  on (the default), the probe reads the level-2 sector as split only when the probe cell lies in
-  that sector and the free part does not fill its block; a block that holds line cells never has a
-  full free part, so the reading is split exactly when the probe cell falls in the sector and inside the usable area, and then
-  the connection to the next corridor sector is closed and a new level-2 corridor may go round.
-  With `quirks.corridor_split_probe` off, a sector reads as split whenever any usable cell of it lies outside the
-  free part, so every block that holds a line cell reads as split whatever the probe cell, and the
-  failure is expected to occur at fewer alignments. The rule alone does not settle the lengths: its
-  failing case is stated for a line inside one level-2 sector, and a line of 9 cannot lie inside one.
-  So the expectations that a line of 3 or 5 is passed, and that lines of 7 and 9 fail at some
-  alignment, are measurement expectations, not consequences of the rule. Q-1280 predicts the 7-line
-  failure from claims 13 and 13a; that is an analysis, not an observation of the original. This spec does not
-  predict which of Run S's shifts is that alignment (it depends on the progress cell, which
-  depends on the order of candidate cells, claim 11); Run S (with the switch on) records the result for every shift so
-  the failing shifts can be named, and the claim stays at "some shift fails". The same path
-  computation serves infantry, vehicles and the approach of a recycling or absorbing building
-  (S-0603, S-0605), whose own destination cell then decides the outcome. Backing: `measurable`
-  (P12, run S) for lengths 3 and 5 being passed and for the existence of failing 7- and 9-line
-  placements; `unmeasured` until Run S has been run for which shifts fail, because the progress
-  cell is not predicted. Confidence: high that the rules as written produce the failure whenever
-  the level-2 corridor is unchanged, low for the exact line lengths and alignments.
-  **Answer to Q-1280** (the original's behaviour with `quirks.corridor_retry_no_fallback` on, as the analysis above gives it; not yet observed). (1) A vehicle 20
-  cells from a straight north–south line of seven 1 × 1 buildings on open ground, ordered to a cell
-  just behind the line, stops at once without moving when the line sits in the failing alignment
-  described above; at other alignments it drives round. Lines of 3 and 5 are expected to be passed. (2) An
-  infantry unit behaves alike, and so does the approach of a recycling building just behind the
-  line, since all use this path computation. The outcome depends on the line's alignment against the
-  level-2 grid and on the probe cell, so which exact lengths and shifts fail is not established until Run S. (3) No step of claim 13 differs from the text; the other behaviour is
-  that quirk with `quirks.corridor_retry_no_fallback` off. Backing: `measurable` (P12, Run S) for claims (1) and (2); `unmeasured` for which lengths and shifts fail. Confidence: medium for claims (1) and (2), high for claim (3).
+- **A unit routed through its own base** (claims 1, 12, 13; Q-1771). The coarse searches see
+  through buildings, so the first corridor from a factory's exit often runs through the factory
+  itself and through the rows of buildings beyond it. The cell search inside that corridor is not
+  stopped by them: every cell of each building's exemption rectangle is exempt (claim 13), and the
+  rectangles of a group of buildings join into one band of cells round the group. Where the
+  corridor meets a building or a row of buildings with open ground round it, the search follows
+  that band round the row's end and rejoins the corridor on the far side. A unit standing at a
+  factory's exit and ordered across its own base therefore keeps its destination and gets a route
+  in the tick of the order, instead of having its destination cleared (claim 23), and reaches the
+  destination on the first cell search; no retry is made, and the limit of 5 cell searches plays no
+  part. The same holds for an infantry unit and a vehicle, and for the buildings of an allied
+  house, whose cells give the unit the same outcome as its own house's (claim 27). The exemption
+  itself is given whatever a building's owner (claim 13), but a building of a house the unit's
+  house does not ally gives an armed unit *enemy obstacle* rather than *blocked* (S-0209 claim 5),
+  which this answer does not cover. This is stated for groups whose detour stays far inside the
+  expansion limit of claim 12: the layouts of P31 and the walls of P12 need a few hundred
+  expansions at most. A band round a far larger group, or one cut by something the cell search
+  cannot cross and that gives no exemption (a ledge or a strip of ground the unit cannot enter,
+  below), can still make the first search fail, and the retry rules of claim 13 then decide. Which
+  end of a row the unit goes round is decided by the cell search's own rules inside the corridor:
+  claim 12's step costs, though the search need not find the end with the cheaper route (claim 7),
+  and at an exact tie the order of equal routes (claim 12a, whose design order the original does
+  not follow in every tie). P31 records the side taken. **Answer to Q-1771** (not yet observed).
+  (1) The original walks out: the unit at the factory's exit, and the unit of the request's 3 × 2
+  block and row of ten, find the way on the first cell search inside the first corridor, round the
+  buildings on the cells of their exemption rectangles, and never reach the limit of 5. It goes
+  round
+  the end that the rules above decide. (2) The corridor exemption includes the exemption
+  rectangles of buildings (claim 13). The rest of claim 13 applies to this case as stated: the limit of 5 cell searches, no corridor-free search after the 5th
+  failure, the coarse searches seeing building cells as *open*, and the retry table. That rests on
+  claim 13's own ratings, not on P31 or P12, which do not count cell searches.
+  (3) So no switch is needed for this case. Backing: `measurable` (P31; P12 for a long wall of
+  buildings) that the unit walks out; `unmeasured` that it does so on the first cell search, round
+  the buildings' exemption rectangles (claim 13's Backing). Confidence: medium that the layouts of
+  P31 and P12 are passed on the first search (that each layout's corridor meets the band as
+  described was traced by hand, without computing its exact cells); item 2 as claim 13 rates each
+  rule (medium for the limit of 5, for the retry's branches and for "on the first cell
+  search"); for the side, medium (the cell search's rules and claim 12's cost formula), and at an
+  exact tie the original's side is `unmeasured`, as in claim 12a.
+- **A harvester leaving a refinery's docking cell across its base** (claims 1, 10, 13, 23,
+  27a; Q-1870). This is the entry above with a harvester as the unit and the docking cell
+  (S-0402 Terms) as the exit. No rule of the path computation depends on the harvester flag,
+  and the field leg after unloading is an ordinary destination: the remembered cell, or the
+  cell the ring search gives (S-0402 claims 3 and 6). For a foundation at least 3 cells wide
+  the docking cell lies in the refinery's own exemption rectangle, and so does the ring of
+  cells round the foundation in every case, so the cell search leaves the docking cell on that
+  ring, goes round the refinery and follows the band of the other buildings' rectangles. The
+  exemption does not look at height. Raised ground cuts the band only where the cell search
+  cannot step from one of its cells to the next (claim 10), as at a ledge, or where a strip of
+  ground the unit cannot enter crosses it (next entries). Ground that no unit can enter at
+  all is closed to the coarse searches too, so the corridor itself
+  goes round it. **Answer to Q-1870** (not yet observed). (1) As for Q-1771, the original
+  finds the way on the first cell search inside the first corridor, round the refinery and the
+  buildings beyond it. There is no higher limit, no search without a corridor and no other
+  corridor: claim 13 stands, and neither `quirks.corridor_retry_no_fallback` nor
+  `quirks.corridor_split_probe` is needed for this. Only where a ledge or such a strip cuts
+  every way round does the first search fail; claim 13's retries then decide, and a give-up
+  follows claim 23. (2) After a give-up, a harvester of a player house other than a chrono
+  miner stands on the docking cell in *guard* and stays there. No refinery rule, harvest rule
+  or retry delay moves it, and it does not try the field again until an order moves it, or a
+  scatter request that it accepts (claim 27a; S-0402 claims 3a and 13; S-0215 claim 11a). The
+  original's computer-controlled owner, whose harvester gets *area guard* with a
+  house-selected destination (claim 23a) and then *harvest* again from *area guard* (S-0215
+  claim 26), applies in our engine only to the harvesters of the neutral and special houses
+  (claim 23, Departure D5). (3) A second harvester that comes loaded to that refinery is
+  S-0402 claim 10a. Where no substitute is adopted at an offer, as within the close-enough
+  distance, it can make the resting one move by a scatter request. While claim 24 adopts a
+  substitute at each of its offers, as it can on a base raised high enough, it does not dock.
+  Backing: `measurable` (P31 run D for item 1; for
+  item 2, P27 and S-0402 H20 part e for the same rest after a stop order; S-0402 H20 parts e
+  and f for item 3). `unmeasured` for item 2's rest after a give-up: no setup is known that is
+  sure to give a departure from the docking cell that gives up (S-0402 claim 3a), and without
+  one a rest cannot be told from a retry that never comes. `unmeasured` that item 1 happens on
+  the first cell search, as for Q-1771. Confidence: medium that the path computation has no rule
+  of its own for harvesters; medium for item 1; medium for item 2, both for the rest after a
+  stop order (pending S-0402 H20 part e) and for the rest after a give-up. For item 3, low for
+  the scatter request and its results, as S-0402 claim 10a rates them, and medium that a harvester
+  given a substitute at each offer on a raised base does not dock, as S-0402 claim 10a rates the
+  substituted offers on a raised base.
+- **A short line of buildings across the route, with open ground round it** (claims 1, 13; Q-1280).
+  As for a unit in its own base (above), the first corridor runs through the line, and the cell
+  search inside it walks round the line's end on the cells of the buildings' exemption rectangles.
+  So the first cell search finds the way round at every alignment against the sector grid, for
+  the straight lines of 3, 5, 7 and 9 1 × 1 buildings that run S of P12 tests; the retries of
+  claim 13 are not reached. For far longer lines the limit stated above applies. A line of wall
+  sections behaves alike for a different reason: its cells are *wall-like*, which the zone table
+  closes to movement zones *normal* and *infantry*, so the corridor itself goes round the line,
+  and the wall's own exemption covers the cells next to it. So neither a line of buildings nor a
+  line of walls shows the failure of the next entry. **Answer to Q-1280** (not yet observed). (1)
+  A vehicle 20 cells from a straight north–south line of seven 1 × 1 buildings on open ground,
+  ordered to a cell just behind the line, drives round the line at once at every alignment, and
+  so it does at lengths 3, 5 and 9. (2) An infantry unit behaves alike, and so does the approach
+  of a recycling building just behind the line (S-0603, S-0605), since all use this path
+  computation. (3) The corridor exemption includes every building's exemption rectangle (claim 13),
+  so the lines of 7 and 9 buildings are passed at every alignment, as the shorter ones are. This
+  has not been observed: it follows from the exemption alone, and P12 run S has not run.
+  Backing: `measurable` (P12 run S) for items 1 and 2, `unmeasured` for item 3, as claim 13's
+  Backing says (the walk does not tell the rectangles from a successful retry). Confidence:
+  medium for items 1 to 3.
+- **A short strip of ground the unit cannot enter, across the route, with open ground round it**
+  (claims 1, 8, 13, 13a). An obstacle that the coarse searches count as passable, that the cell
+  search cannot cross, that gives no exemption and whose cells stop the free part of claim 13a
+  makes the first cell search inside the corridor fail. A strip of a land type whose multiplier
+  for the unit's locomotion class is 0 while its wheel multiplier is above 0.01 is one: the
+  category reads only the wheel column (S-0211 claim 11, its `quirks.passability_wheel_column`),
+  so the strip is *open* to the gate and to the coarse searches, while its cells have entry
+  outcome *blocked* for the unit (claim 8) and nothing on them gives the exemption. Whether stock
+  data has such a land type for some locomotion class is not checked here; run T of P12 makes one
+  with test data. The way round is then found
+  only if the retry changes a corridor in a way that lets a new coarse search route round it. In
+  the retry table, a level at which the progress cell's sector is *whole* and whose free part
+  borders every sector connected to it closes no connection at that level. A new coarse search
+  uses only the connections of its own level and the corridor of the level above, so that level's
+  corridor is then found again unchanged (closures at other levels do not alter it). A sector
+  below level 2 can be on a corridor only when its parent is, or its category is *crushable*
+  (claim 13). When the strip lies inside one level-2 sector (blocks of 8 cells) whose free part
+  borders every sector connected to it, and the probe of claim 13a reads that sector as whole, the
+  level-2 corridor stays the same through every retry. A new coarse search can then fail at level
+  1 because the remaining way round lies outside that corridor, and the path computation fails
+  (claim 13's last-but-one row); the unit does not move and its destination is cleared (claim 23).
+  This follows from the rules of claims 13 and 13a as written, and run T of P12 tests it on the
+  original. This failure has gameplay impact (a unit refuses an order although an open way round
+  exists), so it gets a switch, **`quirks.corridor_retry_no_fallback`** (default: on, the
+  original). Off: when the new coarse search after a retry fails, one more cell search is made
+  without a corridor, bounded by the same limits as the other cell searches (it counts towards the
+  5 of claim 13 and ends as failed at the expansion limit) and deterministic; the path computation
+  fails only if that search fails too. With it off (our engine's alternative, which the original
+  does not have), an open way round a short strip is expected at every alignment. This is an
+  engine check, not a claim about the original, so no oracle measurement backs it. With it on,
+  whether a given strip fails depends on its alignment with the sector grid and on the probe cell.
+  With `quirks.corridor_split_probe` on (the default), the probe reads the level-2 sector as split
+  only when the probe cell lies in that sector and the free part does not fill its block; a block
+  that holds strip cells never has a full free part, so the reading is split exactly when the
+  probe cell falls in the sector and inside the usable area, and then the connection to the next
+  corridor sector is closed and a new level-2 corridor may go round. With
+  `quirks.corridor_split_probe` off, a sector reads as split whenever any usable cell of it lies
+  outside the free part, so every block that holds a strip cell reads as split whatever the probe
+  cell, and the failure is expected to occur at fewer alignments. The rule alone does not settle
+  the lengths: its failing case is stated for a strip inside one level-2 sector, and a strip of 9
+  cannot lie inside one. So the expectations that a strip of 3 or 5 is passed, and that strips of
+  7 and 9 fail at some alignment, are measurement expectations, not consequences of the rule. This
+  spec does not predict which of run T's shifts is that alignment (it depends on the progress cell,
+  which depends on the order of candidate cells, claim 11); run T (with the switch on) records the
+  result for every shift so the failing shifts can be named, and the claim stays at "some shift
+  fails". The same path computation serves infantry, vehicles and the approach of a recycling or
+  absorbing building (S-0603, S-0605). Backing: `measurable` (P12 run T) for lengths 3 and 5 being
+  passed and for the existence of failing 7- and 9-strip placements; `unmeasured` until run T has
+  been run for which shifts fail, because the progress cell is not predicted. Confidence: high that
+  the rules as written produce the failure whenever the level-2 corridor is unchanged, low for the
+  exact strip lengths and alignments.
+  A ledge differs: a straight line of flat cells one height level above the flat ground on both
+  sides, with no slope between them, is also open to the coarse searches (cells one level apart
+  join, claims 3 and 13b) and refused by the cell search (claim 10), but the free part of claim 13a
+  judges only a cell's entry outcome at its own height level, not the height rule, so the ledge's
+  cells do not stop it. A retry then reads the progress sector as whole with a free part that
+  borders every connected sector, closes nothing at any level, and each new coarse search finds the
+  same corridor again. So when the first corridor crosses the ledge without a cell round its end,
+  the same cell search fails 5 times and the path computation fails at the 5th, whatever
+  `quirks.corridor_retry_no_fallback` is set to. This has the same gameplay impact as the strip (a
+  unit refuses an order although an open way round exists), so it gets a switch,
+  **`quirks.corridor_free_part_ignores_height`** (default: on, the original). Off: the free part
+  and its borders (claim 13a) also apply the height rule of claim 10 to each step, so a cell that
+  the step into it would be refused by that rule does not belong to the free part; a ledge then
+  stops the free part as a strip does, and the retries can close connections and lead a new coarse
+  search round it, under the same rules and switches as for a strip. It is independent of
+  `quirks.corridor_split_probe` and `quirks.corridor_free_part_unusable_cells`. Backing:
+  `measurable` (P12 run T, ledge maps) for the original's give-up; the free part and the corridor
+  are `unmeasured` separately (claim 13a). Confidence: medium that no retry changes the corridor in
+  that case; medium that the 7- and 9-ledges of run T fail at every shift; low for the shifts at
+  which the 3- and 5-ledges fail.
 - **Departure D1: unknown movement zone.** In the original a movement-zone value outside the
   vocabulary leaves the type with no movement zone. The gate then always passes, and the search
   reads the reach region of a non-existent movement zone, which is undefined. Our engine follows
@@ -2515,14 +2955,49 @@ Ordering consequences:
   stay exact.
 - **Threat with a zero coefficient.** A unit with threat coefficient 0 ignores threat in every
   claim: the coarse threat term is skipped and every threat test of claims 17 and 18 passes.
+- **`quirks.threat_rebuild_counts_friends`** (default: on). The rebuild of a house's threat records
+  after it makes or breaks an alliance (claim 16a) counts every building on the map, its own and
+  its allies' included, and, for a computer-controlled house, the vehicles, infantry units and
+  aircraft of its allies. No later event takes those contributions away, so they stay in the
+  records ("stale threat") until the next rebuild, even after the objects have moved, been
+  destroyed or left the map. A unit with a threat coefficient can therefore avoid its own base or
+  a spot where an allied unit once stood. Off: the rebuild excludes the house's own objects and objects of houses it allies.
+  Backing: `measurable` (P30 part c and its variant c2 for the counted allied vehicle and
+  building at game start, part g for the house's own building counted at a rebuild in play and
+  kept after it leaves the map); `unmeasured` for the allies' infantry units and aircraft (claim
+  16a gives the reason). Confidence: medium, until those parts have run.
+- **`quirks.negative_threat_field`** (default: on). A type whose threat field is negative takes its amount away from the
+  records when it is placed and adds it back when it is removed, with the floor at 0 of claim 16a,
+  so it can lower another object's threat for as long as it stands near it, and can leave a record
+  higher than before after it leaves (the floor lost part of the subtraction). The rebuild skips
+  it (only amounts above 0 count). Stock data is not known to use negative values, but a mod may
+  set one, and the record left higher after such an object leaves is a defect a mod may want to
+  turn off. Off: a negative threat field is read as 0, so an object of such a type has no
+  threat amount and changes no record. Backing: `unmeasured` (claim 16a gives the reason).
+  Confidence: medium.
+- **`quirks.aircraft_threat_stays_put`** (default: on). An aircraft's threat stays at the block
+  where it was placed on the map while it flies and after it lands elsewhere, and is taken away
+  at the block of its last landing cell, or of the cell whose coordinates are both 0 for one that
+  was placed in the air and never landed (claim 16a). Its placement block keeps stale threat, and
+  the block where the amount is taken away loses threat that other objects put there. The
+  corridor exemption that an aircraft placed in the air gives around its placement cell stays
+  after its first landing in the same way (claim 13). Off: an aircraft placed in the air is
+  recorded in its placement cell, and when it lands in a cell of another block its amount moves
+  to that block as a vehicle's does, so its amount and its exemption are always taken away where
+  they were added. Backing: `measurable` (P30 parts h1 and h2) for where the amount stays; `unmeasured` for
+  where it is taken away, for the lowering of other objects' threat at that block and for the
+  corridor exemption, which P30 part h neither sets up nor records. Confidence: medium for an
+  aircraft placed on the ground; low for everything the switch says about an aircraft placed in
+  the air (where its amount stays and is taken away, and its corridor exemption), as claim 16a
+  and S-0009 claim 38 rate the aircraft placed in the air.
 
 ## Import mapping
 
 Keys are read from the rules file and its rules layers (S-0006). Booleans, decimals, integers and
 named values follow S-0003. An absent key keeps the held value (S-0006 claim 3). The absent-key
 defaults are the values before any data is read. Type fields start from them in every game, because
-every type is created anew at each game start. The game-wide key of `[AI]` below is set to its
-default only once, when the program starts, so the default holds in the first game of a session,
+every type is created anew at each game start. The game-wide keys below are set to their
+defaults only once, when the program starts, so the default holds in the first game of a session,
 and in a later game an absent key keeps the value an earlier game's rules layers left
 (S-0006 claim 3). The keys behind the passability category (land types, overlays, terrain objects,
 firestorm walls and laser fences) and the locomotion class are S-0211's.
@@ -2534,6 +3009,7 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 | `MovementZone` | named value as in S-0211's import mapping (text cut to 31 characters, letter case ignored, the spelling `subterannean`) | `normal` | movement zone (claims 4, 6, 13, 25), including the aircraft factory edge-entry row. The final house-selected search instead always uses *normal* (claim 23a). A value outside the vocabulary: S-0211 claim 4, departure D1 |
 | `SpeedType` | named locomotion class (S-0211 Import mapping) | S-0211 claim 3: *foot* for infantry, *winged* for aircraft, *track* for crusher vehicles and *wheel* for other vehicles | aircraft factory edge-entry search uses the aircraft's class, *winged* counted as *track*. The final house-selected search instead always uses *track* (claim 23a) |
 | `ThreatAvoidanceCoefficient` | decimal, single precision (S-0003 claim 6), held as a double | 0.0 | threat coefficient *k* (claims 13, 17, 18), copied to the unit when it enters play |
+| `ThreatPosed` (building types too) | integer | 0 | the type's threat field: threat amount of claim 16a |
 | `Speed` | integer, converted to the speed number 0 to 255 (Terms): by S-0207 claim 1 for a vehicle type, by S-0208 F4 for an infantry type, each with its rule for the value −1 | speed number 0 | speed comparison of claim 19 |
 | `IsTrain` (vehicle types) | boolean | false | marks the type as a train: train rules (claims 7, 8, 14, 16, 20, 24). Stock data is not known to set it |
 | `JumpJet` | boolean | false | an infantry type with this flag uses movement zone *infantry* for the coarse search of a path computation (claim 13), whatever its own movement zone. The estimate of claim 24 uses its own movement zone (Open questions) |
@@ -2557,6 +3033,7 @@ firestorm walls and laser fences) and the locomotion class are S-0211's.
 | Section | Key | Form | Absent-key default | Use here |
 |---|---|---|---|---|
 | `[AI]` | `PathDelay` | decimal, game minutes, single precision held as a double | the binary64 value nearest 0.016 | *P* (F3, claim 21) |
+| `[General]` | `ThreatPerOccupant` | integer | 5 (the original's built-in default, used only when no rules layer sets the key; `unmeasured`, as no scenario here leaves the key out, medium) | per-occupant threat of an occupied building (claim 16a) |
 
 The close-enough distance *C* (claim 24) and the blockage delay *B* (claim 22) are imported as
 S-0209's Import mapping says.
@@ -3032,8 +3509,10 @@ acquisition, not a path computation's gate or subsequent route search.
     impassable land along their whole length and running at least 16 cells apart, so that they pass
     through different level-2 sectors (the threat term is 0 at level 0, F5, so threat steers the
     corridor only through levels 1 and 2). Route A is shorter than route B by at least 8 cells and
-    passes within range of a defensive building of a computer-controlled house. Route B is out of range of every
-    weapon. The recorder reads the human house's threat records for the sectors along both routes.
+    passes through the nine threat blocks around a building of a computer-controlled house whose
+    type has a positive threat field (claim 16a). Route B passes through no threat block that any
+    object of that house threatens. The recorder reads the human house's threat records for the
+    blocks along both routes.
   - Procedure: order each type to the goal 10 times, starting afresh each time.
   - Observable: which route each takes, judged by the first cells it enters past the fork (so a
     vehicle destroyed on the way still counts), and the threat the house's records hold along each
@@ -3041,8 +3520,8 @@ acquisition, not a path computation's gate or subsequent route search.
   - Expected: the coefficient-0 type takes route A in every run (claims 7 to 12; threat plays no
     part for it, F7). The coefficient-1.0 type takes route B in every run, provided the recorder
     shows a threat along route A that, with *k* = 1.0, outweighs the extra sector costs of route B
-    (F5, F9). Low confidence on whether, and how soon, a house's records hold the threat of a
-    defence it has not yet met; that belongs to the combat and AI-visible-rules specs.
+    (F5, F9). The human house's records hold the building's threat from the start, whether or not
+    the house has seen it (claim 16a; P30 part a tests that separately).
   - Falsified if: the coefficient-0 type takes route B in any run, or the coefficient-1.0 type takes
     route A in any run while the recorder shows such a threat along route A. A run in which the
     recorder shows no threat along route A is void.
@@ -3077,10 +3556,10 @@ acquisition, not a path computation's gate or subsequent route search.
     team. A run-2 result like the control's while the recorder does not show the team in its moving
     state is void, not a falsification. In run 3 the vehicle drives towards the strip cell, or
     searches and gives up with a team exit, for either destination.
-- **P12 (claims 13 with 13a, 14): corridor retries around buildings.**
+- **P12 (claims 13 with 13a, 14): corridors through buildings, and retries.**
   - Setup: open clear ground, enclosed so that the only way from one half to the other leads
-    through or around a straight wall of the human house's own buildings, 2 cells thick, across the
-    direct route, with a single one-cell gap at one end. A vehicle 10 cells before the wall's
+    through or around a straight wall of buildings of the allied house A (see *Building owners*
+    below), 2 cells thick, across the direct route, with a single one-cell gap at one end. A vehicle 10 cells before the wall's
     middle, goal 10 cells behind it. Maps G12, G24, G48 and G96: wall lengths of 12, 24, 48 and 96
     cells, the gap always at the same end.
   - Procedure: order the vehicle to the goal in each map. Then repeat each map with the test train
@@ -3088,31 +3567,73 @@ acquisition, not a path computation's gate or subsequent route search.
   - Observable: whether the vehicle reaches the goal or gives up without a route, and the cells
     entered.
   - Expected: buildings leave the cells *open* (claim 1), so the first corridor runs through the
-    wall and the cell search inside it fails. Each retry closes connections and tries a new
-    corridor, and at most 5 cell searches are made. So at the longer lengths of the sweep the vehicle
-    gives up although a route through the gap exists, while at the shortest it reaches the goal (low
-    confidence on where the change happens). The result for each map is the same in every run.
-    The train never uses the corridor (claim 14) and searches the whole map, so it reaches the goal
-    through the gap in every map, including those where the ordinary vehicle gives up.
+    wall, and the cell search inside it follows the cells of the buildings' exemption rectangles
+    (claim 13) along the wall's face to the gap, through it, and back into the corridor on the far
+    side. So the vehicle reaches the goal through the gap on the first cell search at every
+    length of the sweep, the longest detour (G96) staying far inside the expansion limit (claim
+    12). The result for each map is the same in every run. The train never uses the corridor
+    (claim 14) and searches the whole map, so it reaches the goal through the gap in every map too.
     Secondary check: the outcome and route in each map match what an implementation of claims 3 to 18
     with 13a and 13b gives for the same map, when that implementation meets no exact tie between
     pending entries in its coarse or cell searches. A map whose computation meets such a tie is
     reported but not judged (claim 12a, departure D7).
-  - Falsified if: the vehicle reaches the goal at every length (which would mean no cap on the
-    retries, or closures that free the route much faster than claim 13 says), or the result of a map
-    changes between runs, or the train gives up in a map (which would mean trains use the corridor).
+  - Falsified if: the vehicle gives up at any length (which would mean that building cells are not
+    exempt, or that the expansion limit is reached), or the result of a map changes between runs,
+    or the train gives up in a map. In these maps a train and a corridor-bound vehicle
+    both reach the goal, so they do not tell the two apart; run T does.
+  - **Building owners (P12, its runs and P31).** A skirmish or multiplayer map cannot give a human
+    player's house a building (S-0009 claim 27). Every building these scenarios place by the map
+    therefore belongs to A, a computer-controlled house on the human house H's lobby team, so that
+    A and H start allied (S-0412 claim 8). A takes the earlier lobby slot of the two computer players, so it comes first in house order
+    (S-0009 claim 19), so the map's objects owned by the computer players' placeholder name go to A (S-0009
+    claim 27); a second computer-controlled house E on no team plays the opponent. The start
+    positions of A and E are far from the test area, and a run in which a unit of A or E enters
+    the test area is repeated. The map's buildings are of a named test file's type with no weapon
+    and a threat field of 0 and the foundation stated, so they add nothing to any house's threat
+    records (claim 16a), just as H's own buildings add nothing to H's. For the cells and the
+    exemption, A's buildings are H's equals: an allied building gives the same outcome as an own
+    one (claim 27), and the exemption is given whatever the owner (claim 13). The moving units are
+    H's (the map may place H's vehicles and infantry, S-0009 claim 27). A building that must be
+    H's own, such as a factory or the recycling building of run S, H builds during the run from
+    its base unit (the game's bases setting on, S-0009 claim 45), where H's placement rules allow
+    it, and the positions used are named in the run's record.
   - **Run S (short line, Q-1280).** Setup: open clear ground; a straight north–south line of 1 × 1
-    buildings of the human house, lengths 3, 5, 7 and 9,
+    buildings of A, lengths 3, 5, 7 and 9,
     each map with the line's middle placed at eight shifts of 0 to 7 cells along the
     line against the level-2 grid. A vehicle 20 cells west of the line's middle, goal 2 cells east
-    of it, and the same for one non-jumpjet infantry unit and for the recycle order to a recycling building that the scenario sets with a 2 × 2 cell footprint
-    just behind the line. Observable: whether the unit moves at all or its destination is cleared in
-    the tick of the order (claim 23), and the cells entered if it does. Expected: lengths 3 and 5
-    are passed; at least one length-7 and one length-9 placement fails at once (which shifts fail is recorded; see the Q-1280 edge case), and the
-    outcome is identical for the vehicle and infantry on the same map. Falsified if: every
-    placement of the 7- and 9-lines is passed (the original then makes a corridor-free search after
-    a failed repeated coarse search, or re-searches level 2; the switch's default would then be wrong), or any placement of the 3- or 5-line
-    fails, or the vehicle and the infantry unit differ on one map.
+    of it, and the same for one non-jumpjet infantry unit and for the recycle order to a recycling building of H that the scenario sets with a 2 × 2 cell footprint
+    and that H builds just behind the line. Observable: whether the unit moves at all or its destination is cleared in
+    the tick of the order (claim 23), and the cells entered if it does. Expected: every placement
+    of every length is passed: in the tick of the order the unit keeps its destination and gets a
+    route (its first step follows on the next tick, S-0209), and it goes round one end of
+    the line (which end is recorded, not predicted), and the outcome is identical for the vehicle
+    and infantry on the same map. Falsified if: any placement fails at once, or the vehicle and
+    the infantry unit differ on one map.
+  - **Run T (a strip the unit cannot enter; `quirks.corridor_retry_no_fallback`).** Test data: in
+    the test map's override section, give one land type other than *clear* a multiplier of 0 for
+    locomotion class *track* and a wheel multiplier of 1 (the land type and its full multiplier row
+    are named in the run's record); that land type appears nowhere on the map except in the strip. Setup as run S, with a straight north–south strip of that land type, lengths 3,
+    5, 7 and 9 cells and one cell wide, in place of the line of buildings, the same eight shifts,
+    and a test vehicle of locomotion class *track* and movement zone *normal* (test data if no
+    such vehicle type exists) as the only unit. Ledge maps: the same lengths and shifts with a
+    ledge in place of the strip: a line of flat cells one height level above the flat ground on
+    both sides, with no slope cell between them; the stock vehicle of run S. Train runs: repeat
+    each strip map with the test train type of P9, given locomotion class *track* in the override
+    section. Observable: as run S.
+    Expected (switch on, the original): strips of 3 and 5 are passed; at least one placement each of
+    the 7- and 9-strips fails at once (which shifts fail is recorded; see the strip entry in Edge
+    cases and quirks). Ledge maps (switch `quirks.corridor_free_part_ignores_height` on, the
+    original): the first corridor of this straight route runs along the line's middle, so the unit
+    gives up after its 5 cell searches (claim 23) at every shift of the 7- and 9-ledges (medium
+    confidence), and is expected to at most shifts of the 3- and 5-ledges (low confidence); the
+    result is recorded per shift. Train runs: the train never uses the corridor (claim 14) and
+    searches the whole map, so it reaches the goal round the strip at every placement, including
+    those where the tracked vehicle gives up. Falsified if: every
+    placement of the 7- and 9-strips is passed (the original then makes a corridor-free search
+    after a failed repeated coarse search, or re-searches level 2; the switch's default would then
+    be wrong), or any placement of the 3- or 5-strip fails, or a placement of the 7- or 9-ledge is
+    passed (a retry would then change the corridor at a ledge, or the free part would follow the
+    height rule), or the train gives up at a placement (trains would then use the corridor).
 - **P13 (claims 7, 8, 12): base costs and the blocker chain, by route choice.**
   - Setup: a test map whose local area leaves a strip of legal cells outside it, as in P11, so that
     the test unit, placed by the map in that strip, searches without a corridor (claim 14) and its
@@ -3612,7 +4133,7 @@ The timer's remaining ticks are the observable: a later movement reaction is not
   That single cell is an input to this test, not evidence that its upstream selection
   rule is known. Predict the final result from T5 and claim 25 at the recorded failure
   tick. Compare a same-geometry run owned by a human-controlled house. Use the
-  read-only recorder and scripted input; do not alter the benchmark harness here.
+  read-only recorder and scripted input; do not alter the measurement harness here.
 - Expected: both non-player houses queue *area guard*, with no *move* queued or forced
   by the failure reaction. A found final-search cell is assigned on the failure tick.
   No result leaves no destination. It matches the *track*, *normal*, ground-reach-region
@@ -3683,10 +4204,10 @@ The timer's remaining ticks are the observable: a later movement reaction is not
 - **Setup:** purpose-made skirmish maps with stock rules and art, no engine add-on and no mods (the named test files of a scenario excepted),
   speed index 2, short game off. Use an ordinary aircraft and a full own-house pad whose
   building behaviour requests landing nearby when it cannot accept another aircraft.
-  Confirm that S-0501 claim 41's building search is used, that the winning building's
+  Check that S-0501 claim 41's building search is used, that the winning building's
   weighted distance is at least 256 leptons (avoiding the own-cell replacement), and no
-  successful pad choice supersedes it. Use the read-only bench recorder at 800 × 600,
-  one slot, fixed seeds 1 through 8, and scripted input. Record the search tick, chosen
+  successful pad choice supersedes it. Use the read-only recorder at 800 × 600,
+  one slot, eight runs each with the seed the game chose (S-0202 claim 8), and scripted input. Record the search tick, chosen
   destination cell, terrain, bridge state, reach-region membership derived from the map,
   occupancy and random-stream state. A run not invoking that request is inconclusive.
 - **Footprint and displacement:** surround the building with obstacles so only one
@@ -3767,6 +4288,245 @@ is at the next no-track update, not completion itself. Search-dependent cleanup 
 unconditional same-cell building-goal removal falsifies that distinction. These are
 proposed recorder runs, not completed measurements.
 
+### P30: Threat records and the cells a path avoids (claim 16a, Q-1751)
+
+- **Setup:** a purpose-made flat skirmish map of open clear ground, stock rules and art, no engine
+  add-on and no mods (the named test files of this scenario excepted), speed index 2, short game
+  off, shroud on, 800 × 600. Houses: a human house H, a computer-controlled house C on another lobby
+  team, and a computer-controlled house A on H's lobby team (so H and A ally each other from the
+  start, S-0412 claim 8). A named test file, a rules file supplied through the file system for
+  these runs and removed afterwards (glossary *measurement setup*, named test files), adds:
+  - a vehicle type V1 with threat coefficient 1.0 and a type V0 equal to it in every other field
+    with coefficient 0,
+  - a building type B with no weapon, a 1 × 1 foundation and a threat field *a* of at least 400,
+    and a type B3 equal to it except for a 3 × 3 foundation,
+  - a defence type D with a weapon whose range covers the route and a threat field of 0,
+  - a vehicle type E with a threat field *a* and no weapon, and
+  - an aircraft type F with a threat field *a* and no weapon that needs no airfield and lands at
+    the end of a move,
+  - copies of E for part i: E-c, which cloaks; E-w, with a weapon whose range reaches well beyond
+    the 3 × 3 blocks; E-d, with a weapon of the same range as E-w's and ten times its damage; and
+    a transport type T with a threat field *a*, no weapon and room for two
+    infantry units,
+  - an infantry type N with no weapon and a threat field *b* of at least 100 and different from
+    *a*, for parts f2 and i.
+
+  The start and goal cells lie 40 cells apart on one row, with the test object beside the middle
+  of that row: every test building stands with its whole foundation off the row, on the cells
+  next to it, so that no building is on the route and none can make a cell of the row *blocked*
+  for V0 or V1 (claim 27). Record the run's threat-block coordinates. Every house's start position and starting
+  units lie at least 40 cells from the test object, each part places only the test objects it
+  names, and the map places no other object within that distance, so nothing else reaches the
+  recorded window. The read-only recorder of the
+  measurement setup records, every tick, the cell each vehicle and aircraft is recorded in, whether each test
+  object is on the map, and the threat records of H, A and C for the 7 × 7 threat blocks around the
+  test object (the block of a building's top-left foundation cell, claim 16a). Five runs of each
+  part and of each type, each with the seed the game chose (S-0202 claim 8; no expectation here
+  depends on a random draw), each order given once at tick 60 by scripted input.
+- **Lobby order:** a skirmish map gives every object it places for the computer players'
+  placeholder to the computer player first in house order, and gives the human house no
+  building (S-0009 claim 27); the earlier lobby slot of the two computer players comes first in
+  house order (S-0009 claim 19). The lobby order is therefore set per part:
+  - in parts a, a2, b, d and h, C takes the earlier lobby slot, so the map's computer-owned
+    objects (B, B3, D and F) go to C.
+  - variant c2 has runs of its own, in which A takes the earlier lobby slot, so its map-placed
+    B goes to A, and the map places no object for C.
+  - parts c, e, f, g and i place no computer-owned object by the map, and the lobby order does
+    not matter to them.
+
+  The run's record names the order used. A run in which a map-placed object belongs to a house
+  other than the one its part names is void.
+- **Route checks:** the threat records and recorded cells are tallies that only the read-only
+  recorder shows. So every part that changes H's records also has a route check that needs no
+  reading of them: a V1 and a V0 of H, ordered from the start cell to the goal cell at the tick
+  the part names, with V0 as the control. V1 *bends* if it leaves the row to pass around most of
+  the nine blocks around the named block, as in part a (a few cells inside them can remain on its
+  path). V1 *drives straight* if it keeps V0's row there. Route checks test the aggregate path effect,
+  not single threat-record values; a record reading and a route check that disagree are reported
+  separately. Reading a house's threat records with the read-only
+  recorder is already part of the approved scenario P10, which reads them along both of its
+  routes; P30 reads the same records, and also the cell each vehicle and aircraft is recorded in.
+- **Part a (unseen enemy building):** B of C placed by the map beside the row, never seen by H.
+  Expected: from tick 0 H's records hold *a* at B's block, ⌊*a*/2⌋ at its four edge neighbours,
+  ⌊*a*/4⌋ at its four diagonal neighbours and 0 elsewhere in the window. Falsified if the records
+  differ from this pattern, or stay 0 until H sees B. Route check (qualitative, P10 is the route
+  test): V0 drives straight along the row, while V1 leaves the row to pass around most of the nine
+  blocks; a few cells inside them can remain on V1's path (claim 16a: level 0, the corridor
+  exemption, straightening). The records of a computer-controlled house are checked by part e
+  (C's records). The records are the discriminating observation, and the route check stays
+  qualitative: it falsifies nothing by itself.
+- **Part a2 (large building):** B3 of C in B's place, placed with its top-left foundation cell in
+  the last cell column of a threat block along the row, so that its centre cell lies in the next
+  block along the row (the run's threat-block coordinates show which). Expected: the pattern of
+  part a centred on the block of B3's top-left cell. Falsified if the pattern is centred on the
+  block of its centre cell. Route check: V1's route is recorded, with no prediction of where its
+  bend starts; the records are the discriminating observation.
+- **Part b (armed, no threat field):** D of C in B's place. Expected: H's records stay 0 and both
+  types drive straight. Falsified if V1 bends around D's range or the records hold any threat.
+- **Part c (allied object):** in the runs of part e, A's records too. E is placed by the map, so it
+  has a recorded cell when the alliances of game start rebuild A's records, and A is
+  computer-controlled, so that rebuild counts E, the vehicle of its ally H (claim 16a). Expected:
+  from tick 0 A's records hold the pattern of part a around the block of E's start cell, and they
+  keep it there, unchanged, while E moves (A allies H, so no incremental rule changes A's records
+  for E), while C's records follow E as part e says. Falsified if A's records at tick 0 do not hold
+  that pattern (a rebuild that left allied units out would give 0 there), or if they change while
+  E moves. Variant c2, B of A placed by the map in runs of its own (*Lobby order*): the
+  alliances of game start
+  rebuild H's records after the map's objects are placed, so from tick 0 H's records hold the
+  pattern of part a around B (stale threat, `quirks.threat_rebuild_counts_friends`), and it stays.
+  Falsified if H's records are 0 there at tick 0. Route check (qualitative, as in part a): V1
+  ordered at tick 60 bends around B of A, H's ally's building.
+- **Part d (removal):** B of C destroyed by a map trigger at tick 30. Expected: H's records return
+  to 0 in the tick the recorder first shows B off the map (after any destruction sequence), and V1
+  ordered after that tick drives straight. Falsified if a record of the window stays above 0 after
+  that tick, or drops to 0 while B is still on the map.
+- **Part e (moving threat):** E of H, ordered at tick 30 to drive across the row of blocks; read C's
+  records. Expected: the pattern of part a around the block of E's recorded cell, moving in the
+  same tick that the recorded cell enters a cell of another threat block, and unchanged while it
+  moves within one block. Falsified if C's records lag the recorded cell or change within a block.
+- **Part f (occupied building):** a stock civilian garrison building of the civilian house
+  (S-0508) with a threat field of 0 in the test file, entered by 1, then 2, then 3 infantry units of H of a test
+  infantry type whose threat field is also 0 in the test file (so the units add nothing of their
+  own before or after they enter); read C's records. At its first turn after the first entry
+  the building changes owner to H (S-0508 claim 7), and at its first turn after the last occupant
+  leaves it returns to the civilian house (S-0508 claim 8). These are owner changes, the owner-change
+  row of claim 16a: the building's amount is taken away from the records of every house that
+  records the old owner's objects and added to those of every house that records the new owner's.
+  C allies neither H, which is on another lobby team, nor the civilian house (S-0412 claim 8: no
+  house is made to ally a house that plays a country of the civilian side), so C records both owners' objects and the two changes
+  take away and add the same amount at the same block in the same tick: C's records do not change
+  at either owner change. Expected: the building's block holds *n* × the per-occupant threat value of the rules
+  file in use (and the spread of claim 16a) from the tick each occupant enters, and 0 after they
+  leave. Falsified if the record ignores the occupants or follows another factor, or changes in
+  the tick of an owner change. Variant f2: the same, with infantry units of type N (threat field
+  *b*), each standing still in a block of its own beside the row before the part's order.
+  Expected: C's records hold the sum of the patterns of each unit's own amount *b* and of the
+  building's amount; in the tick a unit enters, its own pattern is gone and the building's amount
+  grows by the per-occupant value; in the tick each unit is placed on leaving the building, its
+  pattern *b* is added at the block of the cell it is placed in, and the building's amount falls.
+  Falsified if a unit's own pattern stays after it enters, or is not added when it leaves.
+- **Part g (rebuild in play):** the test file gives H's construction-yard type a threat field
+  *a*. Scripted input drives H's starting construction vehicle to B's place and deploys it there,
+  with the yard's whole foundation beside the row, and the yard is the test object of this part.
+  Expected: H's records are not changed by the deployment. At tick 300 a map trigger's
+  alliance-making action makes H and C allies; S-0209 (the backing of its alliance views) gives
+  such actions as acting on both houses at once, so the run does not use the player's alliance
+  order of S-0414 claim 12. Expected: from that tick H's records hold the pattern of part a around H's own
+  construction yard (`quirks.threat_rebuild_counts_friends`); H sells the yard at tick 400 and the
+  pattern stays after the yard has left the map. With the switch off the records would stay 0.
+  Falsified if H's records change at the deployment, stay 0 after the trigger, or lose the
+  pattern after the sale without a further alliance change. A trigger that makes no alliance
+  change voids the run. Route check (qualitative, as in part a): V1 ordered at tick 250 drives
+  straight past the yard, and V1 ordered at tick 450 bends around the cells where the yard stood,
+  although nothing stands there then.
+- **Part h (aircraft):** F of C is placed by the map; a map trigger destroys it at tick 400.
+  Read H's records, and record whether F starts on the ground or in the air. Two runs, which
+  choose the case by F's placement cell (S-0009 claim 38, as its scenario M23 part B does):
+  - **h1, on the ground.** F's entry is at the test object's place, a cell usable by the
+    height-aware test (S-0009 claim 4), so F starts landed. At tick 60 a map trigger orders it to
+    a cell 12 cells along the row (three threat blocks away, inside the window), where it lands.
+    Expected: the pattern of part a around F's placement block from tick
+    0, unchanged while F flies, after it lands and after it has left the map; the block of its
+    landing cell stays 0 throughout (`quirks.aircraft_threat_stays_put`). With the switch off the
+    pattern would move to the landing block when F lands and be gone once F has left the map.
+    Falsified if H's records follow F in flight, move when it lands, or lose the pattern at the
+    placement block when F leaves the map. Route check: V1 ordered at tick 450, after F has left
+    the map, bends around F's placement block and drives straight past the block of its landing
+    cell; with the switch off it would drive straight past both.
+  - **h2, in the air.** h2 has a map of its own, laid out as P30's map but with these
+    coordinates, so that F's placement cell lies outside the local area while the start, the goal,
+    the row and the test object's place lie inside it. The map is 100 × 100 cells, so its legal
+    cells have 100 < *s* ≤ 300 and −100 < *d* < 100, with *s* = *x* + *y* and *d* = *x* − *y*
+    (S-0009 claim 1). Its local area is (1, 50, 98, 49), so on its flat ground a legal cell is
+    usable when 200 < *s* ≤ 300 and −98 < *d* < 98 (S-0009 claim 4). The test object's place is
+    (111, 111) (*s* = 222, *d* = 0), in threat block (27, 27). The row is *y* = 112, from the start
+    cell (91, 112) to the goal cell (131, 112), so its cells have 203 ≤ *s* ≤ 243 and −21 ≤ *d* ≤ 19,
+    all usable. F's entry is on cell (99, 99) (*s* = 198, *d* = 0), a legal cell outside the local
+    area, so F starts in the air (S-0009 claim 38, as in its scenario M23 part B). That cell's
+    threat block (24, 24) is three blocks from the test object's block on each axis, a corner of
+    the recorded 7 × 7 window. Every house's start position lies in the usable area, at least 40
+    cells from the test object, as in the other parts. At tick 60 a map trigger orders it to land on the test object's place. Expected: H's
+    window, F's placement block included, holds 0 throughout, because the rebuilds of game start
+    skip an aircraft with no recorded cell and nothing later adds F's amount (claim 16a). With
+    the switch off F's amount would be in the records at its placement block from tick 0 until
+    it lands, and at the landing block from then until it leaves the map. Falsified if any record
+    of the window rises above 0, or if F starts landed (the run is then void). Route check: V1
+    ordered at tick 200, while F stands landed, drives straight past the landing block.
+- **Part i (what the amount leaves out; transport):** C's records, one object of H per run, each
+  placed by the map at the test object's place: E placed at a quarter of its full strength; E
+  placed at the highest veterancy level; E-c, which cloaks and which C never sees; E-w; E-d; and T.
+  Expected: for each of E, E-c, E-w and E-d, the pattern of part a with amount *a*, from tick 0, the same
+  in every run. For T, two units of type N of H are placed by the map in blocks of their own and
+  ordered at tick 60 to enter T, and T is ordered to unload at tick 400. Expected: the pattern of
+  *a* around T throughout, the pattern of *b* around each unit until the tick it is taken off the
+  map on entering T (at whichever block its recorded cell is in, claim 13), nothing for the units
+  while they are inside, and the pattern of *b* added at the block of each unit's placement cell in
+  the tick it is unloaded. Falsified if any variant of E gives an amount other than *a*, if T's
+  amount changes with its passengers, or if a unit's pattern stays while it is inside T. No route
+  check: the part reads only C's records (part e gives the route effect of a vehicle's amount).
+
+### P31: Out of a factory exit across the unit's own base (claims 1, 13; Q-1771, Q-1870)
+
+- **Setup:** a purpose-made flat skirmish map of open clear ground, stock rules and art, no engine
+  add-on and no mods (the named test file of this scenario excepted), speed index 2, short game
+  off, 800 × 600, a human house H, the allied computer-controlled house A and the opponent E, as
+  in P12's *Building owners*. Every building below that the map places belongs to A and is of
+  that entry's test type with a 1 × 1 foundation (no weapon, threat field 0). A 3 × 2 block of such buildings (3 cells west to east, 2 north to south). A row of ten
+  such buildings, 4 cells north of the block's north row, its west end 5 cells west of the block's
+  west column and its east end 2 cells east of the block's east column, with open ground round
+  both ends of the row and round the block. One non-jumpjet infantry unit of H on the cell south of
+  the block's middle building. 64 maps: the whole layout shifted *e* cells east and *n* cells
+  north against the sector grid (claim 13b), one map for each pair (*e*, *n*) with *e* and *n*
+  each from 0 to 7, so that every alignment of the layout against the 8 × 8 blocks occurs once.
+  Each map is run again with a vehicle of
+  movement zone *normal* in place of the infantry unit.
+- **Procedure:** order the unit to the cell 16 cells north and 3 cells west of its own. One run per
+  map.
+- **Observable:** whether, in the tick of the order, the unit keeps its destination and gets a
+  route, or its destination is cleared and it stays (claim 23); the cells it enters; the tick it reaches the destination; which end of
+  the row it goes round.
+- **Expected:** at every shift and for both units, the unit keeps its destination and gets a route
+  in the tick of the order, and reaches the destination round one end of the row (which end is
+  recorded, not predicted). By claim 13 this happens on its first cell search, which the scenario
+  does not record.
+- **Falsified if:** at any shift the destination is cleared and the unit stays (the buildings'
+  exemption rectangles would then not let the cell search round the row, and the limit of 5 cell
+  searches of claim 13 would decide).
+- **Run F (factory):** an infantry factory of H, which H builds on open ground during the run
+  (P12's *Building owners*), and three rows of 1 × 1 buildings placed by the map for A north of it, each row 6 to 10 buildings long (lengths and positions named in the run's
+  record), the rows 3 cells apart, the nearest 3 cells north of the factory, open ground round the
+  ends of every row. Produce one infantry unit; once it stands on the factory's exit cell, order
+  it to a cell 15 cells north of that cell. Repeat with a vehicle factory and a vehicle of
+  movement zone *normal*. Own-base repeat: H builds the three rows itself, from a stock 1 × 1 type
+  of its side or the test type made buildable by H in the named test file, each building where H's
+  placement rules allow it (the positions named in the run's record). Expected: as above, the unit
+  keeps its destination, gets a route and arrives. Falsified if it gives up.
+- **Run D (docking cell; Q-1870):** H builds a stock refinery on open level ground during the
+  run (P12's *Building owners*), and its free harvester is the unit. A resource field lies 15 to 20
+  cells west of the refinery, and between them the map places for A two north–south rows of 1 × 1
+  buildings, each 6 to 10 buildings long, with open ground round both ends (lengths and positions
+  named in the run's record). Let the harvester load, return, unload and leave. Run D2: the same
+  layout with the refinery's site and the ground at least 2 cells round it raised on a plateau
+  (its height levels named in the run's record), whose only ramp down lies north of the plateau,
+  off the straight line to the field, and whose other edges are cliff ground that no unit can
+  enter, with no ledge and no strip open to the coarse searches. A D2 map whose edge turns out
+  to hold a ledge or such a strip makes the run inconclusive, not falsifying. Observable: from
+  the harvester's first seeking processing after unloading ends (S-0402 claim 11) on, whether it
+  has a field destination and keeps it with a route; the cells it enters; whether it reaches the
+  field. Expected in both: it leaves the docking cell round the refinery and reaches the field
+  without giving up (Edge cases, the harvester leaving a docking cell). Falsified if its destination
+  is cleared and it stays on the docking cell in *guard*. If a run does give up, record the
+  harvester for 2000 ticks more: S-0402 claims 3a and 13 expect it to stay on the docking cell in
+  *guard*, with no destination and no new route.
+- **Control (trees):** the layout of the 64 maps with a terrain object (a tree) in place of
+  each 1 × 1 building. Expected: the unit moves and arrives, as with buildings, but by a
+  different mechanism: a tree's cell is *wall-like* or *partial obstacle* (S-0211 claim 11), which
+  the coarse searches close to movement zone *normal* (and, when *wall-like*, to *infantry*), so
+  the corridor itself goes round, and a tree's eight neighbours have the exemption (claim 13).
+  Compare outcomes only, not cells. The control does not test the exemption rectangle of
+  buildings and does not show the failure after 5 cell searches; a stop here falsifies the tree
+  rules of claim 13, not those of buildings.
+
 ## Open questions
 
 - Measurement coverage remains incomplete for the path-length cutoffs of claim 19, the closing
@@ -3776,13 +4536,12 @@ proposed recorder runs, not completed measurements.
   labelling-order cases of claim 13b occur on stock maps, are not established. The secondary checks
   of scenarios P1 and P12 are the practical check.
 - For the corridor exemption (claim 13): exactly when a moving unit's recorded cell changes (on
-  entering a new cell or at some other moment of its move), and whether an aircraft in flight keeps
-  counting and from which cell, are only partly established.
+  entering a new cell or at some other moment of its move) is only partly established. The same
+  moment decides when a moving vehicle's or infantry unit's threat moves to another threat block
+  (claim 16a; P30 part e records both). For an aircraft the moments are stated (claims 13 and
+  16a, rated medium): placement on the ground and landing.
 - When exactly a drive-locomotor follower car's destination is cleared after its computation of
   claim 26 fails (at once, or only at the car's next path computation) is not established.
-- The coarse threat at levels 1 and 2 (F5): which value the house's records hold for a level-1
-  sector, and which places of the house's coarse threat record are read at level 2, are not
-  established. Scenario P10 checks only the aggregate effect.
 - Whether, after a local change (claim 5), the original's result can ever differ from a full
   recomputation for the new map content (for example when the change splits a region) is not
   settled.
@@ -3798,8 +4557,8 @@ proposed recorder runs, not completed measurements.
   unit's own movement zone, not *infantry*; no scenario checks this.
 - The mechanical-walker locomotor also computes paths. Whether it uses claim 22's blockage
   modes and claim 20's immediate refresh like the driving locomotor is not established.
-  Ship refresh, chase-cut and retry rules are included in claims 20–22. S-0504 claim 9
-  now agrees in its current draft; retain the coordinated hand-off listed in the Summary.
+  Ship refresh, chase-cut and retry rules are included in claims 20–22, and S-0504 claim 9
+  agrees with them.
   The lepton-scale refresh boundary and table-root distinction remain unmeasured for
   driving and ships: neither P5 nor S-0504 N11 supplies a discriminating boundary setup.
   Hovering chase-cut, fresh-search delay and blocked-step rules are
@@ -3807,15 +4566,60 @@ proposed recorder runs, not completed measurements.
 - Whether the path-length conditions of claim 19 (a vehicle with at least two stored steps, an infantry
   unit with at least three) apply in search mode 2 as well as in mode 1 is not established. This spec
   applies them in both.
-- Q-0238 remains open for coordinated approval, not for an unspecified centre.
-  S-0215 claim 38 and F11–F12 define the centre, record maintenance, no-base correction
-  and radius-then-direction draws. Claim 23a and T5 define the final search, same-tick
-  assignment, queue and no additional search draw, and T5 also supplies the separate
-  base-record-refresh search. Keep the request open until both revisions are approved
-  together.
 - For locomotors other than driving, ship and hovering, whether a unit of claim 23's third row
   keeps its destination, and when it starts moving towards it again (S-0215), is not established.
-- Which alignments of a straight line of buildings across a route fail, and whether lengths 3, 5, 7 and 9 behave as Run S expects (see the short-line entry in Edge cases and quirks): not established until Run S is run. Tracked by Q-1280.
+- Which alignments of a straight strip of ground the unit cannot enter fail, and whether lengths
+  3, 5, 7 and 9 of such a strip, and of a ledge, behave as P12 run T expects (see the strip entry in
+  Edge cases and quirks): not established until run T is run. That lines of buildings (P12 run S,
+  Q-1280) and the layouts of P31 (Q-1771) are passed at every shift follows from the exemption
+  rectangles of claim 13 but has not been observed.
+
+## Changes for other specs
+
+- **S-0309, Import mapping, per-occupant threat.** S-0309's import row for threat values joins a
+  type's threat field and the game-wide per-occupant threat and gives both an absent-key default
+  of 0. That default is right for the type's threat field but not for the per-occupant threat:
+  when no rules layer sets the per-occupant key, the original uses 5, a built-in default rather than a
+  value of any data file (stock data sets the key, so the constant shows
+  only with a rules file that leaves it out). S-0309 should give the per-occupant key its own row
+  with that absent-key default, as this spec's Import mapping does; the per-occupant threat of
+  claim 16a uses it.
+- **S-0603, claim 3, the approach behind a short line of buildings.** Claim 3 says: "A unit
+  ordered to a recycling building that stands behind a short line of buildings, with open ground
+  round the line, can fail at once: the path computation fails, the unit does not start a move
+  and its destination is cleared", citing this spec's claims 13, 13a and 23, its edge case "short
+  line of buildings" and scenario P12 run S. This spec's claim 13 gives every
+  building's exemption rectangle the corridor exemption, so the first cell search goes round such
+  a line at every length and shift that P12 run S tests, and the approach is expected to succeed
+  (Edge cases and quirks, the answer to Q-1280, item 2). S-0603 should drop that
+  failure from claim 3 and from claim 4's proviso ("This presumes the approach is not cut short as
+  described in claim 3"), drop "that a short line makes the approach fail at once" from claim 3's
+  medium list and the low rating for which lengths and alignments fail, and turn the separate
+  approach-failure test of scenario G9 (the setup of P12 run S) into a test that the unit keeps
+  its destination and gets a route in the tick of the order at every length and shift. Its Open questions entry on which lengths
+  and alignments make the approach fail, tracked by Q-1280, is then answered for straight lines
+  of 1 × 1 buildings. A failing case remains for a short strip of ground the unit cannot enter that
+  the coarse searches count as open (Edge cases and quirks; P12 run T), which S-0603 may cite in
+  its place.
+- **S-0605, its S-0212 cross-reference.** S-0605's list of cross-references says that the
+  approach to the building "can fail where S-0212's short-line case (Q-1280) makes that
+  computation fail: a short line of buildings across the route with open ground round it". Under
+  this spec's claim 13, a short line of buildings does not make it fail (as for S-0603 above).
+  S-0605 should name instead a short strip of ground the actor cannot enter that the coarse
+  searches count as open, with open ground round it (Edge cases and quirks; P12 run T).
+- **S-0412, claim 14, start alliances.** Claim 14 says that nothing observable depends on when the
+  start alliances of claim 8 are made. Threat records are an exception: those alliances are made
+  after the map's objects and the starting units are placed, and each one rebuilds the allying
+  house's threat records (claim 16a), so a house starts with stale threat from the buildings the
+  map places for it and its allies and, if it is computer-controlled, from its allies' starting
+  units. S-0412 should name this exception and point to claim 16a. Scenario P30
+  variant c2 checks it.
+
+- **Glossary, *AI house*.** The entry says that an AI house has the same unit rules as a
+  human-controlled house. Claim 16a's rebuild makes one exception: in the house test that decides
+  whether the house's threat records count its allies' vehicles, infantry and aircraft, an AI
+  house counts as computer-controlled. The entry should name this exception and point to
+  claim 16a; Departure D5, for the units' own coefficient, is unchanged.
 
 ## Questions for the project lead
 
@@ -3830,7 +4634,28 @@ proposed recorder runs, not completed measurements.
   `quirks.opposite_facing_reversal`, `quirks.coarse_limit_records_cost`,
   `quirks.train_exclusion_search_only`, `quirks.detour_mirrored_reference` and
   `quirks.detour_after_tunnel_position`.
-- Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 now agrees
+- Decided (delegated sign-off, 2026-10-10): S-0209 owns the entry outcomes. Claim 27 agrees
   with S-0209 claim 5 for allied units that count as moving, and points to it for the full table.
 
-- Proposed in this revision (Edge cases and quirks, `quirks.corridor_retry_no_fallback`): a switch that turns the original's failure after a repeated coarse search into one extra cell search, default original. The project lead accepts or drops it before sign-off.
+- Decided (spec approval, 2026-10-19): `quirks.corridor_retry_no_fallback` is
+  accepted, a switch that turns the original's failure after a repeated coarse search into one
+  extra cell search, default original.
+- For information (Q-1771): buildings give the corridor exemption to their exemption rectangle
+  (claim 13). So a line or wall of buildings with open ground round it is passed on the first
+  cell search at every length and shift that P12 and its run S test, and does not make the unit
+  give up (the Q-1280 entry in Edge cases and quirks). The case that
+  `quirks.corridor_retry_no_fallback` changes is a strip of ground the unit cannot enter that the
+  coarse searches count as open (P12 run T). A ledge across the route makes the unit give up
+  after 5 cell searches whatever that switch says (Edge cases and quirks). The approach of a
+  recycling or absorbing building behind a line of buildings follows the same rule, so S-0603
+  claim 3 and scenario G9, and S-0605's cross-reference, are listed under Changes for other
+  specs.
+- Decided (delegated sign-off, 2026-10-25): `quirks.threat_rebuild_counts_friends`,
+  `quirks.aircraft_threat_stays_put`, `quirks.negative_threat_field` and
+  `quirks.corridor_free_part_ignores_height` are accepted, default original (claims 13a and 16a,
+  Edge cases and quirks).
+- Decided (delegated sign-off, 2026-10-25): an *AI house* counts as computer-controlled in the
+  rebuild's house test (claim 16a). Departure D5 is not extended to it; under D5 an AI house's
+  units still use their own coefficient.
+- Decided (project lead, 2026-10-24): a to-tile building's exemption rectangle left exempt after it
+  leaves the map is a plain bug, fixed with no switch: claim 13, Edge cases and quirks.
