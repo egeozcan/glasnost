@@ -1104,8 +1104,8 @@ fn seeking(w: &mut World, id: ObjectId) -> i32 {
         set_phase(w, id, Phase::Returning);
         return 1;
     }
-    // spec: S-0402 claim 17 (the seeking drop holds for a harvester whose current locomotor is the teleport locomotor, whether or not its type has the teleporter flag; not for a flagged type moving by another locomotor, S-0417 claim 16)
-    let drops = crate::teleport::is_teleporter(w, id);
+    // spec: S-0402 claim 17 (the seeking drop holds for a harvester whose current locomotor is the teleport locomotor at the test, whether or not its type has the teleporter flag; not for a flagged type moving by another locomotor, S-0417 claim 16)
+    let drops = |w: &World| crate::teleport::is_teleporter(w, id);
     let s = st(w, id);
     if let Some(c) = s.remembered {
         // spec: S-0402 claim 3 (a remembered cell: it drives there and forgets it; no search)
@@ -1113,13 +1113,14 @@ fn seeking(w: &mut World, id: ObjectId) -> i32 {
             x.remembered = None;
         }
         drive_to(w, id, Target::Cell(c));
-        if !drops {
+        // spec: S-0402 claim 17 (Who reaches the drop: the adoption is an ordinary assignment, which installs driving before the drop's test outside a qualified docking assignment, S-0207 claim 28; then the cell is not dropped)
+        if !drops(w) {
             return standard(w, id);
         }
         // spec: S-0402 claim 17 (the seeking drop: the remembered cell, adopted by an ordinary destination assignment, is removed at once, so the miner never jumps to it; the processing then takes the ring-search rows of claim 3)
         drive_to_none(w, id);
     } else if w.obj(id).is_some_and(|o| o.dest.is_some()) {
-        if !drops {
+        if !drops(w) {
             // spec: S-0402 claim 3 (a destination: stays seeking, no search)
             return standard(w, id);
         }
@@ -1355,6 +1356,7 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0402 claim 10 and Edge cases (a refinery that is not a dock-unload refinery never directs the harvester: it stays in enter)
     let Some(dc) = docking_cell(w, r) else {
+        repeated_dock_test(w, id);
         return standard(w, id);
     };
     if o.pos.cell() != dc {
@@ -1363,8 +1365,11 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
         if o.dest != Some(Target::Cell(dc)) || crate::refresh::pending(w, id) {
             drive_to(w, id, Target::Cell(dc));
         }
+        // spec: S-0207 claim 28 (One jump: when the offer and the repeated dock test both act in one processing, the offer comes first)
+        repeated_dock_test(w, id);
         return standard(w, id);
     }
+    repeated_dock_test(w, id);
     // spec: S-0402 claim 10 rows 3 to 5 (on the docking cell: it and the refinery become tethered)
     if let Some(s) = state(w, id) {
         s.tethered = true;
@@ -1392,6 +1397,18 @@ pub fn process_enter(w: &mut World, id: ObjectId) -> i32 {
     }
     // spec: S-0402 claim 10 row 5 (still moving: tethered, nothing else) and the standard delay of enter
     standard(w, id)
+}
+
+/// S-0207 claim 28's repeated dock test in *enter* (S-0402 claim 10): at a
+/// processing that the refinery accepts, or at which the harvester is
+/// tethered, a vehicle whose type has the teleport-capable flag and holds
+/// a destination has it treated as a new assignment, even when unchanged.
+/// The caller has passed row 1.
+fn repeated_dock_test(w: &mut World, id: ObjectId) {
+    // spec: S-0207 claim 28 (the repeated dock test: a teleport-capable vehicle holding a destination in enter, while its contact accepts it or it is tethered; a vehicle with no destination makes no such jump)
+    if crate::refresh::flagged(w, id) && w.obj(id).is_some_and(|o| o.dest.is_some()) {
+        crate::refresh::reassign(w, id);
+    }
 }
 
 /// The second route to unloading (S-0402 claim 10): a driving harvester

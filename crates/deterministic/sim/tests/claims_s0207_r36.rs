@@ -4,7 +4,8 @@
 //! assignment while a jump is pending; with S-0215 revision 54 claim 2,
 //! S-0514 revision 7 claims 16 and 17, S-0214 revision 38 (Terms) and
 //! S-0502 revision 11 claim 27. The fixture is the jumpjet factory ruleset
-//! (TELE teleports). Every name and number is invented; no game data.
+//! (TELEQ teleports: it lacks the teleport-capable flag, which would make
+//! it drive under S-0207 claim 28). Every name and number is invented; no game data.
 
 mod jump_common;
 
@@ -25,7 +26,7 @@ fn game() -> World {
 }
 
 fn tele(w: &mut World, c: CellXY) -> ObjectId {
-    testkit::spawn(w, Kind::Vehicle, "TELE", 0, c, 0)
+    testkit::spawn(w, Kind::Vehicle, "TELEQ", 0, c, 0)
 }
 
 fn offer(w: &mut World, u: ObjectId, c: CellXY) {
@@ -57,7 +58,7 @@ fn suppressed(w: &World, u: ObjectId) -> bool {
 
 /// Puts `u` under an erasing lock led by a fresh vehicle (S-0514).
 fn erase(w: &mut World, u: ObjectId) {
-    let leader = testkit::spawn(w, Kind::Vehicle, "TELE", 1, at(-8, -8), 0);
+    let leader = testkit::spawn(w, Kind::Vehicle, "TELEQ", 1, at(-8, -8), 0);
     w.temporal.locks.insert(
         u,
         Lock {
@@ -211,7 +212,7 @@ fn claim_20_h_an_empty_assignment_cancels_the_pending_jump() {
 fn being_erased_under_pending_suppression_keeps_the_destination() {
     let mut w = game();
     let u = tele(&mut w, at(0, 0));
-    let other = testkit::spawn(&mut w, Kind::Vehicle, "TELE", 1, at(6, 6), 0);
+    let other = testkit::spawn(&mut w, Kind::Vehicle, "TELEQ", 1, at(6, 6), 0);
     let c = at(4, 0);
     let o = w.obj_mut(u).unwrap();
     o.dest = Some(Target::Cell(c));
@@ -244,7 +245,7 @@ fn leaving_stage_under_pending_suppression_keeps_the_destination() {
     for pending in [false, true] {
         let mut w = game();
         let u = tele(&mut w, at(0, 0));
-        let other = testkit::spawn(&mut w, Kind::Vehicle, "TELE", 1, at(6, 6), 0);
+        let other = testkit::spawn(&mut w, Kind::Vehicle, "TELEQ", 1, at(6, 6), 0);
         let c = at(4, 0);
         let pos = w.obj(u).unwrap().pos;
         let o = w.obj_mut(u).unwrap();

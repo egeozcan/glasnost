@@ -2,9 +2,11 @@
 //! claim 27): buildings VF (a vehicle factory), BAR (a barracks with the
 //! first door kind), PLAIN (an infantry factory with neither), REFN (a
 //! dock-unload refinery) and vehicles JVQUICK (a jumpjet whose climb passes
-//! its cruise height in one step), TELE (a teleporting vehicle) and
-//! TELEDRIVE (a driving vehicle with the teleport-capable flag). Every name
-//! and number is invented.
+//! its cruise height in one step), TELE (a teleporting vehicle with the
+//! teleport-capable flag, so it drives from placement, S-0207 claim 28),
+//! TELEQ (the same without the flag: it teleports) and TELEDRIVE (a driving
+//! vehicle with the teleport-capable flag). Every name and number is
+//! invented.
 #![allow(dead_code)]
 
 use glasnost_rules::schema::Ruleset;
@@ -69,11 +71,14 @@ pub fn ruleset() -> Ruleset {
     tele.teleporter = Some(true);
     tele.rot = Some(5);
     r.sim.vehicles.insert("TELE".into(), tele.clone());
+    let mut plain = tele.clone();
+    plain.teleporter = None;
+    r.sim.vehicles.insert("TELEQ".into(), plain);
     tele.locomotor = Some(Locomotor::Drive);
     r.sim.vehicles.insert("TELEDRIVE".into(), tele);
     r.registries
         .get_mut("vehicles")
         .unwrap()
-        .extend(["JVQUICK", "TELE", "TELEDRIVE"].map(String::from));
+        .extend(["JVQUICK", "TELE", "TELEQ", "TELEDRIVE"].map(String::from));
     r
 }

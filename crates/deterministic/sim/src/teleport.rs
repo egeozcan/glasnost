@@ -198,13 +198,27 @@ pub fn mark_cell(w: &World, id: ObjectId) -> Option<CellXY> {
 /// destination cancels a pending jump but keeps the fixed landing point's
 /// reservation (part h).
 pub fn take_destination(w: &mut World, id: ObjectId) {
+    take_destination_with(w, id, false);
+}
+
+/// [`take_destination`] for an assignment treated as new even when
+/// unchanged (S-0207 claim 28, the repeated dock test in *enter*).
+pub fn take_destination_forced(w: &mut World, id: ObjectId) {
+    take_destination_with(w, id, true);
+}
+
+fn take_destination_with(w: &mut World, id: ObjectId, forced: bool) {
     if !is_teleporter(w, id) {
         return;
     }
     let Some(o) = w.obj(id).cloned() else { return };
     let mut st = o.teleport.clone().unwrap_or_default();
     // spec: S-0207 claim 27 (pending destination refresh makes an unchanged assignment effective whatever the locomotor)
-    if o.dest == st.for_dest && !crate::refresh::pending(w, id) {
+    if o.dest == st.for_dest && !crate::refresh::pending(w, id) && !forced {
+        return;
+    }
+    // spec: S-0207 claim 28 (a destination that reached no assignment hook, such as a fall-back's queued destination, S-0215 claim 15 row 2: outside a qualified docking assignment driving is installed and receives it)
+    if o.dest != st.for_dest && crate::refresh::untaken(w, id, o.dest) {
         return;
     }
     let Some(dest) = o.dest else {
@@ -272,19 +286,24 @@ fn fix_landing_with(
     release_old: bool,
 ) {
     let Some(o) = w.obj(id).cloned() else { return };
+    let (old, old_layer) = aircraft_mark(w, id);
+    // spec: S-0207 claim 20 (a) (the old mark is cleared before part b's entry test, so a vehicle fixing a landing point again in a cell where it holds that reservation does not meet its own reservation there; claim 28, One jump)
+    if release_old {
+        reserve(w, o.kind, old, old_layer, false);
+    }
     // spec: S-0207 claim 20 (b) (revision 34: warp-pending immobilization, Terms, leaves L unchanged, as a search that gives no cell does)
     let found = if crate::superweapons::warp_pending_or_leaving(w, id) {
         None
     } else {
         landing_point(w, id, dc)
     };
+    if found.is_none() && release_old {
+        // design: S-0207 claim 20 (a) and (b) (no cell leaves L and its reservation unchanged: the old mark cleared for the entry test is marked again)
+        reserve(w, o.kind, old, old_layer, true);
+    }
     match found {
         Some(l) => {
             // spec: S-0207 claim 20 (a) (a vehicle's vehicle-present mark, an aircraft's object-present mark, moves at once from the old point's record to L's)
-            if release_old {
-                let (old, old_layer) = aircraft_mark(w, id);
-                reserve(w, o.kind, old, old_layer, false);
-            }
             // spec: S-0207 claim 20 (a) and Edge cases (the reservation at L is in the ground record at L's chosen height H, even on a high-bridge cell; quirk off: the eventual landing layer)
             let layer = if ground_reservation(w, o.kind) {
                 Layer::Ground
@@ -605,9 +624,13 @@ fn set_state(w: &mut World, id: ObjectId, st: TeleportState) {
 }
 
 fn drop_destination(w: &mut World, id: ObjectId) {
-    if let Some(ob) = w.obj_mut(id) {
-        ob.dest = None;
-        ob.path.steps.clear();
+    let Some(ob) = w.obj_mut(id) else { return };
+    let had = ob.dest.is_some();
+    ob.dest = None;
+    ob.path.steps.clear();
+    if had {
+        // spec: S-0207 claim 28 (claim 20 a's drop, 20 b's removal without a jump and 20 d's removal are empty assignments: driving is installed)
+        crate::refresh::removed(w, id);
     }
 }
 
@@ -615,6 +638,10 @@ fn drop_destination(w: &mut World, id: ObjectId) {
 /// whether it moved.
 pub fn tick(w: &mut World, id: ObjectId) -> bool {
     take_destination(w, id);
+    if !is_teleporter(w, id) {
+        // spec: S-0207 claim 28 (driving installed by the destination just taken receives it; the teleporting locomotor makes no move)
+        return false;
+    }
     let Some(o) = w.obj(id).cloned() else {
         return false;
     };
@@ -738,8 +765,9 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
     crate::objects::arrival_raise(w, id);
     // spec: S-0207 claim 20 (e) and S-0520 claim 6 (crate collection at L after the arrival update, before the destination is removed; the landing is never undone)
     crate::crates::pickup(w, id, l.cell());
+    let had = o.dest.is_some();
     if let Some(ob) = w.obj_mut(id) {
-        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; its behaviour falls back to rest, S-0215 claim 13)
+        // spec: S-0207 claim 20 (e) (it stops moving and its destination is removed; a behaviour that ends once its destination is gone falls back to rest at a later tick, S-0215 claim 13, as the behaviour was processed before the locomotion)
         ob.dest = None;
         ob.path.steps.clear();
     }
@@ -761,6 +789,10 @@ fn jump(w: &mut World, id: ObjectId, l: Pos) {
             ..Default::default()
         },
     );
+    if had {
+        // spec: S-0207 claim 28 (the jump's removal of the destination, claim 20 d and e, is an empty assignment: driving is the active movement kind from the jump tick on)
+        crate::refresh::removed(w, id);
+    }
 }
 
 /// Every object that has `id` as its target drops it, and a projectile

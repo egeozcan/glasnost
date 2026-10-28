@@ -997,6 +997,13 @@ fn fresh_search(w: &mut World, id: ObjectId, u: &UnitRules) -> Search {
         path::failed(w, id, res, false);
         return res;
     }
+    if crate::refresh::stopped(w, id) {
+        // spec: S-0402 claim 10a (A chrono miner: a substitute the computation adopted got claim 27's fallback; the miner stops and the substitute is not driven to)
+        if let Some(ob) = w.obj_mut(id) {
+            ob.path.steps.clear();
+        }
+        return Search::SearchFailed;
+    }
     first_cell_look(w, id, u);
     res
 }
@@ -1650,6 +1657,13 @@ pub fn tick(w: &mut World, id: ObjectId) -> bool {
         }
         // spec: S-0207 claim 26 (the first locomotion update without an active track removes a cell goal in the vehicle's cell, and a guard goal at the exact point, in that update's tick; also the assignment tick when assignment precedes the update)
         if goal_cleanup(w, id) {
+            return false;
+        }
+        // spec: S-0207 claims 27 and 28 (stopped by the dock fallback: no locomotor destination point, so no track begins until a later effective assignment supplies one)
+        if crate::refresh::stopped(w, id) {
+            if let Some(ob) = w.obj_mut(id) {
+                ob.path.steps.clear();
+            }
             return false;
         }
         if o.path.steps.is_empty() {

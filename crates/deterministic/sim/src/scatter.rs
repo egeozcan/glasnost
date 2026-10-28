@@ -292,8 +292,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         slot,
         Some(Behaviour::Sleep | Behaviour::Sticky | Behaviour::Unload)
     ) || u.train;
-    // spec: S-0207 claim 16 (b): the teleporting locomotor
-    let b = u.type_locomotor() == glasnost_rules::sim::Locomotor::Teleport;
+    // spec: S-0207 claim 16 (b): the teleporting locomotor, read as the current one (scenario D17 d, the active movement kind; claim 28, a chrono miner driving on the docking cell accepts a sale's request)
+    let b = crate::teleport::is_teleporter(w, id);
     // spec: S-0207 claim 16 (c): not forced and the current behaviour lacks the scatter property (S-0215 claim 19)
     let c = !req.forced && !o.beh.seen().is_some_and(|x| r.behaviour(x).scatter);
     // spec: S-0207 claim 16 (d): its body is turning
@@ -338,6 +338,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
             ob.path.steps.clear();
             // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
             crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
+            // spec: S-0207 claim 28, A sale of the refinery (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
+            crate::refresh::adopted(w, id, o.dest);
         }
         return true;
     };
@@ -397,6 +399,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         ob.beh.queue(Some(Behaviour::Move));
         // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
         crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
+        // spec: S-0207 claim 28 (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
+        crate::refresh::adopted(w, id, o.dest);
     }
     true
 }

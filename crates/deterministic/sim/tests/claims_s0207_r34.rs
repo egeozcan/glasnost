@@ -200,19 +200,18 @@ fn pending_suppression_still_skips_the_restored_point() {
     assert_eq!(w.obj(u).unwrap().pos.cell(), at(0, 0), "no jump");
 }
 
-// spec: S-0207 claim 27 (the restored predecessor receives this assignment's otherwise due point even when its suspended state was fixed for the same cell before the temporary drive: here the already-pending suppression consumes that application)
+// spec: S-0207 claim 27 (the restored predecessor receives this assignment's otherwise due point: here the already-pending suppression consumes that application)
+// spec: S-0207 claim 21 (installing temporary driving cancels the pending jump: the suspended state keeps no point for the cell)
 #[test]
 fn the_restored_predecessor_takes_an_offer_equal_to_its_suspended_one() {
     let (mut w, u) = docked("TELE");
     let c = at(3, 0);
     offer(&mut w, u, c);
     release::install_temporary_drive(&mut w, u);
-    // While driving, the order-level destination is cleared; the suspended state keeps its point.
     assign_destination(&mut w, u, None);
-    assert_eq!(
-        w.obj(u).unwrap().teleport.as_ref().unwrap().for_dest,
-        Some(Target::Cell(c))
-    );
+    let t = w.obj(u).unwrap().teleport.clone().unwrap();
+    assert_eq!(t.for_dest, None, "the pending jump was cancelled");
+    assert_eq!(t.landing, None);
     w.obj_mut(u).unwrap().econ.point_suppression = true;
     offer(&mut w, u, c);
     assert!(!release::temporary_drive(&w, u), "restored");
@@ -227,7 +226,7 @@ fn the_restored_predecessor_takes_an_offer_equal_to_its_suspended_one() {
 #[test]
 fn claim_20_b_warp_pending_immobilization_keeps_the_landing_point() {
     let mut w = game();
-    let u = spawn(&mut w, Kind::Vehicle, "TELE", at(0, 0));
+    let u = spawn(&mut w, Kind::Vehicle, "TELEQ", at(0, 0));
     let m = member(&w, u, Stage::Pending);
     w.obj_mut(u).unwrap().sw.warp = Some(m);
     offer(&mut w, u, at(4, 0));
@@ -236,7 +235,7 @@ fn claim_20_b_warp_pending_immobilization_keeps_the_landing_point() {
     assert_eq!(o.teleport.as_ref().and_then(|t| t.landing), None);
     // An L fixed before the warp stays when a new destination arrives.
     let mut w = game();
-    let u = spawn(&mut w, Kind::Vehicle, "TELE", at(0, 0));
+    let u = spawn(&mut w, Kind::Vehicle, "TELEQ", at(0, 0));
     offer(&mut w, u, at(3, 0));
     w.obj_mut(u).unwrap().sw.warp = Some(member(&w, u, Stage::Leaving(2)));
     offer(&mut w, u, at(5, 0));

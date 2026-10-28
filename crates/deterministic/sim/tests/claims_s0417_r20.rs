@@ -150,7 +150,8 @@ fn claim_16_a_chrono_miner_drives_its_first_leg_to_the_ore() {
     );
 }
 
-// spec: S-0417 claim 16 (a later accepted destination replaces the exit point; its completion clears the point under S-0207 claims 25 and 26, and a subsequent fall-back to rest that finds every claim 5 predicate restores the suspended locomotion; the next accepted distant move then teleports)
+// spec: S-0417 claim 16 (a later accepted destination replaces the exit point; its completion clears the point under S-0207 claims 25 and 26, and a subsequent fall-back to rest that finds every claim 5 predicate restores the suspended locomotion)
+// spec: S-0207 claim 28 (teleporting is active at rest after a restoration until the next destination assignment; that move is not a qualified docking assignment, so it installs driving and the miner drives there)
 #[test]
 fn claim_16_a_later_move_clears_the_point_and_the_fallback_restores() {
     let (mut w, k) = game(&[]);
@@ -186,27 +187,58 @@ fn claim_16_a_later_move_clears_the_point_and_the_fallback_restores() {
         "restored at the fall-back after the move"
     );
     assert_eq!(w.obj(u).unwrap().pos.cell(), c, "it drove there");
-    // The next accepted distant move teleports.
-    let far = at(8, -8);
+    // The next accepted distant move installs driving again: no jump.
+    let far = at(4, -4);
     assert!(orders::issue(&mut w, HouseId(0), mv(far)));
-    assert!(until(&mut w, 5, |w| w.obj(u).unwrap().pos.cell() == far));
+    testkit::run(&mut w, 1);
+    assert!(release::temporary_drive(&w, u), "driving installed");
+    let mut last = w.obj(u).unwrap().pos.cell();
+    assert!(until(&mut w, 2000, |w| {
+        let c = w.obj(u).unwrap().pos.cell();
+        assert!(
+            (c.x - last.x).abs() <= 2 && (c.y - last.y).abs() <= 2,
+            "no jump"
+        );
+        last = c;
+        c == far
+    }));
 }
 
-// spec: S-0417 claim 16 (No follow-up goal: there is no factory-exit timeout clearing the exit point; without a replacement or a stop it keeps preventing restoration, here for 300 ticks after the clear report with no field)
-// spec: S-0207 claim 25 (Factory-exit lifetime: completing the exit track with no order-level destination retains its locomotor destination point)
+// spec: S-0417 claim 16 (No follow-up goal: there is no factory-exit timeout clearing the exit point; without a replacement or a stop it keeps preventing restoration after the clear report with no field)
+// spec: S-0207 claim 25 (Factory-exit lifetime: completing the exit track with no order-level destination retains its locomotor destination point; a later accepted destination replaces it in the active driving locomotion)
+// spec: S-0207 claim 16 b (the refusal reads the current locomotor: the driving miner accepts the factory's apron-clearing request, S-0417 claim 4, which was refused while it read the type's teleporting locomotor)
 #[test]
 fn claim_16_no_field_no_timer() {
     let (mut w, k) = game(&[]);
     let u = released(&mut w, k);
+    glasnost_sim::trace::switch_on(&mut w);
+    let mut held = 0;
     for _ in 0..300 {
         testkit::run(&mut w, 1);
         let o = w.obj(u).unwrap();
-        // Nothing in this scene supplies a destination or a stop (no field: harvest goes idle, then guard).
-        assert_eq!(o.dest, None);
         assert!(release::temporary_drive(&w, u), "no timer restores it");
-        assert!(
-            o.drive.as_ref().unwrap().goal.is_some(),
-            "the exit point is retained"
-        );
+        let goal = o.drive.as_ref().unwrap().goal;
+        match o.dest {
+            None => {
+                held += 1;
+                assert!(goal.is_some(), "the exit point is retained");
+            }
+            Some(Target::Cell(c)) => {
+                // The only destination in this scene: an accepted scatter request.
+                let asked = glasnost_sim::trace::take(&w).into_iter().any(|e| {
+                    e.unit == u
+                        && matches!(e.what, glasnost_sim::trace::What::Asked { accepted: true, dest: Some(d) } if d == c)
+                });
+                assert!(asked, "a scatter request gave it");
+                assert_eq!(
+                    goal.map(|g| g.cell()),
+                    Some(c),
+                    "it replaced the exit point"
+                );
+                break;
+            }
+            Some(Target::Object(_)) => panic!("no object destination in this scene"),
+        }
     }
+    assert!(held >= 30, "the exit point held {held} ticks");
 }

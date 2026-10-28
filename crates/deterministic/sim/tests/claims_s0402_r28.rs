@@ -2,7 +2,9 @@
 //! S-0207 revision 36): the seeking drop of a chrono miner with active
 //! teleporting locomotion (claim 17 and the claim 3 table rows). The
 //! fixture is the harvest ruleset with CHRONOT, a harvester whose own
-//! locomotor teleports. Every name and number is invented; no game data.
+//! locomotor teleports and whose type lacks the teleport-capable flag (with
+//! the flag it would drive from placement, S-0207 claim 28). Every name and
+//! number is invented; no game data.
 
 mod harvest_common;
 
@@ -18,7 +20,6 @@ use harvest_common::*;
 fn ruleset() -> Ruleset {
     let mut r = harvest_common::ruleset();
     let mut chrono = harvester(CAPACITY);
-    chrono.teleporter = Some(true);
     chrono.locomotor = Some(Locomotor::Teleport);
     r.registries
         .get_mut("vehicles")
