@@ -2,12 +2,12 @@
 id: S-0401
 title: Ore and gems (resource cells, bales and value, growth, spread, ore mines)
 topic: economy
-revision: 10
-sources-class: [decomp, design]
+revision: 17
+sources-class: [decomp, design, measurement]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-17
-measurements: []
+approved-on: 2026-10-28
+measurements: [M-0013]
 requests: [Q-0046]
 supersedes: []
 ---
@@ -86,7 +86,12 @@ claim 4), which can take more than one raw draw. In addition:
   keys are, even entries whose key lies in the future.
 - **Resource settings.** Three on/off settings of a game: the *grows setting* and the *spreads
   setting*, both always on in a skirmish (claim 4), and the *map growth switch* (claim 4).
-- **Germinable cell.** A cell on which new resource may appear (claim 10).
+- **Germinable cell.** Any cell that meets all the conditions of claim 10. A spread step
+  (claim 9) and an ore mine (claim 15) choose new resource cells among germinable neighbours, and
+  other specs' resource placements test the same conditions. A germinable cell that is chosen
+  becomes a resource cell (claim 11).
+  The one exception: with the switch of claim 11 on, a germinable cell that holds a terrain
+  object, such as a tree, receives no resource when chosen (claim 11).
 - **Ore mine.** A terrain object whose type has the spawns-resources flag (S-0203, claim 2, and
   S-0104, which calls it an ore-spawning terrain object). Its *animated flag*, *animation rate R* (ticks)
   and *animation probability p* (a single-precision number) are fields of its terrain type
@@ -183,7 +188,9 @@ claim 4), which can take more than one raw draw. In addition:
    it with a stage below 11; the offer adds an entry with key *t* + (|*r*| mod 50), where *t* is the
    tick number and *r* one raw draw (Formulas F2). An offer of a cell at stage 11 or above does
    nothing and takes no draw. A cell is offered to the growth list of its tiberium when it becomes a
-   resource cell (claim 11) and at the game-start rebuilding (claim 13). Taking bales out of a cell
+   resource cell (claim 11), when a spread step or an ore mine chooses a cell holding a terrain
+   object, which receives no resource (claim 11, with its switch on), and at the game-start
+   rebuilding (claim 13). Taking bales out of a cell
    never offers it (claim 18). The offer tests the cell's stage only: not its tiberium, slope or the
    growth fraction. A growth update also adds a re-entry for an entry it has taken (table below). A
    re-entry is not an offer, so no stage test other than the table's applies to it. A cell can be
@@ -223,8 +230,11 @@ claim 4), which can take more than one raw draw. In addition:
    growth step, no re-entry. With the switch off, *m* is always at least 1.
    - Backing: `measurable` (scenario E4 for the number of steps per update and the stage changes,
      the random-state recorder for the draw count per update; E10 for a lone cell taken again); the
-     *m* < 1 case is `unmeasured`: it occurs for one raw value in 2³², too rare to provoke
-   - Confidence: high; medium for the *m* < 1 case (inferred, never seen in play)
+     *m* < 1 case is `unmeasured`: it occurs for one raw value in 2³², too rare to provoke; the
+     offer at a cell holding a terrain object is `unmeasured` (no record of the draws or the offer
+     at a tree cell, claim 11)
+   - Confidence: high; medium for the *m* < 1 case (inferred, never seen in play); medium for the
+     offer at a cell holding a terrain object (claim 11)
 
 8. **Spread list.** A cell offered to a tiberium's spread list joins it, with key *t* + (|*r*| mod
    50) from one raw draw (Formulas F2), when it is not already marked in that list and all of these
@@ -254,9 +264,10 @@ claim 4), which can take more than one raw draw. In addition:
    it at that moment, judged with its own tiberium and not counting the mark (the cell is still
    marked when it is taken). If they do, one ranged draw *U*(0, 7) gives a starting step
    direction *j*, and the neighbours in step directions *j*, *j* + 1, …, *j* + 7 (modulo 8) are
-   examined in that order; the first that is germinable becomes a new resource cell of the
-   spreading cell's tiberium at stage 3 (claim 11). If the conditions do not hold, no draw is taken
-   and nothing happens, but the attempt still counts.
+   examined in that order; the first that is germinable is chosen. It becomes a new resource cell
+   of the spreading cell's tiberium at stage 3, or, when it holds a terrain object (only with the
+   switch of claim 11 on), it receives nothing (claim 11). If the conditions do not hold, no draw
+   is taken and nothing happens, but the attempt still counts.
 
    The count *m* is below 1 only for the one raw value of `quirks.random_magnitude_overflow`
    (S-0202, Edge cases). Such an update makes the rebuilding test of Formulas F7, and its only
@@ -278,18 +289,25 @@ claim 4), which can take more than one raw draw. In addition:
      cell is unmarked when it is dropped.
    - Backing: `measurable` (scenario E5 for the spread step and the new stage, E7 for the two
      consequences); the choice among several germinable neighbours is `measurable` too (E5, with
-     the random-state recorder: one ranged draw over 0 to 7 per successful attempt, and the new cell
-     is the first germinable neighbour from that direction)
-   - Confidence: high for the rules; medium for the consequences' size in normal play
+     the random-state recorder: one ranged draw over 0 to 7 per successful attempt, and the chosen
+     neighbour is the first germinable one from that direction). For a chosen neighbour holding a
+     tree: `measured` (M-0013) that it never receives resource; `measurable` (scenario E8 part b)
+     that the step chooses it; `unmeasured` that the step uses its attempt (E8 part b's draw
+     counts come out the same whether or not it does)
+   - Confidence: high for the rules, except the case of a chosen neighbour holding a tree:
+     medium that such a cell is chosen at all and that the step then makes nothing (inferred,
+     claims 10 and 11: M-0013 shows only that tree cells never received resource); medium for
+     the consequences' size in normal play
 
-10. **Where new resource may appear (germinable cells).** A cell is germinable when all of these
-    hold:
+10. **Which neighbours a spread step can choose (germinable cells).** A cell is germinable when
+    all of these hold:
     - it is in the usable area, by the height-aware form of the test (S-0009, claims 4 and 5),
     - it is not part of a bridge (neither a high bridge's cell nor any other bridge part),
     - it holds no living building, other than one of a type that is invisible or invisible in
       game; only the first building among the objects of the cell's ground layer is looked at,
-    - its first terrain object, if any, is not an ore mine (other terrain objects, such as trees,
-      do not prevent it),
+    - its first terrain object, if any, is not an ore mine (by default, other terrain objects,
+      such as trees, do not make it non-germinable, but no resource appears in a cell that holds
+      one: claim 11 and its switch),
     - its land type is buildable (the buildable flag of S-0211, claim 2, and S-0010, claim 16),
     - it holds no overlay,
     - it is flat (slope shape 0),
@@ -300,9 +318,25 @@ claim 4), which can take more than one raw draw. In addition:
     conditions apply only while a game is running; before play starts (while a map is being
     loaded) they are not checked. S-0010 claim 16 states the last four conditions; this claim adds
     the others.
-    - Backing: `measurable` (scenario E8)
-    - Confidence: high; medium for "only the first building and the first terrain object are
-      looked at", which matters only when a cell holds two of them
+
+    With the switch of claim 11 on (the default), a tree cell is germinable but never receives
+    resource, so a spreading cell treats it as a free neighbour: it counts in *c* (claim 9) and can
+    be the first germinable neighbour a spread step finds. With the switch off it is not germinable
+    and does not count in *c*. A bouncing animation's resource offer (S-0319 claim 10) treats a
+    germinable cell holding a terrain object the same way: it places nothing there, takes its
+    draws and leaves the cell germinable.
+    - Backing: `measured` (M-0013, scenario E8 part a) for the kinds of cell it tested: free cells
+      and cells with an infantry unit receive resource; cells holding either of two tree types,
+      one type of living building or an ore mine, high-bridge cells, rock cells and wall cells
+      never do. `measurable` (scenario E8 part b) for a tree cell counting as germinable in a
+      spread step; `measurable` (scenario E8 part c) for the conditions M-0013 did not test: a
+      bridge part other than a high bridge's cell, the usable-area test, the exception for an
+      invisible building, the tileset test and slope
+    - Confidence: high for which cells receive resource, for the kinds M-0013 tested; medium for
+      the untested conditions of part c; medium for terrain objects other than trees; medium for a tree
+      cell counting as germinable (inferred, M-0013 does not record the draws or the neighbour
+      tried); medium for "only the first building and the first terrain object are looked at",
+      which matters only when a cell holds two of them
 
 11. **A new resource cell.** When a germinable cell becomes a resource cell of tiberium *T* at
     stage *a* (a spread step gives *a* = 3, claim 9, and so does an ore mine, claim 15):
@@ -320,15 +354,38 @@ claim 4), which can take more than one raw draw. In addition:
     been given an image number has a run of no pictures, so it never makes a new cell (S-0112,
     claim 12).
 
+    **A cell holding a terrain object** (a tree, for example) gets no overlay: the draws and the
+    growth-list offer above happen as for any new cell, but the cell holds no resource afterwards
+    and, with the switch below on, stays germinable. The growth entry, if one was added, is later
+    dropped when taken while the cell still holds no resource (claim 7, first row of its table). A
+    spread step that chose the cell has used one of its attempts and makes nothing (claim 9), and an
+    ore mine's step that chose it makes nothing (claim 15).
+    `quirks.spread_step_lost_on_terrain_object` (default: original, as this claim states it; that
+    the original keeps the cell germinable and uses the attempt is rated medium, see the confidence
+    below). With the switch off, a cell holding a terrain object is not germinable, so the scan
+    of a spread step passes over it to the next neighbour and the cell does not count in *c*.
+
     A new resource cell is **not** offered to any spread list. It joins a spread list only when it
     later gets a growth step (claim 7), when a neighbour is emptied (claim 5) or at a rebuilding
     (claim 13). So, as long as none of these happens, a cell made by a spread step or an ore mine
     does not spread itself. With a growth fraction below 10⁻⁵ new cells never get a growth step, so
     they spread only after a neighbour is emptied or a rebuilding (as in scenario E5); with the map
     growth switch off no spread update runs (claim 6), so they never spread while it stays off.
-    - Backing: `measurable` (scenario E5 for the stage and for new cells not spreading, the
-      random-state recorder for the two draws)
-    - Confidence: high
+    - Backing: `measured` (M-0013: stage 3 in all 118 new cells, from spread steps and an ore mine,
+      and tree cells never receive resource); `measurable` (scenario E5 for new cells not
+      spreading, the random-state recorder for the two draws; scenario E8 part b for the overlay
+      draw at a tree cell); `unmeasured` for the lost attempt at a tree cell (E8 part b's draw
+      counts come out the same whether or not it is used); `unmeasured` for the growth-list offer at a cell
+      holding a terrain object (M-0013 has no record of the draws or the growth-list offer at a
+      tree cell, and the draw it takes turns on the stage the offer sees, an open question),
+      `unmeasured` for terrain objects other than trees (M-0013 placed no other kind, and E8 uses
+      trees only)
+    - Confidence: high for a cell without a terrain object. For a cell holding a terrain object:
+      high that it gets no overlay where the object is a tree (two tree types measured); medium
+      that it stays germinable and that a spread step that chose it has used an attempt and made
+      nothing (inferred: M-0013 shows only that tree cells never held resource, not whether they
+      are chosen); medium for other terrain objects; medium for the draws and the growth-list
+      offer at such a cell (no record of them at a tree cell)
 
 12. **Sloped resource never grows or spreads.** Resource on a cell of slope shape 1 to 4 (the only
     slopes that keep resource, S-0211 claim 7) never gets a growth step (claim 7), never spreads
@@ -399,13 +456,16 @@ claim 4), which can take more than one raw draw. In addition:
     checked, so the spreads setting does not matter, and neither does the map growth switch. And
     the tiberium is that of the mine's cell, or the first tiberium in registration order when the
     cell holds no resource, which is the normal case because the mine's own cell is never
-    germinable (claim 10). So every ore mine makes resource of the first tiberium in registration
-    order, at stage 3, in a germinable neighbour, unless a map put resource of another tiberium
-    under the mine. The ranged draw *U*(0, 7) of the spread step is taken even when no neighbour is
-    germinable; nothing appears then.
-    - Backing: `measurable` (scenario E9)
+    germinable (claim 10). So the resource an ore mine makes is of the first tiberium in
+    registration order, at stage 3, in the germinable neighbour its step chooses, unless a map put
+    resource of another tiberium under the mine. The ranged draw *U*(0, 7) of the spread step is
+    taken even when no neighbour is germinable; nothing appears then. With the switch of claim 11
+    on, the chosen neighbour can hold a tree; it is germinable and gets nothing (claim 11).
+    - Backing: `measurable` (scenario E9); `measured` (M-0013) that a mine's new cells appear off
+      the tiberium's spread schedule, at stage 3, and never on the mine's own cell or a wall
     - Confidence: high for the spread step and the tiberium; medium for the exact tick
-      *t*₀ + *R* × ⌊*N*/2⌋, which assumes the mine takes a turn in every tick
+      *t*₀ + *R* × ⌊*N*/2⌋, which assumes the mine takes a turn in every tick; medium for a
+      neighbour holding a tree being germinable (claims 10 and 11)
 
 16. **Other ways resource is removed.** Besides harvesting (claim 3), resource leaves cells through
     the following, and no other path is known. Each removal that takes a number of bales follows the
@@ -491,9 +551,14 @@ claim 4), which can take more than one raw draw. In addition:
     the original). With the switch off, every tiberium's timers restart at each game start, so that
     its first updates run in the first tick. This is a separate switch from S-0006's
     `quirks.persist_tiberium_overrides`, which concerns the tiberiums' fields.
-    - Backing: `measurable` (scenario E11)
-    - Confidence: medium (that nothing restarts the timers at game start is inferred, not observed; the
-      first game's tick-0 update depends on the tick number when the tiberiums are created)
+    - Backing: `measured` (M-0013) for the first spread update of the first game of a session:
+      each of its runs is a separate program start, and spread gains fall on tick 0 and on
+      multiples of the spread field after it; `measurable` (scenario E11) for the first growth
+      update of a first game and for a later game of a session
+    - Confidence: high for the first game's tick-0 spread update; medium for its tick-0 growth
+      update (the growth timer starts as the spread timer does, claim 6, but M-0013's resource
+      cells start full-grown, so no growth step shows); medium for a later game (that nothing
+      restarts the timers at game start is inferred, not observed)
 
 20. **Animation start-event resource chain reaction (Q-0046 Q2a).** The chain reaction is
     enabled by the animation type's resource-chain-reaction flag. For a trigger-played animation,
@@ -645,7 +710,8 @@ animation starts for every *p* ≥ 0 (with the switch off the remainder is 48364
 
 | State | Event | Result |
 |---|---|---|
-| empty, germinable | spread step from a neighbour, or ore mine | resource cell at stage 3; one overlay draw; offered to the growth list (one draw when it joins, claim 11) |
+| empty, germinable, no terrain object | spread step from a neighbour, or ore mine | resource cell at stage 3; one overlay draw; offered to the growth list (one draw when it joins, claim 11) |
+| empty, germinable (switch of claim 11 on), holding a terrain object | spread step from a neighbour, or ore mine | no resource; the cell stays empty and germinable; draws and growth-list offer as claim 11 |
 | resource, stage *d* < 11, in growth list | taken in a growth update, switch on, flat | stage *d* + 1; offered to spread list; if still below 11, new growth entry (one draw) |
 | resource, stage 11 | taken in a growth update | dropped from growth list |
 | resource, stage 11 | *n* bales taken | no growth entry (claim 18); stage 11 − *n* or emptied |
@@ -667,6 +733,9 @@ later in the tick. Harvesting, which takes bales, happens in harvesters' turns (
 - `quirks.spread_attempts_count_failures` (claim 9): failed attempts count and return to the front.
 - `quirks.spread_mark_kept_on_last_neighbour` (claim 9): a cell dropped with one free neighbour can
   rejoin only through a rebuilding.
+- `quirks.spread_step_lost_on_terrain_object` (claim 11): a tree cell counts as germinable; when
+  a spread step or an ore mine chooses it, it receives nothing and the spread step's attempt is
+  used.
 - `quirks.spread_stage_from_index` (claim 17): the spread stage depends on the tiberium's index.
 - `quirks.full_cell_no_regrowth` (claim 18): harvesting a full cell takes it out of growth until a
   rebuilding.
@@ -780,7 +849,8 @@ product and bear on `quirks.chop_rounding`), or more than *k*<sub>g</sub> cells 
 draws of claim 7.
 
 **E5. Spread and germination (claims 5, 8, 9, 11).** *Setup:* a single ore cell at stage 11
-surrounded by at least two rings of germinable clear cells; spread field 10, spread fraction 1.0,
+surrounded by at least two rings of germinable clear cells, none holding a terrain object (so each
+chosen neighbour receives resource); spread field 10, spread fraction 1.0,
 growth fraction 0. *Observable:* the ticks at which new cells appear, their positions and stages, and,
 with the random-state recorder, the direction draw of each spread step. *Expected:* new cells
 appear only in the eight neighbours of the centre, each at stage 3, and several can appear in one
@@ -820,12 +890,32 @@ random-state recorder, every spread update before tick 600 takes exactly one raw
 there, or no new cell appears after the unit has left (the entry was dropped, which would mean
 failed attempts do not return to the list).
 
-**E8. Germinable cells (claim 10).** *Setup:* around a spreading stage-11 cell: a cell with an
-infantry unit, a cell with a tree, a cell with an ore mine, a cell with a living building, a cell of
-a high bridge, a cell of non-buildable land, a cell holding a wall. *Observable:* which cells
-receive new resource over 6000 ticks, 5 runs. *Expected:* the infantry and tree cells can receive
-it; the others never. *Falsified if:* any of the others receives resource, or the infantry or tree
-cell never does over the runs while free cells do.
+**E8. Germinable cells (claims 10 and 11).** *Part a, setup:* around a spreading stage-11 cell: a
+cell with an infantry unit, a cell with a tree, a cell with an ore mine, a cell with a living
+building, a cell of a high bridge, a cell of non-buildable land, a cell holding a wall.
+*Observable:* which cells receive new resource over 6000 ticks, 5 runs. *Expected:* the infantry
+cells receive it; the tree cells and the others never. *Falsified if:* a tree cell or any of
+the others receives resource, or the infantry cell never does over the runs while free cells do.
+(Measured: M-0013, as expected.)
+
+*Part b, setup:* a stage-11 cell whose eight neighbours are walls except two: a tree cell X and a
+free cell Y, so that *c* = 2. The random-state recorder on. *Observable:* for each spread step of
+the cell, the drawn starting direction, the next draws with their ranges, and whether Y receives
+resource. *Expected:* when the scan from the drawn direction reaches X
+before Y, the direction draw is followed by a ranged draw over 0 to 11, the overlay draw, and
+nothing appears. The range tells it from the growth-list offer's draw, which is a raw draw.
+Whether that offer takes a draw turns on the stage it sees (Open questions), so the raw draw is
+not part of this test. Y receives resource only from a step whose scan reaches Y first.
+*Falsified if:* Y receives resource from a step whose scan reaches X first, or such a step is
+not followed by a ranged draw over 0 to 11.
+
+*Part c, setup:* as part a, with these neighbours of the spreading cell instead: a bridge cell
+that is not a high bridge's, a cell outside the usable area (the spreading cell at the area's
+edge), a cell with a living building of an invisible test type, a cell whose tile's tileset lacks
+the allow-tiberium flag, a sloped cell, and a free cell as control. *Observable and runs:* as in
+part a. *Expected:* the invisible building's cell and the free cell receive resource; the others
+never do. *Falsified if:* any of the others receives resource, or the invisible building's cell
+never does over the runs while the free cell does.
 
 **E9. Ore mines (claim 15).** *Setup:* an ore mine type with the animated flag, *p* = 0.01, *R* = 5,
 a sprite of 2*B* image frames; growth fraction 0 for all tiberiums; part B: a gem cell placed under
@@ -853,8 +943,9 @@ stages (which would falsify the re-entry rule of claim 7).
 **E11. Timer carry-over (claim 19).** *Procedure:* in one session, play a first skirmish with
 growth field 3000 (period 899) on a field of stage-0 cells for 20000 ticks; return to the menu and
 start a second skirmish on the same map. *Observable:* the tick of the first stage change in each
-game. *Expected:* game 1: tick 0; game 2: no change before the tick number reaches the last update
-tick of game 1 plus 899 (about 20000). Control: a fresh program start for game 2 gives tick 0.
+game (a growth step, since the field starts at stage 0). *Expected:* game 1: tick 0; game 2: no
+change before the tick number reaches the last update tick of game 1 plus 899 (about 20000).
+Control: a fresh program start for game 2 gives tick 0.
 *Falsified if:* game 2 grows at tick 0.
 
 **E12. Rebuilding during play (claims 9, 13, 18; F7).** *Setup:* a very small map (for example
@@ -998,10 +1089,21 @@ and the no-resource and trigger-played later-start controls, which do not. A tri
 creation over resource must still recalculate normally. A missing or premature start,
 a duplicate start despite the once-only rule, or a different stream order falsifies the claim.
 
+## Changes for other specs
+
+- **S-0319 claim 10** (the bullet on a cell with a terrain object, and its Changes entry for
+  S-0401 claim 10): S-0401's own new resource does not let a tree's cell receive resource.
+  M-0013 shows tree cells never receive it, and claim 11 here gives such a cell no overlay, with
+  its draws taken and the cell left germinable. So the sentence "It differs from S-0401's own new
+  resource, which S-0401 claim 10 and its scenario E8 let a tree's cell receive" should instead
+  say that S-0401's own new resource treats such a cell the same way (S-0401 claims 10 and 11).
+  Claim 10 here notes S-0319's offer, as that Changes entry asks.
+- **S-0317 claim 12 and S-0520 claim 24:** no change needed. Both say a germinable cell becomes
+  a new resource cell as S-0401 claim 11 says, and claim 11 covers a germinable cell holding a
+  terrain object (its draws taken, no resource).
+
 ## Open questions
 
-- Whether the tick number is 0 when the tiberiums are created in the first game of a session, which
-  decides whether the first updates fall in tick 0 (claim 19). Scenario E11's game 1 settles it.
 - Whether any removal outside those listed in claim 16 takes bales from cells.
 - A germinable cell keeps whatever overlay data value it had; when a map stores a value of 11 or
   more on a cell without an overlay, the growth-list offer of claim 11 (made before the new stage is
