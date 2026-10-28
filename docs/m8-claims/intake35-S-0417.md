@@ -101,16 +101,24 @@ put an infantry unit on a building cell in *guard* to test something else now pu
 `claims_s0606.rs` (`claim_6_chosen_only_both_positions`, `claim_6_far_point_both_positions`)
 and `claims_s0513_storm.rs` (`building_strike_debris`). What they check is unchanged.
 
-**Goldens, arena, sweeps.** No golden moved (`cargo xtask gate` ok, native and wasm32):
-the gate games put no infantry in *guard* on a building cell. Arena M-0001 31 of 96 pairings
-failing, M-0002 13 of 24, M-0003 2 of 35, before and after; the arena folders are identical.
-Seed sweeps 1 to 16, reference and with `GLASNOST_PLAY_FIXES=1`, all exit 0. M7b is identical.
-M6c (both) and M7a (reference seeds 1 and 2, play fixes seed 1) differ; the minimum and median
-of every counter, before and after, are in `local-lane/m8/a3-35/sweep-tables.md`. Most changes
-are a median moving by one or two. Two stand out: M6c reference jumpjet orders, median 47 to 53,
-and M7a play fixes seed 1, whose infantry absorbed fell from 6 to 2 and now shows in its
-below-3 list. Each traces to claim 17 firing where the spec says it should, after which the game
-goes its own way:
+**Goldens, arena, sweeps.** Before the rebase no golden moved. After the rebase onto main
+21651b9 (intake 34 in), `duel-m6c` moves from its line 746 (tick 7460 to 7470): at tick 7467 a
+garrison infantry in *guard* stands on a cell of a 2x2 hut of house 2. Claim 17's request is
+accepted once and the unit walks to the next cell, after which each request is refused while it
+walks. The goldens are regenerated; no other golden moved (`cargo xtask gate` ok, native and
+wasm32). Main against this branch, after the rebase: arena M-0001 30 of 96 pairings failing,
+M-0002 13 of 24, M-0003 2 of 35, before and after; the arena folders are identical. Seed sweeps
+1 to 16, reference and with `GLASNOST_PLAY_FIXES=1`, all exit 0. M7a and M7b are identical.
+M6c (both, the same changes) differs: jumpjet orders median 51 to 52 (max 77 to 132), jumpjets
+built and flown median 9 to 10, deploy orders min 62 to 65 and median 106 to 102, sabotage
+orders median 17 to 15, crates picked up median 17 to 16, radiation exits max 54 to 94. The
+minimum and median of every counter are in `local-lane/m8/a3-35/sweep-tables-rebased.md`.
+
+Before the rebase (main a2584dd), M7a also differed (reference seeds 1 and 2, play fixes seed
+1), with M6c reference jumpjet orders median 47 to 53 and M7a play fixes seed 1's infantry
+absorbed 6 to 2 (`sweep-tables.md`). The tracing below was done on that base and was not
+repeated after the rebase. Each change traced to claim 17 firing where the spec says it should,
+after which the game goes its own way:
 - M6c, reference, seeds 1 to 16 traced: in 11 seeds, one to four units met claim 17's
   conditions, mostly for 1 to 30 ticks. Most are jumpjet infantry in *guard* over a pillbox, a
   prism tower or a yard, at 300 to 470 leptons (claim 17 ignores the unit's height). The others
@@ -126,12 +134,13 @@ goes its own way:
   times. Against the first build the design also changed M6c reference and M7a reference seed
   2, where units held a destination with no path; M6c play fixes and M7b did not change.
 
-**Found, not ours to fix.** In M7a play fixes seed 1, slave 797 walks onto its own house's bio
-reactor's cell under an entry order (S-0605) and stays there in *guard* from about tick 7740 to
-the end of the game. Its search back to its master's unloading cell (S-0402 claim 14) fails in
-every retry cycle. The same happens with claim 17 switched off, so it predates this intake. It
-is a play-fix candidate: the AI gives an absorber entry order to an enslaved unit, and the slave
-does not get out of the building's cells.
+**Found, not ours to fix.** In M7a play fixes seed 1 on main a2584dd, slave 797 walks onto its
+own house's bio reactor's cell under an entry order (S-0605) and stays there in *guard* from
+about tick 7740 to the end of the game. Its search back to its master's unloading cell (S-0402
+claim 14) fails in every retry cycle. The same happens with claim 17 switched off, so it
+predates this intake. It is a play-fix candidate: the AI gives an absorber entry order to an
+enslaved unit, and the slave does not get out of the building's cells. Not checked again after
+the rebase, where M7a no longer differs.
 
 **Local lane.** Scene `barracks-no-rally` (`m7b_lane.rs`): the first infantry factory of the
 local house (a 3x2 barracks), no rally point, five releases 60 ticks apart. All five were
