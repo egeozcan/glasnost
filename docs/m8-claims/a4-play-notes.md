@@ -484,9 +484,11 @@ read. Frames: `r5-22-25-radar-and-countdown.png`; the blink's dark half in `r5-3
 **By eye (note 26).** Build a chronosphere (or an Iron Curtain, weather control, missile
 silo, genetic mutator or psychic dominator). Once it is built its top part shows: the
 chronosphere's dome sits closed on its base while it charges. When the charge is nearly full
-the dome opens and, once open, shows the charged sphere with its energy until you fire; after
-firing it closes again. With low power a type that has a low-power picture shows it in place of
-the charged one. Frames: `r5-26-chrono-zoom.png` (charging), `r5-26-chrono-charged-zoom.png`
+the dome opens and, once open, shows the charged sphere with its energy until you fire. Two
+things the lane did not see and only the unit tests cover: after firing the top closes again
+and the charge starts over, and with low power a type whose charged picture is marked
+effect-unpowered shows its low-power picture instead (of the stock types only the genetic
+mutator names a low-power picture; the lane did not check its charged picture's mark). Frames: `r5-26-chrono-zoom.png` (charging), `r5-26-chrono-charged-zoom.png`
 (charged), `r5-26-sw4-zoom.png` … `r5-26-sw13-zoom.png` (the other types), in
 `local-lane/m8/a4-r5/part2/`.
 
