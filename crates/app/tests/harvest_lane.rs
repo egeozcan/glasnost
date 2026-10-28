@@ -693,8 +693,8 @@ fn far_slave_miners_of_a_person_and_a_computer() {
                     firsts[2].get_or_insert(t);
                     // The deployed form: the owner's slave master building
                     // nearest the vehicle's last cell (S-0415 claim 10).
-                    if *master == *id {
-                        if let Some(b) = w
+                    if *master == *id
+                        && let Some(b) = w
                             .objects
                             .values()
                             .filter(|b| {
@@ -707,9 +707,8 @@ fn far_slave_miners_of_a_person_and_a_computer() {
                                 let p = b.pos.cell();
                                 (p.x - last.x).abs().max((p.y - last.y).abs())
                             })
-                        {
-                            *master = b.id;
-                        }
+                    {
+                        *master = b.id;
                     }
                 }
             }
