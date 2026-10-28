@@ -48,8 +48,10 @@ been revised, and the code follows S-0501 claim 48 (d).
 - `air::take_off`: claim 8's pad rule ends a building contact only when the cell of the aircraft's
   horizontal position belongs to that pad (`pad_cell`). A non-building contact ends as before.
 - `air::tick_flight`, design for Open question 26 (below): a low release at height 0 with a
-  destination, neither landing nor taking off, whose destination did not come with a move, is
-  given its flight point at the start of the movement update, so it takes off there.
+  destination, neither landing nor taking off, whose current behaviour is not *move*, is given its
+  flight point at the start of the movement update, so it takes off there. On a move only claim
+  40's processing takes it off, so the k (7) tests depend on that processing: with `regive`'s call
+  disabled, six of them fail (checked).
 - `econ::release::aircraft`, docked row: with a rally point, a type that need not return to a dock
   now gets *move* queued and the destination assigned (claim 48 (d)), not started at once.
 - Comments: the Q-1940 and Q-1941 interim comments in `destination_taken`, the replacement block
@@ -80,7 +82,7 @@ takes off again and lands once more. Built as stated.
 | Front matter, revision 62, Q-1940 to Q-1942 in `requests` | followed | |
 | Overview, Q-1905 and Q-1940 to Q-1942 in full and their ratings | followed | Ratings; the behaviour is in the rows below. |
 | Claim 40: the selected destination, kept or replaced, is given at the move's first processing; a destination in claim 8's sense | built, tested (new) | `move_` and `regive`. `ac30_k7_a` to `ac30_k7_c` (kept) and `ac30_k7_d` (replaced): take-off before the second update. |
-| Claim 40: the move's next processing gives its flight point once more | built, tested (new) | `AirState::regive`. `claim_40_the_next_processing_gives_the_flight_point_once_more` (TENPAD, NEAR, a move order): `regive` holds the move's start tick from its first processing, is cleared at a later processing of the same move, and the flight then flies to the destination, unfinished. The landing case above is not tested. |
+| Claim 40: the move's next processing gives its flight point once more | built, tested (new) | `AirState::regive`. `claim_40_the_next_processing_gives_the_flight_point_once_more` (TENPAD, NEAR, a move order): `regive` holds the move's start tick from its first processing, is cleared at a later processing of the same move, and the flight then flies to the destination, unfinished. This checks the bookkeeping only: for an aircraft already in flight to that point the second giving changes nothing observable, and the landing case above is not tested. |
 | Claim 5: the approach target replacement only for an aircraft above the terrain at the end of the update, whatever the aircraft | built, tested (new) | Height gate. `q1941_ordinary_flight_at_height_0_has_no_approach_replacement` (`claims_s0501.rs`, was `..._keeps_the_approach_replacement`): the attacker whose holding approach holds height 0 keeps claim 5's ordinary fraction, checked against `air::slowing`, with updates where the band would differ. `ac30_k7_b` checks the ordinary fraction at height 0 at the end of the first update. |
 | Claim 6: the close-approach trigger only above the terrain; the exact-cell trigger at any height | built | Height gate; the exact-cell trigger unchanged. |
 | Claim 8: claim 48 (c) for the factory release's contact | built, tested (new) | `take_off` reads `pad_cell`. `claim_48_c_tethered_type_keeps_its_contact_outside_the_foundation` (SCOUT at OUTPAD with a rally point): contact kept through the take-off, tether ended. |
@@ -114,14 +116,17 @@ Before is main 5fe9f1b, after is this branch. Outputs are in the local-only
     replacement and claim 6's close trigger gated on the low release again (intake 28's interim)
     it is byte-identical to main's. As intake 28 saw, an attacker that claim 6's holding approach
     brings to height 0 loses its band value.
-  - Neither claim 40's processing nor the rally queue moves any golden. No AI aircraft in the
-    gate's games runs *move* with a destination: they are given attacks.
+  - With the field left out and the old gates, every golden matches main's, so neither claim 40's
+    processing nor the rally queue moves any golden. Why was not traced: either no aircraft in
+    the gate's games runs *move* with a destination, or a second giving to an aircraft in flight
+    leaves the hashed state unchanged.
 - The gate with its ignored tests passes (`--include-ignored`), including the M6c, M7a and M7b
   replays.
 - Arena CSVs ours-M-0001, M-0002 and M-0003 are byte-identical before and after: M-0001 31 of 96
   failing and 151 of 172 reproduced, M-0002 13 of 24 and 43 of 47, M-0003 2 of 35 and 61 of 64.
 - Sweeps over seeds 1 to 16, all exit 0. M7a and M7b, reference and `GLASNOST_PLAY_FIXES=1`:
-  identical seed lines and counters. M6c moves with duel-m6c's cause:
+  identical seed lines and counters. M6c moves; its cause was not isolated (duel-m6c's, the height
+  gates, is the likely one, but other seeds may reach claim 40's processing or the rally queue):
   - Reference: smallest minimum 2 → 4 (seed 3's charger orders and seed 12's jumpjet orders, both 2,
     are now 4 or more). Medians move by a few (jumpjet orders 51 → 47, crate orders 124 → 141,
     garrison occupants 6 → 8). Minima of 4 after: buildings captured, infiltrations, tech building
@@ -135,9 +140,10 @@ Before is main 5fe9f1b, after is this branch. Outputs are in the local-only
 `low-release-ahead` and `low-release-abeam` (`crates/app/tests/m6c_lane.rs`, intake 28's scenes;
 the summary line gains three counters). Outputs are in `local-lane/m8/a3-31/lane/` (`run.txt`,
 per-update traces and screens).
-- Both: the release at height 10, the order inside *S*. One update at height 0 with a destination
-  (the first, in which *move* becomes current), then the take-off: at the end of the next update
-  height 20, held height its cruise height, taking off, released mark gone. No turn at or below
+- Both: the release at height 10, the order inside *S*. The first update, in which *move* becomes
+  current, ends at height 0 with the destination; the next takes off, ending at height 20 with
+  held height its cruise height, taking off, released mark gone. No update that begins at
+  height 0 ends with a destination and no take-off (the lane's counter, 0). No turn at or below
   half the cruise height, a climb, and no rest at height 0.
 - By eye, the end screen: the aircraft in flight above the pad's surroundings with its shadow, the
   pad empty.
