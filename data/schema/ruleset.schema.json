@@ -12003,7 +12003,7 @@
           ]
         },
         "image_frames": {
-          "description": "The number of image frames *N* of the type's sprite (S-0401 claim\n15, S-0112 Terms *frame count*), from its art; absent: not known,\nand an animated ore mine never makes resource (a provisional rule:\nthe importer does not read terrain sprites yet).",
+          "description": "The number of image frames *N* of the type's sprite (S-0401 claim\n15, S-0112 Terms *frame count*), which the importer reads from the\nsprite of S-0007 claim 13 for the map's theater; absent (no sprite,\na file that does not parse, or an import without a theater): an\nanimated ore mine never makes resource, as for a sprite of fewer\nthan 2 image frames (S-0401 claim 15).",
           "type": [
             "integer",
             "null"
