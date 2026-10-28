@@ -1288,6 +1288,7 @@ impl Script {
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
             .find(|&r| !self.candidates(w, r).is_empty())
+            .or_else(|| self.field_refinery(w).then_some(Role::Refinery))
     }
 
     /// The refinery type the house rebuilds before anything else, when it
@@ -1311,6 +1312,61 @@ impl Script {
         self.candidates(w, Role::Refinery)
             .into_iter()
             .find(|&t| self.placeable(w, t))
+    }
+
+    /// Whether the house builds a refinery beside a new field (M8 step
+    /// B8): it keeps harvesters (not slave miners, S-0402 claim 14) and has
+    /// a refinery, the explored resource within [`FIELD_REACH`] cells of
+    /// its refineries would not keep one harvester at work (fewer than
+    /// [`CELLS_PER_HARVESTER`] cells), the field of [`Script::ore_goal`]
+    /// lies beyond that reach of every refinery, no refinery is on its
+    /// lines, and a refinery fits with its foundation within that reach of
+    /// the field. A person builds a refinery at the field his harvesters
+    /// drive to once the one by his refinery runs dry (M8 step B8: in the
+    /// quick lane on maps 2 and 8, with the refinery beside the home field,
+    /// the Allied miners loaded a median of 15 to 34 cells from their only
+    /// refinery once that field was mined down); one per field, since
+    /// the new refinery puts that field within reach. A building that
+    /// comes with a free unit gives the house a harvester with it (S-0402
+    /// claim 18).
+    pub(crate) fn field_refinery(&self, w: &World) -> bool {
+        if self.slave_miners(w) || self.of_role(w, Role::Harvester).is_empty() {
+            return false;
+        }
+        let refineries: Vec<CellXY> = self
+            .of_role(w, Role::Refinery)
+            .iter()
+            .filter_map(|&id| w.obj(id))
+            .map(|o| o.pos.cell())
+            .collect();
+        if refineries.is_empty() {
+            return false;
+        }
+        let reach = i64::from(FIELD_REACH) * i64::from(FIELD_REACH);
+        let near = w
+            .cells
+            .grid
+            .iter()
+            .map(|(c, _)| c)
+            .filter(|&c| {
+                refineries.iter().any(|&r| dist2(r, c) <= reach)
+                    && w.cells.usable(c)
+                    && resource::resource_at(w, c).is_some()
+                    && shroud::explored(w, self.house, c)
+            })
+            .count();
+        if near >= CELLS_PER_HARVESTER {
+            return false;
+        }
+        let Some(goal) = self.ore_goal(w) else {
+            return false;
+        };
+        let types = self.candidates(w, Role::Refinery);
+        !refineries.iter().any(|&r| dist2(r, goal) <= reach)
+            && !types.iter().any(|&t| self.in_line(w, t))
+            && types
+                .iter()
+                .any(|&t| self.refinery_site(w, t, goal, Some(reach)).is_some())
     }
 
     /// The power plant the plan builds next: the cheapest power plant type
@@ -2071,6 +2127,19 @@ impl Script {
             return None;
         }
         let goal = self.ore_goal(w)?;
+        self.refinery_site(w, t, goal, None)
+    }
+
+    /// [`Script::place_refinery`]'s search toward `goal`, among the cells
+    /// whose foundation centre lies within `within` (a squared distance)
+    /// of it when given.
+    fn refinery_site(
+        &self,
+        w: &World,
+        t: TypeRef,
+        goal: CellXY,
+        within: Option<i64>,
+    ) -> Option<CellXY> {
         let search = {
             let cells: Vec<CellXY> = self.spiral(w, WIDE_RINGS).collect();
             placement::PlaceSearch::new(w, self.house, t, &cells)
@@ -2078,7 +2147,10 @@ impl Script {
         let p = search.place_type();
         let (fw, fh) = p.size;
         let centre = |c: CellXY| CellXY::new(c.x + fw / 2, c.y + fh / 2);
-        let mut cells: Vec<CellXY> = self.spiral(w, WIDE_RINGS).collect();
+        let mut cells: Vec<CellXY> = self
+            .spiral(w, WIDE_RINGS)
+            .filter(|&c| within.is_none_or(|r| dist2(centre(c), goal) <= r))
+            .collect();
         cells.sort_by_key(|&c| (dist2(centre(c), goal), c.y, c.x));
         let mut legal: Vec<Option<bool>> = vec![None; cells.len()];
         let known = self.known_objects(w, None);
