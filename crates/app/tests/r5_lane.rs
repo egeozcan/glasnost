@@ -404,6 +404,59 @@ fn round_5_notes_on_the_real_data() {
         "note 31: plain click after release: {} selected (expected 1)",
         selection_len(&c)
     );
+    // Type-select boxes around one near tank only (claims 19 and 29).
+    let one = centre_of(&mut c, near[0]).expect("the first near tank is drawn");
+    let drag = |c: &mut Client, mods: Modifiers| {
+        let (a, b) = (
+            Point::new(one.x - 14, one.y - 14),
+            Point::new(one.x + 14, one.y + 18),
+        );
+        let _ = c.frame();
+        c.modifiers(mods);
+        c.pointer_moved(a);
+        c.pointer_down(Button::Left, a);
+        for k in 1..=4 {
+            c.pointer_moved(Point::new(
+                a.x + (b.x - a.x) * k / 4,
+                a.y + (b.y - a.y) * k / 4,
+            ));
+        }
+        c.pointer_up(Button::Left, b, mods);
+        c.modifiers(Modifiers::default());
+        let s = c.session.as_ref().unwrap();
+        (s.play.selection.clone(), s.play.selected.len())
+    };
+    c.session.as_mut().unwrap().play.selection.clear();
+    let (plain, _) = drag(&mut c, Modifiers::default());
+    println!(
+        "note 31: plain box: {} selected (expected 1), it is the box's tank {}",
+        plain.len(),
+        plain == vec![near[0]]
+    );
+    c.session.as_mut().unwrap().play.selection.clear();
+    let spoken = c.session.as_ref().unwrap().play.selected.len();
+    // Each press well after the one before, so none widens to the map.
+    c.session.as_mut().unwrap().clock_ms = 30_000;
+    c.key(Key::Char('t'), true);
+    let (typed, after) = drag(&mut c, Modifiers::default());
+    println!(
+        "note 31: type-select box: {} selected (expected 4), far ones {}, silent {}",
+        typed.len(),
+        typed.iter().any(|id| far.contains(id)),
+        after == spoken
+    );
+    c.key(Key::Char('t'), false);
+    c.session.as_mut().unwrap().play.selection = vec![far[0]];
+    c.session.as_mut().unwrap().clock_ms = 40_000;
+    c.key(Key::Char('t'), true);
+    let (added, _) = drag(&mut c, shift);
+    c.key(Key::Char('t'), false);
+    println!(
+        "note 31: additive type-select box with a far one selected: {} selected (expected 5), far one kept {}",
+        added.len(),
+        added.contains(&far[0])
+    );
+    shots.save(&mut c, "r5-31-type-box");
     // Control groups: Ctrl+1 of two near tanks, Shift+1 adds a far one.
     let ctrl = Modifiers {
         force_fire: true,

@@ -26,5 +26,11 @@ fn the_settings_screen_draws() {
         std::fs::create_dir_all(&dir).unwrap();
         let path = std::path::Path::new(&dir).join("settings.png");
         std::fs::write(path, png::png(c.size.0 as u32, c.size.1 as u32, &rgba)).unwrap();
+        // The largest interface scale on a large window (fitted to it).
+        c.settings.ui_scale = 300;
+        c.resize((2560, 1440));
+        let rgba = c.frame_rgba();
+        let path = std::path::Path::new(&dir).join("settings-300.png");
+        std::fs::write(path, png::png(c.size.0 as u32, c.size.1 as u32, &rgba)).unwrap();
     }
 }
