@@ -90,7 +90,7 @@ taken in (later intakes): S-0207 r82, S-0402 r76 (34dd574), S-0417 r64.
 | 17 (flattening's threat test, the start cell) | partly | Coded and cited (`path::straighten`); no test isolates it, because the gate games give no unit a coefficient and a synthetic shape whose flattening alone turns on threat was not built. |
 | 18 (the count of threatened cells) | partly | As claim 17. |
 | 23, 23a, 27a (a give-up on a docking cell) | by construction | Unchanged rules; the give-up row stands. |
-| 24 (repeated substitution on high ground) | by construction | No rule change: derived from the existing rules. The estimate's coarse search adds no threat term: Q-1975. |
+| 24 (repeated substitution on high ground) | by construction | No rule change: derived from the existing rules. Intake 37 (S-0212 r83): the estimate's coarse search adds the threat term with the unit's own coefficient and owner (Q-1975 answered); test `claim_24_the_estimate_reads_the_units_threat`. |
 | F5, F7, F9 | tested | As claim 13's coarse threat. F7's coefficient limit and 0.01: `consts` tests. |
 | Constants (threat block, spread) | tested | As claim 16a. |
 | Edge cases (base, docking cell, short line: the original walks out) | tested | As claim 13; `claims_s0603.rs`: `run_s_shifts_with_the_switch_on` (lines of 3 to 9 at all eight shifts), `lines_are_passed_with_corridor_retry_no_fallback_off`. |
@@ -135,4 +135,4 @@ intake 33, which changed no golden). Every sweep exits 0 and no seed ends early.
   without the layer, 34 205 with it, same winner).
 
 **Requests.** Q-1975 (does a unit's threat coefficient steer the estimate's coarse search of
-claim 24). Q-1976 to Q-1979 unused.
+claim 24; answered by S-0212 r83 in intake 37). Q-1976 to Q-1979 unused.
