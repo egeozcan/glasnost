@@ -16,10 +16,10 @@
 //! (no shroud or fog), the corner brackets of selected buildings (claim 8:
 //! which corners are drawn is not established), the pip scale (claims 9 to
 //! 15), the self-heal marker (claim 16), the control-group number (claim
-//! 17: there are no control groups yet) and the repair wrench (claim 19:
-//! buildings are not repaired yet). The bomb icon of S-0519 claim 24 is
-//! drawn: the first status extra of its carrier, through the cursor
-//! palette ([`Cache::bomb_item`], [`CURSOR_PALETTE`]; S-0111 claim 19a).
+//! 17: there are no control groups yet). The bomb icon of S-0519 claim 24
+//! is drawn: the first status extra of its carrier, through the cursor
+//! palette ([`Cache::bomb_item`], [`CURSOR_PALETTE`]; S-0111 claim 19a),
+//! and so is the repair wrench of claim 19 ([`Cache::wrench_item`]).
 
 use std::collections::BTreeMap;
 
@@ -42,6 +42,11 @@ pub const BRACKET_SPRITE: &[u8] = b"PIPBRD.SHP"; // spec: S-0111 Import mapping 
 pub const OVERLAY_PALETTE: &[u8] = b"PALETTE.PAL"; // spec: S-0111 Import mapping (overlay palette)
 /// The bomb icon sprite (S-0519 claim 24, S-0111 Import mapping).
 pub const BOMB_SPRITE: &[u8] = b"BOMBCURS.SHP"; // spec: S-0111 Import mapping (BOMBCURS.SHP, the bomb icon of S-0519 claim 24)
+/// The wrench sprite (S-0111 claim 19 and Import mapping).
+pub const WRENCH_SPRITE: &[u8] = b"WRENCH.SHP"; // spec: S-0111 Import mapping (WRENCH.SHP, the wrench sprite)
+/// The wrench's base delay before normalisation, in ticks (S-0111
+/// Constants).
+const WRENCH_DELAY: i32 = 14; // spec: S-0111 Constants (wrench base delay 14 ticks before normalisation)
 /// The cursor palette: the palette of the wrench, the bomb icon (S-0519
 /// claim 24, S-0111 claim 19a and Import mapping) and the cursor images
 /// (S-0214 Import mapping).
@@ -56,6 +61,21 @@ pub fn cursor_palette(file: &[u8], q: &PaletteQuirks) -> Option<glasnost_fmt::im
     let pal = Palette6::parse(file).ok()?;
     // spec: S-0111 claim 19a, S-0103 claim 1 and Edge cases (the cursor palette's components ×4, wrapping, or 252 above 63 with the switch off)
     Some(palette_from_file(&pal, q))
+}
+
+/// The repair wrench's image frame in tick `t` at game speed `speed`
+/// (S-0111 claim 19, F4); `normalise` is `quirks.speed_normalised_delays`.
+pub fn wrench_frame(t: i32, speed: u8, normalise: bool) -> usize {
+    // spec: S-0111 claim 19 and F4 (N(14, s), the game-speed normalisation of S-0107 F3; with quirks.speed_normalised_delays off, 14 at every speed)
+    let n = if normalise {
+        glasnost_sim::infantry::normalised(WRENCH_DELAY, speed)
+    } else {
+        WRENCH_DELAY
+    };
+    // spec: S-0111 F4 (p = max(2, ⌊N(14, s) / 4⌋))
+    let p = (n / 4).max(2);
+    // spec: S-0111 F4 (image frame = ⌊6 (t mod p) / (p − 1)⌋, t the ticks since the game started)
+    usize::try_from(6 * t.rem_euclid(p) / (p - 1)).unwrap_or(0)
 }
 
 /// The image frame of a bomb icon in tick `n` for a bomb planted in tick
@@ -157,6 +177,8 @@ pub enum Sprite {
     Bracket,
     /// The bomb icon sprite (S-0519 claim 24).
     Bomb,
+    /// The wrench sprite (S-0111 claim 19).
+    Wrench,
 }
 
 impl Sprite {
@@ -166,6 +188,7 @@ impl Sprite {
             Sprite::Pips => PIP_SPRITE,
             Sprite::Bracket => BRACKET_SPRITE,
             Sprite::Bomb => BOMB_SPRITE,
+            Sprite::Wrench => WRENCH_SPRITE,
         }
     }
 }
@@ -675,6 +698,36 @@ impl Cache {
             x: at.0 - cw / 2 + fx,
             y: at.1 - ch / 2 + fy,
             // spec: S-0519 claim 24 (a status extra: after the object layers, with no depth test)
+            test: DepthTest::Ignore,
+            depth: flat(),
+            paint: Paint::Row(row),
+            group: Group::Status,
+            provisional: false,
+            object,
+            stack: None,
+        })
+    }
+
+    /// The repair wrench's item at image frame `frame`, a centred image at
+    /// the status anchor `anchor` (S-0111 claims 1 and 19, Terms); `None`
+    /// when the sprite, its frame or the cursor palette is missing.
+    pub fn wrench_item(
+        &mut self,
+        scene: &mut Scene,
+        assets: &Assets,
+        anchor: (i32, i32),
+        frame: usize,
+        object: Option<u32>,
+    ) -> Option<Item> {
+        // spec: S-0111 claim 19 and Import mapping (the wrench is drawn through the cursor palette)
+        let row = self.mouse_row(scene, assets)?;
+        let (image, (fx, fy), (cw, ch)) = self.frame(scene, assets, Sprite::Wrench, frame)?;
+        Some(Item {
+            image,
+            // spec: S-0111 claim 1 and Terms (placed from the status anchor, a centred image; claim 19 gives the wrench no displacement)
+            x: anchor.0 - cw / 2 + fx,
+            y: anchor.1 - ch / 2 + fy,
+            // spec: S-0102 claim 1 (a status extra: after the object layers, with no depth test)
             test: DepthTest::Ignore,
             depth: flat(),
             paint: Paint::Row(row),

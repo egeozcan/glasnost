@@ -5080,6 +5080,185 @@ fn cursor_palette_missing_claim19a() {
     assert!(live.notes.contains(super::live::CURSOR_PALETTE_MISSING));
 }
 
+/// spec: S-0108 Import mapping (ChargedAnimTime: a building rules key, a decimal held in single
+/// precision; absent: none here, the default 999 turning claim 18 off) and F6 (widened exactly to
+/// binary64)
+#[test]
+fn charged_anim_time_is_read_from_the_building_section() {
+    use glasnost_num::{F64, Rounding};
+    let m = Rounding::TowardZero;
+    let (import, ..) = super::tests::context_with(
+        "[BuildingTypes]\n0=DOME\n1=SHED\n[DOME]\nChargedAnimTime=0.1\n[SHED]\nStrength=5\n",
+    );
+    let tc = super::live::charged_anim_time(&import, "DOME", m).expect("set");
+    // 0.1 in single precision is a little above 0.1 in binary64.
+    let tenth = F64::from_i64(1, m).div(F64::from_i64(10, m), m);
+    assert!(tenth.lt(tc));
+    assert_eq!(
+        tc,
+        glasnost_num::decimal::parse("0.1", glasnost_num::decimal::Field::Single, m).unwrap()
+    );
+    assert_eq!(super::live::charged_anim_time(&import, "SHED", m), None);
+    assert_eq!(super::live::charged_anim_time(&import, "NONE", m), None);
+}
+
+/// spec: S-0111 F4 (p = max(2, ⌊N(14, s) / 4⌋): 28, 14, 9, 7, 5, 4 and 4 for s = 0 … 6; image
+/// frame ⌊6 (t mod p) / (p − 1)⌋; with quirks.speed_normalised_delays off, p = 3 at every speed)
+#[test]
+fn wrench_frame_f4() {
+    use super::combat::wrench_frame;
+    for (s, p) in [(0u8, 28), (1, 14), (2, 9), (3, 7), (4, 5), (5, 4), (6, 4)] {
+        // The period: the frame at t = p is the frame at t = 0, and the last tick of a period
+        // shows frame 6.
+        assert_eq!(wrench_frame(p, s, true), 0, "speed {s}");
+        assert_eq!(wrench_frame(p - 1, s, true), 6, "speed {s}");
+        assert_eq!(wrench_frame(0, s, true), 0, "speed {s}");
+    }
+    // s = 3, p = 7: every frame 0 … 6 in turn.
+    let frames: Vec<usize> = (0..7).map(|t| wrench_frame(t, 3, true)).collect();
+    assert_eq!(frames, vec![0, 1, 2, 3, 4, 5, 6]);
+    // s = 0, p = 28: ⌊6·5 / 27⌋ = 1.
+    assert_eq!(wrench_frame(5, 0, true), 1);
+    // Off: p = 3, frames 0, 3, 6 at every speed.
+    for s in 0..=6u8 {
+        let frames: Vec<usize> = (0..6).map(|t| wrench_frame(t, s, false)).collect();
+        assert_eq!(frames, vec![0, 3, 6, 0, 3, 6], "speed {s}");
+    }
+}
+
+/// The overlay assets plus the wrench sprite (7 frames on 10 × 10, frame i a 2 × 2 block of value
+/// i + 1 at (4, 4)) and a cursor palette.
+fn wrench_assets() -> super::build::Assets {
+    let mut assets = overlay_assets();
+    assets.insert(
+        super::combat::WRENCH_SPRITE,
+        super::tests::shp((10, 10), 7, (2, 2), (4, 4)),
+    );
+    let pal: Vec<u8> = (0..768u32).map(|i| (i * 3 % 64) as u8).collect();
+    assets.insert(super::combat::CURSOR_PALETTE, pal);
+    assets
+}
+
+/// What [`wrench_run`] gives: the building's status items, the first pixel of each, the F4 frame,
+/// the building's projected status anchor and the notes.
+type WrenchRun = (
+    Vec<glasnost_render::scene::Item>,
+    Vec<u8>,
+    usize,
+    (i32, i32),
+    std::collections::BTreeSet<String>,
+);
+
+/// A tower of house 0 on the combat scene, its repair `repairing`, drawn with `assets` for viewer
+/// `viewer` (`None`: no local player); `explore` reveals the tower's cell for the viewer first.
+fn wrench_run(
+    assets: &super::build::Assets,
+    repairing: bool,
+    viewer: Option<HouseId>,
+    explore: bool,
+) -> WrenchRun {
+    use glasnost_render::scene::Group;
+    use glasnost_sim::rules::Kind as SimKind;
+    let (mut live, mut scene, map, import, catalogue, ..) = combat_live_with(3, assets.clone());
+    let tower = testkit::spawn(
+        &mut live.world,
+        SimKind::Building,
+        "TOWER",
+        0,
+        testkit::mid(24, 4, 4),
+        0,
+    );
+    live.world.obj_mut(tower).unwrap().econ.building.repairing = repairing;
+    if let (Some(v), true) = (viewer, explore) {
+        let pos = live.world.obj(tower).unwrap().pos;
+        glasnost_sim::econ::shroud::area_reveal(&mut live.world, v, pos, 3);
+    }
+    live.set_viewer(viewer);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_marks(&[], None);
+    live.redraw_status(&inputs, &mut scene);
+    let status: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(sim_code(tower)))
+        .copied()
+        .collect();
+    let shown = (live.world.tick - 1).max(0);
+    let frame = super::combat::wrench_frame(
+        shown,
+        live.world.game_speed,
+        live.rules.quirks.speed_normalised_delays,
+    );
+    let p = live.world.reference_point(tower);
+    let pixels: Vec<u8> = status
+        .iter()
+        .map(|i| scene.images[i.image as usize].pixels()[0])
+        .collect();
+    (
+        status,
+        pixels,
+        frame,
+        project_lifted(p.x, p.y, p.z),
+        live.notes.clone(),
+    )
+}
+
+/// spec: S-0111 claim 19 (a building under repair shows the wrench sprite at its F4 image frame,
+/// unless its cell, the top-left cell of its foundation, is under shroud by S-0110 claim 8's point
+/// test; drawn through the cursor palette, claim 19a), claim 1 and Terms (a centred image at the
+/// status anchor), S-0111 Import mapping (a missing sprite: no wrench is drawn, and a warning)
+#[test]
+fn repair_wrench_claim19() {
+    // Under repair, no local player: the wrench, centred at the status anchor.
+    let (status, pixels, frame, (ax, ay), notes) = wrench_run(&wrench_assets(), true, None, false);
+    assert_eq!(
+        status.len(),
+        1,
+        "the wrench alone: not selected, no insignia"
+    );
+    let w = status[0];
+    // Frame f is a block of value f + 1.
+    assert_eq!(pixels[0], frame as u8 + 1);
+    assert_eq!((w.x, w.y), (ax - 5 + 4, ay - 5 + 4));
+    assert_eq!(w.test, DepthTest::Ignore);
+    assert!(matches!(w.paint, Paint::Row(_)));
+    assert!(!notes.contains(super::live::WRENCH_MISSING));
+    // Not under repair: nothing.
+    let (none, ..) = wrench_run(&wrench_assets(), false, None, false);
+    assert!(none.is_empty());
+    // A local player that has not explored the cell: shrouded, no wrench; explored: the wrench.
+    let (hidden, ..) = wrench_run(&wrench_assets(), true, Some(HouseId(1)), false);
+    assert!(hidden.is_empty(), "shrouded for the local player");
+    let (seen, ..) = wrench_run(&wrench_assets(), true, Some(HouseId(1)), true);
+    assert_eq!(seen.len(), 1, "explored by the local player");
+    // Without the sprite: no wrench, and the importer's warning (at load, repairing or not).
+    let mut no_sprite = wrench_assets();
+    no_sprite.set(super::combat::WRENCH_SPRITE, None);
+    let (missing, _, _, _, notes) = wrench_run(&no_sprite, true, None, false);
+    assert!(missing.is_empty());
+    assert!(notes.contains(super::live::WRENCH_MISSING));
+    assert!(!notes.contains(super::live::CURSOR_PALETTE_MISSING));
+    let (_, _, _, _, notes) = wrench_run(&no_sprite, false, None, false);
+    assert!(notes.contains(super::live::WRENCH_MISSING));
+    // Without the cursor palette: no wrench, and the palette's warning.
+    let mut no_pal = wrench_assets();
+    no_pal.set(super::combat::CURSOR_PALETTE, None);
+    let (missing, _, _, _, notes) = wrench_run(&no_pal, true, None, false);
+    assert!(missing.is_empty());
+    assert!(notes.contains(super::live::CURSOR_PALETTE_MISSING));
+}
+
 /// spec: S-0111 claim 19a, S-0103 claim 1 and Edge cases (the cursor palette's components become
 /// (4·c) mod 256, so 64 to 79 wrap to 0 to 60; with quirks.palette_component_wrap off, a component
 /// above 63 becomes 252: OV14 palette part e's engine fixture)

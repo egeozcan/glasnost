@@ -428,6 +428,9 @@ pub struct Live {
     /// Each building type's slot definitions, by import registration
     /// index, read when the type is first drawn.
     slot_defs: BTreeMap<usize, slot_play::Defs>,
+    /// Each building type's charged-animation time (S-0108 claim 18), by
+    /// the simulation's type index, read from the import at the start.
+    charged_anim_times: Vec<Option<glasnost_num::F64>>,
     /// The walls' slot starts and stops the last tick reported (S-0606
     /// claims 6, 12 and 16): building, slots, start, damaged variant.
     special_events: Vec<(ObjectId, [u8; 2], bool, bool)>,
@@ -664,6 +667,31 @@ pub fn import_kind(k: SimKind) -> Option<Kind> {
     }
 }
 
+/// Building type `name`'s charged-animation time *t_c* in game minutes
+/// (S-0108 claim 18, Import mapping): the rules key `ChargedAnimTime` of
+/// the building's section, a decimal held in single precision and widened
+/// exactly to binary64, read under rounding `mode`; `None` when the import
+/// does not set it (its default, 999, turns claim 18 off). No typed field
+/// carries the key, so it is read from the import's stored INI text of the
+/// type.
+pub fn charged_anim_time(
+    import: &glasnost_convert::Import,
+    name: &str,
+    mode: glasnost_num::Rounding,
+) -> Option<glasnost_num::F64> {
+    // spec: S-0108 Import mapping (ChargedAnimTime: building, decimal, held in single precision, game minutes)
+    let text = import
+        .tree
+        .get("types")?
+        .get(Kind::Buildings.key())?
+        .get(name)?
+        .get("ini")?
+        .get("ChargedAnimTime")?
+        .as_str()?;
+    // spec: S-0108 F6 (t_c is the single-precision field widened exactly to binary64); S-0003 claim 7 (a single-precision field's value)
+    glasnost_num::decimal::parse(text, glasnost_num::decimal::Field::Single, mode).ok()
+}
+
 /// The bytes of a type name as our rules format writes it (bytes 128 to 255
 /// as U+F780 to U+F7FF, docs/development.md "Import").
 pub fn name_bytes(s: &str) -> Vec<u8> {
@@ -821,6 +849,11 @@ impl Live {
         started: (World, Arc<SimRules>, GameSetup, Vec<String>),
     ) -> Self {
         let (world, rules, setup, substituted) = started;
+        let charged_anim_times = rules
+            .buildings
+            .iter()
+            .map(|b| charged_anim_time(inputs.import, &b.name, rules.mode))
+            .collect();
         // spec: S-0103 claim 15 (a house's display RGB, sampled once at colour setup; 8-bit channels)
         let house_rgb: Vec<[u8; 3]> = world
             .houses
@@ -1078,6 +1111,7 @@ impl Live {
             source_marker: None,
             slot_anims: BTreeMap::new(),
             slot_defs: BTreeMap::new(),
+            charged_anim_times,
             special_events: Vec::new(),
             depot_events: Vec::new(),
         };
@@ -1131,6 +1165,10 @@ impl Live {
         // spec: S-0519 Import mapping (a missing bomb-icon image draws no icon, and the importer warns)
         if inputs.assets.get(combat::BOMB_SPRITE).is_none() {
             live.notes.insert(BOMB_ICON_MISSING.to_owned());
+        }
+        // spec: S-0111 Import mapping (a missing wrench sprite draws nothing, and the importer warns)
+        if inputs.assets.get(combat::WRENCH_SPRITE).is_none() {
+            live.notes.insert(WRENCH_MISSING.to_owned());
         }
         live.note_cursor_palette(inputs.assets);
         live.redraw(inputs, &mut built.scene);
@@ -1334,6 +1372,12 @@ impl Live {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
                 let r = self.rules.buildings.get(o.type_index as usize)?;
                 let power = self.rules.econ.power.buildings.get(o.type_index as usize);
+                let first_sw = self
+                    .rules
+                    .superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .and_then(|s| s[0]);
                 let extra = power.map_or(0, |p| p.extra_output);
                 let needs_power = power.is_some_and(|p| p.needs_power);
                 let kind = slot_play::TypeKind {
@@ -1348,7 +1392,20 @@ impl Live {
                     draws_power: needs_power && power.is_some_and(|p| p.drain > 0),
                     // spec: S-0108 claims 13 and 26 (the needs-engineer flag: only such a type's ownership change re-enables it)
                     needs_engineer: power.is_some_and(|p| p.needs_engineer),
+                    // spec: S-0108 claims 11 and 18 (a building with a superweapon: its first superweapon field)
+                    superweapon: first_sw.is_some(),
+                    charged_anim_time: self
+                        .charged_anim_times
+                        .get(o.type_index as usize)
+                        .copied()
+                        .flatten(),
                 };
+                // spec: S-0108 claims 11 and 18 (the weapon's remaining charge time: the owner's record of the type's first superweapon, S-0512 F2, in the tick the picture shows)
+                let charge_remaining = first_sw
+                    .zip(o.owner)
+                    .and_then(|(sw, h)| glasnost_sim::superweapons::record(w, h, sw))
+                    .filter(|rec| rec.granted)
+                    .map(|rec| rec.remaining(now));
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)
                         .iter()
@@ -1380,6 +1437,11 @@ impl Live {
                     pulsed: glasnost_sim::econ::power::under_pulse(w, o.id),
                     // spec: S-0108 claim 26 (the needs-engineer flag and not manned, S-0515 claim 2)
                     unmanned: power.is_some_and(|p| p.needs_engineer) && !o.econ.building.manned,
+                    // spec: S-0108 claim 18 (not checked while the building is being sold)
+                    selling: o.econ.sale.is_some(),
+                    charge_remaining,
+                    // spec: S-0108 F6 (t_r = r × κ)
+                    charge_minutes: charge_remaining.map(|r| slot_play::charge_minutes(r, mode)),
                 };
                 // spec: S-0109 claims 21 and 23 (a building being erased holds its slot animations, a hold independent of claim 13's freeze)
                 let erased = glasnost_sim::superweapons::being_erased(w, o.id);
@@ -3522,7 +3584,8 @@ impl Live {
             && assets.get(combat::OVERLAY_PALETTE).is_some()
     }
 
-    /// S-0111's status extras after the effects: every object's veterancy
+    /// S-0111's status extras after the effects: every object's bomb icon
+    /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
     /// (with the unit bracket) and of the hovered one (claims 3 to 7). Within
     /// an object the bar covers the insignia (State and ordering).
@@ -3577,6 +3640,42 @@ impl Live {
                     None => {
                         let note = if inputs.assets.get(combat::CURSOR_PALETTE).is_some() {
                             BOMB_ICON_MISSING
+                        } else {
+                            CURSOR_PALETTE_MISSING
+                        };
+                        self.notes.insert(note.to_owned());
+                    }
+                }
+            }
+            // spec: S-0111 claim 19 (a building under repair, its repair switched on, S-0408 claim 13 and S-0314 claim 8, shows the wrench, unless the cell of its position, the top-left cell of its foundation, is under shroud by S-0110 claim 8's point test at the centre of that cell at its surface height)
+            if o.kind == SimKind::Building
+                && o.econ.building.repairing
+                && self
+                    .viewer
+                    .is_none_or(|v| !slot_cell_shrouded(&self.world, v, o.pos.cell()))
+            {
+                // spec: S-0111 F4 (the image frame in the tick the picture shows, S-0201 claim 6)
+                let frame = combat::wrench_frame(
+                    self.shown_tick(),
+                    self.world.game_speed,
+                    r.quirks.speed_normalised_delays,
+                );
+                // spec: S-0111 claim 1 and Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
+                let p = self.world.reference_point(o.id);
+                let anchor = project_lifted(p.x, p.y, p.z);
+                // design: the wrench follows the bomb icon and precedes the insignia and health bar among the object's extras, so the bar and its marks cover it as they cover the bomb icon (S-0111 gives no order for the wrench)
+                match self.cache.wrench_item(
+                    scene,
+                    inputs.assets,
+                    anchor,
+                    frame,
+                    Some(sim_code(o.id)),
+                ) {
+                    Some(item) => items.push(item),
+                    // spec: S-0111 Import mapping (a missing sprite draws nothing; the importer warns); claim 19a (missing cursor palette: likewise, its own warning)
+                    None => {
+                        let note = if inputs.assets.get(combat::CURSOR_PALETTE).is_some() {
+                            WRENCH_MISSING
                         } else {
                             CURSOR_PALETTE_MISSING
                         };
@@ -3845,6 +3944,9 @@ pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
 /// The note for a bomb icon whose image cannot be drawn (S-0519 Import
 /// mapping).
 pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP or its image frame is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+
+/// The note for a wrench that cannot be drawn (S-0111 Import mapping).
+pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image frame is missing: no repair wrench is drawn (S-0111 claim 19, Import mapping)";
 
 /// The note for a missing cursor palette, given once (S-0111 claim 19a and
 /// Edge cases: our engine's departure, no switch).

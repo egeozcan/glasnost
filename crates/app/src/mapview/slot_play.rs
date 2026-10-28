@@ -22,10 +22,12 @@
 //! pulse's end, and an ownership change of a building whose type needs an
 //! engineer, claim 26; an ownership change of any other building is
 //! neither). The *light-unpowered* and *effect-unpowered* columns stop and
-//! start slots. Not covered here: claim 14's special outage and
-//! the *low-power* slot, silo fill (claim 16), the superweapon slots and
-//! *super-low-power* (claims 11, 13 and 18), the turret slot (claims 11 and
-//! 19), the upgrade slots and the recycling building's row of claim 20.
+//! start slots. The superweapon slots *super-1* to *super-4* and
+//! *super-low-power* are played: the grand opening's start (claim 11), the
+//! charge cycle (claim 18) and the power rows (claim 13). Not covered here:
+//! claim 14's special outage and the *low-power* slot, silo fill (claim
+//! 16), the turret slot (claims 11 and 19), the upgrade slots and the
+//! recycling building's row of claim 20.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -54,15 +56,26 @@ pub enum Slot {
     Special3,
     /// *special-4*.
     Special4,
+    /// *super-1*: charging.
+    Super1,
+    /// *super-2*: opening.
+    Super2,
+    /// *super-3*: charged.
+    Super3,
+    /// *super-4*: closing.
+    Super4,
+    /// *super-low-power*.
+    SuperLowPower,
 }
 
 impl Slot {
     /// This module's slots in S-0108 claim 12's restart order: *active-1*
-    /// to *active-4*, *production*, *special-1* to *special-4*, then
-    /// *idle* (the upgrade, pre-production, turret, super and low-power
-    /// slots of that order are not played here).
+    /// to *active-4*, *production*, *special-1* to *special-4*, *super-1*
+    /// to *super-4*, *idle*, then *super-low-power* (the upgrade,
+    /// pre-production, turret and low-power slots of that order are not
+    /// played here).
     // spec: S-0108 claim 12 (the running slots are restarted one after another in the fixed order upgrade-1 to upgrade-3, active-1 to active-4, pre-production, production, turret, special-1 to special-4, super-1 to super-4, idle, low-power, super-low-power)
-    pub const RESTART: [Slot; 10] = [
+    pub const RESTART: [Slot; 15] = [
         Slot::Active1,
         Slot::Active2,
         Slot::Active3,
@@ -72,12 +85,17 @@ impl Slot {
         Slot::Special2,
         Slot::Special3,
         Slot::Special4,
+        Slot::Super1,
+        Slot::Super2,
+        Slot::Super3,
+        Slot::Super4,
         Slot::Idle,
+        Slot::SuperLowPower,
     ];
 
     /// Every slot of this module, in our own order (also the drawing
     /// order of a building's slot animations: our placeholder).
-    pub const ALL: [Slot; 10] = [
+    pub const ALL: [Slot; 15] = [
         Slot::Idle,
         Slot::Active1,
         Slot::Active2,
@@ -88,6 +106,11 @@ impl Slot {
         Slot::Special2,
         Slot::Special3,
         Slot::Special4,
+        Slot::Super1,
+        Slot::Super2,
+        Slot::Super3,
+        Slot::Super4,
+        Slot::SuperLowPower,
     ];
 
     /// The slot's base art key.
@@ -104,6 +127,11 @@ impl Slot {
             Slot::Special2 => b"SpecialAnimTwo",
             Slot::Special3 => b"SpecialAnimThree",
             Slot::Special4 => b"SpecialAnimFour",
+            Slot::Super1 => b"SuperAnim",
+            Slot::Super2 => b"SuperAnimTwo",
+            Slot::Super3 => b"SuperAnimThree",
+            Slot::Super4 => b"SuperAnimFour",
+            Slot::SuperLowPower => b"SuperLowPower",
         }
     }
 
@@ -154,6 +182,36 @@ pub struct TypeKind {
     /// The type needs an engineer (claim 26): only then is an ownership
     /// change a re-enabling (claim 13).
     pub needs_engineer: bool,
+    /// The type's first superweapon field names a superweapon (claims 11
+    /// and 18: its first superweapon only).
+    pub superweapon: bool,
+    /// The type's charged-animation time *t_c* in game minutes, the
+    /// single-precision field widened exactly to binary64 (claim 18, F6);
+    /// `None` when the data does not set the key.
+    pub charged_anim_time: Option<glasnost_num::F64>,
+}
+
+/// The grand opening's "charged" test: a remaining charge below this many
+/// ticks starts *super-3* (S-0108 claim 11).
+pub const CHARGED_TICKS: i32 = 15; // spec: S-0108 Constants (grand-opening "charged" test: 15 ticks)
+
+/// The charge cycle runs only for a charged-animation time of at most this
+/// many game minutes (S-0108 claim 18).
+pub const CHARGE_CYCLE_CUTOFF: i64 = 990; // spec: S-0108 claim 18 (the check runs only when t_c is at most 990)
+
+/// The charged-animation time when the data does not set the key, in game
+/// minutes (S-0108 Import mapping).
+pub const CHARGED_ANIM_TIME_DEFAULT: i64 = 999; // spec: S-0108 Import mapping (ChargedAnimTime absent: 999)
+
+/// S-0108 F6: the remaining charge *t_r* in game minutes for `r` remaining
+/// ticks, r × κ formed in binary64 under rounding `mode`, with κ =
+/// 2 386 093 / 2³¹.
+pub fn charge_minutes(r: i32, mode: glasnost_num::Rounding) -> glasnost_num::F64 {
+    use glasnost_num::F64;
+    // spec: S-0108 F6 and Constants (κ = 2 386 093 / 2³¹, the single-precision value nearest 0.0011111111)
+    let kappa = F64::from_parts(false, 2_386_093, -31, mode);
+    // spec: S-0108 F6 (the product formed in binary64, rounded by the program-wide mode)
+    F64::from_i64(i64::from(r), mode).mul(kappa, mode)
 }
 
 /// A building's state as the slot rules read it, each tick.
@@ -182,6 +240,14 @@ pub struct State {
     pub pulsed: bool,
     /// Its type needs an engineer and it is not manned (claim 26).
     pub unmanned: bool,
+    /// It is being sold (claim 18: the charge cycle is not checked then).
+    pub selling: bool,
+    /// The remaining charge in ticks of its owner's record of its type's
+    /// first superweapon (S-0512 F2), when that record is granted (claims
+    /// 11 and 18).
+    pub charge_remaining: Option<i32>,
+    /// That remaining charge in game minutes (F6).
+    pub charge_minutes: Option<glasnost_num::F64>,
 }
 
 /// Makes a slot's animation of a type name.
@@ -378,9 +444,11 @@ impl<A> Slots<A> {
 
     /// Claim 13's power-loss column.
     fn power_lost(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        // design: the column acts on the slots running at the loss; a slot it starts itself (active-1 of a delayed-fire type, super-low-power) is not then put through the column again
+        let was_running: BTreeSet<Slot> = self.running.keys().copied().collect();
         for slot in Self::power_slots(kind) {
             let Some(def) = defs.get(&slot) else { continue };
-            if !self.runs(slot) {
+            if !self.runs(slot) || !was_running.contains(&slot) {
                 continue;
             }
             match def.power.counting() {
@@ -404,9 +472,13 @@ impl<A> Slots<A> {
                     }
                 }
                 Counting::Effect => {
-                    // spec: S-0108 claim 13 (effect-unpowered, power lost: a running slot is stopped and marked as stopped by the outage; super-3's super-low-power is not modelled here)
+                    // spec: S-0108 claim 13 (effect-unpowered, power lost: a running slot is stopped and marked as stopped by the outage)
                     self.stop(slot);
                     self.outage.insert(slot);
+                    // spec: S-0108 claim 13 (if it is super-3, super-low-power starts; normal or damaged variant)
+                    if slot == Slot::Super3 {
+                        self.start_variant(Slot::SuperLowPower, defs, st.damaged, mk);
+                    }
                 }
                 Counting::Nothing => {}
             }
@@ -415,7 +487,14 @@ impl<A> Slots<A> {
 
     /// Claim 13's power-return column.
     fn power_back(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        // spec: S-0108 claim 13 (any counting flag, power comes back: super-low-power stops)
+        self.stop(Slot::SuperLowPower);
         for slot in Self::power_slots(kind) {
+            // design: super-low-power, stopped by the row for any flag, is not started again by its own flag's row at the same return (claim 13 gives no order between the rows; ours lets the stop stand)
+            if slot == Slot::SuperLowPower {
+                self.outage.remove(&slot);
+                continue;
+            }
             let Some(def) = defs.get(&slot) else { continue };
             match def.power.counting() {
                 Counting::Freeze => {
@@ -580,14 +659,54 @@ impl<A> Slots<A> {
             // variant) and claim 15 (no stored ore, m = 0: L = 0 selects active-1; no skirmish path
             // fills a building's own storage)
             self.start_variant(Slot::Active1, defs, st.damaged, mk);
+        } else {
+            // spec: S-0108 claim 11 (idle and active-1 with occupied variants allowed; active-2,
+            // active-3 and active-4 with no occupied variant)
+            self.start_occupied(Slot::Idle, defs, st, mk);
+            self.start_occupied(Slot::Active1, defs, st, mk);
+            for slot in [Slot::Active2, Slot::Active3, Slot::Active4] {
+                self.start_variant(slot, defs, st.damaged, mk);
+            }
+        }
+        if kind.superweapon {
+            // spec: S-0108 claim 11 (a building with a superweapon: super-3 when the weapon's remaining charge time is below 15 ticks, otherwise super-1; both allow occupied variants)
+            // design: a record that is not granted at the opening (S-0512 claim 2 grants it at the house's next recheck) counts as not charged, so super-1 starts, as S-0108 scenario B6 expects of a building that completes; Q-2001 asks
+            let charged = st.charge_remaining.is_some_and(|r| r < CHARGED_TICKS);
+            let slot = if charged { Slot::Super3 } else { Slot::Super1 };
+            self.start_occupied(slot, defs, st, mk);
+        }
+    }
+
+    /// S-0108 claim 18's charge cycle check, for a type with a superweapon
+    /// whose charged-animation time is at most 990 game minutes.
+    fn charge_cycle(&mut self, kind: &TypeKind, defs: &Defs, st: &State, mk: &mut dyn Make<A>) {
+        use glasnost_num::{F64, Rounding};
+        // spec: S-0108 claim 18 (a building with a superweapon, its first only; not while it is being built or sold)
+        if !kind.superweapon || !st.completed || st.selling {
             return;
         }
-        // spec: S-0108 claim 11 (idle and active-1 with occupied variants allowed; active-2,
-        // active-3 and active-4 with no occupied variant)
-        self.start_occupied(Slot::Idle, defs, st, mk);
-        self.start_occupied(Slot::Active1, defs, st, mk);
-        for slot in [Slot::Active2, Slot::Active3, Slot::Active4] {
-            self.start_variant(slot, defs, st.damaged, mk);
+        // spec: S-0108 Import mapping (ChargedAnimTime absent: 999, above 990, so claim 18 is off)
+        let Some(tc) = kind.charged_anim_time else {
+            return;
+        };
+        // spec: S-0108 claim 18 (the check runs only when t_c is at most 990); 990 is exact in binary64 in either mode
+        if !tc.le(F64::from_i64(CHARGE_CYCLE_CUTOFF, Rounding::TowardZero)) {
+            return;
+        }
+        // design: no granted record, no remaining charge to compare: the cycle waits (Q-2001)
+        let Some(tr) = st.charge_minutes else {
+            return;
+        };
+        if tc.lt(tr) {
+            // spec: S-0108 claim 18 (t_c < t_r and super-3 running: super-3 stops and super-4 starts; normal or damaged variant)
+            if self.runs(Slot::Super3) {
+                self.stop(Slot::Super3);
+                self.start_variant(Slot::Super4, defs, st.damaged, mk);
+            }
+        } else if self.runs(Slot::Super1) {
+            // spec: S-0108 claim 18 and F6 (t_c ≥ t_r, the charged branch, and super-1 running: super-1 stops and super-2 starts; normal or damaged variant)
+            self.stop(Slot::Super1);
+            self.start_variant(Slot::Super2, defs, st.damaged, mk);
         }
     }
 
@@ -634,6 +753,8 @@ impl<A> Slots<A> {
                 self.start_occupied(on, defs, st, mk);
             }
         }
+        // design: the charge cycle after the damage swap and the absorption check, before the power reaction (S-0108 gives no order among a building's own checks)
+        self.charge_cycle(kind, defs, st, mk);
         self.power(kind, defs, st, mk);
     }
 
@@ -698,6 +819,10 @@ impl<A> Slots<A> {
             Slot::Special1 if kind.delayed_fire && !kind.depot => {
                 self.start_occupied(Slot::Active1, defs, st, mk);
             }
+            // spec: S-0108 claim 18 (when super-2 finishes on its own, super-3 starts; normal or damaged variant)
+            Slot::Super2 => self.start_variant(Slot::Super3, defs, st.damaged, mk),
+            // spec: S-0108 claim 18 (when super-4 finishes on its own, super-1 starts; normal or damaged variant)
+            Slot::Super4 => self.start_variant(Slot::Super1, defs, st.damaged, mk),
             // spec: S-0108 claim 20 (no other building reacts to special-1 or special-3 ending)
             _ => {}
         }
@@ -764,9 +889,12 @@ mod tests {
     }
 
     /// Every slot named after itself: `I`, `A1` … `A4`, `P`, `S1` … `S4`,
-    /// with damaged names `…D` and occupied names `…G`.
+    /// `U1` … `U4` (super-1 … super-4) and `L` (super-low-power), with
+    /// damaged names `…D` and occupied names `…G`.
     fn defs() -> Defs {
-        let names = ["I", "A1", "A2", "A3", "A4", "P", "S1", "S2", "S3", "S4"];
+        let names = [
+            "I", "A1", "A2", "A3", "A4", "P", "S1", "S2", "S3", "S4", "U1", "U2", "U3", "U4", "L",
+        ];
         Slot::ALL
             .iter()
             .zip(names)
@@ -1692,5 +1820,200 @@ mod tests {
         assert!(s.frozen(Slot::Active1));
         turn(&mut s, &fire, &d, &on(), true);
         assert!(!s.runs(Slot::Special1) && !s.frozen(Slot::Active1));
+    }
+
+    fn sw() -> TypeKind {
+        TypeKind {
+            superweapon: true,
+            ..TypeKind::default()
+        }
+    }
+
+    /// A completed building whose owner's record has `r` ticks of charge
+    /// left (`None`: not granted), with the F6 minutes.
+    fn charging(r: Option<i32>) -> State {
+        State {
+            charge_remaining: r,
+            charge_minutes: r.map(|r| charge_minutes(r, glasnost_num::Rounding::TowardZero)),
+            ..done()
+        }
+    }
+
+    /// spec: S-0108 claim 11 and Constants (a building with a superweapon: super-3 when the
+    /// remaining charge is below 15 ticks, otherwise super-1, both with occupied variants allowed;
+    /// alongside the other opening starts, a refinery's included; at a set-up placement too)
+    #[test]
+    fn grand_opening_starts_a_superweapon_slot() {
+        let d = defs();
+        let open = |kind: &TypeKind, st: &State| {
+            let mut s = Slots::default();
+            s.update(kind, &d, st, &mut Maker);
+            names(&s)
+        };
+        assert_eq!(
+            open(&sw(), &charging(Some(15))),
+            ["I", "A1", "A2", "A3", "A4", "U1"]
+        );
+        assert_eq!(
+            open(&sw(), &charging(Some(14))),
+            ["I", "A1", "A2", "A3", "A4", "U3"]
+        );
+        assert_eq!(open(&sw(), &charging(Some(0))).last().unwrap(), "U3");
+        // Occupied variants allowed.
+        let occupied = State {
+            occupied: true,
+            ..charging(Some(900))
+        };
+        assert_eq!(open(&sw(), &occupied).last().unwrap(), "U1G");
+        // design (Q-2001): a record that is not granted counts as not charged.
+        assert_eq!(open(&sw(), &charging(None)).last().unwrap(), "U1");
+        // A refinery with a superweapon: its fill-level slot and the superweapon slot.
+        let refinery = TypeKind {
+            refinery: true,
+            ..sw()
+        };
+        assert_eq!(open(&refinery, &charging(Some(900))), ["A1", "U1"]);
+        // A set-up placement.
+        let setup = State {
+            setup: true,
+            ..charging(Some(3))
+        };
+        assert_eq!(open(&sw(), &setup).last().unwrap(), "U3");
+        // No superweapon: no superweapon slot.
+        assert_eq!(
+            open(&TypeKind::default(), &charging(Some(3))),
+            ["I", "A1", "A2", "A3", "A4"]
+        );
+    }
+
+    /// spec: S-0108 F6 and Constants (t_r = r × κ in binary64, κ = 2 386 093 / 2³¹ exactly, a
+    /// little above 1/900)
+    #[test]
+    fn remaining_charge_in_game_minutes_f6() {
+        use glasnost_num::{F64, Rounding};
+        let m = Rounding::TowardZero;
+        let kappa = F64::from_i64(2_386_093, m).div(F64::from_i64(1 << 31, m), m);
+        assert_eq!(charge_minutes(1, m), kappa);
+        assert_eq!(charge_minutes(0, m), F64::ZERO);
+        // 900 ticks are a little more than one game minute.
+        let one = F64::from_i64(1, m);
+        assert!(one.lt(charge_minutes(900, m)));
+        assert!(charge_minutes(899, m).lt(one));
+    }
+
+    /// spec: S-0108 claim 18 (t_c at most 990: when t_c ≥ t_r and super-1 runs, super-2 replaces it;
+    /// super-2 finishing starts super-3; when t_c < t_r and super-3 runs, super-4 replaces it;
+    /// super-4 finishing starts super-1; normal or damaged variant; not while being built or sold;
+    /// t_c above 990, or absent with its default 999: no check)
+    #[test]
+    fn the_superweapon_charge_cycle() {
+        use glasnost_num::{F64, Rounding};
+        let d = defs();
+        let tc = |m: i64| Some(F64::from_i64(m, Rounding::TowardZero));
+        let kind = TypeKind {
+            charged_anim_time: tc(30),
+            ..sw()
+        };
+        let mut s = Slots::default();
+        s.update(&kind, &d, &charging(Some(100_000)), &mut Maker);
+        assert!(s.runs(Slot::Super1));
+        // 27 000 ticks are a little more than 30 minutes (κ is above 1/900): still charging.
+        s.update(&kind, &d, &charging(Some(27_000)), &mut Maker);
+        assert!(s.runs(Slot::Super1) && !s.runs(Slot::Super2));
+        // 26 999 ticks: t_c ≥ t_r, the charged branch.
+        s.update(&kind, &d, &charging(Some(26_999)), &mut Maker);
+        assert!(!s.runs(Slot::Super1) && s.runs(Slot::Super2));
+        // Super-2 finishes on its own: super-3, here damaged.
+        let hurt = State {
+            damaged: true,
+            ..charging(Some(10))
+        };
+        s.update(&kind, &d, &hurt, &mut Maker);
+        s.finished(Slot::Super2, &kind, &d, &hurt, &mut Maker);
+        assert_eq!(names(&s).last().unwrap(), "U3D");
+        // Fired: the charge restarts, t_c < t_r: super-4 replaces super-3.
+        s.update(&kind, &d, &charging(Some(100_000)), &mut Maker);
+        assert!(!s.runs(Slot::Super3) && s.runs(Slot::Super4));
+        s.finished(Slot::Super4, &kind, &d, &charging(Some(99_000)), &mut Maker);
+        assert!(s.runs(Slot::Super1) && !s.runs(Slot::Super4));
+        // Being sold: no check.
+        let sold = State {
+            selling: true,
+            ..charging(Some(0))
+        };
+        s.update(&kind, &d, &sold, &mut Maker);
+        assert!(s.runs(Slot::Super1));
+        // t_c above 990, or not set (999): no check, super-1 stays.
+        for k in [
+            TypeKind {
+                charged_anim_time: tc(991),
+                ..sw()
+            },
+            sw(),
+        ] {
+            let mut s = Slots::default();
+            s.update(&k, &d, &charging(Some(100_000)), &mut Maker);
+            s.update(&k, &d, &charging(Some(0)), &mut Maker);
+            assert!(s.runs(Slot::Super1) && !s.runs(Slot::Super2));
+        }
+        // At 990 the check runs.
+        let at = TypeKind {
+            charged_anim_time: tc(990),
+            ..sw()
+        };
+        let mut s = Slots::default();
+        s.update(&at, &d, &charging(Some(100_000)), &mut Maker);
+        s.update(&at, &d, &charging(Some(0)), &mut Maker);
+        assert!(s.runs(Slot::Super2));
+        // No granted record: the cycle waits (Q-2001).
+        let mut s = Slots::default();
+        s.update(&kind, &d, &charging(None), &mut Maker);
+        s.update(&kind, &d, &charging(None), &mut Maker);
+        assert!(s.runs(Slot::Super1) && !s.runs(Slot::Super2));
+    }
+
+    /// spec: S-0108 claim 13 (an effect-unpowered super-3: at a power loss it stops, is marked, and
+    /// super-low-power starts; at the power return super-low-power stops and the marked super-3
+    /// starts again), claim 12 (super-1 … super-4 restart before idle, super-low-power last)
+    #[test]
+    fn super_low_power_at_an_outage() {
+        let mut d = defs();
+        d.insert(Slot::Super3, flagged("U3", false, true));
+        let kind = TypeKind {
+            needs_power: true,
+            draws_power: true,
+            ..sw()
+        };
+        let powered = State {
+            in_operation: true,
+            ..charging(Some(0))
+        };
+        let mut s = Slots::default();
+        turn(&mut s, &kind, &d, &powered, true);
+        assert!(s.runs(Slot::Super3));
+        turn(&mut s, &kind, &d, &charging(Some(0)), true);
+        assert!(!s.runs(Slot::Super3) && s.runs(Slot::SuperLowPower));
+        turn(&mut s, &kind, &d, &powered, true);
+        assert!(s.runs(Slot::Super3) && !s.runs(Slot::SuperLowPower));
+        // A freeze-unpowered super-1 is only frozen at a loss: no super-low-power.
+        let mut t = Slots::default();
+        turn(
+            &mut t,
+            &kind,
+            &d,
+            &State {
+                in_operation: true,
+                ..charging(Some(900))
+            },
+            true,
+        );
+        turn(&mut t, &kind, &d, &charging(Some(900)), true);
+        assert!(t.frozen(Slot::Super1) && !t.runs(Slot::SuperLowPower));
+        // The restart order of claim 12.
+        let i = |x: Slot| Slot::RESTART.iter().position(|s| *s == x).unwrap();
+        assert!(i(Slot::Special4) < i(Slot::Super1));
+        assert!(i(Slot::Super1) < i(Slot::Super2) && i(Slot::Super3) < i(Slot::Super4));
+        assert!(i(Slot::Super4) < i(Slot::Idle) && i(Slot::Idle) < i(Slot::SuperLowPower));
+        assert_eq!(Slot::RESTART.len(), Slot::ALL.len());
     }
 }

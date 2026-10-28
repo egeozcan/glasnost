@@ -902,6 +902,8 @@ pub fn wanted_files(
         // spec: S-0519 claim 24 and S-0111 Import mapping (the bomb icon and its cursor palette)
         super::combat::BOMB_SPRITE,
         super::combat::CURSOR_PALETTE,
+        // spec: S-0111 claim 19 and Import mapping (the wrench sprite, through the cursor palette)
+        super::combat::WRENCH_SPRITE,
     ] {
         out.insert(upper(f));
     }
