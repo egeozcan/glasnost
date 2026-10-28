@@ -3152,9 +3152,8 @@ impl Live {
         ids.into_iter().zip(drawn).collect()
     }
 
-    /// The items of every debris piece in play (S-0317 claim 15; drawing
-    /// interim of Q-1835), by object number; empty for one that draws
-    /// nothing.
+    /// The items of every debris piece in play (S-0317 claims 15 and 22 to
+    /// 28), by object number; empty for one that draws nothing.
     fn piece_items(&mut self, inputs: &Inputs, scene: &mut Scene) -> BTreeMap<ObjectId, Vec<Item>> {
         use super::build::PieceDraw;
         let mut list = Vec::new();
@@ -3173,11 +3172,20 @@ impl Live {
                 .and_then(|h| self.world.houses.get(usize::from(h.0)))
                 .map(|h| h.name.as_bytes().to_vec())
                 .unwrap_or_default();
+            // spec: S-0317 Terms (the cell of a position: (trunc(x / 256), trunc(y / 256)))
+            let cell = p.pos.cell();
             list.push(PieceDraw {
+                id: sim_code(*id),
                 idx,
                 pos: (p.pos.x, p.pos.y, p.pos.z),
-                pose: piece_pose(p.axis, f64::from_bits(p.spin.0), p.turns),
+                axis: p.axis,
+                spin: p.spin.0,
+                turns: p.turns,
                 owner,
+                // spec: S-0317 claims 20 and 27 (the ground height at the position, 0 off the legal map)
+                ground: self.world.surface_at(p.pos.x, p.pos.y),
+                bridge: self.world.high_bridge(cell),
+                on_map: self.world.cells.cell(cell).is_some(),
             });
             ids.push(*id);
         }
@@ -3897,31 +3905,4 @@ pub(super) fn generic_shadow(w: &World, o: &Object) -> Option<i32> {
     };
     // spec: S-0107 claim 19 (c) (drawn exactly when hₛ > 0; nothing while h < 0)
     (h > 0 && hs > 0).then_some(hs)
-}
-
-/// A debris piece's drawn pose (S-0317 claim 15: the spin rate turns the
-/// drawn model each tick about the spin axis), in our interim of Q-1835:
-/// the model axis is the axis of the spin axis's largest component (the
-/// first of equal ones; none for a zero axis), and the angle reached after
-/// `elapsed` ticks, spin rate × ticks radians with the sign of that
-/// component, is taken in whole 32-step facing steps of π/16, modulo 32.
-pub fn piece_pose(axis: [i32; 3], spin: f64, elapsed: i32) -> (u8, u8) {
-    let Some((k, c)) = axis
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| **c != 0)
-        .max_by(|a, b| {
-            a.1.unsigned_abs()
-                .cmp(&b.1.unsigned_abs())
-                .then(b.0.cmp(&a.0))
-        })
-        .map(|(k, c)| (k, *c))
-    else {
-        return (3, 0); // nocite: our interim's "no turn" axis code (Q-1835)
-    };
-    let angle = spin * f64::from(elapsed) * f64::from(c.signum());
-    let steps = (angle / super::build::PIECE_STEP).floor();
-    // Our interim (Q-1835): whole steps modulo the 32 facing steps of S-0105.
-    let step = (steps.rem_euclid(32.0)) as u8; // nocite: 32 facing steps (S-0105 Constants)
-    (k as u8, step)
 }

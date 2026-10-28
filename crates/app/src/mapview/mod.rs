@@ -19,6 +19,7 @@ pub mod live;
 mod live_tests;
 pub mod load;
 pub mod particles;
+pub mod piece_pool;
 #[cfg(test)]
 mod piece_tests;
 pub mod png;

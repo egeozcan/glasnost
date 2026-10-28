@@ -238,6 +238,8 @@ pub struct MapRenderer {
     atlas_layers: u32,
     packer: Packer,
     row_count: usize,
+    /// The scene's [`Scene::rewrites`] when last uploaded or synced.
+    rewrites_seen: u64,
     target_format: wgpu::TextureFormat,
     rows: wgpu::Texture,
     /// The light-alpha texture and its size.
@@ -521,6 +523,7 @@ impl MapRenderer {
             atlas_layers: layers,
             packer,
             row_count: scene.rows.len(),
+            rewrites_seen: scene.rewrites,
             target_format,
             rows: rows_texture,
             alpha: (alpha, (1, 1)),
@@ -539,10 +542,12 @@ impl MapRenderer {
     }
 
     /// Uploads what `scene` gained since the upload or the last sync: images
-    /// appended to [`Scene::images`] go into the atlas's free space, and
-    /// palette rows appended to [`Scene::rows`] replace the row texture.
-    /// Images and rows already uploaded must be unchanged. Fails when the
-    /// atlas is full (or the scene lost images); upload the scene anew then.
+    /// appended to [`Scene::images`] go into the atlas's free space, images
+    /// rewritten in place ([`Scene::replace_image`]) are written again into
+    /// their own slots, and palette rows appended to [`Scene::rows`]
+    /// replace the row texture. Images and rows already uploaded must
+    /// otherwise be unchanged. Fails when the atlas is full (or the scene
+    /// lost images); upload the scene anew then.
     pub fn sync(
         &mut self,
         device: &wgpu::Device,
@@ -551,6 +556,20 @@ impl MapRenderer {
     ) -> Result<(), UploadError> {
         if scene.images.len() < self.slots.len() || scene.signed.len() < self.signed_slots.len() {
             return Err(UploadError("the scene lost images".into()));
+        }
+        if scene.rewrites != self.rewrites_seen {
+            for (&id, &at) in &scene.rewritten {
+                if at <= self.rewrites_seen {
+                    continue;
+                }
+                let (Some(&slot), Some(img)) =
+                    (self.slots.get(id as usize), scene.images.get(id as usize))
+                else {
+                    continue;
+                };
+                self.write(queue, slot, img.width(), img.height(), img.pixels());
+            }
+            self.rewrites_seen = scene.rewrites;
         }
         for img in &scene.images[self.slots.len()..] {
             let slot = self.upload(queue, img.width(), img.height(), img.pixels())?;
@@ -595,6 +614,12 @@ impl MapRenderer {
             .place(w.max(1), h.max(1))
             .filter(|s| s.layer < self.atlas_layers)
             .ok_or_else(|| UploadError("the atlas is full".into()))?;
+        self.write(queue, slot, w, h, pixels);
+        Ok(slot)
+    }
+
+    /// Writes a `w` × `h` image of bytes `pixels` into the atlas at `slot`.
+    fn write(&mut self, queue: &wgpu::Queue, slot: Slot, w: u32, h: u32, pixels: &[u8]) {
         if w > 0 && h > 0 {
             self.stats.uploads += 1;
             self.stats.upload_bytes += u64::from(w) * u64::from(h);
@@ -622,7 +647,6 @@ impl MapRenderer {
                 },
             );
         }
-        Ok(slot)
     }
 
     /// Records the scene for `view` into `encoder`, rendering into `target`

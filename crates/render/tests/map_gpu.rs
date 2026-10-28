@@ -292,6 +292,64 @@ fn sync_uploads_added_images_and_rows() {
     assert_eq!(differing, 0);
 }
 
+/// Images rewritten in place after the upload (`Scene::replace_image`)
+/// reach the GPU through `sync`, into their own slots: the result still
+/// matches the CPU reference, and the image count does not grow.
+#[test]
+fn sync_rewrites_replaced_images() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let mut s = scene();
+    let mut r = MapRenderer::new(&device, &queue, &s, glasnost_render::map_gpu::COLOR_FORMAT)
+        .expect("scene uploads");
+    let n = s.images.len();
+    for id in [0u32, 2] {
+        let (w, h) = (
+            s.images[id as usize].width(),
+            s.images[id as usize].height(),
+        );
+        assert!(s.replace_image(id, image(w, h, 77 + id as u8)));
+    }
+    assert!(
+        !s.replace_image(1, image(1, 1, 3)),
+        "a size change is refused"
+    );
+    assert_eq!(s.images.len(), n);
+    r.sync(&device, &queue, &s).expect("rewrites fit");
+    let size = (128, 72);
+    let view = View {
+        origin: (0, 0),
+        size,
+        reference: DEPTH_REFERENCE,
+    };
+    let filter = Filter::default();
+    let cpu = s
+        .compose(&view, &filter, &ComposeQuirks::default())
+        .to_rgba();
+    let (color, depth) = targets(&device, size, glasnost_render::map_gpu::COLOR_FORMAT);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    r.render(
+        &device,
+        &queue,
+        &mut encoder,
+        &color,
+        &depth.create_view(&Default::default()),
+        &s,
+        &view,
+        &filter,
+        &ComposeQuirks::default(),
+    );
+    queue.submit([encoder.finish()]);
+    let gpu = read_texture(&device, &queue, &color, size.0, size.1);
+    let differing = cpu
+        .chunks(4)
+        .zip(gpu.chunks(4))
+        .filter(|(a, b)| a[..3] != b[..3])
+        .count();
+    assert_eq!(differing, 0);
+}
+
 /// spec: S-0102 claim 27 (cell-pass shadows store their depth; quirks.cell_pass_shadows_write_depth)
 ///
 /// Two writer shadows at the same depth over a flat item: with the switch
