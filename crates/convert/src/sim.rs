@@ -1750,6 +1750,15 @@ impl Builder<'_> {
                 Kind::TerrainObjects => {
                     self.fields(&mut rec, t, kind, TERRAIN_OBJECT_FIELDS);
                     self.terrain_combat(&mut rec, t);
+                    // spec: S-0401 claim 15 (N, the image-frame count of the type's sprite, S-0112 Terms; the sprite is S-0007 claim 13's, read while the loading archives are mounted)
+                    if let Some(n) = self
+                        .i
+                        .arts
+                        .and_then(|a| a.get(&(Kind::TerrainObjects, i)))
+                        .and_then(|a| a.sprite_frames)
+                    {
+                        rec.put("image_frames", int_node(n));
+                    }
                 }
                 Kind::Weapons => {
                     self.fields(&mut rec, t, kind, WEAPON_FIELDS);

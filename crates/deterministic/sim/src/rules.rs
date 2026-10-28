@@ -1434,7 +1434,7 @@ impl SimRules {
                         .animation_probability
                         .as_ref()
                         .map_or(F64::ZERO, |d| d.single_value(mode)),
-                    // spec: S-0401 claim 15 (N, the sprite's image frames; absent: the schema's provisional rule, no frames, so the mine never makes resource)
+                    // spec: S-0401 claim 15 (N, the sprite's image frames; absent: no frames known, so the mine never makes resource, as with fewer than 2)
                     image_frames: t.image_frames.unwrap_or(0),
                 }
             })

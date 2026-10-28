@@ -475,6 +475,54 @@ fn terrain_spawns_resources_flag() {
     assert_eq!(s.terrain_objects["Grower"].spawns_tiberium, Some(true));
 }
 
+/// spec: S-0401 claim 15 (N, the image-frame count of an ore mine's sprite: the
+/// count of the sprite found for the type; no sprite found gives no count)
+#[test]
+fn terrain_image_frames_from_the_sprite() {
+    let base = "[TerrainTypes]\n0=Grower\n1=Bare\n[Grower]\nSpawnsTiberium=yes\n";
+    let layers = [crate::layers::Layer {
+        role: crate::layers::Role::Base,
+        file: "rules.ini".into(),
+        doc: Document::parse(base.as_bytes(), Default::default(), &mut Vec::new()),
+    }];
+    let art = Document::empty(Default::default());
+    let outcome = crate::layers::apply(
+        &layers,
+        &art,
+        "art.ini",
+        Default::default(),
+        &LayerQuirks::default(),
+    );
+    let arts = BTreeMap::from([
+        (
+            (Kind::TerrainObjects, 0),
+            TypeArt {
+                sprite: Some(b"grower.tem".to_vec()),
+                sprite_frames: Some(12),
+                ..TypeArt::default()
+            },
+        ),
+        ((Kind::TerrainObjects, 1), TypeArt::default()),
+    ]);
+    let (node, _) = build(SimInputs {
+        outcome: &outcome,
+        art: &art,
+        arts: Some(&arts),
+        quirks: &LayerQuirks::default(),
+        art_quirks: &ArtQuirks::default(),
+        ini_quirks: &Default::default(),
+        sim_quirks: &SimQuirks::default(),
+    });
+    let parsed: SimData = glasnost_rules::de::from_node(&node).unwrap();
+    assert_eq!(parsed.terrain_objects["Grower"].image_frames, Some(12));
+    assert!(
+        parsed
+            .terrain_objects
+            .get("Bare")
+            .is_none_or(|t| t.image_frames.is_none())
+    );
+}
+
 /// spec: S-0211 claim 4 and Import mapping (zone names, restricted land types)
 #[test]
 fn zones_and_restrictions() {
