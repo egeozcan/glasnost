@@ -1132,6 +1132,10 @@ impl Live {
         if inputs.assets.get(combat::BOMB_SPRITE).is_none() {
             live.notes.insert(BOMB_ICON_MISSING.to_owned());
         }
+        // spec: S-0111 Import mapping (a missing wrench sprite draws nothing, and the importer warns)
+        if inputs.assets.get(combat::WRENCH_SPRITE).is_none() {
+            live.notes.insert(WRENCH_MISSING.to_owned());
+        }
         live.note_cursor_palette(inputs.assets);
         live.redraw(inputs, &mut built.scene);
         live
@@ -3522,7 +3526,8 @@ impl Live {
             && assets.get(combat::OVERLAY_PALETTE).is_some()
     }
 
-    /// S-0111's status extras after the effects: every object's veterancy
+    /// S-0111's status extras after the effects: every object's bomb icon
+    /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
     /// (with the unit bracket) and of the hovered one (claims 3 to 7). Within
     /// an object the bar covers the insignia (State and ordering).
@@ -3577,6 +3582,39 @@ impl Live {
                     None => {
                         let note = if inputs.assets.get(combat::CURSOR_PALETTE).is_some() {
                             BOMB_ICON_MISSING
+                        } else {
+                            CURSOR_PALETTE_MISSING
+                        };
+                        self.notes.insert(note.to_owned());
+                    }
+                }
+            }
+            // spec: S-0111 claim 19 (a building under repair, its repair switched on, S-0408 claim 13 and S-0314 claim 8, shows the wrench, unless the cell of its position, the top-left cell of its foundation, is under shroud by S-0110 claim 8's point test at the centre of that cell at its surface height)
+            if o.kind == SimKind::Building
+                && o.econ.building.repairing
+                && self
+                    .viewer
+                    .is_none_or(|v| !slot_cell_shrouded(&self.world, v, o.pos.cell()))
+            {
+                // spec: S-0111 F4 (the image frame in the tick the picture shows, S-0201 claim 6)
+                let frame = combat::wrench_frame(
+                    self.shown_tick(),
+                    self.world.game_speed,
+                    r.quirks.speed_normalised_delays,
+                );
+                // spec: S-0111 claim 1 and Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
+                let p = self.world.reference_point(o.id);
+                let anchor = project_lifted(p.x, p.y, p.z);
+                // design: the wrench follows the bomb icon and precedes the insignia and health bar among the object's extras, so the bar and its marks cover it as they cover the bomb icon (S-0111 gives no order for the wrench)
+                match self
+                    .cache
+                    .wrench_item(scene, inputs.assets, anchor, frame, Some(sim_code(o.id)))
+                {
+                    Some(item) => items.push(item),
+                    // spec: S-0111 Import mapping (a missing sprite draws nothing; the importer warns); claim 19a (missing cursor palette: likewise, its own warning)
+                    None => {
+                        let note = if inputs.assets.get(combat::CURSOR_PALETTE).is_some() {
+                            WRENCH_MISSING
                         } else {
                             CURSOR_PALETTE_MISSING
                         };
@@ -3845,6 +3883,9 @@ pub fn mobile_key(o: &glasnost_sim::world::Object) -> i64 {
 /// The note for a bomb icon whose image cannot be drawn (S-0519 Import
 /// mapping).
 pub const BOMB_ICON_MISSING: &str = "the bomb icon sprite BOMBCURS.SHP or its image frame is missing: no bomb icon is drawn (S-0519 claim 24, Import mapping)";
+
+/// The note for a wrench that cannot be drawn (S-0111 Import mapping).
+pub const WRENCH_MISSING: &str = "the wrench sprite WRENCH.SHP or its image frame is missing: no repair wrench is drawn (S-0111 claim 19, Import mapping)";
 
 /// The note for a missing cursor palette, given once (S-0111 claim 19a and
 /// Edge cases: our engine's departure, no switch).
