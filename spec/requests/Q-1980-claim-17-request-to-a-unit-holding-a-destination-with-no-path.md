@@ -22,8 +22,9 @@ delay (S-0212 claims 20 and 21). It holds the destination and has no path until 
 over.
 
 The engine must choose. In our engine the choice matters. Our M7a synthetic duel (seed 1, with
-our play-fixes layer) has an enslaved unit that ends up standing on a cell of its own house's
-absorbing building, in *guard*. That is a separate fault of ours, which we will follow up
+our play-fixes layer, as built at our commit a2584dd; on later builds claim 17 no longer fires
+in that game) had an enslaved unit that ends up standing on a cell of its own house's absorbing
+building, in *guard*. That is a separate fault of ours, which we will follow up
 separately. Its search back to its master fails in each retry cycle, and the failure clears its
 destination (S-0212 claim 23). With "no movement in progress" for a held destination, claim 17's
 request was accepted in every turn: about 4 300 draws over 4 300 ticks, a new destination each
