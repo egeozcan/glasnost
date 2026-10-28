@@ -1454,9 +1454,9 @@ fn claim_42_close_approach_hovers_short_and_fires() {
     assert!(x.near_aims > 0, "{x:?}");
 }
 
-// spec: S-0501 claim 5 (the approach target replacement: 0 below 128 leptons, 0.5 below 512, 0.75 below 768, with no height condition) and claim 6 (holding-height approach: a target with ammunition left sets the mark, and below 768 leptons the held height is the destination's height minus the terrain height there; a point accepted without a target keeps the cell's surface height, so that held height is 0); Q-1941 interim (claim 48 (c)'s height-0 exemption from the bands is the low release's only, so an ordinary aircraft at height 0 keeps the replacement)
+// spec: S-0501 claims 5 and 42 (the approach target replacement, 0 below 128 leptons, 0.5 below 512, 0.75 below 768, is part of guidance, which runs only for an aircraft above the terrain at the end of that movement update, whatever the aircraft: at height 0 its target fraction is claim 5's ordinary one, Q-1941) and claim 6 (holding-height approach: a target with ammunition left sets the mark, and below 768 leptons the held height is the destination's height minus the terrain height there; a point accepted without a target keeps the cell's surface height, so that held height is 0). An attacker that holds height 0 on such an approach, inside 768 leptons, keeps the ordinary fraction
 #[test]
-fn q1941_ordinary_flight_at_height_0_keeps_the_approach_replacement() {
+fn q1941_ordinary_flight_at_height_0_has_no_approach_replacement() {
     let mut r = rules();
     r.sim.general.economy.curley_shuffle = Some(true);
     // Slow, so that it reaches height 0 while still in the 0.5 band.
@@ -1472,6 +1472,7 @@ fn q1941_ordinary_flight_at_height_0_keeps_the_approach_replacement() {
     }));
     assert!(!st(&w, a).raised, "the move order's point is not raised");
     let mut bands = [0; 3];
+    let s_jet = r.sim.aircraft["JET"].slowdown_distance.unwrap();
     for _ in 0..1500 {
         // A target with ammunition left, kept on every tick, gives the
         // holding-height mark (claim 6).
@@ -1493,7 +1494,7 @@ fn q1941_ordinary_flight_at_height_0_keeps_the_approach_replacement() {
         let dd = guide_dist(&w, o.pos, air::flight_point(&w, a, d));
         let ar = &w.rules().air;
         // spec: S-0501 claim 5 (the bands 128, 512 and 768 leptons)
-        let (band, want) = if dd < 128 {
+        let (band, replacement) = if dd < 128 {
             (0, glasnost_num::F64::ZERO)
         } else if dd < 512 {
             (1, ar.half)
@@ -1502,12 +1503,19 @@ fn q1941_ordinary_flight_at_height_0_keeps_the_approach_replacement() {
         } else {
             continue;
         };
-        assert_eq!(s.tgt, want, "the replacement at height 0, {dd} leptons");
-        bands[band] += 1;
+        // spec: S-0501 claim 5 and F4 (the ordinary calculation: τ from the post-step distance and S)
+        let (ordinary, _) = air::slowing(s.cur, dd, s_jet, ar, w.rules().mode);
+        assert_eq!(
+            s.tgt, ordinary,
+            "the ordinary fraction at height 0, {dd} leptons"
+        );
+        if !ordinary.eq_num(replacement) {
+            bands[band] += 1;
+        }
     }
     assert!(
         bands.iter().sum::<i32>() > 0,
-        "it flies at height 0 inside 768 leptons: {bands:?}"
+        "it flies at height 0 inside 768 leptons where the replacement differs: {bands:?}"
     );
 }
 

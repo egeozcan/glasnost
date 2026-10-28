@@ -706,15 +706,16 @@ fn jumpjet_leaves_its_factory(lane: &mut Lane) {
     );
 }
 
-/// S-0501 claim 48 (c), *At height 0* (r59, Q-1905): an aircraft released
-/// low from its pad. The lane gives a local copy of the loaded rules a pad
-/// whose docking displacements sit 10 leptons up at a cell's centre (AC30
-/// part k (7)'s second pad) and the aircraft type a slowdown distance of
-/// 2000, so that the release rests above the terrain, then gives a move
-/// order as a person would: `ahead` along the released facing, else at a
-/// right angle to it. Ahead, it should stay at height 0 unturned and come to
-/// rest in the destination cell; at a right angle it should slide on at
-/// height 0 unturned, then climb and turn. Writes a per-update trace
+/// S-0501 claim 48 (c), *Low release on a move* (r62, Q-1942): an aircraft
+/// released low from its pad. The lane gives a local copy of the loaded
+/// rules a pad whose docking displacements sit 10 leptons up at a cell's
+/// centre (AC30 part k (7)'s second pad) and the aircraft type a slowdown
+/// distance of 2000, so that the release rests above the terrain, then
+/// gives a move order as a person would: `ahead` along the released facing,
+/// else at a right angle to it. In both runs it should reach height 0 in its
+/// first movement update, take off at the move's first processing and climb
+/// in its second, unturned up to half its cruise height; at a right angle it
+/// then turns toward the destination. Writes a per-update trace
 /// (`low-release-<run>.txt`: tick, cell, height, facing relative to the
 /// release, speed fractions, destination, behaviour, contact) and screens.
 /// Prints no type names or rules values.
@@ -813,6 +814,12 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
     // The first traced update can still show the release height; a climb
     // counts only after the run has been at height 0.
     let mut been_at_0 = false;
+    // Updates that end at height 0 with a destination and no take-off, and
+    // the update (counted from the order) whose end first shows a take-off.
+    let mut at_0_unsteered = 0;
+    let mut take_off = None;
+    let mut updates = 0;
+    let mut turned_low = false;
     for _ in 0..400 {
         lane.ticks(1);
         let w = lane.world();
@@ -839,8 +846,19 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
             s.holding,
         );
         been_at_0 |= h == 0;
+        updates += 1;
         if h == 0 && climbed.is_none() && df != 0 {
             turned_at_0 = true;
+        }
+        if h == 0 && o.dest.is_some() && !s.taking_off {
+            at_0_unsteered += 1;
+        }
+        if take_off.is_none() && s.taking_off {
+            take_off = Some(updates);
+        }
+        let half = glasnost_sim::air::cruise_height(w, a) / 2;
+        if df != 0 && h <= half && climbed.is_some() {
+            turned_low = true;
         }
         if climbed.is_none() && been_at_0 && h > 0 {
             climbed = Some(w.tick);
@@ -870,6 +888,9 @@ fn aircraft_low_release(lane: &mut Lane, ahead: bool) {
         "{run}: turned at height 0: {turned_at_0}, climbed: {}, resting with no destination at height 0 for {rest} updates, ends in the destination cell: {}",
         climbed.is_some(),
         c == to
+    );
+    println!(
+        "{run}: updates at height 0 with a destination and no take-off: {at_0_unsteered}, take-off first seen at the end of update {take_off:?} after the order, turned at or below half its cruise height: {turned_low}"
     );
     lane.look_at(c);
     lane.ticks(1);
