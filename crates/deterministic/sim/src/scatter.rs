@@ -338,6 +338,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
             ob.path.steps.clear();
             // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
             crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
+            // spec: S-0207 claim 28, A sale of the refinery (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
+            crate::refresh::adopted(w, id, o.dest);
         }
         return true;
     };
@@ -397,6 +399,8 @@ pub fn vehicle_request(w: &mut World, id: ObjectId, req: ScatterRequest) -> bool
         ob.beh.queue(Some(Behaviour::Move));
         // spec: S-0314 claim 22 (the destination of a scatter request ends a settled vehicle's being settled while a depot occupies its cell)
         crate::depot::destination_given(w, id, o.dest != Some(Target::Cell(cell)));
+        // spec: S-0207 claim 28 (the request's destination is an assignment: claim 27's dock test and claim 28's rule act on it)
+        crate::refresh::adopted(w, id, o.dest);
     }
     true
 }

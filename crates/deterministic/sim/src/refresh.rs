@@ -108,11 +108,12 @@ pub fn reassign(w: &mut World, id: ObjectId) {
     finish(w, id, token);
 }
 
-/// A destination set without the assignment hook by a path computation's
-/// substitution (S-0212 claim 24): for a vehicle with the teleport-capable
-/// flag the adoption is an assignment (S-0402 claim 10a, *A chrono
-/// miner*), so the dock test and claim 28's rule act on it and the
-/// locomotors take it. `before` is the destination it replaced.
+/// A destination set without the assignment hook, by a path computation's
+/// substitution (S-0212 claim 24) or a vehicle scatter request (S-0207
+/// claim 16): for a vehicle with the teleport-capable flag it is an
+/// assignment (S-0402 claim 10a, *A chrono miner*; S-0207 claim 28, *A
+/// sale of the refinery*), so the dock test and claim 28's rule act on it
+/// and the locomotors take it. `before` is the destination it replaced.
 pub fn adopted(w: &mut World, id: ObjectId, before: Option<Target>) {
     if !flagged(w, id) {
         return;

@@ -15,12 +15,14 @@ use glasnost_map::CellXY;
 use glasnost_rules::schema::Ruleset;
 use glasnost_rules::sim::Locomotor;
 use glasnost_sim::econ::harvest::{self, HarvestState, Phase};
+use glasnost_sim::econ::sell::Stage;
 use glasnost_sim::econ::{assign_destination, release};
+use glasnost_sim::orders::{self, Order};
 use glasnost_sim::rules::Behaviour;
 use glasnost_sim::scatter::{self, ScatterRequest};
 use glasnost_sim::teleport;
 use glasnost_sim::testkit;
-use glasnost_sim::world::{Layer, ObjectId, Pos, Target, World};
+use glasnost_sim::world::{HouseId, Layer, ObjectId, Pos, Target, World};
 use harvest_common::*;
 
 fn ruleset() -> Ruleset {
@@ -411,4 +413,91 @@ fn claim_28_d34_c_the_cycle_jumps_only_to_the_docking_cell() {
     }
     assert_eq!(unloads, 3, "three loads");
     assert_eq!(jumps, 3, "one jump per load");
+}
+
+// spec: S-0207 claim 28, A sale of the refinery (a full chrono miner unloading after its docking jump: the sale's scatter request, made while the contact holds, is a qualified docking assignment; driving has no movement report, so teleporting is restored with the landing point at the scatter cell; a full miner's first harvest processing assigns nothing, so it jumps there, and that jump's removal installs driving again) and S-0402 claim 11 and claim 17 case (f)
+#[test]
+fn claim_28_a_sale_jumps_to_the_scatter_cell() {
+    let mut r = ruleset();
+    r.sim.buildings.get_mut("REFN").unwrap().econ.buildup = Some(true);
+    let mut w = game_with_ore(&r, &[], 7);
+    while w.tick <= w.orders_blocked_through {
+        testkit::run(&mut w, 1);
+    }
+    let refn = place_building(&mut w, "REFN", 0, refinery_cell());
+    let h = place_vehicle(&mut w, "CHRONOT", 0, at(6, 0), 0);
+    w.obj_mut(h).unwrap().econ.harvest = Some(HarvestState {
+        load: vec![CAPACITY, 0],
+        phase: Phase::Returning,
+        ..Default::default()
+    });
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Behaviour {
+            actor: h,
+            behaviour: Behaviour::Enter,
+            attack_move: false,
+            target: Some(Target::Object(refn)),
+            dest: Some(Target::Object(refn)),
+        }
+    ));
+    let mut to_dock = false;
+    for _ in 0..300 {
+        let a = cell(&w, h);
+        testkit::run(&mut w, 1);
+        to_dock |= jumped(a, cell(&w, h)) && cell(&w, h) == dock_cell();
+        if w.obj(h).unwrap().beh.current == Some(Behaviour::Unload) {
+            break;
+        }
+    }
+    assert!(to_dock, "the docking jump");
+    assert!(driving(&w, h), "driving through the unloading");
+    assert_eq!(harvest::load(&w, h), vec![CAPACITY, 0]);
+    assert!(orders::issue(
+        &mut w,
+        HouseId(0),
+        Order::Sell { actor: refn }
+    ));
+    // The sale's first processing: the request restores teleporting and fixes the landing point;
+    // the miner's turn comes later in the same tick (the refinery is earlier in the update order),
+    // its harvest processing assigns nothing (full) and its locomotion jumps.
+    let mut moved = None;
+    for _ in 0..20 {
+        testkit::run(&mut w, 1);
+        if cell(&w, h) != dock_cell() {
+            moved = Some(w.tick);
+            break;
+        }
+    }
+    let t = moved.expect("it left the docking cell");
+    let begun = w
+        .obj(refn)
+        .and_then(|b| b.econ.sale.as_ref())
+        .map(|x| x.stage);
+    assert_eq!(
+        begun,
+        Some(Stage::Begun),
+        "in the tick of the sale's first processing"
+    );
+    let o = w.obj(h).unwrap();
+    let s = cell(&w, h);
+    assert!(
+        (s.x - dock_cell().x).abs() <= 1 && (s.y - dock_cell().y).abs() <= 1,
+        "a cell next to the docking cell"
+    );
+    let centre = Pos::centre(s, w.surface_at(256 * s.x + 128, 256 * s.y + 128));
+    assert_eq!(
+        (o.pos.x, o.pos.y),
+        (centre.x, centre.y),
+        "a jump to the cell's centre at tick {t}"
+    );
+    assert_eq!(o.dest, None);
+    assert_eq!(o.beh.current, Some(Behaviour::Harvest));
+    assert_eq!(
+        harvest::load(&w, h),
+        vec![CAPACITY, 0],
+        "full: nothing assigned"
+    );
+    assert!(driving(&w, h), "the jump installs driving again");
 }
