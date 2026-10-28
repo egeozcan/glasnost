@@ -199,6 +199,17 @@ pub enum Effect {
         /// Its bunker.
         bunker: ObjectId,
     },
+    /// A deploy or a pack-up put its new object on the map in place of the
+    /// old one (S-0415 claims 6 and 10): the new object takes over the old
+    /// one's control group and selection, which are the client's. Reported
+    /// only on success; a refused deploy and a failed pack-up (claim 11)
+    /// report nothing. Presentation only, like every effect.
+    Converted {
+        /// The deploying vehicle, or the packing building.
+        old: ObjectId,
+        /// The building put on the map, or the vehicle that appeared.
+        new: ObjectId,
+    },
     /// A unit was seized by magnetic lift (S-0607 claim 5): it is removed
     /// from the selection.
     Seized {

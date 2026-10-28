@@ -1235,3 +1235,96 @@ fn control_groups_make_add_and_select() {
     p.group_assign(1, false);
     assert!(p.groups[1].is_empty());
 }
+
+/// spec: S-0415 claim 6 (the deployed building takes over the deploying
+/// vehicle's control group and its selection: a selected vehicle gives a
+/// selected building), S-0111 claim 17 (it then shows the group's digit)
+#[test]
+fn a_deploy_hands_the_control_group_and_the_selection_to_the_building() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    let m = mixed_mobiles(&mut p);
+    // The base unit in group 3, between two others; selected with one of them.
+    p.selection = vec![m[1]];
+    p.group_assign(3, false);
+    p.selection = vec![mcv];
+    p.group_assign(3, true);
+    p.selection = vec![m[2]];
+    p.group_assign(3, true);
+    p.selection = vec![m[1], mcv];
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    let yard = own(&p, Kind::Building)[0];
+    assert!(p.world().obj(mcv).is_none(), "the vehicle is gone");
+    // design: it takes the vehicle's place in the group's and the selection's order
+    assert_eq!(p.groups[3], vec![m[1], yard, m[2]]);
+    assert_eq!(p.selection, vec![m[1], yard]);
+    // spec: S-0111 claim 17 (key 3's group shows 3)
+    assert_eq!(p.group_digits().get(&yard), Some(&3));
+    // Recalling the group selects the building with the others.
+    p.selection.clear();
+    p.group_recall(3);
+    assert!(p.selection.contains(&yard));
+}
+
+/// spec: S-0415 claim 10 (the vehicle that appears takes over the packing
+/// building's control group and selection). The synthetic skirmish's yard
+/// does not pack up, so the pack-up's report (tested in the simulation,
+/// `claims_s0415::claim_10_pack_up_reports_the_hand_over`) is given to the
+/// client's effect loop by hand, with a vehicle put where it would appear.
+#[test]
+fn a_pack_up_hands_the_control_group_and_the_selection_to_the_vehicle() {
+    let mut p = start();
+    let mcv = *own(&p, Kind::Vehicle).first().expect("a base unit");
+    step_until(&mut p, 10, |p| p.world().tick >= 4);
+    p.selection = vec![mcv];
+    p.key(KeyCommand::Deploy);
+    step_until(&mut p, 400, |p| !own(p, Kind::Building).is_empty());
+    let yard = own(&p, Kind::Building)[0];
+    p.selection = vec![yard];
+    p.group_assign(0, false);
+    // spec: S-0111 claim 17 (the tenth group, key 0, shows 0)
+    assert_eq!(p.group_digits().get(&yard), Some(&0));
+    let local = p.local;
+    let cell = p.world().obj(yard).unwrap().pos.cell();
+    let vehicle = {
+        let w = &mut p.game.world;
+        let t = w
+            .rules()
+            .index_of(Kind::Vehicle, "GUNR")
+            .expect("fixture type");
+        let id = glasnost_sim::objects::create(w, Kind::Vehicle, t, Some(local));
+        glasnost_sim::objects::remove(w, yard);
+        let z = w.surface_at(256 * cell.x + 128, 256 * cell.y + 128);
+        glasnost_sim::objects::place(w, id, glasnost_sim::world::Pos::centre(cell, z), 0);
+        id
+    };
+    p.step_by(|g| {
+        g.step();
+        g.world.effects.push(Effect::Converted {
+            old: yard,
+            new: vehicle,
+        });
+        true
+    });
+    assert_eq!(p.groups[0], vec![vehicle]);
+    assert_eq!(p.selection, vec![vehicle]);
+    assert_eq!(p.group_digits().get(&vehicle), Some(&0));
+}
+
+/// spec: S-0415 claims 6 and 10 (the take-over replaces the old object in
+/// place); an object in no group and not selected changes nothing
+#[test]
+fn a_hand_over_keeps_the_order() {
+    let (a, b, c, d) = (ObjectId(10), ObjectId(11), ObjectId(12), ObjectId(13));
+    let mut selection = vec![a, b];
+    let mut groups: [Vec<ObjectId>; GROUPS] = Default::default();
+    groups[0] = vec![c, b];
+    converted(&mut selection, &mut groups, b, d);
+    assert_eq!(selection, vec![a, d]);
+    assert_eq!(groups[0], vec![c, d]);
+    converted(&mut selection, &mut groups, ObjectId(99), ObjectId(100));
+    assert_eq!(selection, vec![a, d]);
+    assert_eq!(groups[0], vec![c, d]);
+}

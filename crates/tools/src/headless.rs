@@ -192,6 +192,7 @@ async fn smoke_async(
                         | Effect::SpecialAnims { .. }
                         | Effect::DepotSlot { .. }
                         | Effect::Bunkered { .. }
+                        | Effect::Converted { .. }
                         | Effect::Seized { .. }
                         | Effect::Deactivated { .. }
                         | Effect::Dropped { .. }

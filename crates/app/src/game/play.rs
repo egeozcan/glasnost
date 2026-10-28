@@ -8,6 +8,8 @@
 //! clicks and keys, `econ::sidebar` for the icons, `econ::placement` for
 //! placement); this module only routes them. Tests drive it headless.
 
+use std::collections::BTreeMap;
+
 use glasnost_ai::game::Game;
 use glasnost_audio::events::UiCue;
 use glasnost_map::CellXY;
@@ -91,6 +93,24 @@ pub enum Button {
 
 /// The number of control groups (S-0111 claim 17: groups 0 to 9).
 pub const GROUPS: usize = 10; // spec: S-0111 claim 17 (the local player's ten control groups)
+
+/// A deploy or pack-up replaced object `old` by `new` (S-0415 claims 6
+/// and 10): `new` takes over `old`'s control group and, when `old` was
+/// selected, its selection.
+pub fn converted(
+    selection: &mut [ObjectId],
+    groups: &mut [Vec<ObjectId>; GROUPS],
+    old: ObjectId,
+    new: ObjectId,
+) {
+    // spec: S-0415 claim 6 (deploy) and claim 10 (pack-up): the new object takes over the old one's control group and its selection (a selected old object gives a selected new one)
+    // design: the new object takes the old one's place in the selection's order and in its group's order (Q-1988 keeps groups in joining order)
+    for x in selection.iter_mut().chain(groups.iter_mut().flatten()) {
+        if *x == old {
+            *x = new;
+        }
+    }
+}
 
 /// The local player's game.
 pub struct Play {
@@ -417,6 +437,9 @@ impl Play {
                 for g in &mut self.groups {
                     g.retain(|&x| x != vehicle);
                 }
+            }
+            if let Effect::Converted { old, new } = *e {
+                converted(&mut self.selection, &mut self.groups, old, new);
             }
             if let Effect::Seized { unit } = *e {
                 // spec: S-0607 claim 5 (the seized unit is deselected)
@@ -807,6 +830,23 @@ impl Play {
                 self.groups[g].push(id);
             }
         }
+    }
+
+    /// The digit each member of the control groups shows (S-0111 claim
+    /// 17), for the drawing. Only the local player's own objects count:
+    /// one that changed owner is still listed until the group is next
+    /// selected, and the drawing's pip-scale test (claim 9) decides the rest.
+    pub fn group_digits(&self) -> BTreeMap<ObjectId, u8> {
+        let w = &self.game.world;
+        let mut out = BTreeMap::new();
+        for (i, group) in self.groups.iter().enumerate() {
+            for &id in group {
+                if w.obj(id).is_some_and(|o| o.owner == Some(self.local)) {
+                    out.insert(id, crate::mapview::combat::group_digit(i));
+                }
+            }
+        }
+        out
     }
 
     /// Selects control group `g`: its own objects that can still be

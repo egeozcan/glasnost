@@ -168,5 +168,6 @@ fn label(a: Action) -> &'static str {
         Action::TypeSelect => "Select type (twice: map)",
         Action::PathReport => "Save pathing report",
         Action::Mark => "Mark (pathing report)",
+        Action::MakeGroup => "Make a group, web (+digit)",
     }
 }

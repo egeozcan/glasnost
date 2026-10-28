@@ -395,6 +395,10 @@ impl Session {
             l.set_viewer(Some(local));
         }
         let house_colours = loaded.house_radar_colours(&game.world);
+        if let Some(l) = loaded.live.as_mut() {
+            // spec: S-0111 claim 17 (the group number in the owner's house colour); design: the house display RGB of S-0103 claim 15 (Q-2040)
+            l.set_house_colours(house_colours.clone());
+        }
         let radar = Radar::new(
             &game.world,
             loaded.map.theater,
@@ -1801,8 +1805,12 @@ impl Session {
             .filter(|&p| self.map_rect().contains(p))
             .and_then(|p| self.under(p).1);
         let selection = self.play.selection.clone();
+        let digits = self.play.group_digits();
         self.with_live(|live, inputs, scene| {
-            if live.set_marks(&selection, hovered) {
+            let marks = live.set_marks(&selection, hovered);
+            // Making or changing a group changes no mark, but its digits.
+            let groups = live.set_group_digits(digits);
+            if marks || groups {
                 live.redraw_status(inputs, scene);
             }
         });

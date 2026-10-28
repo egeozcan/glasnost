@@ -291,3 +291,61 @@ fn control_group_keys_make_select_and_go_to_a_group() {
     with(&mut c, Modifiers::default(), '4');
     assert_eq!(session(&c).play.selection.len(), 3);
 }
+
+/// The web stand-in for Ctrl+digit (M8 A4 round 5 seams, our design):
+/// with the fallback on, the held make-group key (N by default, rebindable)
+/// and a digit make that group; its release, or the focus going, ends it.
+/// With the fallback off (the native build) the key does nothing and a
+/// digit only selects; Ctrl+digit makes the group either way.
+#[test]
+fn the_make_group_key_stands_in_for_ctrl_on_the_web() {
+    let mut c = client((800, 600), 100);
+    start_by_keyboard(&mut c);
+    let [a, b, far] = three_gunrs(&mut c);
+    assert_eq!(c.settings.bindings.key(Action::MakeGroup), 'n');
+    // Off, as natively: N held and 5 make no group.
+    c.group_fallback = false;
+    session_mut(&mut c).play.selection = vec![a, b];
+    c.key(Key::Char('n'), true);
+    key(&mut c, Key::Char('5'));
+    c.key(Key::Char('n'), false);
+    assert!(session(&c).play.groups[5].is_empty());
+    // On: N held and 5 make group 5 of the selection.
+    c.group_fallback = true;
+    session_mut(&mut c).play.selection = vec![a, b];
+    c.key(Key::Char('n'), true);
+    key(&mut c, Key::Char('5'));
+    assert_eq!(session(&c).play.groups[5], vec![a, b]);
+    // Released, 5 selects the group again.
+    c.key(Key::Char('n'), false);
+    session_mut(&mut c).play.selection = vec![far];
+    key(&mut c, Key::Char('5'));
+    assert_eq!(
+        sorted(session(&c).play.selection.clone()),
+        sorted(vec![a, b])
+    );
+    // The focus going lets go of it.
+    c.key(Key::Char('n'), true);
+    c.focus(false);
+    c.focus(true);
+    session_mut(&mut c).play.selection = vec![far];
+    key(&mut c, Key::Char('5'));
+    assert_eq!(
+        sorted(session(&c).play.selection.clone()),
+        sorted(vec![a, b])
+    );
+    // Rebound to J, N no longer holds it.
+    c.settings
+        .bindings
+        .rebind(Action::MakeGroup, 'j')
+        .expect("J is free");
+    session_mut(&mut c).play.selection = vec![far];
+    c.key(Key::Char('n'), true);
+    key(&mut c, Key::Char('6'));
+    c.key(Key::Char('n'), false);
+    assert!(session(&c).play.groups[6].is_empty());
+    c.key(Key::Char('j'), true);
+    key(&mut c, Key::Char('6'));
+    c.key(Key::Char('j'), false);
+    assert_eq!(session(&c).play.groups[6], vec![far]);
+}

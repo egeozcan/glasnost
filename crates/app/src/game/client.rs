@@ -290,6 +290,12 @@ pub struct Client {
     /// The modifiers held (Shift turns Tab backwards; Ctrl with an arrow
     /// moves the keyboard cell).
     mods: Modifiers,
+    /// Whether the make-group key stands in for Ctrl with a digit: on in
+    /// the web build only, where the browser may take Ctrl+digit first
+    /// (design, M8 A4 round 5 seams); native keeps Ctrl+digit alone.
+    pub group_fallback: bool,
+    /// The make-group key is held.
+    group_held: bool,
     /// The keyboard focus on the main menu.
     pub menu_focus: Focus<MenuHit>,
     /// The keyboard focus on the setup and room screens.
@@ -363,6 +369,9 @@ impl Client {
             chat_field: None,
             clock: 0,
             mods: Modifiers::default(),
+            // design: the web stand-in for Ctrl+digit (M8 A4 round 5 seams)
+            group_fallback: cfg!(target_arch = "wasm32"),
+            group_held: false,
             menu_focus: Focus::new(),
             setup_focus: Focus::new(),
             net_focus: Focus::new(),
@@ -868,6 +877,10 @@ impl Client {
         {
             s.type_select_key(false);
         }
+        // The make-group key ends when it comes up, wherever the focus is.
+        if !down && bound_with(&self.settings.bindings, k) == Some(Bound::MakeGroup) {
+            self.group_held = false;
+        }
         // Enter presses the open options menu's focused control, or places
         // at the keyboard cell, before it opens a network game's chat.
         if down
@@ -940,12 +953,20 @@ impl Client {
             }
             Some(Bound::Mark) => s.mark(),
             Some(Bound::TypeSelect) => s.type_select_key(true),
+            Some(Bound::MakeGroup) => self.group_held = self.group_fallback,
             None => {
                 // Our control-group keys (Q-1988): a digit no binding takes.
+                // On the web the held make-group key plays Ctrl's part
+                // (design, M8 A4 round 5 seams).
                 if let Key::Char(c) = k
                     && let Some(g) = c.to_digit(10)
                 {
-                    s.group_key(g as usize, self.mods);
+                    let mut mods = self.mods;
+                    if self.group_held {
+                        mods.force_fire = true;
+                        mods.force_select = false;
+                    }
+                    s.group_key(g as usize, mods);
                 }
             }
             _ => {}
@@ -1094,6 +1115,7 @@ impl Client {
         self.focused = on;
         if !on {
             self.held = [false; 4];
+            self.group_held = false;
             // The key-up of a held type-select key may not come back.
             if let Some(s) = self.session.as_mut() {
                 s.type_select_key(false);
@@ -1394,6 +1416,9 @@ pub enum Bound {
     Mark,
     /// The type-select role (S-0214 claim 12), held or pressed.
     TypeSelect,
+    /// Held with a digit, makes that control group (the web stand-in
+    /// for Ctrl+digit; design, M8 A4 round 5 seams).
+    MakeGroup,
 }
 
 /// The key bindings of a fresh profile (S-0213 claims 22 and 23). The
@@ -1415,6 +1440,7 @@ pub fn bound_with(b: &Bindings, k: Key) -> Option<Bound> {
             Action::PathReport => Bound::PathReport,
             Action::Mark => Bound::Mark,
             Action::TypeSelect => Bound::TypeSelect,
+            Action::MakeGroup => Bound::MakeGroup,
         });
     }
     match k {
