@@ -2,13 +2,13 @@
 id: S-0402
 title: Harvest cycle (loading, field and refinery choice, docking, unloading, income, slave and chrono miners)
 topic: economy
-revision: 34
+revision: 76
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-28
 measurements: []
-requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130]
+requests: [Q-0140, Q-0141, Q-0142, Q-0143, Q-0144, Q-0145, Q-0194, Q-0197, Q-0270, Q-0371, Q-0411, Q-0412, Q-0413, Q-0414, Q-0441, Q-0442, Q-0500, Q-0550, Q-0580, Q-0590, Q-0900, Q-1130, Q-1759, Q-1870]
 supersedes: []
 ---
 
@@ -21,9 +21,12 @@ of its owner, docks, and is paid for each kind of resource it carries; then it g
 This spec covers the harvester's capacity, the timing of a load step, how it chooses a field and a
 refinery, when it waits or queues, docking and unloading, the credits a house gets and when, what
 happens when fields are exhausted or no refinery is left, and the variants: the slave miner, whose
-infantry slaves gather for it, and the chrono miner, which teleports; resource cells themselves
-(stages, bales, growth) are S-0401's. This revision covers skirmish only; network
-games and campaigns are out of scope.
+infantry slaves gather for it, and the chrono miner, which teleports to dock and at a sale of its refinery; resource cells
+themselves (stages, bales, growth) are S-0401's. This spec covers skirmish only; network
+games and campaigns are out of scope. It answers Q-1870 in part: that a harvester left on a docking cell by a failed
+departure stays there, except a chrono miner (claim 3a), and what a second harvester does at
+that occupied docking cell (claim 10a). Whether the path computation gives up (the request's
+first question) is S-0212's.
 
 ## Terms
 
@@ -127,9 +130,21 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 - **Slave miner, slave.** A vehicle type that both gathers and processes resources and controls a
   group of infantry *slaves* of the type its enslaves field names (S-0215 calls them the slave
   master and its harvesting slaves). It can deploy into a building that keeps controlling them.
-- **Chrono miner.** A harvester whose type has the teleporter flag. Its travel is teleporting
-  only while its active locomotion is teleporting. A vehicle-factory-built miner can instead
-  retain temporary driving locomotion for its first field leg (claim 17; S-0417 claim 16).
+- **Chrono miner.** A harvester whose type has the teleporter flag, which is the flag S-0207 calls
+  the teleport-capable flag (the same imported key). It drives everywhere except on its jump to a
+  refinery's docking cell during *enter*, and on its jump when that refinery is sold while it
+  still holds the contact: to the scatter cell, or, for a miner that was unloading and is not
+  full, to the field cell that its first seeking processing finds (claims 11 and 17). This holds
+  outside S-0207 claim 28's exclusions (a warp-pending immobilization, being gripped, being
+  seized: claim 28's paragraph *The rule*). The rule is that, outside those exclusions, every
+  destination other than a qualified docking assignment installs temporary driving: one given
+  while the miner is in contact with a building that permits dock unloading, as a cell
+  destination, with no ground-layer vehicle in that cell (S-0207 claims 27 and 28). In ordinary
+  play such assignments include the docking-cell offer, its repeated dock test, a sale's
+  scatter request (claim 11) and, for a miner that was unloading at the sale, the cells that its
+  first seeking processing assigns while the sale's contact holds (claim 17, case (f)). A
+  vehicle-factory-built miner also starts with temporary driving locomotion for its first field
+  leg (S-0417 claim 16).
 - **Group update.** The slave group's periodic opportunity to regenerate, restore or release
   slaves and to reconsider the master's movement (claim 21). Its group states are *at rest*,
   *field seeking*, *travelling*, *retrying deployment* and *working* (claim 22). *Working*
@@ -280,22 +295,22 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     behaviour does not end loading. It is not replayed from image frame 0 at loading
     start, at a bale or after movement: F8 uses the current tick and walk-animation counter.
 
-    **Visibility conditions.** While eligible, the sprite is suppressed during movement
-    or body turning, while an erasing weapon is removing the vehicle, and during its
-    teleport disappearance or reappearance state. For a ground-driving harvester the
-    movement test means either a turning body or an active track with a positive
-    integer per-tick progress step *s* (S-0207 claim 2), not merely a positive
-    double-precision speed fraction *ρ* (S-0207 Terms). The step is
-    *s* = trunc(*s*₂ × *ρ*), truncated toward zero after the floating-point
-    multiplication, with *s*₂ as defined in S-0207 claim 2. On an active track
-    with *ρ* > 0 but *s* = 0, the sprite is shown if the body is not turning and
-    the other visibility conditions permit it. Conversely, *s* > 0 suppresses
-    it even when the progress budget buys no track point and the position does
-    not change that tick (S-0207 claim 3). A destination alone does not suppress
-    it. For a teleporting harvester it means a teleport journey still in progress.
-    Ordinary object visibility still applies.
-    Thus driving to another resource cell suppresses the sprite without restarting its
-    frame cycle, and it can reappear on stopping before another successful load step.
+    **Visibility conditions.** While eligible, the sprite is suppressed during movement or body
+    turning, while an erasing weapon is removing the vehicle, and during its teleport disappearance
+    or reappearance state. For a ground-driving harvester the movement test means either a turning
+    body or an active track with a positive integer per-tick progress step *s* (S-0207 claim 2), not
+    merely a positive double-precision speed fraction *ρ* (S-0207 Terms). The step is *s* =
+    trunc(*s*₂ × *ρ*), truncated toward zero after the floating-point multiplication, with *s*₂ as
+    defined in S-0207 claim 2. On an active track with *ρ* > 0 but *s* = 0, the sprite is shown if
+    the body is not turning and the other visibility conditions permit it. Conversely, *s* > 0
+    suppresses it even when the progress budget buys no track point and the position does not change
+    that tick (S-0207 claim 3). A destination alone does not suppress it. For a teleporting
+    harvester it means a teleport journey still in progress. A chrono miner drives on every trip
+    except its docking jump and its jump at a sale (S-0207 claim 28; claims 11 and 17), so for it
+    only those jumps count as teleport journeys, and its driving trips count as ordinary movement.
+    Ordinary object visibility still applies. Thus driving to another resource cell suppresses the
+    sprite without restarting its frame cycle, and it can reappear on stopping before another
+    successful load step.
 
     **Body and variants.** Loading selects no different body model, voxel section, HVA
     frame sequence, turret or barrel motion, or vehicle-sprite sequence. Ordinary body
@@ -345,8 +360,26 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     applies at its next processing; a queued replacement behaviour can instead start
     before another harvest processing. Ending *harvest* does not itself resume it.
     Claim 13 governs rest and the original's computer-only resumption rule.
-    - Backing: `measurable` (H20)
-    - Confidence: high for the absence of a docking-cell exception in the harvest rules
+
+    So after a failed departure that gives up (S-0212 claim 23), a harvester of a player
+    house other than a chrono miner rests on the docking cell in *guard* (Q-1870), as it does
+    after a stop order there. It does not try its field again by itself: the route retry
+    delay running out restores no destination (S-0212 claim 27a), no rule of the refinery
+    moves it, and claim 13's step off a refinery-flag building's cell belongs to going idle
+    for lack of a field, not to a give-up. This spec adds no other way out of the cell than an
+    order or a scatter request that it accepts, such as the one a second harvester's approach can send (claim
+    10a). A chrono miner is the exception: in *guard* it queues *harvest* again by claim 17
+    when one of its eight neighbouring cells holds a refinery-flag building of its owner, as
+    the cells round a refinery's docking cell do when they belong to that refinery, and then
+    claim 3's seeking applies to it.
+    - Backing: `measurable` (H20's first run for the absence of a docking-cell exception, part
+      e for the rest after a stop order), and `unmeasured` for the rest after a give-up: no setup
+      is known that is sure to give a departure from the docking cell that gives up (S-0212
+      claim 23), and without one a rest cannot be told from a retry that never comes. The
+      chrono-miner exception is claim 17's (its backing there).
+    - Confidence: high for the absence of a docking-cell exception in the harvest
+      rules; medium for the rest after a stop order, pending H20 part e; medium for the rest
+      after a give-up
 
 3b. **Seeking after the final field track (Q-0900).** For an ordinary driving
     harvester, claim 3 tests the order-level destination alone. It does not test the
@@ -459,8 +492,8 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
    qualifies, so the result comes from ring 1 or beyond: on open level ground, the cell
    (*x*₀, *y*₀ − 1) above the top-left cell.
 
-   A chrono miner always moves in the last case, even at 768 leptons or less. Its active
-   locomotion determines whether that travel teleports or drives (claim 17).
+   A chrono miner always moves in the last case, even at 768 leptons or less. It drives
+   there (claim 17; S-0207 claim 28).
    While a harvester is driving in this phase it does not re-choose, except a chrono miner (claim
    17). The phase takes no draws other than the standard delay's; the search takes none.
    - Backing: `measurable` (scenario H4 parts a, b and f, H8 part f for the chrono miner, and H11
@@ -500,22 +533,29 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     new movement point. S-0207 claim 27 owns the teleport/dock test: only an otherwise
     eligible destination assignment reaches it, when the destination changes or pending
     destination refresh permits an unchanged assignment. An unchanged offer without
-    refresh is ignored before that test, even when contact or cell occupancy has changed.
-    Acquiring contact alone does not trigger the test. For a qualified chrono miner
-    currently using non-teleporting locomotion, that claim determines restoration of a
-    suspended predecessor versus fallback. On qualified successful restoration of teleporting
-    locomotion, the restored movement receives that same assignment's otherwise due point,
-    fixing its landing point under S-0207 claim 20. Eligibility uses the driving points already
-    present, not the offered new point. Unless already-pending point suppression or that claim's
-    disabling states prevent it, the miner jumps at its next teleporting movement update,
-    possibly in the same tick. Restoration itself requires neither a preliminary driving leg
-    nor a second offer, and enables neither refresh nor point suppression.
-    The non-restorable fallback stops locomotion,
-    clears the current behaviour and queues *enter* without an immediate start. Normally
-    that same assignment installs the order-level cell destination but suppresses its
-    locomotor movement point, consuming point suppression while leaving newly enabled
-    refresh pending. A later otherwise eligible equal offer can therefore test again:
-    there is no once-per-entry limit. This fallback does not itself turn driving into
+    refresh is ignored before that test, even when contact or cell occupancy has changed, for
+    every harvester. The dock test of the next sentence is not such an offer, so this does not
+    stop it. A chrono miner also gets S-0207 claim 28's repeated dock test: at each processing at which the
+    refinery accepts it, or at which it is tethered, its destination, if it has one, is tested,
+    changed or not. So a chrono miner whose docking cell was occupied tests the cell again at each
+    such processing, and, if its suspended predecessor is its teleporting locomotor, jumps once the
+    cell is clear and it stands still (S-0207 claim 28, the occupied docking cell). Acquiring
+    contact alone does not trigger the test. For a qualified chrono miner
+    currently using non-teleporting locomotion, that claim
+    determines restoration of a suspended predecessor versus fallback. On qualified successful
+    restoration of teleporting locomotion, the restored movement receives that same assignment's
+    otherwise due point, fixing its landing point under S-0207 claim 20. Eligibility uses the
+    driving points already present, not the offered new point. Unless already-pending point
+    suppression or that claim's disabling states prevent it, the miner jumps at its next teleporting
+    movement update, possibly in the same tick. Restoration itself requires neither a preliminary
+    driving leg nor a second offer, and enables neither refresh nor point suppression. The jump's
+    own removal of the destination makes driving active again from the jump tick on (S-0207 claim
+    28), so the miner unloads and leaves with driving locomotion.
+    The non-restorable fallback stops locomotion, clears the current behaviour and queues *enter*
+    without an immediate start. Normally that same assignment installs the order-level cell
+    destination but suppresses its locomotor movement point, consuming point suppression while
+    leaving newly enabled refresh pending. A later otherwise eligible equal offer can therefore test
+    again: there is no once-per-entry limit. This fallback does not itself turn driving into
     teleporting locomotion.
 
     **Tag notifications.** Ordinary refinery arrival and docking in *enter* add neither an
@@ -526,7 +566,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     So there is no backing in: the harvester arrives with whatever facing its path gives, and the
     turn of row 3 happens on the docking cell. The turn of row 3 aims at exactly 16384, so row 4
     holds at the first processing after the turn has ended; claim 11's facing range then holds at
-    once. Through row 4, the *unload* is queued only then, with the body no longer turning, so it does not wait for a
+    once. Through row 4, the *unload* is queued only then, once the body has stopped turning, so it does not wait for a
     turn; had the body still been turning, it would count as moving and the start would wait for the turn
     to end under S-0215 claim 11's tick-based readiness rule. Under the default quirk, a refinery that is not a dock-unload refinery and has
     no other applicable unit-entry exchange can agree to contact but never directs the
@@ -568,28 +608,33 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       H10 for the docking cell, the approach, the turn, the delays, the start of *unload*
       and the non-dock-unload contact stall, plus
       H14 for the second route, its ordering and draw count; S-0524 claim 14,
-      scenario C16 for the absence of docking tag raises). H10's qualified chrono-miner
-      assignment trace is `unmeasured`: no ordinary stock sequence isolating that
-      locomotion state and all predicates is established; H10 supplies conditional
-      diagnostics, not a claim of unreachability. The selling-state
+      scenario C16 for the absence of docking tag raises). The qualified chrono-miner
+      docking assignment itself is reached by S-0207 scenario D34 parts c and e (below); the
+      destination-refresh and point-suppression states it passes through are `unmeasured`: D34
+      does not read them, and no recorder field shows them; H10 supplies conditional
+      diagnostics for them, not a claim of unreachability. The selling-state
       arrival refusal and its destination-absent scatter case are `unmeasured`:
       H14 proposes timing controls but establishes no reliable overlap before
       the sale independently releases contact and tether.
     - Confidence: medium; high for the docking cell at (3, 1) from the top-left cell; low
       for being erased and for the refinery that is not a dock-unload refinery; high for the
       second route's track-completion event, the absence of facing and stopped tests and its
-      scatter-request options and for repeated-offer assignment qualification and
-      same-assignment point suppression; medium for its ordering and retained state
+      scatter-request options, and for the refinery's repeated-offer rule (an unchanged offer
+      without refresh is ignored); medium for same-assignment point suppression, which arises
+      only on the qualified chrono-miner assignment path, whose suppression state is `unmeasured`
+      (above); medium for its ordering and retained state.
+    - The chrono miner's repeated dock test in *enter* and its driving from the jump tick on
+      are S-0207 claim 28's, with the backing and confidence that claim gives them (medium).
 
 10a. **A blocked docking cell does not expire the reservation (Q-0371).** Holding
     contact reserves a dock slot, not exclusive occupancy of the docking cell.
     The docking exchange of claim 10 directs the contacting harvester, not an
-    unrelated friendly harvester standing on that cell. It does not request that
-    blocker to scatter. While the refinery continues accepting the contacting
+    unrelated friendly harvester standing on that cell. The exchange itself does not
+    request that blocker to scatter; the contacting harvester's driving can (below). While the refinery continues accepting the contacting
     harvester, failure to reach the cell does not by itself release contact,
     send it to a queueing cell or select another refinery. There is no elapsed-tick
-    limit in this docking rule: claim 10 row 2 keeps offering the same docking
-    destination at each *enter* processing. Other movement, orders, loss of contact
+    limit in this docking rule: claim 10 row 2 governs the repeated offers of the
+    docking destination, and this rule adds no limit to them. Other movement, orders, loss of contact
     and refusal rules can still end or change this situation.
 
     A harvester resting there without contact does not unload merely by occupying
@@ -597,9 +642,91 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     eviction of that resting harvester. General occupancy and scatter rules remain
     separate, and a vehicle factory's apron clearing is S-0417 claim 13, not a
     refinery-wide docking rule.
-    - Backing: `measurable` (H20)
+
+    **A second harvester at an occupied docking cell (Q-1870).** Those general rules decide what
+    a contacting harvester does when a harvester rests on the docking cell. A chrono miner follows
+    them too, except where a substitute is adopted (*A chrono miner*, below). While the
+    cell gives that harvester the outcome *stationary friendly* (S-0209 claim 5), each offer
+    of the cell by claim 10 row 2 that claim 10 does not ignore as unchanged leads to a path
+    computation towards it, which waits for a running retry delay like any fresh search (S-0212,
+    State and ordering), and S-0212 claim 24 decides by its distance *D*ᵤ to the cell (S-0212
+    F6a):
+
+    | Situation at the path computation | Result |
+    |---|---|
+    | *D*ᵤ is above the close-enough distance and a substitute is adopted | its destination becomes a free cell near the docking cell, the one nearest itself (S-0212 claims 24 and 25), and it drives there; the next offer of the docking cell is a changed destination and is tested again |
+    | *D*ᵤ is at most the close-enough distance, or no substitute is adopted | when a search finds a path, its route leads onto the docking cell. Whenever a fresh search gives it a path whose first step enters the docking cell, the look at that first cell (S-0207 claim 15) sends the occupant a forced, move-anywhere scatter request with no threat point, and, because the harvester holds contact, that look never gives up the move. Such a search is the one made on the offer when the path begins with that step, or the one a first step check of that step makes on finding *stationary friendly*. The step check of that step follows (below). When a search finds no path, S-0212 claim 23 decides instead: the destination is cleared, and that claim's rows say whether the harvester also gives up |
+
+    What follows the request depends on the occupant (S-0207 claim 16):
+
+    | The occupant | Result for the contacting harvester |
+    |---|---|
+    | accepts, and its nearby-cell search gives it a cell | the occupant then has a destination and counts as moving (S-0212 claim 27). The step check that follows the look (on that tick when the harvester faces the step, otherwise once it has turned) takes the outcome S-0209 gives for that occupant (rows VP21 to VP23), and S-0212 claim 22 acts on it; if that gives up the move, the next offer repeats the sequence, as in the next row. Either way the harvester keeps its contact and reservation and docks by claim 10 once the cell is clear |
+    | refuses, or accepts but its search gives no cell, so that it stays and the cell still gives *stationary friendly* | the step check that follows (on that tick when the harvester faces the step, otherwise once it has turned) makes the repeated check on its tick (after a first check, whose fresh search repeats the look and its request). When the give-up test (S-0207 F7, which asks nothing about contact at a step check) holds, the harvester gives up the move there: its destination is removed, and the next processing of *enter* offers the docking cell again, a changed destination, so the sequence repeats. When the test fails, it sends the request of S-0207 table T4 and waits. Either way it stays next to the docking cell with its contact and reservation and docks only once the occupant has left |
+
+    A resting occupant in *guard*, standing still with no destination, accepts the request
+    unless another of S-0207 claim 16's refusals holds (its type is a train type, its body is
+    turning, its locomotor is teleporting or switched off, or it is deployed, deploying or
+    undeploying), and drives to the nearby-cell result round its own cell. It stays in
+    *guard* there and does not
+    resume harvesting unless claim 13 or 17 makes it. An occupant that refuses includes a chrono
+    miner whose teleporting locomotion is active (S-0207 claim 16, case b); such an occupant in
+    *guard* leaves by itself when the refinery is its owner's, because claim 17 then queues
+    *harvest* for it (claim 3a) and claim 3's search gives it a destination. When that search
+    finds nothing, it goes *idle* instead, and leaves by itself only by claim 13's step off a
+    refinery-flag building's cell, when it stands on one.
+
+    *D*ᵤ counts the harvester's own world height in full, against the docking cell's centre at
+    height 0 (`quirks.substitution_distance_flat_destination`). On a base raised so high that
+    *D*ᵤ stays above the close-enough distance even at the cells next to the docking cell, which
+    the harvester's world height alone exceeding that distance guarantees, every offer is
+    substituted again, unless no substitute is adopted at it (then the second row of the
+    first table applies). A harvester whose occupancy record holds it (S-0212 claim 24) then
+    moves from one free cell next to the docking cell to another at its processings of *enter*,
+    never gets a path onto the docking cell and so
+    never sends the request, and keeps its contact and its reservation until the occupant is moved by other
+    means. With the switch off the true distance decides, so height alone does not keep the
+    harvester from the first table's second row. Neither case adds a docking timeout or another refinery choice.
+
+    *A chrono miner.* An offer of the occupied cell is not a qualified docking assignment, so a
+    chrono miner outside S-0207 claim 28's exclusions drives, with its teleporting locomotor
+    suspended. A substitute that a path computation adopts in the first table's first row is
+    different: it is a free cell given to the miner while it holds contact with the refinery, so
+    it is a qualified docking assignment (S-0207 claims 27 and 28). It comes while the miner has a
+    movement report, as its locomotor still holds the point of the docking cell it was just given,
+    so it gets claim 27's fallback. The miner stops, finishing the track it is on, *enter* is
+    queued again with refresh pending, and the substitute is not driven to. At the next processing
+    of *enter* at which it stands still, the refinery offers the docking cell again, and a path
+    computation that adopts a substitute stops it again. So:
+    - while the cell stays occupied and each path computation adopts a substitute, the miner
+      stands where the first one stopped it, which from far away is near where it was first
+      offered the cell. It sends no request and keeps its contact and its reservation. On a base
+      raised as above, it stands there until the occupant leaves, instead of moving between the
+      free cells next to the docking cell.
+    - where a path computation adopts no substitute (the first table's second row, including
+      within the close-enough distance), it drives on the route it gets, and the look, the
+      request, the step check and the give-up follow as for other harvesters (second table).
+    - once the cell is clear, it jumps to the docking cell at the first processing of *enter* at
+      which it stands still (S-0207 claim 28, *An occupied docking cell*), unless it has already
+      reached the cell by driving.
+    - Backing: `measurable` (H20; part e for the request, the occupant's acceptance, the kept
+      contact and reservation and the docking, part f for the substituted offers on a raised base,
+      part g for a chrono miner's stop at an adopted substitute, which is composed from S-0212
+      claim 24's substitution and S-0207 claim 27's dock test and fallback),
+      the step-check outcome after an acceptance resting on S-0209 rows VP21 to VP23,
+      and `unmeasured` for the give-up and the repeated offers after a refusing or staying
+      occupant: the only refusing resting occupant known is a chrono miner with teleporting
+      active, which leaves the cell by claim 17, and no setup is known that keeps another
+      refusal of S-0207 claim 16, or a failed search for the occupant, in force while the
+      contacting harvester approaches.
     - Confidence: high for the docking exchange, retained reservation and absence of
-      a docking timeout; medium for the resting-occupant case pending movement tests
+      a docking timeout; medium for the resting-occupant case pending movement tests,
+      and low for the request and for both of its results for the contacting harvester
+      (the step-check outcome after an acceptance as S-0209 rows VP21 to VP23 give it), which
+      rest on the look at the first cell of a new path, rated low in S-0207 claim 15
+      (composed from the movement rules cited, not observed); medium for the substituted
+      offers on a raised base, and for a chrono miner's stop at an adopted substitute and the
+      standing that follows, until H20 part g runs
 
 11. **Unloading.** A harvester counts as facing map east when its facing *f* (glossary) satisfies
     16256 ≤ *f* ≤ 16511. "The neighbouring cell" is the cell in step direction 6 (map west) of the
@@ -669,13 +796,31 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
     *Refinery sold while unloading.* At the first processing of a sale of the refinery, the refinery
     tells every unit docked with it to leave (S-0408, claim 6). A harvester in the unloading state leaves it at
-    once, receives a forced vehicle scatter request without a threat point and not move-anywhere
-    (S-0207 claim 16), queues *harvest* and starts it if it is ready to change
+    once, queues *harvest* and starts it if it is ready to change
     (subject to any remaining readiness blocker, including an unfinished body turn; see
-    *Turning body* for first-start eligibility on the turn's expiry tick), keeping the part of its load that has not been paid; the sale then breaks off the
-    contact. A harvester still in *enter* at that moment (tethered on or towards the docking cell)
-    queues *guard* instead and receives the same kind of vehicle scatter request, subject to
-    the usual refusals (a turning body or an existing destination can prevent movement).
+    *Turning body* for first-start eligibility on the turn's expiry tick), keeping the part of its load that has not been paid.
+    In the same processing it receives a forced vehicle scatter request without a threat point
+    (S-0207 claim 16), made only while it has no destination. If *harvest* could not start,
+    the request is refused, since S-0207 claim 16 refuses a vehicle whose behaviour is *unload*,
+    and the harvester gets no scatter destination. The sale then breaks off the
+    contact at its next processing, 1 tick after the first, whether or not the harvester is still
+    tethered (a docked unit holds back only the release and the build-down: Changes for other
+    specs, S-0408 claim 6), so
+    the scatter destination is assigned while the contact still holds, and no processing of the
+    harvester after the sale's second one sees that contact. A harvester
+    still in *enter* at that moment, in contact with the refinery (on the docking cell, or driving
+    towards it under row 2 of claim 10), queues *guard*
+    instead. If its destination is the refinery building itself, rather than a cell (a
+    destination naming a building, S-0207 claim 26), that destination is removed first. Then,
+    only if it has no destination, it receives the same kind of vehicle scatter request, which a
+    turning body still refuses (S-0207 claim 16). A harvester whose destination is a cell, such
+    as the docking cell, keeps that destination and receives no request. For a chrono miner such a
+    scatter destination can be a qualified docking assignment, which restores its teleporting
+    locomotion with the jump to the scatter cell pending (S-0207 claim 28, *A sale of the
+    refinery*). An unloading chrono miner's *harvest*, started by the sale, is processed in its
+    next turn, before its locomotion and while the sale's contact still holds, and that seeking
+    processing decides whether the jump is made, and where a miner that is not full goes
+    instead (claim 17, case (f)).
 
     *Contact lost otherwise while unloading.* When the refinery leaves play without a sale (it is
     destroyed, for example) or otherwise breaks off contact with no run-away, the next processing
@@ -701,11 +846,21 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     for a destination and a queued behaviour applies), but orders of S-0213 never reach it, since
     only a dock-unload refinery queues *unload* and an order breaks off that contact first.
     - Backing: `measurable` (scenario H1; its variant e for the three animations; H12 for the sale,
-      contact lost while unloading, an order while unloading and the free dock slot; for
+      its part a2 for the end of contact at the sale's second processing, contact lost while
+      unloading, an order while unloading and the free dock slot; for
       refinery smoke, S-0616 claim 1, scenario P20).
       The order-ending route with contact kept is `unmeasured`: the orders in S-0213
       break this contact before that route could be observed, and no other reachable
-      input is known to preserve it.
+      input is known to preserve it. The sale's scatter request refused when *harvest* could
+      not start is `unmeasured`: in H12 part a2 *harvest* starts at once, and no set-up is known
+      that holds a readiness blocker other than a body turn, which refuses the request itself.
+      A cell destination kept with no request is `measurable` through H12 part a4. The removal of
+      a destination naming the refinery is `unmeasured`: an explicit enter order gives a
+      harvester that destination, but no set-up is known that keeps it while the harvester holds
+      contact, since row 2 of claim 10 replaces it with the docking cell at the processings of
+      *enter* that follow; H12 part a4 records it if a run shows it. A chrono miner's jump at the
+      sale, to the scatter cell or to a field cell, is S-0207 claim 28's and claim 17's case (f)
+      (S-0207 scenario D34 part h).
     - Confidence: high for the payment per tiberium, the dump threshold and the smoke events.
       Medium for the exact
       tick of each payment and the 1-tick intervals, for the extra interval before *finishing* and
@@ -714,7 +869,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       and for which building types play the docking animation (this claim says any building in the
       neighbouring cell); medium for the stall after contact is lost, for the order's route and for
       the delays of the two *finishing* rows; medium for the sale's run-away and the *guard* of a
-      harvester still in *enter*; low for the route with contact kept
+      harvester still in *enter*; medium, until H12 part a2 runs, for the end of contact at the
+      sale's second processing; medium, until H12 part a4 runs, for a cell destination kept with
+      no request; medium for the removal of a destination naming the refinery (`unmeasured`,
+      above); medium for the sale's
+      scatter request being refused when
+      *harvest* could not start; low for the route with contact kept
 
 12. **What the house gains, and when.** Each payment for an amount *a* of tiberium *T* (value per
     bale *V*) adds to the balance of the refinery's owner:
@@ -871,13 +1031,15 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 17. **Chrono miner.** A chrono miner follows the cycle with these differences:
     - its too-far distance is the chrono-harvester field (claim 9), and when it does not reserve a
       refinery and the waiting choice finds one, it always moves to that refinery's queueing cell
-      (claim 9), travelling by its active locomotion,
+      (claim 9), and it drives there (S-0207 claim 28),
     - while it is moving in the *returning* phase and a refinery would accept it (the normal
       choice of claim 8 finds one), it drops its movement, so that its next processing reserves it,
     - at a seeking processing it drops its destination and runs the ring search from where it
       stands (the *seeking drop*, below). This rule holds for a harvester
       whose current locomotor is the teleport locomotor, whether or not its type has the teleporter
-      flag, and not for one whose type has the flag but that moves by another locomotor,
+      flag, and not for one whose type has the flag but that moves by another locomotor. A chrono
+      miner reaches it only while its teleporting locomotion is still active at the seeking
+      test (*Who reaches the drop*, below),
     - in *guard*, a chrono miner queues *harvest* again (1-tick interval, ending the processing as
       a case of row 2 of S-0215 claim 24's vehicle table; the claim 13 note on row 3 does not
       apply to it) when one of its eight
@@ -885,8 +1047,12 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
       mapping; the dock list is not consulted here), or when it is full and still moving. In the
       original this rule is reached only for a human-controlled owner (a computer-controlled owner
       gets claim 13's rule instead); in our engine it applies to every player house.
-    **The seeking drop (Q-1130).** The drop is not tied to the first processing after the miner
-    enters *harvest*; it applies at every seeking processing that gets past the *full* test
+
+    **The seeking drop (Q-1130).** Here and in the rest of this claim's drop rules, "the miner"
+    means a harvester of a type with the teleporting locomotor and without the teleporter flag,
+    such as H8's type *Q*: the jumps these rules describe are its jumps only. A chrono miner
+    meets the drop only in the cases of *Who reaches the drop*, below. The drop is not tied to
+    the first processing after the miner enters *harvest*; it applies at every seeking processing that gets past the *full* test
     (claim 3's first seeking row). At such a processing the destination the miner had before the
     ring search is removed, whatever its origin. A remembered cell counts as such a destination: it
     is adopted by an ordinary destination assignment (which can fix a landing point under S-0207
@@ -918,7 +1084,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
 
     Within one miner's turn, a due behaviour processing sees the destination state before that
     turn's locomotion changes it (claim 3b), and a destination that a behaviour processing sets is
-    jumped to in the same turn (S-0207 claim 20 d). Hence in ordinary play:
+    jumped to in the same turn (S-0207 claim 20 d). Hence, for the miner as defined above:
     - a destination the ring search sets is jumped to in that same turn and removed by the jump,
       so the next seeking processing, a standard delay later, finds none; a search that sent the
       miner away produces a drop at the next processing only if the jump was blocked (the miner
@@ -938,12 +1104,199 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     The "remains seeking" row of claim 3 (a destination present, no search) is therefore not
     reached by a miner with active teleporting locomotion in ordinary play, except through the
     blocked-jump case. It remains the rule for every harvester with other active locomotion,
-    including a vehicle-factory-built miner on its temporary driving leg.
-    - Backing: `measurable` (scenario H8 parts d, h and i)
-    - Confidence: high that every seeking processing past the *full* test drops a destination
-      and that the order-level destination is cleared and the pending jump cancelled; medium
-      for the retained landing point and reservation (it composes this with S-0207 claim 20 a
-      and the locomotor's stop); low for the order-to-first-processing timing of a harvest order
+    including a chrono miner in ordinary play (S-0207 claim 28) and a vehicle-factory-built
+    miner on its temporary driving leg.
+    - Backing: `measurable` (scenario H8 parts d, h and i, with the flag-off type *Q*); a chrono
+      miner's cases have the backing given under *Who reaches the drop*, below
+    - Confidence: high that, for a
+      harvester whose teleporting locomotion is active, every seeking processing past the *full*
+      test drops a destination; medium that the order-level destination is cleared and the
+      pending jump cancelled (S-0207 claim 20's rule for an empty assignment while a jump is
+      pending, which that claim rates medium) and for the retained landing point and reservation
+      (it composes this with S-0207 claim 20 a and the locomotor's stop); low for the
+      order-to-first-processing timing of a harvest order
+
+    **Who reaches the drop (Q-1759).** The seeking drop applies when teleporting locomotion
+    is still active at the seeking test. Which locomotor is active follows from the destination
+    assignments, under S-0207 claim 28. A chrono miner's docking jump installs driving, which
+    stays active through the docking and the unloading. Outside the contact of a sale (case (f)
+    below), adopting a remembered cell, a harvest order and every other destination assignment
+    install driving before the drop's test. A seeking processing begins with teleporting
+    locomotion active in seven cases, listed below: a harvester type without the teleporter flag,
+    and six chrono-miner cases, (a) to (f). The table after the list gives, for each of (a) to
+    (f), the destination held at the seeking processing and the outcome.
+    - Only case (e), warp-pending immobilization, meets the drop as the flag-off type does, with
+      teleporting locomotion active at the test and after it.
+    - In cases (a) to (d), adopting a remembered cell installs driving before the test, so the
+      cell is not dropped. A held destination, possible only in case (a), is removed by the
+      drop's empty assignment, which installs driving first. Otherwise there is nothing to drop.
+    - In case (f) the sale's contact still holds at the test, so adopting a remembered cell is a
+      qualified docking assignment and teleporting stays active. The drop removes the held cell
+      by an empty assignment, which installs driving, and a destination that the ring search sets,
+      again a qualified docking assignment while the contact holds, restores teleporting: the
+      chrono miner jumps to that cell in the same turn. When a ground-layer vehicle stands in the
+      remembered cell, adopting it is not qualified and installs driving, so nothing is dropped,
+      no ring search follows, and the miner drives to its remembered cell.
+    - Of the six, cases (c) and (f) have known ordinary-play fixtures. In case (c) the chrono
+      miner holds no destination.
+
+    So a chrono miner in ordinary play either drives at a seeking processing or has teleporting
+    active there with no destination, except in case (f), where it holds the scatter cell with
+    the jump pending. In both cases it drives to the cell the processing sets, except in case
+    (f), where it jumps to that cell while the sale's contact holds.
+    The seven cases are:
+    - the flag-off type: a harvester type with the teleporting locomotor and without the teleporter flag, to which
+      S-0207 claim 28 does not apply,
+    - (a) *temporary driving ended*: a chrono miner whose temporary driving S-0607 claim 4 ended (a magnetic-beam hit while it
+      drives, which seizes nothing), before its next destination assignment (S-0207 claim 28,
+      the window after that restoration),
+    - (b) *at rest after a seizure*: a chrono miner at rest after the restoration that ends its seizure (S-0607 claim 20),
+      before its next destination assignment; in the original a computer-controlled house's
+      restored miner then queues *harvest* (S-0607's restoration paragraph), so it can reach a
+      seeking processing in that window (S-0607 says our AI houses use the human-house rule
+      there, claim 20),
+    - (c) *at rest after a fall-back*: a chrono miner at rest after S-0215 claim 13's restoration, before its next destination
+      assignment (S-0207 claim 28, the at-rest window). A fall-back to rest restores
+      teleporting when the chrono miner stands still with no destination and driving installed
+      over its teleporting locomotor, and S-0417 claim 5's restoration conditions hold (no
+      restoration lock, not seized, no driving movement report). This happens in ordinary play
+      once a player's move order has ended, and after its docking jump when the refinery refuses
+      it or the contact ends before it docks. After a move order the fall-back queues *harvest*
+      or *guard* (S-0215 claim 15 row 4), and its *guard* rule above then queues *harvest* when an
+      own refinery-flag building is next to it, so it reaches a seeking processing in this window
+      (S-0207 scenario D34 part i). A refinery switched off after the docking jump
+      and before the chrono miner's next processing of *enter*, while it is not yet tethered,
+      refuses its dock request at that processing (claim 10 row 1; S-0207 claim 28
+      and its scenario D34 part g), so that fall-back is reachable. A sale of the refinery
+      leads to this window too, but only after the sale's contact has ended: while the contact
+      holds, the sale's scatter request (claim 11) is a qualified docking assignment, and a
+      chrono miner standing still has teleporting restored with the jump to the scatter cell
+      pending. One still in *enter* makes that jump, which installs driving again (S-0207 claim
+      28, *A sale of the refinery*). A chrono miner still in *enter* has *guard*
+      queued by the sale (claim 11), whatever came of the sale's scatter request. It falls back
+      to rest at a processing of *enter* if one comes before that *guard* starts: at the first
+      one if it is not tethered, since a refinery being sold refuses it (claim 10 row 1), or
+      otherwise at the first one after the sale has broken off its tether and contact. That
+      fall-back restores teleporting when it stands still with no destination. The queued
+      *guard* starts at the first per-tick start at which the miner is ready to change (S-0215
+      claim 11), for example after its jump, or once a refused turning body's turn has ended. A
+      processing of *enter* comes only when its processing timer is due (S-0215 claim 2), so
+      which of the two comes first depends on that timer. If the *guard* starts first, the miner
+      makes no fall-back from *enter*: its behaviour becomes *guard*, driving stays installed,
+      and this window is not reached that way. S-0207 scenario D34 part h records which comes
+      first. A miner that was unloading has *harvest* current instead and does not fall back:
+      it is case (f),
+    - (d) *placed with no destination assignment*: a chrono miner whose placement made no destination assignment, before its first
+      destination assignment (S-0207 claim 28, the third window). A refinery's free miner is
+      not one: its placement fall-back clears its destination before it is given *harvest*
+      (claim 18), and that clear installs driving (S-0207 claim 28, the placement bullet),
+    - (e) *warp-pending*: a chrono miner with warp-pending immobilization, one of S-0207 claim 28's exclusions,
+      whose current locomotor is teleporting,
+    - (f) *unloading at a sale*: a chrono miner that was unloading when its refinery was sold, at
+      the first seeking processing of the *harvest* that the sale started (claim 11), when the
+      sale's scatter request has restored teleporting with the jump to the scatter cell pending.
+      (When the request was refused or assigned nothing, driving stays installed and this is not
+      a case of the list. The cells its processings set then follow S-0207 claim 28's rule, under
+      which they too are qualified docking assignments while the sale's contact holds.) Since a
+      behaviour start sets its processing timer to expire at once (S-0215 claim 3), that
+      processing comes in the miner's next turn, before its locomotion (S-0207 claim 20 d): in the
+      sale's tick when the miner's turn follows the refinery's, otherwise in the next tick, before
+      the refinery's turn. Either way it comes before the sale's next processing, 1 tick after the
+      first (S-0408 claim 6). The sale breaks off the contact at that next processing (claim 11),
+      so the contact still holds at the miner's seeking processing and has ended by its next
+      processing.
+
+    The other two of S-0207 claim 28's exclusions, a gripped and a seized chrono miner, are one
+    case here, since a gripped vehicle is always seized (glossary). A chrono miner whose own
+    locomotor is the teleporting one has, while it drives, that locomotor temporarily replaced by
+    driving (S-0207 claim 28), so a magnetic-beam hit on it while it
+    is not gripped is S-0607 claim 4's case if its type is a resource-gathering vehicle (S-0607
+    claim 4's condition): that claim ends its temporary driving or stops it, it is not seized,
+    and when its temporary driving ends, the window above follows. For such a type, a hit seizes it only where S-0607 claim 4
+    does not apply, which here means while its teleporting locomotion is active, in one of the
+    windows above. A chrono miner seized with the jumpjet stand-in has that as its
+    current locomotor (S-0607 claim 5; a seize whose warhead names another locomotor, S-0607
+    claims 22 and 23, is open: Open questions), so it is not teleporting. The restoration that
+    ends its seizure brings back its teleporting locomotor at rest (the bullet above).
+
+    A chrono miner whose own locomotor is the driving one (so nothing is suspended) has nothing
+    installed or replaced at any assignment (S-0207 claim 28: when the current locomotor is
+    already driving, nothing changes).
+    None of the windows above arises for it, and its qualified docking assignments get S-0207 claim
+    27's fallback, as for a vehicle with no suspended predecessor (S-0207 claim 28, an occupied
+    docking cell). A magnetic-beam hit on it is not S-0607 claim 4's case, since nothing is
+    temporarily replaced; S-0607's other claims decide it.
+
+    Cases (a) to (f) meet a seeking processing as follows. The drop removes a destination by an
+    empty destination assignment.
+
+    | Case | Destination held at the seeking processing | Outcome |
+    |---|---|---|
+    | (a) temporary driving ended by S-0607 claim 4 | may still hold the destination of the trip it was driving (S-0607 claim 4 does not clear it) | a held destination: the drop's empty assignment installs driving first (S-0207 claim 28: empty assignments included), and driving receives it, so the miner stops there; held or not, it then goes on as in the next row |
+    | (b) at rest after the restoration that ends its seizure | none | the ring search's destination is an ordinary assignment, which installs driving first (S-0207 claim 28): it drives there and is a driving chrono miner from then on |
+    | (c) at rest after S-0215 claim 13's restoration (after a move order, a refusal on the docking cell, or the end of its contact, a sale's included) | none | as the row above |
+    | (d) placed with no destination assignment | none | as the row above |
+    | (e) warp-pending immobilization | may hold one | a held destination, or an adopted remembered cell, is removed at once as for the flag-off type *Q* (H8), which stops its teleporting locomotion; claim 28 installs nothing for it, so the ring search's destination goes to its teleporting locomotion, and what that locomotion then does with it is open |
+    | (f) unloading at a sale | the scatter cell, with the jump to it pending | full: the *full* row of claim 3 comes first, so nothing is dropped or assigned; the pending jump to the scatter cell is made in that turn, and the miner goes *returning*. Not full: a remembered cell is adopted and kept by teleporting (a qualified docking assignment while the contact holds), unless a ground-layer vehicle is in it, in which case driving takes it, which by our engine's rule (S-0207 claim 21) cancels the pending scatter jump, nothing is dropped or searched and the miner drives there; otherwise the drop's empty assignment then installs driving, which by the same rule cancels it, so no jump to the scatter cell or the remembered cell is made; a destination that the ring search sets restores teleporting and the miner jumps to it in that turn, unless a ground-layer vehicle is in that cell, in which case driving takes it and the miner drives there; when the search finds nothing the miner goes *idle* with driving installed and no destination |
+
+    In cases (a) to (d) the chrono miner makes no jump to a held destination before driving is
+    installed: a restored teleporting locomotion has no pending jump, since by our engine's rule
+    installing driving cancels a pending one (S-0207 claim 21; claim 28, the window after S-0607
+    claim 4's ending).
+    A remembered cell's adoption is an ordinary assignment too and
+    installs driving before the drop's test, so in those cases it is not dropped and the chrono
+    miner drives to it. Installing driving leaves the chrono miner's behaviour as it is: the
+    reset of the behaviour that S-0215 claim 9 gives a change of locomotor is not applied to it.
+    This rule is S-0207 claim 28's, `measurable` at the docking jump in S-0207 scenario D34
+    part c and rated medium there. S-0215 claim 9 lacks this exception; S-0207 lists the
+    amendment under its Cross-spec changes (its Q-1759 entry on
+    S-0215 claim 9).
+
+    In case (e) the drop of the seeking events table above applies unchanged, the adopted
+    remembered cell included: only what the immobilized teleporting locomotion does with the
+    ring search's destination, before or after the superweapon warp, is not established (Open
+    questions).
+
+    A chrono miner seized with the jumpjet stand-in is not among those cases. A seized unit is
+    put in *guard* (S-0607 claim 5), and a computer-controlled house's seized resource gatherer
+    gets no *hunt* (S-0607 claim 6), which changes nothing here. Whether the chrono miner's *guard* rule above (an own
+    refinery-flag building next to it, or full and still moving), or, in the original under a
+    computer-controlled owner, claim 13's *guard* rule can queue *harvest* while the chrono miner is
+    seized is open (Open questions). If a seeking processing runs while it is seized, that processing gives it no empty destination: the drop
+    needs teleporting locomotion, and the ring search and a remembered cell give only cells. It
+    ignores those, as a seized unit ignores every new destination (S-0607 claim 9; the one
+    exception there is a rule that gives a gripped unit no destination), so the processing
+    neither ends its grip nor makes it travel.
+
+    Outside those cases, a chrono miner that is driving takes claim 3's rows for other active
+    locomotion: it drives to a remembered cell, to a harvest order's cell and to the cells the
+    ring search sets.
+    - Backing: `measurable` (S-0207 scenario D34, with H8 part j) for a chrono miner driving at a
+      seeking processing and to every cell this claim sends it to. `measurable` through S-0207
+      scenario D34 part i for the rest after S-0215 claim 13's restoration that follows a move
+      order: teleporting active at rest, then a driven trip to the cell its seeking processing
+      sets. `measurable` through D34 part h for the jump to a sale's scatter cell of a miner in
+      *enter* and the fall-back that follows the sale's end of contact, for the queued *guard*
+      that starts before any fall-back from *enter*, and for case (f): run 1 for a miner that is
+      not full, which jumps to a field cell, and run 4 for a full one, which jumps to the scatter
+      cell. `unmeasured` for case (f) with a ground-layer vehicle in its remembered cell or in the
+      ring search's cell, or with no cell found, and for what a later restoration of its
+      teleporting locomotion does after that: D34's map has a free field in range, and no
+      recorder field shows the suspended teleporting locomotion. `unmeasured` for the other four
+      chrono-miner cases, their consequences, the chrono miner whose own locomotor is driving and
+      the seized chrono miner's seeking processing: no ordinary-play fixture is known that brings a chrono
+      miner to a seeking processing in one of those states, and H8 tests the drop with the
+      flag-off type *Q*.
+    - Confidence: medium for a chrono miner driving at, or driving from, a seeking processing in
+      ordinary play (S-0207 claim 28's rating until D34 runs), the at-rest case after S-0215
+      claim 13's restoration and the sale's scatter jump of a miner in *enter* included; medium,
+      until D34 part h runs, for case (f)'s jump to a field cell and to the scatter cell, and for
+      the timing that puts its seeking processing inside the sale's contact; low for case (f) with
+      a vehicle in its remembered cell or in the search's cell, or no cell found, and for what
+      follows; medium for the sale's
+      fall-back and for the queued *guard* that can start before it; low for the other four cases,
+      their consequences, the chrono miner whose own locomotor is driving and the seized chrono
+      miner.
 
     **Temporary driving after production.** A vehicle-factory-built chrono miner still using
     temporary driving drives its first leg to ore found in another cell. The ore destination
@@ -954,18 +1307,27 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     teleporting locomotion and supply that same offer to it (claim 10; S-0207 claim 27).
     A refinery's free unit follows claim 18's distinct release path, not the vehicle-factory
     exit; its travel is not evidence that a factory-built miner skips this first driving leg.
+    A free chrono miner has driving installed at its placement (S-0207 claim 28), so its trips
+    are driven too. Whether or not a miner has docked since it was made, in ordinary play every
+    trip other than its docking jump and its jump at a sale (claim 11; case (f) above) is driven,
+    outside S-0207 claim 28's exclusions: only a qualified docking assignment (S-0207 claim 27)
+    installs no driving.
 
     How it teleports while teleporting locomotion is active is S-0207 claim 20's.
     A vehicle whose type has the harvester flag does not
     phase in after a jump (S-0207 claim 20 f).
-    - Backing: `measurable` (scenario H8; S-0207 scenario D22 run 2 for no phasing in; H8 part g
+    - Backing: `measurable` (scenario H8, parts d and j and the queueing-cell runs, and S-0207
+      scenario D34 for driving on every trip but the docking jump; S-0207 scenario D22 run 2
+      for no phasing in; H8 part g
       for the "full and still moving" trigger, `unmeasured` if no run reaches it, and
       S-0417 claim 16, scenario U15 for the factory-built first field leg, point replacement,
       clearing and later restoration; claim 10's conditional H10 trace for docking restoration)
     - Confidence: medium, including the composed factory-built first field leg and later
       restoration; high for the active-locomotion seeking test, harvest queueing not itself
-      restoring locomotion, and no phasing in.
-      Low for the "full and still moving" trigger
+      restoring locomotion, and no phasing in. Medium for S-0207 claim 28's rule at an assignment,
+      the level that claim gives it until its scenario D34 runs; medium for that claim's composed
+      ordinary-play consequences, among them that a chrono miner drives on every trip except its
+      docking jump and its jump at a sale. Low for the "full and still moving" trigger
 
 ### A building's free unit
 
@@ -1017,16 +1379,33 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     the owner receives the refund of S-0408 claim 1 for the free unit's type with the refund
     percentage taken as 1 (that is, the amount *P*, or the refund-override form, of that claim).
 
-    A free unit that is placed queues *harvest* with an immediate start, whatever its type, so it
-    starts the harvest cycle at once (S-0215 claim 15's placement fall-back is not involved).
+    The free unit is placed before it is given any behaviour, so its placement fall-back (S-0215
+    claim 15) finds no contact, no destination and nothing current or queued. For a harvester
+    type that is row 4: target and destination are cleared and *harvest* is queued (for a chrono
+    miner the clear installs driving, S-0207 claim 28). Once placed, the free unit is given
+    *harvest* with an immediate start, whatever its type, so it starts the harvest cycle at once,
+    in *harvest* from its first recorded tick. For a harvester type, that *harvest* replaces the
+    one the fall-back queued; both are the same behaviour, so the replacement itself shows
+    nothing, and an implementation may equally start the fall-back's own.
     Creating it takes the object creation draw (S-0202, claim 10); the placement and the searches
     take none, except the draws that putting a unit of that type on the map takes in general (none
     for a harvester). The building's other grand-opening effects (its slot animations, S-0108 claim
     11, and any aircraft its type comes with) are other specs'.
-    - Backing: `measurable` (scenario H13, parts a to g)
+    - Backing: `measurable` (scenario H13, parts a to g; for the placement fall-back coming before
+      the free unit's *harvest*, S-0207 scenario D34 part f, whose free chrono miner drives from
+      its first recorded tick only if that fall-back cleared its destination). For every other
+      harvester type the fall-back is `unmeasured`: the free unit has no
+      target or destination for it to clear, and the *harvest* it queues is replaced at once, so
+      it leaves nothing that a recorder can read; for such a type it changes nothing observable.
+      The immediate start of *harvest* is `measurable` (H13; S-0207 D34 part f, *harvest* from the
+      tick the free miner appears); its replacement of the fall-back's queued *harvest* is
+      `unmeasured`, since it shows nothing, as stated above.
     - Confidence: high for the timing at the grand opening, for no unit after a capture and for the
       first place and its facing; medium for the two searches, the refund, the start of *harvest*
-      and the start-price condition; high for suppression of the set-up free-unit grant
+      and the start-price condition; medium, until S-0207 scenario D34 part f runs, for the
+      placement fall-back before *harvest* for a chrono miner, the type that part tests; medium
+      for it for other harvester types (`unmeasured`, above); high for suppression of the
+      set-up free-unit grant
 
 ### Creating and directing a slave group
 
@@ -1166,7 +1545,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     A seeking vehicle already with a destination enters travelling without replacing it.
     Otherwise it seeks a field with the miner's long scan range and searches for a site near
     the result. No field or no site puts it at rest with the current tick as last-rest.
-    With a site, it moves there and enters travelling. A working vehicle that is no longer
+    With a site, it moves there and enters travelling. A working vehicle that has stopped
     deploying and is in *guard* re-enters travelling, permitting another deployment attempt.
 
     An at-rest deployed group enters checking the field at an update that sees neither
@@ -1280,7 +1659,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     does not immediately return merely because of that capacity. Unlike a vehicle
     harvester, a zero-capacity slave has fill ratio 0, not a non-number. Its *harvest*
     processing queues *guard* with a 1-tick delay. At a group update checking a slave
-    still on resource land, no longer in *harvest*, the slave re-enters searching.
+    still on resource land, out of *harvest*, the slave re-enters searching.
     Arrival at a selected resource cell queues *harvest* again. It can therefore
     alternate searching and attempted harvesting without taking resources.
 
@@ -1387,7 +1766,7 @@ terms *resource cell*, *the tiberium of a cell*, *stage*, *bale*, *value per bal
     and takes no draw (S-0215 claim 4 and table T1). It does not move the
     building, request packing or clear its guard spot. Becoming current does
     replace the previous behaviour, so its previous processing, such as
-    *guard*, no longer runs while *move* remains current. No automatic return
+    *guard*, does not run while *move* remains current. No automatic return
     to *guard* accompanies the group's return to rest.
     - Backing: `measurable` (H25, site-offer variants). Selling-state variants remain
       `unmeasured` until a run reaches field seeking during current *selling* before
@@ -1624,8 +2003,8 @@ cause a second processing.
 |---|---|---|---|
 | any | owner owns no building of a dock type | queues *guard* | 1 tick |
 | seeking | full | → returning | 1 tick |
-| seeking | not full, has a remembered cell | drives there and forgets it; no search in this processing (chrono miner with active teleporting locomotion: the seeking drop of claim 17 removes the adopted cell, and the processing then takes the ring-search rows below) | standard delay; for such a chrono miner, the next processing is that of the row the ring search then reaches |
-| seeking | not full, no remembered cell, has a destination | stays seeking; no search (chrono miner with active teleporting locomotion: the seeking drop removes the destination, and the processing then takes the ring-search rows below) | standard delay; for such a chrono miner, the next processing is that of the row the ring search then reaches |
+| seeking | not full, has a remembered cell | drives there and forgets it; no search in this processing (a harvester whose teleporting locomotion is still active at the drop's test: the seeking drop of claim 17 removes the adopted cell, and the processing then takes the ring-search rows below; a chrono miner in cases (a) to (d) of claim 17 (*Who reaches the drop*) is not such a harvester, since adopting the remembered cell installs driving before the drop's test, S-0207 claim 28; the drop holds for a chrono miner with warp-pending immobilization, whose open case is only the ring search's destination, and for one unloading at a sale, case (f), whose adoption keeps teleporting while the sale's contact holds, claim 17) | standard delay; for such a harvester, the next processing is that of the row the ring search then reaches |
+| seeking | not full, no remembered cell, has a destination | stays seeking; no search (a harvester whose teleporting locomotion is still active, as in the row above: the seeking drop removes the destination, and the processing then takes the ring-search rows below; for a chrono miner whose temporary driving S-0607 claim 4 ended, the drop's empty assignment installs driving first, claim 17) | standard delay; for such a harvester, the next processing is that of the row the ring search then reaches |
 | seeking | not full, no remembered cell, no destination, ring search (long scan) gives its own cell | step counter 0, period 2 started; → loading | 1 tick |
 | seeking | not full, no remembered cell, no destination, ring search gives another cell | drives there; stays seeking | standard delay |
 | seeking | not full, no remembered cell, no destination, nothing found | → idle | 105 ticks |
@@ -2167,7 +2546,7 @@ with no engine add-on and no mods (the named test files of a scenario and the pu
   health after reload.
 - *Falsified if:* the group wakes or slaves emerge at or before tick 400, bale intervals
   differ, or timer completion occurs between group updates. A failure to emerge must be
-  separated from a failure to wake; it no longer implies an unknown initial last-rest tick.
+  separated from a failure to wake; it does not imply an unknown initial last-rest tick.
 - *Variants:* (b) the wrap: the miner stands on an ore cell (so the group's rest tick plays no
   part) and the kick key is absent (the default 2147483647); the stop order is given at tick 100
   as above. Expected: the group wakes within 10 standard delays of *s*<sub>m</sub>, because the
@@ -2192,56 +2571,76 @@ with no engine add-on and no mods (the named test files of a scenario and the pu
 - *Runs:* 3 for the main run, 1 for each variant.
 
 **H8. Chrono miner (claim 17).**
-- *Setup:* a chrono miner with active teleporting locomotion far (40 cells) from its refinery,
-  chrono too-far field 50. Record its active locomotion before each travel or seeking test.
-  Separately use S-0417 claim 16's U15 to test a vehicle-factory-built miner's first distant
-  ore leg and later restoration; distinguish it from the refinery free-unit path of claim 18.
-- *Observable:* its cell per tick (a teleport is a jump of more than 2 cells in one tick), its
-  behaviour and phase.
-- *Expected:* when full it reserves the refinery and teleports to dock. With the field set to 10, it
-  teleports to the queueing cell. Standing next to its owner's refinery in *guard*, it queues
-  *harvest* by itself. Part (d): ordered to harvest a cell 10 cells away while a richer cell lies
-  next to it, it drops the order's destination and loads at the cell the ring search from where it
-  stands finds. Part (e): while it is moving in *returning* and a refinery would accept it, its
-  movement stops and it reserves that refinery on its next processing. Part (f): with the
-  refinery busy and the chrono miner 2 cells (512 leptons) from it, too-far field 1: it moves
-  (teleports) to the queueing cell, although an ordinary harvester stays there (H4 part b).
-  Part (g), the "full and still moving" trigger: a full chrono miner is returning to its only
-  refinery over a long way (40 cells), and that refinery is sold while the miner is moving, so
-  claim 13 puts it into *guard* with its locomotor still moving. Expected: at every processing of
-  *guard* at which the recorder shows the locomotor moving, the behaviour one tick later is
-  *harvest* (which falls back to *guard* at once, claim 13, as the house owns no refinery); once
-  the locomotor has stopped, it stays in *guard*. If no processing of *guard* ever shows the
-  locomotor moving (the miner stops at once when the refinery goes), the part shows nothing and
-  the trigger stays `unmeasured` for that reason.
-  Part (h), the seeking drop's timing for a harvest order (Q-1130): as part (d), with the ordered
-  cell 10 cells away and richer ore next to the miner, record every tick from the order until the
-  first load: the miner's cell, order-level destination, the locomotor's goal, its moving state,
-  its behaviour and phase and the time of each processing. Expected: the destination is gone
-  within a few ticks; either the miner never leaves its cell and loads at the nearby ore (the
-  processing came first), or it jumps to the ordered cell once and then searches from there. Both
-  outcomes are recorded; neither falsifies the drop itself, and the observed one settles the
-  `unmeasured` timing in claim 17.
-  Part (i), the remembered cell and the retained landing point: let a miner with active
-  teleporting locomotion unload at a refinery with ore 10 or more cells away from its first
-  loading cell, so that it has a remembered cell, and record the same fields over the first
-  seeking processing after the unloading, plus the occupancy of the remembered cell (try to move
-  a second vehicle onto it, or read the recorder's vehicle-present mark). Expected: the miner
-  does not jump to the remembered cell (its cell does not change in the processing's tick unless
-  the ring search from where it stands finds another cell); the destination and goal are
-  nothing after the processing; the remembered cell's reservation stays marked until the miner's
-  next accepted destination. Repeat with the miner disabled (electromagnetic pulse) at the
-  processing: the drop still removes the destination and no landing point or mark appears.
-- *Falsified if:* it drives (other than the one jump that part (h) allows), stays in *guard* next to
-  its refinery, keeps the ordered cell as its destination after its first seeking processing in part
-  (d), keeps moving in part (e), or stays where it is in part (f); in part (g), a processing of
-  *guard* that shows the locomotor moving and is followed by a behaviour other than *harvest*, or
-  *harvest* after the locomotor has stopped; in part (h), the ordered cell still set as the destination
-  after the first seeking processing; in part (i), the miner jumping to the remembered cell, a
-  destination still set after the seeking processing, the reservation moving back to the miner's cell
-  at the drop, or the drop happening only at the first processing after *harvest* starts (a destination
-  that the search sets at a later seeking processing is gone at the next seeking processing, unless the
-  jump was blocked).
+- *Setup:* a chrono miner *H* far (40 cells) from its refinery, chrono too-far field 50. A named
+  test harvester type *Q*, a copy of the chrono miner's type with the teleporter flag off.
+  *Q* keeps the teleporting locomotor, so S-0207 claim 28 does not apply to it and its
+  teleporting locomotion stays active. *Q* is used only for the seeking drop, in parts (d),
+  (h) and (i), which test no rule that needs the teleporter flag. The rules keyed to the flag
+  (the chrono too-far field, the queueing-cell choice, the returning drop and the *guard*
+  rule: the first three expected results and parts (e) to (g)) are tested with *H* only. Record the
+  active locomotion of both before each travel or seeking test. Separately use S-0417 claim
+  16's U15 to test a vehicle-factory-built miner's first distant ore leg and later
+  restoration, and distinguish it from the refinery free-unit path of claim 18.
+- *Observable:* the cell per tick (a teleport is a jump of more than 2 cells in one tick), the
+  behaviour and phase, and the active movement kind.
+- *Expected:*
+  - When full, *H* reserves the refinery and teleports to the docking cell. Its active movement
+    kind is driving from that jump's tick.
+  - With the field set to 10, *H* drives towards the queueing cell.
+  - Standing next to its owner's refinery in *guard*, *H* queues *harvest* by itself.
+  - Part (d): ordered to harvest a cell 10 cells away while a richer cell lies next to it, *H*
+    keeps the order's destination, drives to the ordered cell and loads there. Repeated with
+    *Q*: it drops the order's destination by its first seeking processing, with either timing
+    outcome of part (h): it loads at the cell that the ring search from where it stands finds,
+    or it jumps to the ordered cell once and then searches from there.
+  - Part (e): while *H* is moving in *returning* and a refinery would accept it, its movement
+    stops and it reserves that refinery on its next processing.
+  - Part (f): with the refinery busy, *H* 2 cells (512 leptons) from it and the too-far field
+    1, it drives to the queueing cell, although an ordinary harvester stays there (H4 part b).
+  - Part (g), the "full and still moving" trigger: a full *H* is returning to its only
+    refinery over a long way (40 cells), and that refinery is sold while the miner is moving,
+    so claim 13 puts it into *guard* with its locomotor still moving. At every processing of
+    *guard* at which the recorder shows the locomotor moving, the behaviour one tick later is
+    *harvest*, which falls back to *guard* at once (claim 13, as the house owns no refinery).
+    Once the locomotor has stopped, it stays in *guard*. If no processing of *guard* ever shows
+    the locomotor moving (the miner stops at once when the refinery goes), the part shows
+    nothing, and the trigger stays `unmeasured` for that reason.
+  - Part (h), the seeking drop's timing for a harvest order (Q-1130): as part (d) with *Q*, the
+    ordered cell 10 cells away and richer ore next to it. Record every tick from the order until
+    the first load: the cell, order-level destination, the locomotor's goal, its moving state,
+    behaviour and phase, and the time of each processing. The destination is gone within a few
+    ticks. Either *Q* loads at the nearby ore (the processing came
+    first), or it jumps to the ordered cell once and then searches from there. Both outcomes are
+    recorded; neither falsifies the drop itself, and the observed one settles the `unmeasured`
+    timing in claim 17.
+  - Part (i), the remembered cell and the retained landing point: let *Q* unload at a refinery
+    with ore 10 or more cells away from its first loading cell, so that it has a remembered
+    cell. Record the same fields over the first seeking processing after the unloading, plus
+    the occupancy of the remembered cell (try to move a second vehicle onto it, or read the
+    recorder's vehicle-present mark). *Q* does not jump to the remembered cell: its cell does
+    not change in the processing's tick unless the ring search from where it stands finds
+    another cell. The remembered
+    cell's reservation stays marked until *Q*'s next accepted destination. Repeat with *Q*
+    disabled (electromagnetic pulse) at the processing: the drop still removes the destination,
+    and no landing point or mark appears.
+  - Part (j), *H* after unloading: over three loads, its trip to the remembered cell or to the
+    cell the ring search finds is driven every time, and its only jumps are to the docking cell.
+- *Falsified if any of these holds:*
+  - *H* jumps anywhere other than to a refinery's docking cell during *enter*, or does not
+    make the docking jump under claim 10's qualified docking conditions.
+  - *H* stays in *guard* next to its refinery.
+  - in part (d), *H* drops the ordered cell or jumps, or *Q* keeps the ordered cell as its
+    destination after its first seeking processing.
+  - *H* keeps moving in part (e), or stays where it is in part (f).
+  - in part (g), a processing of *guard* that shows the locomotor moving and is followed by a
+    behaviour other than *harvest*, or *harvest* after the locomotor has stopped.
+  - in part (h), the ordered cell still set as *Q*'s destination after the first seeking
+    processing.
+  - in part (i), *Q* jumps to the remembered cell, a destination is still set after the seeking
+    processing, the reservation moves back to *Q*'s cell at the drop, or the drop happens only
+    at the first processing after *harvest* starts (a destination that the search sets at a
+    later seeking processing is gone at the next seeking processing, unless the jump was
+    blocked).
 - *Runs:* 3.
 
 **H9. Stop order and *return* (claim 2).** A harvester in *loading* and another in *returning* are
@@ -2293,7 +2692,10 @@ is wrong). *Runs:* 3.
   destination-refresh and point-suppression states, suspended predecessor and restoration
   permission, current and queued behaviours, and the predicates of S-0207 claim 27.
   Compare an unchanged offer without refresh with a changed or refreshed offer, keeping
-  the other predicates qualified. The former must not run the dock test. For the latter,
+  the other predicates qualified. The former must not run the dock test by itself. The
+  miner's repeated dock test (S-0207 claim 28) runs it at every accepted processing at which
+  it has a destination, so record each processing's dock-test outcome whether or not the
+  refinery made an offer. For the latter,
   distinguish restoration from non-restorable fallback. On qualified restoration, expect
   the restored teleporting locomotion to receive this same offer's otherwise due movement
   point, using the old driving points for restoration eligibility. With no already-pending
@@ -2306,7 +2708,8 @@ is wrong). *Runs:* 3.
   movement point is skipped in that assignment; suppression is consumed and newly enabled
   refresh remains. A subsequent eligible equal offer may test again. Contact acquisition
   alone, or changing cell occupancy without an eligible assignment, must not cause a test.
-  A test on the rejected unchanged offer, a movement point installed by the triggering
+  A dock test caused by the rejected unchanged offer itself (as distinct from S-0207 claim
+  28's repeated dock test at the same processing), a movement point installed by the triggering
   fallback assignment, or a once-per-entry limit falsifies these conditional predictions.
   If this state cannot be established with stock data, retain it as unmeasured; do not
   infer that it is unreachable or replace the missing run with altered locomotion data.
@@ -2334,7 +2737,7 @@ is wrong). *Runs:* 3.
 - *Part e (Q-0194, failed idle step-off):* no resources, an ordinary non-teleporting harvester
   standing on a refinery-flag building's cell, and an owned dock-type building still present.
   Block every cell through the largest search radius of S-0212 claim 25 with walls or
-  stationary units. Use the recorder to confirm that no cell qualifies; the harvester must
+  stationary units. Use the recorder to check that no cell qualifies; the harvester must
   enter idle normally, without setting its state externally. Record its destination, current
   and queued behaviours, body facing, contact, tether, no-field record, next-processing tick
   and random-stream state immediately before and after the processing 105 ticks later.
@@ -2361,16 +2764,37 @@ is wrong). *Runs:* 3.
   not move and is not paid, for 3000 ticks; a move order breaks contact at once, and at its next
   processing of *unload* the harvester leaves the unloading state and stops. Part a2: the
   refinery is sold after the first payment instead: the harvester is in *harvest* one tick after
-  the sale's first processing, with the unpaid rest of its load, and drives off (to another
-  refinery of the house when there is one, part a2 having a second refinery). Part a3: sold while a
+  the sale's first processing, with the unpaid rest of its load; its contact with the refinery
+  ends at the sale's second processing, 1 tick after the first; and it drives off, not full, to
+  its remembered cell if it has one, otherwise to the sale's scatter cell (claim 3's seeking
+  rows). In part a2 the recorder also logs, per tick, its order-level destination and the cell
+  of its last load. Part a3: sold while a
   harvester is in *enter* on the docking cell, still turning: it is in *guard* soon after and does
-  not dock. Part b (no sale): the first harvester is given a move order in the tick after its first
+  not dock. Part a4: the first harvester returns to dock as usual with the dock slot free, and the
+  refinery is sold while it is in *enter*, in contact with the refinery and still driving to the
+  docking cell (row 2 of claim 10 has offered it that cell); the recorder also logs, per tick,
+  whether its destination names the refinery building or a cell, and which cell. Expected: its
+  destination is still the docking cell in the sale's first processing, with no scatter
+  destination. Conditional variant: select the harvester and click the refinery (an explicit
+  enter order) in the tick before the sale. If a run shows the destination naming the refinery
+  building, with contact held, at the sale, expect that destination gone in the sale's first
+  processing, and the harvester then to receive the sale's scatter request (claim 11): its
+  destination becomes the cell that the nearby-cell search gives around its vehicle scatter
+  centre cell (S-0207 claim 16 and Terms: the cell of its heading point while it has one,
+  otherwise its own cell), or it gets no destination when its body is turning or the search
+  gives no cell. The recorder also logs, per tick, the cell of its heading point and its body
+  facing.
+  Runs in which the destination names neither at the sale are void. Part b (no sale): the first harvester is given a move order in the tick after its first
   payment: the second harvester takes contact with the refinery from the next of its own
   processings on (the slot was freed in the order's tick); the first harvester starts moving at its
   next processing of *unload* (1 tick later) and keeps its unpaid load; ordered back to harvest, it
   docks again and is paid for that load.
 - *Falsified if:* in part a, the first harvester leaves *unload* without an order, or is paid; in
-  part a2, it stays in *unload* or loses its load; in part a3, it unloads at the sold refinery; in
+  part a2, it stays in *unload*, loses its load, keeps its contact after the sale's second
+  processing or drives off towards a cell other than those two; in part a3, it unloads at the
+  sold refinery; in part a4, a harvester with a cell destination gets a scatter destination or
+  loses the cell, or, in a run of the variant that qualifies, a destination naming the refinery survives the sale's
+  processing, or the harvester gets a scatter destination while its body is turning; in
   part b, the second harvester cannot take contact until the first has driven off, or the first
   harvester loses its unpaid load or is paid for it before it docks again.
 - *Runs:* 2 for each part.
@@ -2581,23 +3005,27 @@ is wrong). *Runs:* 3.
   read-only tick-labelled recorder. This scenario proposes observation only, not a
   change to the harness or the original.
 
-**H20. Friendly harvester on the docking cell (claims 3a and 10a; Q-0371).**
+**H20. Friendly harvester on the docking cell (claims 3a and 10a; Q-0371, Q-1870).**
 - *Setup:* tiny flat skirmish map, stock refinery and two ordinary harvesters of one
   human house, reachable ore field, speed index 2, remote bystander; no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Keep the test refinery powered on. Use the normal measurement setup.
 - *Procedure:* while B unloads, move A to the docking cell and stop it after B leaves.
-  Order B to enter the refinery again. Record for 2000 ticks, then give A a harvest
-  order. Repeat three times; repeat with the field reachable only past the refinery,
-  and with a second available refinery. A computer-owner run records the original's
+  Order B to enter the refinery again from at least 10 cells away. In the first run, give A
+  a harvest order once B has contact and while B's distance by S-0212 F6a still exceeds the
+  close-enough distance, and record until A leaves the docking cell or 2000 ticks pass. In
+  the second run give A no order and record for 2000 ticks. Repeat each run three times, and
+  repeat both with the field reachable only past the refinery and with a second available
+  refinery. A computer-owner run records the original's
   own orders separately rather than assuming human input reaches that owner.
 - *Observable:* both units' cells, current and queued behaviours, destinations,
   contact and tether, dock occupancy, and any movement or scatter request, tick by tick.
-- *Expected:* merely occupying the cell does not give A contact or unloading. B's
-  docking exchanges keep directing B to that cell without a docking timeout,
-  alternative-refinery choice or a request to scatter A. A's harvest seeking can
-  select the reachable ore destination despite B's reservation. Any later route
-  failure is logged separately from the harvest destination assignment.
-- *Falsified if:* the docking exchange evicts A, expires B's reservation because
-  time passed, queues B elsewhere or chooses another refinery, or harvest seeking
+- *Expected:* in the first run A's harvest seeking selects the reachable ore destination
+  from the docking cell despite B's reservation. Any later route failure is logged
+  separately from the harvest destination assignment. In the second run merely occupying
+  the cell does not give A contact or unloading. B's docking exchanges keep directing B to
+  that cell without a docking timeout or alternative-refinery choice, and the exchanges
+  themselves send A no request; B's own driving can (parts e and f).
+- *Falsified if:* the docking exchange evicts A other than through B's driving
+  (claim 10a), expires B's reservation because time passed, queues B elsewhere or chooses another refinery, or harvest seeking
   refuses A's field destination solely because it starts on the docking cell.
 - *Route variants:* S-0212 claim 27a/P27 supplies docking-cell entry, persistence and
   departure tests; claim 23 supplies failure classification and retry delay. Record
@@ -2608,6 +3036,40 @@ is wrong). *Runs:* 3.
 - *Tool:* scripted input with video and a read-only tick/state recorder. Reachability
   and route-failure overlaps must actually be observed; this scenario does not
   assume that every movement failure leaves *harvest* current.
+- *Part e (Q-1870, low base):* the flat map above. A rests on the docking cell in *guard*
+  with no destination, after a stop order or, where one can be obtained, after a failed
+  departure that gave up; record A for 2000 ticks before B arrives. Then B arrives loaded
+  from at least 10 cells away and takes contact. Record B's destination at every processing
+  of *enter*, every scatter request with its sender, options and receivers, A's acceptance
+  and new destination, B's contact and reservation, and the tick B docks. Expected: A stays on
+  the cell in *guard* until B's request, with no route retry of its own. While B's distance by
+  S-0212 F6a exceeds the close-enough distance, B's destination is a free cell next to the
+  docking cell; once B is within it, B's route leads onto the cell, B sends A a forced,
+  move-anywhere request without a threat point, and A accepts it and drives off to a nearby
+  cell, staying in *guard* there. B keeps its contact and reservation throughout and docks
+  after A leaves. Falsified if B, within the close-enough distance, keeps moving round the cell
+  without sending the request, A, still and without a destination, refuses it, or B loses its
+  contact or reservation, is sent to a queueing cell or another refinery, or never docks once
+  the cell is clear.
+- *Part f (Q-1870, raised base):* as part e, with the refinery on a plateau whose world
+  height exceeds the close-enough distance (its height levels named in the run's record) and
+  free cells next to the docking cell. Expected: at every processing of *enter* B's
+  destination is replaced by a free cell next to the docking cell; B moves between such
+  cells, keeps its contact, sends A no request and does not dock for 3000 ticks. Then order
+  A off the cell: B docks at a later processing of *enter*. Falsified if B docks or A is
+  scattered before that order, except after a recorded processing of *enter* at which no
+  substitute was adopted (claim 10a's second row then applies). Repeat on a plateau whose world height is well below the
+  close-enough distance: part e's result is expected.
+- *Part g (chrono miner):* parts e and f with B a chrono miner whose field is 15 to 40 cells from
+  the docking cell, with the test rules file of S-0207 scenario D34 part e. Record B's movement
+  kind, its tracks, its destination and its movement report at every processing of *enter*.
+  Expected:
+  once B is offered the occupied cell, B starts no new track after the track it is on, sends no
+  request, keeps its contact and reservation, and does not dock while A stays (on the low base,
+  unless a recorded path computation adopted no substitute, after which part e's driving and
+  request follow). Then order A off the cell: B jumps to the docking cell at the first processing
+  of *enter* at which it stands still. Falsified if B drives to a free cell next to the docking
+  cell after a recorded substitution, or jumps anywhere but the docking cell.
 
 **H21. Slave-place ordering, two clocks, facing and scan tests (claims 21, 26).**
 - *Setup:* common skirmish setup, speed 2, 800 × 600, no engine add-on and no mods (the named test files of a scenario and the purpose-made test maps excepted). Named map
@@ -2840,7 +3302,8 @@ is wrong). *Runs:* 3.
   Restore the original sprite after the control; this changes test art only, not
   the shadow rules or the miner's gameplay.
 - *Suppression controls:* in separate runs, give the loading miner a movement order,
-  target it with an erasing weapon, and record a chrono miner's journey. The extra
+  target it with an erasing weapon, and record a chrono miner's trips: its driving trips and
+  its docking jump, the only one of them that is a teleport journey. The extra
   image is absent in the conditions of claim 5a and can resume when those conditions
   end without restarting its image cycle. Record whether loading is still eligible:
   ending the behaviour is not evidence for a movement-only gate. Presence while an
@@ -2873,6 +3336,28 @@ is wrong). *Runs:* 3.
 
 ## Open questions
 
+- (Claim 17, Q-1759.) Q-1759 questions 1 to 4 are settled in S-0207 claim 28 (its answer
+  table); this spec carries their consequences in claim 17 and the Terms. Still unsettled, all
+  `unmeasured`:
+  - whether a chrono miner reaches a seeking processing with teleporting locomotion active in
+    each of claim 17's cases: (a) after S-0607 claim 4 ended its temporary driving; (b) after the
+    restoration that ends its seizure; (d) after a placement that made no destination assignment
+    (no way of creating one is established); and (e) with warp-pending immobilization. Of these,
+    only (e) meets the drop with teleporting active at the test and after it, and only (e), or (a)
+    with a held destination, meets the drop at all. Case (c), after a fall-back before docking, is
+    measurable through S-0207 scenario D34 parts g, h and i, and case (f), a miner unloading at a
+    sale, through D34 part h. Neither is among these.
+  - what a chrono miner in case (e) does with the destination that the seeking drop's ring
+    search gives its teleporting locomotion (an adopted remembered cell is removed at once,
+    claim 17): whether it is dropped, kept for after the superweapon warp, or jumped to.
+  - whether the chrono miner's *guard* rule, or claim 13's *guard* rule under a
+    computer-controlled owner, can queue *harvest* while it is seized, and that a seized chrono
+    miner's seeking processing neither ends its grip nor makes it travel (claim 17).
+  - a chrono miner seized with a stand-in other than the jumpjet one, named by the seizing
+    warhead (S-0607 claims 22 and 23), is not covered: which of claim 17's rules it meets is
+    open.
+  - the answers to Q-1759 questions 1 to 4 rest on S-0207 claim 28 and its scenario D34, which
+    has not been run.
 - Q-1130 question 3 is answered by the seeking drop in claim 17 (every seeking processing past
   the *full* test; order-level destination cleared, pending jump cancelled, landing point and
   reservation retained). Open: whether a harvest order's destination is dropped before the
@@ -2880,17 +3365,16 @@ is wrong). *Runs:* 3.
 - Q-0550 is answered by claim 5a, F8 and H26. S-0111 claim 14 already covered load
   pips. The fixed harvesting sprite is not an animation instance, so its frame cycle
   does not require a new S-0109 playback claim.
-- Q-0580 questions 1, 2 and 4 were already answered by claim 5a, corrected F8
-  and H26. S-0205 claim 6 already required table trigonometry before the request.
-  The prior F8 omitted that precision rule and also reversed its coordinate
-  contributions. Question 3 is already answered by S-0102 claim 13 and scenario
+- Q-0580 questions 1, 2 and 4 are answered by claim 5a, F8 (with its precision
+  rule and its coordinate contributions) and H26. S-0205 claim 6 requires table
+  trigonometry before the request. Question 3 is already answered by S-0102 claim 13 and scenario
   D43. Question 5 is answered by claim 5a's integer-step test and H26's zero-step
   movement control; S-0207 claim 2 already defines the step and its rounding.
 - Cross-spec coverage: S-0215 claim 4 already covers the reachable 450-tick no-op building *move* described in claim 27a and cites H25. S-0415 claim 9 already recognizes that claim 27a's site offer can supply a guard spot, including with lobby redeploy off; pack-up legality remains S-0213 claim 12's, unchanged here.
 - Q-0500 is answered by claim 27a. Claim 28 and S-0415 claims 9 and 10
   already identify the shared guard spot and its packing consequences.
   S-0215 claims 7 and 11 already fix queue refusal and building starts.
-  The site-offer gates and destination retention are now explicit here.
+  This spec states the site-offer gates and destination retention.
 - Q-0441's creation and draw ordering is claim 19a; S-0415 claim 11 owns
   refused-vehicle retention and its quirk. Q-0442's deployed state boundaries and
   shared remembered destination are claims 27 and 28. Q-0440 belongs to S-0408
@@ -2910,7 +3394,7 @@ is wrong). *Runs:* 3.
 - Q-0270 is listed as answered for this spec's scope: claims 19 to 24 cover initial creation,
   counting, emergence, ownership retention, directed harvesting, sites and successful relocation,
   claim 25 now supplies failure comparison inputs and the immediate vehicle destination,
-  with H19 to confirm them. No failure is assumed to mean stay-in-place.
+  with H19 to check them. No failure is assumed to mean stay-in-place.
   Ordinary killing-hit integration is S-0312 claim 30; attacker-less removal of a
   remaining, untransferred group is S-0312 claim 31. True-sale slave fate is S-0408
   claim 10a, whose exact cleanup tick remains open. Earlier group-ending events during
@@ -2940,9 +3424,25 @@ is wrong). *Runs:* 3.
   Edge cases); confidence low.
 - That a pre-placed building gets no free unit rests on S-0009 claim 40 (claim 18).
 
+## Changes for other specs
+
+- **S-0408 claim 6, the sale's contact break.** S-0408 claim 6's row "A later processing while
+  any unit remains docked: the sale waits" holds back only the releases and the build-down. The
+  sale's second processing breaks off every contact with the refinery, whether or not a unit is
+  still tethered (claim 11). A contact still held after the first processing by a unit that is
+  not tethered does not hold up the release. A tethered unit holds up only the releases and the
+  build-down, not the end of its contact.
+
 ## Questions for the project lead
 
-None. The nine quirk switches of this spec (`quirks.harvester_failed_step_off_origin`,
+None. This spec rests on S-0207 claim 28. S-0207's Cross-spec changes list the hand-off
+for scenarios that expect a chrono miner to jump after a restoration (S-0215 scenario B15 part
+(e), S-0417 scenarios U6 and U15) and the S-0214 Terms restatement of the self-teleporting type
+that this spec's Terms (*chrono miner*) rely on, and its Q-1759 entry on S-0215 claim 9 carries
+the amendment that claim 17 relies on (the
+guard reset is not applied when driving is installed). The note for S-0408 claim 6 is under
+Changes for other specs. The nine quirk switches of this spec
+(`quirks.harvester_failed_step_off_origin`,
 `quirks.refinery_distance_wraps`,
 `quirks.slave_kick_delay_wraps`, `quirks.zero_load_period_stalls` and
 `quirks.unload_without_contact_stalls`, `quirks.slave_relocation_failed_search_origin`
