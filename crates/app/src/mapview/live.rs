@@ -428,6 +428,9 @@ pub struct Live {
     /// Each building type's slot definitions, by import registration
     /// index, read when the type is first drawn.
     slot_defs: BTreeMap<usize, slot_play::Defs>,
+    /// Each building type's charged-animation time (S-0108 claim 18), by
+    /// the simulation's type index, read from the import at the start.
+    charged_anim_times: Vec<Option<glasnost_num::F64>>,
     /// The walls' slot starts and stops the last tick reported (S-0606
     /// claims 6, 12 and 16): building, slots, start, damaged variant.
     special_events: Vec<(ObjectId, [u8; 2], bool, bool)>,
@@ -664,6 +667,31 @@ pub fn import_kind(k: SimKind) -> Option<Kind> {
     }
 }
 
+/// Building type `name`'s charged-animation time *t_c* in game minutes
+/// (S-0108 claim 18, Import mapping): the rules key `ChargedAnimTime` of
+/// the building's section, a decimal held in single precision and widened
+/// exactly to binary64, read under rounding `mode`; `None` when the import
+/// does not set it (its default, 999, turns claim 18 off). No typed field
+/// carries the key, so it is read from the import's stored INI text of the
+/// type.
+pub fn charged_anim_time(
+    import: &glasnost_convert::Import,
+    name: &str,
+    mode: glasnost_num::Rounding,
+) -> Option<glasnost_num::F64> {
+    // spec: S-0108 Import mapping (ChargedAnimTime: building, decimal, held in single precision, game minutes)
+    let text = import
+        .tree
+        .get("types")?
+        .get(Kind::Buildings.key())?
+        .get(name)?
+        .get("ini")?
+        .get("ChargedAnimTime")?
+        .as_str()?;
+    // spec: S-0108 F6 (t_c is the single-precision field widened exactly to binary64); S-0003 claim 7 (a single-precision field's value)
+    glasnost_num::decimal::parse(text, glasnost_num::decimal::Field::Single, mode).ok()
+}
+
 /// The bytes of a type name as our rules format writes it (bytes 128 to 255
 /// as U+F780 to U+F7FF, docs/development.md "Import").
 pub fn name_bytes(s: &str) -> Vec<u8> {
@@ -821,6 +849,11 @@ impl Live {
         started: (World, Arc<SimRules>, GameSetup, Vec<String>),
     ) -> Self {
         let (world, rules, setup, substituted) = started;
+        let charged_anim_times = rules
+            .buildings
+            .iter()
+            .map(|b| charged_anim_time(inputs.import, &b.name, rules.mode))
+            .collect();
         // spec: S-0103 claim 15 (a house's display RGB, sampled once at colour setup; 8-bit channels)
         let house_rgb: Vec<[u8; 3]> = world
             .houses
@@ -1078,6 +1111,7 @@ impl Live {
             source_marker: None,
             slot_anims: BTreeMap::new(),
             slot_defs: BTreeMap::new(),
+            charged_anim_times,
             special_events: Vec::new(),
             depot_events: Vec::new(),
         };
@@ -1338,6 +1372,12 @@ impl Live {
                 let idx = (*self.types.get(&(o.kind, o.type_index))?)?;
                 let r = self.rules.buildings.get(o.type_index as usize)?;
                 let power = self.rules.econ.power.buildings.get(o.type_index as usize);
+                let first_sw = self
+                    .rules
+                    .superweapons
+                    .building_sw
+                    .get(o.type_index as usize)
+                    .and_then(|s| s[0]);
                 let extra = power.map_or(0, |p| p.extra_output);
                 let needs_power = power.is_some_and(|p| p.needs_power);
                 let kind = slot_play::TypeKind {
@@ -1352,7 +1392,20 @@ impl Live {
                     draws_power: needs_power && power.is_some_and(|p| p.drain > 0),
                     // spec: S-0108 claims 13 and 26 (the needs-engineer flag: only such a type's ownership change re-enables it)
                     needs_engineer: power.is_some_and(|p| p.needs_engineer),
+                    // spec: S-0108 claims 11 and 18 (a building with a superweapon: its first superweapon field)
+                    superweapon: first_sw.is_some(),
+                    charged_anim_time: self
+                        .charged_anim_times
+                        .get(o.type_index as usize)
+                        .copied()
+                        .flatten(),
                 };
+                // spec: S-0108 claims 11 and 18 (the weapon's remaining charge time: the owner's record of the type's first superweapon, S-0512 F2, in the tick the picture shows)
+                let charge_remaining = first_sw
+                    .zip(o.owner)
+                    .and_then(|(sw, h)| glasnost_sim::superweapons::record(w, h, sw))
+                    .filter(|rec| rec.granted)
+                    .map(|rec| rec.remaining(now));
                 let sizes: Vec<glasnost_num::F64> =
                     glasnost_sim::structures::absorb::passengers(w, o.id)
                         .iter()
@@ -1384,6 +1437,11 @@ impl Live {
                     pulsed: glasnost_sim::econ::power::under_pulse(w, o.id),
                     // spec: S-0108 claim 26 (the needs-engineer flag and not manned, S-0515 claim 2)
                     unmanned: power.is_some_and(|p| p.needs_engineer) && !o.econ.building.manned,
+                    // spec: S-0108 claim 18 (not checked while the building is being sold)
+                    selling: o.econ.sale.is_some(),
+                    charge_remaining,
+                    // spec: S-0108 F6 (t_r = r × κ)
+                    charge_minutes: charge_remaining.map(|r| slot_play::charge_minutes(r, mode)),
                 };
                 // spec: S-0109 claims 21 and 23 (a building being erased holds its slot animations, a hold independent of claim 13's freeze)
                 let erased = glasnost_sim::superweapons::being_erased(w, o.id);

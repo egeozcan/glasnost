@@ -5080,6 +5080,28 @@ fn cursor_palette_missing_claim19a() {
     assert!(live.notes.contains(super::live::CURSOR_PALETTE_MISSING));
 }
 
+/// spec: S-0108 Import mapping (ChargedAnimTime: a building rules key, a decimal held in single
+/// precision; absent: none here, the default 999 turning claim 18 off) and F6 (widened exactly to
+/// binary64)
+#[test]
+fn charged_anim_time_is_read_from_the_building_section() {
+    use glasnost_num::{F64, Rounding};
+    let m = Rounding::TowardZero;
+    let (import, ..) = super::tests::context_with(
+        "[BuildingTypes]\n0=DOME\n1=SHED\n[DOME]\nChargedAnimTime=0.1\n[SHED]\nStrength=5\n",
+    );
+    let tc = super::live::charged_anim_time(&import, "DOME", m).expect("set");
+    // 0.1 in single precision is a little above 0.1 in binary64.
+    let tenth = F64::from_i64(1, m).div(F64::from_i64(10, m), m);
+    assert!(tenth.lt(tc));
+    assert_eq!(
+        tc,
+        glasnost_num::decimal::parse("0.1", glasnost_num::decimal::Field::Single, m).unwrap()
+    );
+    assert_eq!(super::live::charged_anim_time(&import, "SHED", m), None);
+    assert_eq!(super::live::charged_anim_time(&import, "NONE", m), None);
+}
+
 /// spec: S-0111 F4 (p = max(2, ⌊N(14, s) / 4⌋): 28, 14, 9, 7, 5, 4 and 4 for s = 0 … 6; image
 /// frame ⌊6 (t mod p) / (p − 1)⌋; with quirks.speed_normalised_delays off, p = 3 at every speed)
 #[test]
