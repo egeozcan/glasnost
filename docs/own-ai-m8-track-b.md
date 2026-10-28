@@ -742,3 +742,92 @@ In the six games the dominator launched 7 times, 4 sweeps changed an owner and 4
 In B4's 32-seed default margins sweep, no required counter is at zero. The smallest required minimums are duel 3, diagonal 4, naval 14, M6c 4, M7a 1 and M7b 3 (B6: 2, 5, 12, 1, 1, 3). Four duels now reach the 40 000-tick cap without a result: duel seeds 2 and 30 and naval seeds 2 and 28. B6 had none, and diagonal still has none. Bisected, the spread alone gives all four, and main's brain ends them. No AI code depends on the think phase beyond `thinks_at` and the income window. In duel seed 2, both houses are broke and mined out by tick 35 000. House 0 then destroys house 1's last buildings one jet sortie at a time from its one helipad (a power plant between 39 000 and 40 000) and is not done by the cap.
 
 **Left open.** The dominator's tempo gap. The long, broke endgames of the four duels above. The full-game dominator count is down (7 launches against B6's 13). No requests.
+
+## Own AI (M8 step B8: the economy with driving chrono miners)
+
+Follow-up of S-0207 revision 82 (claim 28: the chrono miner drives, except on docking). The step looks at the Allied AI's economy in our own AI only (`glasnost_ai::scripted`, `brain`, `power`). Lane outputs are git-ignored under `local-lane/m8/b8/` (counts and ticks only). The quick lane is seed 7, maps 8, 2 and 0, 120 000 ticks at most, `GLASNOST_AI_QUICK=1`, with reference rules (*f0*) and with `GLASNOST_PLAY_FIXES=1` (*f1*). It plays the side pairs Allied–Soviet, Allied–Yuri, Soviet–Yuri, Allied–Allied and Soviet–Soviet (30 games). The Yuri mirror is left out: the lane registers one Yuri player country, so house 1 of a Yuri mirror gets nothing and the game has no winner, which is a limit of the lane and not of the AI. *Main* is main 7aabc33 with the probe commit; *after* is the branch. Both were rebuilt on the same tree. *e20* is the credits a house earned up to tick 20 000, summed from the lane's economy lines (`GLASNOST_AI_ECON=5000`).
+
+**The economy probe** (`GLASNOST_AI_ECOPROBE=<ticks>`, `Brain::economy_probe`). Every so many ticks it prints per AI house: the refineries with the explored resource near each, each harvester's cell, behaviour, phase, load and distances, the role the plan builds next, the refinery types it can build and place, every item on its lines with line kind, role, progress, balance owed and hold, and the economy-first and selling states. At the end it prints each house's harvester cycles: ticks out, loading, back and unloading, and the distance from the loading cell to the nearest refinery.
+
+### What the probe found (main)
+
+- **A lost refinery that was never rebuilt.** Allied against Yuri on map 0 lost its only refinery at about tick 24 500. The plan wanted a refinery, but the building line held a power plant, and the script orders nothing for a busy line. With credits near 0, `sell_when_broke` then sold the construction yard first, the costliest building. The two chrono miners stood for the rest of the game (S-0402 claim 13: a harvester whose owner has no refinery queues *guard*).
+- **The refinery put behind power, over and over.** With the refinery wanted first (the first fix below), the probe showed a loop. `power::plant_first` replaced the refinery's build order with a power plant, since the refinery's drain would leave the house short. At the next think `economy_first` cancelled the plant for the refinery. Credits stayed at 428 and the refinery was never built.
+- **The cycle of a driving chrono miner.** In the Allied games, a cycle's median was 340 to 650 ticks out, 550 to 665 loading, about 50 back (the chrono jump) and 32 unloading. The median distance from the loading cell to the nearest refinery was 10 to 16 cells, and 30 in Allied–Soviet on map 2. Since claim 28 the miner drives out and jumps back, so the drive out is a third of each cycle. The refinery stood where the yard's placement spiral first fit it, not by the field. The Soviet war miner drives both ways: a median of 1 110 to 1 320 ticks loading and 330 to 600 back.
+- **The home field mined down.** With the refinery beside the home field (the third fix below), the miners on maps 2 and 8 loaded a median of 15 to 34 cells from their only refinery once that field was mined down. On map 2 the home field is about 24 cells.
+- In the main lane, f0 and f1 end on the same tick in 13 of 15 games (only Allied–Yuri on maps 0 and 2 differ, after tick 20 000), with the same winner in all 15.
+
+### What the brain does now (B8)
+
+- **A lost refinery is rebuilt first** (`Script::refinery_lost`). This applies to a house that keeps harvesters (not slave miners, which are their slaves' refinery, S-0402 claim 14) and owns no refinery, either because it lost them all or because it started with a harvester and has built none. The house wants the cheapest refinery type it can build and place, before power and also while selling out (`Script::wanted_role`, `Script::think`). `power::plant_first` leaves that order alone (its new `before_power` argument). `Brain::paying` is true while the refinery is not on the lines, so `economy_first` holds the rest of the sidebar for it. The item on the refinery's line is cancelled with a refund, not held (S-0404 claim 6: a held item keeps its line, claim 5). While selling out, `sell_when_broke` keeps the construction yard that builds the refinery and sells the rest first.
+- **A refinery goes beside the field** (`Script::place_refinery`, in both placement paths, `Script::think` and `Brain::place_done`). The target is the explored resource cell nearest home with at least `CELLS_PER_HARVESTER` explored resource cells within `FIELD_REACH`, which is a field that keeps a harvester at work (`Script::ore_goal`), or with none such, the explored resource cell nearest home. The refinery takes the legal cell of the wider spiral around the yard whose foundation centre is nearest that target, with no resource under its foundation and the gap narrowing as in `place_cell`. A harvester leaves its refinery for the field after every load, so this shortens every trip, as a person places it. If no resource is explored, it falls back to the old placement.
+- **A refinery beside the next field once the home field runs dry** (`Script::field_refinery`). The rule applies to a house with harvesters and a refinery when fewer than `CELLS_PER_HARVESTER` explored resource cells lie within `FIELD_REACH` of its refineries, the `ore_goal` field lies beyond that reach of every refinery, no refinery is on its lines, and a refinery fits with its foundation within that reach of the field. It wants a refinery when nothing else is wanted. A building that comes with a free unit gives a harvester with it (S-0402 claim 18). There is one per field, since the new refinery brings that field within reach.
+- **A slave miner's building is left out** of all three (`keeps_slaves`: a building type whose objects keep slaves, S-0402 claim 19). `Script::slave_miners` asks about the harvester types the house can build now, so before its first war factory a Yuri-style house counted as a house with harvesters. In the first after-run, `place_refinery` put its slave-miner building beside the field. M7a's sweep showed it: slave-miner buildings placed or deployed fell from 13 / 13 to 4 / 4 (min / median), and in the lane Yuri earned 13.7 % less to tick 20 000. Yuri's own play is now the same as on main, given the same game.
+- The economy probe lists every line item.
+- The AI game format stays 45: no new saved state.
+
+**Tried and dropped.**
+- *The lost refinery first without the power exemption.* This was the loop above: the refinery was never built.
+- *Fixes 1 and 2 without the placement.* In the f0 lane, Allied won 2 of the 6 games against Soviet and Yuri, the same as main. The synthetic `plays_to_the_last_side` (ai `skirmish.rs`) failed: both houses ended broke in a mined-out endgame with 2 explored resource cells, not deadlocked. It passes with the placement.
+- *The placement without the field refinery* (fixes 1 to 3). Allied won 3 of 6 against Soviet and Yuri. The median loading distance fell on map 0 (13 to 6–8 cells, ticks out 450 to 280–310), was the same on map 8, where the field is unexplored when the first refinery is placed, and rose on map 2 (10 → 33, 12 → 19, 8 → 18) once the small home field was mined down. That led to the field refinery, which is kept: Allied e20 rises 0.9 % against fixes 1 to 3, Soviet 5 to 11 %, and the map-8 loading distances fall (below).
+
+### Results
+
+Quick lane, f0, main → after. Winner and tick, then e20 of house 0 / house 1.
+
+| Sides, map | Main | After |
+| --- | --- | --- |
+| Allied–Soviet, 0 | Soviet 63 247; 59 614 / 60 023 | Allied 41 832; 58 553 / 49 221 |
+| Allied–Soviet, 2 | Allied 48 233; 69 903 / 71 616 | Soviet 49 453; 77 556 / 83 549 |
+| Allied–Soviet, 8 | Allied 32 598; 52 776 / 54 196 | Allied 35 239; 54 495 / 63 642 |
+| Allied–Yuri, 0 | Yuri 40 533; 51 367 / 51 949 | Yuri 49 662; 53 134 / 43 992 |
+| Allied–Yuri, 2 | Yuri 42 163; 62 531 / 61 981 | Yuri 35 431; 58 516 / 62 163 |
+| Allied–Yuri, 8 | Yuri 47 051; 46 111 / 45 180 | Yuri 65 367; 51 198 / 53 270 |
+| Soviet–Yuri, 0 | Yuri 45 431; 57 579 / 70 665 | Soviet 76 380; 64 073 / 41 152 |
+| Soviet–Yuri, 2 | Yuri 19 475; 49 241 / 48 412 | Yuri 33 678; 53 984 / 57 670 |
+| Soviet–Yuri, 8 | Yuri 39 216; 63 173 / 59 887 | Yuri 42 605; 83 573 / 54 072 |
+| Allied–Allied, 0 | house 1 25 546; 63 515 / 70 392 | house 1 36 940; 76 062 / 58 106 |
+| Allied–Allied, 2 | house 1 90 498; 89 769 / 71 095 | house 1 21 777; 78 958 / 88 276 |
+| Allied–Allied, 8 | house 0 93 024; 60 016 / 59 132 | house 0 32 959; 63 429 / 59 273 |
+| Soviet–Soviet, 0 | house 1 51 666; 58 797 / 49 770 | house 1 59 394; 58 347 / 51 693 |
+| Soviet–Soviet, 2 | house 1 65 116; 69 539 / 73 945 | house 1 23 916; 74 349 / 86 452 |
+| Soviet–Soviet, 8 | house 1 55 262; 56 619 / 48 024 | house 0 24 328; 93 443 / 49 826 |
+
+- **e20 by side over the nine games of two sides**: Allied 342 302 → 353 452 (+3.3 %), Soviet 355 828 → 398 042 (+11.9 %), Yuri 338 074 → 312 319 (−7.6 %).
+- **Wins**: Allied against Soviet 2 of 3 in both. Allied against Yuri 0 of 3 in both. Soviet against Yuri 0 → 1 of 3. Every game has a winner, every run exits 0, and there are no panics.
+- **Game length**: the 15 games take 759 059 → 628 961 ticks. The mirrors on maps 2 and 8 end at 21 777 to 32 959 instead of 55 262 to 93 024.
+- **f1** ends on the same tick as f0 in 11 of 15 games after (Allied–Allied on maps 0 and 8, Allied–Yuri on map 8 and Soviet–Yuri on map 0 differ, after tick 20 000), with the same winner in all 15. Its e20 is the same as f0's in every game.
+- **Yuri.** The Yuri house plays as on main, given the same game. Its e20 is lower because its opponents are stronger: in Soviet–Yuri, Soviet's e20 rises from 169 993 to 201 630. Yuri still wins every game against Allied and two of three against Soviet.
+
+Harvester cycles (economy probe, the same games): the median distance from the loading cell to the nearest refinery and the completed cycles of the first Allied house, main → after. Both are over the whole game, so a shorter game has fewer cycles.
+
+| Sides, map | Distance (cells) | Cycles |
+| --- | --- | --- |
+| Allied–Soviet, 0 | 13 → 8 | 90 → 86 |
+| Allied–Soviet, 2 | 30 → 27 | 71 → 65 |
+| Allied–Soviet, 8 | 16 → 12 | 47 → 62 |
+| Allied–Yuri, 0 | 13 → 8 | 32 → 58 |
+| Allied–Yuri, 2 | 12 → 16 | 41 → 21 |
+| Allied–Yuri, 8 | 16 → 13 | 46 → 103 |
+| Allied–Allied, 0 / 2 / 8 (house 0) | 13 / 10 / 15 → 7 / 18 / 12 | 32 / 30 / 135 → 34 / 25 / 58 |
+
+The median ticks out of an Allied cycle fall to 285 to 400 in five of the six games of two sides (main 360 to 646; Allied–Soviet on map 2 rises from 646 to 785). On map 2 the home field is small, and the miners still load 16 to 27 cells out. On main every Allied and Soviet house kept one refinery all game. After, the first house has two in six of the nine games where it is Allied, and other houses reach three to five (Soviet in Allied–Soviet and house 1 of the Allied mirror, both on map 2: five).
+
+**Tests** (synthetic data, through the real tick).
+- `crates/deterministic/ai/tests/economy.rs`, new: `rebuilds_a_lost_refinery_before_power`, `keeps_the_yard_while_selling_for_a_lost_refinery` and `places_the_refinery_beside_the_field` (which fails without the placement).
+- `expansion.rs`, new: `builds_a_refinery_by_the_far_field_once_the_home_field_runs_dry` (which fails without the field refinery; it also checks that none is built there while the home field is rich). `a_rich_house_with_a_far_field_builds_a_yard_vehicle` checks the case without a far field on the plain map, because on the far-field map the harvesters now explore that field themselves once the home field is mined down.
+- `power.rs` passes `None` for the new argument.
+- `skirmish.rs`: the naval game's seed moves from 6 to 2. Over seeds 1 to 32, `naval_seed_sweep` passes 31 on main and 18 after. Each failing seed ends with a land win between ticks 14 495 and 17 934, before the ships meet. The passing seeds run from 19 850 ticks to the 40 000-tick cap. On main, 12 of the 32 seeds reached the cap and the others ended at 21 345 to 38 425, except seed 16 at 13 770.
+- **Goldens**: seven of nine were regenerated. Six differ from tick 1 960 to 2 000 on, when the first refinery is placed: duel, duel-diagonal, duel-naval, duel-m6c, duel-m7b and skirmish. The duel now ends at about tick 23 900 (main 19 870), duel-diagonal at 18 210 (14 800) and duel-naval at 19 290 (24 270); the others keep their length. duel-m7a differs from tick 60: in the M7a fixture Beta starts with a harvester and no refinery, so it now wants its refinery first. combat and scripted are unchanged.
+
+**Seed sweeps M6c, M7a and M7b, 1 to 16** (min / median, main → after; f0 and f1 alike).
+- M6c: smallest minimum 3 → 4. Radiation exits 3 / 28 → 9 / 25, crates picked up 6 / 16 → 11 / 20, support beams 64 / 103 → 51 / 109, chrono erasure orders 27 / 31 → 22 / 32.
+- M7a: smallest minimum 0 → 0. Seeds with a zero counter were 6 and 13 (infantry absorbed) on main, and are 7 and 13 (hostile intent seen by a sensor) and 9 (infantry absorbed) after. Units made berserk 30 / 50 → 13 / 41, takeovers 14 / 25 → 5 / 23, slave-miner buildings 13 / 13 → 12 / 13. The gate seed 17 has every counter above zero.
+- M7b: smallest drain minimum 3 → 3. Credits drained 7 280 / 7 320 → 6 960 / 7 440, infantry absorbed 3 / 7 → 7 / 10, objects taken over 10 / 17 → 12 / 17.
+
+**Left open.**
+- `ore_goal` does not ask whether a harvester can reach the field (its reach region). A refinery can be pulled toward ore across water or a cliff. The probe showed no such case.
+- On map 2 the miners still drive far once the small home field is mined out and no other field is explored near home.
+- A broke house whose lost refinery stands at 51 of 54, with only the yard left, stays there (Allied–Yuri, map 0, from tick 31 000; a person could do no more).
+- The naval synthetic games end before the ships meet in 14 of 32 seeds.
+- No requests.
