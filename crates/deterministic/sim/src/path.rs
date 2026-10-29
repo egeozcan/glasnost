@@ -42,6 +42,24 @@ pub struct PathState {
     /// a destination reaches the locomotor or a path is found.
     #[serde(default)]
     pub failed_for: Option<Target>,
+    /// The unit gives way in a deadlock with no way round
+    /// (`quirks.deadlock_no_yield` off; our design, C7 part 5); none
+    /// otherwise.
+    #[serde(default)]
+    pub yielding: Option<Yield>,
+}
+
+/// A unit giving way in a deadlock with no way round (our design, C7 part
+/// 5, yield): it is sent to a free cell off the other side's way, waits
+/// there and then resumes its order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Yield {
+    /// The destination of the order it resumes.
+    pub resume: Target,
+    /// The units it gives way to.
+    pub to: Vec<ObjectId>,
+    /// The tick it began to give way.
+    pub since: i32,
 }
 
 /// Search mode (S-0212 Terms).
