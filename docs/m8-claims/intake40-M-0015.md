@@ -25,22 +25,22 @@ only for the two games the record watched.
 
 | M-0015 fact | stock (seed 0; seed 1) | ours | verdict |
 |---|---|---|---|
-| all four fortresses held from the first tick, by fire events in that tick | yes | yes, at tick 1 (the same labelling offset as intake 38's tick of the first gas) | agrees |
-| fire events that started a hold | 56; 52 | 4 in each game | **differs**: cause below, Q-2035 |
+| every fortress held from the first tick, by fire events in that tick | yes | yes, at tick 1 (the same labelling offset as intake 38's tick of the first gas) | agrees |
+| fire events that started a hold | 56; 52 | one per fortress in each game | **differs**: cause below, Q-2035 |
 | fire events at a fortress held by another Magnetron, no hold | 501; 439 | 12 (side A), 10 (side B) | follows from the cause |
 | other fire events, no hold | 22; 20 | about 3 000 per game; every one meets a fortress that is still seized | follows from the cause; the record leaves its 22 and 20 unexplained |
 | no fire event by a Magnetron while it holds a fortress | none | none | agrees (S-0607 claim 11) |
 | damage events with a Magnetron as attacker | only the 2 of the landing crush | none | follows from the cause (no landing crush) |
-| holds that end in a landing | 54 of 56; 51 of 52 | 4 of 4 | follows from the cause |
-| height above the surface at release | above 0 in all 105 | above 0 in all 4 of every game | agrees that every release is a drop (claim 13) |
+| holds that end in a landing | local | every hold | compared in the local lane only; follows from the cause |
+| height above the surface at release | above 0 in every one | above 0 in every one of every game | agrees that every release is a drop (claim 13) |
 | carry time, release height and time to landing | local | local lane only | not compared: the record keeps the values local, and this session has none to compare with |
 | damage events at a landing other than the landing crush | 0 | 0 | agrees (claim 17, the *not blocked* row: unhurt) |
 | what ended each hold | not recorded | in ours the lifter accepted a destination (claim 12, row 2) | left alone: the record does not identify it |
 | landing crush: two fortresses come down together; the crushing warhead kills both, attacker the later one's holder; 3 credits for 2 fortresses | 1 per seed | not reached in our games | tested synthetically (claims 16 to 18, double credit on): agrees |
 | fortress hits on Magnetrons | 15; 18 | 0 | **differs**: cause below |
 | Magnetrons destroyed by that fire | 0; 0 | 0 | agrees, trivially |
-| Magnetrons that leave play, all with no damage event while a fortress that targeted them stood on their position (crushed, S-0210 claim 4) | 6; 5 | 0 | **differs**: cause below |
-| end of game | tick limit (6080); Magnetrons 3 and 4 of 9 left, fortresses 2 of 4 | tick limit (6080); 9 of 9 and 4 of 4 left | follows from the cause |
+| Magnetrons that leave play, all with no damage event while a fortress that targeted them stood on their position (crushed, S-0210 claim 4) | local | none | **differs** (compared in the local lane): cause below |
+| end of game | tick limit (6080); the units left are local | tick limit (6080); every unit left | follows from the cause |
 
 ## Cause
 
