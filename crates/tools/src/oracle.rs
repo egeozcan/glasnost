@@ -8,20 +8,23 @@
 //! An *oracle arena record* is a measurement record
 //! `measurements/<topic>/M-xxxx-*.md` with a CSV file of the same stem
 //! beside it whose header is exactly [`CSV_HEADER`]: one line per game,
-//! `row,col,row_side,seed,winner,end_frame,row_left,col_left` (the row and
-//! column type IDs, the side the row type played (`A` or `B`), the seed,
-//! the winner `row`, `col` or `none`, the sample frame at which the game
-//! was over, and each type's share of its starting army value left at the
-//! end, with four decimals). The record's Setup names the map as a
-//! back-quoted file name followed by `(sha256 `…`)`; the rest of the setup
-//! is the arena protocol below, which the records M-0001 to M-0003 share.
+//! `row,col,row_side,seed,winner,end_frame` (the row and column type IDs,
+//! the side the row type played (`A` or `B`), the seed, the winner `row`,
+//! `col` or `none`, and the sample frame at which the game was over). The
+//! record's Setup names the map as a back-quoted file name followed by
+//! `(sha256 `…`)`; the rest of the setup is the arena protocol below, which
+//! the records M-0001 to M-0003 share. Since their revision of 2026-10-29
+//! the records give no army shares (measure: M-0001, M-0002, M-0003,
+//! Procedure step 3 and *Tolerance for tests*).
 //!
 //! # The protocol (measure: M-0001, M-0002, M-0003, Setup and Procedure)
 //!
 //! - **Map**: the record's stock map, read from the install
 //!   (`GLASNOST_GAME_DIR`) and checked against the record's sha256; never
 //!   committed. Its rules layer applies (the inputs of a skirmish on that
-//!   map). W is the cell of start waypoint [`W_WAYPOINT`].
+//!   map), and its own objects are loaded as in any game on it (the four
+//!   neutral bunkers of M-0017's Setup among them). W is the cell of start
+//!   waypoint [`W_WAYPOINT`].
 //! - **Houses**: side A plays country [`COUNTRIES`]`[0]` at start 0, side B
 //!   [`COUNTRIES`]`[1]` at start 1; skirmish setup with 0 credits, no
 //!   starting units, no bases, short game, superweapons and crates off,
@@ -37,36 +40,32 @@
 //!   cleanup (S-0009 claim 28). See *Differences* in docs/development.md for what we cannot
 //!   reproduce (the original's skirmish AI, the observer, the tech level).
 //! - **Groups**: per side one type, round(9000 / cost) units (an exact half
-//!   to the even number, as the CSVs show), at least 1, infantry at most 60. Unit *i* of side A on
+//!   to the even number), at least 1, infantry at most 60. Unit *i* of side A on
 //!   cell (W.x − 6 − ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map east, side B on
 //!   (W.x + 6 + ⌊i/8⌋, W.y − 4 + (i mod 8)) facing map west; infantry at
-//!   the cell's centre standing point, with no standing-position draw and
-//!   no entry test: A1's interim, not S-0216's play-time placement, while
-//!   Q-1711 question 5 (how the stock harness placed them) is open. The
-//!   facings are those of S-0216 claim 1. Side A's group is created first.
-//!   Every unit starts in the hunt behaviour, as a map object whose entry
-//!   names it (S-0009 claim 41); no order is given.
+//!   the cell's centre standing point, with no standing-position draw: A1's
+//!   interim, while Q-1711 question 5 (how the stock harness placed them) is
+//!   open. The facings are those of S-0216 claim 1. Side A's group is
+//!   created first. Every unit starts in the hunt behaviour; no order is
+//!   given. See [`setup`] for a stated cell that does not take its unit.
 //! - **Samples**: every [`SAMPLE_PERIOD`] frames (ticks from game start);
 //!   the game is over at the first sample at which only one side owns
 //!   anything (that side wins), or at which neither does (`none`), or at
 //!   the first sample at or after [`FRAME_LIMIT`] (`none` when both own
 //!   something).
-//! - **Shares**: a side's share is the summed cost fields of every object
-//!   its house owns at the end (any kind, on or off the map, taken-over
-//!   units included) over the summed cost fields of its group at the
-//!   start, written with four decimals (rounded half up).
 //!
-//! # The comparison (each record's *Tolerance for tests*)
+//! # The comparison (each record's *Tolerance for tests*, M-0017)
 //!
-//! Per pairing (row type against column type), pooled over both sides
-//! (n = 12): the row's win proportion with a two-proportion z test, and
-//! the per-game row-left and column-left shares with two-sample
-//! Kolmogorov–Smirnov tests (asymptotic p-value with Stephens'
-//! correction, [`stats::ks_two_sample`]; shares compared as whole
-//! ten-thousandths, so ties are as in the CSV), each failing at
-//! p < [`ALPHA`]. Separately, where the record shows the same winner for
-//! every seed on a side, whether ours shows that same winner for every
-//! seed on that side.
+//! Only the pairings that stand as stock are scored: those with neither
+//! type one of [`UNCONFIRMED_TYPES`] (M-0017; M-0001 and M-0003, *Stock
+//! rows*). The others are played and shown, with no verdict. A stock game
+//! that crashed ([`crashed`]) has no result: it and our game of the same
+//! side and seed are left out, so MIND against E2 runs on M-0017's
+//! restated line (n = 5). Per scored pairing, pooled over both sides: the
+//! row's win proportion with a two-proportion z test, failing at
+//! p < [`ALPHA`]; and, where the record shows the same winner for every
+//! seed on a side, whether ours shows that same winner for every seed on
+//! that side. A pairing passes when both hold.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -83,8 +82,9 @@ use glasnost_sim::world::{HouseId, ObjectId, World};
 
 use crate::stats;
 
-/// The CSV header of an oracle arena record (measure: M-0001, Procedure).
-pub const CSV_HEADER: &str = "row,col,row_side,seed,winner,end_frame,row_left,col_left";
+/// The CSV header of an oracle arena record (measure: M-0001, Procedure,
+/// per-game data).
+pub const CSV_HEADER: &str = "row,col,row_side,seed,winner,end_frame";
 
 /// Each side's budget in credits (measure: M-0001, Setup, Groups).
 pub const BUDGET: i64 = 9000;
@@ -196,47 +196,19 @@ pub struct Game {
     pub winner: Winner,
     /// The sample frame at which the game was over.
     pub end_frame: i32,
-    /// The row type's share left, in ten-thousandths.
-    pub row_left: i64,
-    /// The column type's share left, in ten-thousandths.
-    pub col_left: i64,
-}
-
-/// A share in ten-thousandths as written in the CSV (four decimals).
-pub fn share_text(x: i64) -> String {
-    format!("{}.{:04}", x / 10_000, x % 10_000)
-}
-
-/// Parses a share with up to four decimals into ten-thousandths, without
-/// going through floating point.
-pub fn parse_share(s: &str) -> Result<i64, String> {
-    let bad = || format!("share {s:?}: expected a number with up to four decimals");
-    let (whole, frac) = s.trim().split_once('.').unwrap_or((s.trim(), ""));
-    if frac.len() > 4
-        || whole.is_empty()
-        || !whole.bytes().all(|b| b.is_ascii_digit())
-        || !frac.bytes().all(|b| b.is_ascii_digit())
-    {
-        return Err(bad());
-    }
-    let whole: i64 = whole.parse().map_err(|_| bad())?;
-    let frac: i64 = format!("{frac:0<4}").parse().map_err(|_| bad())?;
-    Ok(whole * 10_000 + frac)
 }
 
 impl Game {
     /// The game as a CSV line (without the line end).
     pub fn line(&self) -> String {
         format!(
-            "{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{}",
             self.row,
             self.col,
             self.row_side.text(),
             self.seed,
             self.winner.text(),
-            self.end_frame,
-            share_text(self.row_left),
-            share_text(self.col_left)
+            self.end_frame
         )
     }
 }
@@ -256,8 +228,8 @@ pub fn parse_csv(text: &str) -> Result<Vec<Game>, String> {
         }
         let f: Vec<&str> = line.split(',').map(str::trim).collect();
         let at = |e: String| format!("CSV line {}: {e}", n + 1);
-        if f.len() != 8 {
-            return Err(at("expected 8 fields".into()));
+        if f.len() != 6 {
+            return Err(at("expected 6 fields".into()));
         }
         let row_side = match f[2] {
             "A" => Side::A,
@@ -282,8 +254,6 @@ pub fn parse_csv(text: &str) -> Result<Vec<Game>, String> {
             end_frame: f[5]
                 .parse()
                 .map_err(|_| at(format!("end_frame {:?}", f[5])))?,
-            row_left: parse_share(f[6]).map_err(at)?,
-            col_left: parse_share(f[7]).map_err(at)?,
         });
     }
     Ok(out)
@@ -397,6 +367,39 @@ pub fn record_files(dir: &Path) -> Vec<PathBuf> {
                     .is_ok_and(|t| t.lines().next().map(str::trim) == Some(CSV_HEADER))
             {
                 out.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, &mut out);
+    out.sort();
+    out
+}
+
+/// Every `M-*.md` record under `dir` (recursively, outside `local/`) with a
+/// CSV of the same stem beside it whose first line is not [`CSV_HEADER`]:
+/// a per-game file that the arena would not read. A changed header must
+/// not make the arena skip a record silently (M8 step A3 intake 47: the
+/// records' revision of 2026-10-29 dropped two columns, and the arena found
+/// no record).
+pub fn unrecognised_csvs(dir: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if p.is_dir() {
+                if name != "local" {
+                    walk(&p, out);
+                }
+            } else if name.starts_with("M-")
+                && name.ends_with(".md")
+                && let Ok(t) = std::fs::read_to_string(csv_beside(&p))
+                && t.lines().next().map(str::trim) != Some(CSV_HEADER)
+            {
+                out.push(csv_beside(&p));
             }
         }
     }
@@ -641,8 +644,6 @@ pub struct Arena {
     pub houses: [HouseId; 2],
     /// Each side's units, in creation order.
     pub units: [Vec<ObjectId>; 2],
-    /// Each side's starting army value (summed cost fields).
-    pub start_value: [i64; 2],
 }
 
 /// The cost field of an object's type (S-0403 claim 2).
@@ -720,7 +721,6 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
     }
     let stale = w.rules().quirks.stale_suspended_revert; // spec: S-0215 Edge cases (quirks.stale_suspended_revert)
     let mut units: [Vec<ObjectId>; 2] = [Vec::new(), Vec::new()];
-    let mut start_value = [0i64; 2];
     for side in [Side::A, Side::B] {
         let s = side.index();
         let (kind, n, _) = group(rules, types[s])?;
@@ -749,7 +749,6 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
             }
             // spec: S-0009 claim 41 (the behaviour a placed object starts with: hunt, measure: M-0001)
             o.beh.force(Behaviour::Hunt, tick, stale);
-            start_value[s] += cost_of(&w, id);
             units[s].push(id);
         }
     }
@@ -757,15 +756,14 @@ pub fn setup(ground: &Ground, types: [&str; 2], seed: u32) -> Result<Arena, Stri
         world: w,
         houses,
         units,
-        start_value,
     })
 }
 
 /// What a house owns: the number of its objects with health above 0 (any
-/// kind, on or off the map), and their summed cost fields. A rocket missile
-/// in flight (S-0506) is not counted: it is a weapon's shot rather than a
-/// unit of the army, and the records never show a share above 1 without
-/// mind control (our reading of M-0001's "owns anything" and "army value").
+/// kind, on or off the map), and their summed cost fields (shown by
+/// `--watch`). A rocket missile in flight (S-0506) is not counted: it is a
+/// weapon's shot rather than a unit of the army (our reading of M-0001's
+/// "owns anything").
 pub fn owned(w: &World, h: HouseId) -> (usize, i64) {
     let ids: Vec<ObjectId> = w
         .objects
@@ -777,15 +775,6 @@ pub fn owned(w: &World, h: HouseId) -> (usize, i64) {
         .collect();
     let value = ids.iter().map(|&id| cost_of(w, id)).sum();
     (ids.len(), value)
-}
-
-/// A share in ten-thousandths, rounded half up.
-fn share(value: i64, start: i64) -> i64 {
-    if start <= 0 {
-        0
-    } else {
-        (value * 20_000 + start) / (2 * start)
-    }
 }
 
 /// Plays the game of `row` against `col` with the row type on `row_side`
@@ -807,11 +796,10 @@ pub fn play(
         world: mut w,
         houses,
         units,
-        start_value,
     } = setup(ground, types, seed)?;
     let mut seen = String::new();
     let mut shots = [0u32; 2];
-    let (winner_side, end_frame, values) = loop {
+    let (winner_side, end_frame) = loop {
         glasnost_sim::tick::step(&mut w);
         let effects = std::mem::take(&mut w.effects);
         for e in effects {
@@ -842,12 +830,11 @@ pub fn play(
                 o[0].0, o[0].1, o[1].0, o[1].1, shots[0], shots[1]
             );
         }
-        let values = [o[0].1, o[1].1];
         match (o[0].0 > 0, o[1].0 > 0) {
-            (true, false) => break (Some(Side::A), frame, values),
-            (false, true) => break (Some(Side::B), frame, values),
-            (false, false) => break (None, frame, values),
-            (true, true) if frame >= FRAME_LIMIT || finished => break (None, frame, values),
+            (true, false) => break (Some(Side::A), frame),
+            (false, true) => break (Some(Side::B), frame),
+            (false, false) => break (None, frame),
+            (true, true) if frame >= FRAME_LIMIT || finished => break (None, frame),
             _ => {}
         }
     };
@@ -948,7 +935,6 @@ pub fn play(
             }
         }
     }
-    let (r, c) = (row_side.index(), 1 - row_side.index());
     let winner = match winner_side {
         None => Winner::None,
         Some(s) if s == row_side => Winner::Row,
@@ -962,8 +948,6 @@ pub fn play(
             seed,
             winner,
             end_frame,
-            row_left: share(values[r], start_value[r]),
-            col_left: share(values[c], start_value[c]),
         },
         seen,
     ))
@@ -1443,7 +1427,7 @@ pub fn run_cli(cli: &Cli, game_dir: Option<&Path>) -> Result<String, String> {
         let text = report(&c);
         let txt = cli.out.join(format!("oracle-{}.txt", r.id));
         let full = format!(
-            "{text}\nour games (winner@frame row_left/col_left), by pairing and the row's side:\n{}",
+            "{text}\nour games (winner@frame), by pairing and the row's side:\n{}",
             games_text(&ours)
         );
         std::fs::write(&txt, &full).map_err(|e| format!("{}: {e}", txt.display()))?;
@@ -1472,11 +1456,13 @@ fn unanimous(games: &[&Game], side: Side) -> Option<Winner> {
 }
 
 /// The types whose stock rows M-0017 does not cover: its replay leaves out
-/// every game with one of them on either side, so a pairing with one is not
-/// confirmed as stock.
+/// every game with one of them on either side, so a pairing with one does
+/// not stand as stock, and no test runs against its rows (M-0001 and
+/// M-0003, *Tolerance for tests* and Notes, *Stock rows*).
 pub const UNCONFIRMED_TYPES: [&str; 2] = ["SREF", "V3"]; // measure: M-0017
 
-/// Whether M-0017 confirms a pairing's stock rows.
+/// Whether a pairing stands as stock and so is scored (measure: M-0017;
+/// M-0001 and M-0003, *Tolerance for tests*).
 pub fn confirmed(pairing: &(String, String)) -> bool {
     // measure: M-0017
     !UNCONFIRMED_TYPES
@@ -1484,17 +1470,21 @@ pub fn confirmed(pairing: &(String, String)) -> bool {
         .any(|t| *t == pairing.0 || *t == pairing.1)
 }
 
-/// Whether a stock game crashed: no result, and over before the limit
-/// sample. M-0017: the 7 MIND against E2 games of M-0001 are the only ones
-/// of the records with a `none` and an end frame short of the limit; they
-/// crash in the game and have no result to compare with.
+/// Whether a stock game crashed and so has no result: the harness records
+/// a crashed game as `none` with an end frame before the limit (measure:
+/// M-0001, Procedure step 3). M-0017: the 7 MIND against E2 games of M-0001
+/// are the only ones of the records with a `none` and an end frame short of
+/// the limit sample.
 pub fn crashed(g: &Game) -> bool {
-    // measure: M-0017
+    // measure: M-0001 (Procedure step 3), M-0017
     g.winner == Winner::None && g.end_frame < FRAME_LIMIT
 }
 
 /// The key of a game within its record.
-fn key(g: &Game) -> (&str, &str, Side, u32) {
+/// A game's row, column, row side and seed: what names one game.
+type GameKey<'a> = (&'a str, &'a str, Side, u32);
+
+fn key(g: &Game) -> GameKey<'_> {
     (&g.row, &g.col, g.row_side, g.seed)
 }
 
@@ -1505,19 +1495,14 @@ pub struct PairingComparison {
     pub pairing: (String, String),
     /// Stock and our counts: row wins, column wins, none.
     pub counts: [[u32; 3]; 2],
-    /// Stock and our mean row-left and column-left shares.
-    pub means: [[f64; 2]; 2],
     /// The two-proportion test of the row's win proportion.
     pub win: Option<stats::ProportionTest>,
-    /// The KS tests of the row-left and column-left shares.
-    pub ks: [Option<stats::KsTest>; 2],
     /// Per side (A, B): the stock winner when every stock game of the side
     /// had the same one, and whether ours reproduces it.
     pub same: [Option<(Winner, bool)>; 2],
     /// Our games of the pairing (n).
     pub n: usize,
-    /// Whether M-0017 confirms the pairing's stock rows (neither type is
-    /// one of [`UNCONFIRMED_TYPES`]).
+    /// Whether the pairing stands as stock and is scored ([`confirmed`]).
     pub confirmed: bool,
     /// Games left out of the comparison because the stock game crashed
     /// (each counted once; ours of the same game are left out too).
@@ -1525,10 +1510,9 @@ pub struct PairingComparison {
 }
 
 impl PairingComparison {
-    /// Whether all three tests pass at [`ALPHA`].
-    pub fn pass(&self) -> bool {
+    /// Whether the win-proportion test passes at [`ALPHA`].
+    pub fn win_pass(&self) -> bool {
         self.win.is_some_and(|t| t.p >= ALPHA)
-            && self.ks.iter().all(|k| k.is_some_and(|k| k.p >= ALPHA))
     }
 
     /// Whether every side-wise unanimous stock outcome is reproduced.
@@ -1536,19 +1520,26 @@ impl PairingComparison {
         self.same.iter().flatten().all(|&(_, ok)| ok)
     }
 
+    /// Whether the pairing is within the record's tolerance: the win test
+    /// passes and every side on which the stock games all gave the same
+    /// outcome gives it in ours too (measure: M-0001, M-0002, M-0003,
+    /// *Tolerance for tests*). A pairing that is not scored has no verdict;
+    /// this then tells only what the tests would say.
+    pub fn pass(&self) -> bool {
+        self.win_pass() && self.same_reproduced()
+    }
+
+    /// Whether the pairing is scored and outside the tolerance.
+    pub fn fails(&self) -> bool {
+        self.confirmed && !self.pass()
+    }
+
     /// How far off it is, for ranking: side-wise mismatches first, then the
-    /// win-rate difference, then the larger KS D.
-    pub fn badness(&self) -> (usize, i64, i64) {
+    /// win-count difference.
+    pub fn badness(&self) -> (usize, i64) {
         let mism = self.same.iter().flatten().filter(|(_, ok)| !ok).count();
         let dw = (i64::from(self.counts[0][0]) - i64::from(self.counts[1][0])).abs();
-        let d = self
-            .ks
-            .iter()
-            .flatten()
-            .map(|k| (k.d * 1000.0) as i64)
-            .max()
-            .unwrap_or(0);
-        (mism, dw, d)
+        (mism, dw)
     }
 }
 
@@ -1576,17 +1567,7 @@ pub fn compare_pairing(
         }
         c
     };
-    let mean = |gs: &[Game], f: fn(&Game) -> i64| {
-        if gs.is_empty() {
-            0.0
-        } else {
-            gs.iter().map(|g| f(g) as f64).sum::<f64>() / gs.len() as f64 / 10_000.0
-        }
-    };
     let (cs, co) = (count(&s), count(&o));
-    let left = |gs: &[Game], f: fn(&Game) -> i64| gs.iter().map(f).collect::<Vec<i64>>();
-    let rl: fn(&Game) -> i64 = |g| g.row_left;
-    let cl: fn(&Game) -> i64 = |g| g.col_left;
     let sr: Vec<&Game> = s.iter().collect();
     let or: Vec<&Game> = o.iter().collect();
     let same = [Side::A, Side::B].map(|side| {
@@ -1598,12 +1579,7 @@ pub fn compare_pairing(
     PairingComparison {
         pairing: pairing.clone(),
         counts: [cs, co],
-        means: [[mean(&s, rl), mean(&s, cl)], [mean(&o, rl), mean(&o, cl)]],
         win: stats::two_proportion(cs[0], s.len() as u32, co[0], o.len() as u32),
-        ks: [
-            stats::ks_two_sample(&left(&s, rl), &left(&o, rl)),
-            stats::ks_two_sample(&left(&s, cl), &left(&o, cl)),
-        ],
         same,
         n: o.len(),
         confirmed: confirmed(pairing),
@@ -1623,18 +1599,44 @@ pub struct RecordComparison {
 }
 
 impl RecordComparison {
-    /// The pairings that fail a test.
-    pub fn failing(&self) -> Vec<&PairingComparison> {
-        self.pairings.iter().filter(|p| !p.pass()).collect()
+    /// The scored pairings.
+    pub fn scored(&self) -> Vec<&PairingComparison> {
+        self.pairings.iter().filter(|p| p.confirmed).collect()
     }
 
-    /// The pairings that do not reproduce a side-wise unanimous outcome.
+    /// The scored pairings outside the tolerance.
+    pub fn failing(&self) -> Vec<&PairingComparison> {
+        self.pairings.iter().filter(|p| p.fails()).collect()
+    }
+
+    /// The scored pairings that do not reproduce a side-wise unanimous
+    /// outcome.
     pub fn not_same(&self) -> Vec<&PairingComparison> {
-        self.pairings
-            .iter()
+        self.scored()
+            .into_iter()
             .filter(|p| !p.same_reproduced())
             .collect()
     }
+}
+
+/// The stock games of a record that the comparison uses: all but the
+/// crashed ones ([`crashed`]), with the keys of the crashed ones.
+fn usable(record: &OracleRecord) -> (Vec<Game>, Vec<GameKey<'_>>) {
+    // measure: M-0017 (crashed stock games have no result: they and our
+    // games of the same row, column, side and seed are not compared)
+    let dead: Vec<GameKey<'_>> = record
+        .games
+        .iter()
+        .filter(|g| crashed(g))
+        .map(key)
+        .collect();
+    let stock = record
+        .games
+        .iter()
+        .filter(|g| !dead.contains(&key(g)))
+        .cloned()
+        .collect();
+    (stock, dead)
 }
 
 /// Compares a record's games with ours.
@@ -1644,20 +1646,7 @@ pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison 
         pairings: Vec::new(),
         missing: Vec::new(),
     };
-    // measure: M-0017 (crashed stock games have no result: they and our
-    // games of the same row, column, side and seed are not compared)
-    let dead: Vec<(&str, &str, Side, u32)> = record
-        .games
-        .iter()
-        .filter(|g| crashed(g))
-        .map(key)
-        .collect();
-    let stock: Vec<Game> = record
-        .games
-        .iter()
-        .filter(|g| !dead.contains(&key(g)))
-        .cloned()
-        .collect();
+    let (stock, dead) = usable(record);
     let ours: Vec<Game> = ours
         .iter()
         .filter(|g| !dead.contains(&key(g)))
@@ -1675,6 +1664,28 @@ pub fn compare_record(record: &OracleRecord, ours: &[Game]) -> RecordComparison 
     out
 }
 
+/// The stock line of one pairing as the comparison uses it: the counts of
+/// row wins, column wins and `none` over the usable games, and the games
+/// per side (A, B). For MIND against E2 of M-0001 this is M-0017's restated
+/// line.
+pub fn stock_line(record: &OracleRecord, pairing: &(String, String)) -> ([u32; 3], [u32; 2]) {
+    let (stock, _) = usable(record);
+    let mut c = [0u32; 3];
+    let mut sides = [0u32; 2];
+    for g in stock
+        .iter()
+        .filter(|g| g.row == pairing.0 && g.col == pairing.1)
+    {
+        c[match g.winner {
+            Winner::Row => 0,
+            Winner::Col => 1,
+            Winner::None => 2,
+        }] += 1;
+        sides[g.row_side.index()] += 1;
+    }
+    (c, sides)
+}
+
 fn p_text(p: Option<f64>) -> String {
     p.map_or("  n/a ".to_owned(), |p| format!("{p:.4}"))
 }
@@ -1683,49 +1694,50 @@ fn p_text(p: Option<f64>) -> String {
 /// (largest discrepancies first).
 pub fn report(c: &RecordComparison) -> String {
     let mut s = String::new();
+    let scored = c.scored();
     let _ = writeln!(
         s,
-        "{}: {} pairings compared, {} without games of ours",
+        "{}: {} pairings compared ({} scored, {} not scored), {} without games of ours",
         c.id,
         c.pairings.len(),
+        scored.len(),
+        c.pairings.len() - scored.len(),
         c.missing.len()
     );
     let _ = writeln!(
         s,
-        "{:<7} {:<7} {:>2} | stock W/L/N  ours W/L/N | p(win) | rowleft stock ours  D     p     | colleft stock ours  D     p     | same A / same B        | result",
+        "{:<7} {:<7} {:>2} | stock W/L/N  ours W/L/N | p(win) | same A / same B        | result",
         "row", "col", "n"
     );
     for p in &c.pairings {
-        let ks = |i: usize| {
-            p.ks[i].map_or("  n/a        ".to_owned(), |k| {
-                format!("{:.3} {}", k.d, p_text(Some(k.p)))
-            })
-        };
         let same = |i: usize| match p.same[i] {
             None => "-".to_owned(),
             Some((w, ok)) => format!("{} {}", w.text(), if ok { "yes" } else { "NO" }),
         };
-        let notes = format!(
-            "{}{}{}",
-            if p.same_reproduced() {
-                ""
-            } else {
-                " (side outcome differs)"
-            },
-            if p.confirmed {
-                ""
-            } else {
-                " [not confirmed by M-0017]"
-            },
-            if p.excluded == 0 {
-                String::new()
-            } else {
-                format!(" [{} crashed stock games left out, M-0017]", p.excluded)
-            }
-        );
+        let result = match (p.confirmed, p.pass()) {
+            (true, true) => "pass".to_owned(),
+            (true, false) => format!(
+                "FAIL ({})",
+                match (p.win_pass(), p.same_reproduced()) {
+                    (false, false) => "win test, side outcome",
+                    (false, true) => "win test",
+                    _ => "side outcome",
+                }
+            ),
+            // measure: M-0017 (SREF and V3 pairings do not stand as stock; no test runs against them)
+            (false, ok) => format!(
+                "not scored, SREF or V3 (M-0017); the tests would {}",
+                if ok { "pass" } else { "fail" }
+            ),
+        };
+        let notes = if p.excluded == 0 {
+            String::new()
+        } else {
+            format!(" [{} crashed stock games left out, M-0017]", p.excluded)
+        };
         let _ = writeln!(
             s,
-            "{:<7} {:<7} {:>2} | {:>2}/{:>2}/{:>2}     {:>2}/{:>2}/{:>2}   | {} | {:>6.3} {:>6.3} {} | {:>6.3} {:>6.3} {} | {:<9} / {:<9} | {}{}",
+            "{:<7} {:<7} {:>2} | {:>2}/{:>2}/{:>2}     {:>2}/{:>2}/{:>2}   | {} | {:<9} / {:<9} | {result}{notes}",
             p.pairing.0,
             p.pairing.1,
             p.n,
@@ -1736,89 +1748,58 @@ pub fn report(c: &RecordComparison) -> String {
             p.counts[1][1],
             p.counts[1][2],
             p_text(p.win.map(|t| t.p)),
-            p.means[0][0],
-            p.means[1][0],
-            ks(0),
-            p.means[0][1],
-            p.means[1][1],
-            ks(1),
             same(0),
             same(1),
-            if p.pass() { "pass" } else { "FAIL" },
-            notes
         );
     }
-    let fail = c.failing();
-    let count = |f: &dyn Fn(&PairingComparison) -> bool| c.pairings.iter().filter(|p| f(p)).count();
+    let count = |part: &[&PairingComparison], f: &dyn Fn(&PairingComparison) -> bool| {
+        part.iter().filter(|p| f(p)).count()
+    };
+    let sides = |part: &[&PairingComparison]| -> (usize, usize) {
+        (
+            part.iter().map(|p| p.same.iter().flatten().count()).sum(),
+            part.iter()
+                .map(|p| p.same.iter().flatten().filter(|(_, ok)| *ok).count())
+                .sum(),
+        )
+    };
     let _ = writeln!(s);
+    let (all, kept) = sides(&scored);
     let _ = writeln!(
         s,
-        "tests failing (p < {ALPHA}): win proportion {}, row-left KS {}, column-left KS {}; pairings failing any test: {} of {}",
-        count(&|p| !p.win.is_some_and(|t| t.p >= ALPHA)),
-        count(&|p| !p.ks[0].is_some_and(|k| k.p >= ALPHA)),
-        count(&|p| !p.ks[1].is_some_and(|k| k.p >= ALPHA)),
-        fail.len(),
-        c.pairings.len()
+        "scored pairings (stock rows, M-0017): failing the win test (p < {ALPHA}) {}, failing the side outcome {}; scored pairings failing: {} of {}",
+        count(&scored, &|p| !p.win_pass()),
+        count(&scored, &|p| !p.same_reproduced()),
+        c.failing().len(),
+        scored.len()
     );
-    let sides: usize = c
-        .pairings
-        .iter()
-        .map(|p| p.same.iter().flatten().count())
-        .sum();
-    let kept: usize = c
-        .pairings
-        .iter()
-        .map(|p| p.same.iter().flatten().filter(|(_, ok)| *ok).count())
-        .sum();
     let _ = writeln!(
         s,
-        "side-wise unanimous stock outcomes: {sides}; reproduced {kept}; pairings with one not reproduced: {}",
-        c.not_same().len()
+        "side-wise unanimous stock outcomes of the scored pairings: {all}; reproduced {kept}"
     );
-    // measure: M-0017 (the split: pairings whose stock rows it confirms and
-    // the SREF and V3 pairings it does not cover)
-    for (label, sure) in [
-        ("confirmed by M-0017", true),
-        ("not confirmed by M-0017 (SREF or V3)", false),
-    ] {
-        let part: Vec<&PairingComparison> =
-            c.pairings.iter().filter(|p| p.confirmed == sure).collect();
-        let sides: usize = part.iter().map(|p| p.same.iter().flatten().count()).sum();
-        let kept: usize = part
-            .iter()
-            .map(|p| p.same.iter().flatten().filter(|(_, ok)| *ok).count())
-            .sum();
-        let _ = writeln!(
-            s,
-            "{label}: pairings failing any test {} of {}; side-wise unanimous stock outcomes {sides}, reproduced {kept}",
-            part.iter().filter(|p| !p.pass()).count(),
-            part.len()
-        );
-    }
-    let mut ranked: Vec<&PairingComparison> = c
-        .pairings
-        .iter()
-        .filter(|p| !p.pass() || !p.same_reproduced())
-        .collect();
+    let unscored: Vec<&PairingComparison> = c.pairings.iter().filter(|p| !p.confirmed).collect();
+    let (all, kept) = sides(&unscored);
+    let _ = writeln!(
+        s,
+        "not scored (SREF or V3, M-0017): {} pairings; the tests would fail {}; side-wise unanimous stock outcomes {all}, reproduced {kept}",
+        unscored.len(),
+        count(&unscored, &|p| !p.pass()),
+    );
+    let mut ranked: Vec<&PairingComparison> = c.failing();
     ranked.sort_by_key(|p| std::cmp::Reverse(p.badness()));
-    let _ = writeln!(
-        s,
-        "failing or side-differing pairings, largest discrepancy first:"
-    );
+    let _ = writeln!(s, "failing scored pairings, largest discrepancy first:");
     for p in ranked {
         let _ = writeln!(
             s,
-            "  {} against {}: stock row wins {}/12, ours {}/12; mean row left {:.3} / {:.3}, column left {:.3} / {:.3}{}",
+            "  {} against {}: stock row wins {}/{}, ours {}/{}{}",
             p.pairing.0,
             p.pairing.1,
             p.counts[0][0],
+            p.counts[0].iter().sum::<u32>(),
             p.counts[1][0],
-            p.means[0][0],
-            p.means[1][0],
-            p.means[0][1],
-            p.means[1][1],
-            if p.pass() {
-                " (tests pass; a side outcome differs)"
+            p.n,
+            if p.win_pass() {
+                " (win test passes; a side outcome differs)"
             } else {
                 ""
             }
@@ -1842,14 +1823,7 @@ pub fn games_text(games: &[Game]) -> String {
     for ((r, c, side), gs) in by {
         let _ = write!(s, "{r} {c} {}:", side.text());
         for g in gs {
-            let _ = write!(
-                s,
-                " {}@{} {}/{}",
-                g.winner.text(),
-                g.end_frame,
-                share_text(g.row_left),
-                share_text(g.col_left)
-            );
+            let _ = write!(s, " {}@{}", g.winner.text(), g.end_frame);
         }
         s.push('\n');
     }
@@ -1859,22 +1833,6 @@ pub fn games_text(games: &[Game]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn shares_parse_without_floats() {
-        assert_eq!(parse_share("0.0769"), Ok(769));
-        assert_eq!(parse_share("2.04"), Ok(20_400));
-        assert_eq!(parse_share("1"), Ok(10_000));
-        assert!(parse_share("0.12345").is_err());
-        assert!(parse_share("-0.1").is_err());
-        assert!(parse_share("x").is_err());
-        assert_eq!(share_text(769), "0.0769");
-        assert_eq!(share_text(20_400), "2.0400");
-        // Rounded half up: 1/13 = 0.076923… → 0.0769; 1/8 → 0.1250.
-        assert_eq!(share(1, 13), 769);
-        assert_eq!(share(1, 8), 1250);
-        assert_eq!(share(0, 0), 0);
-    }
 
     #[test]
     fn group_sizes_round_an_exact_half_to_even() {
@@ -1918,7 +1876,7 @@ mod tests {
         }
     }
 
-    fn g(row_side: Side, seed: u32, winner: Winner, rl: i64, cl: i64) -> Game {
+    fn g(row_side: Side, seed: u32, winner: Winner) -> Game {
         Game {
             row: "R".into(),
             col: "C".into(),
@@ -1926,85 +1884,107 @@ mod tests {
             seed,
             winner,
             end_frame: 304,
-            row_left: rl,
-            col_left: cl,
         }
     }
 
-    fn twelve(f: impl Fn(Side, u32) -> (Winner, i64, i64)) -> Vec<Game> {
+    fn twelve(f: impl Fn(Side, u32) -> Winner) -> Vec<Game> {
         let mut out = Vec::new();
         for side in [Side::A, Side::B] {
             for seed in SEEDS {
-                let (w, rl, cl) = f(side, seed);
-                out.push(g(side, seed, w, rl, cl));
+                out.push(g(side, seed, f(side, seed)));
             }
         }
         out
     }
 
     #[test]
-    fn csv_round_trips_and_shape_is_checked() {
-        let games = twelve(|_, s| (Winner::Row, 10_000 - i64::from(s), 0));
+    fn csv_has_the_six_columns_of_the_restated_records() {
+        // measure: M-0001, M-0002, M-0003 (per-game data: row, col, row_side, seed, winner, end_frame)
+        assert_eq!(CSV_HEADER, "row,col,row_side,seed,winner,end_frame");
+        let games = twelve(|_, s| if s == 3 { Winner::None } else { Winner::Row });
         let text = write_csv(&games);
         assert_eq!(parse_csv(&text).unwrap(), games);
         assert!(check_shape(&games).is_ok());
         assert!(check_shape(&games[1..]).is_err());
         assert!(parse_csv("row,col\n").is_err());
-        assert!(parse_csv(&format!("{CSV_HEADER}\nR,C,X,0,row,304,1,0\n")).is_err());
+        assert!(parse_csv(&format!("{CSV_HEADER}\nR,C,X,0,row,304\n")).is_err());
+        // The old form with the two share columns is refused.
+        assert!(
+            parse_csv(&format!(
+                "{CSV_HEADER},row_left,col_left\nR,C,A,0,row,304,1,0\n"
+            ))
+            .is_err()
+        );
+        assert!(parse_csv(&format!("{CSV_HEADER}\nR,C,A,0,row,304,1,0\n")).is_err());
     }
 
     #[test]
-    fn equal_samples_pass_and_reversed_ones_fail() {
-        let stock = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+    fn the_win_test_and_the_side_outcome_make_the_verdict() {
+        // measure: M-0001 (Tolerance for tests: the win-proportion test, and the same outcome where every seed of a side gave it)
+        let stock = twelve(|_, _| Winner::Row);
         let c = compare_pairing(&("R".into(), "C".into()), &stock, &stock);
-        assert!(c.pass() && c.same_reproduced(), "{c:?}");
+        assert!(c.pass() && c.win_pass() && c.same_reproduced(), "{c:?}");
         assert_eq!(
             c.same,
             [Some((Winner::Row, true)), Some((Winner::Row, true))]
         );
-        let reversed = twelve(|_, s| (Winner::Col, 0, 8000 + i64::from(s) * 100));
+        let reversed = twelve(|_, _| Winner::Col);
         let c = compare_pairing(&("R".into(), "C".into()), &stock, &reversed);
-        assert!(!c.pass() && !c.same_reproduced());
+        assert!(!c.pass() && !c.win_pass() && !c.same_reproduced());
         assert!(c.win.unwrap().p < ALPHA);
-        assert!(c.ks.iter().all(|k| k.unwrap().p < ALPHA));
-        // A side-wise difference that the pooled tests do not catch: stock
-        // 6/6 on side A, ours 5/6 there.
+        // A side-wise difference that the pooled test does not catch: stock
+        // 6/6 on side A, ours 5/6 there. It fails on the side outcome alone.
         let near = twelve(|side, s| {
             if side == Side::A && s == 0 {
-                (Winner::Col, 0, 8000)
+                Winner::Col
             } else {
-                (Winner::Row, 8000 + i64::from(s) * 100, 0)
+                Winner::Row
             }
         });
         let c = compare_pairing(&("R".into(), "C".into()), &stock, &near);
-        assert!(c.pass());
+        assert!(c.win_pass() && !c.same_reproduced() && !c.pass());
+        assert!(c.fails());
         assert_eq!(
             c.same,
             [Some((Winner::Row, false)), Some((Winner::Row, true))]
         );
+        let r = report(&RecordComparison {
+            id: "M-test".into(),
+            pairings: vec![c],
+            missing: Vec::new(),
+        });
+        assert!(r.contains("FAIL (side outcome)"), "{r}");
+        assert!(r.contains("scored pairings failing: 1 of 1"), "{r}");
+        // A stock side with mixed outcomes asks only the win test.
+        let mixed = twelve(|_, s| if s < 3 { Winner::Row } else { Winner::Col });
+        let ours = twelve(|_, s| if s < 2 { Winner::Row } else { Winner::Col });
+        let c = compare_pairing(&("R".into(), "C".into()), &mixed, &ours);
+        assert_eq!(c.same, [None, None]);
+        assert!(c.pass());
     }
 
     #[test]
     fn crashed_stock_games_are_left_out_of_both_sides() {
-        // measure: M-0017
+        // measure: M-0001 (Procedure step 3: a crashed game is `none` with an end frame before the limit), M-0017
         // Stock: side A has no result in any game (a crash before the limit
         // sample), side B ordinary. Ours: side A won by the row.
-        let mut stock = twelve(|side, s| {
+        let mut stock = twelve(|side, _| {
             if side == Side::A {
-                (Winner::None, 5000, 5000)
+                Winner::None
             } else {
-                (Winner::Row, 8000 + i64::from(s) * 100, 0)
+                Winner::Row
             }
         });
-        for x in stock.iter_mut().filter(|x| x.row_side == Side::A) {
-            x.end_frame = 304;
-        }
         // A stock `none` at the limit sample is a real draw, not a crash.
         stock[6].winner = Winner::None;
         stock[6].end_frame = FRAME_LIMIT + 80;
         assert_eq!(stock.iter().filter(|g| crashed(g)).count(), 6);
-        let ours = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+        let ours = twelve(|_, _| Winner::Row);
         let record = record_of("M-test", stock);
+        assert_eq!(
+            stock_line(&record, &("R".into(), "C".into())),
+            ([5, 0, 1], [0, 6])
+        );
         let c = compare_record(&record, &ours);
         let p = &c.pairings[0];
         assert_eq!(p.n, 6, "our side-A games are not counted");
@@ -2016,59 +1996,68 @@ mod tests {
     }
 
     #[test]
-    fn sref_and_v3_pairings_are_reported_apart() {
-        // measure: M-0017
+    fn sref_and_v3_pairings_are_shown_but_not_scored() {
+        // measure: M-0017; M-0001 and M-0003 (Tolerance for tests: no test runs against the SREF and V3 rows)
         let pair = |a: &str, b: &str| (a.to_owned(), b.to_owned());
         assert!(confirmed(&pair("MIND", "E2")));
         assert!(!confirmed(&pair("SREF", "E2")));
         assert!(!confirmed(&pair("E1", "V3")));
-        let mk = |row: &str| {
-            let mut v = twelve(|_, s| (Winner::Row, 8000 + i64::from(s) * 100, 0));
+        let mk = |row: &str, w: Winner| {
+            let mut v = twelve(|_, _| w);
             for x in &mut v {
                 x.row = row.into();
             }
             v
         };
-        let mut stock = mk("SREF");
-        stock.extend(mk("E2"));
-        let mut ours = mk("SREF");
-        ours.extend(mk("E2").into_iter().map(|g| Game {
-            winner: Winner::Col,
-            row_left: 0,
-            col_left: 9000,
-            ..g
-        }));
+        let mut stock = mk("SREF", Winner::Row);
+        stock.extend(mk("E2", Winner::Row));
+        stock.extend(mk("V3", Winner::Row));
+        // Ours: SREF reversed (would fail, not scored), E2 reversed (fails),
+        // V3 the same (would pass, not scored).
+        let mut ours = mk("SREF", Winner::Col);
+        ours.extend(mk("E2", Winner::Col));
+        ours.extend(mk("V3", Winner::Row));
         let record = record_of("M-test", stock);
         let c = compare_record(&record, &ours);
-        assert!(!c.pairings[0].confirmed && c.pairings[0].pass());
-        assert!(c.pairings[1].confirmed && !c.pairings[1].pass());
+        assert!(!c.pairings[0].confirmed && !c.pairings[0].fails());
+        assert!(c.pairings[1].confirmed && c.pairings[1].fails());
+        assert_eq!(c.scored().len(), 1);
+        assert_eq!(c.failing().len(), 1);
+        assert_eq!(c.not_same().len(), 1);
         let r = report(&c);
+        assert!(r.contains("scored pairings failing: 1 of 1"), "{r}");
         assert!(
-            r.contains("confirmed by M-0017: pairings failing any test 1 of 1"),
+            r.contains("not scored (SREF or V3, M-0017): 2 pairings; the tests would fail 1"),
             "{r}"
         );
         assert!(
-            r.contains("not confirmed by M-0017 (SREF or V3): pairings failing any test 0 of 1"),
+            r.contains("not scored, SREF or V3 (M-0017); the tests would fail"),
+            "{r}"
+        );
+        assert!(
+            !r.lines()
+                .skip_while(|l| !l.starts_with("failing scored pairings"))
+                .any(|l| l.contains("SREF against")),
             "{r}"
         );
     }
 
     #[test]
     fn merging_replaces_only_the_redone_pairings() {
-        let mut a = twelve(|_, _| (Winner::Row, 1, 0));
-        let mut b = twelve(|_, _| (Winner::Row, 2, 0));
+        let mut a = twelve(|_, _| Winner::Row);
+        let mut b = twelve(|_, _| Winner::Row);
         for x in &mut b {
             x.col = "D".into();
         }
         a.extend(b.clone());
-        let mut fresh = twelve(|_, _| (Winner::Col, 0, 3));
+        let mut fresh = twelve(|_, _| Winner::Col);
         for x in &mut fresh {
             x.col = "D".into();
         }
         let order = pairings(&a);
         let m = merge(&a, &fresh, &order);
         assert_eq!(m.len(), 24);
-        assert!(m[..12].iter().all(|x| x.row_left == 1));
+        assert!(m[..12].iter().all(|x| x.winner == Winner::Row));
         assert!(m[12..].iter().all(|x| x.winner == Winner::Col));
     }
 
