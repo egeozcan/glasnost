@@ -3956,13 +3956,19 @@ impl Live {
         self.draw_status(inputs, scene);
     }
 
-    /// Whether a unit's selection is drawn by S-0111's bracket image (the
-    /// bracket sprite and the overlay palette are there); buildings get no
-    /// bracket image (claim 8's corner brackets are not drawn yet).
+    /// Whether an object's selection is drawn by S-0111's marks: a unit's
+    /// bracket image (the bracket sprite and the overlay palette are
+    /// there), or a building's corner brackets (claim 8; the overlay
+    /// palette is there).
     pub fn bracket_drawn(&self, assets: &super::build::Assets, id: ObjectId) -> bool {
-        self.world.obj(id).is_some_and(|o| o.kind.is_mobile())
-            && assets.get(combat::BRACKET_SPRITE).is_some()
-            && assets.get(combat::OVERLAY_PALETTE).is_some()
+        let Some(o) = self.world.obj(id) else {
+            return false;
+        };
+        let palette = assets.get(combat::OVERLAY_PALETTE).is_some();
+        if o.kind == SimKind::Building {
+            return palette;
+        }
+        o.kind.is_mobile() && palette && assets.get(combat::BRACKET_SPRITE).is_some()
     }
 
     /// S-0111's status extras after the effects: every object's bomb icon
@@ -3998,6 +4004,13 @@ impl Live {
                 continue;
             }
             let infantry = o.kind == SimKind::Infantry;
+            // spec: S-0111 Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
+            let p = self.world.reference_point(o.id);
+            let anchor = project_lifted(p.x, p.y, p.z);
+            // spec: S-0111 claim 1 (status extras, the bomb icon too, are drawn only while the status anchor lies within the battlefield view widened by 360 pixels left and right and 180 above and below; fog does not hide them)
+            if !combat::in_status_view(anchor, self.battlefield) {
+                continue;
+            }
             // spec: S-0519 claim 24 (the bomb icon is the first of its carrier's status extras, so its own extras paint over it)
             if let Some(b) = o.combat.bomb
                 && self
@@ -4049,9 +4062,6 @@ impl Live {
                     self.world.game_speed,
                     r.quirks.speed_normalised_delays,
                 );
-                // spec: S-0111 claim 1 and Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
-                let p = self.world.reference_point(o.id);
-                let anchor = project_lifted(p.x, p.y, p.z);
                 // design: the wrench follows the bomb icon and precedes the insignia and health bar among the object's extras, so the bar and its marks cover it as they cover the bomb icon (S-0111 gives no order for the wrench)
                 match self.cache.wrench_item(
                     scene,
@@ -4077,9 +4087,6 @@ impl Live {
             if bar.is_none() && insignia.is_none() {
                 continue;
             }
-            // spec: S-0111 Terms (status anchor: the centre at its world height, projected; S-0204 claim 4 for a building's centre)
-            let p = self.world.reference_point(o.id);
-            let anchor = project_lifted(p.x, p.y, p.z);
             let import_idx = self.types.get(&(o.kind, o.type_index)).copied().flatten();
             let mut pips: Vec<combat::Pip> = insignia.into_iter().collect();
             if let Some(selected) = bar {
@@ -4096,6 +4103,31 @@ impl Live {
                         })
                         .unwrap_or(combat::DEFAULT_ART_HEIGHT);
                     let (w, d) = o.foundation;
+                    if selected {
+                        // spec: S-0111 claim 8 (a selected building gets corner brackets instead of a bracket image: palette index 15, index 12 when its height above the terrain is below -4 leptons; design: the terrain is its cell's level height)
+                        let level = self
+                            .world
+                            .cells
+                            .grid
+                            .get(o.pos.cell())
+                            .map_or(0, |c| c.level);
+                        let above =
+                            p.z - glasnost_render::projection::LEVEL_LEPTONS * i32::from(level);
+                        let index = if above < combat::CORNER_LOW {
+                            combat::CORNER_INDEX_LOW
+                        } else {
+                            combat::CORNER_INDEX
+                        };
+                        items.extend(self.cache.corner_item(
+                            scene,
+                            inputs.assets,
+                            anchor,
+                            (w, d),
+                            levels * combat::LEVEL_HEIGHT,
+                            index,
+                            Some(sim_code(o.id)),
+                        ));
+                    }
                     pips.extend(combat::building_bar(
                         w, d, levels, o.health, strength, &ratios,
                     ));

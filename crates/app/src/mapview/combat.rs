@@ -11,10 +11,11 @@
 //! game client draws none. They are marked provisional and can be hidden
 //! with the other provisional items, or with their own layer toggle.
 //!
-//! What S-0111 asks that is not drawn yet: the culling of claim 1 (the
-//! scene has no on-screen culling, S-0101 claim 6), the shading of claim 2
-//! (no shroud or fog), the corner brackets of selected buildings (claim 8:
-//! which corners are drawn is not established). The pip scale is drawn
+//! The culling of claim 1 ([`in_status_view`]), the shading of claim 2
+//! (the bracket, insignia, wrench and bomb icon take the light-alpha shade
+//! of S-0104 claim 15 at neutral brightness; [`Cache::overlay_lit`]) and the
+//! corner brackets of selected buildings (claim 8, [`corner_segments`],
+//! [`corner_image`]) are drawn. The pip scale is drawn
 //! whole: its origin (claim 10, [`pip_origin`]), who sees it (claim 9), its
 //! rows and self-heal marker (claims 10 to 16, [`super::pip_scale`]) and the
 //! control-group number (claim 17, [`group_number_at`],
@@ -30,7 +31,7 @@ use glasnost_fmt::image::{IndexedImage, Rgb8};
 use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::shp::Shp;
 use glasnost_num::{F32, F64, Rounding};
-use glasnost_render::compose::{DepthTest, Paint, Profile, pack565, row565};
+use glasnost_render::compose::{DepthTest, Paint, Profile, Shade, pack565, row565};
 use glasnost_render::palette::{PaletteQuirks, palette_from_file};
 use glasnost_render::projection::height_lift;
 use glasnost_render::scene::{Group, Item, ItemDepth, Scene};
@@ -214,6 +215,9 @@ pub struct Pip {
     pub at: (i32, i32),
     /// Drawn as a shadow instead of as an image.
     pub shadow: bool,
+    /// Shaded by the light-alpha values (S-0111 claim 2: the bracket image
+    /// and the insignia); segments and pips keep their palette colours.
+    pub shaded: bool,
 }
 
 impl Pip {
@@ -224,6 +228,15 @@ impl Pip {
             frame,
             at,
             shadow: false,
+            shaded: false,
+        }
+    }
+
+    /// As [`Pip::image`], shaded (S-0111 claim 2).
+    pub fn shaded(sprite: Sprite, frame: usize, at: (i32, i32)) -> Pip {
+        Pip {
+            shaded: true,
+            ..Pip::image(sprite, frame, at)
         }
     }
 }
@@ -248,7 +261,8 @@ pub fn unit_bar(
     let mut out = Vec::new();
     if selected {
         // spec: S-0111 claim 6 (the bracket image when selected only; it shows through as the empty part)
-        out.push(Pip::image(Sprite::Bracket, bracket_frame, bracket_at));
+        // spec: S-0111 claim 2 (the bracket is shaded)
+        out.push(Pip::shaded(Sprite::Bracket, bracket_frame, bracket_at));
     }
     // spec: S-0111 claim 6 (pip sprite image frames 16 green, 17 yellow, 18 red)
     let frame = match health_colour(health, strength, false, r) {
@@ -325,7 +339,8 @@ pub fn insignia(v: F32, infantry: bool) -> Option<Pip> {
     } else {
         return None;
     };
-    Some(Pip::image(
+    // spec: S-0111 claim 2 (the insignia is shaded)
+    Some(Pip::shaded(
         Sprite::Pips,
         frame,
         // spec: S-0111 claim 18 (at (5, 2) for infantry, (10, 6) for everything else)
@@ -801,6 +816,108 @@ pub struct Cache {
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
     group_rows: BTreeMap<[u8; 3], usize>,
     group_digits: BTreeMap<u8, Option<GroupImage>>,
+    overlay_lit: Option<Option<Shade>>,
+    mouse_lit: Option<Option<Shade>>,
+    corners: BTreeMap<(i32, i32, i32, u8), Option<GroupImage>>,
+}
+
+const NEUTRAL_BRIGHTNESS: i32 = 1000; // spec: S-0111 claim 2 (neutral brightness), S-0104 claim 15 (brightness in per mille)
+
+/// The widening of the battlefield view within which status extras are
+/// drawn, left and right (S-0111 claim 1).
+pub const CULL_X: i32 = 360; // spec: S-0111 claim 1
+/// As [`CULL_X`], above and below.
+pub const CULL_Y: i32 = 180; // spec: S-0111 claim 1
+
+/// Whether the status anchor `anchor` (world pixels) lies within the
+/// battlefield view `view` (origin, size) widened by [`CULL_X`] and
+/// [`CULL_Y`], equality included (S-0111 claim 1, scenario OV1). No view
+/// known: everything is in view.
+pub fn in_status_view(anchor: (i32, i32), view: Option<((i32, i32), (u32, u32))>) -> bool {
+    let Some((o, (w, h))) = view else {
+        return true;
+    };
+    let (x, y) = (i64::from(anchor.0 - o.0), i64::from(anchor.1 - o.1));
+    // spec: S-0111 claim 1 (within 360 pixels left or right and 180 above or below, equality included)
+    (-i64::from(CULL_X)..=i64::from(w) + i64::from(CULL_X)).contains(&x)
+        && (-i64::from(CULL_Y)..=i64::from(h) + i64::from(CULL_Y)).contains(&y)
+}
+
+/// The overlay-palette index of a selected building's corner brackets.
+pub const CORNER_INDEX: u8 = 15; // spec: S-0111 claim 8 (palette index 15)
+/// The index when the building's height above the terrain is below
+/// [`CORNER_LOW`].
+pub const CORNER_INDEX_LOW: u8 = 12; // spec: S-0111 claim 8 (index 12)
+/// The height above the terrain, in leptons, below which index 12 is used.
+pub const CORNER_LOW: i32 = -4; // spec: S-0111 claim 8 (below -4 leptons)
+
+/// The line segments of a selected building's corner brackets, as screen
+/// displacements from the status anchor (S-0111 claim 8): for a building
+/// of foundation `w` x `d` and box height `v` leptons, at each drawn corner
+/// of the building box a line along each edge that meets there, for a
+/// quarter of that edge's length rounded toward zero in leptons, projected
+/// by [`displacement`].
+// design: S-0111 gives low confidence on which corners are drawn; we draw the four corners of the top face and the three base corners the box's silhouette shows (left, front, right); the hidden back base corner is left out
+pub fn corner_segments(w: i32, d: i32, v: i32) -> Vec<((i32, i32), (i32, i32))> {
+    let (alpha, beta) = (128 * w, 128 * d);
+    // spec: S-0111 claim 8 (a quarter of the edge's length, toward zero: the edges are 256W, 256D and V leptons long)
+    let (qx, qy, qz) = (256 * w / 4, 256 * d / 4, v / 4);
+    let mut corners = Vec::new();
+    for (sx, sy) in [(-1, -1), (1, -1), (-1, 1), (1, 1)] {
+        corners.push((sx, sy, v, -1)); // top face: its vertical edge runs down
+    }
+    for (sx, sy) in [(-1, 1), (1, 1), (1, -1)] {
+        corners.push((sx, sy, 0, 1)); // base: its vertical edge runs up
+    }
+    let mut out = Vec::new();
+    for (sx, sy, z, up) in corners {
+        let at = (sx * alpha, sy * beta, z);
+        let from = displacement(at.0, at.1, at.2);
+        for end in [
+            (at.0 - sx * qx, at.1, at.2),
+            (at.0, at.1 - sy * qy, at.2),
+            (at.0, at.1, at.2 + up * qz),
+        ] {
+            out.push((from, displacement(end.0, end.1, end.2)));
+        }
+    }
+    out
+}
+
+/// The image of the corner brackets of a building (`w` x `d`, box height
+/// `v`) in palette index `index`, and the displacement of its top-left
+/// pixel from the status anchor; `None` when there is nothing to draw.
+pub fn corner_image(w: i32, d: i32, v: i32, index: u8) -> Option<(IndexedImage, (i32, i32))> {
+    let segs = corner_segments(w, d, v);
+    let pts = || segs.iter().flat_map(|&(a, b)| [a, b]);
+    let (x0, x1) = (pts().map(|p| p.0).min()?, pts().map(|p| p.0).max()?);
+    let (y0, y1) = (pts().map(|p| p.1).min()?, pts().map(|p| p.1).max()?);
+    let (iw, ih) = ((x1 - x0 + 1) as usize, (y1 - y0 + 1) as usize);
+    let mut px = vec![0u8; iw * ih];
+    for &(a, b) in &segs {
+        // spec: S-0111 claim 8 (thin lines: one pixel wide)
+        let (mut x, mut y) = a;
+        let (dx, dy) = ((b.0 - a.0).abs(), -(b.1 - a.1).abs());
+        let (sx, sy) = ((b.0 - a.0).signum(), (b.1 - a.1).signum());
+        let mut err = dx + dy;
+        loop {
+            px[(y - y0) as usize * iw + (x - x0) as usize] = index;
+            if (x, y) == b {
+                break;
+            }
+            let e2 = 2 * err;
+            if e2 >= dy {
+                err += dy;
+                x += sx;
+            }
+            if e2 <= dx {
+                err += dx;
+                y += sy;
+            }
+        }
+    }
+    let img = IndexedImage::new(iw as u32, ih as u32, px).ok()?;
+    Some((img, (x0, y0)))
 }
 
 impl Cache {
@@ -834,6 +951,73 @@ impl Cache {
         })
     }
 
+    /// The shade table of a palette at neutral brightness (S-0111 claim 2,
+    /// S-0104 claim 15), added to the scene once.
+    fn lit(scene: &mut Scene, pal: &glasnost_fmt::image::Palette) -> Shade {
+        // spec: S-0104 claims 6 and 15 (the untinted table; the light-alpha value picks the row), S-0111 claim 2 (neutral brightness)
+        let t = glasnost_render::light::untinted_table(pal);
+        let base = scene.rows.len();
+        for row in &t {
+            scene.add_row(row565(row));
+        }
+        Shade::new(base, t.len(), NEUTRAL_BRIGHTNESS)
+    }
+
+    /// The overlay palette's shade table (S-0111 claim 2: bracket,
+    /// insignia, corner brackets).
+    pub fn overlay_lit(&mut self, scene: &mut Scene, assets: &Assets) -> Option<Shade> {
+        *self.overlay_lit.get_or_insert_with(|| {
+            let pal = Palette6::parse(assets.get(OVERLAY_PALETTE)?).ok()?;
+            let pal = palette_from_file(&pal, &PaletteQuirks::default());
+            Some(Self::lit(scene, &pal))
+        })
+    }
+
+    /// The cursor palette's shade table (S-0111 claim 2: wrench and bomb).
+    fn mouse_lit(&mut self, scene: &mut Scene, assets: &Assets) -> Option<Shade> {
+        *self.mouse_lit.get_or_insert_with(|| {
+            let pal = cursor_palette(assets.get(CURSOR_PALETTE)?, &PaletteQuirks::default())?;
+            Some(Self::lit(scene, &pal))
+        })
+    }
+
+    /// The corner brackets of a selected building (S-0111 claim 8) at the
+    /// status anchor `anchor`, in overlay-palette `index`; `None` when the
+    /// overlay palette is missing.
+    #[allow(clippy::too_many_arguments)]
+    pub fn corner_item(
+        &mut self,
+        scene: &mut Scene,
+        assets: &Assets,
+        anchor: (i32, i32),
+        foundation: (i32, i32),
+        v: i32,
+        index: u8,
+        object: Option<u32>,
+    ) -> Option<Item> {
+        let shade = self.overlay_lit(scene, assets)?;
+        let (image, (ox, oy)) = (*self
+            .corners
+            .entry((foundation.0, foundation.1, v, index))
+            .or_insert_with(|| {
+                let (img, off) = corner_image(foundation.0, foundation.1, v, index)?;
+                Some((scene.add_image(img), off))
+            }))?;
+        Some(Item {
+            image,
+            x: anchor.0 + ox,
+            y: anchor.1 + oy,
+            test: DepthTest::Ignore,
+            depth: flat(),
+            // spec: S-0111 claim 2 (selection marks are shaded by the light-alpha values)
+            paint: Paint::Lit(shade),
+            group: Group::Status,
+            provisional: false,
+            object,
+            stack: None,
+        })
+    }
+
     /// The bomb icon's item at image frame `frame`, centred on the
     /// carrier's draw point `at` (S-0519 claim 24); `None` when the sprite,
     /// its frame or the cursor palette is missing.
@@ -847,6 +1031,7 @@ impl Cache {
     ) -> Option<Item> {
         // spec: S-0519 claim 24 (the fixed cursor palette, no house-colour remapping, neutral brightness, no translucency)
         let row = self.mouse_row(scene, assets)?;
+        let lit = self.mouse_lit(scene, assets);
         let (image, (fx, fy), (cw, ch)) = self.frame(scene, assets, Sprite::Bomb, frame)?;
         Some(Item {
             image,
@@ -856,7 +1041,8 @@ impl Cache {
             // spec: S-0519 claim 24 (a status extra: after the object layers, with no depth test)
             test: DepthTest::Ignore,
             depth: flat(),
-            paint: Paint::Row(row),
+            // spec: S-0111 claim 2 (shaded by the light-alpha values at neutral brightness)
+            paint: lit.map_or(Paint::Row(row), Paint::Lit),
             group: Group::Status,
             provisional: false,
             object,
@@ -877,6 +1063,7 @@ impl Cache {
     ) -> Option<Item> {
         // spec: S-0111 claim 19 and Import mapping (the wrench is drawn through the cursor palette)
         let row = self.mouse_row(scene, assets)?;
+        let lit = self.mouse_lit(scene, assets);
         let (image, (fx, fy), (cw, ch)) = self.frame(scene, assets, Sprite::Wrench, frame)?;
         Some(Item {
             image,
@@ -886,7 +1073,8 @@ impl Cache {
             // spec: S-0102 claim 1 (a status extra: after the object layers, with no depth test)
             test: DepthTest::Ignore,
             depth: flat(),
-            paint: Paint::Row(row),
+            // spec: S-0111 claim 2 (shaded by the light-alpha values at neutral brightness)
+            paint: lit.map_or(Paint::Row(row), Paint::Lit),
             group: Group::Status,
             provisional: false,
             object,
@@ -1011,6 +1199,7 @@ impl Cache {
         let Some(row) = self.overlay_row(scene, assets) else {
             return Vec::new();
         };
+        let lit = self.overlay_lit(scene, assets);
         pips.iter()
             .filter_map(|p| {
                 let (image, (fx, fy), (cw, ch)) = self.frame(scene, assets, p.sprite, p.frame)?;
@@ -1025,6 +1214,9 @@ impl Cache {
                     // spec: S-0111 claim 16 (the self-heal blink: drawn as a shadow, darkening, instead of as an image)
                     paint: if p.shadow {
                         Paint::Shadow
+                    } else if p.shaded {
+                        // spec: S-0111 claim 2 (bracket and insignia take the light-alpha shade; segments and pips keep their palette colours)
+                        lit.map_or(Paint::Row(row), Paint::Lit)
                     } else {
                         Paint::Row(row)
                     },
@@ -1139,7 +1331,7 @@ mod tests {
         let r = ratios("0.5", "0.25");
         let v = unit_bar(false, 3, 100, 100, true, &r);
         assert_eq!(v.len(), 18);
-        assert_eq!(v[0], Pip::image(Sprite::Bracket, 0, (1, -23)));
+        assert_eq!(v[0], Pip::shaded(Sprite::Bracket, 0, (1, -23)));
         assert_eq!(v[1].at, (-15, -22));
         assert_eq!(v[17].at, (17, -22));
         assert!(v[1..].iter().all(|p| p.frame == 16));

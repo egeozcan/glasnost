@@ -41,7 +41,10 @@ built here too, so the whole status-extras stack of claims 9 to 17 is now drawn.
 
 | Claim | Status | Tests |
 | --- | --- | --- |
+| 1 (culling) | built (seams commit): status extras, the bomb icon and wrench included, are drawn only while the status anchor lies within the battlefield view widened by 360 px left and right and 180 px above and below, equality included; fog does not hide them. The cull is read at each status redraw, from `Live::battlefield` (no view known: no cull) | `claim_1_culling_margins` (OV1's shape: each of the four edges, at the margin and one pixel beyond) |
+| 2 (shading: brackets, insignia, wrench, bomb sprite) | built (seams commit): the bracket image, the insignia, the corner brackets, the wrench and the bomb icon are `Paint::Lit` through the untinted shade table of their palette (overlay or cursor) at neutral brightness 1000, the path of S-0104 claim 15; segments, pips, the group number and its box stay `Paint::Row` | `claim_2_shading_of_the_bracket_and_the_insignia` (OV2's shape: a synthetic light-alpha 0 darkens bracket and insignia, not the segments), `repair_wrench_claim19`, `bomb_icon_claim24` |
 | 2 (the control-group number and its box unshaded) | built | `the_group_number_follows_the_pip_scale` (the number is painted through its colour row, never shaded) |
+| 8 (corner brackets) | built (seams commit); which corners is our design (see below) | `claim_8_corner_brackets`, `claim_8_a_selected_building_in_the_live_view` |
 | 9 (who sees the pip scale) | built (r19 text; the gate now also gates the rows and the number) | `pip_rows_and_the_self_heal_marker` |
 | 10 (placement) | built | `claim_10_places`, `pip_rows_and_the_self_heal_marker` |
 | 11 (rows, order, covering) | built; spawn states and occupant order are design (Q-2072) | `claim_11_spawn_and_occupant_rows`, `a_building_occupant_row` |
@@ -80,9 +83,20 @@ built here too, so the whole status-extras stack of claims 9 to 17 is now drawn.
 - The importer's gunner check needs passengers above 0 and a row length of 0 or less (an absent
   `Ammo` defaults to −1). The size warning covers only an explicit `Size` below 1 on infantry and
   vehicles.
-- Not built here (seams, unchanged): claim 1's culling of status extras, claim 2's shading of the
-  other extras, claim 8's corner brackets. The original's view-edge line defect and its fallback
-  colour defect are not reproduced, as the spec allows.
+- Built in the seams commit: claim 1's culling, claim 2's shading and claim 8's corner brackets
+  (rows above). The original's view-edge line defect and its fallback colour defect are not
+  reproduced, as the spec allows.
+- Claim 8 corners (our design, 2026-10-25 decision; the spec's confidence on which corners are
+  drawn is low and gives nothing to choose from, so no request): the four corners of the box's top
+  face and the three base corners its silhouette shows (left, front, right); the hidden back base
+  corner is left out. At each, one line along each of the three edges that meet there (x, y and
+  vertical), a quarter of the edge's length (256 W, 256 D, V leptons) rounded toward zero. Index 15,
+  or 12 when the building's z is more than 4 leptons below its cell's level height (our reading of
+  "height above terrain"; unreachable in play, as the spec notes). The line is one pixel wide
+  (Bresenham). Selected buildings no longer get the viewer's egui placeholder (`bracket_drawn`).
+- Culling seam: the scene is rebuilt per tick and on selection change, not per scroll step, so a
+  pure scroll between redraws is covered only by the 360/180 margin until the next redraw.
+- Not done: no by-eye lane shots added for these three.
 
 ## By eye
 
