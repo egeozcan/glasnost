@@ -63,6 +63,46 @@ pub enum Effect {
         /// Damage amount D.
         damage: i32,
     },
+    /// A detonation of a warhead with the rocking flag rocks bodies (S-0303
+    /// claim 20): its rocking strength exceeds 0.3 and it was not
+    /// nullified. The drawing keeps the rocking; the game reads none of it.
+    Rock {
+        /// The damage amount *D*, at least 31; the strength is min(*D* ×
+        /// 0.01, 4.0).
+        damage: i32,
+        /// The objects in the detonation's cell layer of the 7 × 7 cells
+        /// around the centre cell, row by row, each with the point it is
+        /// pushed away from: the source object's position for the centre
+        /// cell when there is one, else the detonation point.
+        pushed: Vec<(ObjectId, Pos)>,
+    },
+    /// A drone parasite's delivery rocks its host, which is not infantry
+    /// (S-0614 claim 9, F2): `side` is the delivery's draw, 0 or 1.
+    DroneRock {
+        /// The host.
+        host: ObjectId,
+        /// The draw R(0, 1) that chose the side.
+        side: i32,
+    },
+    /// A damaging overload pulse sets its surviving controller's sideways
+    /// rocking rate (S-0601 claim 16, F4): `level` is the pulse's level
+    /// *i* (at least 1) and `draw` its rocking draw *r* in [0, 100].
+    OverloadRock {
+        /// The controller.
+        controller: ObjectId,
+        /// The pulse's level *i*.
+        level: i32,
+        /// The draw *r* that chose the sign.
+        draw: i32,
+    },
+    /// A grappling parasite's push starts (S-0614 claim 10): `way` is the
+    /// push's draw, 0 or 1.
+    GrapplePush {
+        /// The host.
+        host: ObjectId,
+        /// The draw R(0, 1) that chose the way.
+        way: i32,
+    },
     /// A shot that reached the choice of a shot animation started its
     /// vehicle's target line (S-0301 claim 24 a): the vehicle's type has the
     /// target-laser flag. Presentation only: the drawing keeps the line's

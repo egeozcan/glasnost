@@ -1818,3 +1818,71 @@ fn p14_selected_attachment_outranks_erasure() {
     shoot_to_end(&mut w, p);
     assert_eq!(parasite::host_of(&w, p), Some(host));
 }
+
+/// The drone rockings the effects report: host and side.
+fn drone_rocks(w: &World) -> Vec<(ObjectId, i32)> {
+    w.effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::DroneRock { host, side } => Some((*host, *side)),
+            _ => None,
+        })
+        .collect()
+}
+
+// spec: S-0614 claim 9 and F2 (each delivery to a host that is not infantry rocks it, to the side its one draw R(0, 1) chose; the rocking is presentation and takes no further draw)
+#[test]
+fn claim_9_each_delivery_reports_its_rocking_side() {
+    let (mut w, _p, host, _) = latched();
+    w.effects.clear();
+    let mut expect = w.rng.clone();
+    next_hit(&mut w, host, 5).unwrap();
+    // The only draw of the first delivery's tick in this scene is the rocking side.
+    let side = expect.ranged(0, 1, w.rules().quirks.ranged_draw_half_span);
+    assert_eq!(drone_rocks(&w), [(host, side)]);
+    for _ in 0..2 {
+        w.effects.clear();
+        next_hit(&mut w, host, 50).unwrap();
+        let r = drone_rocks(&w);
+        assert_eq!(r.len(), 1, "one rocking per delivery");
+        assert!(r[0].0 == host && (0..=1).contains(&r[0].1));
+    }
+}
+
+// spec: S-0614 claim 6 and claim 9 (an infantry host: no rocking choice and no rocking)
+#[test]
+fn claim_9_an_infantry_host_is_not_rocked() {
+    let mut w = game();
+    let man = spawn(&mut w, Kind::Infantry, "WALKER", 1, cell(2, 0), 0);
+    let p = spawn(&mut w, Kind::Vehicle, "DRONE", 0, cell(0, 0), 64);
+    shoot(&mut w, p, Target::Object(man));
+    w.effects.clear();
+    testkit::run(&mut w, 2);
+    assert!(drone_rocks(&w).is_empty());
+}
+
+// spec: S-0614 claim 10 and table G (the grab's end starts a push, whose one draw R(0, 1) chooses the way it rocks; reported to the drawing)
+#[test]
+fn claim_10_each_push_reports_its_way() {
+    let (mut w, _s, boat, t) = grappled(&ruleset());
+    let g = t + 1;
+    let half = w.rules().quirks.ranged_draw_half_span;
+    let pushes = |w: &World| -> Vec<(ObjectId, i32)> {
+        w.effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::GrapplePush { host, way } => Some((*host, *way)),
+                _ => None,
+            })
+            .collect()
+    };
+    run_to(&mut w, g + 29);
+    w.effects.clear();
+    let mut expect = w.rng.clone();
+    parasite::host_turn(&mut w, boat);
+    let way = expect.ranged(0, 1, half);
+    assert_eq!(pushes(&w), [(boat, way)], "the grab's end");
+    w.effects.clear();
+    testkit::run(&mut w, 1);
+    assert!(pushes(&w).is_empty(), "no push between");
+}

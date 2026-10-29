@@ -7,7 +7,7 @@ use glasnost_num::F64;
 use glasnost_num::geom::root_floor;
 
 use crate::combat::damage::{self, Hit};
-use crate::combat::data::WarheadId;
+use crate::combat::data::{WarheadId, WarheadRules};
 use crate::combat::effects::Effect;
 use crate::rules::Kind;
 use crate::world::{HouseId, Layer, ObjectId, Pos, World};
@@ -557,11 +557,72 @@ pub fn detonate(w: &mut World, det: Detonation) -> DetonationResult {
         // spec: S-0303 claim 20 and S-0613 claim 4 (a warhead that names a particle system creates it at P at the end of the detonation, owned by the source house, with its first particle)
         crate::gas::warhead_system(w, &name, p, det.house);
     }
-    // The warhead's rocking (claim 20) is presentation.
+    if h.rocker {
+        // spec: S-0303 claim 20 (the warhead's rocking is presentation, takes no draw and is reported to the drawing)
+        rock(w, &det, &h, layer);
+    }
     if any {
         DetonationResult::Hit
     } else {
         DetonationResult::Missed
+    }
+}
+
+/// The least damage amount whose rocking strength min(*D* × 0.01, 4.0)
+/// exceeds 0.3 (S-0303 claim 20).
+// spec: S-0303 claim 20 (whatever the rounding, the strength exceeds 0.3 exactly when D ≥ 31)
+const ROCKING_LEAST_DAMAGE: i32 = 31;
+/// The rocking area's reach from the centre cell, cells: 7 × 7 cells.
+// spec: S-0303 claim 20 and Constants (rocking area 7 × 7 cells around the centre cell)
+const ROCKING_REACH: i32 = 3;
+
+/// The rocking of a warhead with the rocking flag (S-0303 claim 20), as a
+/// presentation event: the objects of `layer` in the 7 × 7 cells around
+/// the centre cell, those of the centre cell pushed away from the source
+/// object when there is one, the others away from *P* and only when the
+/// spread is above 0. Reads only; takes no draw.
+fn rock(w: &mut World, det: &Detonation, h: &WarheadRules, layer: Layer) {
+    // spec: S-0303 claim 20 (only when the rocking strength exceeds 0.3)
+    if det.damage < ROCKING_LEAST_DAMAGE {
+        return;
+    }
+    let centre = det.point.cell();
+    let from_source = det.source.and_then(|s| w.obj(s)).map(|o| o.pos);
+    // spec: S-0303 claim 20 (the cells other than the centre cell only when S > 0)
+    let spread = h.spread.gt(F64::ZERO);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut pushed = Vec::new();
+    for dy in -ROCKING_REACH..=ROCKING_REACH {
+        for dx in -ROCKING_REACH..=ROCKING_REACH {
+            let in_centre = dx == 0 && dy == 0;
+            if !in_centre && !spread {
+                continue;
+            }
+            let c = CellXY::new(centre.x + dx, centre.y + dy);
+            if w.cells.cell(c).is_none() {
+                continue;
+            }
+            // spec: S-0303 claim 20 (the objects in the same cell layer)
+            for &id in w.cells.list(c, layer) {
+                if !seen.insert(id) {
+                    continue;
+                }
+                // spec: S-0303 claim 20 (the centre cell's objects away from the source object when there is one, the others away from P)
+                // design: Q-2081 question 5 (interim: a centre-cell object with no source object, or whose source has left play, is pushed away from P)
+                let from = if in_centre {
+                    from_source.unwrap_or(det.point)
+                } else {
+                    det.point
+                };
+                pushed.push((id, from));
+            }
+        }
+    }
+    if !pushed.is_empty() {
+        w.effects.push(Effect::Rock {
+            damage: det.damage,
+            pushed,
+        });
     }
 }
 

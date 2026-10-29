@@ -103,7 +103,9 @@ fn only_the_rocking_locomotors_draw_the_lean() {
 /// The images (as pixels) of the body, turret and shadow a vehicle type
 /// with a turret draws for each of `attitudes` in turn, all in one painter,
 /// with how many shadow items each drawing has.
-fn images(attitudes: &[Attitude]) -> Vec<(Vec<glasnost_fmt::image::IndexedImage>, usize)> {
+pub(super) fn images(
+    attitudes: &[Attitude],
+) -> Vec<(Vec<glasnost_fmt::image::IndexedImage>, usize)> {
     let rules = format!("{RULES}[CARX]\nTurret=yes\n");
     let (mut import, catalogue, mut assets) = context_with(&rules);
     import.arts.insert(

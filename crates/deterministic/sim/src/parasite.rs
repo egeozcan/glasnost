@@ -874,7 +874,10 @@ fn deliver(w: &mut World, host: ObjectId, p: ObjectId, weapon: Option<WeaponId>)
         crate::combat::effects::anim(w, name, h.pos);
     }
     // spec: S-0614 claim 9 (one draw R(0, 1) for the rocking side, after the effects and before the hit)
-    let _side = w.rng.ranged(0, 1, half);
+    let side = w.rng.ranged(0, 1, half);
+    // spec: S-0614 claim 9 and F2 (the rocking is presentation: the drawing rocks the host to the side the draw chose)
+    w.effects
+        .push(crate::combat::effects::Effect::DroneRock { host, side });
     // spec: S-0614 claim 6 (a hit of the weapon's damage at distance 0, not ignoring defences, no-escape, the parasite as attacker, no house)
     crate::combat::damage::apply(
         w,
@@ -931,7 +934,10 @@ fn push_start(w: &mut World, host: ObjectId) {
     let half = rules.quirks.ranged_draw_half_span;
     let pos = w.obj(host).map_or(Pos::default(), |o| o.pos);
     // spec: S-0614 claim 10 (one draw R(0, 1): which way the push rocks)
-    let _way = w.rng.ranged(0, 1, half);
+    let way = w.rng.ranged(0, 1, half);
+    // spec: S-0614 claim 10 (the rocking of the host during the push is presentation: the drawing rocks it the way the draw chose)
+    w.effects
+        .push(crate::combat::effects::Effect::GrapplePush { host, way });
     for _ in 0..WAKES {
         // spec: S-0614 claim 10 (each wake preceded by R(−180, 180) and then R(−64, 64) leptons)
         let dx = w.rng.ranged(-180, 180, half);

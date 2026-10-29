@@ -52,7 +52,7 @@ for a simulation change, so none were run. No spec request was filed.
 
 | Spec | Row | Finding |
 |---|---|---|
-| S-0504 | Terms (pitch and roll) and claim 15 (`intake26-S-0504.md`) | Rocking is not built at all (S-0303 claim 20, S-0614 claim 10, S-0210's rates). The ledger already names this as a seam. It is a missing feature, not a missing test. |
+| S-0504 | Terms (pitch and roll) and claim 15 (`intake26-S-0504.md`) | Rocking is not built at all (S-0303 claim 20, S-0614 claim 10, S-0210's rates). The ledger already names this as a seam. It is a missing feature, not a missing test. Closed by M8 A4 rocking ([a4-rocking.md](a4-rocking.md)). |
 
 ## Left (no test written)
 

@@ -448,6 +448,9 @@ pub struct Live {
     /// tick reported (S-0108 claim 20): building, active-1 (else idle),
     /// start, damaged variant.
     depot_events: Vec<(ObjectId, bool, bool, bool)>,
+    /// The bodies that rock (S-0303 claim 20, S-0614 claims 9 and 10):
+    /// presentation state, moved once per game tick.
+    rocking: super::rocking::Rocking,
 }
 
 /// A running slot animation of a building (S-0108 Terms), played by
@@ -622,19 +625,11 @@ pub fn shadow_anchor(w: &World, o: &Object) -> ShadowAnchor {
 /// simulation marks sinking, its pitch and roll (S-0504 claims 15, 16).
 pub fn attitude(w: &World, o: &Object) -> Attitude {
     if o.kind == SimKind::Vehicle && glasnost_sim::naval::sinking(w, o.id) {
-        use glasnost_rules::sim::Locomotor as L;
-        // spec: S-0504 claim 16 (the lean is drawn for a type whose locomotor is the driving, ship, hovering or jumpjet one; S-0106 claims 5 and 9)
-        // design: the type's own locomotor (S-0207 claim 14), not a carrier's: a vehicle sinks only from its own movement, and no spec gives a lift or teleport carrier's drawing a lean
-        let drawn = w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
-            matches!(
-                u.type_locomotor(),
-                L::Drive | L::Ship | L::Hover | L::Jumpjet
-            )
-        });
+        let drawn = draws_rocking(w, o);
         return Attitude::Sinking {
             // spec: S-0504 claim 15 and F4 (the pitch the simulation steps at each descent)
             pitch: glasnost_sim::naval::pitch(w, o.id).0,
-            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0303 claim 20, is not modelled, so a sinking vessel's roll stays level)
+            // spec: S-0504 claim 16 and F5 (r: the roll; rocking, S-0303 claim 20, is the view's own state, which attitude_with adds; the game state alone gives a level roll)
             roll: 0,
             drawn,
         };
@@ -663,6 +658,52 @@ pub fn attitude(w: &World, o: &Object) -> Attitude {
             0
         },
         crashing: air.is_some_and(|a| a.crash.is_some()),
+    }
+}
+
+/// Whether a vehicle's locomotor draws rocking: its type's locomotor is
+/// the driving, ship, hovering or jumpjet one (S-0504 claim 16; S-0106
+/// claims 5 and 9).
+pub fn draws_rocking(w: &World, o: &Object) -> bool {
+    use glasnost_rules::sim::Locomotor as L;
+    // spec: S-0504 claim 16 (the lean is drawn for a type whose locomotor is the driving, ship, hovering or jumpjet one; S-0106 claims 5 and 9)
+    // design: the type's own locomotor (S-0207 claim 14), not a carrier's: a vehicle sinks only from its own movement, and no spec gives a lift or teleport carrier's drawing a lean
+    w.rules().unit(o.kind, o.type_index).is_some_and(|u| {
+        matches!(
+            u.type_locomotor(),
+            L::Drive | L::Ship | L::Hover | L::Jumpjet
+        )
+    })
+}
+
+/// [`attitude`] with the view's rocking (`super::rocking`) in tick
+/// `shown`: a sinking vehicle's roll, and its lean when it was rocked as it
+/// began to sink (S-0504 claim 15); a vehicle that rocks and does not sink
+/// is drawn with its pitch and roll (S-0303 claim 20, S-0106 claim 9).
+pub fn attitude_with(
+    w: &World,
+    o: &Object,
+    rocking: &super::rocking::Rocking,
+    shown: i32,
+) -> Attitude {
+    let angles = rocking.angles(o.id, shown);
+    match attitude(w, o) {
+        Attitude::Sinking { pitch, drawn, .. } => Attitude::Sinking {
+            // spec: S-0504 claim 15 (Starting value: the lean steps from the rocked pitch the vehicle had when sinking began)
+            pitch: rocking.lean(o.id).map_or(pitch, |p| p.0),
+            // spec: S-0504 claim 15 (the roll is left free: a rocking hit during descent rolls the hull) and claim 16 (drawn as S-0106 claim 9's rocking)
+            roll: angles.map_or(0, |(_, r)| r.to_bits()),
+            drawn,
+        },
+        Attitude::None if o.kind == SimKind::Vehicle => match angles {
+            Some((pitch, roll)) if pitch != 0.0 || roll != 0.0 => Attitude::Rocking {
+                pitch: pitch.to_bits(),
+                roll: roll.to_bits(),
+                drawn: draws_rocking(w, o),
+            },
+            _ => Attitude::None,
+        },
+        other => other,
     }
 }
 
@@ -1127,6 +1168,7 @@ impl Live {
             charged_anim_times,
             special_events: Vec::new(),
             depot_events: Vec::new(),
+            rocking: Default::default(),
         };
         // The skirmish's AI houses are played by the script (S-0412
         // claim 12: AI houses; the script is our own opponent).
@@ -1227,6 +1269,11 @@ impl Live {
     /// S2).
     pub fn voxel_canvas(&self) -> &glasnost_render::voxel::VoxelCanvas {
         self.painter.canvas()
+    }
+
+    /// The bodies that rock (presentation state, S-0303 claim 20).
+    pub fn rocking(&self) -> &super::rocking::Rocking {
+        &self.rocking
     }
 
     /// The ground layer.
@@ -2178,6 +2225,9 @@ impl Live {
         let now = self.shown_tick();
         let at = |p: glasnost_sim::world::Pos| project_lifted(p.x, p.y, p.z);
         let effects = std::mem::take(&mut self.world.effects);
+        // spec: S-0303 claim 20 and S-0614 claims 9 and 10 (the tick's rocking sets its bodies' rates); the angles move once per game tick, not per drawn frame (S-0504 claim 16)
+        self.rocking.take(&self.world, &effects, now);
+        self.rocking.advance(&self.world);
         for e in &effects {
             if let Effect::Superweapon {
                 event, house, pos, ..
@@ -2416,6 +2466,10 @@ impl Live {
                 | Effect::Spin { .. }
                 | Effect::Trigger { .. }
                 | Effect::Hit { .. }
+                | Effect::Rock { .. }
+                | Effect::DroneRock { .. }
+                | Effect::GrapplePush { .. }
+                | Effect::OverloadRock { .. }
                 | Effect::OverlayCrushed { .. }
                 | Effect::PieceSound { .. }
                 | Effect::Superweapon { .. }
@@ -2776,7 +2830,7 @@ impl Live {
             shadow: (kind == Kind::Aircraft).then(|| shadow_anchor(w, o)),
             // spec: S-0105 claim 12 (alternative body: a spawner none of whose spawned aircraft is docked)
             alternative: glasnost_sim::spawn::any_docked(w, id) == Some(false),
-            attitude: attitude(w, o),
+            attitude: attitude_with(w, o, &self.rocking, self.shown_tick()),
             // spec: S-0104 claim 13 (Deactivated voxel vehicles) and S-0405 claims 13 and 20
             disabled: kind == Kind::Vehicles && glasnost_sim::econ::power::unit_disabled(w, id),
             // spec: S-0107 claim 19 and Terms (height above the surface; 0 on a bridge deck)
