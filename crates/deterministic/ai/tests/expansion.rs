@@ -499,3 +499,61 @@ fn drives_a_yard_vehicle_to_the_far_field_and_deploys_it() {
     );
     assert!(of(&g.world, "MCV").is_empty());
 }
+
+// Tuning of our own opponent and PLAN §4.7 (M8 step B10): a house whose home field has run dry and that cannot pay for both a power plant and the refinery by the far field orders the refinery, though its drain would leave the house short of power; with the money for both it builds the plant first, as before.
+#[test]
+#[ignore = "long in debug builds; run in release (`cargo test --release -p glasnost-ai -- --include-ignored`)"]
+fn a_broke_house_orders_the_far_field_refinery_before_power() {
+    let map = far_field_map();
+    let mut g = built_up(&map);
+    scout(&mut g.world);
+    let w = &mut g.world;
+    let ore: Vec<CellXY> = w
+        .cells
+        .grid
+        .iter()
+        .map(|(c, _)| c)
+        .filter(|&c| {
+            glasnost_sim::econ::resource::resource_at(w, c).is_some() && dist2(c, far()) > 8
+        })
+        .collect();
+    for c in ore {
+        glasnost_sim::crush::remove_overlay(w, c);
+    }
+    w.econ.lines.lines.retain(|l| l.house != H);
+    let proc_ = building(w, "PROC");
+    let powr = building(w, "POWR");
+    let drain = glasnost_ai::power::type_drain(w, proc_);
+    // Power to spare, but less than the refinery drains: barracks (each
+    // drains) bring the margin down, a plant brings it up.
+    loop {
+        let margin =
+            glasnost_ai::power::plant_output(w, H) - glasnost_ai::power::coming_drain(w, H);
+        if margin <= 0 {
+            stand(w, "POWR");
+        } else if margin > drain {
+            stand(w, "PILL");
+        } else {
+            break;
+        }
+        // The house works its power out in its update (S-0405 claim 7).
+        testkit::run(w, 1);
+    }
+    let wants = |w: &World| Brain::with_plan(w, &map, H, fixture::plan()).wants_field_refinery(w);
+    assert!(wants(w), "the far field's refinery is wanted");
+    assert!(glasnost_ai::power::short_after(w, H, proc_));
+    let price = |w: &World, t| glasnost_sim::econ::production::price(w, H, t);
+    let both = price(w, proc_) + price(w, powr);
+    let mut broke = w.clone();
+    broke.houses[0].credits = both - 1;
+    let (orders, _, _) = think(&mut broke, &map);
+    assert!(orders.contains(&Order::Build { what: proc_ }), "{orders:?}");
+    assert!(!orders.contains(&Order::Build { what: powr }), "{orders:?}");
+    w.houses[0].credits = both;
+    let (orders, _, _) = think(w, &map);
+    assert!(orders.contains(&Order::Build { what: powr }), "{orders:?}");
+    assert!(
+        !orders.contains(&Order::Build { what: proc_ }),
+        "{orders:?}"
+    );
+}

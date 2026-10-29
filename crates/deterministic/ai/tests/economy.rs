@@ -102,8 +102,17 @@ fn first(w: &World, role: Role, kind: Kind) -> TypeRef {
 /// test and two harvesters stand, its credits set and its unit lines
 /// removed.
 fn settled(map: &Map, credits: i32) -> World {
+    settled_with(fixture::rules(), map, credits)
+}
+
+/// [`settled`] under `rules`.
+fn settled_with(
+    rules: std::sync::Arc<glasnost_sim::rules::SimRules>,
+    map: &Map,
+    credits: i32,
+) -> World {
     let mut g = Game::new(
-        fixture::rules(),
+        rules,
         map,
         "synthetic-economy",
         fixture::catalogue(),
@@ -1133,5 +1142,211 @@ fn places_the_refinery_beside_a_field_a_harvester_reaches() {
     assert!(
         d2(r, open) < d2(r, moated),
         "refinery at {r:?} toward the open field {open:?}, not the moated {moated:?}"
+    );
+}
+
+/// [`map_moated_fields`]'s game, with both fields in sight of both
+/// houses and a bridge link (S-0212 claim 3) across each
+/// moat's north side, from the field's edge to the open ground beyond;
+/// run until house 0's first refinery stands, the link's cells named as a
+/// destroyed bridge's (S-0212 claim 3) at tick `cut` when given. Returns
+/// the refinery's foundation centre and the moated and open fields of
+/// house 0.
+fn refinery_by_a_bridged_moat(
+    cut: Option<i32>,
+) -> (
+    glasnost_map::CellXY,
+    glasnost_map::CellXY,
+    glasnost_map::CellXY,
+) {
+    let (map, fields) = map_moated_fields();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-economy",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the skirmish loads");
+    for &(moated, open) in &fields {
+        for c in [moated, open] {
+            for h in [H, HouseId(1)] {
+                let p = glasnost_sim::world::Pos::centre(c, 0);
+                glasnost_sim::econ::shroud::area_reveal(&mut g.world, h, p, 5);
+            }
+        }
+        // spec: S-0212 claim 3 (an enabled link makes the regions of its two end cells adjacent)
+        g.world.cells.links.push(glasnost_sim::cells::BridgeLink {
+            first: glasnost_map::CellXY::new(moated.x, moated.y - 5),
+            second: glasnost_map::CellXY::new(moated.x, moated.y - 2),
+            along_x: false,
+            enabled: true,
+        });
+    }
+    g.world.regions.dirty = true;
+    glasnost_sim::regions::ensure(&mut g.world);
+    while g.world.tick < 8000 && !has_role(&g.world, Role::Refinery) {
+        if cut == Some(g.world.tick) {
+            for &(moated, _) in &fields {
+                // spec: S-0212 claim 3 (a destroyed bridge: the links within 3 cells of the named cell stop being enabled)
+                glasnost_sim::bridges::high::name_cell(
+                    &mut g.world,
+                    glasnost_map::CellXY::new(moated.x, moated.y - 4),
+                    false,
+                );
+            }
+            glasnost_sim::regions::ensure(&mut g.world);
+        }
+        g.step();
+    }
+    let w = &g.world;
+    let yard = *of_role(w, Role::Yard).first().expect("a yard");
+    let refinery = *of_role(w, Role::Refinery).first().expect("a refinery");
+    let centre = |id: ObjectId| {
+        let o = w.obj(id).expect("own object");
+        let c = o.pos.cell();
+        glasnost_map::CellXY::new(c.x + o.foundation.0 / 2, c.y + o.foundation.1 / 2)
+    };
+    let y = centre(yard);
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+        dx * dx + dy * dy
+    };
+    let &(moated, open) = fields
+        .iter()
+        .min_by_key(|(m, _)| d2(*m, y))
+        .expect("the house's fields");
+    (centre(refinery), moated, open)
+}
+
+// S-0212 claims 3 to 5 and PLAN §4.7 (M8 step B10): a field a bridge joins to home is one the house's harvesters reach, so the refinery goes beside it; once the bridge is destroyed (its link disabled, the regions brought up to date) the field is cut off, as a person's move order there learns, and the refinery goes beside the open field instead.
+#[test]
+fn a_destroyed_bridge_cuts_a_field_off() {
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+        dx * dx + dy * dy
+    };
+    let (r, moated, open) = refinery_by_a_bridged_moat(None);
+    assert!(
+        d2(r, moated) < d2(r, open),
+        "bridged: refinery at {r:?} toward the moated field {moated:?}, not the open {open:?}"
+    );
+    let (r, moated, open) = refinery_by_a_bridged_moat(Some(30));
+    assert!(
+        d2(r, open) < d2(r, moated),
+        "bridge destroyed: refinery at {r:?} toward the open field {open:?}, not the moated {moated:?}"
+    );
+}
+
+// S-0404 claims 1 and 5 (the earlier line is paid first; the hold order) and PLAN §4.7 (M8 step B10): a house that still has a refinery and builds another (the refinery by a new field) with less money in hand than it owes pays for it first, holding its army, as a person pauses the rest of the sidebar to get his income back; with the balance in hand, or with an enemy near its base, it holds nothing.
+#[test]
+fn pays_first_for_a_refinery_by_a_new_field() {
+    let map = fixture::map();
+    let mut w = settled(&map, 0);
+    w.econ.lines.lines.retain(|l| l.house != H);
+    let refinery = first(&w, Role::Refinery, Kind::Building);
+    let soldier = first(&w, Role::Army, Kind::Infantry);
+    assert!(orders::issue(&mut w, H, Order::Build { what: refinery }));
+    assert!(orders::issue(&mut w, H, Order::Build { what: soldier }));
+    to_think(&mut w);
+    assert!(has_role(&w, Role::Refinery), "the house keeps its refinery");
+    let owed = item_of(&w, refinery).owed;
+    assert!(owed > w.houses[0].credits);
+    let orders = think(&mut w.clone(), &map, plan(2));
+    assert!(
+        orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+    assert!(!orders.contains(&Order::Hold { what: refinery }));
+    let mut rich = w.clone();
+    rich.houses[0].credits = owed + 1000;
+    let orders = think(&mut rich, &map, plan(2));
+    assert!(
+        !orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+    let near = w
+        .objects
+        .values()
+        .find(|o| o.owner == Some(H) && o.kind == Kind::Building)
+        .map(|o| o.pos.cell())
+        .unwrap();
+    testkit::spawn(
+        &mut w,
+        Kind::Infantry,
+        "WALKER",
+        1,
+        glasnost_map::CellXY::new(near.x + 3, near.y - 3),
+        0,
+    );
+    let orders = think(&mut w, &map, plan(2));
+    assert!(
+        !orders.contains(&Order::Hold { what: soldier }),
+        "{orders:?}"
+    );
+}
+
+// S-0404 claim 2 and S-0402 claim 18 (a refinery's free harvester), S-0407 claim 10 (the ever-built count), S-0408 (selling) and PLAN §4.7 (M8 step B10): a house whose refinery and harvesters are all gone, broke, keeps its construction yard, sells its other buildings and rebuilds the refinery that brings a harvester with their refunds; selling out (which lasts until it earns again) does not leave it standing idle with credits in hand.
+#[test]
+fn a_house_with_no_harvester_rebuilds_the_refinery_that_brings_one() {
+    let mut r = fixture::ruleset();
+    let proc_ = r.sim.buildings.get_mut("PROC").expect("the refinery type");
+    proc_.econ.free_unit = Some("MINR".into());
+    // Less than the refunds of the house's other buildings come to.
+    proc_.cost = Some(1200);
+    // Sellable buildings (S-0408 claim 3).
+    for b in r.sim.buildings.values_mut() {
+        b.econ.buildup = Some(true);
+        b.econ.buildup_frames = Some(8);
+    }
+    let rules = std::sync::Arc::new(glasnost_sim::rules::SimRules::new(
+        &r,
+        "synthetic-free-harvester",
+    ));
+    let map = fixture::map();
+    let mut w = settled_with(rules, &map, 0);
+    let yards = of_role(&w, Role::Yard);
+    assert!(!yards.is_empty());
+    lose_the_refineries(&mut w);
+    // Its harvesters and army go, those docked or inside a building too.
+    let gone: Vec<ObjectId> = w
+        .objects
+        .values()
+        .filter(|o| o.owner == Some(H) && o.kind != Kind::Building)
+        .map(|o| o.id)
+        .collect();
+    for id in gone {
+        objects::remove(&mut w, id);
+    }
+    w.econ.lines.lines.retain(|l| l.house != H);
+    // Broke: what it has from here on comes from its sales. Only house 0
+    // thinks, so no enemy comes.
+    let mut brain = Brain::with_plan(&w, &map, H, plan(2));
+    let from = w.tick;
+    let mut sold = Vec::new();
+    let mut sold_out = false;
+    while w.tick < from + 8000 && !has_role(&w, Role::Harvester) {
+        testkit::run(&mut w, 1);
+        if w.tick % 15 != 0 {
+            continue;
+        }
+        for o in brain.think(&w) {
+            if let Order::Sell { actor } = o {
+                sold.push(actor);
+            }
+            orders::issue(&mut w, H, o);
+        }
+        sold_out |= brain.broke_probe(&w).selling;
+    }
+    assert!(sold_out, "the house sold out");
+    assert!(!sold.is_empty(), "the broke house sold a building");
+    assert!(
+        sold.iter().all(|id| !yards.contains(id)),
+        "the yard is never sold"
+    );
+    assert!(
+        has_role(&w, Role::Refinery) && has_role(&w, Role::Harvester),
+        "a refinery and its harvester by tick {}",
+        w.tick
     );
 }

@@ -360,7 +360,19 @@ impl Brain {
                 // design: a lost refinery is not put behind a power plant
                 // (M8 step B8: in the quick lane the plant that replaced it
                 // was cancelled for it at the next think, over and over).
-                let lost = self.script.refinery_lost(w);
+                // design: nor is a refinery by a new field while the house
+                // cannot pay for both (M8 step B10): with no money the plant
+                // would take what the refinery needs for its income.
+                let credits = i64::from(w.houses[usize::from(self.house().0)].credits);
+                let both = |t: TypeRef| {
+                    plant.map_or(0, |p| i64::from(production::price(w, self.house(), p)))
+                        + i64::from(production::price(w, self.house(), t))
+                };
+                let lost = self.script.refinery_lost(w).or_else(|| {
+                    self.script
+                        .field_refinery_type(w)
+                        .filter(|&t| credits < both(t))
+                });
                 let n = crate::power::plant_first(w, self.house(), plant, lost, &mut out);
                 self.special.count_plants_first(n);
             }
@@ -741,6 +753,9 @@ impl Brain {
         if lost.is_some_and(|t| !self.script.in_line(w, t)) {
             return true;
         }
+        if self.field_refinery_short(w) {
+            return true;
+        }
         let short = (!self.script.selling() || lost.is_some())
             && (!self.script.economy_kept(w) || !self.script.has_refinery(w));
         let credits = w.houses[usize::from(h.0)].credits;
@@ -751,6 +766,40 @@ impl Brain {
                         is_economy(w, i.t) && i.hold == Hold::None && !i.done() && credits < i.owed
                     })
             })
+    }
+
+    /// Whether a refinery the house builds while it has one (the refinery
+    /// by a new field, `Script::field_refinery`) runs on its lines owing
+    /// more than the money in hand, the house is safe ([`Self::safe`]),
+    /// not selling out, and not a slave-miner house (S-0402 claim 14).
+    /// The house then pays for its economy first ([`Self::paying`]).
+    fn field_refinery_short(&self, w: &World) -> bool {
+        use glasnost_sim::econ::production::Hold;
+        let s = &self.script;
+        if s.selling() || s.slave_miners(w) || !s.has_refinery(w) {
+            return false;
+        }
+        let h = self.house();
+        let credits = w.houses[usize::from(h.0)].credits;
+        // design: a refinery by a new field that waits for money is paid
+        // first, as a person pauses the superweapon and the army lines to
+        // get his income back (M8 step B10). In the quick lane 118 spells of
+        // over 3 000 ticks (689 340 ticks in 60 games) had a house broke
+        // with that refinery waiting: in 77 a superweapon building on
+        // another line drew the money first (the earlier line is paid
+        // first, S-0404 claim 1), in the rest the army lines did. A house
+        // that is not safe keeps training, as the superweapon saving does.
+        let short = w.econ.lines.lines.iter().any(|l| {
+            l.house == h
+                && l.item.as_ref().is_some_and(|i| {
+                    scripted::role_of(w, i.t) == Some(Role::Refinery)
+                        && !scripted::keeps_slaves(w, i.t)
+                        && i.hold == Hold::None
+                        && !i.done()
+                        && credits < i.owed
+                })
+        });
+        short && self.safe(w)
     }
 
     /// Builds a psychic sensor (S-0610 claim 9) as a person adds one to the
