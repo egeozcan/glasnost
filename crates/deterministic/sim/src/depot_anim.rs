@@ -117,6 +117,7 @@ fn create(
     let drawn = crate::load::anim_created(w, &a.name, Some((pos.x, pos.y, pos.z)), true);
     let play = crate::mutation::playback(w, a);
     let id = w.new_id();
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let anim = u32::try_from(index).ok();
     let mut env = crate::mutation::SimEnv {
@@ -125,14 +126,7 @@ fn create(
         anim,
     };
     // spec: S-0109 claims 1 and 7 (no loop delay, repeat factor 1, no reverse request)
-    let mut player = Player::new(
-        a.name.as_bytes(),
-        play,
-        t,
-        drawn,
-        &mut env,
-        &AnimQuirks::default(),
-    );
+    let mut player = Player::new(a.name.as_bytes(), play, t, drawn, &mut env, &aq);
     if let Some(k) = from {
         // spec: S-0108 claim 25 (a running slot is replaced: the new animation keeps the replaced one's stage, and takes its passes afresh)
         player.keep_stage(k);
@@ -309,6 +303,7 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
         w.update.leave(id, skip);
         return;
     }
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let pos = w.obj(k).map(|o| o.pos).unwrap_or_default();
     let mut env = crate::mutation::SimEnv {
@@ -316,7 +311,7 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
         pos,
         anim: a.anim,
     };
-    let playing = a.player.update(t, &mut env, &AnimQuirks::default());
+    let playing = a.player.update(t, &mut env, &aq);
     a.anim = env.anim;
     if playing {
         w.depot_anims.anims.insert(id, a);

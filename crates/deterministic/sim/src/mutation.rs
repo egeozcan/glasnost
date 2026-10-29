@@ -231,7 +231,13 @@ pub fn playback(w: &World, a: &AnimRules) -> Playback {
     };
     // spec: S-0109 claim 28 (a spriteless type plays with N = 0: absent end fields are 0)
     let n = a.frames.unwrap_or(0);
-    Playback::of_fields(&f, n, delay, a.random_delay, &AnimQuirks::default())
+    Playback::of_fields(
+        &f,
+        n,
+        delay,
+        a.random_delay,
+        &AnimQuirks::from(&w.rules().quirks),
+    )
 }
 
 /// The registration index of animation type `name`.
@@ -362,20 +368,14 @@ pub fn start(
     let drawn = crate::load::anim_created(w, &a.name, Some((pos.x, pos.y, pos.z)), true);
     let play = playback(w, a);
     let id = w.new_id();
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = SimEnv {
         w: &mut *w,
         pos,
         anim: Some(anim),
     };
-    let player = Player::new(
-        a.name.as_bytes(),
-        play,
-        t,
-        drawn,
-        &mut env,
-        &AnimQuirks::default(),
-    );
+    let player = Player::new(a.name.as_bytes(), play, t, drawn, &mut env, &aq);
     let spot = spot_of(w, pos);
     w.mutation.makers.insert(
         id,
@@ -741,6 +741,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         // spec: S-0611 claim 8 (in each of its updates its position is marked taken and the cell's infantry house becomes its owner)
         w.cells.mark_anim(c, m.layer, p, id, m.owner, seize);
     }
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let before = (m.anim, m.player.name.clone());
     let mut env = SimEnv {
@@ -748,7 +749,7 @@ pub fn turn(w: &mut World, id: ObjectId) {
         pos: m.pos,
         anim: m.anim,
     };
-    let playing = m.player.update(t, &mut env, &AnimQuirks::default());
+    let playing = m.player.update(t, &mut env, &aq);
     m.anim = env.anim;
     if (m.anim, m.player.name.clone()) != before {
         w.effects.push(Effect::Maker {

@@ -155,6 +155,7 @@ fn play_fields(a: &AnimRules, n: i32) -> Playback {
         random_loop_delay: a.random_loop_delay,
         next: None,
     };
+    // nocite: the importer's warning is a design aid and reads the default switches
     Playback::of_fields(&f, n, 1, (0, 0), &AnimQuirks::default())
 }
 
@@ -347,6 +348,7 @@ fn start_anim(w: &mut World, anim: u32, pos: Pos) -> Option<ObjectId> {
     let drawn = crate::load::anim_created(w, &a.name, Some((pos.x, pos.y, pos.z)), true);
     let play = crate::mutation::playback(w, a);
     let id = w.new_id();
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = crate::mutation::SimEnv {
         w: &mut *w,
@@ -354,14 +356,7 @@ fn start_anim(w: &mut World, anim: u32, pos: Pos) -> Option<ObjectId> {
         anim: Some(anim),
     };
     // spec: S-0109 claims 1 and 7 (no loop delay, repeat factor 1: played once)
-    let player = Player::new(
-        a.name.as_bytes(),
-        play,
-        t,
-        drawn,
-        &mut env,
-        &AnimQuirks::default(),
-    );
+    let player = Player::new(a.name.as_bytes(), play, t, drawn, &mut env, &aq);
     w.domination.anims.insert(
         id,
         DomAnim {
@@ -388,13 +383,14 @@ pub fn anim_turn(w: &mut World, id: ObjectId) {
     let Some(mut a) = w.domination.anims.remove(&id) else {
         return;
     };
+    let aq = AnimQuirks::from(&w.rules().quirks);
     let t = w.tick;
     let mut env = crate::mutation::SimEnv {
         w: &mut *w,
         pos: a.pos,
         anim: a.anim,
     };
-    let playing = a.player.update(t, &mut env, &AnimQuirks::default());
+    let playing = a.player.update(t, &mut env, &aq);
     a.anim = env.anim;
     if playing {
         w.domination.anims.insert(id, a);

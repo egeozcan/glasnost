@@ -344,6 +344,40 @@ fn claim23_rows_outrank_rearming_ammunition_and_range() {
     assert_eq!(answer(&w, f, obj(t)), Answer::Rearming);
 }
 
+// spec: S-0306 claim 23, The firer's gripped unit (no row refuses the firer's own gripped unit: every row yields to the rearming answer of S-0301 claim 9 and S-0607 claim 11; any other airborne object asked about with a projectile that is not anti-air is illegal, one the firer holds as its target included)
+#[test]
+fn claim23_the_firers_gripped_unit_is_never_refused_by_a_row() {
+    // The land row (mode 1) and the airborne row, each against the control of the same target not gripped.
+    for (lm, airborne) in [(1, false), (0, true)] {
+        let (mut w, f, t) = duel("AGV", lm, 0, "TGT", land::CLEAR);
+        if airborne {
+            lift(&mut w, t, 600);
+        }
+        assert_eq!(
+            answer(&w, f, obj(t)),
+            Answer::Illegal,
+            "control {lm} {airborne}"
+        );
+        w.obj_mut(f).unwrap().lift.gripped = Some(t);
+        w.obj_mut(t).unwrap().lift.lifter = Some(f);
+        assert_eq!(
+            answer(&w, f, obj(t)),
+            Answer::Rearming,
+            "gripped {lm} {airborne}"
+        );
+        // Another object of the same kind is still refused.
+        let other = put(&mut w, Kind::Vehicle, "TGT", 1, 3, 0);
+        if airborne {
+            lift(&mut w, other, 600);
+        }
+        assert_eq!(
+            answer(&w, f, obj(other)),
+            Answer::Illegal,
+            "other {lm} {airborne}"
+        );
+    }
+}
+
 // spec: S-0306 claim 23 (within rank 4 the rows come after the impossible answer of an absent weapon and of a hidden target)
 #[test]
 fn claim23_rows_yield_to_earlier_rank_four_answers() {

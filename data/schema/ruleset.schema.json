@@ -8677,6 +8677,31 @@
           "type": "boolean",
           "default": true
         },
+        "anim_followup_keeps_step": {
+          "description": "The step keeps its sign at a follow-up switch; off: it is set afresh from the reversed test.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_followup_start_doubled": {
+          "description": "A follow-up type starts at k = a'; off: at its own k0 of F3.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_loop_count_wrap": {
+          "description": "The remaining-pass count of an animation is taken modulo 256 and 255 means endless; off: an unbounded count, endless for a negative loop count.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_loop_end_from_sprite": {
+          "description": "An absent loop end takes the sprite end; off: it takes the end field.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_pingpong_lower_turn": {
+          "description": "While r >= 2 a ping-pong animation's lower turn compares k with the start field; off: k <= loop start less the start field.",
+          "type": "boolean",
+          "default": true
+        },
         "anim_random_rate_collapse": {
           "description": "A converted random rate pair is clamped to [min(d₁, max(d₂, 0)), max(d₂, 0)], so an ascending pair collapses to its faster end and takes no draw; off: the converted pair is put in order and the delay is a ranged draw over [min(d₁, d₂), max(d₁, d₂)], with no draw when they are equal. Changes the number of draws.",
           "type": "boolean",
@@ -8689,6 +8714,11 @@
         },
         "anim_resource_spread_neighbours_only": {
           "description": "A resource-spreading animation's radius selects pairs but the cell depends only on the pair's first number, so at most the eight neighbours receive resource and the landing cell never does; off: the pair (i, j) offers the cell (X + i, Y + j), in the same order.",
+          "type": "boolean",
+          "default": true
+        },
+        "anim_reverse_raw_loop_end": {
+          "description": "A reversed animation starts at the loop end less one, restarts at the loop end and ends its pass at k <= 0; off: it starts and restarts at the loop end less the start field less one and ends its pass at k < 0.",
           "type": "boolean",
           "default": true
         },
