@@ -492,7 +492,15 @@ fn describe(w: &World, id: ObjectId, start: CellXY) -> String {
 /// Starts a skirmish on the `GLASNOST_UI_MAP`-th map through the client,
 /// deploys the local house's base unit and runs 200 ticks. Returns the
 /// client, its clock and the local house.
-fn start(dir: &std::ffi::OsStr) -> (Client, i64, HouseId) {
+/// Starts a skirmish on the chosen map through the setup screen. With
+/// `allied`, the local slot and the computer slot are both put on team 1
+/// in the lobby, so the game starts with them allied (S-0412 claim 8), as
+/// a person sets up a game to watch the economy without either house
+/// losing and ending it. (Writing the houses' alliance lists directly is
+/// not what any game setup does: the sim keeps them sorted and rebuilds
+/// what an alliance changes, S-0412 claim 8, S-0414 claim 12, and a two-
+/// player game cannot ally in play, S-0414 claim 12.)
+fn start(dir: &std::ffi::OsStr, allied: bool) -> (Client, i64, HouseId) {
     let mut c = Client::new();
     c.resize((1280, 800));
     c.mount(files(std::path::Path::new(dir)));
@@ -511,6 +519,14 @@ fn start(dir: &std::ffi::OsStr) -> (Client, i64, HouseId) {
         let _ = c.frame();
         let r = c.setup_targets.rect_of(&SetupHit::Country(0, 1)).unwrap();
         click(&mut c, r);
+    }
+    if allied {
+        for slot in 0..2 {
+            let _ = c.frame();
+            // spec: S-0412 claim 15 (no team, then teams 1 … 4: one step gives team 1)
+            let r = c.setup_targets.rect_of(&SetupHit::Team(slot, 1)).unwrap();
+            click(&mut c, r);
+        }
     }
     let _ = c.frame();
     let r = c.setup_targets.rect_of(&SetupHit::Start_).unwrap();
@@ -547,21 +563,16 @@ fn start(dir: &std::ffi::OsStr) -> (Client, i64, HouseId) {
     (c, clock, local)
 }
 
-/// Every player house allied with every other, so that the watched
-/// economy plays on without a house losing and ending the game.
-fn peace(c: &mut Client) {
-    let w = &mut c.session.as_mut().unwrap().play.game.world;
+/// Whether every two player houses are allied both ways in the sim's
+/// view (S-0412 claim 8: lobby teams).
+fn all_allied(w: &World) -> bool {
     let players: Vec<HouseId> = (0..w.houses.len())
         .filter(|&h| w.houses[h].start.is_some())
         .map(|h| HouseId(h as u8))
         .collect();
-    for &h in &players {
-        for &o in &players {
-            if !w.houses[usize::from(h.0)].allies.contains(&o) {
-                w.houses[usize::from(h.0)].allies.push(o);
-            }
-        }
-    }
+    players
+        .iter()
+        .all(|&a| players.iter().all(|&b| w.allied(Some(a), Some(b))))
 }
 
 /// The other player house with the most objects: the computer's.
@@ -584,7 +595,9 @@ fn computer_of(w: &World, local: HouseId) -> Option<HouseId> {
 /// sends its own with a harvest order on a field cell it has explored,
 /// and it travels, deploys and its slaves work. Prints, per miner, the
 /// first tick it had a destination, moved, deployed and had a slave out;
-/// screens of each at the end go to `local-lane/m8/a3-41/`.
+/// screens of each at the end go to `local-lane/m8/a3-41/`. The two houses
+/// start allied by lobby team (S-0412 claim 8), and nothing of either
+/// targets the other's (M8 step B9).
 #[test]
 #[ignore = "local lane: needs GLASNOST_GAME_DIR"]
 fn far_slave_miners_of_a_person_and_a_computer() {
@@ -594,9 +607,9 @@ fn far_slave_miners_of_a_person_and_a_computer() {
     };
     let out = png::lane_out("m8/a3-41");
     std::fs::create_dir_all(&out).unwrap();
-    let (mut c, mut clock, local) = start(&dir);
-    peace(&mut c);
+    let (mut c, mut clock, local) = start(&dir, true);
     let w = world(&c);
+    assert!(all_allied(w), "the lobby teams ally the players");
     let computer = computer_of(w, local).expect("a computer house");
     println!(
         "computer house {} human {} (an AI house)",
@@ -635,9 +648,23 @@ fn far_slave_miners_of_a_person_and_a_computer() {
     let from = world(&c).tick;
     let mut hp: BTreeMap<ObjectId, i32> = BTreeMap::new();
     let mut first_hit: BTreeMap<ObjectId, i32> = BTreeMap::new();
+    let mut allied_targets = 0usize;
     for done in 1..=watch {
         ticks(&mut c, &mut clock, 1);
         let w = world(&c);
+        let at_ally = w.objects.values().any(|x| {
+            let Some(glasnost_sim::world::Target::Object(t)) = x.target else {
+                return false;
+            };
+            let to = w.obj(t).and_then(|t| t.owner);
+            x.owner != to
+                && x.owner
+                    .is_some_and(|h| w.houses[usize::from(h.0)].start.is_some())
+                && w.allied(x.owner, to)
+        });
+        if at_ally {
+            allied_targets += 1;
+        }
         for (_, house, id, cell, master, last, firsts) in &mut watched {
             let t = w.tick - from;
             match w.obj(*id) {
@@ -739,20 +766,22 @@ fn far_slave_miners_of_a_person_and_a_computer() {
         let _ = c.frame();
         save(&mut c, &out, &format!("a3-41-{who}-far-slave-miner"));
         if *who == "person" {
-            // It never gets a destination or sends a slave out, and does
-            // not move until something hits it (the computer's waves still
-            // go for the local house's units: `peace` only sets the sim's
-            // alliances).
+            // It never gets a destination, sends no slave out and stays
+            // put; the computer is its ally (lobby teams), so nothing of
+            // the computer's goes for it (M8 step B9: with the alliance
+            // lists written by hand, unsorted, the sim saw no alliance and
+            // a computer vehicle hit it at +1557).
             let hit = first_hit.get(id).copied();
             println!("person's miner first hit {hit:?}");
             assert_eq!(firsts[0], None, "no destination");
             assert_eq!(firsts[3], None, "no slave out");
-            assert!(
-                firsts[1].is_none_or(|m| hit.is_some_and(|h| h <= m)),
-                "the person's miner stays put until hit: {firsts:?}"
-            );
+            assert_eq!(hit, None, "an ally's miner is never hit");
+            assert_eq!(firsts[1], None, "the person's miner stays put: {firsts:?}");
         }
     }
+    // spec: S-0309 claim 18 (an object of an allied house is not acquired); S-0412 claim 8 (lobby teams ally)
+    println!("ticks where a player house's object targeted an ally's: {allied_targets}");
+    assert_eq!(allied_targets, 0, "no object targets an ally's");
 }
 
 #[test]
@@ -764,13 +793,15 @@ fn harvest_notes_on_the_real_data() {
     };
     let out = png::lane_out("m8/a3-36");
     std::fs::create_dir_all(&out).unwrap();
-    let (mut c, mut clock, local) = start(&dir);
-    // Every player house allied with every other (GLASNOST_HARVEST_PEACE=0
-    // keeps the war): the economy plays on without the local house losing
-    // and ending the game.
-    if env_num("GLASNOST_HARVEST_PEACE", 1) != 0 {
-        peace(&mut c);
-    }
+    // Every player house allied with every other by lobby teams
+    // (GLASNOST_HARVEST_PEACE=0 keeps the war): the economy plays on
+    // without the local house losing and ending the game.
+    let peace = env_num("GLASNOST_HARVEST_PEACE", 1) != 0;
+    let (mut c, mut clock, local) = start(&dir, peace);
+    assert!(
+        !peace || all_allied(world(&c)),
+        "the lobby teams ally the players"
+    );
     // Note 30: the resource within 2 cells of every mine is taken away, and
     // so is that of a 5 × 5 control patch of the field cell farthest from
     // any mine; what comes back near the mines and in the patch is counted.

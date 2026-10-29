@@ -92,7 +92,7 @@ pub(crate) fn build_sensor(script: &Script, w: &World) -> Option<TypeRef> {
 /// keeps the reveal for later).
 pub(crate) fn reveal_cell(script: &Script, w: &World) -> Option<CellXY> {
     let home = script.home(w)?;
-    let starts = script.enemy_starts();
+    let starts = script.enemy_starts(w);
     if let Some(c) = starts
         .iter()
         .copied()

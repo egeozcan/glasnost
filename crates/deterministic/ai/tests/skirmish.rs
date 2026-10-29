@@ -18,10 +18,12 @@ const LIMIT: i32 = 40_000;
 /// The seed of the synthetic game.
 const SEED: u32 = 5;
 
-/// The seed of the naval game (18 of the seeds 1 to 32 pass; in the others
-/// a house wins on land, by tick 18 000, before the ships meet: since the
-/// refinery stands beside the field (M8 step B8) the land war ends sooner).
-const NAVAL_SEED: u32 = 2;
+/// The seed of the naval game: the plain game's, not one picked for
+/// passing. On the island map (`fixture::map_islands`, M8 step B9) no land
+/// war ends the game before the ships meet, and all of the seeds 1 to 32
+/// pass (on `fixture::map_naval` 18 did once the refinery stood beside the
+/// field, M8 step B8).
+const NAVAL_SEED: u32 = SEED;
 
 fn run_for(ticks: i32) -> skirmish::Run {
     skirmish::run(
@@ -195,7 +197,7 @@ fn climbs_to_the_launcher_and_fires() {
     assert!(rockets > 0, "a rocket flew");
 }
 
-// On a map with water the houses build a naval yard on the sea, then
+// On a map of two islands the houses build a naval yard on the sea, then
 // ships, and send the ships to the water off the enemy base; ships fight
 // and sink. One fixed seed is played; `naval_seed_sweep` reports how many
 // seeds of a range show all of it.
@@ -235,7 +237,7 @@ fn naval_seed_sweep() {
 
 /// One seed's naval game, checked; the error names the first claim that fails.
 fn navy_game(seed: u32) -> Result<(), Vec<String>> {
-    let map = fixture::map_naval();
+    let map = fixture::map_islands();
     let run = skirmish::run(
         fixture::rules(),
         &map,

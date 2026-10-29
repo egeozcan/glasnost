@@ -201,10 +201,7 @@ fn worth(
             }
             gain += value(w, o);
             n += 1;
-        } else if o
-            .owner
-            .is_some_and(|x| x != house && me.allies.contains(&x))
-        {
+        } else if o.owner.is_some_and(|x| x != house && me.allied_with(x)) {
             // spec: S-0612 claim 13 (allied objects are taken over)
             loss += value(w, o);
         }
@@ -231,9 +228,7 @@ fn wrecks(w: &World, house: HouseId, c: CellXY, seen: &BTreeSet<ObjectId>) -> bo
         .values()
         .filter(|o| o.on_map && o.health > 0 && o.kind != Kind::Terrain)
         .filter(|o| {
-            seen.contains(&o.id)
-                || o.owner
-                    .is_some_and(|x| x == house || me.allies.contains(&x))
+            seen.contains(&o.id) || o.owner.is_some_and(|x| x == house || me.allied_with(x))
         })
         .any(|o| blast_hit(w, c, d.damage, d.warhead, o).is_some_and(|x| x >= o.health))
 }

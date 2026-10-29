@@ -56,6 +56,7 @@
 use std::collections::BTreeMap;
 
 use glasnost_map::CellXY;
+use glasnost_rules::sim::MovementZone;
 use glasnost_sim::combat::{check, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
@@ -142,6 +143,14 @@ const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 /// Resource cells around a refinery, slave miner or home that keep one
 /// harvester at work ([`Script::harvesters_wanted`]).
 const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
+
+/// How far around home, in cells, [`Script::harvester_reach`] looks for
+/// where a harvester would leave the base when the house has none.
+const HOME_RING: i32 = 6; // nocite: tuning of our own opponent
+
+/// How near a start cell an ally's building stands for that start to be
+/// the ally's base ([`Script::ally_base_at`]), in cells.
+const ALLY_BASE: i32 = 10; // nocite: tuning of our own opponent
 
 /// Cells around a refinery, slave miner or home within which resource
 /// counts for [`Script::harvesters_wanted`].
@@ -761,9 +770,44 @@ impl Script {
     }
 
     /// The enemy start cells (the map's start waypoints of the other
-    /// players: lobby knowledge).
-    pub(crate) fn enemy_starts(&self) -> &[CellXY] {
-        &self.targets
+    /// players: lobby knowledge), in visiting order, less those where an
+    /// ally's base stands ([`Script::ally_base_at`]). Read at every think,
+    /// so an alliance made during the game counts from then on.
+    pub(crate) fn enemy_starts(&self, w: &World) -> Vec<CellXY> {
+        let me = &w.houses[usize::from(self.house.0)];
+        if !me.allies.iter().any(|&h| h != self.house) {
+            return self.targets.clone();
+        }
+        self.targets
+            .iter()
+            .copied()
+            .filter(|&c| !self.ally_base_at(w, c))
+            .collect()
+    }
+
+    /// Whether a building of a player house that this house allies (not
+    /// itself) stands within [`ALLY_BASE`] cells of start cell `c`: that
+    /// start is an ally's base, and a person sends no wave there. Allies
+    /// share their sight (S-0409 claim 2), so the house sees the building;
+    /// the alliance is this house's view of it (S-0414 claim 12: an
+    /// alliance is one-way), as the sim's targeting reads it (S-0309
+    /// claim 18).
+    pub(crate) fn ally_base_at(&self, w: &World, c: CellXY) -> bool {
+        let me = &w.houses[usize::from(self.house.0)];
+        let r = i64::from(ALLY_BASE) * i64::from(ALLY_BASE);
+        w.objects.values().any(|o| {
+            o.on_map
+                && o.kind == Kind::Building
+                && o.owner.is_some_and(|h| {
+                    h != self.house
+                        && me.allied_with(h)
+                        && w.houses
+                            .get(usize::from(h.0))
+                            .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
+                })
+                && dist2(o.pos.cell(), c) <= r
+                && shroud::explored(w, self.house, o.pos.cell())
+        })
     }
 
     /// Where the next wave would go, without choosing it: the seen enemy
@@ -775,8 +819,8 @@ impl Script {
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
             .or_else(|| {
-                (!self.targets.is_empty())
-                    .then(|| self.targets[self.next_target % self.targets.len()])
+                let targets = self.enemy_starts(w);
+                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
             })
     }
 
@@ -792,8 +836,8 @@ impl Script {
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
             .or_else(|| {
-                (!self.targets.is_empty())
-                    .then(|| self.targets[self.next_target % self.targets.len()])
+                let targets = self.enemy_starts(w);
+                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
             })
     }
 
@@ -1202,10 +1246,11 @@ impl Script {
                 }
             }
         }
+        let enemy_starts = self.enemy_starts(w);
         let own_half: Vec<CellXY> = ore
             .difference(&worked)
             .map(|&(y, x)| CellXY::new(x, y))
-            .filter(|&c| self.targets.iter().all(|&t| dist2(c, home) < dist2(c, t)))
+            .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
             .collect();
         Fields {
             explored: ore.len(),
@@ -1283,6 +1328,19 @@ impl Script {
     /// Power is read off the plants without a blackout (`power::short`): a
     /// blackout is not answered with power plants.
     pub(crate) fn wanted_role(&self, w: &World) -> Option<Role> {
+        self.base_role(w)
+            .or_else(|| self.field_refinery(w).then_some(Role::Refinery))
+    }
+
+    /// Whether the role the plan builds next is the refinery by a new field
+    /// ([`Script::field_refinery`]): no other base role is wanted (the
+    /// lane's economy probe counts these spells, M8 step B9).
+    pub(crate) fn wants_field_refinery(&self, w: &World) -> bool {
+        self.base_role(w).is_none() && self.field_refinery(w)
+    }
+
+    /// [`Script::wanted_role`] without the refinery by a new field.
+    fn base_role(&self, w: &World) -> Option<Role> {
         // design: a lost refinery its harvesters wait for comes before
         // power (M8 step B8): with no refinery the house has no income.
         if self.refinery_lost(w).is_some() {
@@ -1301,7 +1359,6 @@ impl Script {
                     .filter(|&f| self.of_role(w, f).is_empty()),
             )
             .find(|&r| !self.candidates(w, r).is_empty())
-            .or_else(|| self.field_refinery(w).then_some(Role::Refinery))
     }
 
     /// The refinery type the house rebuilds before anything else, when it
@@ -1334,8 +1391,9 @@ impl Script {
     /// its refineries would not keep one harvester at work (fewer than
     /// [`CELLS_PER_HARVESTER`] cells), the field of [`Script::ore_goal`]
     /// lies beyond that reach of every refinery, no refinery is on its
-    /// lines, and a refinery fits with its foundation within that reach of
-    /// the field. A person builds a refinery at the field his harvesters
+    /// lines, and a refinery type it can build both has a cell in the
+    /// build spiral (`Script::placeable`) and fits with its foundation
+    /// within that reach of the field. A person builds a refinery at the field his harvesters
     /// drive to once the one by his refinery runs dry (M8 step B8: in the
     /// quick lane on maps 2 and 8, with the refinery beside the home field,
     /// the Allied miners loaded a median of 15 to 34 cells from their only
@@ -1380,11 +1438,18 @@ impl Script {
             .into_iter()
             .filter(|&t| !keeps_slaves(w, t))
             .collect();
+        // design: the want holds only while the refinery could be ordered
+        // and placed now (M8 step B9): `Script::build` orders a type only
+        // when `Script::placeable` finds it a cell, so a refinery that fits
+        // by the field but not in the build spiral was wanted with nothing
+        // ever ordered, and the tech climb behind it waited. Read afresh at
+        // every think, the want comes back when a cell opens, a new field
+        // is explored or a harvester reaches one (`Script::ore_goal`).
         !refineries.iter().any(|&r| dist2(r, goal) <= reach)
             && !types.iter().any(|&t| self.in_line(w, t))
-            && types
-                .iter()
-                .any(|&t| self.refinery_site(w, t, goal, Some(reach)).is_some())
+            && types.iter().any(|&t| {
+                self.placeable(w, t) && self.refinery_site(w, t, goal, Some(reach)).is_some()
+            })
     }
 
     /// The power plant the plan builds next: the cheapest power plant type
@@ -1776,16 +1841,17 @@ impl Script {
                 });
                 let goal = pick.or_else(|| {
                     *fallback.get_or_insert_with(|| {
-                        (self.next_target < self.targets.len())
+                        let targets = self.enemy_starts(w);
+                        (self.next_target < targets.len())
                             .then(|| {
-                                let c = self.targets[self.next_target];
+                                let c = targets[self.next_target];
                                 self.next_target += 1;
                                 c
                             })
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
                             .or_else(|| {
-                                (!self.targets.is_empty()).then(|| {
-                                    let c = self.targets[self.next_target % self.targets.len()];
+                                (!targets.is_empty()).then(|| {
+                                    let c = targets[self.next_target % targets.len()];
                                     self.next_target += 1;
                                     c
                                 })
@@ -1916,8 +1982,9 @@ impl Script {
             .filter_map(|o| {
                 let owner = o.owner?;
                 let h = w.houses.get(usize::from(owner.0))?;
+                // The house's view of the alliance, as the sim's targeting reads it (S-0309 claim 18).
                 let enemy = owner != self.house
-                    && !me.allies.contains(&owner)
+                    && !me.allied_with(owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
                 // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it).
@@ -2108,6 +2175,7 @@ impl Script {
     /// none, the explored resource cell nearest home.
     fn ore_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
+        let reach = self.harvester_reach(w, home);
         let mut ore: Vec<CellXY> = w
             .cells
             .grid
@@ -2117,6 +2185,10 @@ impl Script {
                 w.cells.usable(c)
                     && resource::resource_at(w, c).is_some()
                     && shroud::explored(w, self.house, c)
+                    && (reach.is_empty()
+                        || reach
+                            .iter()
+                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
             })
             .collect();
         ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
@@ -2128,6 +2200,60 @@ impl Script {
             .copied()
             .find(|&c| rich(c))
             .or_else(|| ore.first().copied())
+    }
+
+    /// The reach regions (S-0212 claim 4) the house's harvesters drive
+    /// in, each with its movement zone: those its harvesters stand in
+    /// (not slave miners, which go by their own rules, S-0402 claim 14,
+    /// nor one that flies), or, with none on the map, those of the cells
+    /// within [`HOME_RING`] cells of `home` for the zone of each harvester
+    /// type of its plan, where one would leave the base. A person sends a
+    /// harvester only to a field its order can reach (M8 step B9: the
+    /// pathing query a person's order gives); empty when nothing is known,
+    /// and then no field is left out.
+    fn harvester_reach(&self, w: &World, home: CellXY) -> Vec<(MovementZone, u32)> {
+        let mut out: Vec<(MovementZone, u32)> = Vec::new();
+        let mut add = |z: MovementZone, c: CellXY| {
+            if let Reach::Region(r) = regions::reach_in(w, c, z)
+                && !out.contains(&(z, r))
+            {
+                out.push((z, r));
+            }
+        };
+        let mut any = false;
+        for id in self.of_role(w, Role::Harvester) {
+            let Some(o) = w.obj(id) else { continue };
+            if is_slave_miner(w, tech::type_of(o)) || crate::jumpjets::flies(w, id) {
+                continue;
+            }
+            if let Some(u) = w.rules().unit(o.kind, o.type_index) {
+                any = true;
+                add(u.zone, o.pos.cell());
+            }
+        }
+        if !any {
+            // Every harvester type of the plan, buildable now or not: a
+            // house with no harvester yet has no war factory either, and
+            // its first harvester may come later or with a refinery
+            // (S-0404 claim 2).
+            let types = all_types(w)
+                .into_iter()
+                .filter(|&t| self.allowed(w, t, Role::Harvester));
+            for t in types {
+                if is_slave_miner(w, t) {
+                    continue;
+                }
+                let Some(u) = w.rules().unit(t.kind, t.index) else {
+                    continue;
+                };
+                for dy in -HOME_RING..=HOME_RING {
+                    for dx in -HOME_RING..=HOME_RING {
+                        add(u.zone, CellXY::new(home.x + dx, home.y + dy));
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Where a person puts a refinery (M8 step B8): in the wider spiral
