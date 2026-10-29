@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-10-29
 ---
 
 # M-0017: Unit arena, stock replay of every archived game without SREF or V3
@@ -18,8 +18,8 @@ approved-on: 2026-10-28
 This record replays, with stock rules, every archived game of M-0001 to M-0003 in which neither
 side is SREF or V3: 1584 games. Every replay is identical to its archived game on the columns a
 record row is made of, so 1577 of those rows stand as stock rows. The other 7, all in M-0001's
-MIND against E2 pairing, end in a game crash in both, and M-0001 counts them as played. The
-Result restates that pairing's line on its 5 completed games.
+MIND against E2 pairing, end in a game crash in both and have no result; M-0001 sets them apart
+from its usable games. The Result restates that pairing's line on its 5 completed games.
 
 ## Setup
 
@@ -47,12 +47,11 @@ Result restates that pairing's line on its 5 completed games.
 - Placement and map content, as in the archived games: units are created on their stated cells
   before tick 0, and a unit that its stated cell does not take is placed on a free neighbouring
   cell. The map's four bunkers, owned by a neutral house, are in play from tick 0.
-- **About M-0001 to M-0003.** Their Setup says the harness's own AI additions were off. Their
-  archived games were in fact run with five gameplay changes of the harness on: a siege rule for
-  long-range artillery, a change to Magnetron carrying, changes to the computer houses'
-  production, extra defences, and an expansion and factory queue. This replay has all five off.
-  The house director is off for every house, in the archive and in the replay. The houses' own
-  skirmish AI runs as in a normal game but has nothing to build with.
+- **About M-0001 to M-0003.** Their archived games were run with five gameplay changes of the
+  harness on: a siege rule for long-range artillery, a change to Magnetron carrying, changes to the
+  computer houses' production, extra defences, and an expansion and factory queue. This replay has
+  all five off. The house director is off for every house, in the archive and in the replay. The
+  houses' own skirmish AI runs as in a normal game but has nothing to build with.
 - What is not stock, in this replay:
   - no menus: the skirmish setup comes from a settings file
   - the computer players' starting construction vehicles are removed
@@ -79,19 +78,20 @@ Result restates that pairing's line on its 5 completed games.
 
 | Quantity | n | Value |
 |---|---|---|
-| Games identical to the archived game in every sample, and in the result where it has one | 1584 | 1584 |
+| Games identical to the archived game in every sample, and in the result where it has one (the 7 crashed games included) | 1584 | 1584 |
 | Games that end in a game crash, in the archive and in the replay alike | 1584 | 7 |
 
-- Each of a record row's columns (winner, end frame and each side's share of its starting army
-  value) follows from the compared columns and the archived setup. So each of the 1584 rows in
-  M-0001 to M-0003 stands as a stock row, except the 7 crashed games below.
+- Each of a record row's columns (winner and end frame) follows from the compared columns and the
+  archived setup. So 1577 of the 1584 rows in M-0001 to M-0003 stand as stock rows: all but the 7
+  crashed games below, which have no result.
 - **The crashed games** are MIND against E2 in M-0001: the row type MIND on side A with seeds 0
   to 5, and on side B with seed 0. Each crashes after its last sample and before the next. The
   last sample is at tick 304 (side A, seeds 0 to 4) or 608 (side A, seed 5; side B, seed 0), in
   the archive and in the replay alike, with identical samples up to it.
 - M-0001's per-game data gives each of the 7 as winner `none` with that last sample as its end
-  frame, and its Result counts them as usable. A crashed game has no winner: by M-0001's
-  Procedure, `none` means both sides still own something at the limit.
+  frame. A crashed game has no winner; by M-0001's Procedure, the harness records a crashed game as
+  `none` with an end frame before the limit, and its Result names the 7 *None* games of the row as
+  the crashed ones.
 - **Scope, checked:** of the 1860 archived games of M-0001 to M-0003, these 7 are the only ones
   without a result. Of the 175 `none` rows in their per-game data, these 7 are the only ones with
   an end frame other than the limit sample 6080.
@@ -99,16 +99,16 @@ Result restates that pairing's line on its 5 completed games.
 **MIND against E2 (M-0001), restated on its 5 completed games** (side B, seeds 1 to 5; columns
 as in M-0001's Result).
 
-| Row | Column | n | Row wins | Column wins | None | Row win rate | Row win rate as A / as B | Mean row left | Mean column left |
-|---|---|---|---|---|---|---|---|---|---|
-| MIND | E2 | 5 | 3 | 2 | 0 | 0.60 | no game / 3/5 | 0.414 | 0.303 |
+| Row | Column | n | Row wins | Column wins | None | Row win rate | Row win rate as A / as B |
+|---|---|---|---|---|---|---|---|
+| MIND | E2 | 5 | 3 | 2 | 0 | 0.60 | no game / 3/5 |
 
 - The completed games: seeds 2, 3 and 4 won by MIND, seeds 1 and 5 won by E2, all at end frame
-  608. The shares are M-0001's per-game values for those 5 games.
+  608.
 - There is no completed game with MIND on side A, so the side-A rate is undefined (M-0001 gives
   0/6). M-0001's line was n 12: 3 row wins, 2 column wins, 7 none, win rate 0.25, as A / as B
-  0/6 / 3/6, means 0.761 and 0.319.
-- M-0001's count of usable games becomes 1145 of 1152.
+  0/6 / 3/6.
+- 7 of M-0001's 1152 games are crashes with no result, leaving 1145 with one.
 
 **Tolerance for tests.** As M-0001's, per pairing. For MIND against E2, the tests run on the 5
 side-B games of seeds 1 to 5 only (n = 5). The 7 crashed games have no result to compare with.
@@ -122,12 +122,9 @@ side-B games of seeds 1 to 5 only (n = 5). The 7 crashed games have no result to
 
 ## Notes
 
-- **Hand-off to the project lead: M-0001 to M-0003.** This record does not edit them. Their Setup
-  sentence that the harness's AI additions were off needs a note: the archived games ran with the
-  five gameplay changes above, and their rows without SREF or V3, except the 7 crashed games,
-  are confirmed as stock by this record. M-0001 also needs a note on its MIND against E2 line,
-  its "all usable" count and its Evidence line that no game failed: 7 of its games crashed, and
-  its line is restated here.
+- **M-0001 to M-0003** point here for the five gameplay changes of their archived games, for a
+  unit placed on a neighbouring cell, and for which of their rows stand as stock rows. M-0001 also
+  points here for its 7 crashed MIND against E2 games.
 - DECIDED (autonomy, 2026-10-28): the 7 crashed games are not re-run, and the pairing's line is
   restated on its 5 completed games. They crash in the stock replay too.
 - **Not shown:** whether the game crashes without the harness, and why it crashes. The tick in
