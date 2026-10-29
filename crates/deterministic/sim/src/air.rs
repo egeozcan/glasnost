@@ -261,6 +261,12 @@ pub struct AirState {
     /// aircraft its destination, until that move's next processing gives
     /// its flight point once more (claim 40).
     pub regive: Option<i32>,
+    /// The start tick of the *move* whose first processing has run (claim
+    /// 40). A *move* started inside another behaviour's processing, such as
+    /// the fall-back at a run's end (claim 17), has its "expired now" timer
+    /// replaced by that processing's delay (S-0215 claims 2 and 3), so the
+    /// start flag alone does not mark its first processing.
+    pub first_moved: Option<i32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -3213,9 +3219,14 @@ fn move_(w: &mut World, id: ObjectId) -> i32 {
         fall_back(w, id);
         return standard(w, id);
     }
-    let (first, start) = w
+    let (expired, start) = w
         .obj(id)
         .map_or((false, 0), |o| (o.beh.expired, o.beh.start_tick));
+    // spec: S-0501 claim 40 (the selection runs at the first processing of every such move, also one started inside another behaviour's processing, such as the fall-back at a run's end, whose start timer that processing's delay replaced, S-0215 claims 2 and 3)
+    let first = expired || st(w, id).first_moved != Some(start);
+    if first && let Some(a) = st_mut(w, id) {
+        a.first_moved = Some(start);
+    }
     if let Some(o) = w.obj(id)
         && first
         && let Some(orig) = o.dest
