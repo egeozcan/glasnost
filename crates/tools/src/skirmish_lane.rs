@@ -2068,13 +2068,20 @@ pub(crate) fn unit_class(w: &World, kind: Kind, index: u32) -> &'static str {
 /// The spells of `GLASNOST_AI_ECOPROBE` (M8 step B9) in which a house's
 /// plan wants the refinery by a new field next
 /// (`glasnost_ai::brain::Brain::wants_field_refinery`), sampled every
-/// think period: per house, the first and last tick of each spell.
+/// think period: per house, the first and last tick of each spell, and
+/// the stalls within them: samples at which the want held while the
+/// house had no item on a building line, so that nothing was being built
+/// for it (or for anything else).
 #[derive(Default)]
 struct FieldSpells {
     /// Per house: the open spell's first and last tick.
     open: BTreeMap<u8, (i32, i32)>,
     /// Per house: the closed spells.
     done: BTreeMap<u8, Vec<(i32, i32)>>,
+    /// Per house: the open stall's first and last tick.
+    stall: BTreeMap<u8, (i32, i32)>,
+    /// Per house: the stalled samples and the longest stall in ticks.
+    stalls: BTreeMap<u8, (u32, i32)>,
 }
 
 /// A spell longer than this many ticks is listed (M8 step B9's count).
@@ -2084,10 +2091,27 @@ impl FieldSpells {
     fn observe(&mut self, tick: i32, brains: &[glasnost_ai::brain::Brain], w: &World) {
         for b in brains {
             let h = b.house().0;
-            if b.wants_field_refinery(w) {
+            let wants = b.wants_field_refinery(w);
+            if wants {
                 self.open.entry(h).or_insert((tick, tick)).1 = tick;
             } else if let Some(s) = self.open.remove(&h) {
                 self.done.entry(h).or_default().push(s);
+            }
+            // An empty line ceases to exist (S-0404 claim 1): the building
+            // line is idle when the house has none with an item.
+            let idle = !w.econ.lines.lines.iter().any(|l| {
+                l.house == b.house()
+                    && l.kind == glasnost_sim::econ::production::LineKind::Building
+                    && l.item.is_some()
+            });
+            if wants && idle {
+                let s = *self.stall.entry(h).or_insert((tick, tick));
+                self.stall.insert(h, (s.0, tick));
+                let e = self.stalls.entry(h).or_default();
+                e.0 += 1;
+                e.1 = e.1.max(tick - s.0);
+            } else {
+                self.stall.remove(&h);
             }
         }
     }
@@ -2101,10 +2125,12 @@ impl FieldSpells {
             let long: Vec<&(i32, i32)> = spells.iter().filter(|s| s.1 - s.0 > LONG_SPELL).collect();
             let _ = writeln!(
                 out,
-                "fieldspell house {h}: {} spells, {} ticks wanted, longest {}; over {LONG_SPELL} ticks: {} {long:?}",
+                "fieldspell house {h}: {} spells, {} ticks wanted, longest {}; stalled samples {}, longest stall {}; over {LONG_SPELL} ticks: {} {long:?}",
                 spells.len(),
                 spells.iter().map(|s| s.1 - s.0 + 1).sum::<i32>(),
                 spells.iter().map(|s| s.1 - s.0).max().unwrap_or(0),
+                self.stalls.get(h).map_or(0, |s| s.0),
+                self.stalls.get(h).map_or(0, |s| s.1),
                 long.len()
             );
         }
