@@ -143,6 +143,10 @@ const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 /// harvester at work ([`Script::harvesters_wanted`]).
 const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
 
+/// How near a start cell an ally's building stands for that start to be
+/// the ally's base ([`Script::ally_base_at`]), in cells.
+const ALLY_BASE: i32 = 10; // nocite: tuning of our own opponent
+
 /// Cells around a refinery, slave miner or home within which resource
 /// counts for [`Script::harvesters_wanted`].
 pub(crate) const FIELD_REACH: i32 = 14; // nocite: tuning of our own opponent
@@ -761,9 +765,44 @@ impl Script {
     }
 
     /// The enemy start cells (the map's start waypoints of the other
-    /// players: lobby knowledge).
-    pub(crate) fn enemy_starts(&self) -> &[CellXY] {
-        &self.targets
+    /// players: lobby knowledge), in visiting order, less those where an
+    /// ally's base stands ([`Script::ally_base_at`]). Read at every think,
+    /// so an alliance made during the game counts from then on.
+    pub(crate) fn enemy_starts(&self, w: &World) -> Vec<CellXY> {
+        let me = &w.houses[usize::from(self.house.0)];
+        if !me.allies.iter().any(|&h| h != self.house) {
+            return self.targets.clone();
+        }
+        self.targets
+            .iter()
+            .copied()
+            .filter(|&c| !self.ally_base_at(w, c))
+            .collect()
+    }
+
+    /// Whether a building of a player house that this house allies (not
+    /// itself) stands within [`ALLY_BASE`] cells of start cell `c`: that
+    /// start is an ally's base, and a person sends no wave there. Allies
+    /// share their sight (S-0409 claim 2), so the house sees the building;
+    /// the alliance is this house's view of it (S-0414 claim 12: an
+    /// alliance is one-way), as the sim's targeting reads it (S-0309
+    /// claim 18).
+    pub(crate) fn ally_base_at(&self, w: &World, c: CellXY) -> bool {
+        let me = &w.houses[usize::from(self.house.0)];
+        let r = i64::from(ALLY_BASE) * i64::from(ALLY_BASE);
+        w.objects.values().any(|o| {
+            o.on_map
+                && o.kind == Kind::Building
+                && o.owner.is_some_and(|h| {
+                    h != self.house
+                        && me.allied_with(h)
+                        && w.houses
+                            .get(usize::from(h.0))
+                            .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
+                })
+                && dist2(o.pos.cell(), c) <= r
+                && shroud::explored(w, self.house, o.pos.cell())
+        })
     }
 
     /// Where the next wave would go, without choosing it: the seen enemy
@@ -775,8 +814,8 @@ impl Script {
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
             .or_else(|| {
-                (!self.targets.is_empty())
-                    .then(|| self.targets[self.next_target % self.targets.len()])
+                let targets = self.enemy_starts(w);
+                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
             })
     }
 
@@ -792,8 +831,8 @@ impl Script {
             .min_by_key(|&(e, c)| (dist2(c, home), e))
             .map(|(_, c)| c)
             .or_else(|| {
-                (!self.targets.is_empty())
-                    .then(|| self.targets[self.next_target % self.targets.len()])
+                let targets = self.enemy_starts(w);
+                (!targets.is_empty()).then(|| targets[self.next_target % targets.len()])
             })
     }
 
@@ -1202,10 +1241,11 @@ impl Script {
                 }
             }
         }
+        let enemy_starts = self.enemy_starts(w);
         let own_half: Vec<CellXY> = ore
             .difference(&worked)
             .map(|&(y, x)| CellXY::new(x, y))
-            .filter(|&c| self.targets.iter().all(|&t| dist2(c, home) < dist2(c, t)))
+            .filter(|&c| enemy_starts.iter().all(|&t| dist2(c, home) < dist2(c, t)))
             .collect();
         Fields {
             explored: ore.len(),
@@ -1776,16 +1816,17 @@ impl Script {
                 });
                 let goal = pick.or_else(|| {
                     *fallback.get_or_insert_with(|| {
-                        (self.next_target < self.targets.len())
+                        let targets = self.enemy_starts(w);
+                        (self.next_target < targets.len())
                             .then(|| {
-                                let c = self.targets[self.next_target];
+                                let c = targets[self.next_target];
                                 self.next_target += 1;
                                 c
                             })
                             .or_else(|| from.and_then(|f| self.unseen_cell(w, f)))
                             .or_else(|| {
-                                (!self.targets.is_empty()).then(|| {
-                                    let c = self.targets[self.next_target % self.targets.len()];
+                                (!targets.is_empty()).then(|| {
+                                    let c = targets[self.next_target % targets.len()];
                                     self.next_target += 1;
                                     c
                                 })
@@ -1916,8 +1957,9 @@ impl Script {
             .filter_map(|o| {
                 let owner = o.owner?;
                 let h = w.houses.get(usize::from(owner.0))?;
+                // The house's view of the alliance, as the sim's targeting reads it (S-0309 claim 18).
                 let enemy = owner != self.house
-                    && !me.allies.contains(&owner)
+                    && !me.allied_with(owner)
                     && h.role == glasnost_sim::world::HouseRole::Player;
                 let c = o.pos.cell();
                 // A cloaked enemy the house does not sense is not seen (S-0516 claim 28: not drawn for it).

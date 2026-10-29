@@ -1095,7 +1095,7 @@ impl Brain {
     fn curtain_cell(&self, w: &World) -> Option<(CellXY, bool)> {
         let house = self.house();
         let me = &w.houses[usize::from(house.0)];
-        let friend = |h: Option<HouseId>| h.is_some_and(|h| h == house || me.allies.contains(&h));
+        let friend = |h: Option<HouseId>| h.is_some_and(|h| h == house || me.allied_with(h));
         let enemies = self.script.seen_enemies(w);
         // The objects a block reaches, as a person sees them standing in
         // its cells (claim 4: listed in a swept layer of a block cell, so
@@ -1209,10 +1209,7 @@ impl Brain {
             .objects
             .values()
             .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Building)
-            .filter(|o| {
-                o.owner
-                    .is_some_and(|h| h == house || me.allies.contains(&h))
-            })
+            .filter(|o| o.owner.is_some_and(|h| h == house || me.allied_with(h)))
             .map(|o| {
                 let p = w.reference_point(o.id);
                 (

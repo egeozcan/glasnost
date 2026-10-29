@@ -158,10 +158,7 @@ fn best(script: &Script, w: &World) -> Option<(CellXY, i64, i64, usize)> {
         .objects
         .values()
         .filter(|o| o.on_map && o.health > 0 && o.kind == Kind::Infantry)
-        .filter(|o| {
-            o.owner
-                .is_some_and(|h| h == house || me.allies.contains(&h))
-        })
+        .filter(|o| o.owner.is_some_and(|h| h == house || me.allied_with(h)))
         .collect();
     let mut owners = vec![house];
     owners.extend(me.allies.iter().copied().filter(|&h| h != house));

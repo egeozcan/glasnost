@@ -748,7 +748,7 @@ impl Special {
                 && o.health > 0
                 && o.owner != Some(house)
                 && o.owner.is_some_and(|h| {
-                    !me.allies.contains(&h)
+                    !me.allied_with(h)
                         && w.houses
                             .get(usize::from(h.0))
                             .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
@@ -860,7 +860,7 @@ impl Special {
                 && o.health > 0
                 && o.owner.is_some_and(|h| {
                     h != house
-                        && !me.allies.contains(&h)
+                        && !me.allied_with(h)
                         && w.houses
                             .get(usize::from(h.0))
                             .is_some_and(|x| x.role == glasnost_sim::world::HouseRole::Player)
