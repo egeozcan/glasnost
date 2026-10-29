@@ -10582,6 +10582,11 @@
           "type": "boolean",
           "default": true
         },
+        "spread_step_lost_on_terrain_object": {
+          "description": "A cell holding a terrain object (a tree) counts as germinable; when a spread step or an\nore mine chooses it, it receives nothing and the spread step's attempt is used. Off: such\na cell is not germinable, so a spread step passes over it and it does not count in *c*.",
+          "type": "boolean",
+          "default": true
+        },
         "spy_plane_count_from_paradrop_list": {
           "description": "The spy plane count is the length of the first side group's paradrop infantry list, and none when that list and its count list differ in length; off: exactly one plane.",
           "type": "boolean",

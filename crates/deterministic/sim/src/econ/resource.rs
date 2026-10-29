@@ -373,6 +373,10 @@ pub fn germinable(w: &World, c: CellXY) -> bool {
     {
         return false;
     }
+    // spec: S-0401 claims 10 and 11 (quirks.spread_step_lost_on_terrain_object off: a cell holding a terrain object is not germinable; on, it is, and receives nothing)
+    if !r.quirks.spread_step_lost_on_terrain_object && holds_terrain_object(w, c) {
+        return false;
+    }
     // spec: S-0401 claim 10 (buildable land, no overlay, flat)
     if !r
         .land
@@ -389,6 +393,15 @@ pub fn germinable(w: &World, c: CellXY) -> bool {
         Ok(n) if n < cat.tiles.len() => cat.allow_tiberium.get(n).copied().unwrap_or(false),
         _ => true,
     }
+}
+
+/// Whether a terrain object (a tree, an ore mine) is listed in the cell's
+/// ground layer (S-0401 claim 11).
+fn holds_terrain_object(w: &World, c: CellXY) -> bool {
+    w.cells
+        .list(c, Layer::Ground)
+        .iter()
+        .any(|&x| w.obj(x).is_some_and(|o| o.kind == Kind::Terrain))
 }
 
 /// Offers a cell to tiberium `t`'s growth list (S-0401 claim 7).
@@ -586,7 +599,8 @@ pub fn add_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
 }
 
 /// A germinable cell becomes a resource cell of tiberium `t` at stage `a`
-/// (S-0401 claim 11).
+/// (S-0401 claim 11); one holding a terrain object takes the draws and the
+/// growth-list offer and receives nothing.
 fn new_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
     let Some(tib) = w.rules().econ.resource.tiberiums.get(t).cloned() else {
         return;
@@ -610,6 +624,12 @@ fn new_resource_cell(w: &mut World, c: CellXY, t: usize, a: u8) {
     let Ok(o) = u8::try_from(position) else {
         return;
     };
+    if holds_terrain_object(w, c) {
+        // spec: S-0401 claim 11 (a cell holding a terrain object gets no overlay: the overlay draw and the growth-list offer as for any new cell, and it holds no resource afterwards)
+        // Our design: its stage is not set either (it holds no resource; the Open questions' kept overlay data value), so the cell is unchanged.
+        offer_growth(w, t, c);
+        return;
+    }
     if let Some(cell) = w.cells.grid.get_mut(c) {
         cell.overlay = o;
     }
@@ -657,7 +677,8 @@ pub fn crate_stage(w: &mut World, c: CellXY, t: usize) {
 
 /// A spread step from `from` with tiberium `t` (S-0401 claims 9 and 15):
 /// one ranged draw U(0, 7), then the first germinable neighbour from that
-/// direction becomes a new resource cell at stage 3.
+/// direction is chosen and becomes a new resource cell at stage 3, or
+/// receives nothing when it holds a terrain object (claim 11).
 fn spread_step(w: &mut World, from: CellXY, t: usize) {
     let half = w.rules().quirks.ranged_draw_half_span;
     // spec: S-0401 claim 9 (one ranged draw U(0, 7) gives the starting step direction)
@@ -666,6 +687,7 @@ fn spread_step(w: &mut World, from: CellXY, t: usize) {
     for k in 0..8 {
         let n = neighbour(from, ((j + k) % 8) as u8); // spec: S-0401 claim 9 (modulo 8)
         if germinable(w, n) {
+            // spec: S-0401 claim 9 (the first germinable neighbour is chosen; claim 11 says what it receives)
             new_resource_cell(w, n, t, NEW_STAGE);
             return;
         }

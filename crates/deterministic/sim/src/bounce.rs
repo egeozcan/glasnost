@@ -590,6 +590,7 @@ fn resources(w: &mut World, b: &BounceType, c: CellXY) {
 /// `quirks.anim_resource_no_growth_entry` off, and the stage draw.
 fn offer(w: &mut World, spawn: usize, c: CellXY) -> Offer {
     // spec: S-0319 claim 10 (each offered cell that is germinable, S-0401 claim 10; others take no draws)
+    // spec: S-0401 claim 10 (with quirks.spread_step_lost_on_terrain_object off a cell holding a terrain object is not germinable, so the offer takes no draws there)
     if !crate::econ::resource::germinable(w, c) {
         return Offer::NoDraws;
     }
