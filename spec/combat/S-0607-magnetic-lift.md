@@ -2,13 +2,13 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 11
+revision: 14
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-20
+approved-on: 2026-10-29
 measurements: []
-requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344, Q-1522]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344, Q-1522, Q-2035]
 supersedes: []
 ---
 
@@ -200,8 +200,9 @@ New terms:
    resource-gathering vehicle is the exception. This describes the original only. Our AI houses
    use the human-house rule; our AI may reproduce the later hunt through ordinary orders after
    restoration. The neutral and special houses retain the original's non-human rule. The queued
-   hunt cannot make a seized unit move under its own power or fire (claims 9 and 10).
-   - Backing: `measurable` (scenario L11 part b)
+   hunt cannot make a seized unit move under its own power or fire (claims 9 and 10). It is
+   still current when the unit is restored (claim 20), and the unit then hunts as any hunter.
+   - Backing: `measurable` (scenario L11 parts b and e)
    - Confidence: medium
 
 ### The lift
@@ -300,12 +301,12 @@ New terms:
      - **In the air** (height above the surface 1 lepton or more): it re-enters *hovering* over
        its current cell (S-0502 Edge cases). It keeps no movement point and its jumpjet movement
        is no longer moving, so it neither descends nor flies anywhere. It stays set down and
-       seized. Claim 20 does not restore it while it hovers. At each fall-back to rest it
+       seized. Claim 20 does not restore it while it hovers. At the end of each of its turns it
        repeats the stop's search instead (claim 20).
      - **On the ground** (height above the surface 0 or less): it stays where it is and its
        flight state becomes *grounded*, even if it was *ascending* at height 0. It keeps no
        movement point and is no longer moving. Claim 20 then restores it as any grounded
-       set-down unit.
+       set-down unit, at the end of its first turn that comes after the stop.
      - With the switch on the unit is destroyed, and none of this arises.
    - With the jumpjet stand-in, its own locomotor does not return until claim 20 allows it; other stand-ins follow claims 23 and 24.
    - Backing: `unmeasured`: the destination refusals and the no-destination exception are traced,
@@ -425,7 +426,9 @@ New terms:
         self-destruction does not happen, whatever `quirks.jumpjet_no_cell_self_destruct` says.
         In both cases the unit keeps no movement point (the one fixed at the seize is cleared)
         and loses its movement commitment: its jumpjet movement is no longer moving.
-        - **A set-down unit** stays where it is, and claim 20 restores it.
+        - **A set-down unit** stays where it is. Claim 20 restores it at the end of its own turn
+          in that tick when that turn comes after the grip's end in the update order (S-0203),
+          and otherwise at its next test (claim 20).
         - **A dropped unit** falls as claim 15 says. Over its cell centre it falls with no
           movement point, so S-0502 claim 9's direct ground reference applies to its height,
           not the look-ahead. Off its cell centre, claim 15's detour gives it that centre as its
@@ -582,31 +585,54 @@ New terms:
 ### Getting its own locomotor back
 
 20. **Restoration.** A seized unit's temporary jumpjet locomotor ends, and its own locomotor
-    returns, when the unit falls back to rest (S-0215 claim 13) and all of these hold:
+    returns, at the first restoration test at which all of these hold:
     - its jumpjet movement is not moving (S-0502's *moving*, not *moving now*),
     - it is set down, or it is no longer seized,
     - it is not a seized set-down unit hovering with no movement point and no movement
       commitment after S-0502 claim 17's no-cell outcome with
       `quirks.jumpjet_no_cell_self_destruct` off.
 
+    **When restoration is tested.** The test is made at the end of each of the unit's turns
+    (S-0203): after the point at which it may
+    process its behaviour (S-0215 claim 2), whether or not its behaviour is processed in that
+    turn, and after its movement. A turn in which its processing timer has not expired is
+    tested like any other. A tick in which the unit takes no turn (a turn lost to a removal,
+    S-0203 claim 10) has no test for it, and the next test is at the end of its next turn. The
+    test is made whatever the unit's current behaviour is and whichever house owns it.
+    Whether some other states keep the test from being made is open (Open questions). The
+    same test is also made whenever the unit falls back to rest (S-0215 claim 13). Both ask
+    the same question, so what can be observed is the first test at which the conditions hold.
+    - **At touchdown.** A unit that touches down on a clear cell (claim 17's *not blocked* row)
+      stops moving and is set down in its own movement in its own turn, so it is restored at
+      the end of that same turn. A unit set down by a grip that ends at height 0 or less with
+      no movement commitment is restored at the end of its own turn in that tick when that turn
+      comes after the set-down in the update order (S-0203), and otherwise at its next test.
+    - **Behaviour and house make no difference.** A set-down unit in *guard* (claim 5) and one in
+      *hunt* (claim 6) are restored at the same tick, for every house. The house matters only
+      for the queue that restoration adds for a gatherer (below).
+    - **Units being erased.** A seized infantry unit or vehicle is not restored while it is
+      being erased (glossary) or is in the leaving stage of a chrono move (S-0215 claim 2): it
+      stays seized for as long as either holds, even when it is set down and not moving. One
+      that survives is restored at the end of its first turn after that ends at which the
+      conditions hold. For a landed aircraft being erased, which S-0215 claim 2 already keeps
+      from ordinary movement, whether the test is made is not stated (Open questions).
+
     **The hovering set-down unit (design).** Every seized set-down unit in that switch-off
     outcome follows this rule, whatever route brought it there, not only claim 9's
-    no-destination set-down. At each fall-back to rest, restoration is not tested. The unit
-    repeats the stop's search instead: S-0502 claim 17's nearby-cell search around its current
-    cell, for its type's own locomotion class and movement zone, with no draw.
+    no-destination set-down. Restoration is not tested for it, neither at the end of a tick nor
+    at a fall-back to rest. At the end of each of its turns the unit repeats the stop's
+    search instead: S-0502 claim 17's nearby-cell search around its current cell, for its type's
+    own locomotion class and movement zone, with no draw.
     This includes a set-down unit that kept its movement commitment, flew to its point, and
     subsequently reached that no-cell outcome through a failed landing or another stop.
     S-0502's switch-off height test applies: height above the surface 1 lepton or more hovers.
     Height 0 or less stays put and becomes *grounded*, even from *ascending*.
     - **A cell is found.** It re-orders itself to that cell's centre through S-0502 claim 16,
       exactly as claim 13's stop does. It is then claim 13's set-down unit that is still moving:
-      it flies to its point, descends and lands there, and is restored at a later fall-back to
-      rest once its commitment has ended.
+      it flies to its point, descends and lands there, and is restored at the end of the turn in
+      which it lands.
     - **No cell is found.** It keeps hovering and is not restored. It is not destroyed: the
-      switch is off.
-    - A hovering unit whose behaviour never falls back to rest therefore hovers indefinitely, as
-      a grounded set-down unit in *guard* stays seized (below). The refused move order of "The
-      first order after touchdown" below makes it fall back to rest, and so retries the search.
+      switch is off. It searches again at the next test, so it lands once a cell becomes free.
 
     Restoration clears *seized*, *set down* and the dropper. A seized resource gatherer of a
     computer-controlled house then queues *harvest* in the original. Our AI houses use the
@@ -614,33 +640,41 @@ New terms:
     and special houses retain the original's non-human rule.
 
     So a gripped unit hovering over its lifter is never restored. Subject to the hovering
-    exclusion above, a unit set down by claims 9, 13 or 17 is restored on its first fall-back
-    to rest after touchdown at which its jumpjet movement is not moving.
+    exclusion above, a unit set down by claims 9, 13 or 17 is restored at the end of the first
+    of its turns after it is set down at which its jumpjet movement is not moving.
     - **Set down does not pre-empt movement.** Being set down, or being grounded, does not
       by itself restore a unit whose jumpjet movement still has a movement commitment (claim
       13's still-moving set-down). That unit takes off and flies to its point first (S-0502
-      claims 5 and 24), and is restored at a fall-back to rest after the commitment has ended.
-    - **Only at rest.** Restoration is tested only at the fall-back to rest. A set-down unit
-      whose current behaviour stays *guard* (claim 5) and which never falls back to rest stays
-      seized indefinitely, with its temporary jumpjet movement.
-    - **The first order after touchdown.** While the unit is still seized, a move order's
-      destination is refused (claim 9). The refused order leaves the unit in *move* with no
-      destination, so it falls back to rest, is restored, and a second move order then moves
-      it normally.
+      claims 5 and 24), and is restored at the end of the turn in which the commitment ends.
+    - **Before restoration.** Until it is restored, the unit's searches for a target find none:
+      its firing check answers *illegal* (claim 10) at S-0309 table C's firing-check row, so a
+      *hunt* processing in the grip, in the fall or earlier in the touchdown turn finds nothing.
+    - **After restoration.** Restoration queues and starts no behaviour of its own, apart from
+      the gatherer's *harvest* above. A unit in *hunt* keeps it and is an ordinary hunter from
+      its next *hunt* processing (S-0215 claim 27): it searches, takes targets, fires and
+      approaches them under the combat specs. It can be seized again (claim 3).
+    - **The first order after touchdown.** A move order given in any tick after a clear-cell
+      touchdown meets a restored unit, so it moves the unit with its own locomotor.
     - **Readiness while seized.** Wherever S-0215 claim 11 asks whether a vehicle is moving on
       this tick, it asks the unit's current locomotor. While seized that is the temporary
       jumpjet movement, so the question is S-0502's *moving now* (every state except *grounded*
       and *hovering*). This holds also for a unit that was driving on a temporary locomotor of
       its own when it was seized: the driving locomotor's moving test no longer applies.
-    - Backing: `measurable` (scenarios L3 and L11) for restoration and orders. That a kept
-      movement commitment delays restoration is `measurable` through conditional scenario L3
-      run b (S-0502 claims 5 and 24); whether ordinary play reaches that case is not established.
-      The hovering exclusion, retry for every route and height-based grounded outcome are
-      `unmeasured`: they are design rules for a non-default switch setting, which the original
-      does not have. Scenario L14 checks these rules on our engine only.
-    - Confidence: high (restoration conditions, only at rest, readiness, no restoration while
-      committed, the route-independent switch-off design rule and its height boundary),
-      medium (the two-order sequence)
+    - Backing: `measurable` (scenarios L3 and L11) for restoration, its timing, the behaviour and
+      house independence and the first order. That a kept movement commitment delays
+      restoration is `measurable` through conditional scenario L3 run b (S-0502 claims 5 and
+      24); whether ordinary play reaches that case is not established. The being-erased case
+      is `unmeasured`: it needs an erasure that starts before a set-down unit's first test,
+      which ordinary play is not known to produce. Conditional scenario L11 part f tests it
+      when a run reaches that state. The hovering exclusion, retry for
+      every route and height-based grounded outcome are `unmeasured`: they are design rules for
+      a non-default switch setting, which the original does not have. Scenario L14 checks
+      these rules on our engine only.
+    - Confidence: high (restoration conditions, no restoration while committed, the
+      route-independent switch-off design rule and its height boundary), medium (the test at
+      the end of every turn whatever the behaviour and house, restoration in the touchdown
+      turn, no target before restoration, an ordinary hunter after restoration, the set-down
+      tick of a height-0 grip end), low (units being erased)
 
 ### The magnetic wave
 
@@ -1093,12 +1127,12 @@ Life of a seized unit:
 | dropped | fall ends, blocked on water (claim 17) | sinking | death credited to the dropper |
 | dropped | fall ends, blocked on land or beach | crashed, then removed | claim 18, unless crashable |
 | set down, movement commitment kept (claim 13) | next eligible jumpjet update | set down, ascending | flies to its point and lands there (S-0502 claims 5 and 24); not restored meanwhile |
-| set down, outside the hovering exclusion of claim 20 | falls back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns |
-| seized and set down, hovering with no point or commitment after no cell with the self-destruction switch off (claim 20, any route) | falls back to rest (claim 20) | set down and moving if the repeated search finds a cell, otherwise unchanged | not restored; with a cell, flies there and lands |
+| set down, outside the hovering exclusion of claim 20 | end of each of its turns or a fall-back to rest, jumpjet not moving (claim 20) | ordinary | own locomotor returns; in the touchdown tick for a clear-cell touchdown |
+| seized and set down, hovering with no point or commitment after no cell with the self-destruction switch off (claim 20, any route) | end of each of its turns (claim 20) | set down and moving if the repeated search finds a cell, otherwise unchanged | not restored; with a cell, flies there and lands |
 | gripped with the teleporting stand-in | jump (claim 23) | set down, seized | grip ends; the jump clears the lifter's target |
 | gripped with another ground stand-in | its own rules remove its destination (claim 23) | set down, seized | grip ends; the lifter keeps its target |
 | gripped with the drop-pod stand-in | the seize, in our engine (touchdown in the original) (claim 23) | set down, seized, own locomotor back | grip ends; the lifter's target is cleared |
-| seized with another stand-in | falls back to rest (claim 24) | stays seized | never restored; a drop-pod stand-in ends at its touchdown but the unit stays seized |
+| seized with another stand-in | any restoration test (claim 24) | stays seized | never restored; a drop-pod stand-in ends at its touchdown but the unit stays seized |
 
 **Ordering consequences.**
 - One hit can drop the old gripped unit and seize the new one in the same tick (claim 5).
@@ -1107,6 +1141,10 @@ Life of a seized unit:
   resource gatherer that reaches claim 4's special case loses its spawned objects and releases
   its naval parasite in either outcome of that case.
 - Claim 16's effects on what lies underneath happen before claim 17's sinking or landing.
+- A unit that touches down on a clear cell is restored at the end of its turn in that tick,
+  after the point at which it may process its behaviour, so a *hunt* processing in the
+  touchdown turn still finds no target; the first search that can find one is its next *hunt*
+  processing (claim 20).
 - A neighbour destroyed by claim 18's first detonation is absent for the second; both
   detonations nevertheless use the damage computed from the falling unit before either.
 
@@ -1123,7 +1161,7 @@ Life of a seized unit:
     protection gained after the seize.
   - Fixed (design): a unit that survives both detonations stays in play. It is placed on the
     surface below its impact point, or on the deck if its fall ended crossing a deck, grounded
-    and set down, and is then restored by claim 20.
+    and set down, and is then restored at the end of the turn in which its fall ended (claim 20).
 - **Double impact credit** (`quirks.lift_impact_double_credit`, default on). A falling unit
   killed by either impact detonation is credited a second time by the impact credit (claim 18).
   Fixed: it is credited once.
@@ -1154,10 +1192,11 @@ Life of a seized unit:
   S-0502 claim 17 applies unchanged.
 - **No cell for a seized set-down unit, switch off** (claims 9 and 20, design). After
   S-0502 claim 17's switch-off outcome, every seized set-down unit hovering with no point or
-  commitment retries the search at each fall-back to rest instead of being restored, whatever
-  route brought it there. Height above the surface decides the outcome: 1 lepton or more
-  hovers; 0 or less stays where it is and becomes *grounded*, even from *ascending*, and is
-  eligible for ordinary restoration. Claim 13's lifter-ended safety departure is unchanged.
+  commitment retries the search at the end of each of its turns instead of being
+  restored, whatever route brought it there. Height above the surface decides the outcome:
+  1 lepton or more hovers; 0 or less stays where it is and becomes *grounded*, even from
+  *ascending*, and is eligible for ordinary restoration. Claim 13's lifter-ended safety
+  departure is unchanged.
 - **Wave picture artefacts** (claim 25). The original's ripples read unrelated memory beyond
   its table range, its view-edge margin varies between 2 and 3 pixels, and its band direction
   is undefined when the ends coincide horizontally. These are drawing artefacts with no gameplay
@@ -1265,8 +1304,8 @@ establish a qualifying condition; a run lacking the required observations is inc
   to run, because it decides whether a release is harmless.
   - Run a: mid-pull, at full cruise height over clear land, order the lifter to move one cell.
     - Expected: the unit is dropped; it flies to its cell centre, falls with a growing rate,
-      finds the cell clear, descends, touches down undamaged, is no longer crashing, and drives
-      normally after its next fall-back to rest.
+      finds the cell clear, descends, touches down undamaged, is not crashing, and is restored
+      at the end of the touchdown tick: a move order in the next tick drives it normally.
     - Record the ticks from the order to touchdown and the health at touchdown.
     - Falsified by: damage or removal on clear land.
   - Run b (conditional; S-0502's J27 a): give the order in the tick of the seize, at height 0,
@@ -1278,11 +1317,11 @@ establish a qualifying condition; a run lacking the required observations is inc
       the test is inconclusive, not falsified.
     - Expected: set down with no fall. The point and commitment are kept; the next eligible
       jumpjet update starts its ascent, the unit flies to the point and lands there, and
-      it cannot be restored before the commitment has ended. After touchdown, issue a move
-      order to provoke a fall-back to rest, and expect restoration at that eligible event.
+      it cannot be restored before the commitment has ended. Expect restoration at the end of
+      the tick in which its landing ends the commitment, with no order given.
     - Falsified by: a fall or damage; staying grounded through that eligible update; losing the
-      commitment despite a found point; restoration while committed; failure to restore at
-      the confirmed eligible fall-back to rest.
+      commitment despite a found point; restoration while committed; failure to restore by
+      the end of the landing tick.
   - Run a also falsifies claim 15 if a non-centred release falls vertically without the
     cell-centre detour.
   - Run c: use a transport with passengers. After a clear-land release, verify all passengers
@@ -1435,10 +1474,14 @@ establish a qualifying condition; a run lacking the required observations is inc
     the gripped unit from any weapon, and the lifter's target to stay on it until arrival or
     another event of claim 12. A shot at the gripped unit, or a dropped target without such an
     event, falsifies claim 11.
-  - Part g: seize a deployable vehicle and, separately, a loaded transport. After touchdown and
-    before restoration (in *guard*, so no fall-back to rest), order deploy, undeploy and unload.
-    Record whether each starts. Expect the ordinary result for a grounded unit; a refusal
-    explained only by the seized state falsifies claim 10's last bullet.
+  - Part g: seize a deployable vehicle and, separately, a loaded transport. A clear-cell
+    touchdown restores the unit in the same tick (claim 20), so try deploy, undeploy and
+    unload through the harness while it is gripped at height 0, or while it is set down and
+    still committed (L3 run b's route). Whether any order reaches a seized unit is open (Open
+    questions), so this part is conditional. When an order reaches the unit, record whether
+    each starts. Expect the ordinary result for a grounded unit; a refusal explained only by
+    the seized state falsifies claim 10's last bullet. When no order reaches the unit, the
+    part is inconclusive and confirms nothing.
   - Part e: named L9 map data supplies a slow seizing projectile. Launch it at an immune
     target while a grip exists, after any wave refusal has ended; expect release of the old
     victim without seizure of the immune one. Repeat with the firer destroyed, seized, or
@@ -1466,22 +1509,64 @@ establish a qualifying condition; a run lacking the required observations is inc
   - Falsified by: wave creation below F3's threshold, missing creation at/above it with a free
     slot, failure to seize solely because no wave exists, a lifetime inconsistent with F4,
     fixed expiry with unchanged targeting, or health loss attributable only to the wave.
-- **L11 Restoration and computer houses (claims 6, 20; parts c and d for claim 20's later bullets).**
-  - Part a: after L3, record the tick the unit first accepts a move order.
+- **L11 Restoration and computer houses (claims 6, 20; parts c to f for claim 20's later
+  bullets).**
+  - Part a: after L3, record the tick the unit first accepts a move order. Expect the first
+    tick after touchdown.
   - Part b: repeat L3 against an isolated unit of the computer opponent, excluding resource
     gatherers and passive countries. Record its queued hunt at seizure, rather than inferring
     it from later AI movement. A second run uses a resource gatherer and records its harvest
     queue at restoration; a human-owned control must not receive either computer-only queue.
     A passive-country control must not receive the seizure hunt.
-  - Part c: after a clear-cell touchdown, leave the unit alone for well over 100 ticks; expect
-    it still seized (its own movement not back). Then give two move orders a few ticks apart.
-    Expect the first to move it nowhere and the second to move it with its own locomotor.
+  - Part c: a human-owned unit in *guard* after a clear-cell touchdown. Record per tick whether
+    it is seized. Expect restoration at the end of the touchdown tick. One move order given in
+    the next tick moves it with its own locomotor.
   - Part d: seize a vehicle while it is mid-turn or mid-step and give it an order that waits for
     readiness; expect readiness to follow the jumpjet's *moving now* state, not its earlier
     driving state.
+  - Part e (computer hunter after a drop; extends part b). Use the common measurement setup.
+    A magnetic lifter of the human house seizes an isolated armed vehicle of the computer
+    opponent (not a gatherer, not passive). A second lifter of the human house stands by,
+    idle, outside the vehicle's weapon range. Order the first lifter to move one cell
+    mid-pull, so the vehicle is dropped over clear land. That move order clears the first
+    lifter's target (claim 12). To keep it from taking the vehicle as a new target, order it
+    on in the tick after the drop to a cell beyond its weapon's range of the vehicle and
+    outside the vehicle's sight. Leave the vehicle alone for 600 ticks. Record per tick its
+    seized and set-down state, current and queued behaviour, target, position, and every fire
+    event. A run in which the first lifter fires at the vehicle again is void.
+    - Run 1, second lifter withdrawn as the first, no armed object of the human house in the
+      vehicle's reach, and an unarmed vehicle of the human house placed 10 cells from the
+      vehicle's touchdown cell as the human's nearest object: record the full 600 ticks, and
+      the first tick at which the vehicle takes a target, moves or fires, with that target and
+      its behaviour. Expected: no target before restoration; its first target at its first
+      *hunt* processing after the touchdown tick (an object that its hunt search reaches,
+      normally the unarmed vehicle), with *hunt* current, then an ordinary approach and fire.
+    - Run 1b: as run 1, but the second lifter stays and at touchdown + k ticks (k = 1, 5 and
+      30, one run each) fires at the vehicle. A seize can succeed only on a restored unit
+      (claim 3). Expected: the seize succeeds for every k. After that second seize claims 5
+      and 6 apply again.
+    - Run 2, an armed enemy vehicle placed within the dropped vehicle's weapon range of its
+      touchdown cell, with the second lifter withdrawn: record the first tick it takes a
+      target, fires or moves, the target, and its behaviour at that tick. Expected: no fire
+      during the grip, the fall or the touchdown tick; its first target at its first *hunt*
+      processing after the touchdown tick, chosen by the ordinary threat rules (S-0309), and
+      its first shot under the ordinary firing rules (S-0301), with *hunt* current. Record
+      whether the enemy destroys it first; such a run is void for the first-shot tick.
+    - Control: a human-owned vehicle of the same type, dropped beside it in *guard* (part c).
+      Expect restoration in its touchdown tick too, and in run 2 the ordinary *guard* response.
+    - Falsified by: a vehicle still seized after its touchdown tick, any shot or target before
+      restoration, a different restoration tick for the hunter and the guard control, or a
+      behaviour other than *hunt* at the first shot.
+  - Part f (units being erased; conditional): drop a vehicle over clear land and have an
+    eraser lock onto it at touchdown, then remove the eraser before the erasure completes.
+    Record per tick its seized state and its being-erased state. Expected: still seized while
+    it is being erased, restored at the end of its first turn after it stops being erased.
+    Falsified by restoration while it is being erased. Inconclusive if no lock starts before
+    the end of the touchdown tick.
   - Expected: no restoration while gripped, no accepted own movement before restoration,
-    restoration at the first eligible fall-back after touchdown, and the queues above.
-    Falsified by earlier restoration, failure to restore when resting and set down, or a
+    restoration at the end of the touchdown tick (or the end of a still-committed movement)
+    whatever the behaviour and house, and the queues above.
+    Falsified by earlier restoration, a later restoration of a resting set-down unit, or a
     queue contrary to the owner/type conditions. Keep incidental AI orders out of the observed
     interval, or mark the run void.
 - **L12 Seizing from a moving lifter (claims 7, 8).**
@@ -1606,15 +1691,16 @@ establish a qualifying condition; a run lacking the required observations is inc
   - Compare a no-destination set-down with a set-down unit that kept its commitment, flew
     to its point and then reached a no-cell stop after a failed landing. Qualify the latter
     only if that route actually reaches the stated outcome; the seized landing exceptions
-    can prevent it. In both runs record seized/set-down state, height, flight state, movement
-    point, commitment and each fall-back to rest.
-  - Expected at height 1 lepton or more with no point or commitment: no restoration at rest,
-    and another search with no draw. With no cell still available it keeps hovering; after a
-    qualifying cell becomes available it flies there and lands, and is restored only at a
-    later eligible fall-back to rest. The route into the outcome makes no difference.
+    can prevent it. In both runs record per tick seized/set-down state, height, flight state,
+    movement point, commitment and each search.
+  - Expected at height 1 lepton or more with no point or commitment: no restoration, and
+    another search with no draw at the end of each of its turns. With no cell still
+    available it keeps hovering; after a qualifying cell becomes available it flies there
+    and lands, and is restored at the end of its landing tick. The route into the outcome
+    makes no difference.
   - Separately stop at height 0 while *ascending*, and at height 0 while *grounded*, with no
-    cell. Both stay put, become *grounded*, clear point and commitment, and are eligible for
-    restoration at rest. Compare height 1: it must hover instead.
+    cell. Both stay put, become *grounded*, clear point and commitment, and are restored at the
+    end of its turn in that tick or the next. Compare height 1: it must hover instead.
   - A restoration while hovering, a route-dependent retry, or hovering at height 0 fails the
     design check. A run that never reaches the required state is inconclusive.
 - **L15 Registration and combat height (claim 7).**
@@ -1705,4 +1791,41 @@ establish a qualifying condition; a run lacking the required observations is inc
   found point in another cell while its own cell holds another object (claim 13). The
   outcomes are stated; scenario L3 runs b and f are inconclusive until a run reaches them.
 - Deploying, undeploying and unloading while seized (claim 10's last bullet) rest on the absence
-  of any seized-state test, not on a traced refusal; low confidence until scenario L9 part g.
+  of any seized-state test, not on a traced refusal. Low confidence until scenario L9 part g
+  gets an order through to a seized unit; whether the harness or the player can do so is open.
+- Whether any state other than erasure and the leaving stage keeps claim 20's test from being
+  made at the end of a turn: a deactivated or paralysed vehicle (S-0215 Terms, S-0214), or a
+  unit phasing in after a chrono move. Claim 20 states the test for every other turn.
+- Whether a landed aircraft that is being erased is tested at the end of its turns (claim 20,
+  *Units being erased*).
+
+## Changes for other specs
+
+- **S-0215, claim 13, first row (temporary locomotor).** The row gives a unit its own locomotor
+  back when it falls back to rest. For a seized unit's temporary jumpjet locomotor, the same
+  test is also made at the end of each of the unit's turns (S-0203), after its movement and
+  after the point at which it may process its behaviour, whether or not its behaviour is
+  processed in that turn, whatever its behaviour, and not while it is being erased or in the
+  leaving stage (S-0607 claim 20). The row should say so for that locomotor, or point to
+  claim 20.
+- **Questions for other specs (not rules).** The end-of-turn test of claim 20 is shared by every
+  infantry unit, vehicle and aircraft, but only the seized unit's jumpjet locomotor was traced
+  through it. Each of these should check, against its own conditions for ending a temporary
+  locomotor, whether that locomotor can also end at the end of a turn without a fall-back to
+  rest: S-0417 claim 5 (temporary driving during factory exit), S-0207 claims 21 and 28 (the
+  restored teleporting state, and driving that stays active through the docking and the
+  unloading), S-0402's chrono-miner rest cases after a seizure or a fall-back, and request
+  Q-0233, which rests on S-0215 claim 13's first row.
+- **S-0502, Edge cases (*No landing slot*) and scenario J27 part (c).** Both say that a seized
+  hovering set-down unit, with `quirks.jumpjet_no_cell_self_destruct` off, retries the stop's
+  search at each fall-back to rest. Claim 20 sets the cadence to the end of each of the unit's
+  turns (S-0203), and not at a fall-back to rest. Replacement for the Edge cases sentence:
+  "while hovering it is not restored and retries the search at the end of each of its turns
+  (S-0203), not at a fall-back to rest". Replacement for J27 (c): "retries the search at the
+  end of each of its turns under S-0607 claims 9 and 20", and in its falsifier "a
+  route-dependent retry, a turn that ends without a retry, or a retry at a fall-back to rest
+  outside that test". Expected retry ticks: the search runs at the end of the unit's turn in
+  every tick from the tick of the no-cell outcome on in which it takes a turn. A cell freed in
+  a tick is found at the end of the unit's turn in that tick when the freeing comes before
+  that turn in the update order, and otherwise at its next retry. Both
+  are design rules for the switch-off setting; the original destroys the unit instead.
