@@ -1,9 +1,9 @@
 ---
 id: Q-2040
 title: How the control-group number looks: font, alignment, border, colour sample and shading
-status: open
+status: answered
 related: [S-0111, S-0103]
-answered-by: []
+answered-by: [S-0111]
 ---
 
 ## Need
