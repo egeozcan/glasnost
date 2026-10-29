@@ -192,7 +192,7 @@ play note names a strip or ledge give-up.
 
 ## Part 4: our own pathing improvements (2026-10-29)
 
-The lead's decision of 2026-10-29 adds an exception to condition (1): our own pathing improvements are admitted with an off position of our design, marked `// design: C7-P4` in the code; conditions (2) and (3) still hold. Part 4 adds three such entries (`path_through_stalled_blockers`, `unreachable_move_dropped`, `group_spread_no_detour`), so the layer holds nine. Ledger: [c7-pathing.md](c7-pathing.md).
+The lead's decision of 2026-10-29 adds an exception to condition (1): our own pathing improvements are admitted with an off position of our design, marked `// design: C7-P4` in the code; conditions (2) and (3) still hold. Part 4 adds three such entries (`path_through_stalled_blockers`, `unreachable_move_dropped`, `group_spread_no_detour`), so the layer holds nine. Part 5 adds three more, marked `// design: C7-P5` (`rally_point_shared`, `deadlock_no_yield`, `harvest_cell_shared`), so it holds twelve. Ledger: [c7-pathing.md](c7-pathing.md).
 
 ## Part 3: the layer re-judged (2026-10-28)
 

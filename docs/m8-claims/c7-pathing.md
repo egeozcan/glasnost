@@ -97,3 +97,92 @@ Two sets of binaries on one base (main as of the S-0111 intake 46 answers, befor
 - `cargo test --release -p glasnost-ai -- --include-ignored` on the rebased tree: 239 passed, none failed.
 
 **Version effects.** Only the layered `sim_rules_hash` changes (the layer file's content is in it): a save, replay, report or room made with part 3's layer matches neither the reference nor the new layered hash and is refused on the rules hash. Reference files are unaffected. Save 85, AI game format 47, wire 9, pathing report 2 and desync bundle 3 are unchanged.
+
+## Part 5
+
+Brief: `.claude/worktrees/M8-C7-PATHING5-BRIEF.md`. The same rules as part 4: each change is our design, marked `// design: C7-P5 <name>`, behind a quirk switch whose default (on) is the original's, set off by the play-fixes layer, which now admits twelve switches. Part 4's statement above (no saved state, formats 85 and 47) holds for part 4; part 5 adds saved state (the yield, below). No request was needed (block Q-2116 to Q-2120 unused). The scenario set is part 4's, with one new ignored test, `cost` (below); `measure` now also prints a column for the layer less each switch.
+
+### Rally spread (`rally_point_shared` off)
+
+**Problem.** Every unit a factory releases with a cell rally point is sent to the rally cell itself (S-0417 claims 8 and 10, S-0404 claim 13). A stream crowds the one cell: in the factory stream all 8 units of a seed share their destination, and 12 give up after arriving.
+
+**Design.** `orders::rally_cell`, at each of the three release paths (ground vehicle, naval, infantry: the saved guard spot or the move order): the rally cell while no other mobile unit of the house has it as its destination or guard spot and it is not obstructed; else part 4's `open_near` round the rally point, with those cells taken (the same open class as the group spread: usable, the rally cell's reach region, a level difference under 3, not obstructed, out to `SPREAD_RADIUS`); else the rally cell. An object rally point is kept. It takes no draw.
+
+**Effect.** Factory stream: 12 give-ups and 24 shared → 0 and 0, computations 39 → 27, median 247 as before, max 249 → 283 (the last units now drive on to a cell of their own instead of stopping in the crowd).
+
+**Tried and dropped.** A tie-break that preferred cells on the rally point's far side: on seed 7 one unit then accepted a scatter's request to move off (an original behaviour, S-0212's scatter) and lost its destination, so the plain nearest cell stays.
+
+**Test.** `rally_spread_off_gives_each_released_unit_its_own_cell` (on: 8 shared and late give-ups; off: none shared, no give-up, none missing).
+
+### Yield (`deadlock_no_yield` off)
+
+**Problem.** Part 4's open case: two closed rooms joined by a 2-wide corridor, 6 units each way. There is no way round, so part 4's detour search finds nothing and 33 of 36 stay stuck in both positions.
+
+**Design.** When a stalled unit in a deadlock (part 4's wait-for graph, `path_through_stalled_blockers` off) computes a path, part 4's bounded detour still runs first. Only when it finds none, and the unit is *shut in*, one side gives way:
+
+- *Shut in*: the units of the deadlock heading against the unit are taken as walls, and a fill from the unit and one from its goal (each bounded to 2 048 cells, `YIELD_FLOOD`) do not meet. The fill gives up (no yield) on a deck, outside the usable area, at a bridge cell or at the bound. The test keeps the yield out of a deadlock that has a way round: an earlier version that gave way first made corridor 2 with 6 each way worse (max 772 → 791 to 838).
+- *Who gives way*: the unit with the right of way is the deadlock's unit with the lowest object id that is not giving way. The units in play are the deadlock's and the house's moving units (a move to a cell, not giving way) within 12 cells (`YIELD_RADIUS`, part 4's `NEAR_RADIUS`; Chebyshev) of any of the deadlock's cells. Those heading against the right-of-way unit (a negative dot product of the headings) give way; the others keep going.
+- *Where to*: the lane is the cells of the units that keep going and their fresh paths (S-0212's search). Each giving-way unit gets the nearest free cell off the lane by a breadth-first search from its own cell. If no unit gets a cell, nothing changes.
+- *Resume*: `path::yield_turn`, each turn before movement. A giving-way unit resumes its order (a fresh computation) when every unit it gives way to has no destination, is off the map or has passed it (the vector from it to that unit points along that unit's heading), or after 900 ticks (`YIELD_WAIT`). Any order for the unit ends the giving way (`orders::apply_pending`).
+
+**State.** `PathState::yielding: Option<Yield { resume, to, since }>`, saved and hashed: save format 85 → 86, AI game format 47 → 48. The trace gains `GaveWay` and `Resumed` (the pathing report prints them).
+
+**Effect.** Two rooms, 6 each way: 33 missing → 0, median 715, max 838, 18 reversals, 6 831 computations → 960. Corridor 2, 6 each way keeps part 4's 585 / 772 (the detour finds a way there, so no unit is shut in). Every other row, reference and layer, is unchanged.
+
+**Tests.** `yield_off_clears_a_deadlock_with_no_way_round` (the detour alone: units missing; with the yield none missing, no give-up, none unsettled), `yield_off_leaves_queues_and_the_reference_alone` (alone, without the graph, nothing changes; with the graph, the infantry and 20-vehicle queues and corridor 2 with 3 and with 6 each way play the same with and without it), `a_unit_giving_way_survives_save_and_load`, `the_giving_way_state_is_hashed`.
+
+### Tick cost
+
+Part 4's two-rooms deadlock cost 107 µs a tick against the reference's 95. A profile (temporary, removed) put about 20 % of the extra in building the wait-for graph and about 80 % in the detour search that fails at its 4 096 expansions. Two exact changes to `stalled_ring`: a unit with no stalled unit in its wait cells has an empty ring without the graph being built, and the graph is peeled in one pass by counts. Every scenario row prints the same before and after. Skipping the failing detour after a fill was tried and dropped: it was slower (the corridor's detour time rose from 4 ms to 31 ms).
+
+`cost` (ignored; `ROUNDS=<n>`) prints the fastest ns per tick of each scenario for the reference, the layer, the layer without the yield and the layer with stalled blockers on. With the layer, most rows are within 0.5 % of the reference. Three rows are higher, all where the behaviour differs: by buildings +1.2 %, inside buildings +3 % and the unreachable cell +8 % (more computations). The column with stalled blockers on shows the same three rises (+1.4 %, +2.9 %, +7.4 %), so they come from part 4's nearest reachable cell and group spread, not from the stalled-blocker check; the brief's bar for that check (no higher than the reference in every scenario) holds. Corridor 2, 6 each way costs 70 000 against 105 600; two rooms, 6 each way 63 000 against 95 000. The layer without the yield in two rooms is 107 000 (+12 %, the failing detour every computation).
+
+### Field cells (`harvest_cell_shared` off)
+
+**Problem.** Harvesters sent from one place pick the same ore cells by the ring search (S-0402 claim 4) and block each other one step short of them. In the harvester scenario all 12 harvesters (4 a seed) share their first destination, with 12 give-ups and 29 jostles.
+
+**Design.** In `econ::harvest::ring_search` a cell that another on-map unit of the harvester's house has as its cell destination is not acceptable. It takes no draw.
+
+**Effect.** Harvesters: give-ups 12 → 6, jostles 29 → 22, failed computations 5 → 1, shared 12 → 0, median 91 → 77, max 203 → 80; credits 4 125 as before.
+
+**The remaining 6 give-ups** are S-0402 claim 9's docking queue, not changed. The synthetic refinery has no queueing-cell shift, so its queueing cell is its top-left cell, the dock. A returning harvester drives to the dock another harvester holds and gives up within the close-enough distance (S-0207 F7). With a refinery whose queueing cell is off the dock it would wait there instead. The jostles were not analysed cell by cell; a harvester turning round on its trips counts as one.
+
+**Test.** `field_cells_off_gives_each_harvester_its_own_cell` (on: shared and give-ups; off: none shared, fewer give-ups, no fewer credits).
+
+### Left open
+
+- **Shore maximum** (176 → 217, part 4's group spread): the tradeoff of the spread, the last members walk round to cells of their own. Not changed.
+- **The harvesters' dock** (above).
+- **The yield's choice of side** is by object id, not by group or order time; with more than two groups at one passage it has not been tried.
+
+### The table with the layer (seeds 7 to 9 pooled), part 5
+
+Only three rows change against part 4's layer; the reference rows are all unchanged.
+
+| Scenario | Part 4's layer: median / max, missing, give-ups, shared, searches | Part 5's layer |
+|---|---|---|
+| factory stream | 247 / 249, 0, 12, 24, 39 | 247 / 283, 0, 0, 0, 27 |
+| harvesters | 91 / 203, 0, 12, 12, 318 | 77 / 80, 0, 6, 0, 282 |
+| two rooms, 6 each way | 287, 33, 0, 0, 6 831 | 715 / 838, 0, 0, 0, 960 |
+
+### Results, part 5 (local lane, outputs in the git-ignored `local-lane/m8/c7-pathing5/`)
+
+Two sets of binaries: *base*, origin/main fbae0ce (A6, which changes no simulation code), exported into the lane folder, and *branch*, this branch rebased onto it.
+
+- *Default runs, byte-identical.* The oracle arena (`arena --record all`): the three `ours-M-000*.csv` and the three oracle reports are byte-identical between base and branch. The reference M6c, M7a and M7b sweeps 1 to 16 print the same lines. The sim-gate goldens (`cargo test --release -p glasnost-sim-gate -- --include-ignored`, without update) pass on the branch and leave `crates/sim-gate` unchanged. The reference quick lane: all 48 games end on the same tick with the same result on both (47 won, house 1 27 and house 0 20, and sides 1 and 2 on map 0 seed 10 not over at the 120 000-tick bound, as before; median 44 512).
+- *Layer-on sweeps 1 to 16* (`GLASNOST_PLAY_FIXES=1`): all three pass on both. M6c smallest minimum 1 (base 1); M7a smallest minimum 1 (base 1), no seed ends early; M7b smallest drain minimum 2 (base 3: seed 2's mutator launches are 2, a different game with the layer).
+- *Quick lane* (maps 8, 2 and 0, Yuri as house 1 against Allied and against Soviet, `GLASNOST_AI_QUICK=1`). Seeds 7 to 14 (48 games) as in part 4, and, because the layer's median came out longer, seeds 15 to 22 (48 more) as well; medians in ticks, house 1 and house 0 wins:
+
+  | Run | Seeds 7 to 14 | Seeds 15 to 22 | All 96 (median; mean) |
+  |---|---|---|---|
+  | reference (the same on base and branch for 7 to 14; 15 to 22 on the branch; the game not over counted at the bound) | 44 512; 27, 20, one not over at the bound | 42 738; 24, 24 | 43 334; 47 112 |
+  | part 4's layer (base) | 43 158; 30, 18 | 43 284; 26, 22 | 43 158; 46 062 |
+  | part 5's layer (branch) | 45 197; 35, 13 | 45 370; 27, 21 | 45 197; 48 351 |
+  | part 5's layer without field cells | 44 525; 39, 9 | 42 423; 29, 19 | 43 304; 45 659 |
+  | part 5's layer without rally spread | 42 535; 32, 16 | 43 027; 26, 22 | 42 691; 44 908 |
+
+  With the layer every game is over with a winner and none panics, in every row. Part 4's bar, "the median length is no worse" than the reference's, is **not met** on a plain reading: part 5's layer is 4.3 % longer over the 96 games (45 197 against 43 334) and 4.7 % longer than part 4's layer. The two variants (temporary builds with one switch's line removed from the layer, not committed) do not point at one switch: without either field cells or rally spread the median is at or below the reference's, and the five rows spread over 2 500 ticks while single games range from about 21 000 to 104 000 ticks. Nothing in the long games looks stuck: the two longest layer games (sides 0 and 2 map 8 seed 7, 103 156 ticks, and sides 1 and 2 map 0 seed 8, 101 912) end with a winner and their harvesters' ticks by behaviour have the same proportions as on base, and the layer's harvest income per 1 000 ticks (median over seeds 7 to 14) rises from 1 231 and 1 197 (houses 0 and 1, part 4's layer) to 1 246 and 1 298. Left for the lead: whether the longer median is a reason to hold back one of the two switches.
+- *Tick cost.* In the scenario set, see *Tick cost* above. In the quick lane, mean of the games' µs per tick: reference 1 712 (base) and 1 716 (branch); layer 1 747 (base) and 1 781 (branch). The layer's games differ between the two, so this is no like-for-like measurement.
+- `cargo test --release -p glasnost-ai -- --include-ignored` on the branch: 239 passed, none failed. `cargo test --workspace`: 6 817 passed, none failed (113 ignored). fmt and clippy (`-D warnings`) are clean. `cargo xtask check`: deps, determinism, cite and canary pass; stock-guard reports 16 lines in the measurement records M-0013 and M-0015 (local values shown in a Result table), which are main's as of fbae0ce and not touched here.
+
+**Version effects.** Save format 86 and AI game format 48 (the yield's state): saves and AI games of earlier formats are refused. The layered `sim_rules_hash` changes again (the layer file's content is in it). The sim-gate goldens were regenerated for the format only: the nine files keep their line counts, and only the hashes of the saved state move (each object's path state gains one byte, `None` in every golden game since the reference never gives way). Wire 9, pathing report 2 and desync bundle 3 are unchanged.
