@@ -1912,6 +1912,7 @@ pub fn guard_rule(w: &mut World, id: ObjectId) -> bool {
     let Some(u) = unit(w, id).cloned() else {
         return false;
     };
+    // spec: S-0402 claim 14 and Import mapping (Harvester: claim 13's guard rows apply to a slave miner only when its type has the harvester flag, a field separate from the enslaves field; the weeder's row is a later revision's)
     if !u.harvester {
         return false;
     }
@@ -1995,7 +1996,7 @@ pub fn slave_wake_rule_holds(w: &mut World, id: ObjectId) -> bool {
     let r = w.rules_arc();
     // spec: S-0402 claim 14 (the group at rest: no slave sent out since the group last came together)
     let at_rest = g.state == super::slaves::GroupState::AtRest;
-    // spec: S-0402 claim 14 (the computer-controlled condition: not for player houses in our engine; the neutral and special houses keep it, as does a test-only computer-controlled player house, glossary)
+    // spec: S-0402 claim 14 (who takes the owner alternative, Q-1990: in our engine the neutral and special houses and a test-only computer-controlled player house; a person's house and an AI house take the human-controlled alternatives, glossary *AI house*)
     let computer = o.owner.is_some_and(|h| !w.houses[usize::from(h.0)].human);
     let here = o.pos.cell();
     let on_ore = w.cells.cell(here).is_some_and(|c| c.land == land::TIBERIUM);
