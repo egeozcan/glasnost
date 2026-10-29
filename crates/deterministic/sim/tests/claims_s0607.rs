@@ -226,36 +226,24 @@ fn claim_10_no_firing() {
     );
 }
 
-// spec: S-0607 claim 10 (deploying is not refused: being seized adds no refusal of its own, while set down before restoration) and claim 20 (a set-down unit in guard stays seized)
+// spec: S-0607 claim 10 (deploying is not refused: being seized adds no refusal of its own) and scenario L9 part g (revision 14: a clear-cell touchdown restores the unit in the same tick, so the deploy is tried through the harness while the unit is gripped at height 0; no order route to a seized unit at rest is known in our engine, the part's open question): a deploy step of *unload* on a gripped deployer at height 0 starts its deploy, and it is still seized
 #[test]
-fn claim_10_set_down_seized_unit_deploys() {
-    let (mut w, l, v) = seized_world(
+fn claim_10_gripped_seized_unit_deploys() {
+    let (mut w, _, v) = seized_world(
         |r| vehicle(r, "DEPV", |t| t.is_simple_deployer = Some(true)),
         "DEPV",
     );
-    order_lifter(&mut w, l);
-    // S-0607 claim 13 (revision 6): set down while its jumpjet movement is
-    // still moving, it first flies to the stop's found point and lands.
-    assert!(run_until(&mut w, 400, |w| !lift::dropped(w, v)
-        && !glasnost_sim::jump::moving(w, v)));
-    assert!(lift::seized(&w, v), "set down, not restored yet");
-    while glasnost_sim::orders::blocked(&w) {
-        testkit::run(&mut w, 1);
-    }
-    assert!(glasnost_sim::orders::issue(
-        &mut w,
-        glasnost_sim::world::HouseId(1),
-        glasnost_sim::orders::Order::Deploy { actor: v },
-    ));
-    assert!(
-        run_until(&mut w, 30, |w| glasnost_sim::econ::inplace::form(w, v)
-            != glasnost_sim::econ::inplace::Form::Mobile),
+    assert_eq!(height(&w, v), 0, "gripped at height 0");
+    glasnost_sim::econ::inplace::process(&mut w, v);
+    assert_ne!(
+        glasnost_sim::econ::inplace::form(&w, v),
+        glasnost_sim::econ::inplace::Form::Mobile,
         "the deploy starts"
     );
     assert!(lift::seized(&w, v), "while still seized");
 }
 
-// spec: S-0607 claims 12, 13, 15, 17 and 20: a lifter's accepted order drops the unit mid-pull; it flies to its cell centre, falls with a growing rate, finds the cell clear, descends and touches down unhurt, set down; its next fall-back to rest restores its own locomotor
+// spec: S-0607 claims 12, 13, 15, 17 and 20 (revision 14; scenario L3 run a): a lifter's accepted order drops the unit mid-pull; it flies to its cell centre, falls with a growing rate, finds the cell clear, descends and touches down unhurt, set down; the end of its touchdown turn restores its own locomotor
 #[test]
 fn claim_17_release_over_clear_land() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
@@ -443,9 +431,9 @@ fn quirk_lift_impact_removes_survivor_both_positions() {
     assert!(restored(&mut w, v), "off: restored");
 }
 
-// spec: S-0607 claim 20: restoration only at rest: a set-down unit in guard stays seized; the first move order after touchdown is refused and restores the unit; a second one moves it
+// spec: S-0607 claim 20 (revision 14, the first order after touchdown; scenario L11 parts a and c): a set-down unit in guard is restored at the end of its landing turn with no order, and one move order given after touchdown moves it with its own locomotor
 #[test]
-fn claim_20_first_order_restores_second_moves() {
+fn claim_20_restored_at_landing_first_order_moves() {
     let (mut w, l, v) = seized_world(|_| {}, "VICT");
     pull_over(&mut w, v, 4);
     glasnost_sim::econ::assign_destination(&mut w, v, None);
@@ -454,24 +442,15 @@ fn claim_20_first_order_restores_second_moves() {
             && !glasnost_sim::jump::moving(w, v)),
         "touchdown"
     );
-    // The lifter leaves, so it cannot seize the unit again once restored.
+    assert!(!lift::seized(&w, v), "left alone in guard: restored");
+    // The lifter leaves, so it cannot seize the unit again.
     glasnost_sim::objects::remove(&mut w, l);
-    run(&mut w, 30);
-    assert!(lift::seized(&w, v), "left alone in guard: still seized");
     let here = w.obj(v).unwrap().pos.cell();
     let goal = glasnost_map::CellXY::new(here.x, here.y + 3);
     assert!(order_move(&mut w, v, goal));
     assert!(
-        run_until(&mut w, 40, |w| !lift::seized(w, v)),
-        "the first order restores it"
-    );
-    assert_eq!(w.obj(v).unwrap().dest, None, "its destination was refused");
-    run(&mut w, 30);
-    assert_eq!(w.obj(v).unwrap().pos.cell(), here, "it did not move");
-    assert!(order_move(&mut w, v, goal));
-    assert!(
         run_until(&mut w, 300, |w| w.obj(v).unwrap().pos.cell() == goal),
-        "the second order moves it"
+        "the first order moves it"
     );
 }
 

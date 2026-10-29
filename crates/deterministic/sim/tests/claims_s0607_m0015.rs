@@ -30,9 +30,9 @@ fn shots_by(w: &mut World, firer: ObjectId, n: i32) -> usize {
     shots
 }
 
-// spec: S-0607 claims 6, 10, 17 and 20, S-0215 claim 27, S-0309 table C (firing check row); measure: M-0015 (Q-2035): a seized unit of a computer-controlled house, dropped over clear land and set down unhurt, has *hunt* current (claim 6); its hunt search finds nothing because its firing check answers illegal for every target (claim 10), so hunt never falls back to rest (claim 27) and claim 20 never restores it: it stays seized, takes no target and fires no shot, with an enemy in range. Control: the same unit unseized, in hunt, fires at that enemy
+// spec: S-0607 claims 6, 10, 17 and 20 (revision 14, answers Q-2035), S-0215 claim 27, S-0309 table C (firing check row); measure: M-0015: a seized unit of a computer-controlled house, dropped over clear land and set down unhurt, has *hunt* current (claim 6); claim 20 restores it at the end of its touchdown turn, whatever its behaviour; before that its hunt search finds nothing (its firing check answers illegal, claim 10), after it the unit hunts as any hunter: it takes the enemy in range as its target and fires. Control: the same unit, never seized, in hunt, fires at that enemy
 #[test]
-fn m0015_a_set_down_computer_unit_in_hunt_stays_seized_and_never_fires() {
+fn m0015_a_set_down_computer_unit_in_hunt_is_restored_and_fires() {
     let mut w = world(armed_victim);
     w.houses[1].human = false;
     let l = spawn(&mut w, Kind::Vehicle, "LIFTER", 0, at(0, 0));
@@ -50,21 +50,29 @@ fn m0015_a_set_down_computer_unit_in_hunt_stays_seized_and_never_fires() {
     // The lifter accepts a destination: the grip ends with a drop (claims 12 and 13).
     glasnost_sim::econ::assign_destination(&mut w, l, Some(Target::Cell(at(0, 1))));
     assert!(lift::dropped(&w, v));
-    assert!(
-        run_until(&mut w, 400, |w| !lift::dropped(w, v)
-            && height(w, v) == 0
-            && !glasnost_sim::jump::moving(w, v)),
-        "the victim did not touch down"
-    );
+    // The lifter leaves play, so that it cannot seize the restored unit again (L11 part e).
+    glasnost_sim::objects::remove(&mut w, l);
+    let mut fired_seized = 0;
+    for _ in 0..400 {
+        if !lift::dropped(&w, v) && height(&w, v) == 0 && !glasnost_sim::jump::moving(&w, v) {
+            break;
+        }
+        assert!(lift::seized(&w, v), "claim 20: seized through the fall");
+        assert!(w.obj(v).unwrap().target.is_none(), "claim 10: no target");
+        fired_seized += shots_by(&mut w, v, 1);
+    }
+    assert_eq!(fired_seized, 0, "claim 10: no shot while seized");
     assert_eq!(health(&w, v), 100, "claim 17: unhurt on clear land");
-    assert!(lift::seized(&w, v), "claim 17: set down, still seized");
+    assert!(!lift::seized(&w, v), "claim 20: restored at touchdown");
+    assert_eq!(
+        w.obj(v).unwrap().beh.current,
+        Some(Behaviour::Hunt),
+        "claim 6: hunt"
+    );
     let shots = shots_by(&mut w, v, 600);
-    let o = w.obj(v).unwrap();
-    assert_eq!(o.beh.current, Some(Behaviour::Hunt), "claim 6: hunt");
-    assert!(lift::seized(&w, v), "claim 20: never restored in hunt");
-    assert!(o.target.is_none(), "claim 10: the search takes no target");
-    assert_eq!(shots, 0, "claim 10: no shot");
-    assert!(w.obj(enemy).is_some() && w.obj(l).is_some());
+    assert!(shots > 0, "S-0215 claim 27: a restored hunter fires");
+    assert!(!lift::seized(&w, v));
+    assert!(w.obj(enemy).is_none_or(|o| o.health < 100), "it hit the enemy");
 
     // Control: the same unit, never seized, hunting from the same cell.
     let mut w = world(armed_victim);

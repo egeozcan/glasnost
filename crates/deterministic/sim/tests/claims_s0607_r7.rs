@@ -490,27 +490,22 @@ fn claim_23_landed_aircraft_teleports() {
     assert_eq!(total(&w, others_at), 0, "no object-present mark left");
 }
 
-// spec: S-0607 claim 23 (revision 7, taking off) and claim 24 (quirks.lift_standin_stays_seized off: a landed aircraft seized with the teleporting stand-in is restored and can take off on a later order; its marks are its own again)
+// spec: S-0607 claim 23 (revision 7, taking off) and claim 24 (quirks.lift_standin_stays_seized off: a landed aircraft seized with the teleporting stand-in is restored and can take off on a later order; its marks are its own again) and claim 20 (revision 14: the restoration test at the end of each of its turns restores it with no order)
 #[test]
 fn claim_23_landed_aircraft_restored_takes_off() {
     let (mut w, l, p) = scene("teleport", false, true, Kind::Aircraft, "PLANE");
     assert!(run_until(&mut w, 5, |w| !lift::grips(w, l, p)));
     glasnost_sim::objects::remove(&mut w, l);
-    let mut restored = false;
-    for _ in 0..10 {
-        let c = w.obj(p).unwrap().pos.cell();
-        order_move(&mut w, p, CellXY { x: c.x + 4, y: c.y });
-        if run_until(&mut w, 20, |w| !lift::seized(w, p)) {
-            restored = true;
-            break;
-        }
-    }
-    assert!(restored, "restored");
+    assert!(run_until(&mut w, 2, |w| !lift::seized(w, p)), "restored");
     assert!(w.obj(p).unwrap().lift.own.is_none());
     assert!(w.obj(p).unwrap().teleport.is_none(), "its own (none)");
     assert!(total(&w, others_at) <= 1, "at most its own mark");
+    // Past the start-of-game order block (S-0213 claim 1), which refuses the
+    // order otherwise.
+    let through = w.orders_blocked_through;
+    assert!(run_until(&mut w, 10, |w| w.tick > through));
     let c = w.obj(p).unwrap().pos.cell();
-    order_move(&mut w, p, CellXY { x: c.x + 6, y: c.y });
+    assert!(order_move(&mut w, p, CellXY { x: c.x + 6, y: c.y }));
     assert!(run_until(&mut w, 200, |w| height(w, p) > 0), "it takes off");
     assert!(
         run_until(&mut w, 400, |w| total(w, others_at) == 0),
