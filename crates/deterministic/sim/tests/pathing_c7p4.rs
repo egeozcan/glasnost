@@ -19,11 +19,12 @@ mod pathing_common;
 
 use pathing_common::*;
 
-/// Our switches (C7 part 4), each defaulting to the original.
-const DESIGN: [&str; 3] = [
+/// Our switches (C7 parts 4 and 5), each defaulting to the original.
+const DESIGN: [&str; 4] = [
     "path_through_stalled_blockers",
     "unreachable_move_dropped",
     "group_spread_no_detour",
+    "rally_point_shared",
 ];
 
 /// The seeds the table is measured over.
@@ -213,7 +214,18 @@ fn group_spread_off_gives_each_member_its_own_cell() {
     assert_eq!(off.missing, 0);
 }
 
-// design: C7-P4 (the play-fixes layer turns each of our switches off)
+// spec: S-0417 claims 8 and 10 and S-0404 claim 13 (the original: every released unit is sent to the rally cell, so a stream crowds it and gives up after arriving); design: C7-P5 rally spread (off: each released unit gets a cell of its own round the rally point)
+#[test]
+fn rally_spread_off_gives_each_released_unit_its_own_cell() {
+    let (on, off) = both("rally_point_shared", |r, s| factory(r, 8, 5, s));
+    assert_eq!(on.shared, 8, "the original: one rally cell for all");
+    assert!(on.late_give_ups > 0, "{on:?}");
+    assert_eq!(off.shared, 0, "off: a cell each");
+    assert_eq!(off.give_ups, 0);
+    assert_eq!(off.missing, 0);
+}
+
+// design: C7-P4 and C7-P5 (the play-fixes layer turns each of our switches off)
 #[test]
 fn the_layer_turns_our_switches_off() {
     let q = pathing_common::ruleset(Rules::Layer).globals.quirks;
@@ -227,3 +239,4 @@ fn the_layer_turns_our_switches_off() {
         DESIGN.len()
     );
 }
+

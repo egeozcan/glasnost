@@ -907,7 +907,15 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
         }
         // design: C7-P4 group spread (quirks.group_spread_no_detour off: a member whose look gives no cell of its own gets the nearest open cell round the common cell, when there is one)
         let near = if result.is_none() && !w.rules().quirks.group_spread_no_detour {
-            open_near(w, id, common, zone, common_reach, &given, reference)
+            open_near(
+                w,
+                id,
+                common,
+                zone,
+                common_reach,
+                &|c| given.contains(&c),
+                reference,
+            )
         } else {
             None
         };
@@ -931,21 +939,22 @@ fn spread(w: &mut World, run: &[(usize, ObjectId)], common: CellXY) -> Vec<(usiz
 // nocite: design: C7-P4 group spread (our choice: the look's length of S-0213 claim 7)
 const SPREAD_RADIUS: i32 = 6;
 
-/// The nearest open cell round the common cell `common` for member `id`
-/// whose look gave no cell of its own (`quirks.group_spread_no_detour` off;
-/// our design, C7 part 4): the first ring round `common`, out to
+/// The nearest open cell round the common cell `common` for unit `id`
+/// (our design: C7 part 4's group spread, for a member whose look gave no
+/// cell of its own with `quirks.group_spread_no_detour` off, and C7 part
+/// 5's rally spread, [`rally_cell`]): the first ring round `common`, out to
 /// [`SPREAD_RADIUS`], with a cell that the look would class open (in the
-/// usable area and the common cell's reach region, given to no member yet,
-/// less than 3 levels from the common cell, not obstructed); of that ring
-/// the cell nearest `common`, the first in row order on equal distances.
-/// It takes no draw.
-fn open_near(
+/// usable area and the common cell's reach region, not `taken`, less than 3
+/// levels from the common cell, not obstructed); of that ring the cell
+/// nearest `common`, the first in row order on equal distances. It takes
+/// no draw.
+pub(crate) fn open_near(
     w: &World,
     id: ObjectId,
     common: CellXY,
     zone: Option<glasnost_rules::sim::MovementZone>,
     common_reach: Option<Reach>,
-    given: &[CellXY],
+    taken: &dyn Fn(CellXY) -> bool,
     reference: i32,
 ) -> Option<CellXY> {
     if matches!(common_reach, Some(Reach::OffMap | Reach::None)) {
@@ -963,7 +972,7 @@ fn open_near(
                 // spec: S-0213 claim 7 (the open class of a look cell: usable, the common cell's region, not given, less than 3 levels off, not obstructed)
                 let open = w.cells.usable(c)
                     && zone.is_none_or(|z| Some(regions::reach_in(w, c, z)) == common_reach)
-                    && !given.contains(&c)
+                    && !taken(c)
                     && (level_of(w, c) - common_level).abs() < 3
                     && !obstructed(w, id, c, reference);
                 let d = dx * dx + dy * dy;
@@ -977,6 +986,57 @@ fn open_near(
         }
     }
     None
+}
+
+/// The rally destination of a unit `unit` a factory releases with the
+/// factory's rally point `spot` (S-0404 claim 13, S-0417 claims 8 and 10).
+/// With `quirks.rally_point_shared` on (the original) the rally point
+/// itself. Off (our design, C7 part 5, rally spread): a cell rally point
+/// becomes a cell of the unit's own round it: the rally cell when no other
+/// mobile unit of the house has it as destination or guard spot and it is
+/// not obstructed, else [`open_near`] round it with those cells taken, else
+/// the rally cell. An object rally point is kept. It takes no draw.
+pub(crate) fn rally_cell(w: &World, unit: ObjectId, spot: Option<Target>) -> Option<Target> {
+    // spec: S-0417 claim 8 (the original: the rally point is copied as it is, quirks.rally_point_shared)
+    if w.rules().quirks.rally_point_shared {
+        return spot;
+    }
+    let Some(Target::Cell(rally)) = spot else {
+        return spot;
+    };
+    let Some(o) = w.obj(unit) else {
+        return spot;
+    };
+    // design: C7-P5 rally spread (taken: a cell another mobile unit of the house is sent to or guards, so each released unit gets its own)
+    let taken: std::collections::BTreeSet<CellXY> = w
+        .objects
+        .iter()
+        .filter(|(id, x)| **id != unit && x.owner == o.owner && x.kind.is_mobile())
+        .flat_map(|(_, x)| [x.dest, x.guard_spot])
+        .filter_map(|t| match t {
+            Some(Target::Cell(c)) => Some(c),
+            _ => None,
+        })
+        .collect();
+    let zone = w.rules().unit(o.kind, o.type_index).map(|u| u.zone);
+    let reach = zone.map(|z| regions::reach_in(w, rally, z));
+    // spec: S-0213 claim 7 (the obstructed class's reference height: the common cell's level, here the rally cell's)
+    let reference = level_of(w, rally);
+    if !taken.contains(&rally) && !obstructed(w, unit, rally, reference) {
+        return spot;
+    }
+    // design: C7-P5 rally spread (the group spread's nearest open cell round the rally point, C7-P4)
+    open_near(
+        w,
+        unit,
+        rally,
+        zone,
+        reach,
+        &|c| taken.contains(&c),
+        reference,
+    )
+    .map(Target::Cell)
+    .or(spot)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

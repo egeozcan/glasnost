@@ -437,6 +437,13 @@ pub struct Quirks {
     // spec: S-0213 claim 7 and Edge cases (no further search after a spoiled look; the off position is our design, the lead's decision of 2026-10-29)
     #[serde(default = "on")]
     pub group_spread_no_detour: bool,
+    /// Every unit a factory releases with a cell rally point is sent to the
+    /// rally cell itself (the original). Off (our design, C7 part 5): each
+    /// released unit is sent to a cell of its own round the rally point, the
+    /// rally cell while no other unit of the house has it.
+    // spec: S-0417 claims 8 and 10 and S-0404 claim 13 (the rally point copied at release; the off position is our design, the lead's decision of 2026-10-29)
+    #[serde(default = "on")]
+    pub rally_point_shared: bool,
     /// The harvester-truce exception of row I15 never applies.
     // spec: S-0214 Edge cases
     #[serde(default = "on")]
@@ -2166,6 +2173,7 @@ impl Default for Quirks {
             detonate_in_planter_name: true,
             cheer_memory_spans_session: true,
             group_spread_no_detour: true,
+            rally_point_shared: true,
             hijack_truce_harvester_check: true,
             permadisguise_attack_cursor: true,
             empty_box_release_click: true,
@@ -2816,6 +2824,7 @@ impl Quirks {
                 self.cheer_memory_spans_session,
             ),
             ("group_spread_no_detour", self.group_spread_no_detour),
+            ("rally_point_shared", self.rally_point_shared),
             (
                 "hijack_truce_harvester_check",
                 self.hijack_truce_harvester_check,

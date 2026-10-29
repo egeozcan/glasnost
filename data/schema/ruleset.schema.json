@@ -10207,6 +10207,11 @@
           "type": "boolean",
           "default": true
         },
+        "rally_point_shared": {
+          "description": "Every unit a factory releases with a cell rally point is sent to the\nrally cell itself (the original). Off (our design, C7 part 5): each\nreleased unit is sent to a cell of its own round the rally point, the\nrally cell while no other unit of the house has it.",
+          "type": "boolean",
+          "default": true
+        },
         "ramp_shape_zero": {
           "description": "A tile of the ramp range or of the smooth-ramp range whose slope shape is 0 becomes the tile just before the ramp range.",
           "type": "boolean",

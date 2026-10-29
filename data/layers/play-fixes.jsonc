@@ -13,11 +13,11 @@
 // (3) it is not a balance change (D14). Each entry cites its claim and what it answers. The list
 // is kept short; docs/m8-claims/c7-play-fixes.md gives the entries considered and rejected.
 //
-// Our own pathing improvements (the lead's decision of 2026-10-29, M8 step C7 part 4) are
-// admitted without condition (1): their off position is our design, marked
-// `// design: C7-P4 <name>` in the code and described in docs/m8-claims/c7-pathing.md, which
-// also gives the synthetic scenario that shows the bug in the on position. Conditions (2) and
-// (3) still hold.
+// Our own pathing improvements (the lead's decision of 2026-10-29, M8 step C7 parts 4 and 5)
+// are admitted without condition (1): their off position is our design, marked
+// `// design: C7-P4 <name>` or `// design: C7-P5 <name>` in the code and described in
+// docs/m8-claims/c7-pathing.md, which also gives the synthetic scenario that shows the bug in
+// the on position. Conditions (2) and (3) still hold.
 {
   "globals": {
     "quirks": {
@@ -89,6 +89,13 @@
       // and give up (the spec's own Edge case).
       // Answers: the scenarios "by buildings" and "shore" of the same ledger.
       "group_spread_no_detour": false,
+      // Our design, C7-P5 rally spread (quirks.rally_point_shared off; S-0417 claims 8 and 10,
+      // S-0404 claim 13): each unit a factory releases with a cell rally point is sent to a cell
+      // of its own round it (the rally cell while no other unit of the house has it, else the
+      // group spread's nearest open cell round it). On (the original), every released unit
+      // heads for the one rally cell, where they crowd and give up after arriving.
+      // Answers: the scenario "factory stream" of docs/m8-claims/c7-pathing.md.
+      "rally_point_shared": false,
     },
   },
 }
