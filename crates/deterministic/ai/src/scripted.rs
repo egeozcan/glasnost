@@ -56,6 +56,7 @@
 use std::collections::BTreeMap;
 
 use glasnost_map::CellXY;
+use glasnost_rules::sim::MovementZone;
 use glasnost_sim::combat::{check, weapon};
 use glasnost_sim::econ::TypeRef;
 use glasnost_sim::econ::{deploy, placement, production, resource, sell, shroud, slaves, tech};
@@ -142,6 +143,10 @@ const WAVE_PATIENCE: i32 = 3000; // nocite: tuning of our own opponent
 /// Resource cells around a refinery, slave miner or home that keep one
 /// harvester at work ([`Script::harvesters_wanted`]).
 const CELLS_PER_HARVESTER: usize = 20; // nocite: tuning of our own opponent
+
+/// How far around home, in cells, [`Script::harvester_reach`] looks for
+/// where a harvester would leave the base when the house has none.
+const HOME_RING: i32 = 6; // nocite: tuning of our own opponent
 
 /// How near a start cell an ally's building stands for that start to be
 /// the ally's base ([`Script::ally_base_at`]), in cells.
@@ -2162,6 +2167,7 @@ impl Script {
     /// none, the explored resource cell nearest home.
     fn ore_goal(&self, w: &World) -> Option<CellXY> {
         let home = self.home(w)?;
+        let reach = self.harvester_reach(w, home);
         let mut ore: Vec<CellXY> = w
             .cells
             .grid
@@ -2171,6 +2177,10 @@ impl Script {
                 w.cells.usable(c)
                     && resource::resource_at(w, c).is_some()
                     && shroud::explored(w, self.house, c)
+                    && (reach.is_empty()
+                        || reach
+                            .iter()
+                            .any(|&(z, r)| regions::reach_in(w, c, z) == Reach::Region(r)))
             })
             .collect();
         ore.sort_by_key(|&c| (dist2(c, home), c.y, c.x));
@@ -2182,6 +2192,60 @@ impl Script {
             .copied()
             .find(|&c| rich(c))
             .or_else(|| ore.first().copied())
+    }
+
+    /// The reach regions (S-0212 claim 4) the house's harvesters drive
+    /// in, each with its movement zone: those its harvesters stand in
+    /// (not slave miners, which go by their own rules, S-0402 claim 14,
+    /// nor one that flies), or, with none on the map, those of the cells
+    /// within [`HOME_RING`] cells of `home` for the zone of each harvester
+    /// type of its plan, where one would leave the base. A person sends a
+    /// harvester only to a field its order can reach (M8 step B9: the
+    /// pathing query a person's order gives); empty when nothing is known,
+    /// and then no field is left out.
+    fn harvester_reach(&self, w: &World, home: CellXY) -> Vec<(MovementZone, u32)> {
+        let mut out: Vec<(MovementZone, u32)> = Vec::new();
+        let mut add = |z: MovementZone, c: CellXY| {
+            if let Reach::Region(r) = regions::reach_in(w, c, z)
+                && !out.contains(&(z, r))
+            {
+                out.push((z, r));
+            }
+        };
+        let mut any = false;
+        for id in self.of_role(w, Role::Harvester) {
+            let Some(o) = w.obj(id) else { continue };
+            if is_slave_miner(w, tech::type_of(o)) || crate::jumpjets::flies(w, id) {
+                continue;
+            }
+            if let Some(u) = w.rules().unit(o.kind, o.type_index) {
+                any = true;
+                add(u.zone, o.pos.cell());
+            }
+        }
+        if !any {
+            // Every harvester type of the plan, buildable now or not: a
+            // house with no harvester yet has no war factory either, and
+            // its first harvester may come later or with a refinery
+            // (S-0404 claim 2).
+            let types = all_types(w)
+                .into_iter()
+                .filter(|&t| self.allowed(w, t, Role::Harvester));
+            for t in types {
+                if is_slave_miner(w, t) {
+                    continue;
+                }
+                let Some(u) = w.rules().unit(t.kind, t.index) else {
+                    continue;
+                };
+                for dy in -HOME_RING..=HOME_RING {
+                    for dx in -HOME_RING..=HOME_RING {
+                        add(u.zone, CellXY::new(home.x + dx, home.y + dy));
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Where a person puts a refinery (M8 step B8): in the wider spiral

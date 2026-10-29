@@ -1003,3 +1003,94 @@ fn places_the_refinery_beside_the_field() {
         }
     }
 }
+
+/// [`fixture::map`] with a moat of water around each start's field (the
+/// cells three to four cells from its middle, nine cells south of the
+/// start), so that no harvester reaches it, and a second field of 5 × 5
+/// cells on open ground, eight cells toward the map's middle and eleven
+/// cells north of the start, farther from it. Returns the map and the
+/// middle cells of the moated and the open fields of each start.
+fn map_moated_fields() -> (Map, Vec<(glasnost_map::CellXY, glasnost_map::CellXY)>) {
+    let mut m = fixture::map();
+    let mut fields = Vec::new();
+    for dx in [-fixture::START_DX, fixture::START_DX] {
+        let side = dx.signum();
+        let moated = fixture::at(dx, 9);
+        let open = fixture::at(dx - side * 8, -11);
+        fields.push((moated, open));
+        let cells: Vec<glasnost_map::CellXY> = m.cells.iter().map(|(c, _)| c).collect();
+        for c in cells {
+            let (ox, oy) = (c.x - moated.x, c.y - moated.y);
+            let ring = ox.abs().max(oy.abs());
+            if (3..=4).contains(&ring)
+                && let Some(cell) = m.cells.get_mut(c)
+            {
+                cell.tile = fixture::WATER_TILE;
+                cell.overlay = glasnost_map::NO_OVERLAY;
+            }
+            if (c.x - open.x).abs() <= 2
+                && (c.y - open.y).abs() <= 2
+                && let Some(cell) = m.cells.get_mut(c)
+            {
+                cell.overlay =
+                    (((c.x - open.x + 2) * side + c.y - open.y + 2).rem_euclid(12)) as u8;
+                cell.overlay_data = 6;
+            }
+        }
+    }
+    (m, fields)
+}
+
+// PLAN §4.7 (M8 step B9): the refinery goes beside a field a harvester of the house can reach (its reach region, S-0212 claim 4), not beside a nearer one across water.
+#[test]
+fn places_the_refinery_beside_a_field_a_harvester_reaches() {
+    let (map, fields) = map_moated_fields();
+    let mut g = Game::new(
+        fixture::rules(),
+        &map,
+        "synthetic-economy",
+        fixture::catalogue(),
+        fixture::setup(5),
+    )
+    .expect("the skirmish loads");
+    // Both fields are in sight from the start, as a person who scouted
+    // them sees them: which one the house builds beside is then its
+    // choice, not what it has explored.
+    for &(moated, open) in &fields {
+        for c in [moated, open] {
+            for h in [H, HouseId(1)] {
+                let p = glasnost_sim::world::Pos::centre(c, 0);
+                glasnost_sim::econ::shroud::area_reveal(&mut g.world, h, p, 5);
+            }
+        }
+    }
+    while g.world.tick < 8000 && !has_role(&g.world, Role::Refinery) {
+        g.step();
+    }
+    let w = &g.world;
+    let yard = *of_role(w, Role::Yard).first().expect("a yard");
+    let refinery = *of_role(w, Role::Refinery).first().expect("a refinery");
+    let centre = |id: ObjectId| {
+        let o = w.obj(id).expect("own object");
+        let c = o.pos.cell();
+        glasnost_map::CellXY::new(c.x + o.foundation.0 / 2, c.y + o.foundation.1 / 2)
+    };
+    let d2 = |a: glasnost_map::CellXY, b: glasnost_map::CellXY| {
+        let (dx, dy) = (i64::from(a.x - b.x), i64::from(a.y - b.y));
+        dx * dx + dy * dy
+    };
+    let y = centre(yard);
+    let &(moated, open) = fields
+        .iter()
+        .min_by_key(|(m, _)| d2(*m, y))
+        .expect("the house's fields");
+    assert!(
+        d2(moated, y) < d2(open, y),
+        "the moated field is the nearer one"
+    );
+    let r = centre(refinery);
+    assert!(
+        d2(r, open) < d2(r, moated),
+        "refinery at {r:?} toward the open field {open:?}, not the moated {moated:?}"
+    );
+}
