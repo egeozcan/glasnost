@@ -232,7 +232,7 @@ pub fn fall_back(w: &mut World, id: ObjectId, placement: bool) {
         // spec: S-0309 claim 23 (b) (the attack-move refresh is among the common effects, at most once per tick)
         // spec: S-0215 claim 13 (attack-move memory is refreshed before the table's effects; the rows judge the state it leaves)
         refresh_attack_move(w, id);
-        // spec: S-0215 claim 13 row 1 and S-0607 claim 20 (a seized unit, set down and not moving, gets its own locomotor back)
+        // spec: S-0215 claim 13 row 1 and S-0607 claim 20 (a seized unit, set down and not moving, gets its own locomotor back; revision 14: the same test is also made at the end of each of its turns, `lift::end_of_turn`)
         let lifted = crate::lift::restore_at_rest(w, id);
         // spec: S-0607 claim 12 (row 3: a vehicle lifter falling back to rest lets go, unless an override is in effect or wait is current)
         crate::lift::lifter_rest(w, id);

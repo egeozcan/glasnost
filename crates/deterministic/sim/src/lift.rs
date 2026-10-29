@@ -1540,17 +1540,38 @@ pub fn touched_down(w: &mut World, id: ObjectId) {
 // ---------------------------------------------------------------------------
 // Restoration (claim 20)
 
-/// At a fall-back to rest (S-0215 claim 13 row 1): a seized unit whose
-/// jumpjet movement is not *moving* and that is set down gets its own
-/// locomotor back (S-0607 claim 20). With the no-cell switch off, a
-/// set-down unit hovering with no movement point and no commitment, by any
-/// route, is not restored: it repeats the stop's search instead.
-/// Returns whether it was restored.
+/// Claim 20's restoration test at a fall-back to rest (S-0215 claim 13 row
+/// 1). Returns whether the unit was restored.
 pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
+    restoration_test(w, id, false)
+}
+
+/// Claim 20's restoration test at the end of each of the unit's turns
+/// (revision 14; `tick::object_turn`): after the point at which it may
+/// process its behaviour, whether or not it did, and after its movement,
+/// whatever its behaviour and house. A turn that ends early (a lost turn, a
+/// dead unit, being erased, a warp-only update) has no test.
+pub fn end_of_turn(w: &mut World, id: ObjectId) {
+    if seized(w, id) {
+        restoration_test(w, id, true);
+    }
+}
+
+/// The restoration test (claim 20; claim 24 for another stand-in): a seized
+/// unit whose jumpjet movement is not *moving* and that is set down gets its
+/// own locomotor back. With the no-cell switch off, a set-down unit hovering
+/// with no movement point and no commitment, by any route, is not tested:
+/// at the end of a turn it repeats the stop's search instead, at a fall-back
+/// to rest nothing happens. Returns whether it was restored.
+fn restoration_test(w: &mut World, id: ObjectId, turn_end: bool) -> bool {
     let Some(l) = st(w, id).cloned() else {
         return false;
     };
     if !l.seized {
+        return false;
+    }
+    // spec: S-0607 claim 20 (revision 14, units being erased: not restored while being erased or in the leaving stage of a chrono move, S-0215 claim 2, at any test; design: the same for a landed aircraft being erased, which the spec leaves open)
+    if crate::superweapons::being_erased(w, id) {
         return false;
     }
     if let Some(k) = l.stand_in {
@@ -1558,7 +1579,7 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
         if w.rules().quirks.lift_standin_stays_seized {
             return false;
         }
-        // spec: S-0607 claim 24 (quirk off: claim 20 applies to every stand-in, with that stand-in's own moving test in place of the jumpjet's)
+        // spec: S-0607 claim 24 (quirk off: claim 20 applies to every stand-in, at any restoration test, with that stand-in's own moving test in place of the jumpjet's)
         if stand_in_moving(w, id, k) || !l.set_down || l.lifter.is_some() {
             return false;
         }
@@ -1570,8 +1591,10 @@ pub fn restore_at_rest(w: &mut World, id: ObjectId) -> bool {
         && !w.rules().quirks.jumpjet_no_cell_self_destruct
         && crate::jump::hovering_uncommitted(w, id)
     {
-        // spec: S-0607 claim 20 (revision 9, the hovering exclusion, design: a seized set-down unit hovering with no movement point and no movement commitment after S-0502 claim 17's no-cell outcome with quirks.jumpjet_no_cell_self_destruct off, whatever route brought it there, is not tested for restoration; it repeats the stop's search instead; answers Q-1344) and S-0502 Edge cases (revision 17)
-        crate::jump::lift_retry_stop(w, id);
+        // spec: S-0607 claim 20 (revision 14, the hovering set-down unit, design: a seized set-down unit hovering with no movement point and no movement commitment after S-0502 claim 17's no-cell outcome with quirks.jumpjet_no_cell_self_destruct off, whatever route brought it there, is not tested for restoration, neither at the end of a turn nor at a fall-back to rest; at the end of each of its turns it repeats the stop's search instead) and S-0607 Changes for other specs (S-0502 Edge cases: the retry at the end of each turn, not at a fall-back to rest)
+        if turn_end {
+            crate::jump::lift_retry_stop(w, id);
+        }
         return false;
     }
     // spec: S-0607 claim 20 (its jumpjet movement is not moving, S-0502's moving, not moving now; and it is set down)
