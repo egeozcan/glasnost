@@ -10,7 +10,7 @@ measured-on: 2026-10-28
 method: harness
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-28
+approved-on: 2026-10-29
 ---
 
 # M-0015: Unit arena, TELE against BFRT, stock replay watched per unit
@@ -34,6 +34,7 @@ BFRT games of question 3 are M-0011, and question 1 is not tested here.
 - **Placement.** The units are not map entries. They are created on their stated cells once the
   scenario has loaded, before tick 0, so they are in play in the tick-0 state. A unit can be
   placed off its stated cell. Placed cells are not given here.
+- The map's four bunkers, owned by a neutral house, are in play from tick 0.
 - What is not stock:
   - no menus: the skirmish setup comes from a settings file
   - the computer players' starting construction vehicles are removed
@@ -46,7 +47,7 @@ BFRT games of question 3 are M-0011, and question 1 is not tested here.
     6079
   - a periodic sampler and a per-tick recorder read state only. With the recorder on, the
     archived games' results, kill statistics and duel records are reproduced exactly.
-- Tick convention: as in M-0001. A per-unit state stamped tick *f* is read after tick *f*'s logic
+- Tick convention: a per-unit state stamped tick *f* is read after tick *f*'s logic
   has run, and every damage event stamped *f* is already reflected in that tick's state.
 
 ## Procedure
@@ -85,10 +86,11 @@ BFRT games of question 3 are M-0011, and question 1 is not tested here.
 
 | Seed | End | Magnetrons left | Fortresses left | Fortress deaths in the kill statistics |
 |---|---|---|---|---|
-| 0 | tick limit, at tick 6080 | 3 of 9 | 2 of 4 | 3 |
-| 1 | tick limit, at tick 6080 | 4 of 9 | 2 of 4 | 3 |
+| 0 | tick limit, at tick 6080 | local | local | 3, one more than the fortresses that left play |
+| 1 | tick limit, at tick 6080 | local | local | 3 |
 
-The units left in each seed give the surviving shares of M-0001's rows for these two games.
+The units left in each seed are local. The winners and end ticks are those of the archived games
+in M-0001.
 
 **The Magnetrons' fire events.**
 
@@ -102,8 +104,8 @@ The units left in each seed give the surviving shares of M-0001's rows for these
 - No Magnetron made a fire event while it held a fortress.
 - In each seed, the only damage events with a Magnetron as attacker are the two of the landing
   crush below, with the crushing warhead. No damage event is tied to a Magnetron's fire event.
-- All four fortresses were held at tick 0. Those four holds were started by fire events in tick
-  0 and are among the 56 and 52.
+- Every fortress was held at tick 0. Those holds were started by fire events in tick 0 and are
+  among the 56 and 52.
 - What made the 22 and 20 fire events at a free fortress take no hold is not recorded. Whether
   that fortress was still seized from an earlier hold (S-0607 claims 3 and 12) is not recorded:
   only the holder is.
@@ -113,34 +115,34 @@ The units left in each seed give the surviving shares of M-0001's rows for these
 | Quantity | Value | Tolerance for tests |
 |---|---|---|
 | Holds (one per fire event that started a hold; no hold passed from one Magnetron to another without a tick between) | 56 in seed 0, 52 in seed 1 | exact |
-| Of those, holds that end in a landing | 54 in seed 0, 51 in seed 1 (105) | exact |
-| Of those, holds still running at tick 6079, the last recorded tick | 2 in seed 0, 1 in seed 1 | exact |
+| Of those, holds that end in a landing | local | exact |
+| Of those, holds still running at tick 6079, the last recorded tick | local | exact |
 | Time a held fortress is carried before release, in ticks | local | range only: per-hold values are not given here |
-| Height above the surface at the end of the release tick, in leptons | local; above 0 in all 105 | range only |
+| Height above the surface at the end of the release tick, in leptons | local; above 0 in every one | range only |
 | Time from release to landing, in ticks | local | range only |
 | Damage events at a landing other than the landing crush | 0 | exact |
 
 - What ended each hold (S-0607 claim 12) is not recorded.
 
 **The landing crush.** In both seeds two fortresses, held by two different Magnetrons, were
-released one tick apart and came down at the same position in the same tick, the landing tick.
-Both left play in that tick. These are the only two fortresses that left play in each seed. Below,
+released one tick apart and came down in the same tick, the landing tick.
+Both left play in that tick. No other fortress left play in either seed. Below,
 *later* and *earlier* name the fortress released second and first.
 
 | Quantity | Seed 0 | Seed 1 |
 |---|---|---|
-| Fortresses that leave play at the landing crush | 2 | 2 |
-| Damage events on them, all in the landing tick: crushing warhead, defences not ignored, each taking the fortress's full strength | 2 (1 each) | 2 (1 each) |
+| Fortresses of the crush that leave play | both | both |
+| Damage events on them, all in the landing tick: crushing warhead, defences not ignored, each taking the fortress's full strength | one on each | one on each |
 | Attacker of both events | the later fortress's holder | the same |
 | Distance from the detonation: later fortress, earlier fortress | 3 and 8 leptons | 3 and 8 leptons |
 | Damage events with the other fortress's holder as attacker | 0 | 0 |
-| Fortress deaths in the kill statistics, and fortress kills credited to the TELE side | 3 and 3 | 3 and 3 |
+| Fortress deaths in the kill statistics, and fortress kills credited to the TELE side | 3 and 3, each one more than the fortresses that left play | 3 and 3 |
 
 - This fits S-0607 claims 16 to 18 if the later fortress ended its fall on the cell
   holding the other fortress, a vehicle, and so crashed. Its first impact detonation (crushing
   warhead, its dropper as source, ordinary area damage) then kills it and the other fortress. Under
   claim 18's double credit the falling fortress killed by a detonation is credited twice and the
-  other fortress once: 3 credits for 2 fortresses.
+  other fortress once: one credit more than the fortresses that left play.
 - No damage event with the demolition warhead (claim 18's second detonation) was recorded. Both
   fortresses had no health left after the crushing-warhead events.
 - The damage record holds no other event on either fortress. Not recorded: which of the two
@@ -154,10 +156,10 @@ Both left play in that tick. These are the only two fortresses that left play in
 |---|---|---|
 | Hits on Magnetrons by fortress fire | 15 | 18 |
 | Magnetrons destroyed by that fire | 0 | 0 |
-| Magnetrons that leave play | 6 | 5 |
-| Of those, with no damage event, above half strength, while a grounded fortress that had the Magnetron as its target stood within 0.04 cells of its position in the tick before | 6 | 5 |
+| Magnetrons that leave play | local | local |
+| Of those, with no damage event, above half strength, while a grounded fortress that had the Magnetron as its target stood within 0.04 cells of its position in the tick before | all of them | all of them |
 | Distance of that fortress from the Magnetron's position in that tick | 0.02 to 0.04 cells (both seeds) | |
-| Magnetrons the kill statistics credit to the BFRT side | 6 | 5 |
+| Magnetrons the kill statistics credit to the BFRT side | as many as left play | the same |
 
 The removals with no damage event are consistent with crushing under S-0210 claim 4. The kill
 statistics credit a side, not a unit, so they do not name the crusher.
@@ -166,19 +168,19 @@ statistics credit a side, not a unit, so they do not name the crusher.
 
 - 2 games (seeds 0 and 1, side A), per-tick records kept by the operator. No recording or log hash
   was supplied.
-- The end ticks and the surviving shares match the archived M-0001 games. With the recorder on,
-  their results, kill statistics and duel records are reproduced exactly (Setup).
+- The winners and end ticks match the archived M-0001 games. With the recorder on, their results,
+  kill statistics and duel records are reproduced exactly (Setup). The units left are local.
 
 ## Notes
 
-- **Three fortress deaths, two removals.** The kill statistics count credits: 3 fortress deaths
-  and 3 kills for the TELE side, for 2 fortresses that left play. This matches S-0607 claim 18's
-  double credit, as set out under the landing crush above.
+- **One fortress death more than removals.** The kill statistics count credits: in each seed they
+  give one fortress death, and one TELE kill, more than the fortresses that left play. This
+  matches S-0607 claim 18's double credit, as set out under the landing crush above.
 - **Not reported:** the fortresses' fire events other than their hits on Magnetrons, the damage
   events' amounts (only the health each takes), what ended each hold, and the cells of the
   removals.
-- **Q-1712 question 2.** In these two games the fortresses are lost only at the landing crush, two
-  per seed, and never from the beams themselves or from an ordinary landing. The Magnetrons are
+- **Q-1712 question 2.** In these two games the fortresses are lost only at the landing crush,
+  and never from the beams themselves or from an ordinary landing. The Magnetrons are
   lost only by removals with no damage event while a fortress that targeted them stands within
   0.04 cells of them.
 - **Q-1712 question 1** (an empty transport with no weapon of its own) is not tested: these
