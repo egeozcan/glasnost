@@ -19,20 +19,20 @@ after each tick, as the record's tick convention does. The record's numbers come
 | M-0011 fact | stock | ours | verdict |
 |---|---|---|---|
 | tick of the first gas on each fortress | 50 to 58 | 51 to 58 | agrees |
-| remaining berserk time at the end of the first gas tick, the same for all fortresses | the same for all 8 | the same for all 8 | agrees (S-0302 claim 10 at distance 0) |
-| later gas events that leave the remaining time at the full value | 133 of 136, 116 of 116; 3 lower amounts not explained | every later berserk hit sets it to the full value | agrees with claim 10; the record leaves the 3 lower amounts unexplained, so we do not chase them |
+| remaining berserk time at the end of the first gas tick, the same for all fortresses | the same for every fortress | the same for every fortress | agrees (S-0302 claim 10 at distance 0) |
+| later gas events that leave the remaining time at the full value | all but three; every one; 3 lower amounts not explained | every later berserk hit sets it to the full value | agrees with claim 10; the record leaves the 3 lower amounts unexplained, so we do not chase them |
 | a further hit sets the time anew, longer or shorter | 1 shorter, 2 longer | tested synthetically, both ways | agrees (test below) |
 | countdown with no gas event | falls by 1 each tick; 5 held ticks in seed 1 not explained | falls by 1 each tick | agrees (S-0610 claim 5); the record leaves the held ticks unexplained |
 | health taken by a gas event | 0 | 0 | agrees (S-0302 claim 10: a berserk hit changes no health) |
 | gas damage events on fortresses | 140 and 120 | no direct counterpart: our berserk hits make no hit event | not compared; we count the berserk entries and resets to the end tick instead: at least 249 in seed 0 and 304 in seed 1. That is more than the record, because our drones never leave play |
-| fortresses that leave the berserk state | 0; 2 (ticks 433, 662) | 0; 0 | follows from the drones row (below): our drones keep gassing the fortresses |
+| fortresses that leave the berserk state | local | none | compared in the local lane only; follows from the drones row (below): our drones keep gassing the fortresses |
 | fire of one fortress at another | 198; 275 | 249 by tick 608; 318 by tick 912 | agrees that it happens; the counts follow from the drones row |
-| fortresses destroyed by that fire | 1; 1 | 1 by tick 608; 2 by tick 912 | the same |
+| fortresses destroyed by that fire | local | compared in the local lane | the same |
 | the fortresses' fire goes only at each other while they are berserk | yes | yes: no shot at a drone while berserk | agrees (S-0610 claims 6 and 8) |
-| drones that leave play | 9; 9 | 0; 0 in 6080 ticks | **differs**: cause below, Q-2005 |
-| of those, crushed: no damage event, a grounded fortress that had the drone as its target on its position | 8; 8 | none: no berserk fortress ever takes a drone as target | **differs**: Q-2005 |
-| of those, one "Super" event with no attacker | 1; 1 | none | left alone: the record does not identify its source |
-| end of game | BFRT wins at 608 and 912 | frame limit (6080), CAOS 1.0 and BFRT 0.25 left, both seeds | follows from the drones row |
+| drones that leave play | every drone | none in 6080 ticks | **differs**: cause below, Q-2005 |
+| of those, crushed: no damage event, a grounded fortress that had the drone as its target on its position | all but one | none: no berserk fortress ever takes a drone as target | **differs**: Q-2005 |
+| of those, one "Super" event with no attacker | the other one | none | left alone: the record does not identify its source |
+| end of game | BFRT wins at 608 and 912 | frame limit (6080), both seeds; no drone leaves play | follows from the drones row |
 
 ## Cause
 

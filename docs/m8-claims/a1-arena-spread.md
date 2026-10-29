@@ -23,7 +23,8 @@ would change it).
 | lobby stream | not used | countries, colours and starts are fixed by M-0001's *Setup*, so nothing in the arena draws from it |
 
 Placement, facing and the hunt order are fixed by the records' *Setup* (units created through
-`testkit::spawn` and `objects::create`, which takes the creation draw of S-0202 claim 10; the hunt
+`objects::create`, which takes the creation draw of S-0202 claim 10, and put down by `objects::place`
+on their cell or, since intake 47, a cell around it, by a test with no draw; the hunt
 starts with its timer expired, S-0215 claim 3). So the seed reaches the games only through the
 scenario stream, and it does reach them: with `--spread`, our games differ from seed 0's
 
@@ -109,7 +110,7 @@ pairings, before this step, with what our games show:
 | rank | record, pairing | ours (all six seeds of each side) | candidate cause |
 |---|---|---|---|
 | 1 | M-0001 LTNK against ROBO | the ROBO are disabled (no shots) and the LTNK destroy all of them in every game; in the stock games a seed-dependent part survives | Q-1710 |
-| 2 | M-0001 YTNK against SREF | YTNK win by the first sample at full value; the SREF fire few shots; the front column of YTNK all take equal damage | Q-1714; since M8 A3 intake 6 S-0318's shrapnel fragments answer it in part and the pairing passes (ours 9/3 against stock 8/4; row left 0.183 against 0.122) |
+| 2 | M-0001 YTNK against SREF | YTNK win by the first sample at full value; the SREF fire few shots; the front column of YTNK all take equal damage | Q-1714; since M8 A3 intake 6 S-0318's shrapnel fragments answer it in part and the pairing passes (ours 9/3 against stock 8/4) |
 | 3 | M-0001 MIND against E2 | the column side wins every game | the open mind-control item of *Arena mode (M7b)*; Q-1713 for E2 on side A |
 | 4 | M-0001 YTNK against E2 | side B ends `none` in every game | Q-1713 |
 | 5 | M-0001 TELE against BFRT | the BFRT take no target and fire no shot in 6080 frames; the TELE fire thousands of shots at one BFRT with no effect; both shares stay 1 | Q-1712; answered in part by M-0015 (M8 A3 intake 40, [ledger](intake40-M-0015.md)): in ours every fortress is seized at tick 1, dropped and set down unhurt, and then stays seized for good (in *hunt* it never falls back to rest, so S-0607 claim 20 never restores it), so it is never held again and never fires; in the stock games the fortresses are held again 52 to 56 times, fire at the Magnetrons and crush them; what restores them is open, Q-2035 |
@@ -185,3 +186,5 @@ drain in M7b).
 ## After M-0017 (M8 step A3)
 
 The arena's report gives its totals twice: for the pairings whose stock rows M-0017 confirms, and for the pairings with SREF or V3 on either side ("not confirmed by M-0017"; still judged). The 7 crashed MIND against E2 games are left out, so that pairing runs on n = 5. See [intake-M-0017.md](intake-M-0017.md).
+
+Since intake 47 the records give no army shares: the share KS tests above are gone, only the stock pairings are scored, and a unit its stated cell does not take stands on a free cell around it. See [intake47-arena-restated.md](intake47-arena-restated.md).

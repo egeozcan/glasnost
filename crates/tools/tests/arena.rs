@@ -4,13 +4,14 @@
 //!   seeds gives the identical report twice (in CI).
 //! - `arena_records_parse`: every oracle arena record under
 //!   `measurements/` (front matter plus the sibling CSV) parses and has the
-//!   protocol's shape (in CI).
+//!   protocol's shape, no record's CSV goes unread, and the scored pairings
+//!   and MIND against E2's line are M-0017's (in CI).
 //! - `arena_matches_the_oracle`: the local lane's comparison (never in
 //!   CI): with `GLASNOST_GAME_DIR` set, the records' games are played in
 //!   our engine with their setup (`glasnost_tools::oracle`) and compared
-//!   per pairing: a two-proportion test on the row's win proportion and
-//!   two-sample Kolmogorov–Smirnov tests on the row-left and column-left
-//!   shares, at `oracle::ALPHA`.
+//!   per pairing that stands as stock (M-0017): a two-proportion test on
+//!   the row's win proportion at `oracle::ALPHA`, and the same winner on
+//!   every side where every stock seed gave one.
 //! - `oracle_records_are_compared`: the oracle comparison on the synthetic
 //!   ground with a temporary record (in CI).
 //! - The other tests cover the synthetic arena of `glasnost_tools::arena`
@@ -147,9 +148,17 @@ fn an_unknown_type_is_refused() {
 /// Every oracle arena record under `measurements/` (the lead's form: front
 /// matter, a Setup `- Map:` line, and the sibling CSV) parses and has the
 /// protocol's shape: per pairing seeds 0 to 5 once on each side (measure:
-/// M-0001, M-0002, M-0003, Procedure). In CI; no game data is read.
+/// M-0001, M-0002, M-0003, Procedure). No record's CSV has a header the
+/// arena does not read, so a changed header cannot make the arena skip a
+/// record silently. In CI; no game data is read.
 #[test]
 fn arena_records_parse() {
+    let unread = oracle::unrecognised_csvs(&measurements());
+    assert!(
+        unread.is_empty(),
+        "per-game CSVs beside a record whose header is not {:?}: {unread:?}",
+        oracle::CSV_HEADER
+    );
     let records = oracle::load_records(&measurements()).unwrap();
     if records.is_empty() {
         println!("skipped: no oracle arena record in measurements/");
@@ -173,15 +182,70 @@ fn arena_records_parse() {
     arena::load_records(&measurements(), false).unwrap();
 }
 
+/// The pairings the comparison scores are those M-0017 confirms as stock:
+/// 84 of M-0001's 96, all 24 of M-0002's, 24 of M-0003's 35 (M-0017's
+/// table of games; the pairings with SREF or V3 on either side are not
+/// scored, M-0001 and M-0003 *Tolerance for tests*). The 7 crashed MIND
+/// against E2 games are the only stock games left out, and that pairing's
+/// line is M-0017's restated one: n = 5, 3 row wins, 2 column wins, no
+/// `none`, every game on side B. In CI; no game data is read.
+#[test]
+fn scored_pairings_and_mind_against_e2_are_those_of_m0017() {
+    let records = oracle::load_records(&measurements()).unwrap();
+    if records.is_empty() {
+        println!("skipped: no oracle arena record in measurements/");
+        return;
+    }
+    // measure: M-0017 (Setup: pairings per record; Result: the 7 crashed games and the restated line)
+    let want = [
+        ("M-0001", 84, 96, 7),
+        ("M-0002", 24, 24, 0),
+        ("M-0003", 24, 35, 0),
+    ];
+    for (id, scored, all, crashed) in want {
+        let r = oracle::find_record(&records, id).unwrap_or_else(|| panic!("no record {id}"));
+        let ps = oracle::pairings(&r.games);
+        assert_eq!(ps.len(), all, "{id}");
+        assert_eq!(
+            ps.iter().filter(|p| oracle::confirmed(p)).count(),
+            scored,
+            "{id}"
+        );
+        assert_eq!(
+            r.games.iter().filter(|g| oracle::crashed(g)).count(),
+            crashed,
+            "{id}"
+        );
+        // Our games equal to the stock ones: the scored pairings all pass,
+        // and the report counts only them.
+        let c = oracle::compare_record(r, &r.games);
+        assert_eq!(c.scored().len(), scored, "{id}");
+        assert!(c.failing().is_empty(), "{}", oracle::report(&c));
+        assert!(
+            oracle::report(&c).contains(&format!("scored pairings failing: 0 of {scored}")),
+            "{id}"
+        );
+    }
+    let m1 = oracle::find_record(&records, "M-0001").unwrap();
+    // measure: M-0017 (MIND against E2 restated: n 5, 3 / 2 / 0, side B seeds 1 to 5, no side-A game)
+    let pair = ("MIND".to_owned(), "E2".to_owned());
+    assert_eq!(oracle::stock_line(m1, &pair), ([3, 2, 0], [0, 5]));
+    let c = oracle::compare_record(m1, &m1.games);
+    let p = c.pairings.iter().find(|p| p.pairing == pair).unwrap();
+    assert_eq!((p.n, p.excluded, p.counts[0]), (5, 7, [3, 2, 0]));
+    assert!(p.confirmed);
+}
+
 /// The local lane's comparison (never in CI): with `GLASNOST_GAME_DIR` set,
 /// every oracle arena record (or only `GLASNOST_ARENA_RECORD`, an ID) is
 /// played in our engine with the record's setup and compared with its
-/// CSV per pairing (two-proportion test on the row's wins, KS tests on the
-/// row-left and column-left shares, at p < [`oracle::ALPHA`]; each
-/// record's *Tolerance for tests*). The tables go to
-/// `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored). Fails while any
-/// pairing is outside the tolerance; see docs/development.md, *Arena
-/// mode*, for the open discrepancies.
+/// CSV per pairing that stands as stock (M-0017): the two-proportion test
+/// on the row's wins at p < [`oracle::ALPHA`], and the same winner on every
+/// side where the stock seeds all gave it (each record's *Tolerance for
+/// tests*). The SREF and V3 pairings are played and shown, not scored. The
+/// tables go to `local-lane/m7b/arena/oracle-<ID>.txt` (git-ignored). Fails
+/// while any scored pairing is outside the tolerance; see
+/// docs/development.md, *Arena mode*, for the open discrepancies.
 #[test]
 fn arena_matches_the_oracle() {
     let records = oracle::load_records(&measurements()).unwrap();
@@ -214,8 +278,8 @@ fn arena_matches_the_oracle() {
     assert!(
         report
             .lines()
-            .filter(|l| l.contains("pairings failing any test:"))
-            .all(|l| l.contains("pairings failing any test: 0 of")),
+            .filter(|l| l.contains("scored pairings failing:"))
+            .all(|l| l.contains("scored pairings failing: 0 of")),
         "an oracle arena pairing is outside the record's tolerance (p < {})",
         oracle::ALPHA
     );
@@ -223,8 +287,7 @@ fn arena_matches_the_oracle() {
 
 /// The oracle comparison end to end on the synthetic ground: a record made
 /// in a temporary folder from our own games passes; the same record with
-/// the winners and shares swapped fails. Invented test data, not
-/// measurements.
+/// the winners swapped fails. Invented test data, not measurements.
 #[test]
 fn oracle_records_are_compared() {
     let ground = oracle::synthetic_ground(40);
@@ -261,8 +324,6 @@ fn oracle_records_are_compared() {
                 oracle::Winner::Col => oracle::Winner::Row,
                 w => w,
             },
-            row_left: g.col_left + 20_000,
-            col_left: g.row_left + 20_000,
             ..g.clone()
         })
         .collect();
