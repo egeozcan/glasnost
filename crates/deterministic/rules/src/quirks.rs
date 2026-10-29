@@ -888,6 +888,12 @@ pub struct Quirks {
     // spec: S-0401 claim 9
     #[serde(default = "on")]
     pub spread_mark_kept_on_last_neighbour: bool,
+    /// A cell holding a terrain object (a tree) counts as germinable; when a spread step or an
+    /// ore mine chooses it, it receives nothing and the spread step's attempt is used. Off: such
+    /// a cell is not germinable, so a spread step passes over it and it does not count in *c*.
+    // spec: S-0401 claims 10 and 11, Edge cases
+    #[serde(default = "on")]
+    pub spread_step_lost_on_terrain_object: bool,
     /// The stage a cell needs to spread depends on the tiberium's index.
     // spec: S-0401 claim 17
     #[serde(default = "on")]
@@ -2257,6 +2263,7 @@ impl Default for Quirks {
             spread_offer_by_emptied_type: true,
             spread_attempts_count_failures: true,
             spread_mark_kept_on_last_neighbour: true,
+            spread_step_lost_on_terrain_object: true,
             spread_stage_from_index: true,
             full_cell_no_regrowth: true,
             resource_timers_carry_over: true,
@@ -3095,6 +3102,10 @@ impl Quirks {
             (
                 "spread_mark_kept_on_last_neighbour",
                 self.spread_mark_kept_on_last_neighbour,
+            ),
+            (
+                "spread_step_lost_on_terrain_object",
+                self.spread_step_lost_on_terrain_object,
             ),
             ("spread_stage_from_index", self.spread_stage_from_index),
             ("full_cell_no_regrowth", self.full_cell_no_regrowth),

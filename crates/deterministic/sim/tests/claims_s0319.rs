@@ -1477,6 +1477,43 @@ fn claim_10_terrain_object_neighbour() {
     assert_eq!(overlay_at(&w, treed).0, glasnost_map::NO_OVERLAY);
 }
 
+/// spec: S-0319 claim 10 and S-0401 claim 10 (quirks.spread_step_lost_on_terrain_object off: a cell holding a terrain object is not germinable, so the offer takes no draws there)
+#[test]
+fn claim_10_terrain_object_neighbour_switch_off() {
+    use glasnost_rules::sim::TerrainObjectType;
+    let mut r = resource_rules(1);
+    r.globals.quirks.spread_step_lost_on_terrain_object = false;
+    register(&mut r, "terrain_objects", "TREE");
+    r.sim.terrain_objects.insert(
+        "TREE".into(),
+        TerrainObjectType {
+            strength: Some(100),
+            ..Default::default()
+        },
+    );
+    let mut w = world(&r);
+    let c = mid(0, 0);
+    let (dx, dy) = glasnost_sim::regions::STEPS[0];
+    let treed = CellXY::new(c.x + dx, c.y + dy);
+    let ty = w.rules().index_of(Kind::Terrain, "TREE").unwrap();
+    let tree = glasnost_sim::objects::create(&mut w, Kind::Terrain, ty, None);
+    glasnost_sim::objects::place(&mut w, tree, Pos::centre(treed, 0), 0);
+    assert!(!glasnost_sim::econ::resource::germinable(&w, treed));
+    let at = centre(c, 0);
+    let id = make(&mut w, "GROW", at);
+    set(&mut w, id, [at.x, at.y, 5], ["0", "0", "-10"]);
+    let mut probe = w.rng.clone();
+    let half = w.rules().quirks.ranged_draw_half_span;
+    // Direction 7 once and direction 1 once; the tree's three pairs take none.
+    for _ in 0..2 {
+        probe.ranged(0, 3, half);
+        probe.ranged(0, 2, half);
+    }
+    anims::turn(&mut w, id);
+    assert_eq!(w.rng, probe, "the tree's cell takes no draws");
+    assert_eq!(overlay_at(&w, treed).0, glasnost_map::NO_OVERLAY);
+}
+
 /// spec: S-0319 claim 10 and Edge cases (quirks.anim_resource_no_growth_entry: a new resource cell joins no growth list and takes no growth-list draw; off: it is offered to its tiberium's growth list with S-0401 claim 7's raw draw, after the placement and before the stage draw)
 #[test]
 fn claim_10_growth_entry_switch() {
