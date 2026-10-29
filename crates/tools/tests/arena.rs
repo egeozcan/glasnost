@@ -272,6 +272,7 @@ fn arena_matches_the_oracle() {
         groups: false,
         spread: None,
         ai_houses: false,
+        seed_range: None,
     };
     let report = oracle::run_cli(&cli, Some(Path::new(&dir))).unwrap();
     println!("{report}");

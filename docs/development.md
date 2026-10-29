@@ -2447,7 +2447,8 @@ target/release/glasnost-headless arena --record all --threads 8      # all three
 #          --compare-only (compare the stored ours-<ID>.csv without playing), --groups (list each type's kind, group size and cost),
 #          --ai-houses, --watch ROW,COL,A|B,SEED (play one game and print per-sample counts and every unit's final state),
 #          --spread ROW,COL,A|B (play the side's six seeds and print, per seed, the first tick and the state that differs from seed 0's),
-#          --trace ROW,COL,A|B,SEED (one game, every unit's changes tick by tick: berserk time, target, shots, how it leaves play), --trace-summary (its per-unit totals only).
+#          --trace ROW,COL,A|B,SEED (one game, every unit's changes tick by tick: berserk time, target, shots, how it leaves play), --trace-summary (its per-unit totals only),
+#          --seed-range ROW,COL,A|B,FIRST-LAST (play the side over more seeds than the records' 0 to 5 and print each winner and the counts: a noise check of ours, M8 A6).
 cargo test --release -p glasnost-tools --test arena arena_matches_the_oracle -- --nocapture   # the same as a test; GLASNOST_ARENA_RECORD=M-0003 picks one record
 ```
 
@@ -2489,6 +2490,12 @@ Before the fixes below (and with human-controlled houses) the counts were 37, 13
 Built: S-0309 claim 25 (g), the computer-owner houses' draw at a blinking disguise (`acquire::admit`; it was the seam `disguise::neutral_sees_through`), and S-0107 claim 17's corpse pick and row 3 (the importer now reads `DeadBodies` and `DeathAnims`; `combat::death::corpse`, the seam `death_anims_row` is gone; no-type entries by the interim rule of Q-1715 until S-0107 revision 22 answered it at M8 step A3 intake 5: the importer leaves no-type and empty items out of both lists). Left as seams: the animation playback of S-0109 (claims 11, 14 with μ > 0, 15, 17, 28, 29; `load::anim_created` now notes when an animation with those parts is created, which happens in nearly every pairing) and the smudges of S-0312 claim 26.
 
 Arena after both builds: failing pairings 34 of 96, 16 of 24 and 3 of 35 (were 35, 16 and 4); side-unanimous stock outcomes reproduced 148 of 172, 43 of 47 and 61 of 64 (were 145, 43 and 59). Claim 25 (g) moved only MGTK pairings (M-0003 MGTK against APOC and M-0001 YTNK against MGTK now pass); the corpse pick changed 37 games of M-0001 and 37 of M-0002. The sim-gate goldens and the seed sweeps 1 to 16 are unchanged. The results table above is from before this step.
+
+### Failing-pairing triage (M8 step A6)
+
+[m8-claims/a6-arena-triage.md](m8-claims/a6-arena-triage.md) classifies the 17 scored pairings that fail under intake 47's scoring: none is a departure of ours from an approved claim, 5 rest on rules the specs leave open (DISK against APOC: Q-2111, a steering missile fired from a muzzle at the surface; DISK against FV: Q-2112, ground hunters and hovering jumpjets; TELE against BFRT: Q-2113, a lifter whose gripped unit comes inside its minimum range; LTNK against ROBO and ROBO against APOC: Q-1710), and 12 are within noise. Q-2114 (the targets of a crushed unit) came up on the way. Interim rule for all of them: the approved rules as built; nothing in the simulation changed.
+
+The noise test is ours. `glasnost-headless arena --record ID --seed-range ROW,COL,A|B,FIRST-LAST` (`oracle::seed_range`) plays one side over more seeds than the records' 0 to 5 and prints each game and the counts. A side-outcome failure counts as within noise when our share *p* of the stock's 6-of-6 outcome over seeds 0 to 63 gives *p*⁶ ≥ 0.01, the records' α.
 
 ### The synthetic arena
 
