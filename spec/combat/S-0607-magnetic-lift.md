@@ -2,13 +2,15 @@
 id: S-0607
 title: Magnetic lift (seizing a vehicle's locomotor, lifting, dropping and the fall)
 topic: combat
-revision: 14
+revision: 18
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-29
 measurements: []
-requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330, Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342, Q-1343, Q-1344, Q-1522, Q-2035]
+requests: [Q-1320, Q-1321, Q-1322, Q-1323, Q-1324, Q-1325, Q-1326, Q-1327, Q-1328, Q-1329, Q-1330,
+Q-1331, Q-1332, Q-1333, Q-1334, Q-1335, Q-1336, Q-1337, Q-1338, Q-1339, Q-1340, Q-1341, Q-1342,
+Q-1343, Q-1344, Q-1522, Q-2035, Q-2113]
 supersedes: []
 ---
 
@@ -49,7 +51,7 @@ Rules owned elsewhere and not restated here:
   - claim 29: registration as a tracked flying object,
   - claim 30: the height test for being in the air for combat.
 - **Other rules that test the seized state:**
-  - the approach step: S-0215 claim 37 c and d,
+  - the approach step: S-0215 claim 37 c and d (claim 11 here for the gripped unit),
   - deployed vehicles: S-0517 claims 9 and 11,
   - cloaking: S-0516 claim 4,
   - spawners: S-0506 claims 6 and 13,
@@ -333,10 +335,32 @@ New terms:
       answers *rearming*, with any weapon. This answer comes ahead of every test of the target's
       layer, height, kind or armour and of every projectile test, so a gripped unit that is in the
       air never gets *illegal* or *impossible* from its lifter. Of S-0301 claim 9's rank-4 answers
-      it is preceded only by the materialising firer's *rearming* and by the refusal of a firer
-      that is bound to a slave master. The lifter therefore keeps the gripped unit as its target
-      through the whole pull: nothing in this spec or in that check drops it, and the grip lasts
-      until an event of claim 12.
+      it is preceded only by the materialising firer's *rearming* and by the refusal of a firer that
+      is bound to a slave master. The lifter therefore keeps the gripped unit as its target through
+      the pull: neither that check nor any other rule of this spec drops it. S-0215 claim 37
+      part a's per-tick drop can (below), and the grip lasts until an event of claim 12.
+    - **No approach against its gripped unit.** A mobile lifter takes no approach step against
+      the unit it grips while that unit is its target, in every behaviour, unless one of the
+      crushing or balloon-hover approaches of S-0215 claim 37 part h applies to the lifter. Those
+      come first and are not excepted: such an approach gives the lifter its gripped unit as its
+      destination, which ends the grip (claim 12). Otherwise the range test, minimum range
+      included, gives the lifter no destination towards or away from its gripped unit, so the
+      approach step never ends a grip through the gripped unit (S-0215 claim 37, part c). Q-2113
+      question 2 therefore does not arise: outside part h's approaches, no approach step against
+      the gripped unit gives the lifter a destination.
+    - **The per-tick drop still applies.** The per-tick rule of S-0215 claim 37 part a applies
+      unchanged, with every condition and trigger that part states, and makes its own range test
+      after the approach step. So a lifter whose target is its gripped unit drops it as its
+      target when part a's conditions hold, among them: the lifter has no destination, it cannot
+      reach the gripped unit's cell, and the gripped unit is out of its range, minimum range
+      included. The grip stays (claim 12 has no row for a target change) and the wave ends
+      (claim 21). Its next search may give it a new target, and an approach step against that
+      target can give it a destination, which ends the grip.
+    - A computer-controlled lifter in *hunt* whose gripped unit stays reachable or in range
+      therefore takes no approach step against it while the unit comes in, makes no fire event
+      against it
+      (*rearming*, above) and keeps the grip until the unit arrives (claim 8) or another event of
+      claim 12 happens.
     - A lifter with a magnetic-beam weapon gets *rearming* when all of these hold:
       - it grips a unit,
       - its magnetic wave is alive (claim 21),
@@ -352,10 +376,17 @@ New terms:
     - This *rearming* belongs to S-0301 claim 9's rank 4, before the ordinary countdown and
       own-effect gates of rank 5. It comes after the target's layer and projectile tests, so
       against an airborne target the beam cannot hit, that refusal wins.
-    - Backing: `measurable` (scenario L9 parts c, d and f) for firing, target retention
-      and wave/grip outcomes. Exact precedence between refusal reasons with identical
-      observable effects is `unmeasured`: those scenarios do not distinguish their rank.
-    - Confidence: high (the conditions, the gripped-unit answer and its precedence); medium (the
+    - Backing: `measurable` (scenario L9 parts c, d and f) for firing, target retention and
+      wave/grip outcomes. The absence of an approach step is `measurable`
+      (scenario L17) and not yet measured: M-0015 records neither destinations nor what ended a
+      hold. The part h exception and the per-tick drop are `unmeasured` here: they apply S-0215
+      claim 37 parts h and a unchanged (backed there, part a by its scenario B32 case d), and no
+      scenario of this spec gives a lifter a part h approach or makes its gripped unit's cell
+      unreachable while the unit is out of range. Exact precedence between refusal reasons with
+      identical observable effects is
+      `unmeasured`: those scenarios do not distinguish their rank.
+    - Confidence: high (the conditions, the gripped-unit answer and its precedence); medium (no
+      approach against the gripped unit, the part h exception, the per-tick drop, the
       building-attack sequence)
 
 ### Ending the grip
@@ -365,7 +396,7 @@ New terms:
     | Event | Lifter's target cleared? |
     |---|---|
     | The gripped unit arrives at its lifter (claim 8) | yes |
-    | The lifter is a mobile unit and accepts a non-empty destination (from an order, an approach step or another rule) | yes |
+    | The lifter is a mobile unit and accepts a non-empty destination (from an order, an approach step or another rule; an approach step against its gripped unit gives none, claim 11, except S-0215 claim 37 part h's) | yes |
     | The lifter is a vehicle that falls back to rest, unless an override is in effect (S-0215, Terms) or its current behaviour is *wait* | yes |
     | The lifter is a building that stops being in operation (S-0405 claim 9) | yes |
     | The lifter is a building that is destroyed | yes |
@@ -1470,10 +1501,14 @@ establish a qualifying condition; a run lacking the required observations is inc
     - Falsified by: a building refused solely by the grip/wave gate, the grip ending merely on
       retargeting, a second wave, or non-building fire before the live-wave grip gate ends.
   - Part f: while gripping, keep the lifter's target on its gripped unit with a non-magnetic
-    weapon too (named L9 map data gives the lifter such a secondary weapon). Expect no shot at
-    the gripped unit from any weapon, and the lifter's target to stay on it until arrival or
-    another event of claim 12. A shot at the gripped unit, or a dropped target without such an
-    event, falsifies claim 11.
+    weapon too (named L9 map data gives the lifter such a secondary weapon). Keep the gripped
+    unit's cell reachable for the lifter, or the unit within range, on every tick of the part,
+    and record both on every tick. Expect no shot at the gripped unit from any weapon, and the
+    lifter's target to stay on it until arrival or another event of claim 12. A shot at the
+    gripped unit falsifies claim 11, and so does a dropped target without such an event on a
+    tick on which the cell was reachable or the unit in range. A drop on a tick on which the
+    cell could not be reached and the unit was out of range is claim 11's per-tick drop, and
+    makes the part void.
   - Part g: seize a deployable vehicle and, separately, a loaded transport. A clear-cell
     touchdown restores the unit in the same tick (claim 20), so try deploy, undeploy and
     unload through the harness while it is gripped at height 0, or while it is set down and
@@ -1765,6 +1800,35 @@ establish a qualifying condition; a run lacking the required observations is inc
   the cell-centre detour (claim 15 here), and the sinking-only-after-a-drop case (S-0502 claim 19,
   via L6).
 
+- **L17 No approach against the gripped unit (claim 11; Q-2113).** Replay M-0015's two games, or a
+  purpose-made game of computer-controlled lifters in *hunt* against a group of heavy enemy
+  vehicles on a flat plateau, with the recorder. The lifters are a test copy of the lifter type
+  (named test rules file) whose weapon has a non-zero minimum range and which has none of S-0215
+  claim 37 part h's approaches.
+  - For each hold (from the first tick the victim has the lifter as its holder to the release,
+    the tick of an event of claim 12 that ends the grip),
+    record on every tick: the lifter's destination, its target and the gripped unit's target; the
+    spatial distance from the lifter's range-test source point to the gripped unit (S-0215 claim
+    37 part b's test), whether it is below the weapon's minimum range or above its range, and
+    whether the lifter can reach the gripped unit's cell. Record each order given to the lifter
+    and every damage event on a holding lifter. At the release, record whether the gripped unit
+    had arrived (claim 8) or which other event of claim 12 happened. Record each landing cell by
+    role only: its land type and whether a terrain object stands on it.
+  - A hold counts for the claim only if the gripped unit is inside minimum range on at least one
+    tick on which the lifter processes its behaviour. Holds that never reach this are
+    inconclusive for the claim and are reported separately. The release event is recorded for
+    every hold, counted or not (Q-2113 question 3).
+  - Expected: in a counted hold, no new destination on any tick on which the lifter's target is
+    the gripped unit and no order is given to it. The target stays the gripped unit, except a drop
+    by the per-tick rule on a tick on which the gripped unit's cell cannot be reached and it is
+    out of range. Destinations that follow an order, or come after the target changed to another
+    object, are listed apart and are not part of this expectation. The record gives each landing
+    cell's land type and terrain object, with no expected value (Open questions).
+  - Falsified by any new destination in a counted hold, at whatever distance and on whatever
+    tick, while the lifter's target is the gripped unit and no order is given, or by a target
+    drop on a tick before the release while the gripped unit's cell can be reached. The release
+    events of claim 12, arrival among them, are not drops.
+
 ## Open questions
 
 - Whether stock data lets a magnetic-beam weapon make a wave whose target is not a vehicle
@@ -1774,6 +1838,12 @@ establish a qualifying condition; a run lacking the required observations is inc
 - Which pixels on the boundary of the wave band are filled (claim 25). The band's interior is
   stated; the edge rule of the original's fill is not pinned down.
 
+- (Q-2113 question 3.) What ends each hold in M-0015's games is not settled: M-0015 does not
+  record it. Scenario L17 records the release event of every hold; claim 11 expects arrival
+  (claim 8) or another event of claim 12.
+- Whether the cell of claim 7's movement point, where a gripped unit is set down, can be a cell
+  with a tree or other terrain object, or a rock cell (Q-2113). Scenario L17 records each
+  landing cell by role.
 - Whether any player order can reach a gripped unit after it is deselected, which would exercise
   claim 9's no-destination exception. Our engine follows claim 9 if one does.
 - How the factory-contact protection of claim 3 can be reached in play.
@@ -1801,6 +1871,15 @@ establish a qualifying condition; a run lacking the required observations is inc
 
 ## Changes for other specs
 
+- **S-0215, claim 37, part c (the approach step's nothing-to-do case).** Part c makes the step do
+  nothing when the actor's target is the object that holds the actor
+  with a magnetic beam. By claim 11, and as scenario L17 expects, the step does nothing when the
+  actor grips a unit and its target is that unit. The reverse case needs no exception, since a
+  seized unit ignores destinations (claim 9). Part c should state the gripping case instead,
+  after part h, with backing that cites scenario L17 here. Part a should say that its per-tick
+  drop still runs for a lifter whose gripped unit is its target: the empty approach step gives
+  no destination, and an unreachable gripped unit out of range, minimum range included, is
+  dropped as target while the grip stays (claim 11).
 - **S-0215, claim 13, first row (temporary locomotor).** The row gives a unit its own locomotor
   back when it falls back to rest. For a seized unit's temporary jumpjet locomotor, the same
   test is also made at the end of each of the unit's turns (S-0203), after its movement and
