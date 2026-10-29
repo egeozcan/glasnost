@@ -831,3 +831,94 @@ The median ticks out of an Allied cycle fall to 285 to 400 in five of the six ga
 - A broke house whose lost refinery stands at 51 of 54, with only the yard left, stays there (Allied–Yuri, map 0, from tick 31 000; a person could do no more).
 - The naval synthetic games end before the ships meet in 14 of 32 seeds.
 - No requests.
+
+## Own AI (M8 step B9: allies, the far-field refinery, the island naval game)
+
+B9 follows up B8. It changes the own AI (`glasnost_ai::scripted`, `brain`, `fixture`), the harvest lane (`crates/app/tests/harvest_lane.rs`) and the lane's economy probe (`crates/tools/src/skirmish_lane.rs`). Lane outputs are git-ignored under `local-lane/m8/b9/` and hold counts and ticks only. The quick lane is B8's: seed 7, maps 8, 2 and 0, at most 120 000 ticks, `GLASNOST_AI_QUICK=1`, f0 and f1, 30 games. *Before* is the branch with the alliance fix and the two probe commits. The alliance fix changes no game without allies, so before plays exactly as B8's after: every count below matches B8's table. *After* is the branch. Both binaries were built on main b1ab906, before intake 42, so they share one base. Intake 42 changes ore spreading next to trees on real maps, so a lane on today's main can differ from both. The goldens, sweeps and tests were first run on the branch before its rebase onto main 5c1d621; the arena and the final checks ran after it, and there the goldens and the naval sweep pass again unchanged.
+
+### The alliance bug: the lane was at fault
+
+Intake 41's harvest lane (`far_slave_miners_of_a_person_and_a_computer`, map 8) allied every house by hand, and the computer's units still hit the person's slave miner (hit at +1 557, gone by +2 882). The lane's `peace` pushed each house onto the others' `House::allies` lists unsorted. `House::allied_with`, the sim's alliance test, does a binary search on a sorted list, so for house 0's list `[0, 3, 1]` it found no ally but itself. The sim's acquisition (S-0309 claim 18) therefore saw an enemy. No real setup writes alliances like that:
+- the loader sorts and dedups the setup's alliances;
+- lobby teams (`start_alliances`, S-0412 claim 8) and the in-game alliance order (`victory::alliance`, S-0414 claims 12 and 13) insert in order, rebuild the threat records and update the shroud.
+
+A two-player game cannot ally in play: S-0414 claim 12 refuses the order when exactly one other contender is left unallied.
+
+- **The lane** now puts both slots on lobby team 1 (`SetupHit::Team`, S-0412 claim 15) and asserts that the sim sees every player allied. It also asserts that the person's miner is never hit and that no object ever targets an ally's object. Rerun on map 8 (`local-lane/m8/b9/lane`): no hit, no ally targeted, and the game goes on.
+- **The AI**. Two things were wrong here, though neither caused the lane's hit.
+  - Its own alliance tests used `allies.contains`, which reads a list differently from the sim's test. They now use `House::allied_with`, as the sim does (`seen_enemies`, special, mutator, dominator, brain).
+  - Its wave fallback (`Script::enemy_starts`) sent waves to every other start, an ally's base included. It now leaves out a start where a building of an allied player house stands on an explored cell within `ALLY_BASE` (10, nocite) cells. Allies share sight (S-0409 claim 2), so this is what a person sees.
+  - Both are read at every think, so an alliance made during the game counts from the next think.
+- **Test** `allies.rs` `allied_ai_houses_never_go_for_each_other`: two fixture AI houses on lobby team 1 over 14 000 ticks. No object targets or hits an ally's, units move, and no move order goes within 5 cells of the ally's start. Without the filter it fails: 76 331 and 72 253 unit-ticks were sent to the ally's start. A mid-game alliance test would need three houses (claim 12), and the fixture map has two starts.
+
+### What the probe found (before)
+
+The economy probe now prints, per house, the spells in which `Brain::wants_field_refinery` holds (sampled every think period) and the stalls within them. A stall is a sample where the want holds and the house has no item on a building line, so nothing is being built for it. An empty line ceases to exist (S-0404 claim 1), so the test is for the absence of a building-line item.
+
+- **The long spells are not stalls.** Five of the 15 f0 games have a spell over 3 000 ticks (f1 the same): Allied–Soviet on maps 0 (16 875–20 595) and 2 (28 935–31 965), Allied–Yuri on maps 0 (15 465–23 985) and 2 (25 965–30 045), Soviet–Yuri on map 0 (39 150–43 605). In every one the house is broke (credits 0 to about 300) with five or six lines running. The building line holds the item the refinery waits for:
+  - a power plant that `power::plant_first` put in place of the refinery order, because the refinery's drain would leave the house short (Allied–Yuri map 0: plant started at 15 466, refinery at 23 986; Soviet–Yuri map 0: 41 251 and 43 606; Allied–Soviet map 2: 28 921 and 32 296);
+  - a power plant already there (Allied–Soviet map 0: refinery at 20 596);
+  - or the Allied superweapon on the defence line taking the money (Allied–Yuri map 2).
+
+  The refinery starts as soon as the line is free. Over the 30 games the probe found stalls only as lone samples, each on the think when a line had just emptied and the next order was going out. No two stall samples were ever consecutive (longest stall 0 ticks). B8's reading was that the want "stays true while the refinery cannot be built and pushes aside the tech climb". That was the length of these spells read as a stall. The climb could not have used the busy building line either.
+- **One real stall was possible.** `field_refinery` asked `refinery_site` (the wider spiral, within reach of the field), while `Script::build` orders a type only when `placeable` finds it a cell in the build spiral. A refinery that fit by the field but not in the spiral was wanted with nothing ever ordered, and everything behind it on the plan waited. The lane did not hit this; the synthetic test below builds it.
+- **Lost refineries waited on held money.** In 21 probe samples, over 13 of the 30 games, a house with no refinery had its refinery on the building line. Often the money it needed sat in held items. For example, in Soviet–Yuri on map 2 the Soviet house had 5 credits, a held defence building with about 840 paid, a held infantry item, and a refinery at 11 to 21 of 54 for more than 5 000 ticks. B8's `economy_first` holds the rest of the sidebar while it pays for the economy. A held item keeps what was paid into it (S-0404 claim 5), so with no income that money never reached the refinery. This is B8's "stuck at 51 of 54" case. B8's own example (Allied mirror, map 0) shows held army items owing 494 and 428 beside a refinery owing 76 with 30 credits in hand.
+
+### What the brain does now (B9)
+
+- **The field want holds only while it can be ordered** (`Script::field_refinery`, `// design:`). A refinery type must also be `placeable`, the same test `Script::build` uses. The rule has no memory, so the want returns as soon as a cell opens, a new field is explored or a harvester reaches one. The brief asked for a way to give up, "for example after a number of thinks with no placement, or when no legal cell exists by the field". The second is what this does. A count of thinks would only ever fire in the broke spells above, where a person keeps the refinery first too. It would also need saved AI state, so it was not added. The AI game format stays 45.
+- **The refinery goes by a field a harvester reaches** (`Script::ore_goal`, `Script::harvester_reach`). The candidate resource cells are limited to the reach regions (S-0212 claim 4) of the house's harvesters, by each one's movement zone. Slave miners, which go by their own rules, and flying harvesters are left out. With no harvester on the map, the regions used are those of the cells within `HOME_RING` (6, nocite) of home, for the zone of each harvester type of the plan, buildable now or not. A house with no harvester has no war factory either, and its first harvester may come later or with a refinery (S-0404 claim 2). This is the pathing query a person's order gives, on cells the house has explored. With nothing known, no cell is left out.
+- **A house paying for a lost refinery cancels a held item for its refund** (`Brain::refund_for_refinery`, in `economy_first`). The conditions:
+  - its harvesters wait for a lost refinery (`refinery_lost`);
+  - it pays for its economy first;
+  - the money in hand is less than the refinery still owes (its whole price before it is on a line).
+
+  It then cancels, one item per think, the item that refunds the most. That item is not of the economy, not done, not on the refinery's line, and its refund is above 0 (S-0404 claim 6: *P*′ − *B*, or the price at the start with `quirks.refund_at_current_price` off). A person clears the sidebar the same way to finish the refinery. A broke house with only the yard and nothing paid into any item still waits; no order a person has would pay for it. Like the other B8 rules, this leaves out slave-miner houses.
+- The economy probe prints the field-refinery spells and stalls (`fieldspell house h: ...`).
+
+### Results
+
+Quick lane, f0, before → after. Winner and tick, then e20 of house 0 / house 1. Rows that differ:
+
+| Sides, map | Before | After |
+| --- | --- | --- |
+| Allied–Allied, 0 | house 1 36 940; 76 062 / 58 106 | house 0 48 224; 83 092 / 57 782 |
+| Allied–Allied, 2 | house 1 21 777; 78 958 / 88 276 | house 1 26 963; 94 421 / 93 526 |
+| Allied–Soviet, 2 | Soviet 49 453 | Soviet 50 621 (e20 the same) |
+| Allied–Yuri, 0 | Yuri 49 662 | Allied 82 337 (e20 the same) |
+| Soviet–Soviet, 0 | house 1 59 394 | house 1 82 949 (e20 the same) |
+| Soviet–Soviet, 2 | house 1 23 916; 74 349 / 86 452 | house 1 22 993; 76 206 / 88 311 |
+| Soviet–Yuri, 2 | Yuri 33 678; 53 984 / 57 670 | Yuri 37 285; 66 644 / 57 256 |
+| Soviet–Yuri, 8 | Yuri 42 605 | Yuri 42 576 (e20 the same) |
+
+The other seven games are identical. Seven of the eight games that differ split on the refund rule: built without it (`quick/norefund`, the eight f0 games), they play exactly as before. The eighth, Allied–Soviet on map 2, ends 1 168 ticks later with the same winner and the same e20. It splits after tick 40 000, while the Allied house rebuilds a lost refinery with 13 078 credits in hand, so the change comes from the reach filter or the field-want guard (not separated). Allied–Yuri on map 0 splits at about tick 35 000. Before, the Allied refinery stood at 53 of 54 waiting for money, and Yuri won at 49 662. After, the refinery stands again by tick 35 000, and the Allied house recovers and wins at 82 337.
+
+- **Field-refinery spells over 3 000 ticks**: 5 → 6 games in f0 and in f1. The five are the same spells to the tick. The sixth is Soviet–Soviet on map 0, house 1, 69 375–72 885. That game now runs to 82 949. The house is broke with a superweapon building of the climb on the building line (credits 5, building at 24 of 54 owing 1 102), the same kind of spell as above. Stall samples: none consecutive in either lane; lone samples 79 → 91, over the 41 → 46 house-runs with a spell.
+- **Lost refineries waiting**: probe samples of a house with no refinery and its refinery on the line, 21 → 12 over the 30 games. The ones left are a Yuri-side house (no B8 or B9 rule acts for slave miners), a house with no harvester left (nothing waits for a refinery), and houses with the money in hand or nothing paid into any item.
+- **e20 by side over the nine games of two sides**: Allied 353 452 → 353 452, Soviet 398 042 → 410 702 (+3.2 %), Yuri 312 319 → 311 905 (−0.13 %, all in Soviet–Yuri on map 2, −414).
+- **Wins** (f0 = f1): Allied 5 → 6, Soviet 5 → 5, Yuri 5 → 4. Allied against Soviet 2 of 3 in both. Allied against Yuri 0 → 1 of 3. Soviet against Yuri 1 of 3 in both. Every game has a winner, every run exits 0, and there are no panics.
+- **The Yuri bar is missed by the letter: one win and 414 credits of e20.** No B9 rule orders anything for the Yuri house. The win changed sides because the Allied house rebuilt its lost refinery with the refund of its held items, as a person does, and came back. The e20 loss is in one game, where the Soviet house did the same before tick 20 000 (Soviet e20 there 53 984 → 66 644). Under D14 a change that makes one side's AI play better is not held back to keep another side's count. The lead should judge this as B8's Yuri bar was judged.
+- **Game length**: 628 961 → 705 484 ticks (f0), 646 904 → 730 974 (f1). A house that rebuilds its refinery lasts longer.
+- **f1** ends on the same tick as f0 in 10 of 15 games after (11 before), with the same winner in all 15. Its e20 equals f0's in every game.
+
+**The naval game on islands** (`fixture::map_islands`). This is `map_naval` with `map_strait`'s strait from the shore to the south edge, so each start stands on its own island. The sea and the strait join, and no ground unit walks between the bases. Air units and transports still cross. `navy_game` plays on it, and the seed is back to the plain game's seed 5 (`SEED`), not one picked for passing. Over seeds 1 to 32, `naval_seed_sweep` passes 32 on the island map, against 18 on `map_naval` after B8 (31 before B8). The ground war no longer ends the game before the ships meet.
+
+**Tests** (synthetic data, through the real tick).
+- `economy.rs`:
+  - `places_the_refinery_beside_a_field_a_harvester_reaches`: a moated home field and an open field farther off, both in sight. Without the reach filter the refinery goes toward the moated one.
+  - `cancels_a_held_item_to_pay_for_a_lost_refinery`: a held soldier with steps paid is cancelled while the lost refinery cannot be paid, and nothing is cancelled with the balance in hand. It fails without the rule.
+- `expansion.rs`, ignored in debug: `wants_no_far_field_refinery_it_could_not_order`. Soldiers fill the build spiral, and a power plant beyond it lets a refinery fit by the far field. The want must be off. It fails without the `placeable` guard.
+- `allies.rs`, ignored in debug: `allied_ai_houses_never_go_for_each_other` (above).
+- `skirmish.rs`: `navy_game` and `naval_seed_sweep` play the island map, the game at seed 5.
+
+**Goldens**: one of nine was regenerated. duel-diagonal differs from tick 14 860 on and ends at about tick 18 520 (B8 18 210). Built without the refund rule it is byte-identical to the old file, so that rule moves it. The other eight are unchanged.
+
+**Seed sweeps M6c, M7a and M7b, 1 to 16, and the gate seed 17** (f0 and f1 alike; `local-lane/m8/b9/sweeps`): M6c, M7b and every seed-17 run are identical to before. In M7a only seed 5 differs, again from the refund rule (without it seed 5's counters are as before). No minimum moves; the smallest minimum stays 0, at the same seeds 7, 9 and 13. Units made berserk median 41 → 42, gattling at its top stage maximum 7 389 → 7 196, lifter build orders maximum 6 → 8.
+
+**Arena**: byte-identical. The branch rebased on main 5c1d621 writes the same three CSVs as intake 42's after-run on that main (`local-lane/m8/b9/arena-after`). The arena attaches no brain of ours, and B9 changes no simulation code.
+
+**Left open.**
+- The long broke spells stay. The field refinery waits behind the power plant that `plant_first` puts first, or behind the climb's superweapon building, while the house has no money. Holding the army to pay for it, as the superweapon saving does, is a balance of fights against income that this step did not try.
+- A broke house with no refinery, only its yard, and nothing paid into any item still waits. A person has no order that pays for it.
+- `harvester_reach` takes each harvester's zone from its type and reads reach regions only. A field the house's harvester could reach by a bridge that a person knows to be destroyed reads the same as one it cannot reach.
+- No requests.
