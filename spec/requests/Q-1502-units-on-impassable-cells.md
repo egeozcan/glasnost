@@ -21,14 +21,11 @@ In our engine an infantry unit placed there never moves and is never found:
 - with the rest of its group dead, the game ends `none` at the frame limit with the survivors
   owning a small part of their army.
 
-Large side-A infantry groups reach these five rock cells. The stock games with such a group end in
-the first or second sample with that group wiped out, in 6 of 6 seeds.
+Large side-A infantry groups reach these five rock cells.
 
 The lead's note on M-0001 and M-0002 (main f81fc29, *Notes*, "Cliff cells in large groups")
-confirms the setup side: the stock harness placed units on these cells like anywhere else, and in
-the stock games of those groups every game still ended by the third sample with one side
-owning nothing, none at the frame limit. Our placement already matches, so the difference is in
-the simulation, which this request asks about.
+confirms the setup side: the stock harness placed units on these cells like anywhere else. Our
+placement already matches, so the difference is in the simulation, which this request asks about.
 
 Code: `crates/deterministic/sim/src/regions.rs` (`same_region`) and
 `crates/deterministic/sim/src/combat/acquire.rs` (`candidate`, zone row).
