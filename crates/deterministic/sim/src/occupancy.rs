@@ -81,6 +81,20 @@ pub fn moving_or_dest(w: &World, id: ObjectId) -> bool {
 
 /// Whether a unit has movement in progress (S-0107 Terms).
 pub fn in_progress(w: &World, id: ObjectId) -> bool {
+    moving_on_tick(w, id)
+        || w.obj(id).is_some_and(|o| {
+            // spec: S-0417 claim 17 (No path: the walk locomotor has movement in progress from the moment a destination reaches it, before any path is found, and keeps it while it waits for the retry delay; a failed search ends it although the destination is kept, S-0212 claim 23)
+            o.walk.is_some() && o.dest.is_some() && o.path.failed_for != o.dest
+        })
+}
+
+/// Movement in progress without a walker's destination that has no path
+/// yet: a walking target, a stored path, or another locomotor's movement.
+/// It is what S-0215 claim 11's readiness reads as "moving on this tick",
+/// S-0107's *is moving now*: a walker that only waits for its path search,
+/// with no walking target and no stored steps, has movement in progress but
+/// is not moving now (S-0107 Terms: the two differ while a unit starts).
+pub fn moving_on_tick(w: &World, id: ObjectId) -> bool {
     w.obj(id).is_some_and(|o| {
         o.walk.as_ref().is_some_and(|s| s.target.is_some())
             || o.drive

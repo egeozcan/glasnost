@@ -1874,12 +1874,19 @@ mod tests {
         let mut w = testkit::game_with(&r, 40, 3);
         let v = testkit::spawn(&mut w, Kind::Vehicle, "CART", 0, testkit::mid(40, 0, 0), 0);
         let c = testkit::mid(40, 0, -1);
-        testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c, 0);
+        let walker = testkit::spawn(&mut w, Kind::Infantry, "WALKER", 0, c, 0);
         if let Some(o) = w.obj_mut(v) {
             o.drive.get_or_insert_with(DriveState::new);
         }
         for _ in 0..n {
             request_scatter(&mut w, v, c);
+            // The walker that accepted holds a destination, so it has
+            // movement in progress and would refuse a second request
+            // (S-0417 claim 17, No path; S-0208 claim 11): clear it, so that
+            // a request that reaches it is accepted and draws.
+            if let Some(o) = w.obj_mut(walker) {
+                o.dest = None;
+            }
         }
         w
     }

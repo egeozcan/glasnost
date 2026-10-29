@@ -419,8 +419,7 @@ fn the_warning_scatters_infantry_in_the_first_cell() {
 /// A crusher drives east from (0, 0) to (4, 0) past a stationary Beta
 /// infantry unit at (2, 0), optionally standing on a crushable overlay
 /// (which puts the track into that cell in crush mode). Returns whether the
-/// infantry accepted a scatter request (it was given a move destination)
-/// before the crusher reached it, and whether it is alive at that point.
+/// infantry accepted a scatter request before the crusher reached it, and whether it is alive at that point.
 fn drive_at_infantry(brush: bool) -> (bool, bool) {
     let mut s = scatter_scene();
     if brush {
@@ -433,12 +432,24 @@ fn drive_at_infantry(brush: bool) -> (bool, bool) {
     let g = one(&w, Kind::Infantry, "GRUNT");
     open_orders(&mut w);
     order_move(&mut w, m, cell(4, 0));
+    // Acceptance is read from the trace: standing on the brush, the walker's
+    // new destination fails the reachability gate in its own turn of the
+    // same tick and is cleared at once (S-0417 claim 17, No path; S-0212
+    // claim 23), so the destination is not there to read.
+    glasnost_sim::trace::switch_on(&mut w);
     for _ in 0..300 {
         run(&mut w, 1);
+        let accepted = glasnost_sim::trace::take(&w).iter().any(|e| {
+            e.unit == g
+                && matches!(
+                    e.what,
+                    glasnost_sim::trace::What::Asked { accepted: true, .. }
+                )
+        });
         if w.obj(g).is_none() {
-            return (false, false);
+            return (accepted, false);
         }
-        if w.obj(g).is_some_and(|o| o.dest.is_some()) {
+        if accepted {
             return (true, true);
         }
     }

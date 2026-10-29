@@ -2471,9 +2471,10 @@ pub fn failed(w: &mut World, id: ObjectId, res: Search, repath: bool) {
         Search::Found => {}
         Search::GateFailed => {
             // spec: S-0212 claim 23 (gate fails: no path; a driving unit's destination is cleared)
+            // spec: S-0417 claim 17 (No path: a walking unit whose fresh search fails at the gate has its destination cleared in the same movement update, and its movement in progress ends)
             if let Some(ob) = w.obj_mut(id) {
                 ob.path.steps.clear();
-                if drive {
+                if drive || (walker && !repath) {
                     ob.dest = None;
                 }
                 // spec: S-0212 claim 21 (the delay runs after a fresh search, and after a walker's re-path)
