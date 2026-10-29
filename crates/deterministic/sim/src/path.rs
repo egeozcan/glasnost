@@ -2346,12 +2346,28 @@ pub fn stalled_cells(w: &World, id: ObjectId) -> BTreeSet<CellXY> {
 /// The units of the deadlock [`stalled_cells`] finds for `id`, `id` among
 /// them, with their cells; empty unless `id` is in it.
 fn stalled_ring(w: &World, id: ObjectId) -> BTreeMap<ObjectId, CellXY> {
+    let Some(me) = w.obj(id) else {
+        return BTreeMap::new();
+    };
+    let here = me.pos.cell();
+    // The cells `id` waits for, as below.
+    let mine: Vec<CellXY> = match heading_cell(w, id) {
+        Some(h) => vec![h],
+        None => STEPS
+            .iter()
+            .map(|&(dx, dy)| CellXY::new(here.x + dx, here.y + dy))
+            .collect(),
+    };
     let units: BTreeMap<ObjectId, CellXY> = w
         .objects
         .iter()
         .filter(|(oid, x)| **oid == id || stalled(w, x))
         .map(|(oid, x)| (*oid, x.pos.cell()))
         .collect();
+    // design: C7-P5 tick cost (a unit that waits on no stalled unit is in no deadlock: the graph is not built)
+    if !units.iter().any(|(&u, c)| u != id && mine.contains(c)) {
+        return BTreeMap::new();
+    }
     let mut by_cell: BTreeMap<CellXY, Vec<ObjectId>> = BTreeMap::new();
     for (&u, &c) in &units {
         by_cell.entry(c).or_default().push(u);
@@ -2380,18 +2396,29 @@ fn stalled_ring(w: &World, id: ObjectId) -> BTreeMap<ObjectId, CellXY> {
             (u, on)
         })
         .collect();
-    let mut ring: BTreeSet<ObjectId> = units.keys().copied().collect();
-    loop {
-        let free: Vec<ObjectId> = ring
-            .iter()
-            .copied()
-            .filter(|u| !waits[u].iter().any(|x| ring.contains(x)))
-            .collect();
-        if free.is_empty() {
-            break;
+    // design: C7-P5 tick cost (the units that wait on none left are taken away one at a time through a count of what each waits on, not by scanning every unit again each round; what is left is the same)
+    let mut left: BTreeMap<ObjectId, usize> = waits.iter().map(|(&u, on)| (u, on.len())).collect();
+    let mut by: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+    for (&u, on) in &waits {
+        for &x in on {
+            by.entry(x).or_default().push(u);
         }
-        for u in free {
-            ring.remove(&u);
+    }
+    let mut free: Vec<ObjectId> = left
+        .iter()
+        .filter(|&(_, &n)| n == 0)
+        .map(|(&u, _)| u)
+        .collect();
+    let mut ring: BTreeSet<ObjectId> = units.keys().copied().collect();
+    while let Some(x) = free.pop() {
+        ring.remove(&x);
+        for &u in by.get(&x).into_iter().flatten() {
+            if let Some(n) = left.get_mut(&u) {
+                *n -= 1;
+                if *n == 0 {
+                    free.push(u);
+                }
+            }
         }
     }
     // design: C7-P4 stalled blockers (only a unit in the deadlock, or waiting on it, keeps off it)
@@ -2409,47 +2436,34 @@ pub const YIELD_RADIUS: i32 = NEAR_RADIUS;
 // nocite: design: C7-P5 yield (our choice: about a minute of game time, long enough for a group to pass a long passage)
 pub const YIELD_WAIT: i32 = 900;
 
-/// The most cells [`shut_in`] looks at before it takes a deadlock to have a
-/// way round.
+/// The most cells [`shut`] looks at before it gives up.
 // nocite: design: C7-P5 yield (our choice: two rooms and a long passage between them, small against a map's open ground)
 pub const YIELD_FLOOD: usize = 2048;
 
-/// Whether the deadlock `ring` leaves `id` no way round to `goal` (our
-/// design, C7 part 5, yield): a fill from `id`'s cell and one from `goal`,
-/// a step at a time each, through cells of `id`'s reach region and none of
-/// the cells of the deadlock's units heading against `id` (a negative dot
-/// product of the headings to their destinations), of which one runs out of cells
-/// before they meet. False when they meet or have looked at
-/// [`YIELD_FLOOD`] cells between them.
-fn shut_in(
+/// Whether `walls` shut `id` off from `goal` (our design, C7 part 5): a
+/// fill from `id`'s cell and one from `goal`, a step at a time each, in
+/// the eight directions through cells of the usable area in `id`'s reach
+/// region that are not in `walls`. Some(true) when one of them runs out of
+/// cells before they meet, Some(false) when they meet; None when they have
+/// looked at [`YIELD_FLOOD`] cells between them, or when `id` is on a
+/// deck, outside the usable area or the fills meet a bridge cell (a fill
+/// on the ground alone cannot say).
+fn shut(
     w: &World,
     id: ObjectId,
     u: &crate::rules::UnitRules,
-    ring: &BTreeMap<ObjectId, CellXY>,
+    walls: &BTreeSet<CellXY>,
     goal: CellXY,
-) -> bool {
-    let Some(o) = w.obj(id) else { return false };
+) -> Option<bool> {
+    let o = w.obj(id)?;
     let from = o.pos.cell();
-    let own = regions::reach_read(w, from, u.zone, o.layer == Layer::Deck);
-    if matches!(own, Reach::OffMap | Reach::None) {
-        return false;
+    if o.layer == Layer::Deck || !w.cells.usable(from) {
+        return None;
     }
-    let Some((hx, hy)) = heading(w, id) else {
-        return false;
-    };
-    // design: C7-P5 yield (the walls of the fill: the deadlock's units heading against `id`; those going its way move on with it)
-    let walls: BTreeSet<CellXY> = ring
-        .iter()
-        .filter(|&(&x, _)| x != id && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0))
-        .map(|(_, &c)| c)
-        .collect();
-    let open = |n: CellXY| {
-        w.cells.cell(n).is_some()
-            && w.cells.usable(n)
-            && !walls.contains(&n)
-            && regions::reach_read(w, n, u.zone, true) == own
-    };
-    // design: C7-P5 yield (no way round: of the fills from the unit and from its destination round the deadlock, one is shut in)
+    let own = regions::reach_read(w, from, u.zone, false);
+    if matches!(own, Reach::OffMap | Reach::None) {
+        return None;
+    }
     let mut seen = [BTreeSet::from([from]), BTreeSet::from([goal])];
     let mut front = [vec![from], vec![goal]];
     loop {
@@ -2459,22 +2473,55 @@ fn shut_in(
                 for &(dx, dy) in STEPS.iter() {
                     let n = CellXY::new(c.x + dx, c.y + dy);
                     if seen[1 - side].contains(&n) {
-                        return false;
+                        return Some(false);
                     }
-                    if open(n) && seen[side].insert(n) {
+                    if w.cells.cell(n).is_none()
+                        || !w.cells.usable(n)
+                        || walls.contains(&n)
+                        || regions::reach_read(w, n, u.zone, true) != own
+                    {
+                        continue;
+                    }
+                    if is_bridge(w, n) {
+                        return None;
+                    }
+                    if seen[side].insert(n) {
                         next.push(n);
                     }
                 }
             }
             if next.is_empty() {
-                return true;
+                return Some(true);
             }
             if seen[0].len() + seen[1].len() > YIELD_FLOOD {
-                return false;
+                return None;
             }
             front[side] = next;
         }
     }
+}
+
+/// Whether the deadlock `ring` leaves `id` no way round to `goal` (our
+/// design, C7 part 5, yield): whether the cells of the deadlock's units
+/// heading against `id` (a negative dot product of the headings to their
+/// destinations) shut it off from `goal` ([`shut`]).
+fn shut_in(
+    w: &World,
+    id: ObjectId,
+    u: &crate::rules::UnitRules,
+    ring: &BTreeMap<ObjectId, CellXY>,
+    goal: CellXY,
+) -> bool {
+    let Some((hx, hy)) = heading(w, id) else {
+        return false;
+    };
+    // design: C7-P5 yield (no way round: the deadlock's units heading against `id` shut it off from its destination; those going its way move on with it)
+    let walls: BTreeSet<CellXY> = ring
+        .iter()
+        .filter(|&(&x, _)| x != id && heading(w, x).is_some_and(|(ax, ay)| ax * hx + ay * hy < 0))
+        .map(|(_, &c)| c)
+        .collect();
+    shut(w, id, u, &walls, goal) == Some(true)
 }
 
 /// The straight-line heading of a unit to its destination cell, in cells.

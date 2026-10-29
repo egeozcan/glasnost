@@ -31,6 +31,46 @@ const DESIGN: [&str; 5] = [
 /// The seeds the table is measured over.
 const SEEDS: [u32; 3] = [7, 8, 9];
 
+// design: C7-P5 tick cost (the wall time of a tick with the layer against the reference's, the fastest of ROUNDS plays each, taken in turn)
+#[test]
+#[ignore = "measurement: prints the tick cost of the layer against the reference"]
+fn cost() {
+    let rounds: usize = std::env::var("ROUNDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5);
+    let sets = [
+        ("reference", Rules::Reference),
+        ("layer", Rules::Layer),
+        ("layer, no yield", layer_without(&["deadlock_no_yield"])),
+        (
+            "layer, stalled blockers on",
+            layer_without(&["path_through_stalled_blockers", "deadlock_no_yield"]),
+        ),
+    ];
+    println!(
+        "| Scenario | {} ns/tick |",
+        sets.map(|(l, _)| l).join(" ns/tick | ")
+    );
+    let names: Vec<&str> = all(Rules::Reference, 7).iter().map(|s| s.name).collect();
+    for (i, name) in names.iter().enumerate() {
+        let mut best = [u128::MAX; 4];
+        for _ in 0..rounds {
+            for (k, (_, r)) in sets.iter().enumerate() {
+                let s = all(*r, 7).swap_remove(i);
+                let bound = s.bound.max(1) as u128;
+                let t0 = std::time::Instant::now();
+                play(s);
+                best[k] = best[k].min(t0.elapsed().as_nanos() / bound);
+            }
+        }
+        println!(
+            "| {name} | {} | {} | {} | {} |",
+            best[0], best[1], best[2], best[3]
+        );
+    }
+}
+
 #[test]
 #[ignore = "measurement: prints the scenario table"]
 fn measure() {
