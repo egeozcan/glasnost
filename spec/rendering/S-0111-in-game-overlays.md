@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 19
+revision: 21
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
-approved-on: 2026-10-21
+approved-on: 2026-10-29
 measurements: []
-requests: [Q-0471, Q-1622]
+requests: [Q-0471, Q-1622, Q-2040]
 supersedes: []
 ---
 
@@ -66,7 +66,8 @@ S-0108 (Formulas F3).
 2. **Shading of overlay images.** Selection brackets, the veterancy insignia, the repair wrench and
    the attached-bomb sprite are shaded by the light-alpha values of S-0104 claim 15 at neutral
    brightness, so the shroud and fog of S-0110 (shroud rendering) darken them. Health segments and
-   pips are not shaded: they keep their palette colours under shroud and at night.
+   pips are not shaded: they keep their palette colours under shroud and at night. The
+   control-group number and its box are not shaded either (claim 17, scenario OV12 c).
    - Backing: `measurable` (scenario OV2) for shroud and lighting; `unmeasured` for fog
      shading, since fog is always off in skirmish (S-0409 claim 19). The fog rule is deferred
      context for later modes, not a reachable skirmish test. A sprite's shroud shading remains
@@ -380,14 +381,83 @@ S-0108 (Formulas F3).
 
 17. **Control-group number.** A unit or building in one of the local player's ten control groups
     shows the digit (*γ* + 1) mod 10 for group *γ* (0 to 9), so the first group shows 1 and the
-    tenth shows 0. It is drawn with the pip scale, as text placed at the point (−4, −39) from the
-    pip-scale origin *o* of claim 10 for infantry and (−4, −36) for others, so for a vehicle at
-    (−14, −26) and for infantry at (−14, −29) from the status anchor. It is drawn in the owner's house
-    colour, inside a small border of the same colour.
-    - Backing: `measurable` (scenario OV12)
-    - Confidence: high for the digit and the placement point relative to *o*; medium for the colour
-      and the border; how the text is aligned to that point and the font are not established (Open
-      questions)
+    tenth shows 0. It is drawn with the pip scale at the placement point *d*: (−4, −39) from the
+    pip-scale origin *o* of claim 10 for infantry and (−4, −36) for others, buildings included, so
+    *d* is (−14, −26) from the status anchor for a vehicle and (−14, −29) for infantry. Claim 11
+    gives the cases that show no number.
+
+    **Glyph (Q-2040 questions 1 and 2).** The digit is one glyph of the game bitmap font: the same
+    font, glyph widths and masks as the status text of S-0213 claim 25, with the file layout of
+    S-0014. There is no separate set of fixed-size digit images. Each digit keeps its own imported
+    width *G*, so digits of different widths give boxes of different widths. The glyph is
+    left-aligned with its top stored row at *d*, mask pixel (*i*, *r*) at *d* + (*i*, *r*) (F6). No
+    centring, baseline shift or shadow is applied.
+
+    **Glyph rows.** Every stored row of the digit is eligible to paint, 0 ≤ *r* < *H*<sub>f</sub>,
+    even when the line pitch *P*<sub>f</sub> is smaller than the bitmap height *H*<sub>f</sub>.
+    This differs from the status text, whose rows S-0213 claim 25 limits to fewer than both its
+    bitmap height and its pitch. The original sets no pitch limit for the digit and paints every
+    stored row, so there is no extra row to correct, and our engine draws the same rows. The
+    number is a single line, so no following line can overlap it.
+
+    **Missing glyph.** A digit whose text unit has no mapped glyph uses S-0213 claim 25's
+    generated fallback: the complement of the capital X's mask, with X's stored width as *G*, so
+    the box takes the width that X gives. Our engine paints the fallback's set pixels in the house
+    colour, as for any digit. The original paints them in the house colour with the packed
+    foreground's even-numbered bits inverted, the cosmetic defect of S-0213 claim 25, while the
+    border keeps the house colour. This display-only bug has no quirk switch.
+
+    **Box (question 3).** Behind the glyph is a box whose size comes from the digit's text
+    advance *G* + 1 (S-0213 claim 25) and the font's line pitch *P*<sub>f</sub>. Its top-left
+    pixel is (−3, +2) from *d*, and its outer size is (*G* + 6) × (*P*<sub>f</sub> − 4) pixels
+    (F6). The box is first filled with opaque black. Then its outermost ring of pixels, one pixel
+    wide, is painted in the house colour, forming a closed rectangle around the digit alone. The
+    glyph's set mask pixels are painted in the house colour last. Clear mask pixels leave the
+    black fill, or the scene outside the box, unchanged. Set pixels in glyph rows above or below
+    the box are painted over the scene. The gaps between glyph and border therefore follow from
+    the font's data, not from a fixed margin. When *P*<sub>f</sub> − 4 ≤ 0 the digit is still
+    drawn, and our engine draws no box. That box rule is a design rule: the original's pixels
+    for such a font are recorded, not predicted.
+
+    **Colour and shading (questions 4 and 5).** The digit and the border share one colour: the
+    owner's house display RGB of S-0103 claim 15, at display precision. It is not a separate ramp
+    entry or shade row. The number is drawn unshaded. Lighting, including the map tint, light source
+    tints and the global screen effects of S-0104 claim 2, the shroud of S-0110 and a tint from the
+    colour-adjustment table on the object itself, such as the invulnerability effect's, change
+    neither the digit, the border nor the black fill. Every object has an owning house in skirmish,
+    so the colour always comes from that house and no ownerless case arises.
+
+    **Order (question 6).** The number and its box are drawn last among the object's own status
+    extras: after the insignia, selection marks, health bar, pip rows and self-heal marker. They
+    cover those extras where they overlap. They are not drawn in a separate pass above every
+    object. Each object's status extras, the number included, are complete before the next
+    object's begin, in the object order of S-0102 claims 1, 6 and 7. A later object's status
+    extras therefore cover an earlier object's number and box. An earlier object's status extras
+    lie under a later object's opaque box.
+
+    **View edges and a missing font.** At the battlefield view's edges our engine cuts the
+    finished box and digit like any other overlay image. The original cuts the box to the view
+    before outlining it. A box cut by the view's top, right or bottom edge therefore shows a
+    border-coloured line along that edge, a display-only bug with no quirk switch. At the left
+    edge the original's border falls one pixel outside the view, so no line shows there and the
+    visible part matches the cut image. Without a usable game font (S-0014 claim 6) our engine
+    draws neither digit nor box. S-0213 claim 25's missing-asset diagnostic covers the font.
+    - Backing: `measurable` (scenario OV12) for the digit, placement, glyph, alignment, box, colour
+      and both orders (parts a, b, d and e). Also `measurable` for the unshaded number under
+      lighting, the shroud and the invulnerability tint (part c), the original's
+      lines at the four view edges (part f), and the stored rows, the rows outside the box, the
+      digit drawn when *P*<sub>f</sub> − 4 ≤ 0 and the fallback glyph (part g). The covering of the
+      object's own extras stays `unmeasured` if OV12 a exposes no own pixel under the box. The
+      shroud result stays `unmeasured` if OV12 c can place no box pixel over a shrouded cell. The
+      screen effects' result is `unmeasured`: no OV12 part captures one. The
+      cut edge, the fallback's house colour, the absent box for *P*<sub>f</sub> − 4 ≤ 0 and the
+      missing-font result are design rules, not oracle predictions
+    - Confidence: high for the digit, the placement point, the font, the left alignment, the box
+      geometry and fill, the shared colour sample and the absence of shading under lighting. Medium
+      for both orders, the shroud, screen effects and object tints leaving the number unchanged, the
+      stored rows painting without a pitch limit, the rows outside the box, the digit still drawn
+      when *P*<sub>f</sub> − 4 ≤ 0, the fallback glyph and its colour defect, and the original's
+      line along the top, right and bottom view edges with none along the left
 
 18. **Veterancy insignia.** Every unit and building whose veterancy value is outside the rookie band
     shows an insignia, whether or not it is selected and whoever owns it: veteran image frame 14, elite
@@ -555,6 +625,25 @@ W × D, α = 128·W and β = 128·D leptons, and the projected displacements of 
 
 *Q* places the building health pips (claim 7) and *o* the building pip scale (claim 10).
 
+**F6. Control-group number** (integers, pixels, *x* to the right and *y* downwards; claim 17).
+*d* is the placement point, *G* the digit glyph's imported width, *H*<sub>f</sub> the font's
+bitmap height and *P*<sub>f</sub> its line pitch:
+
+> glyph mask pixel (*i*, *r*), 0 ≤ *i* < *G*, 0 ≤ *r* < *H*<sub>f</sub>, at
+> (*d*<sub>x</sub> + *i*, *d*<sub>y</sub> + *r*)
+>
+> box: *d*<sub>x</sub> − 3 ≤ *x* ≤ *d*<sub>x</sub> + *G* + 2 and
+> *d*<sub>y</sub> + 2 ≤ *y* ≤ *d*<sub>y</sub> + *P*<sub>f</sub> − 3
+>
+> border: the box pixels with *x* = *d*<sub>x</sub> − 3, *x* = *d*<sub>x</sub> + *G* + 2,
+> *y* = *d*<sub>y</sub> + 2 or *y* = *d*<sub>y</sub> + *P*<sub>f</sub> − 3
+
+The other box pixels are black. A set mask pixel shows the house colour whether it falls on the
+border, the black interior or the scene. The rows are not limited by *P*<sub>f</sub>: when
+*P*<sub>f</sub> < *H*<sub>f</sub>, the rows *r* ≥ *P*<sub>f</sub> still paint. When
+*P*<sub>f</sub> − 4 ≤ 0 the box is empty in our engine and only the glyph is drawn. Nothing is
+rounded.
+
 ## Constants
 
 | Name (ours) | Value | Unit | Notes |
@@ -574,6 +663,9 @@ W × D, α = 128·W and β = 128·D leptons, and the projected displacements of 
 | Wrench image frames | 7 | image frames (0 … 6) | claim 19 |
 | Building bracket depth threshold | 4 | leptons below the terrain (height above the terrain below −4) | claim 8 |
 | Selection colour | 15 (12 below the depth threshold) | palette index | claim 8 |
+| Group-number box corner | (−3, +2) from the placement point | pixels | claim 17, F6 |
+| Group-number box size | (*G* + 6) × (*P*<sub>f</sub> − 4) | pixels | claim 17, F6 |
+| Group-number box fill | black, opaque | colour | claim 17 |
 
 **T1. Image frames of the pip sprite used here.**
 
@@ -613,7 +705,9 @@ The same number can mean different pictures in the two.
 | neither | no | no | if claim 18 allows |
 
 Within one object, where they overlap, the selection marks and the health bar cover the insignia,
-and the pip scale covers the health bar.
+and the pip scale covers the health bar. The control-group number and its box cover all of them.
+Across objects, each object's status extras are complete before the next object's begin, in
+S-0102's object order (claim 17).
 
 The overload pip (claim 13) and the self-heal blink (claim 16) change with ticks: every drawn frame
 between two ticks shows the same state.
@@ -695,6 +789,7 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
 | building section, `InfantryAbsorb` | boolean | absorbing building (claim 12) | no |
 | building section, `UnitAbsorb` | boolean | absorbing building (claim 12) | no |
 | building's art section, `Height` | integer, height levels | *V* of the building box (claims 7, 8) | 2 |
+| game font file `GAME.FNT`, resolved as in S-0213's Import mapping | binary layout of S-0014 claims 1 to 3 | digit glyph masks, widths *G*, bitmap height *H*<sub>f</sub> and line pitch *P*<sub>f</sub> (claim 17, F6) | a missing or rejected font (S-0014 claim 6): no group number in our engine, with S-0213 claim 25's diagnostic; no original result is predicted |
 
 Vocabulary of `Pip` and `OccupyPip`, compared ignoring case (S-0003 claim 16), with the image frame
 each word selects: `green` 1, `yellow` 2, `white` 3, `red` 4, `blue` 5, `persongreen` 7,
@@ -893,13 +988,70 @@ involved.
   otherwise, with period *T*₀ under the negative interval. Repeat each unit case at full health:
   expected always an image, never a shadow. Falsified if an image frame, place or the blink timing
   differs, a full-health marker blinks, or an aircraft or building shows the marker.
-- **OV12 (claim 17).** A vehicle and an infantry unit put in groups 1, 5 and 10 of the keyboard.
-  Expected: digits 1, 5 and 0 in the owner's house colour, placed from the point (−14, −26) from the
-  vehicle's anchor and (−14, −29) from the infantry unit's; the screenshots also show how the text
-  aligns to that point (Open questions). Falsified if the digit differs, or the text moves with
-  anything other than that point, or if the digit or its border is not in the owner's house
-  colour. Repeat with a selected building assigned to a control group: expected the same digit
-  rule at (−4, −36) from its building pip-scale origin; a different digit or placement falsifies it.
+- **OV12 (claim 17, Q-2040).** Close-up screenshots at 100 % scale, one screen pixel per image
+  pixel, compared pixel by pixel. Read each object's centre and sort key with the recorder. Read
+  the digit glyphs' masks and widths *G*, the bitmap height *H*<sub>f</sub> and the line pitch
+  *P*<sub>f</sub> from the stock game font file (S-0014), and predict each number's pixels by F6.
+  - *a. Digit, glyph and box.* A selected vehicle and a selected infantry unit of the player, put
+    in groups 1, 5 and 10 of the keyboard. The player's house takes a red remap colour; repeat the
+    game with a blue one. Expected: digits 1, 5 and 0, each glyph left-aligned with its top stored
+    row at the point (−14, −26) from the vehicle's anchor and (−14, −29) from the infantry unit's.
+    Each box has the corner and size of F6, a black interior and a one-pixel border ring. The box
+    behind digit 1 differs in width from those behind 5 and 0 by exactly their glyph-width
+    difference, and boxes of equal-width digits match. Falsified by a centred or baseline-aligned
+    glyph, a box of another size or position, a border thicker than one pixel, an interior that
+    shows the scene, or a pixel changed outside the box and the glyph mask (a shadow, for
+    instance). Where the object's own selection bracket or health bar falls under its box, the
+    box and digit show. Falsified if those pixels show through the box.
+  - *b. Colour sample.* In both games of part a, every set mask pixel and every border pixel
+    equals the house display RGB of S-0103 claim 15 at display precision. Falsified if the digit
+    and the border differ, or if either matches another ramp entry, another shade row or the
+    definition's stored HSV bytes read as RGB, instead of claim 15's sample.
+  - *c. Shading.* Repeat part a's vehicle on a cell of a named test map with neutral lighting, of
+    one with night lighting and of one under a coloured light source. Then, as in OV2, place it at
+    the shroud's edge so that box and digit pixels lie over shrouded cells. Capture it once more
+    while the vehicle is under the invulnerability effect of the player's invulnerability
+    superweapon (an iron curtain). Expected: identical number pixels in
+    every capture. Falsified if any digit, border or fill pixel changes. If no box pixel can be
+    placed over a shrouded cell, the shroud result remains unmeasured, not passed.
+  - *d. Building.* A selected building of the player assigned to a control group. Expected: part
+    a's rule from the point (−4, −36) from its building pip-scale origin *o* of claim 10. A
+    different digit, placement or box falsifies it.
+  - *e. Order across objects.* Two selected grouped vehicles on flat cells one cell apart along the
+    map's *y* axis: a screen displacement of (−30, +15) pixels by S-0101 and sort keys differing by
+    256, so S-0102 claim 6 draws the second one later. Then five selected grouped infantry units in
+    one cell, choosing pairs whose sort keys differ. Expected: where a later object's status-extra
+    pixels and an earlier object's box or digit coincide, the later object's pixels show. Where a
+    later object's box covers an earlier object's health bar or pips, the box shows. Falsified if
+    every number appears above all objects' status extras, or if an earlier object's extras show
+    through a later box. If the two vehicles' extras do not overlap with the stock types'
+    selection-bracket displacement, that pair checks only that each number is complete, and the
+    infantry cell carries the ordering test.
+  - *f. View edge.* Scroll so that the vehicle's box crosses the view's top edge, then its right,
+    bottom and left edges in turn. Expected in the original: at the top, right and bottom edges,
+    a border-coloured line along the view edge where it cuts the box. At the left edge, no such
+    line: the visible part matches the cut image. Falsified if a top, right or bottom cut shows
+    no line, or the left cut shows one. Our engine is checked against claim 17's cut image at all
+    four edges, with no line along any edge.
+  - *g. Test fonts.* Named test copies of the game font file, each valid under S-0014 claim 6,
+    with S-0014 scenario F2's setup and restore rule. Repeat part a's vehicle in group 1 with
+    each copy, and read *G*, *H*<sub>f</sub>, *P*<sub>f</sub> and the masks from that copy.
+    1. *P*<sub>f</sub> = *H*<sub>f</sub> + 1, and digit 1's glyph has set pixels in its top two
+       stored rows and in its bottom stored row. Expected: those pixels in the house colour on
+       the scene above and below the box. Falsified if they are missing, black or cut at the box.
+    2. *P*<sub>f</sub> < *H*<sub>f</sub>, and digit 1's glyph has set pixels in the rows from
+       *P*<sub>f</sub> to *H*<sub>f</sub> − 1. Expected: those rows painted, with the box of F6
+       for that pitch. Falsified if the digit ends at row *P*<sub>f</sub> − 1 or *P*<sub>f</sub>,
+       as status text would.
+    3. *P*<sub>f</sub> = 4. Expected: digit 1's set pixels drawn in the house colour. Record any
+       other changed pixels around them: no original result for the box is predicted.
+       Falsified if the digit is missing. Our engine is checked to draw no box.
+    4. Text unit 49 (the digit 1) unmapped, and the capital X mapped with an asymmetric mask and a
+       width different from digit 1's. Expected: the complement of X's mask within X's width and
+       the bitmap height, in a box of X's width plus 6. In the original, the fallback's pixels
+       show S-0213 claim 25's packed-colour defect while the border shows the house colour. Our
+       engine paints them in the house colour. Falsified by another fallback shape or width, or a
+       missing digit.
 - **OV13 (claim 18).** A small map with water. A test map whose unit entries give veterancy values of
   −0.5, 0.5, 1.5 and 2.5 levels (through the veterancy field of the map's unit entries, in hundredths:
   −50, 50, 150, 250) to units of both players; a disguised enemy unit; a cloaked own naval unit, a
@@ -1024,14 +1176,24 @@ involved.
 - Which corners of a building's box get selection brackets (claim 8) is not established.
 - Which picture each image-frame number holds in each pip sprite should be read from the stock sprites at
   measurement time; this spec fixes only the numbers.
-- How the group number's text is aligned to its placement point, its font and the exact size of its
-  border (claim 17) are not established; the colour is medium confidence.
 - The extra-information overlay that some units draw beside the pip scale is not covered, nor is the
   talk bubble that can be shown over one object at a time (it uses its own sprite, drawn at the
   status anchor without shading; what shows it is not traced).
 
 ## Cross-spec consistency
 
+- Claim 17 (Q-2040) uses the game font of S-0014 and S-0213 claim 25 for a second purpose. Its
+  glyph widths, masks, fallback image and transparency are S-0014 claims 3 to 5, and its advance
+  is S-0213 claim 25's. Claim 17 owns the number's foreground, box and placement. S-0014 claim 6's
+  whole-font rejection omits the number as it omits status text. Claim 17's colour is S-0103
+  claim 15's house display RGB, as consumed by S-0410 claim 8, without changing it.
+- Hand off with S-0014's summary and claim 6, and with S-0213 claim 25, noting the font's
+  second use: claim 6's rejection also omits the group number, and the digit paints every
+  stored row with no pitch limit, unlike status text. Neither spec's rules change.
+- Hand off with S-0102 claim 1 stating that status extras are painted object by object, each
+  object's complete before the next object's begin, in the layer order of claim 1 and the
+  in-layer order of claims 6 and 7. Claim 17's order across objects and its scenario OV12 e rely
+  on that statement. S-0102 owns the order itself.
 - This draft replaces this spec's previously approved claim 9 and OV6 infiltration expectation:
   spying is not a reachable pip-reveal condition in stock skirmish. The corrected claim 9 agrees
   with approved S-0510 claim 8 and its scenario I7. Hand-off replaces the old S-0111 text; no
