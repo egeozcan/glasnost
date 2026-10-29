@@ -2,13 +2,13 @@
 id: S-0111
 title: In-game overlays (health bars, pips, selection marks, insignia)
 topic: rendering
-revision: 21
+revision: 25
 sources-class: [decomp, design]
 status: approved
 approved-by: Claude (delegated by project lead)
 approved-on: 2026-10-29
 measurements: []
-requests: [Q-0471, Q-1622, Q-2040]
+requests: [Q-0471, Q-1622, Q-2040, Q-2071, Q-2072]
 supersedes: []
 ---
 
@@ -202,10 +202,27 @@ S-0108 (Formulas F3).
 
     | Row | Shown for | Pips |
     |---|---|---|
-    | spawned aircraft | a type that spawns aircraft, whatever else applies | one per spawn slot: image frame 1 for each aircraft currently docked or ready, 0 for the rest |
-    | occupants | a building type that shows its occupant pips and holds at least one occupant slot, whatever else applies | one per slot: the occupying infantry type's occupant pip image frame, or image frame 6 for an empty slot |
+    | spawned aircraft | a type that spawns aircraft, whatever else applies | one per spawn slot of the type: the first *f* pips image frame 1 and the rest image frame 0, where *f* is the number of its slots that are docked or reloading |
+    | occupants | a building type that shows its occupant pips and holds at least one occupant slot, whatever else applies | one per slot: pip *k* shows the occupant at list position *k* by its infantry type's occupant pip image frame, or image frame 6 when no occupant holds that position |
     | passengers | a type with a passenger capacity above 0, whatever its pip-scale kind | claim 12 |
     | by pip-scale kind | a type with a passenger capacity of 0 or below | mind control: claim 13; resource: claim 14; ammunition: claim 15; none and power: no row |
+
+    **Spawned-aircraft row (Q-2072).** In S-0506 claim 4's slot states, a slot counts toward *f*
+    while it is *docked* or *reloading*: its object is inside the spawner. A slot that is *on the
+    rail*, *preparing* (a missile waiting on its launcher included), *attacking*, *returning* (on
+    its way back) or *empty* does not. The full pips are packed from pip 0: they do not stand at
+    their slots' own indices, so a launched slot leaves no gap. A slot that becomes docked or
+    reloading again adds a full pip at the end of the full ones. So a launched aircraft's pip is
+    empty for the whole time it is out, and its death, at crash start or later, changes no pip.
+
+    **Occupant row (Q-2072).** The occupants are in S-0508's list order: pip 0 shows the first
+    occupant, the one inside longest, and each later entrant takes the next pip (S-0508 claim 5).
+    Occupants of different types each keep their own image frame at their own position. The only
+    loss of one occupant while others stay that S-0508 claim 19 lists is its defeat death. The
+    original keeps the dead place in the list (S-0508 claim 20), so no later pip moves, and what
+    the dead place's pip shows is *unspecified*. Our engine removes the place (S-0508 claim 23),
+    and every later occupant moves down one pip: this closing up is our engine's rule, not a
+    claim about the original.
 
     So the passenger row and the row by pip-scale kind exclude each other, while the spawned-aircraft
     and occupant rows can appear with either: a type that spawns aircraft, has the ammunition kind and
@@ -219,15 +236,26 @@ S-0108 (Formulas F3).
     marker or the group number: claim 12 clips the passenger pips to the row, and claims 9, 16 and
     17 still decide their ordinary visibility.
     - Backing: `measurable` (scenarios OV6, OV7) for the tested rows and spawn/ammunition overlap.
+      `measurable` (scenario OV15) for the spawn states that count, the packing and the occupant
+      order. `unmeasured` for the pip of a dead occupant place and for the later pips' staying in
+      place in the original: S-0508 claim 20 gives no safe original result once a place is dead,
+      so no scenario records it. The closing up is our engine's rule, checked on our engine only
+      (scenario OV15 d).
       `unmeasured` for other multi-row overlaps and resource-building suppression of the group
       number: these scenarios do not establish those combinations. Overflow visibility is a
       departure tested against this spec, not the original (scenario OV7-D)
     - Confidence: high for the rows, the covering, the passenger rule and the resource cut-off,
-      high for the lead-decided overflow visibility
+      high for the lead-decided overflow visibility. High for the spawn states that count and the
+      packing, and for the occupant order and positions while every occupant lives (OV15 a to c).
+      Medium for the original's later pips staying in place after a defeat death (S-0508 claim
+      20, unmeasured). The dead place's pip in the original is unspecified, not rated. The
+      engine's closing up is a design rule (OV15 d)
 
 12. **Passenger pips.** The row length *R* is the one that the type's pip-scale kind gives (Constants
     T2): the passenger capacity for the passengers kind, but 0 for the kind none, the ammunition
-    capacity for the ammunition kind, and so on. Let the *m* passengers be numbered *k* = 1 … *m* in
+    capacity for the ammunition kind, and so on. A type whose pip-scale word is outside the
+    vocabulary has the kind none (Import mapping), so its row length is 0 too.
+    Let the *m* passengers be numbered *k* = 1 … *m* in
     the order they entered, *z*<sub>k</sub> being passenger *k*'s size field (binary64).
     - **Retained pip values.** An infantry type's passenger pip colour and occupant pip image frame
       keep the held value whenever a rules layer contains its section but omits the corresponding
@@ -352,8 +380,14 @@ S-0108 (Formulas F3).
     image frame 15 + λ, where λ is the largest integer from 0 to ⌊*A* / *w*⌋ − 1 with λ·*w* + *j*
     < *a*, or image frame 14 when there is none. So each further layer of wrapped ammunition moves a pip
     to the next image frame.
-    - Backing: `measurable` (scenario OV10)
-    - Confidence: high
+    - **Negative wrap (Q-2071).** A pip wrap below 0 is kept as read, and the type shows no
+      ammunition pip at all, whatever its capacity *A* and its current ammunition *a*. Only the
+      ammunition row is affected: the group number keeps its own rules.
+      The importer warns about a negative pip wrap.
+    - Backing: `measurable` (scenario OV10; OV10 b for the negative wrap). The importer warning is
+      `unmeasured`: the original cannot confirm our diagnostics
+    - Confidence: high for the rows with no wrap and with a wrap above 0. Medium for the negative
+      wrap until OV10 b runs
 
 16. **Self-heal marker.** A vehicle or infantry unit with a pip scale shows a self-heal marker when its
     owner has the healing ability that applies to it: infantry, and vehicles marked organic, use the
@@ -737,6 +771,11 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
   clipped passenger pips and ordinary marker visibility instead, without changing passenger
   capacity or loading legality. The importer warns about a type with a passenger capacity whose
   pip-scale kind is not passengers.
+- **Negative pip wrap** (claim 15, Q-2071): no ammunition pips, with an importer warning
+  (medium until OV10 b runs). No switch: the result is deterministic and harmless, and it only
+  follows from bad data.
+- **Unknown pip-scale word** (Import mapping, Q-2071): the kind none, with an importer warning
+  (medium until OV10 c runs). No switch.
 - **Resource pips round half up per resource** (claim 14), so the row can show one pip more or one
   pip fewer than the whole load would round to. No switch: it is what the original shows.
 - **Building at health 0 shows green** (claim 5). No switch: no stable state shows it.
@@ -770,9 +809,9 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
 | rules `[General]`, `SelfHealInfantryFrames` | integer, ticks | *T* for infantry healing (claim 16) | 1000 |
 | rules `[General]`, `SelfHealUnitFrames` | integer, ticks | *T* for unit repair (claim 16) | 1000 |
 | type section, `PixelSelectionBracketDelta` | integer, pixels | δ (claim 6) | 0 |
-| type section, `PipScale` | named value: `none`, `ammo`, `tiberium`, `passengers`, `power`, `mindcontrol` (S-0003 claim 16) | pip-scale kind (claim 11) | none |
+| type section, `PipScale` | named value: `none`, `ammo`, `tiberium`, `passengers`, `power`, `mindcontrol` (S-0003 claim 16, vocabulary below) | pip-scale kind (claim 11) | none |
 | type section, `PipsDrawForAll` | boolean | claim 9 (buildings only) | no |
-| type section, `PipWrap` | integer | *w* (claim 15) | 0 |
+| type section, `PipWrap` | integer, negative values kept (claim 15) | *w* (claim 15) | 0 |
 | type section, `Ammo` | integer | *A* (claim 15) | as the combat specs give |
 | type section, `Passengers` | integer | passenger capacity (claims 11, 12) | as the transport specs give |
 | type section, `Size` | decimal | *z* (claim 12) | as the transport specs give |
@@ -790,6 +829,15 @@ within one tick is `unmeasured`, confidence high, since they supply no frozen-cy
 | building section, `UnitAbsorb` | boolean | absorbing building (claim 12) | no |
 | building's art section, `Height` | integer, height levels | *V* of the building box (claims 7, 8) | 2 |
 | game font file `GAME.FNT`, resolved as in S-0213's Import mapping | binary layout of S-0014 claims 1 to 3 | digit glyph masks, widths *G*, bitmap height *H*<sub>f</sub> and line pitch *P*<sub>f</sub> (claim 17, F6) | a missing or rejected font (S-0014 claim 6): no group number in our engine, with S-0213 claim 25's diagnostic; no original result is predicted |
+
+Vocabulary of `PipScale`, compared ignoring case (Q-2071): `ammo`, `tiberium`, `passengers`,
+`power` and `mindcontrol` select their kinds. Any other word, `none` included, gives the kind
+none: no row of its own and row length 0 in claim 12, the same as an absent key with no earlier
+value. Its fixed fallback is none, not the held value (S-0003 claim 16). Our engine warns about a
+word other than `none` that matches none of them. Backing: `measurable` (scenario OV10 c) for the
+fallback, `unmeasured` for the warning. Confidence: high for the five listed words and `none`,
+medium for the fallback of any other word until OV10 c runs (S-0003 claim 16 rates its per-field
+fallbacks medium).
 
 Vocabulary of `Pip` and `OccupyPip`, compared ignoring case (S-0003 claim 16), with the image frame
 each word selects: `green` 1, `yellow` 2, `white` 3, `red` 4, `blue` 5, `persongreen` 7,
@@ -850,7 +898,7 @@ involved.
   segments and passenger pips keep their palette colours. Falsified if the segments or pips darken,
   the other sprites ignore shroud at sampled covered pixels, or any overlay follows night lighting.
   If no covered, nontransparent pixel of an eligible sprite can be exposed, that sprite's shroud
-  result remains unmeasured, not passed. No fog-on run is proposed: S-0409 claim 19 forces fog off.
+  result remains unmeasured, not passed. No fog-on run is planned: S-0409 claim 19 forces fog off.
 - **OV3 (claims 3, 6).** A stock vehicle, infantry unit and aircraft of the player and of the computer
   player, each at several healths. Select each owned object, then deselect it and hover it.
   Hover each enemy object. Expected: the segment rows of claim 6 at the
@@ -976,6 +1024,51 @@ involved.
   ammunition count *a*: for the unit without wrap, image frame 13 for every pip *j* < *a* and no pip
   drawn from *j* = *a* on; for the unit with wrap *w*, exactly *w* pips in the image frames of F3.
   Falsified if any pip shows another image frame, or another number of pips is drawn.
+  - **OV10 b (claim 15, Q-2071 question 2).** A test map override section gives a test copy of an
+    ammunition unit type the ammunition kind and a pip wrap of −2, with no passenger capacity. An
+    own unit of it in control group 1, selected, recorded at full ammunition, after one shot and
+    when empty. Expected: no ammunition pip at any count, with the group number still drawn.
+    Falsified if any ammunition pip is drawn, or the pips of a wrap of 0 or of 2 appear.
+  - **OV10 c (claims 11, 12, Import mapping, Q-2071 question 1).** Test rules data gives a test
+    copy of a stock transport type without the gunner flag the pip-scale word `passengers`, its
+    passenger capacity unchanged, and a test copy of an ammunition unit type the word `ammo` and
+    no passenger capacity. A test map override section then gives both copies the word
+    `sideways`; a control game uses the same rules data without that override. In each game, own
+    units of both copies are selected, as in OV10 b, and recorded with the transport empty, then
+    loaded with one infantry passenger. Expected: in the control, the transport's passenger row
+    and the second unit's ammunition row; in the test game, no pip row on either unit, loaded or
+    not. Falsified if the test game shows the transport's passenger row of any length or the
+    second unit's ammunition row (the held kind kept), or if the control shows neither row (the
+    run cannot tell the fallback from the held kind).
+- **OV15 (claim 11, Q-2072).** Pip scales recorded once per tick in screenshots or by the
+  harness's overlay read-out, with each slot's S-0506 state from the same tick.
+  - **OV15 a (spawned aircraft).** S-0506's R14 setup: an own ordinary carrier with its full
+    complement and an enemy target in range. Record while one aircraft launches, attacks, returns,
+    is taken in and reloads, until it is docked again; then while two are out at once and the
+    first of them comes back. Expected: the full pips equal the number of slots docked or
+    reloading in that tick, packed from pip 0: while one aircraft is out, the last pip of the row
+    is empty, not the pip at the launched slot's index; the pip refills on the tick its slot
+    becomes reloading. Falsified if a returning or attacking slot shows a full pip, a reloading
+    slot an empty one, or an empty pip appears before a full one.
+  - **OV15 b (missile spawner).** S-0506's R2 and R5 setups: an own missile spawner while its
+    missile prepares on its launcher, is released and its slot regenerates. Expected: that slot
+    stops counting as full from the tick it leaves docked (preparing) and stays uncounted on the
+    rail and while empty, then counts again from the tick the new missile is docked. Falsified if
+    a slot whose missile prepares still counts as full.
+  - **OV15 c (occupants).** An own occupiable building with at least two slots, test data in a
+    test map override section if needed: two test copies of a stock garrisoning infantry type
+    with different occupant pip words. Enter type A then type B, record, evacuate; enter B then
+    A, record. Expected: pip 0 shows the first entrant's image frame and pip 1 the second's in
+    both orders, the other slots image frame 6. Falsified if the image frames follow type or
+    entry recency instead.
+  - **OV15 d (occupant close-up, our engine only).** S-0508 scenario G18's engine fixture with
+    three identified occupants U, V and W, entered in that order, of test types with different
+    occupant pip words, in a building with at least four slots. Kill V while inside, by a defeat
+    hit and, in a second fixture, by an independently supplied death event. Record the pips in
+    the update of the death and the next. Expected: pip 0 shows U's image frame, pip 1 W's and
+    every other slot image frame 6. Repeat with W dying: pips 0 and 1 show U and V. Falsified if
+    a dead place keeps a pip, or W's pip stays at position 2. No original run is given: S-0508
+    claim 20 gives no safe original result once a place is dead.
 - **OV11 (claim 16).** An own damaged infantry unit while the player owns an infantry-healing building,
   recorded every drawn frame for 3 periods; then a damaged own non-organic vehicle while the player
   owns a unit-repair building; then a test vehicle type marked organic, damaged, while the player owns
@@ -1182,6 +1275,10 @@ involved.
 
 ## Cross-spec consistency
 
+- Hand off with S-0506 scenario R5's crash-start check (Q-2072). Under claim 11 only docked and
+  reloading slots show a full pip, so a launched aircraft's pip is already empty and does not
+  change when the aircraft is killed. R5 must read the slot's change at crash start from the
+  slot state that S-0506 claim 9 gives, not from the pips. S-0506's rules do not change.
 - Claim 17 (Q-2040) uses the game font of S-0014 and S-0213 claim 25 for a second purpose. Its
   glyph widths, masks, fallback image and transparency are S-0014 claims 3 to 5, and its advance
   is S-0213 claim 25's. Claim 17 owns the number's foreground, box and placement. S-0014 claim 6's
