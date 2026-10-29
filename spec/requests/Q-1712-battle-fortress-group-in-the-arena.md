@@ -18,7 +18,7 @@ orders. Two of the ten pairings whose spread falls furthest short of the record'
   without any effect.
 - CAOS against BFRT. Stock: the BFRT side wins more than half the games and the rest end at the
   frame limit, with shares that vary. Ours: all twelve games end at the frame limit with the same
-  shares: the CAOS group untouched, three of the four BFRT vehicles lost.
+  shares: the CAOS group untouched, part of the BFRT group lost.
 
 So in the stock games the empty BFRT group harms the enemy, and in ours it does not. No draw we
 leave out explains that: the seed reaches these games (from the first contact the games differ
