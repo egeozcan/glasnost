@@ -64,6 +64,12 @@ impl StatusFont {
         Self::new(Font::parse(bytes).map_err(|e| e.to_string())?)
     }
 
+    /// The font as parsed, for its other use: the control-group number
+    /// (S-0111 claim 17).
+    pub fn font(&self) -> &Font {
+        &self.font
+    }
+
     /// The common bitmap height in pixels (S-0014 claim 1).
     pub fn height(&self) -> usize {
         self.font.height
@@ -185,7 +191,8 @@ pub fn draw(d: &mut DrawList, font: &StatusFont, messages: &[Message], m: Rect) 
 /// and no substitute font (S-0213 Import mapping, S-0014 claim 6).
 pub async fn read(vfs: &Vfs) -> Result<StatusFont, String> {
     // spec: S-0213 Import mapping (no original status text without a loaded font; our engine reports a missing-asset diagnostic and omits the text)
-    let omitted = "status text is omitted (S-0213 claim 25)";
+    let omitted =
+        "status text and the control-group number are omitted (S-0213 claim 25, S-0111 claim 17)";
     let Some(r) = vfs.resolve(FILE) else {
         return Err(format!("{FILE}: the game font is missing; {omitted}"));
     };

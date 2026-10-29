@@ -373,6 +373,9 @@ pub struct Live {
     /// Each house's display RGB, in house order (S-0103 claim 15), for the
     /// control-group number's house colour.
     house_colours: Vec<[u8; 3]>,
+    /// The game font's digits the control-group number is drawn with
+    /// (S-0111 claim 17); `None` without a usable font: no number.
+    group_font: Option<combat::GroupFont>,
     /// Notes the drawing of the live objects met.
     pub notes: BTreeSet<String>,
     /// Simulation types with no import type of the same name (not drawn).
@@ -1098,6 +1101,7 @@ impl Live {
             hovered: None,
             group_digits: BTreeMap::new(),
             house_colours: Vec::new(),
+            group_font: None,
             notes: BTreeSet::new(),
             undrawn_types: undrawn,
             failed: None,
@@ -2613,6 +2617,84 @@ impl Live {
         v
     }
 
+    /// The objects whose status extras are drawn, in the object order of
+    /// S-0102 claims 1, 6 and 7 (S-0111 claim 17 and State and ordering):
+    /// the underground and surface lists, the ground layer, then the air
+    /// and top lists. The ground layer's mobiles keep its order; each
+    /// building on the map joins them by its sort key (S-0102 claim 5, F4).
+    fn status_order(&self, inputs: &Inputs) -> Vec<ObjectId> {
+        use super::slots::Layer;
+        let upper = |which: &dyn Fn(Layer) -> bool| -> Vec<ObjectId> {
+            self.layers
+                .upper()
+                .filter(|l| which(*l))
+                .flat_map(|l| self.layers.list(l).iter())
+                .filter_map(|e| match e {
+                    Entrant::Object(id) => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        };
+        let mut buildings: Vec<(i64, ObjectId)> = self
+            .world
+            .objects
+            .values()
+            .filter(|o| o.kind == SimKind::Building && o.on_map)
+            .map(|o| {
+                let c = o.pos.cell();
+                let voxel = self
+                    .types
+                    .get(&(o.kind, o.type_index))
+                    .copied()
+                    .flatten()
+                    .is_some_and(|i| {
+                        super::build::rule_bool(
+                            inputs.import,
+                            Kind::Buildings,
+                            i,
+                            b"TurretAnimIsVoxel",
+                            false,
+                        )
+                    });
+                let gate = self
+                    .rules
+                    .buildings
+                    .get(o.type_index as usize)
+                    .is_some_and(|b| b.gate);
+                // spec: S-0102 claim 5 and F4 (a building's key: X + Y of its top-left foundation cell's corner, + 32 for a voxel turret, − 16 for a gate)
+                let key = i64::from(256 * (c.x + c.y)) + if voxel { 32 } else { 0 }
+                    - if gate { 16 } else { 0 };
+                (key, o.id)
+            })
+            .collect();
+        buildings.sort();
+        let mut v = upper(&|l| l < Layer::Ground);
+        let mut b = buildings.into_iter().peekable();
+        // spec: S-0102 claim 6 (the ground layer in increasing sort key); design: at equal keys a building goes before the layer's mobiles, buildings among themselves in object ID order (our engine keeps no entering order for buildings)
+        for (e, key) in &self.ground.list {
+            let Entrant::Object(id) = *e else {
+                continue;
+            };
+            while let Some((_, bid)) = b.next_if(|(k, _)| k <= key) {
+                v.push(bid);
+            }
+            v.push(id);
+        }
+        v.extend(b.map(|(_, id)| id));
+        v.extend(upper(&|l| l > Layer::Ground));
+        // Objects of no list yet (none in a synced game): last, in object ID order.
+        let listed: BTreeSet<ObjectId> = v.iter().copied().collect();
+        let rest: Vec<ObjectId> = self
+            .world
+            .objects
+            .keys()
+            .copied()
+            .filter(|id| !listed.contains(id))
+            .collect();
+        v.extend(rest);
+        v
+    }
+
     /// What one simulation object looks like now, if it is drawn.
     pub fn mobile(&self, inputs: &Inputs, id: ObjectId) -> Option<Mobile> {
         let w = &self.world;
@@ -3595,6 +3677,16 @@ impl Live {
         self.house_colours = colours;
     }
 
+    /// Sets the game font the control-group number is drawn with (S-0111
+    /// claim 17 and Import mapping); `None` for a missing or rejected font
+    /// (S-0014 claim 6), and then no number and no box is drawn.
+    pub fn set_group_font(&mut self, font: Option<combat::GroupFont>) {
+        if self.group_font != font {
+            self.group_font = font;
+            self.cache.forget_group_digits();
+        }
+    }
+
     /// Whether the pip scale of object `o` is drawn with its health bar
     /// for the viewer (S-0111 claims 9 and 11): an owner that is the
     /// viewer's house or allied with it, or for a building whose type draws
@@ -3645,7 +3737,10 @@ impl Live {
     /// (S-0519 claim 24) and repair wrench (claim 19), its veterancy
     /// insignia (claim 18), then the health bars of the selected objects
     /// (with the unit bracket) and of the hovered one (claims 3 to 7). Within
-    /// an object the bar covers the insignia (State and ordering).
+    /// an object the bar covers the insignia, and the pip scale's rows, the
+    /// self-heal marker and the control-group number cover the bar (State
+    /// and ordering). Each object's extras are complete before the next
+    /// object's begin, in the object order of S-0102 (claim 17).
     fn draw_status(&mut self, inputs: &Inputs, scene: &mut Scene) {
         scene.items.truncate(self.effects_end);
         let r = self.rules.clone();
@@ -3661,7 +3756,12 @@ impl Live {
             .chain(self.hovered.map(|h| (h, false)))
             .collect();
         let mut items = Vec::new();
-        for o in self.world.objects.values() {
+        // spec: S-0111 claim 17 and State and ordering (each object's status extras, the number included, are complete before the next object's begin, in the object order of S-0102 claims 1, 6 and 7)
+        let order = self.status_order(inputs);
+        for id in order {
+            let Some(o) = self.world.obj(id) else {
+                continue;
+            };
             if !o.on_map || o.kind == SimKind::Terrain {
                 continue;
             }
@@ -3788,21 +3888,19 @@ impl Live {
                 &pips,
                 Some(sim_code(o.id)),
             ));
-            // spec: S-0111 claim 17 and State and ordering (the group number is drawn with the pip scale, so with the health bar, when claim 9 lets the viewer see the pip scale; claim 10: it covers the pip scale's rows and the self-heal marker); design: pushed last of the object's extras, so over its bar too (Q-2040)
+            // spec: S-0111 claim 17 and State and ordering (the group number is drawn with the pip scale, so with the health bar, when claim 9 lets the viewer see the pip scale; drawn last among the object's own status extras, covering them)
             if bar.is_some()
                 && let Some(&digit) = self.group_digits.get(&o.id)
+                && let Some(font) = self.group_font.as_ref()
                 && self.pip_scale_shown(inputs, o)
+                // spec: S-0111 claim 17 (the owner's house display RGB of S-0103 claim 15; every object has an owning house in skirmish, so no ownerless case arises)
+                && let Some(&colour) = o.owner.and_then(|h| self.house_colours.get(usize::from(h.0)))
             {
                 let building = (o.kind == SimKind::Building).then_some(o.foundation);
                 let at = combat::group_number_at(infantry, building);
-                // spec: S-0111 claim 17 (the owner's house colour); design: the house display RGB of S-0103 claim 15, white for no owner (Q-2040)
-                let colour = o
-                    .owner
-                    .and_then(|h| self.house_colours.get(usize::from(h.0)))
-                    .copied()
-                    .unwrap_or([255, 255, 255]);
-                items.push(self.cache.group_number_item(
+                items.extend(self.cache.group_number_item(
                     scene,
+                    font,
                     anchor,
                     at,
                     digit,

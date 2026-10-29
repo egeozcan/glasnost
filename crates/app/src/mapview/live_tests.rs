@@ -5290,9 +5290,19 @@ fn cursor_palette_component_wrap() {
     assert!(cursor_palette(b"short", &PaletteQuirks::default()).is_none());
 }
 
-/// The control-group number items (our 7 × 9 image) of object `id` in
-/// `scene`, with their place and the colour their row gives index 1.
-fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
+/// The game font of the control-group number tests: `combat::digit_font`
+/// with bitmap height 7 and line pitch 10, so a number's image spans its
+/// box from 3 pixels left of the placement point and its glyph's top row
+/// at the point.
+fn number_font() -> Option<super::combat::GroupFont> {
+    super::combat::GroupFont::new(&super::combat::digit_font(7, 10))
+}
+
+/// The control-group number items of object `id` in `scene` (the images
+/// holding the box's black fill, index 2), with their placement point (the
+/// image's left edge plus 3) and the colours their row gives the house
+/// colour (index 1) and the fill.
+fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16, u16)> {
     use glasnost_render::scene::Group;
     scene
         .items
@@ -5300,14 +5310,14 @@ fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
         .filter(|i| i.group == Group::Status && i.object == Some(sim_code(id)))
         .filter(|i| {
             let img = &scene.images[i.image as usize];
-            (img.width(), img.height()) == super::combat::GROUP_NUMBER_SIZE
+            img.height() == 8 && img.pixels().contains(&super::combat::GROUP_FILL)
         })
         .map(|i| {
             let row = match i.paint {
-                Paint::Row(r) => scene.rows[r][1],
+                Paint::Row(r) => &scene.rows[r],
                 _ => panic!("the group number is drawn through a row"),
             };
-            ((i.x, i.y), row)
+            ((i.x + 3, i.y), row[1], row[2])
         })
         .collect()
 }
@@ -5316,9 +5326,9 @@ fn group_numbers(scene: &Scene, id: ObjectId) -> Vec<((i32, i32), u16)> {
 /// from a vehicle's anchor and (−14, −29) from an infantry unit's, in the
 /// owner's house colour), claims 3 and 9 and State and ordering (drawn with
 /// the pip scale: only with the health bar, only for an owner the viewer
-/// may inspect, after the object's other status extras). The image's
-/// top-left corner at the point and the house display RGB are our design
-/// (Q-2040).
+/// may inspect, after the object's other status extras); the glyph's top
+/// row and left column at the point, the box 3 pixels to its left, in the
+/// house display RGB of S-0103 claim 15 with a black fill (OV12 a and b).
 #[test]
 fn the_group_number_follows_the_pip_scale() {
     use glasnost_render::compose::pack565;
@@ -5348,6 +5358,7 @@ fn the_group_number_follows_the_pip_scale() {
         })
     };
     live.set_house_colours(vec![red, blue]);
+    live.set_group_font(number_font());
     live.set_viewer(Some(HouseId(0)));
     // spec: S-0111 claim 17 (keyboard groups 5 and 10: index 5 shows 5, index 0 shows 0)
     let digits: std::collections::BTreeMap<_, _> = [
@@ -5371,14 +5382,18 @@ fn the_group_number_follows_the_pip_scale() {
     let (ax, ay) = anchor(&live, cart);
     assert_eq!(
         group_numbers(&scene, cart),
-        vec![((ax - 14, ay - 26), px(red))]
+        vec![((ax - 14, ay - 26), px(red), 0)]
     );
     let last = scene
         .items
         .iter()
         .rfind(|i| i.group == Group::Status && i.object == Some(sim_code(cart)))
         .unwrap();
-    assert_eq!((last.x, last.y), (ax - 14, ay - 26), "it covers the bar");
+    assert_eq!(
+        (last.x, last.y),
+        (ax - 14 - 3, ay - 26),
+        "it covers the bar"
+    );
     // The enemy walker hovered: a health bar but no pip scale (claim 9), so no number.
     live.set_marks(&[cart], Some(walker));
     live.redraw_status(&inputs, &mut scene);
@@ -5389,7 +5404,7 @@ fn the_group_number_follows_the_pip_scale() {
     let (wx, wy) = anchor(&live, walker);
     assert_eq!(
         group_numbers(&scene, walker),
-        vec![((wx - 14, wy - 29), px(blue))]
+        vec![((wx - 14, wy - 29), px(blue), 0)]
     );
     assert!(
         group_numbers(&scene, cart).is_empty(),
@@ -5460,8 +5475,9 @@ fn a_building_group_number_and_the_resource_switch() {
     );
     let mut scene = built.scene;
     live.set_house_colours(vec![[200, 40, 40], [40, 40, 200]]);
+    live.set_group_font(number_font());
     live.set_viewer(Some(HouseId(0)));
-    live.set_group_digits([(own, 1), (theirs, 2)].into());
+    live.set_group_digits([(own, 1), (theirs, 5)].into());
     live.set_marks(&[own], Some(theirs));
     // Switch on (the original): a resource-kind building shows no number.
     live.redraw_status(&inputs, &mut scene);
@@ -5483,4 +5499,135 @@ fn a_building_group_number_and_the_resource_switch() {
         assert_eq!(at.len(), 1, "one number for {id:?}");
         assert_eq!(at[0].0, (ax + o.0 - 4, ay + o.1 - 36));
     }
+}
+
+/// Two grouped carts of house 0 one cell apart along the map's *y* axis,
+/// the first created at the larger sort key, in a live game of the
+/// synthetic combat ruleset. Returns the game, scene, map, import,
+/// catalogue and the two carts (lower key first).
+#[allow(clippy::type_complexity)]
+fn two_carts(
+    assets: &super::build::Assets,
+) -> (
+    Live,
+    Scene,
+    glasnost_map::Map,
+    glasnost_convert::Import,
+    glasnost_convert::theater::Catalogue,
+    ObjectId,
+    ObjectId,
+) {
+    use glasnost_sim::rules::Kind as SimKind;
+    let (import, catalogue, _) = context();
+    let map = testkit::empty_map(24);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    let (mut built, painter) = build_parts(&inputs, true);
+    let mut world = testkit::game_with(&testkit::combat_ruleset(), 24, 3);
+    let later = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 1),
+        0,
+    );
+    let earlier = testkit::spawn(
+        &mut world,
+        SimKind::Vehicle,
+        "CART",
+        0,
+        testkit::mid(24, 0, 0),
+        0,
+    );
+    assert!(
+        later < earlier,
+        "object ID order is the reverse of the key order"
+    );
+    let rules = world.rules_arc();
+    let live = Live::new(
+        &inputs,
+        &mut built,
+        painter,
+        (world, rules, testkit::setup(3), Vec::new()),
+    );
+    (live, built.scene, map, import, catalogue, earlier, later)
+}
+
+/// spec: S-0111 claim 17, State and ordering and scenario OV12 e (each object's status extras,
+/// its number last, are complete before the next object's begin, in the object order of S-0102
+/// claims 1 and 6: the ground layer by increasing sort key, not object ID order, so a later
+/// object's bar covers an earlier object's number); Import mapping (without a usable game font,
+/// S-0014 claim 6, no number and no box)
+#[test]
+fn group_numbers_follow_the_object_order() {
+    use glasnost_render::scene::Group;
+    let assets = overlay_assets();
+    let (mut live, mut scene, map, import, catalogue, earlier, later) = two_carts(&assets);
+    let palettes = PaletteState::at_program_start(None, None, PaletteQuirks::default());
+    let options = Options::default();
+    let inputs = Inputs {
+        map: &map,
+        import: &import,
+        catalogue: &catalogue,
+        palettes: &palettes,
+        assets: &assets,
+        options: &options,
+        rules: None,
+        cells: None,
+    };
+    live.set_house_colours(vec![[200, 40, 40], [40, 40, 200]]);
+    live.set_group_font(number_font());
+    live.set_viewer(Some(HouseId(0)));
+    live.set_group_digits([(earlier, 1), (later, 1)].into());
+    live.set_marks(&[later, earlier], None);
+    live.redraw(&inputs, &mut scene);
+    let owner =
+        |i: &glasnost_render::scene::Item| (i.group == Group::Status).then_some(i.object).flatten();
+    let codes: Vec<u32> = scene.items.iter().filter_map(owner).collect();
+    let (e, l) = (sim_code(earlier), sim_code(later));
+    let last_of_earlier = codes.iter().rposition(|&c| c == e).unwrap();
+    let first_of_later = codes.iter().position(|&c| c == l).unwrap();
+    assert!(
+        last_of_earlier < first_of_later,
+        "the earlier object's extras are complete before the later one's begin"
+    );
+    // The earlier cart's number is the last of its own extras.
+    let earlier_items: Vec<_> = scene
+        .items
+        .iter()
+        .filter(|i| i.group == Group::Status && i.object == Some(e))
+        .collect();
+    let last = earlier_items.last().unwrap();
+    assert!(
+        scene.images[last.image as usize]
+            .pixels()
+            .contains(&super::combat::GROUP_FILL)
+    );
+    assert_eq!(group_numbers(&scene, earlier).len(), 1);
+    assert_eq!(group_numbers(&scene, later).len(), 1);
+    // Without a font: neither digit nor box.
+    live.set_group_font(None);
+    live.redraw_status(&inputs, &mut scene);
+    assert!(group_numbers(&scene, earlier).is_empty());
+    assert!(
+        scene
+            .items
+            .iter()
+            .filter(|i| i.group == Group::Status && i.object == Some(e))
+            .all(|i| !scene.images[i.image as usize]
+                .pixels()
+                .contains(&super::combat::GROUP_FILL)),
+        "no box"
+    );
 }

@@ -25,6 +25,7 @@
 
 use std::collections::BTreeMap;
 
+use glasnost_fmt::fnt::{Font, Mask};
 use glasnost_fmt::image::{IndexedImage, Rgb8};
 use glasnost_fmt::pal::Palette6;
 use glasnost_fmt::shp::Shp;
@@ -357,47 +358,98 @@ pub fn group_number_at(infantry: bool, building: Option<(i32, i32)>) -> (i32, i3
     (o.0 + dx, o.1 + dy)
 }
 
-/// Our digit glyphs, 3 × 5 pixels, one row of three bits per line (top
-/// first, the high bit leftmost).
-// design: our own digit glyphs for the control-group number (S-0111 claim 17 leaves the font open; Q-2040)
-const DIGITS: [[u8; 5]; 10] = [
-    [0b111, 0b101, 0b101, 0b101, 0b111],
-    [0b010, 0b110, 0b010, 0b010, 0b111],
-    [0b111, 0b001, 0b111, 0b100, 0b111],
-    [0b111, 0b001, 0b011, 0b001, 0b111],
-    [0b101, 0b101, 0b111, 0b001, 0b001],
-    [0b111, 0b100, 0b111, 0b001, 0b111],
-    [0b111, 0b100, 0b111, 0b101, 0b111],
-    [0b111, 0b001, 0b010, 0b010, 0b010],
-    [0b111, 0b101, 0b111, 0b101, 0b111],
-    [0b111, 0b101, 0b111, 0b001, 0b111],
-];
+/// The game font's data the control-group number is drawn with (S-0111
+/// claim 17, F6 and Import mapping): each digit's glyph mask, whose width is
+/// the digit's imported width *G* and whose height is the font's bitmap
+/// height *H*<sub>f</sub>, and the font's line pitch *P*<sub>f</sub>.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GroupFont {
+    digits: Vec<Mask>,
+    pitch: i64,
+}
 
-/// The size of the group number's image: the glyph, a one-pixel gap and a
-/// one-pixel border round it.
-// design: a 1-pixel border 1 pixel clear of the 3 × 5 glyph (S-0111 claim 17 leaves the border's size open; Q-2040)
-pub const GROUP_NUMBER_SIZE: (u32, u32) = (7, 9);
+impl GroupFont {
+    /// The digits of `font`. `None` for a font without a mapped capital X,
+    /// which is rejected as a whole (S-0014 claim 6): then no group number
+    /// is drawn.
+    pub fn new(font: &Font) -> Option<Self> {
+        // spec: S-0111 claim 17 (a missing glyph uses S-0213 claim 25's generated fallback: the complement of the capital X's mask, with X's stored width as G); S-0014 claims 4 and 6
+        let fallback = font.fallback()?;
+        let digits = (0..10u8)
+            .map(|d| {
+                // spec: S-0111 claim 17 (the digit is one glyph of the game bitmap font, the text unit of its character; no separate digit images)
+                let unit = u16::from(b'0' + d);
+                font.glyph_number(unit)
+                    .and_then(|j| font.mask(j))
+                    .unwrap_or_else(|| fallback.clone())
+            })
+            .collect();
+        Some(Self {
+            digits,
+            pitch: i64::from(font.line_pitch),
+        })
+    }
 
-/// The group number's image for `digit` (S-0111 claim 17: the digit inside
-/// a small border of the same colour), every drawn pixel index 1, the rest
-/// 0 (transparent). The image's top-left corner goes at the placement point.
-// design: the image's top-left corner at claim 17's placement point (the alignment is open; Q-2040)
-pub fn group_number_image(digit: u8) -> IndexedImage {
-    let (w, h) = GROUP_NUMBER_SIZE;
-    let glyph = DIGITS[usize::from(digit % 10)];
-    let mut px = vec![0u8; (w * h) as usize];
-    for y in 0..h {
-        for x in 0..w {
-            let border = x == 0 || y == 0 || x == w - 1 || y == h - 1;
-            let ink = (2..5).contains(&x)
-                && (2..7).contains(&y)
-                && glyph[(y - 2) as usize] & (0b100 >> (x - 2)) != 0;
-            if border || ink {
-                px[(y * w + x) as usize] = 1;
+    /// The glyph mask of `digit`.
+    pub fn mask(&self, digit: u8) -> &Mask {
+        &self.digits[usize::from(digit % 10)]
+    }
+
+    /// The line pitch *P*<sub>f</sub>.
+    pub fn pitch(&self) -> i64 {
+        self.pitch
+    }
+}
+
+/// The group number's image index of the house colour (index 0 is
+/// transparent, S-0104 claim 6).
+pub const GROUP_INK: u8 = 1;
+/// The group number's image index of the box's opaque black fill.
+pub const GROUP_FILL: u8 = 2;
+
+/// The most rows a group number's box is given.
+// design: a cap on the box's height for a font with a huge line pitch, so that the image fits in memory; no battlefield view is that tall, and claim 17's view edge cuts the box anyway (S-0111 sets no bound)
+const GROUP_BOX_MAX_ROWS: i64 = 4096;
+
+/// The group number of glyph `mask` for line pitch `pitch` (S-0111 claim
+/// 17, F6): its image and the displacement of the image's top-left pixel
+/// from the placement point *d*. Index [`GROUP_INK`] is the house colour,
+/// [`GROUP_FILL`] the box's black fill, 0 transparent. `None` when nothing
+/// is drawn (a glyph with no pixels and no box).
+pub fn group_number_image(mask: &Mask, pitch: i64) -> Option<(IndexedImage, (i32, i32))> {
+    let g = mask.width as i64;
+    let h = mask.height as i64;
+    // spec: S-0111 F6 (box: d_x − 3 ≤ x ≤ d_x + G + 2 and d_y + 2 ≤ y ≤ d_y + P_f − 3, outer size (G + 6) × (P_f − 4)); claim 17 (when P_f − 4 ≤ 0 our engine draws no box, only the glyph)
+    let boxed = (pitch - 4 > 0).then(|| (-3, g + 2, 2, (pitch - 3).min(1 + GROUP_BOX_MAX_ROWS)));
+    // spec: S-0111 F6 (glyph mask pixel (i, r), 0 ≤ i < G, 0 ≤ r < H_f, at d + (i, r): left-aligned, its top stored row at d; every stored row paints, with no pitch limit)
+    let glyph = (g > 0 && h > 0).then_some((0, g - 1, 0, h - 1));
+    let (x0, x1, y0, y1) = match (boxed, glyph) {
+        (Some(b), Some(m)) => (b.0.min(m.0), b.1.max(m.1), b.2.min(m.2), b.3.max(m.3)),
+        (Some(r), None) | (None, Some(r)) => r,
+        (None, None) => return None,
+    };
+    let w = x1 - x0 + 1;
+    let mut px = vec![0u8; (w * (y1 - y0 + 1)) as usize];
+    let at = |x: i64, y: i64| ((y - y0) * w + (x - x0)) as usize;
+    if let Some((bx0, bx1, by0, by1)) = boxed {
+        for y in by0..=by1 {
+            for x in bx0..=bx1 {
+                // spec: S-0111 claim 17 and F6 (the box is first filled with opaque black; then its outermost one-pixel ring is painted in the house colour, a closed rectangle round the digit alone)
+                let border = x == bx0 || x == bx1 || y == by0 || y == pitch - 3;
+                px[at(x, y)] = if border { GROUP_INK } else { GROUP_FILL };
             }
         }
     }
-    IndexedImage::new(w, h, px).expect("size matches")
+    for r in 0..h {
+        for i in 0..g {
+            // spec: S-0111 claim 17 and F6 (the glyph's set mask pixels are painted in the house colour last, over the border, the fill or the scene; clear mask pixels leave what is under them)
+            if mask.get(i as usize, r as usize) {
+                px[at(i, r)] = GROUP_INK;
+            }
+        }
+    }
+    let img = IndexedImage::new(w as u32, (y1 - y0 + 1) as u32, px).ok()?;
+    Some((img, (x0 as i32, y0 as i32)))
 }
 
 // ---------------------------------------------------------------------------
@@ -730,7 +782,7 @@ pub struct Cache {
     markers: BTreeMap<Marker, u32>,
     frames: BTreeMap<(Sprite, usize), Option<Frame>>,
     group_rows: BTreeMap<[u8; 3], usize>,
-    group_digits: BTreeMap<u8, u32>,
+    group_digits: BTreeMap<u8, Option<(u32, (i32, i32))>>,
 }
 
 impl Cache {
@@ -824,44 +876,54 @@ impl Cache {
         })
     }
 
-    /// The control-group number's item (S-0111 claim 17): `digit` in the
-    /// house colour `colour`, placed at `at` from the status anchor
-    /// `anchor`. Unshaded, as the pips are (claim 2).
+    /// Forgets the group numbers' images, for a new font.
+    pub fn forget_group_digits(&mut self) {
+        self.group_digits.clear();
+    }
+
+    /// The control-group number's item (S-0111 claim 17, F6): `digit`'s
+    /// glyph of `font` and its box, the glyph's top stored row and left
+    /// column at the placement point `at` from the status anchor `anchor`,
+    /// in the house colour `colour`; `None` when it has no pixels.
+    #[allow(clippy::too_many_arguments)]
     pub fn group_number_item(
         &mut self,
         scene: &mut Scene,
+        font: &GroupFont,
         anchor: (i32, i32),
         at: (i32, i32),
         digit: u8,
         colour: [u8; 3],
         object: Option<u32>,
-    ) -> Item {
+    ) -> Option<Item> {
         let row = *self.group_rows.entry(colour).or_insert_with(|| {
             let [r, g, b] = colour;
             let mut pal = [Rgb8 { r: 0, g: 0, b: 0 }; 256];
-            // spec: S-0111 claim 17 (the digit and its border in the owner's house colour)
-            pal[1] = Rgb8 { r, g, b };
+            // spec: S-0111 claim 17 (the digit and the border share one colour: the owner's house display RGB of S-0103 claim 15, at display precision)
+            pal[usize::from(GROUP_INK)] = Rgb8 { r, g, b };
+            // spec: S-0111 claim 17 and Constants (the box's fill: black, opaque)
+            pal[usize::from(GROUP_FILL)] = Rgb8 { r: 0, g: 0, b: 0 };
             scene.add_row(row565(&pal))
         });
-        let image = *self
-            .group_digits
-            .entry(digit)
-            .or_insert_with(|| scene.add_image(group_number_image(digit)));
-        Item {
+        let (image, (ox, oy)) = (*self.group_digits.entry(digit).or_insert_with(|| {
+            let (img, off) = group_number_image(font.mask(digit), font.pitch())?;
+            Some((scene.add_image(img), off))
+        }))?;
+        Some(Item {
             image,
-            // design: the image's top-left corner at claim 17's placement point (Q-2040)
-            x: anchor.0 + at.0,
-            y: anchor.1 + at.1,
+            // spec: S-0111 claim 17 and F6 (the glyph left-aligned with its top stored row at the placement point d; no centring, baseline shift or shadow)
+            x: anchor.0 + at.0 + ox,
+            y: anchor.1 + at.1 + oy,
             // spec: S-0102 claim 1 (a status extra: after the object layers, with no depth test)
             test: DepthTest::Ignore,
             depth: flat(),
-            // design: unshaded like the pips (S-0111 claim 2 names the shaded overlay images; the group number is not among them; Q-2040)
+            // spec: S-0111 claims 2 and 17 (the number and its box are drawn unshaded: lighting, shroud and the object's colour-adjustment tint change neither digit, border nor fill)
             paint: Paint::Row(row),
             group: Group::Status,
             provisional: false,
             object,
             stack: None,
-        }
+        })
     }
 
     /// A marker's image, added on first use.
@@ -959,6 +1021,26 @@ fn flat() -> ItemDepth {
         bias: 0,
         companion: None,
     }
+}
+
+/// A synthetic game font of bitmap height `h` and line pitch `p`: the
+/// digit 1 two pixels wide (its top two rows and its bottom row set
+/// across), the digit 5 four pixels wide (a single column), the capital
+/// X three pixels wide and asymmetric, the other digits unmapped.
+#[cfg(test)]
+pub(crate) fn digit_font(h: usize, p: u32) -> Font {
+    let mut f = Font::empty(1, h, p);
+    let mut one = vec!["##", "##"];
+    one.extend(std::iter::repeat_n(".#", h.saturating_sub(3)));
+    one.push("##");
+    let j1 = f.push_glyph(2, &one);
+    f.map_unit(u16::from(b'1'), Some(j1));
+    let five = vec!["#..."; h];
+    let j5 = f.push_glyph(4, &five);
+    f.map_unit(u16::from(b'5'), Some(j5));
+    let x = f.push_glyph(3, &["#..", ".#."]);
+    f.map_unit(88, Some(x));
+    f
 }
 
 #[cfg(test)]
@@ -1148,32 +1230,125 @@ mod tests {
         assert_eq!(group_number_at(true, Some((2, 2))), (-64, -36));
     }
 
-    /// spec: S-0111 claim 17 (the digit inside a small border of the same
-    /// colour); the glyphs and the border's size are our design (Q-2040)
+    /// The pixels of a group number, by place from the placement point.
+    fn number_pixels(mask: &Mask, pitch: i64) -> BTreeMap<(i32, i32), u8> {
+        let Some((img, (ox, oy))) = group_number_image(mask, pitch) else {
+            return BTreeMap::new();
+        };
+        let w = img.width() as i32;
+        img.pixels()
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| **p != 0)
+            .map(|(i, p)| ((ox + i as i32 % w, oy + i as i32 / w), *p))
+            .collect()
+    }
+
+    /// spec: S-0111 claim 17, F6 and scenario OV12 a (the glyph of the game font, left-aligned
+    /// with its top stored row at d; the box from (−3, +2), (G + 6) × (P_f − 4), black inside a
+    /// one-pixel ring of the house colour; glyph pixels in the house colour over everything; rows
+    /// above the box paint over the scene; nothing outside the box and the mask)
     #[test]
-    fn group_number_images() {
-        let (w, h) = GROUP_NUMBER_SIZE;
-        let mut seen = std::collections::BTreeSet::new();
-        for d in 0..10u8 {
-            let img = group_number_image(d);
-            assert_eq!((img.width(), img.height()), (w, h));
-            let px = img.pixels();
-            // The border is drawn all round, the gap inside it is clear.
-            for x in 0..w {
-                assert_eq!(px[x as usize], 1);
-                assert_eq!(px[((h - 1) * w + x) as usize], 1);
+    fn claim_17_glyph_and_box_follow_f6() {
+        let font = GroupFont::new(&digit_font(7, 10)).unwrap();
+        let one = font.mask(1);
+        assert_eq!((one.width, one.height), (2, 7), "G = 2, H_f = 7");
+        let px = number_pixels(one, font.pitch());
+        // Box: −3 ≤ x ≤ G + 2 = 4, 2 ≤ y ≤ P_f − 3 = 7.
+        for y in 0..7 {
+            for x in -3..=4 {
+                let inside_box = y >= 2;
+                let border = inside_box && (x == -3 || x == 4 || y == 2 || y == 7);
+                let ink = (0..2).contains(&x) && one.get(x as usize, y as usize);
+                let want = if ink || border {
+                    Some(GROUP_INK)
+                } else if inside_box {
+                    Some(GROUP_FILL)
+                } else {
+                    None
+                };
+                assert_eq!(px.get(&(x, y)).copied(), want, "({x}, {y})");
             }
-            for y in 0..h {
-                assert_eq!(px[(y * w) as usize], 1);
-                assert_eq!(px[(y * w + w - 1) as usize], 1);
-            }
-            for x in 1..w - 1 {
-                assert_eq!(px[(w + x) as usize], 0);
-                assert_eq!(px[((h - 2) * w + x) as usize], 0);
-            }
-            assert!(px.iter().all(|&p| p <= 1));
-            assert!(seen.insert(px.to_vec()), "digit {d} has its own glyph");
         }
+        for x in -3..=4 {
+            assert_eq!(px[&(x, 7)], GROUP_INK, "bottom ring at y = P_f − 3");
+            assert!(!px.contains_key(&(x, 8)), "nothing below the box");
+        }
+        // The glyph's top rows paint above the box, over the scene.
+        assert_eq!(px[&(0, 0)], GROUP_INK);
+        assert_eq!(px[&(1, 1)], GROUP_INK);
+        assert!(!px.contains_key(&(-1, 0)));
+        assert!(
+            !px.contains_key(&(2, 0)),
+            "clear of the glyph above the box"
+        );
+        // The fill shows between glyph and border: the gap follows the font's data.
+        assert_eq!(px[&(-2, 4)], GROUP_FILL);
+        assert_eq!(px[&(0, 4)], GROUP_FILL, "a clear mask pixel keeps the fill");
+        assert_eq!(px[&(1, 4)], GROUP_INK);
+        // Every digit keeps its own width: the box behind 5 is wider by ΔG = 2.
+        let width = |d: u8| {
+            let px = number_pixels(font.mask(d), font.pitch());
+            let xs: Vec<i32> = px.keys().filter(|p| p.1 == 3).map(|p| p.0).collect();
+            xs.iter().max().unwrap() - xs.iter().min().unwrap() + 1
+        };
+        assert_eq!(width(1), 2 + 6);
+        assert_eq!(width(5), 4 + 6);
+        assert_eq!(width(5) - width(1), 2);
+    }
+
+    /// spec: S-0111 claim 17 (glyph rows: every stored row paints, 0 ≤ r < H_f, even when
+    /// P_f < H_f, unlike status text) and F6, scenario OV12 g 2
+    #[test]
+    fn claim_17_rows_past_the_pitch_paint() {
+        let font = GroupFont::new(&digit_font(12, 8)).unwrap();
+        let px = number_pixels(font.mask(5), font.pitch());
+        // The box ends at y = P_f − 3 = 5; the column of 5 still paints rows 6 to 11.
+        for r in 0..12 {
+            assert_eq!(px.get(&(0, r)), Some(&GROUP_INK), "row {r}");
+        }
+        assert_eq!(px.get(&(1, 6)), None, "below the box only the glyph");
+        assert_eq!(px.get(&(-3, 5)), Some(&GROUP_INK));
+        assert_eq!(px.get(&(-3, 6)), None);
+        assert!(!px.contains_key(&(0, 12)));
+    }
+
+    /// spec: S-0111 claim 17 and F6 (when P_f − 4 ≤ 0 the digit is still drawn and our engine
+    /// draws no box; scenario OV12 g 3)
+    #[test]
+    fn claim_17_no_box_at_a_small_pitch() {
+        for p in [0u32, 3, 4] {
+            let font = GroupFont::new(&digit_font(7, p)).unwrap();
+            let px = number_pixels(font.mask(1), font.pitch());
+            assert!(px.values().all(|&i| i == GROUP_INK), "P_f = {p}: no fill");
+            assert_eq!(px.keys().map(|k| k.0).min(), Some(0), "no border at −3");
+            assert_eq!(px[&(0, 0)], GROUP_INK);
+        }
+        let font = GroupFont::new(&digit_font(7, 5)).unwrap();
+        let px = number_pixels(font.mask(1), font.pitch());
+        assert_eq!(px[&(-3, 2)], GROUP_INK, "P_f = 5: a one-row box");
+        assert!(!px.contains_key(&(-3, 3)));
+    }
+
+    /// spec: S-0111 claim 17 (a digit with no mapped glyph uses S-0213 claim 25's fallback, the
+    /// complement of the capital X's mask with X's width, so the box takes X's width; our engine
+    /// paints it in the house colour) and scenario OV12 g 4; S-0014 claim 6 (a font without a
+    /// mapped capital X is rejected whole: no number)
+    #[test]
+    fn claim_17_a_missing_digit_takes_the_fallback() {
+        let raw = digit_font(7, 10);
+        let font = GroupFont::new(&raw).unwrap();
+        let zero = font.mask(0);
+        assert_eq!(zero.width, 3, "X's stored width");
+        assert_eq!(*zero, raw.fallback().unwrap());
+        assert!(!zero.get(0, 0) && zero.get(1, 0) && zero.get(0, 1) && !zero.get(1, 1));
+        let px = number_pixels(zero, font.pitch());
+        assert_eq!(px[&(1, 0)], GROUP_INK);
+        assert_eq!(px[&(5, 4)], GROUP_INK, "border at G + 2 = 5");
+        assert_eq!(px[&(4, 4)], GROUP_FILL);
+        let mut no_x = raw;
+        no_x.map_unit(88, None);
+        assert_eq!(GroupFont::new(&no_x), None);
     }
 
     /// Our placeholder lifetimes and burst sizes.

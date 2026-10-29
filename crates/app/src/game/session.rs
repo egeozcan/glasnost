@@ -467,6 +467,14 @@ impl Session {
             laps: StepLaps::default(),
         };
         problems.append(&mut s.loaded.problems);
+        if let Some(l) = s.loaded.live.as_mut() {
+            // spec: S-0111 claim 17 and Import mapping (the group number uses the game font of S-0213 claim 25; without a usable font no number is drawn, S-0014 claim 6)
+            let digits = status_font
+                .as_ref()
+                .ok()
+                .and_then(|f| crate::mapview::combat::GroupFont::new(f.font()));
+            l.set_group_font(digits);
+        }
         match status_font {
             Ok(f) => s.play.status_font = Some(f),
             // spec: S-0213 Import mapping, S-0014 claim 6 (a missing or rejected font: our engine reports a missing-asset diagnostic naming the file and reason and omits the text)
