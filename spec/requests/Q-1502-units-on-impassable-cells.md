@@ -19,19 +19,14 @@ In our engine an infantry unit placed there never moves and is never found:
   cell without a region with region cells (S-0212 claim 4);
 - the enemy's hunt search rejects it for the same reason;
 - with the rest of its group dead, the game ends `none` at the frame limit with the survivors
-  owning about 0.06 to 0.11 of their army.
+  owning a small part of their army.
 
-The stock games end in the first or second sample with that group wiped out. Pairings with the
-infantry on side A, in 6 of 6 seeds:
-- M-0001: YTNK against E1;
-- M-0001: MIND against E1;
-- M-0002: INIT against E1;
-- M-0002: VIRUS against E1 and VIRUS against E2;
-- M-0001: YTNK against E2, partly.
+Large side-A infantry groups reach these five rock cells. The stock games with such a group end in
+the first or second sample with that group wiped out, in 6 of 6 seeds.
 
 The lead's note on M-0001 and M-0002 (main f81fc29, *Notes*, "Cliff cells in large groups")
 confirms the setup side: the stock harness placed units on these cells like anywhere else, and in
-the stock games of the pairings above every game still ended by the third sample with one side
+the stock games of those groups every game still ended by the third sample with one side
 owning nothing, none at the frame limit. Our placement already matches, so the difference is in
 the simulation, which this request asks about.
 

@@ -9,8 +9,8 @@ answered-by: [S-0607]
 ## Need
 
 M-0015 watches the arena games of TELE against BFRT (M-0001, side A, seeds 0 and 1). There the
-Magnetrons start 56 and 52 holds on the 4 fortresses. 54 and 51 of these holds end in a landing.
-The fortresses hit Magnetrons 15 and 18 times, and they crush 6 and 5 Magnetrons. By S-0607
+Magnetrons start many holds on the fortresses, and most end in a landing; the fortresses also
+crush Magnetrons (M-0015). By S-0607
 claim 3 a unit that is already seized cannot be seized again. By claim 10 a seized unit cannot
 fire. So in the stock games each fortress gets its own movement back (S-0607 claim 20) after
 most of its landings.

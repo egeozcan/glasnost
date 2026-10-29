@@ -24,7 +24,7 @@ automatic choice of the first list for any house (`general.player_auto_crush` is
 used; `docs/m6-claims/step2-movement.md`, claim 11 row).
 
 M-0011 needs that choice. It watches the arena game of CAOS against BFRT (side A, seeds 0 and 1).
-There 8 of the 9 drones per seed leave play "with no damage event, while a grounded fortress that
+There every drone but one per seed leaves play "with no damage event, while a grounded fortress that
 had the drone as its target stood on the drone's position in the tick before". The record reads
 this as crushing under S-0210 claim 4. Yet the same fortresses are berserk from ticks 50 to 58 to
 the end, and "the fortresses' own fire goes at each other while they are berserk".

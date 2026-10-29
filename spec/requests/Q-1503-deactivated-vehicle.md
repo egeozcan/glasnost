@@ -15,10 +15,9 @@ or turn? Our engine sets the state but nothing reads it
 
 The oracle arena shows the effect. Houses own no buildings, so no control centre exists. In
 every stock game of M-0001 and M-0003 with ROBO, the opponent kept all or nearly all of its
-army: column left 1.000 against LTNK, MIND, YTNK, DISK, APOC, TTNK, V3 and HTNK, and 0.944 to
-1.000 against HTK. ROBO games end `none` unless the opponent destroys the ROBO group. In our
+army (against LTNK, MIND, YTNK, DISK, APOC, TTNK, V3, HTNK and HTK). ROBO games end `none` unless the opponent destroys the ROBO group. In our
 engine the ROBO group fights normally. For example, ROBO against HTK in M-0003: stock column
-wins 12 of 12 with column left 0.981; ours, row wins 12 of 12. LTNK against ROBO in M-0001:
+wins 12 of 12; ours, row wins 12 of 12. LTNK against ROBO in M-0001:
 stock row wins 5 of 12; ours 12 of 12.
 
 ## Questions
