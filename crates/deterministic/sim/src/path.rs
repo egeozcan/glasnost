@@ -2467,6 +2467,7 @@ fn shut(
     let mut seen = [BTreeSet::from([from]), BTreeSet::from([goal])];
     let mut front = [vec![from], vec![goal]];
     loop {
+        // nocite: design: C7-P5 yield (the fill's two sides, from the unit and from its goal)
         for side in 0..2 {
             let mut next = Vec::new();
             for &c in &front[side] {
