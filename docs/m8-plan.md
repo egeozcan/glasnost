@@ -77,6 +77,17 @@ revision. The intake that takes in each revision checks it against this list.
 | Q-1750 to Q-1769 | Step A4, the lead's play notes ([m8-claims/a4-play-notes.md](m8-claims/a4-play-notes.md)) |
 | Q-1770 onward | Further intakes |
 
+## Decisions of 2026-10-29
+
+- **Our own pathing improvements (the lead's decision):** "we can improve pathing where we see fit.
+  Departure from the original game is approved." Pathing and movement changes of our own design go
+  ahead without a spec or a request, marked `// design:` and recorded in the step's ledger, under
+  the determinism rules of CLAUDE.md. The main session's choice for how: each improvement sits behind
+  a switch whose default is the original's behaviour, and the play-fixes layer of C7 turns it on, so
+  the client's new games get it by default while the oracle arena, the seed sweeps, the gates and
+  the fidelity suite stay on the reference rules (as for C7, `GLASNOST_PLAY_FIXES=1` measures with
+  it). The layer is in the rules hash, so replays, saves and network starts carry it.
+
 ## Track A: fidelity
 
 M7b ended with the oracle arena failing 55 of 155 measured pairings (M-0001 to M-0003), mostly because
